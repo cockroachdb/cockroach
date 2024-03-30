@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,12 +58,37 @@ func Test_assertValidTest(t *testing.T) {
 	mvt := newTest(MinUpgrades(10))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
-	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (3) must be greater than minUpgrades (10)")
+	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (4) must be greater than minUpgrades (10)")
 
 	mvt = newTest(MaxUpgrades(0))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
 	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (0) must be greater than minUpgrades (1)")
+
+	// Validating minimum supported version.
+	defer withTestBuildVersion("v23.1.2")()
+
+	mvt = newTest(MinimumSupportedVersion("v24.1.0"))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		"mixedversion.NewTest: invalid test options: minimum supported version (v24.1.0) should be from an older release series than current version (v23.1.2)",
+		fatalErr.Error(),
+	)
+
+	// minimum supported version is older than current version, but
+	// still in the same release series.
+	mvt = newTest(MinimumSupportedVersion("v23.1.8"))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		"mixedversion.NewTest: invalid test options: minimum supported version (v23.1.8) should be from an older release series than current version (v23.1.2)",
+		fatalErr.Error(),
+	)
+
+	mvt = newTest(MinimumSupportedVersion("v22.2.0"))
+	assertValidTest(mvt, fatalFunc())
+	require.NoError(t, fatalErr)
 }
 
 func Test_choosePreviousReleases(t *testing.T) {
@@ -117,4 +143,13 @@ func Test_choosePreviousReleases(t *testing.T) {
 			}
 		})
 	}
+}
+
+// withTestBuildVersion overwrites the `TestBuildVersion` variable in
+// the `clusterupgrade` package, allowing tests to set a fixed
+// "current version". Returns a function that resets that variable.
+func withTestBuildVersion(v string) func() {
+	testBuildVersion := version.MustParse(v)
+	clusterupgrade.TestBuildVersion = testBuildVersion
+	return func() { clusterupgrade.TestBuildVersion = nil }
 }

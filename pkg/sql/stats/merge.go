@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -28,7 +29,9 @@ import (
 // are the merged combinations of the latest full statistic and the latest partial
 // statistic for a specific column set. If merging a partial stat with the full
 // stat is not possible, we don't include that statistic as part of the resulting array.
-func MergedStatistics(ctx context.Context, stats []*TableStatistic) []*TableStatistic {
+func MergedStatistics(
+	ctx context.Context, stats []*TableStatistic, st *cluster.Settings,
+) []*TableStatistic {
 	// Map the ColumnIDs to the latest full table statistic,
 	// and map the keys to the number of columns in the set.
 	// It relies on the fact that the first full statistic
@@ -57,7 +60,7 @@ func MergedStatistics(ctx context.Context, stats []*TableStatistic) []*TableStat
 			var merged *TableStatistic
 			var err error
 			if fullStat, ok := fullStatsMap[col]; ok && partialStat.CreatedAt.After(fullStat.CreatedAt) {
-				merged, err = mergeExtremesStatistic(fullStat, partialStat)
+				merged, err = mergeExtremesStatistic(ctx, fullStat, partialStat, st)
 				if err != nil {
 					log.VEventf(ctx, 2, "could not merge statistics for table %v columns %s: %v", fullStat.TableID, redact.Safe(col), err)
 					continue
@@ -113,7 +116,7 @@ func MergedStatistics(ctx context.Context, stats []*TableStatistic) []*TableStat
 // with the statistic renamed to the string assigned to.
 // jobspb.MergedStatsName.
 func mergeExtremesStatistic(
-	fullStat *TableStatistic, partialStat *TableStatistic,
+	ctx context.Context, fullStat *TableStatistic, partialStat *TableStatistic, st *cluster.Settings,
 ) (*TableStatistic, error) {
 	fullStatColKey := MakeSortedColStatKey(fullStat.ColumnIDs)
 	partialStatColKey := MakeSortedColStatKey(partialStat.ColumnIDs)
@@ -238,7 +241,7 @@ func mergeExtremesStatistic(
 	hist := histogram{
 		buckets: mergedHistogram,
 	}
-	histData, err := hist.toHistogramData(fullStat.HistogramData.ColumnType)
+	histData, err := hist.toHistogramData(ctx, fullStat.HistogramData.ColumnType, st)
 	if err != nil {
 		return nil, err
 	}

@@ -94,7 +94,7 @@ func validateParquetFile(
 		"",
 		nil,
 		sessiondata.InternalExecutorOverride{
-			User:     username.RootUserName(),
+			User:     username.NodeUserName(),
 			Database: test.dbName,
 		},
 		validationStmt)
@@ -223,7 +223,7 @@ func TestRandomParquetExports(t *testing.T) {
 
 		for i = 0; i < numTables; i++ {
 			tableName = string(stmts[i].(*tree.CreateTable).Table.ObjectName)
-			numRows, err := randgen.PopulateTableWithRandData(rng, db, tableName, 20)
+			numRows, err := randgen.PopulateTableWithRandData(rng, db, tableName, 20, nil)
 			require.NoError(t, err)
 			if numRows > 5 {
 				// Ensure the table only contains columns supported by EXPORT Parquet. If an
@@ -234,7 +234,7 @@ func TestRandomParquetExports(t *testing.T) {
 						"",
 						nil,
 						sessiondata.InternalExecutorOverride{
-							User:     username.RootUserName(),
+							User:     username.NodeUserName(),
 							Database: dbName},
 						fmt.Sprintf("SELECT * FROM %s LIMIT 1", tree.NameString(tableName)))
 					require.NoError(t, err)
@@ -409,11 +409,12 @@ func TestMemoryMonitor(t *testing.T) {
 
 	// Arrange for a small memory budget.
 	budget := int64(4096)
-	mm := mon.NewMonitorWithLimit(
-		"test-mm", mon.MemoryResource, budget,
-		nil, nil,
-		128 /* small allocation increment */, 100,
-		cluster.MakeTestingClusterSettings())
+	mm := mon.NewMonitor(mon.Options{
+		Name:      "test-mm",
+		Limit:     budget,
+		Increment: 128, /* small allocation increment */
+		Settings:  cluster.MakeTestingClusterSettings(),
+	})
 	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(budget))
 
 	dir, dirCleanupFn := testutils.TempDir(t)

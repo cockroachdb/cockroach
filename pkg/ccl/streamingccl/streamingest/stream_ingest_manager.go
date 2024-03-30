@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -63,16 +64,10 @@ func newStreamIngestManagerWithPrivilegesCheck(
 			pgcode.CCLValidLicenseRequired, "physical replication requires an enterprise license on the secondary (and primary) cluster")
 	}
 
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
+		syntheticprivilege.GlobalPrivilegeObject,
+		privilege.MANAGEVIRTUALCLUSTER); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
-			syntheticprivilege.GlobalPrivilegeObject,
-			privilege.MANAGEVIRTUALCLUSTER); err != nil {
-			return nil, err
-		}
 	}
 
 	return &streamIngestManagerImpl{
@@ -96,7 +91,7 @@ func getReplicationStatsAndStatus(
 			errors.Newf("job with id %d is not a stream ingestion job", job.ID())
 	}
 
-	details.StreamAddress, err = redactSourceURI(details.StreamAddress)
+	details.StreamAddress, err = streamclient.RedactSourceURI(details.StreamAddress)
 	if err != nil {
 		return nil, jobspb.ReplicationError.String(), err
 	}

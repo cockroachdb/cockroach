@@ -269,7 +269,7 @@ func TestPebbleMetricEventListener(t *testing.T) {
 	ctx := context.Background()
 
 	settings := cluster.MakeTestingClusterSettings()
-	MaxSyncDurationFatalOnExceeded.Override(ctx, &settings.SV, false)
+	fs.MaxSyncDurationFatalOnExceeded.Override(ctx, &settings.SV, false)
 	p, err := Open(ctx, InMemory(), settings, CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
 	defer p.Close()
@@ -304,9 +304,9 @@ func TestPebbleIterConsistency(t *testing.T) {
 	require.NoError(t, eng.PutMVCC(k1, v1))
 
 	var (
-		roEngine  = eng.NewReadOnly(StandardDurability)
+		roEngine  = eng.NewReader(StandardDurability)
 		batch     = eng.NewBatch()
-		roEngine2 = eng.NewReadOnly(StandardDurability)
+		roEngine2 = eng.NewReader(StandardDurability)
 		batch2    = eng.NewBatch()
 	)
 	defer roEngine.Close()
@@ -525,7 +525,7 @@ func TestPebbleKeyValidationFunc(t *testing.T) {
 	// Fatalf.
 	l := &nonFatalLogger{t: t}
 	opt := func(cfg *engineConfig) error {
-		cfg.Opts.LoggerAndTracer = l
+		cfg.opts.LoggerAndTracer = l
 		return nil
 	}
 	engine := createTestPebbleEngine(opt).(*Pebble)
@@ -557,14 +557,8 @@ func TestPebbleBackgroundError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	loc := Location{
-		dir: "",
-		fs: &errorFS{
-			FS:         vfs.NewMem(),
-			errorCount: 3,
-		},
-	}
-	eng, err := Open(context.Background(), loc, cluster.MakeClusterSettings())
+	env := mustInitTestEnv(t, &errorFS{FS: vfs.NewMem(), errorCount: 3}, "")
+	eng, err := Open(context.Background(), env, cluster.MakeClusterSettings())
 	require.NoError(t, err)
 	defer eng.Close()
 
@@ -645,10 +639,10 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	// Set up an engine with tiny blocks, so each point key gets its own block,
 	// and disable compactions to keep SSTs separate.
 	overrideOptions := func(cfg *engineConfig) error {
-		cfg.Opts.DisableAutomaticCompactions = true
-		for i := range cfg.Opts.Levels {
-			cfg.Opts.Levels[i].BlockSize = 1
-			cfg.Opts.Levels[i].IndexBlockSize = 1
+		cfg.opts.DisableAutomaticCompactions = true
+		for i := range cfg.opts.Levels {
+			cfg.opts.Levels[i].BlockSize = 1
+			cfg.opts.Levels[i].IndexBlockSize = 1
 		}
 		return nil
 	}
@@ -786,10 +780,10 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 	// separate SSTs when the clearing SST does not satisfy the filter. We
 	// disable compactions to keep SSTs separate.
 	overrideOptions := func(cfg *engineConfig) error {
-		cfg.Opts.DisableAutomaticCompactions = true
-		for i := range cfg.Opts.Levels {
-			cfg.Opts.Levels[i].BlockSize = 65536
-			cfg.Opts.Levels[i].IndexBlockSize = 65536
+		cfg.opts.DisableAutomaticCompactions = true
+		for i := range cfg.opts.Levels {
+			cfg.opts.Levels[i].BlockSize = 65536
+			cfg.opts.Levels[i].IndexBlockSize = 65536
 		}
 		return nil
 	}
@@ -899,10 +893,10 @@ func TestPebbleMVCCTimeIntervalWithRangeClears(t *testing.T) {
 	// Set up an engine with tiny blocks, so each point key gets its own block,
 	// and disable compactions to keep SSTs separate.
 	overrideOptions := func(cfg *engineConfig) error {
-		cfg.Opts.DisableAutomaticCompactions = true
-		for i := range cfg.Opts.Levels {
-			cfg.Opts.Levels[i].BlockSize = 1
-			cfg.Opts.Levels[i].IndexBlockSize = 1
+		cfg.opts.DisableAutomaticCompactions = true
+		for i := range cfg.opts.Levels {
+			cfg.opts.Levels[i].BlockSize = 1
+			cfg.opts.Levels[i].IndexBlockSize = 1
 		}
 		return nil
 	}
@@ -972,95 +966,6 @@ func TestPebbleMVCCTimeIntervalWithRangeClears(t *testing.T) {
 	}
 }
 
-// TestPebbleTablePropertyFilter tests that pebbleIterator still respects
-// crdb.ts.min and crdb.ts.max table properties in SSTs written by 22.1 and
-// older nodes.
-func TestPebbleTablePropertyFilter(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Set up a static property collector which always writes the same table
-	// properties [1-7] regardless of the SSTable contents. We keep the default
-	// block property collects too, which will use the actual SSTable
-	// timestamps.
-	overrideOptions := func(cfg *engineConfig) error {
-		cfg.Opts.TablePropertyCollectors = []func() pebble.TablePropertyCollector{
-			func() pebble.TablePropertyCollector {
-				return &staticTablePropertyCollector{
-					props: map[string]string{
-						"crdb.ts.min": "\x00\x00\x00\x00\x00\x00\x00\x01", // WallTime: 1
-						"crdb.ts.max": "\x00\x00\x00\x00\x00\x00\x00\x07", // WallTime: 7
-					},
-				}
-			},
-		}
-		return nil
-	}
-
-	eng := NewDefaultInMemForTesting(overrideOptions)
-	defer eng.Close()
-
-	// Write keys with timestamps 1 and 7.
-	require.NoError(t, eng.PutMVCC(pointKey("a", 1), stringValue("a1")))
-	require.NoError(t, eng.PutMVCC(pointKey("b", 7), stringValue("b7")))
-	require.NoError(t, eng.Flush())
-
-	// Table and block properties now think the SST covers these spans:
-	//
-	// Block properties: [1-7]
-	// Table properties: [1-7]
-	//
-	// Both must be satisfied in order for the (only) SST to be included.
-	testcases := map[string]struct {
-		minTimestamp int64
-		maxTimestamp int64
-		expectResult []interface{}
-	}{
-		"tableprop lower inclusive": {4, 5, []interface{}(nil)},
-		"tableprop upper inclusive": {7, 8, []interface{}{pointKV("b", 7, "b7")}},
-		"tableprop exact":           {5, 7, []interface{}{pointKV("b", 7, "b7")}},
-		"tableprop within":          {6, 6, []interface{}(nil)},
-		"tableprop covering":        {4, 8, []interface{}{pointKV("b", 7, "b7")}},
-		"tableprop below":           {3, 4, []interface{}(nil)},
-		"both above":                {8, 9, []interface{}(nil)},
-		"blockprop only":            {1, 3, []interface{}{pointKV("a", 1, "a1")}}, // needs both block and table props
-	}
-	for name, tc := range testcases {
-		t.Run(name, func(t *testing.T) {
-			iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
-				UpperBound:   keys.MaxKey,
-				MinTimestamp: hlc.Timestamp{WallTime: tc.minTimestamp},
-				MaxTimestamp: hlc.Timestamp{WallTime: tc.maxTimestamp},
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer iter.Close()
-
-			kvs := scanIter(t, iter)
-			require.Equal(t, tc.expectResult, kvs)
-		})
-	}
-}
-
-type staticTablePropertyCollector struct {
-	props map[string]string
-}
-
-func (c *staticTablePropertyCollector) Add(pebble.InternalKey, []byte) error {
-	return nil
-}
-
-func (c *staticTablePropertyCollector) Finish(userProps map[string]string) error {
-	for k, v := range c.props {
-		userProps[k] = v
-	}
-	return nil
-}
-
-func (c *staticTablePropertyCollector) Name() string {
-	return "staticTablePropertyCollector"
-}
-
 func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	DisableMetamorphicSimpleValueEncoding(t)
@@ -1077,11 +982,11 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	eng.RegisterFlushCompletedCallback(func() {
 		atomic.AddInt32(&cbCount, 1)
 	})
-	roStandard := eng.NewReadOnly(StandardDurability)
+	roStandard := eng.NewReader(StandardDurability)
 	defer roStandard.Close()
-	roGuaranteed := eng.NewReadOnly(GuaranteedDurability)
+	roGuaranteed := eng.NewReader(GuaranteedDurability)
 	defer roGuaranteed.Close()
-	roGuaranteedPinned := eng.NewReadOnly(GuaranteedDurability)
+	roGuaranteedPinned := eng.NewReader(GuaranteedDurability)
 	defer roGuaranteedPinned.Close()
 	require.NoError(t, roGuaranteedPinned.PinEngineStateForIterators(UnknownReadCategory))
 	// Returns the value found or nil.
@@ -1118,7 +1023,7 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	})
 	// Write is visible to new guaranteed reader. We need to use a new reader
 	// due to iterator caching.
-	roGuaranteed2 := eng.NewReadOnly(GuaranteedDurability)
+	roGuaranteed2 := eng.NewReader(GuaranteedDurability)
 	defer roGuaranteed2.Close()
 	require.Equal(t, v.Value.RawBytes, checkGetAndIter(roGuaranteed2))
 }
@@ -1151,7 +1056,7 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 	require.NoError(t, eng.PutMVCC(b1, v2))
 	require.NoError(t, eng.PutMVCC(c1, v3))
 
-	readOnly := eng.NewReadOnly(StandardDurability)
+	readOnly := eng.NewReader(StandardDurability)
 	defer readOnly.Close()
 	require.NoError(t, readOnly.PinEngineStateForIterators(UnknownReadCategory))
 
@@ -1314,12 +1219,10 @@ func TestIncompatibleVersion(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	loc := Location{
-		dir: "",
-		fs:  vfs.NewMem(),
-	}
+	memFS := vfs.NewMem()
+	env := mustInitTestEnv(t, memFS, "")
 
-	p, err := Open(ctx, loc, cluster.MakeTestingClusterSettings())
+	p, err := Open(ctx, env, cluster.MakeTestingClusterSettings())
 	require.NoError(t, err)
 	p.Close()
 
@@ -1327,15 +1230,17 @@ func TestIncompatibleVersion(t *testing.T) {
 	version := roachpb.Version{Major: 21, Minor: 1}
 	b, err := protoutil.Marshal(&version)
 	require.NoError(t, err)
-	require.NoError(t, fs.SafeWriteToFile(loc.fs, loc.dir, MinVersionFilename, b))
+	require.NoError(t, fs.SafeWriteToFile(memFS, "", MinVersionFilename, b))
 
-	_, err = Open(ctx, loc, cluster.MakeTestingClusterSettings())
+	env = mustInitTestEnv(t, memFS, "")
+	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
 	require.Error(t, err)
 	msg := err.Error()
 	if !strings.Contains(msg, "is too old for running version") &&
 		!strings.Contains(msg, "cannot be opened by development version") {
 		t.Fatalf("unexpected error %v", err)
 	}
+	env.Close()
 }
 
 func TestNoMinVerFile(t *testing.T) {
@@ -1343,23 +1248,21 @@ func TestNoMinVerFile(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	loc := Location{
-		dir: "",
-		fs:  vfs.NewMem(),
-	}
-
+	memFS := vfs.NewMem()
+	env := mustInitTestEnv(t, memFS, "")
 	st := cluster.MakeTestingClusterSettings()
-	p, err := Open(ctx, loc, st)
+	p, err := Open(ctx, env, st)
 	require.NoError(t, err)
 	p.Close()
 
 	// Remove the min version filename.
-	require.NoError(t, loc.fs.Remove(loc.fs.PathJoin(loc.dir, MinVersionFilename)))
+	require.NoError(t, memFS.Remove(MinVersionFilename))
 
 	// We are still allowed the open the store if we haven't written anything to it.
 	// This is useful in case the initial Open crashes right before writinng the
 	// min version file.
-	p, err = Open(ctx, loc, st)
+	env = mustInitTestEnv(t, memFS, "")
+	p, err = Open(ctx, env, st)
 	require.NoError(t, err)
 
 	// Now write something to the store.
@@ -1369,10 +1272,12 @@ func TestNoMinVerFile(t *testing.T) {
 	p.Close()
 
 	// Remove the min version filename.
-	require.NoError(t, loc.fs.Remove(loc.fs.PathJoin(loc.dir, MinVersionFilename)))
+	require.NoError(t, memFS.Remove(MinVersionFilename))
 
-	_, err = Open(ctx, loc, st)
+	env = mustInitTestEnv(t, memFS, "")
+	_, err = Open(ctx, env, st)
 	require.ErrorContains(t, err, "store has no min-version file")
+	env.Close()
 }
 
 func TestApproximateDiskBytes(t *testing.T) {
@@ -1428,7 +1333,9 @@ func TestConvertFilesToBatchAndCommit(t *testing.T) {
 	var engs [batchEngine + 1]Engine
 	mem := vfs.NewMem()
 	for i := range engs {
-		engs[i] = InMemFromFS(ctx, mem, fmt.Sprintf("eng-%d", i), st)
+		var err error
+		engs[i], err = Open(ctx, mustInitTestEnv(t, mem, fmt.Sprintf("eng-%d", i)), st)
+		require.NoError(t, err)
 		defer engs[i].Close()
 	}
 	// Populate points that will have MVCC value and an intent.

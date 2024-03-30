@@ -24,16 +24,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
-	"go.etcd.io/raft/v3/raftpb"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -148,7 +149,7 @@ func checkStoreRangeStats(
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	eng, err := OpenEngine(dir, stopper, storage.MustExist, storage.ReadOnly)
+	eng, err := OpenEngine(dir, stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -222,7 +223,7 @@ func checkStoreRaftState(
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenEngine(dir, stopper, storage.MustExist, storage.ReadOnly)
+	db, err := OpenEngine(dir, stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}

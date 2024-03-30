@@ -42,10 +42,6 @@ go_test(
         "walk_test.go",
     ],
     embed = [":screl"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/clusterversion",
         "//pkg/sql/catalog/catpb",

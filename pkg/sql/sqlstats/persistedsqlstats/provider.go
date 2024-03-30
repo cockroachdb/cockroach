@@ -46,9 +46,11 @@ type Config struct {
 	JobRegistry             *jobs.Registry
 
 	// Metrics.
-	FlushCounter   *metric.Counter
-	FlushDuration  metric.IHistogram
-	FailureCounter *metric.Counter
+	FlushesSuccessful       *metric.Counter
+	FlushLatency            metric.IHistogram
+	FlushDoneSignalsIgnored *metric.Counter
+	FlushesFailed           *metric.Counter
+	FlushedFingerprintCount *metric.Counter
 
 	// Testing knobs.
 	Knobs *sqlstats.TestingKnobs
@@ -167,7 +169,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 		})
 
 		initialDelay := s.nextFlushInterval()
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		timer.Reset(initialDelay)
 
 		log.Infof(ctx, "starting sql-stats-worker with initial delay: %s", initialDelay)
@@ -192,7 +194,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 				return
 			}
 
-			s.Flush(ctx)
+			s.Flush(ctx, stopper)
 
 			// Tell the local activity translator job, if any, that we've
 			// performed a round of flush.
@@ -207,6 +209,12 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 					return
 				case <-s.drain:
 					return
+				default:
+					// Don't block the flush loop if the sql activity update job is not
+					// ready to receive. We should at least continue to collect and flush
+					// stats for this node.
+					s.cfg.FlushDoneSignalsIgnored.Inc(1)
+					log.Warning(ctx, "sql-stats-worker: unable to signal flush completion")
 				}
 			}
 		}

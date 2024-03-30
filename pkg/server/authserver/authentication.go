@@ -249,7 +249,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username, _ := username.MakeSQLUsernameFromUserInput(reqUsername, username.PurposeValidation)
 
-	exists, _, canLoginDBConsole, _, _, _, _, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.sqlServer.ExecutorConfig(),
 		username,
@@ -313,7 +313,7 @@ func (s *authenticationServer) UserLogout(
 		ctx,
 		"revoke-auth-session",
 		nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionID,
 	); err != nil {
@@ -328,7 +328,7 @@ func (s *authenticationServer) UserLogout(
 
 	// Send back a header which will cause the browser to destroy the cookie.
 	// See https://tools.ietf.org/search/rfc6265, page 7.
-	cookie := makeCookieWithValue("", false /* forHTTPSOnly */)
+	cookie := CreateSessionCookie("", false /* forHTTPSOnly */)
 	cookie.MaxAge = -1
 
 	// Set the cookie header on the outgoing response.
@@ -360,7 +360,7 @@ WHERE id = $1`
 		ctx,
 		"lookup-auth-session",
 		nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		sessionQuery, cookie.ID)
 	if row == nil || err != nil {
 		return false, "", err
@@ -402,7 +402,7 @@ WHERE id = $1`
 func (s *authenticationServer) VerifyPasswordDBConsole(
 	ctx context.Context, userName username.SQLUsername, passwordStr string,
 ) (valid bool, expired bool, err error) {
-	exists, _, canLoginDBConsole, _, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.sqlServer.ExecutorConfig(),
 		userName,
@@ -484,7 +484,7 @@ RETURNING id
 		ctx,
 		"create-auth-session",
 		nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		insertSessionStmt,
 		hashedSecret,
 		userName.Normalized(),
@@ -550,17 +550,7 @@ func EncodeSessionCookie(
 		return nil, errors.Wrap(err, "session cookie could not be encoded")
 	}
 	value := base64.StdEncoding.EncodeToString(cookieValueBytes)
-	return makeCookieWithValue(value, forHTTPSOnly), nil
-}
-
-func makeCookieWithValue(value string, forHTTPSOnly bool) *http.Cookie {
-	return &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    value,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   forHTTPSOnly,
-	}
+	return CreateSessionCookie(value, forHTTPSOnly), nil
 }
 
 // getSession decodes the cookie from the request, looks up the corresponding session, and

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -58,19 +59,31 @@ var (
 	// reference error used by main.go at the end of a run of tests
 	errSomeClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
 
-	// reference error used when cluster creation fails for a test
-	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
-
-	// reference error for any failures during post test assertions
-	errDuringPostAssertions = fmt.Errorf("error during post test assertions")
-
-	// reference error for any failures due to VM preemption.
-	errVMPreemption = fmt.Errorf("VMs preempted during the test run")
-
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
 	// https://grafana.testeng.crdb.io/prometheus/config
 	prometheusScrapeInterval = time.Second * 15
+
+	// errClusterProvisioningFailed wraps the error given in an error
+	// that is properly sent to Test Eng and marked as an infra flake.
+	errClusterProvisioningFailed = func(err error) error {
+		return registry.ErrorWithOwner(
+			registry.OwnerTestEng, err,
+			registry.WithTitleOverride("cluster_creation"),
+			registry.InfraFlake,
+		)
+	}
+
+	// vmPreemptionError is the error that indicates that a test failed
+	// *and* VMs were preempted. These errors are directed to Test Eng
+	// instead of owning teams.
+	vmPreemptionError = func(preemptedVMs string) error {
+		return registry.ErrorWithOwner(
+			registry.OwnerTestEng, fmt.Errorf("preempted VMs: %s", preemptedVMs),
+			registry.WithTitleOverride("vm_preemption"),
+			registry.InfraFlake,
+		)
+	}
 
 	prng, _ = randutil.NewLockedPseudoRand()
 
@@ -651,6 +664,16 @@ func (r *testRunner) runWorker(
 			}
 		}
 
+		//  TODO(babusrithar): remove this once we see enough data in
+		//  nightly runs. This is a temp logic to test spot VMs.
+		if roachtestflags.Cloud == spec.GCE &&
+			testToRun.spec.Benchmark &&
+			!testToRun.spec.Suites.Contains(registry.Weekly) &&
+			rand.Float64() <= 0.5 {
+			l.PrintfCtx(ctx, "using spot VMs to run test %s", testToRun.spec.Name)
+			testToRun.spec.Cluster.UseSpotVMs = true
+		}
+
 		if roachtestflags.UseSpotVM {
 			testToRun.spec.Cluster.UseSpotVMs = true
 		}
@@ -729,14 +752,9 @@ func (r *testRunner) runWorker(
 		// occurred for reasons related to creating or setting up a
 		// cluster for a test.
 		handleClusterCreationFailure := func(err error) {
-			// Marking the error with this sentinel error allows the GitHub
-			// issue poster to detect this is an infrastructure flake and
-			// post the issue accordingly.
-			clusterError := errors.Mark(err, errClusterProvisioningFailed)
-			t.Error(clusterError)
+			t.Error(errClusterProvisioningFailed(err))
 
-			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
-			if err := github.MaybePost(t, l, t.failureMsg()); err != nil {
+			if _, err := github.MaybePost(t, l, t.failureMsg()); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		}
@@ -874,7 +892,7 @@ elif [[ -e "${ARTIFACTS_DIR}" ]]; then
 else
     echo false
 fi'`
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), "bash", "-c", testCmd)
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(node)), "bash", "-c", testCmd)
 		if err != nil {
 			return errors.Wrapf(err, "failed to check for artifacts in %q", srcDirOnNode)
 		}
@@ -952,6 +970,12 @@ func (r *testRunner) runTest(
 		grafanaAvailable = false
 	}
 
+	if grafanaAvailable {
+		// Add the runID, testRunID, and cluster name to grafanaTags. These are the three
+		// template variables grafana uses to filter tests by.
+		c.grafanaTags = []string{vm.SanitizeLabel(runID), vm.SanitizeLabel(testRunID), vm.SanitizeLabel(c.Name())}
+	}
+
 	defer func() {
 		t.end = timeutil.Now()
 		if err := c.removeLabels([]string{VmLabelTestName}); err != nil {
@@ -997,13 +1021,30 @@ func (r *testRunner) runTest(
 				failureMsg := t.failureMsg()
 				preemptedVMNames := getPreemptedVMNames(ctx, c, l)
 				if preemptedVMNames != "" {
-					failureMsg = fmt.Sprintf("VMs preempted during the test run : %s\n%s", preemptedVMNames, failureMsg)
-					// Adding this error allows the GitHub issue poster to detect this is an infrastructure flake and
-					// post the issue accordingly.
-					t.addFailure(0, "", errVMPreemption)
+					failureMsg = fmt.Sprintf("VMs preempted during the test run : %s\n\n**Other Failure**\n%s", preemptedVMNames, failureMsg)
+					// Reset failures in the test so that the VM preemption
+					// error is the one that is taken into account when
+					// reporting the failure. Note any other failures that
+					// happened during the test will be present in the
+					// `failureMsg` used when reporting the issue. In addition,
+					// `failure_N.log` files should also already exist at this
+					// point.
+					t.resetFailures()
+					t.Error(vmPreemptionError(preemptedVMNames))
 				}
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
 
+				issue, err := github.MaybePost(t, l, output)
+				if err != nil {
+					shout(ctx, l, stdout, "failed to post issue: %s", err)
+				}
+
+				// If an issue was created (or comment added) on GitHub,
+				// include that information in the output so that it can be
+				// easily inspected on the TeamCity overview page.
+				if issue != nil {
+					output += "\n" + issue.String()
+				}
 				if roachtestflags.TeamCity {
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
@@ -1013,8 +1054,11 @@ func (r *testRunner) runTest(
 
 				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", testRunID, durationStr, output)
 
-				if err := github.MaybePost(t, l, output); err != nil {
-					shout(ctx, l, stdout, "failed to post issue: %s", err)
+				if roachtestflags.GitHubActions {
+					outputLines := strings.Split(strings.TrimSpace(output), "\n")
+					for _, line := range outputLines {
+						shout(ctx, l, stdout, "::error title=%s failed::%s", s.Name, line)
+					}
 				}
 			} else {
 				shout(ctx, l, stdout, "--- PASS: %s (%s)", testRunID, durationStr)
@@ -1046,6 +1090,10 @@ func (r *testRunner) runTest(
 			}
 		}
 
+		if roachtestflags.GitHubActions && roachtestflags.Parallelism == 1 {
+			shout(ctx, l, stdout, "::endgroup::")
+		}
+
 		r.recordTestFinish(completedTestInfo{
 			test:    t.Name(),
 			run:     runNum,
@@ -1069,11 +1117,18 @@ func (r *testRunner) runTest(
 		r.status.Unlock()
 	}()
 
+	// NB: Nesting won't work properly if we're running multiple tests
+	// concurrently. Therefore, we only group log lines if parallelism is 1
+	// (which is true for local roachtests that we run in GitHub Actions).
+	if roachtestflags.GitHubActions && roachtestflags.Parallelism == 1 {
+		shout(ctx, l, stdout, "::group::%s", s.Name)
+	}
+
 	t.start = timeutil.Now()
 
 	// Extend the lifetime of the cluster if needed.
 	if err := c.MaybeExtendCluster(ctx, l, t.spec); err != nil {
-		t.Error(errors.Mark(err, errClusterProvisioningFailed))
+		t.Error(errClusterProvisioningFailed(err))
 		return
 	}
 
@@ -1197,7 +1252,9 @@ func (r *testRunner) postTestAssertions(
 	assertionFailed := false
 	postAssertionErr := func(err error) {
 		assertionFailed = true
-		t.Error(errors.Mark(err, errDuringPostAssertions))
+		t.Error(fmt.Errorf(
+			"failed during post test assertions (see test-post-assertions.log): %w", err,
+		))
 	}
 
 	postAssertCh := make(chan struct{})

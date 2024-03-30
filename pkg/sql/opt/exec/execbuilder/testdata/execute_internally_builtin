@@ -1,0 +1,170 @@
+# LogicTest: local
+
+# Note that even though this file contains some queries that actually get
+# executed, we choose to keep it in the execbuilder tests because it also has
+# EXPLAIN output.
+
+statement ok
+CREATE TABLE t (k PRIMARY KEY) AS VALUES (1), (3), (5);
+
+# When the internal executor is not session bound, it doesn't have Database
+# session variable set, so we must specify the fully-qualified table name.
+query T rowsort
+SELECT crdb_internal.execute_internally('SELECT k FROM test.public.t;');
+----
+1
+3
+5
+
+# When the internal executor is session bound that is not needed.
+query T rowsort
+SELECT crdb_internal.execute_internally('SELECT k FROM t;', true);
+----
+1
+3
+5
+
+# Set the database via the override.
+query T rowsort
+SELECT crdb_internal.execute_internally('EXPLAIN SELECT k FROM t;', 'Database=test');
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: FULL SCAN
+
+# Same query as above, but with vectorized engine disabled.
+query T rowsort
+SELECT crdb_internal.execute_internally('EXPLAIN SELECT k FROM t;', 'Database=test,VectorizeMode=off');
+----
+distribution: local
+vectorized: false
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: FULL SCAN
+
+# optimizer_use_histograms is the only variable that differs from the default
+# right now (except when the internal executor is session-bound, #102954).
+query T
+SELECT crdb_internal.execute_internally('SHOW optimizer_use_histograms;', false);
+----
+off
+
+query T
+SELECT crdb_internal.execute_internally('SHOW optimizer_use_histograms;', true);
+----
+on
+
+# Ensure that we can override it.
+query T
+SELECT crdb_internal.execute_internally('SHOW optimizer_use_histograms;', false, 'OptimizerUseHistograms=true');
+----
+on
+
+query T
+SELECT crdb_internal.execute_internally('SHOW optimizer_use_histograms;', true, 'OptimizerUseHistograms=false');
+----
+off
+
+# Some sanity checks around error handling.
+statement error unknown signature
+SELECT crdb_internal.execute_internally(1);
+
+statement error unknown signature
+SELECT crdb_internal.execute_internally('SELECT 1;', false, true);
+
+statement error when session bound internal executor is used, it always uses the session txn - omit the last argument
+SELECT crdb_internal.execute_internally('SELECT 1;', true, '', true);
+
+query error internally-executed-query-builtin: relation "foo" does not exist
+SELECT crdb_internal.execute_internally('SELECT col FROM foo;');
+
+statement error syntax error
+SELECT crdb_internal.execute_internally('SELECT col FROM;');
+
+statement error only one statement is supported, 2 were given
+SELECT crdb_internal.execute_internally('SELECT col FROM foo; SELECT 1;');
+
+statement error only one statement is supported, 0 were given
+SELECT crdb_internal.execute_internally('');
+
+statement error this statement is disallowed
+SELECT crdb_internal.execute_internally('BEGIN;');
+
+statement error this statement is disallowed
+SELECT crdb_internal.execute_internally('COMMIT;', 'Database=test', true);
+
+# Check transactionality.
+statement ok
+BEGIN;
+
+statement ok
+CREATE TABLE t2 (k INT PRIMARY KEY);
+
+# When running in a separate txn, we cannot see the newly created table.
+query error internally-executed-query-builtin: relation "t2" does not exist
+SELECT crdb_internal.execute_internally('SELECT k FROM t2;', 'Database=test', false);
+
+statement ok
+ROLLBACK;
+
+statement ok
+BEGIN;
+
+statement ok
+CREATE TABLE t2 (k INT PRIMARY KEY);
+
+# But using the session's txn with non-session-bound executor should work.
+statement ok
+SELECT crdb_internal.execute_internally('SELECT k FROM t2;', 'Database=test', true);
+
+statement ok
+SELECT crdb_internal.execute_internally('INSERT INTO t2 VALUES (1);', 'Database=test', true);
+
+query T
+SELECT crdb_internal.execute_internally('SELECT * FROM t2;', 'Database=test', true);
+----
+1
+
+statement ok
+COMMIT;
+
+user testuser
+
+statement error user testuser does not have REPAIRCLUSTER system privilege
+SELECT crdb_internal.execute_internally('SELECT session_user;');
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+# Ensure that changing the user via the override isn't possible.
+query T
+SELECT crdb_internal.execute_internally('SELECT session_user;');
+----
+testuser
+
+query T
+SELECT crdb_internal.execute_internally('SELECT session_user;', 'User=root');
+----
+testuser
+
+user root
+
+query T
+SELECT crdb_internal.execute_internally('SELECT session_user;');
+----
+root
+
+query T
+SELECT crdb_internal.execute_internally('SELECT session_user;', 'User=testuser');
+----
+root

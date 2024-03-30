@@ -47,9 +47,5 @@ go_test(
     name = "admissionpb_test",
     srcs = ["io_threshold_test.go"],
     embed = [":admissionpb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = ["@com_github_stretchr_testify//require"],
 )

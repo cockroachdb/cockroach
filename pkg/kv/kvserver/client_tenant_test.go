@@ -183,7 +183,6 @@ func TestTenantRateLimiter(t *testing.T) {
 			UpgradeManager: &upgradebase.TestingKnobs{
 				DontUseJobs:                       true,
 				SkipJobMetricsPollingJobBootstrap: true,
-				SkipAutoConfigRunnerJobBootstrap:  true,
 			},
 		},
 	})

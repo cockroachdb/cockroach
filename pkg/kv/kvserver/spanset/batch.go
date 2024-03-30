@@ -452,8 +452,9 @@ func (s spanSetReader) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
-	return s.r.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile)
+	return s.r.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 func (s spanSetReader) Close() {
@@ -749,6 +750,14 @@ func makeSpanSetReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Times
 	}
 }
 
+// NewReader returns a storage.Reader that asserts access of the underlying
+// Reader against the given SpanSet at a given timestamp. If zero timestamp is
+// provided, accesses are considered non-MVCC.
+func NewReader(r storage.Reader, spans *SpanSet, ts hlc.Timestamp) storage.Reader {
+	spans = addLockTableSpans(spans)
+	return spanSetReader{r: r, spans: spans, ts: ts}
+}
+
 // NewReadWriterAt returns a storage.ReadWriter that asserts access of the
 // underlying ReadWriter against the given SpanSet at a given timestamp.
 // If zero timestamp is provided, accesses are considered non-MVCC.
@@ -780,6 +789,7 @@ func (s spanSetBatch) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
 	// Only used on Engine.
 	panic("unimplemented")

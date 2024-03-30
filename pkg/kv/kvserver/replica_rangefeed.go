@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -77,6 +79,22 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// RangeFeedUseScheduler controls type of rangefeed processor is used to process
+// raft updates and sends updates to clients.
+var RangeFeedUseScheduler = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.scheduler.enabled",
+	"use shared fixed pool of workers for all range feeds instead of a "+
+		"worker per range (worker pool size is determined by "+
+		"COCKROACH_RANGEFEED_SCHEDULER_WORKERS env variable)",
+	util.ConstantWithMetamorphicTestBool("kv_rangefeed_scheduler_enabled", true),
+)
+
+// RangefeedSchedulerDisabled is a kill switch for scheduler based rangefeed
+// processors. To be removed in 24.1 after new processor becomes default.
+var RangefeedSchedulerDisabled = envutil.EnvOrDefaultBool("COCKROACH_RANGEFEED_DISABLE_SCHEDULER",
+	false)
+
 func init() {
 	// Inject into kvserverbase to allow usage from kvcoord.
 	kvserverbase.RangeFeedRefreshInterval = RangeFeedRefreshInterval
@@ -124,8 +142,9 @@ func (s *lockedRangefeedStream) Send(e *kvpb.RangeFeedEvent) error {
 // rangefeedTxnPusher is a shim around intentResolver that implements the
 // rangefeed.TxnPusher interface.
 type rangefeedTxnPusher struct {
-	ir *intentresolver.IntentResolver
-	r  *Replica
+	ir   *intentresolver.IntentResolver
+	r    *Replica
+	span roachpb.RSpan
 }
 
 // PushTxns is part of the rangefeed.TxnPusher interface. It performs a
@@ -133,7 +152,7 @@ type rangefeedTxnPusher struct {
 // transactions.
 func (tp *rangefeedTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
-) ([]*roachpb.Transaction, error) {
+) ([]*roachpb.Transaction, bool, error) {
 	pushTxnMap := make(map[uuid.UUID]*enginepb.TxnMeta, len(txns))
 	for i := range txns {
 		txn := &txns[i]
@@ -149,18 +168,18 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		},
 	}
 
-	pushedTxnMap, pErr := tp.ir.MaybePushTransactions(
+	pushedTxnMap, anyAmbiguousAbort, pErr := tp.ir.MaybePushTransactions(
 		ctx, pushTxnMap, h, kvpb.PUSH_TIMESTAMP, false, /* skipIfInFlight */
 	)
 	if pErr != nil {
-		return nil, pErr.GoError()
+		return nil, false, pErr.GoError()
 	}
 
 	pushedTxns := make([]*roachpb.Transaction, 0, len(pushedTxnMap))
 	for _, txn := range pushedTxnMap {
 		pushedTxns = append(pushedTxns, txn)
 	}
-	return pushedTxns, nil
+	return pushedTxns, anyAmbiguousAbort, nil
 }
 
 // ResolveIntents is part of the rangefeed.TxnPusher interface.
@@ -180,6 +199,58 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 			NoMemoryReservedAtSource: true,
 		}},
 	).GoError()
+}
+
+// Barrier is part of the rangefeed.TxnPusher interface.
+func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
+	// Check for v24.1 before issuing the request, in case the server binary is
+	// somehow upgraded from 23.2 to 24.1 while the response is in flight. This
+	// seems very unlikely, but it doesn't really cost us anything.
+	isV24_1 := tp.r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start)
+
+	// Execute a Barrier on the leaseholder, and obtain its LAI. Error out on any
+	// range changes (e.g. splits/merges) that we haven't applied yet.
+	lai, desc, err := tp.r.store.db.BarrierWithLAI(ctx, tp.span.Key, tp.span.EndKey)
+	if err != nil && errors.HasType(err, &kvpb.RangeKeyMismatchError{}) {
+		// The DistSender may have a stale range descriptor, e.g. following a merge.
+		// Failed unsplittable requests don't trigger a refresh, so we have to
+		// attempt to refresh it by sending a Get request to the start key.
+		//
+		// TODO(erikgrinaker): the DistSender should refresh its cache instead.
+		if _, err := tp.r.store.db.Get(ctx, tp.span.Key); err != nil {
+			return errors.Wrap(err, "range barrier failed: range descriptor refresh failed")
+		}
+		// Retry the Barrier.
+		lai, desc, err = tp.r.store.db.BarrierWithLAI(ctx, tp.span.Key, tp.span.EndKey)
+	}
+	if err != nil {
+		return errors.Wrap(err, "range barrier failed")
+	}
+	if lai == 0 {
+		if !isV24_1 {
+			// We may be talking to a <24.1 binary which doesn't support
+			// BarrierRequest.WithLeaseAppliedIndex. We don't expect to see this,
+			// because those nodes won't support PushTxnResponse.AmbiguousAbort either,
+			// but if we do just return success and degrade to the old behavior.
+			return nil
+		}
+		return errors.AssertionFailedf("barrier response without LeaseAppliedIndex")
+	}
+	if desc.RangeID != tp.r.RangeID {
+		return errors.Errorf("range barrier failed, range ID changed: %d -> %s", tp.r.RangeID, desc)
+	}
+	if !desc.RSpan().Equal(tp.span) {
+		return errors.Errorf("range barrier failed, range span changed: %s -> %s", tp.span, desc)
+	}
+
+	// Wait for the local replica to apply it. In the common case where we are the
+	// leaseholder, the Barrier call will already have waited for application, so
+	// this succeeds immediately.
+	if _, err = tp.r.WaitForLeaseAppliedIndex(ctx, lai); err != nil {
+		return errors.Wrap(err, "range barrier failed")
+	}
+
+	return nil
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
@@ -421,8 +492,13 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// Create a new rangefeed.
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(isSystemSpan)
 
+	var sched *rangefeed.Scheduler
+	if shouldUseRangefeedScheduler(&r.ClusterSettings().SV) {
+		sched = r.store.getRangefeedScheduler()
+	}
+
 	desc := r.Desc()
-	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
+	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r, span: desc.RSpan()}
 	cfg := rangefeed.Config{
 		AmbientContext:   r.AmbientContext,
 		Clock:            r.Clock(),
@@ -431,12 +507,13 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		RangeID:          r.RangeID,
 		Span:             desc.RSpan(),
 		TxnPusher:        &tp,
+		PushTxnsInterval: r.store.TestingKnobs().RangeFeedPushTxnsInterval,
 		PushTxnsAge:      r.store.TestingKnobs().RangeFeedPushTxnsAge,
 		EventChanCap:     defaultEventChanCap,
 		EventChanTimeout: defaultEventChanTimeout,
 		Metrics:          r.store.metrics.RangeFeedMetrics,
 		MemBudget:        feedBudget,
-		Scheduler:        r.store.getRangefeedScheduler(),
+		Scheduler:        sched,
 		Priority:         isSystemSpan, // only takes effect when Scheduler != nil
 	}
 	p = rangefeed.NewProcessor(cfg)
@@ -876,6 +953,10 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *kvpb.Error 
 		}
 	}
 	return nil
+}
+
+func shouldUseRangefeedScheduler(sv *settings.Values) bool {
+	return RangeFeedUseScheduler.Get(sv) && !RangefeedSchedulerDisabled
 }
 
 // TestGetReplicaRangefeedProcessor exposes rangefeed processor for test

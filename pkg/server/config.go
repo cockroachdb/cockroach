@@ -33,12 +33,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -227,6 +228,10 @@ type BaseConfig struct {
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
 
+	// WALFailover enables and configures automatic WAL failover when latency to
+	// a store's primary WAL increases.
+	WALFailover base.WALFailoverConfig
+
 	// SharedStorage is specified to enable disaggregated shared storage.
 	SharedStorage                    string
 	EarlyBootExternalStorageAccessor *cloud.EarlyBootExternalStorageAccessor
@@ -267,15 +272,14 @@ type BaseConfig struct {
 	// through an OpenTelemetry Collector.
 	ObsServiceAddr string
 
-	// AutoConfigProvider provides auto-configuration tasks to apply on
-	// the cluster during server initialization.
-	AutoConfigProvider acprovider.Provider
-
 	// RPCListenerFactory provides an alternate implementation of
 	// ListenAndUpdateAddrs for use when creating gPRC
 	// listeners. This is set by in-memory tenants if the user has
 	// specified port range preferences.
 	RPCListenerFactory RPCListenerFactory
+
+	// DiskMonitorManager provides metrics for individual disks.
+	DiskMonitorManager *disk.MonitorManager
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -312,11 +316,11 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.DisableMaxOffsetCheck = false
 	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	cfg.StorageEngine = storage.DefaultStorageEngine
+	cfg.WALFailover = base.WALFailoverConfig{Mode: base.WALFailoverDefault}
 	cfg.TestingInsecureWebAccess = disableWebLogin
 	cfg.Stores = base.StoreSpecList{
 		Specs: []base.StoreSpec{storeSpec},
 	}
-	cfg.AutoConfigProvider = acprovider.NoTaskProvider{}
 	// We use the tag "n" here for both KV nodes and SQL instances,
 	// using the knowledge that the value part of a SQL instance ID
 	// container will prefix the value with the string "sql", resulting
@@ -325,6 +329,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.Config.InitDefaults()
 	cfg.InitTestingKnobs()
 	cfg.EarlyBootExternalStorageAccessor = cloud.NewEarlyBootExternalStorageAccessor(st, cfg.ExternalIODirConfig)
+	cfg.DiskMonitorManager = disk.NewMonitorManager(vfs.Default)
 }
 
 // InitTestingKnobs sets up any testing knobs based on e.g. envvars.
@@ -749,16 +754,29 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	}
 
 	var storeKnobs kvserver.StoreTestingKnobs
+	var stickyRegistry fs.StickyRegistry
 	if s := cfg.TestingKnobs.Store; s != nil {
 		storeKnobs = *s.(*kvserver.StoreTestingKnobs)
 	}
+	if cfg.TestingKnobs.Server != nil {
+		serverKnobs := cfg.TestingKnobs.Server.(*TestingKnobs)
+		stickyRegistry = serverKnobs.StickyVFSRegistry
+	}
+
+	storeEnvs, err := fs.InitEnvsFromStoreSpecs(ctx, cfg.Stores.Specs, fs.ReadWrite, stickyRegistry)
+	if err != nil {
+		return Engines{}, err
+	}
+	defer storeEnvs.CloseAll()
+
+	walFailoverConfig := storage.WALFailover(cfg.WALFailover, storeEnvs, vfs.Default)
 
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 
 		storageConfigOpts := []storage.ConfigOption{
+			walFailoverConfig,
 			storage.Attributes(spec.Attributes),
-			storage.EncryptionAtRest(spec.EncryptionOptions),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 		}
 		if len(storeKnobs.EngineKnobs) > 0 {
@@ -768,25 +786,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storageConfigOpts = append(storageConfigOpts, opt)
 		}
 
-		var location storage.Location
 		if spec.InMemory {
-			if spec.StickyVFSID == "" {
-				location = storage.InMemory()
-			} else {
-				if cfg.TestingKnobs.Server == nil {
-					return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
-						"engine no server knobs available to get a registry. " +
-						"Please use Knobs.Server.StickyVFSRegistry to provide one.")
-				}
-				knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
-				if knobs.StickyVFSRegistry == nil {
-					return Engines{}, errors.Errorf("Could not create a sticky " +
-						"engine no registry available. Please use " +
-						"Knobs.Server.StickyVFSRegistry to provide one.")
-				}
-				location = storage.MakeLocation("", knobs.StickyVFSRegistry.Get(spec.StickyVFSID))
-			}
-
 			var sizeInBytes = spec.Size.InBytes
 			if spec.Size.Percent > 0 {
 				sysMem, err := status.GetTotalMemory(ctx)
@@ -805,11 +805,10 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 			detail(redact.Sprintf("store %d: in-memory, size %s", i, humanizeutil.IBytes(sizeInBytes)))
 		} else {
-			location = storage.Filesystem(spec.Path)
-			if err := vfs.Default.MkdirAll(spec.Path, 0755); err != nil {
-				return Engines{}, errors.Wrap(err, "creating store directory")
-			}
-			du, err := vfs.Default.GetDiskUsage(spec.Path)
+			// NB: We've already initialized an *fs.Env backed by the real
+			// physical filesystem. This initialization will create the
+			// data directory if it didn't already exist.
+			du, err := storeEnvs[i].UnencryptedFS.GetDiskUsage(spec.Path)
 			if err != nil {
 				return Engines{}, errors.Wrap(err, "retrieving disk usage")
 			}
@@ -853,11 +852,16 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
 			}
 		}
-		eng, err := storage.Open(ctx, location, cfg.Settings, storageConfigOpts...)
+		eng, err := storage.Open(ctx, storeEnvs[i], cfg.Settings, storageConfigOpts...)
 		if err != nil {
 			return Engines{}, err
 		}
-		detail(redact.Sprintf("store %d: %+v", i, eng.Properties()))
+		// Nil out the store env; the engine has taken responsibility for Closing
+		// it.
+		// TODO(jackson): Refactor to either reference count references to the env,
+		// or leave ownership with the caller of Open.
+		storeEnvs[i] = nil
+		detail(redact.Sprintf("store %d: %s", i, eng.Properties()))
 		engines = append(engines, eng)
 	}
 

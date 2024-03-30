@@ -12,10 +12,11 @@ package tests
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -24,9 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	errors "github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
 	"github.com/stretchr/testify/require"
 )
@@ -35,6 +40,9 @@ import (
 // of system.users, and then validates that the time required to create
 // new connections to the cluster afterwards remains under a reasonable limit.
 func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluster) {
+	if c.IsLocal() {
+		t.Fatal("cannot be run in local mode: usage of sudo iptables in local environment discouraged")
+	}
 	n := c.Spec().NodeCount
 	serverNodes, clientNode := c.Range(1, n-1), c.Node(n)
 
@@ -45,10 +53,10 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	// 3 will re-recreate a separate set of certs, which
 	// we don't want. Starting all nodes at once ensures
 	// that they use coherent certs.
-	settings := install.MakeClusterSettings(install.SecureOption(true))
+	settings := install.MakeClusterSettings()
 
 	// Don't create a backup schedule as this test shuts the cluster down immediately.
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, serverNodes)
+	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, serverNodes)
 	require.NoError(t, c.StopE(ctx, t.L(), option.DefaultStopOpts(), serverNodes))
 
 	t.L().Printf("restarting nodes...")
@@ -63,23 +71,23 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	// Currently, creating a scheduled backup at start fails, potentially due to
 	// the induced network partition. Further investigation required to allow scheduled backups
 	// to run on this test.
-	startOpts := option.DefaultStartOptsNoBackups()
+	startOpts := option.NewStartOpts(option.NoBackupSchedule)
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--locality=node=1", "--accept-sql-without-tls")
 	c.Start(ctx, t.L(), startOpts, settings, c.Node(1))
 
 	// See comment above about env vars.
 	// "--env=COCKROACH_SCAN_INTERVAL=200ms",
 	// "--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
-	startOpts = option.DefaultStartOptsNoBackups()
+	startOpts = option.NewStartOpts(option.NoBackupSchedule)
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--locality=node=other", "--accept-sql-without-tls")
 	c.Start(ctx, t.L(), startOpts, settings, c.Range(2, n-1))
 
 	t.L().Printf("retrieving server addresses...")
-	serverAddrs, err := c.InternalAddr(ctx, t.L(), serverNodes)
+	serverUrls, err := c.InternalPGUrl(ctx, t.L(), serverNodes, roachprod.PGURLOptions{Auth: install.AuthUserPassword})
 	require.NoError(t, err)
 
 	t.L().Printf("fetching certs...")
-	certsDir := "/home/ubuntu/certs"
+	certsDir := fmt.Sprintf("/home/ubuntu/%s", install.CockroachNodeCertsDir)
 	localCertsDir, err := filepath.Abs("./network-certs")
 	require.NoError(t, err)
 	require.NoError(t, os.RemoveAll(localCertsDir))
@@ -101,13 +109,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	defer db.Close()
 
 	// Wait for up-replication. This will also print a progress message.
-	err = WaitFor3XReplication(ctx, t, db)
-	require.NoError(t, err)
-
-	t.L().Printf("creating test user...")
-	_, err = db.Exec(`CREATE USER testuser WITH PASSWORD 'password' VALID UNTIL '2060-01-01'`)
-	require.NoError(t, err)
-	_, err = db.Exec(`GRANT admin TO testuser`)
+	err = WaitFor3XReplication(ctx, t, t.L(), db)
 	require.NoError(t, err)
 
 	const expectedLeaseholder = 1
@@ -201,12 +203,12 @@ SELECT $1::INT = ALL (
 				}
 
 				// Construct a connection URL to server i.
-				url := fmt.Sprintf("postgres://testuser:password@%s/defaultdb?sslmode=require", serverAddrs[server-1])
+				url := serverUrls[server-1]
 
 				// Attempt a client connection to that server.
 				t.L().Printf("server %d, attempt %d; url: %s\n", server, attempt, url)
 
-				b, err := c.RunWithDetailsSingleNode(ctx, t.L(), clientNode, "time", "-p", "./cockroach", "sql",
+				b, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(clientNode), "time", "-p", "./cockroach", "sql",
 					"--url", url, "--certs-dir", certsDir, "-e", "'SELECT 1'")
 
 				// Report the results of execution.
@@ -253,7 +255,7 @@ SELECT $1::INT = ALL (
 		})
 
 		t.L().Printf("blocking networking on node 1...")
-		const netConfigCmd = `
+		netConfigCmd := fmt.Sprintf(`
 # ensure any failure fails the entire script.
 set -e;
 
@@ -262,23 +264,35 @@ sudo iptables -P INPUT ACCEPT;
 sudo iptables -P OUTPUT ACCEPT;
 
 # Drop any node-to-node crdb traffic.
-sudo iptables -A INPUT -p tcp --dport 26257 -j DROP;
-sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -A INPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
 
 sudo iptables-save
-`
+`,
+			c.Node(expectedLeaseholder), c.Node(expectedLeaseholder))
 		t.L().Printf("partitioning using iptables; config cmd:\n%s", netConfigCmd)
 		require.NoError(t, c.RunE(ctx, option.WithNodes(c.Node(expectedLeaseholder)), netConfigCmd))
 
-		// (attempt to) restore iptables when test end, so that cluster
-		// can be investigated afterwards.
 		defer func() {
-			const restoreNet = `
+			// Check that iptable DROP actually blocked traffic.
+			t.L().Printf("verify that traffic to node %d is blocked", expectedLeaseholder)
+			packetsDropped, err := iptablesPacketsDropped(ctx, t.L(), c, c.Node(expectedLeaseholder))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if packetsDropped == 0 {
+				t.Fatalf("Expected node %d to be partitioned but reported no packets dropped.", expectedLeaseholder)
+			}
+
+			// (attempt to) restore iptables when test end, so that cluster
+			// can be investigated afterwards.
+			restoreNet := fmt.Sprintf(`
 set -e;
-sudo iptables -D INPUT -p tcp --dport 26257 -j DROP;
-sudo iptables -D OUTPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -D INPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -D OUTPUT -p tcp --dport {pgport%s} -j DROP;
 sudo iptables-save
-`
+`,
+				c.Node(expectedLeaseholder), c.Node(expectedLeaseholder))
 			t.L().Printf("restoring iptables; config cmd:\n%s", restoreNet)
 			require.NoError(t, c.RunE(ctx, option.WithNodes(c.Node(expectedLeaseholder)), restoreNet))
 		}()
@@ -297,6 +311,108 @@ sudo iptables-save
 	m.Wait()
 }
 
+// runClientNetworkConnectionTimeout simulates a scenario where the client and
+// server loose connectivity with a connection that is idle. The purpose of this
+// test is to confirm that the keep alive settings are enforced.
+func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c cluster.Cluster) {
+	if c.IsLocal() {
+		t.Fatal("cannot be run in local mode: usage of sudo iptables in local environment discouraged")
+	}
+	n := c.Spec().NodeCount
+	serverNodes, clientNode := c.Range(1, n-1), c.Nodes(n)
+	settings := install.MakeClusterSettings()
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, serverNodes)
+	certsDir := "/home/ubuntu/certs"
+	t.L().Printf("connecting to cluster from roachtest...")
+	db, err := c.ConnE(ctx, t.L(), 1)
+	require.NoError(t, err)
+	defer db.Close()
+
+	grp := ctxgroup.WithContext(ctx)
+	// Startup a connection on the client server, which will be running a
+	// long transaction (i.e. just the sleep builtin).
+	var runOutput install.RunResultDetails
+	grp.GoCtx(func(ctx context.Context) error {
+		urls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), certsDir, roachprod.PGURLOptions{
+			External: true,
+			Secure:   true,
+		})
+		if err != nil {
+			return err
+		}
+		commandThatWillDisconnect := fmt.Sprintf(`./cockroach sql --certs-dir %s --url %s -e "SELECT pg_sleep(600)"`, certsDir, urls[0])
+		t.L().Printf("Executing long running query: %s", commandThatWillDisconnect)
+		output, err := c.RunWithDetails(ctx, t.L(), option.WithNodes(clientNode), commandThatWillDisconnect)
+		runOutput = output[0]
+		return err
+	})
+	// Confirm that the connection was started.
+	testutils.SucceedsSoon(t, func() error {
+		row := db.QueryRow("SELECT count(*) FROM [SHOW CLUSTER SESSIONS] WHERE active_queries='SELECT pg_sleep(600)'")
+		var count int
+		if err := row.Scan(&count); err != nil {
+			return err
+		}
+		// Wait for the query to start up.
+		if count != 1 {
+			return errors.AssertionFailedf("unexepcted count :%v", count)
+		}
+		return nil
+	})
+
+	netConfigCmd := fmt.Sprintf(`
+# ensure any failure fails the entire script.
+set -e;
+
+# Setting default filter policy
+sudo iptables -P INPUT ACCEPT;
+sudo iptables -P OUTPUT ACCEPT;
+
+# Drop any client traffic to CRDB.
+sudo iptables -A INPUT -p tcp --sport {pgport%s} -j DROP;
+sudo iptables -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
+`,
+		c.Node(1), c.Node(1))
+	t.L().Printf("blocking networking on client; config cmd:\n%s", netConfigCmd)
+	blockStartTime := timeutil.Now()
+	require.NoError(t, c.RunE(ctx, option.WithNodes(clientNode), netConfigCmd))
+
+	// (attempt to) restore iptables when test end, so that the client
+	// can be investigated afterward.
+	defer func() {
+		const restoreNet = `
+set -e;
+sudo iptables -F INPUT;
+sudo iptables -F OUTPUT;
+`
+		t.L().Printf("restoring iptables; config cmd:\n%s", restoreNet)
+		require.NoError(t, c.RunE(ctx, option.WithNodes(clientNode), restoreNet))
+	}()
+
+	// We expect the connection to timeout within 30 seconds based on
+	// the default settings. We will wait for up to 1 minutes for the
+	// connection to drop.
+	testutils.SucceedsWithin(t, func() error {
+		row := db.QueryRow("SELECT count(*) FROM [SHOW CLUSTER SESSIONS] WHERE active_queries='SELECT pg_sleep(600)'")
+		var count int
+		if err := row.Scan(&count); err != nil {
+			return err
+		}
+		if count != 0 {
+			return errors.AssertionFailedf("unexepcted count :%d", count)
+		}
+		return nil
+	},
+		time.Minute)
+	// Confirm it took at least a minute for the connection to clear out.
+	require.Greaterf(t, timeutil.Since(blockStartTime), time.Second*30, "connection dropped earlier than expected")
+	t.L().Printf("Connection was dropped after %s", timeutil.Since(blockStartTime))
+	// We expect the connection to be dropped with the lower keep alive settings.
+	require.NoError(t, grp.Wait())
+	require.Contains(t, runOutput.Stderr, "If the server is running, check --host client-side and --advertise server-side",
+		"Did not detect connection failure %s %d", runOutput.Stderr, runOutput.RemoteExitStatus)
+}
+
 func registerNetwork(r registry.Registry) {
 	const numNodes = 4
 	r.Add(registry.TestSpec{
@@ -310,4 +426,33 @@ func registerNetwork(r registry.Registry) {
 			runNetworkAuthentication(ctx, t, c)
 		},
 	})
+
+	r.Add(registry.TestSpec{
+		Name:             "network/client-connection-timeout",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(2), // One server and client
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Run:              runClientNetworkConnectionTimeout,
+	})
+}
+
+// iptablesPacketsDropped returns the number of packets dropped to a given node due to an iptables rule.
+func iptablesPacketsDropped(
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, node option.NodeListOption,
+) (int, error) {
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), "sudo iptables -L -v -n")
+	if err != nil {
+		return 0, err
+	}
+	rows := strings.Split(res.Stdout, "\n")
+	// iptables -L outputs rows in the order of: chain, fields, and then values.
+	// We care about the values so only look at row 2.
+	values := strings.Fields(rows[2])
+	if len(values) == 0 {
+		return 0, errors.Errorf("no configured iptables rules found:\n%s", res.Stdout)
+	}
+	packetsDropped, err := strconv.Atoi(values[0])
+	return packetsDropped, errors.Wrapf(err, "could not find number of packets dropped, rules found:\n%s", res.Stdout)
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -235,6 +236,49 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	exp.GCBytesAge = -7
 	exp.LockAge = -3
 	require.Equal(t, exp, neg)
+}
+
+func TestMVCCStatsHasUserDataCloseTo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ms1 := enginepb.MVCCStats{
+		ContainsEstimates: 10,
+		KeyBytes:          10,
+		KeyCount:          10,
+		ValBytes:          10,
+		ValCount:          10,
+		IntentBytes:       10,
+		IntentCount:       10,
+		RangeKeyCount:     10,
+		RangeKeyBytes:     10,
+		RangeValCount:     10,
+		RangeValBytes:     10,
+		LockBytes:         10,
+		LockCount:         10,
+		LockAge:           10,
+		GCBytesAge:        10,
+		LiveBytes:         10,
+		LiveCount:         10,
+		SysBytes:          10,
+		SysCount:          10,
+		LastUpdateNanos:   10,
+		AbortSpanBytes:    10,
+	}
+	require.NoError(t, zerofields.NoZeroField(&ms1))
+
+	ms2 := ms1
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 1, 2))
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 0, 0))
+
+	ms2.KeyCount += 5
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 6, 0))
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 5, 0))
+	require.False(t, ms1.HasUserDataCloseTo(ms2, 4, 0))
+
+	ms2.ValBytes += 20
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 5, 21))
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 5, 20))
+	require.False(t, ms1.HasUserDataCloseTo(ms2, 5, 19))
 }
 
 func TestMVCCGetNotExist(t *testing.T) {
@@ -1977,11 +2021,11 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		sz int64,
 		byteLimit int64,
 	) int {
-		resume, err := MVCCClearTimeRange(ctx, rw, ms, key, endKey, ts, endTs, nil, nil, 64, sz, byteLimit)
+		resume, err := MVCCClearTimeRange(ctx, rw, ms, key, endKey, ts, endTs, nil, nil, 64, sz, byteLimit, 0)
 		require.NoError(t, err)
 		attempts := 1
 		for resume != nil {
-			resume, err = MVCCClearTimeRange(ctx, rw, ms, resume, endKey, ts, endTs, nil, nil, 64, sz, byteLimit)
+			resume, err = MVCCClearTimeRange(ctx, rw, ms, resume, endKey, ts, endTs, nil, nil, 64, sz, byteLimit, 0)
 			require.NoError(t, err)
 			attempts++
 		}
@@ -1990,7 +2034,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear > ts0", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts0, ts0Content)
 		assertKVs(t, b, ts1, ts0Content)
@@ -2046,7 +2090,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear > ts4 (nothing) ", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts4, ts5, nil, nil, 64, 10, kb)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts4, ts5, nil, nil, 64, 10, kb, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts4, ts4Content)
 		assertKVs(t, b, ts5, ts4Content)
@@ -2055,7 +2099,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear > ts5 (nothing)", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts5, ts5.Next(), nil, nil, 64, 10, kb)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts5, ts5.Next(), nil, nil, 64, 10, kb, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts4, ts4Content)
 		assertKVs(t, b, ts5, ts4Content)
@@ -2072,7 +2116,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear > ts0 in empty span (nothing)", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey5, ts0, ts5, nil, nil, 64, 10, kb)
+		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey5, ts0, ts5, nil, nil, 64, 10, kb, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts2, ts2Content)
 		assertKVs(t, b, ts5, ts4Content)
@@ -2081,7 +2125,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear > ts0 in empty span [k3,k5) (nothing)", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey5, ts0, ts5, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey5, ts0, ts5, nil, nil, 64, 10, 1<<10, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts2, ts2Content)
 		assertKVs(t, b, ts5, ts4Content)
@@ -2090,7 +2134,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear k3 and up in ts0 > x >= ts1 (nothing)", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, keyMax, ts0, ts1, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, keyMax, ts0, ts1, nil, nil, 64, 10, 1<<10, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts2, ts2Content)
 		assertKVs(t, b, ts5, ts4Content)
@@ -2106,7 +2150,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addIntent(t, b)
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10, 0)
 		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
@@ -2114,41 +2158,61 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addIntent(t, b)
-		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey4, ts2, ts3, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey4, ts2, ts3, nil, nil, 64, 10, 1<<10, 0)
 		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
-	t.Run("clear everything above intent", func(t *testing.T) {
+	t.Run("clear everything above intent fails", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addIntent(t, b)
-		resumingClear(t, ctx, b, nil, localMax, keyMax, ts3, ts5, 10, kb)
-		assertKVs(t, b, ts2, ts2Content)
-
-		// Scan (< k3 to avoid intent) to confirm that k2 was indeed reverted to
-		// value as of ts3 (i.e. v4 was cleared to expose v2).
-		res, err := MVCCScan(ctx, b, localMax, testKey3, ts5, MVCCScanOptions{})
-		require.NoError(t, err)
-		require.Equal(t, ts3Content[:2], res.KVs)
-
-		// Verify the intent was left alone.
-		_, err = MVCCScan(ctx, b, testKey3, testKey4, ts5, MVCCScanOptions{})
-		require.Error(t, err)
-
-		// Scan (> k3 to avoid intent) to confirm that k5 was indeed reverted to
-		// value as of ts3 (i.e. v4 was cleared to expose v2).
-		res, err = MVCCScan(ctx, b, testKey4, keyMax, ts5, MVCCScanOptions{})
-		require.NoError(t, err)
-		require.Equal(t, ts3Content[2:], res.KVs)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts3, ts5, nil, nil, 64, 10, 1<<10, 0)
+		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
-	t.Run("clear below intent", func(t *testing.T) {
+	t.Run("clear below intent fails", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addIntent(t, b)
-		assertKVs(t, b, ts2, ts2Content)
-		resumingClear(t, ctx, b, nil, localMax, keyMax, ts1, ts2, 10, kb)
-		assertKVs(t, b, ts2, ts1Content)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts1, ts2, nil, nil, 64, 10, 1<<10, 0)
+		require.EqualError(t, err, "conflicting locks on \"/db3\"")
+	})
+
+	// Add a shared lock at k1 with a txn at ts3.
+	addLock := func(t *testing.T, rw ReadWriter) {
+		err := MVCCAcquireLock(ctx, rw, &txn, lock.Shared, testKey1, nil, 0, 0)
+		require.NoError(t, err)
+	}
+	t.Run("clear everything hitting lock fails", func(t *testing.T) {
+		b := eng.NewBatch()
+		defer b.Close()
+		addLock(t, b)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10, 0)
+		require.EqualError(t, err, "conflicting locks on \"/db1\"")
+	})
+
+	t.Run("clear exactly hitting lock fails", func(t *testing.T) {
+		b := eng.NewBatch()
+		defer b.Close()
+		addLock(t, b)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts2, ts3, nil, nil, 64, 10, 1<<10, 0)
+		require.EqualError(t, err, "conflicting locks on \"/db1\"")
+	})
+
+	t.Run("clear everything above lock fails", func(t *testing.T) {
+		b := eng.NewBatch()
+		defer b.Close()
+		addLock(t, b)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts3, ts5, nil, nil, 64, 10, 1<<10, 0)
+		require.EqualError(t, err, "conflicting locks on \"/db1\"")
+	})
+
+	t.Run("clear below lock fails", func(t *testing.T) {
+		b := eng.NewBatch()
+		defer b.Close()
+		addLock(t, b)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts1, ts2, nil, nil, 64, 10, 1<<10, 0)
+		require.EqualError(t, err, "conflicting locks on \"/db1\"")
 	})
 }
 
@@ -2254,7 +2318,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 				attempts++
 				batch := e.NewBatch()
 				startKey, err = MVCCClearTimeRange(ctx, batch, &ms, startKey, keyMax, revertTo, now,
-					nil, nil, clearRangeThreshold, keyLimit, byteLimit)
+					nil, nil, clearRangeThreshold, keyLimit, byteLimit, 0)
 				require.NoError(t, err)
 				require.NoError(t, batch.Commit(false))
 				batch.Close()
@@ -4033,8 +4097,8 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	eng, err := Open(
 		context.Background(), InMemory(), cluster.MakeTestingClusterSettings(),
 		func(cfg *engineConfig) error {
-			cfg.Opts.LBaseMaxBytes = int64(100 + rng.Intn(16384))
-			log.Infof(ctx, "lbase: %d", cfg.Opts.LBaseMaxBytes)
+			cfg.opts.LBaseMaxBytes = int64(100 + rng.Intn(16384))
+			log.Infof(ctx, "lbase: %d", cfg.opts.LBaseMaxBytes)
 			return nil
 		})
 	require.NoError(t, err)
@@ -4885,15 +4949,15 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		}
 	}
 	if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("r"),
-		roachpb.Key("r-del").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+		roachpb.Key("r-del").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("t"),
-		roachpb.Key("u").Next(), ts2, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+		roachpb.Key("u").Next(), ts2, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("t"),
-		roachpb.Key("u").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+		roachpb.Key("u").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if log.V(1) {
@@ -5306,7 +5370,7 @@ func (d rangeTestData) populateEngine(
 			ts = v.point.Key.Timestamp
 		} else {
 			require.NoError(t, MVCCDeleteRangeUsingTombstone(ctx, engine, ms, v.rangeTombstone.StartKey,
-				v.rangeTombstone.EndKey, v.rangeTombstone.Timestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, nil),
+				v.rangeTombstone.EndKey, v.rangeTombstone.Timestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil),
 				"failed to insert range tombstone into engine (%s)", v.rangeTombstone.String())
 			ts = v.rangeTombstone.Timestamp
 		}
@@ -6708,7 +6772,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 
 	// Test function uses a fixed time and key range to produce SST.
 	// Use varying inserted keys for values and intents to putting them in and out of ranges.
-	checkReportedErrors := func(data []testValue, expectedIntentIndices []int) func(*testing.T) {
+	checkReportedErrors := func(data []testValue, expectedIntentIndices []int, targetBytes uint64) func(*testing.T) {
 		return func(t *testing.T) {
 			ctx := context.Background()
 			st := cluster.MakeTestingClusterSettings()
@@ -6719,16 +6783,17 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 			require.NoError(t, fillInData(ctx, engine, data))
 			ss := kvpb.ScanStats{}
 			_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
-				StartKey:           MVCCKey{Key: key(10)},
-				EndKey:             key(20000),
-				StartTS:            ts(999),
-				EndTS:              ts(2000),
-				ExportAllRevisions: true,
-				TargetSize:         0,
-				MaxSize:            0,
-				MaxLockConflicts:   uint64(MaxConflictsPerLockConflictError.Default()),
-				StopMidKey:         false,
-				ScanStats:          &ss,
+				StartKey:                MVCCKey{Key: key(10)},
+				EndKey:                  key(20000),
+				StartTS:                 ts(999),
+				EndTS:                   ts(2000),
+				ExportAllRevisions:      true,
+				TargetSize:              0,
+				MaxSize:                 0,
+				MaxLockConflicts:        uint64(MaxConflictsPerLockConflictError.Default()),
+				TargetLockConflictBytes: targetBytes,
+				StopMidKey:              false,
+				ScanStats:               &ss,
 			}, &bytes.Buffer{})
 			if len(expectedIntentIndices) == 0 {
 				require.NoError(t, err)
@@ -6758,7 +6823,8 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 		testData[i*2+1] = intent(key(i*2+12), "intent", ts(1001))
 		expectedErrors[i] = i*2 + 1
 	}
-	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxConflictsPerLockConflictError.Default()]))
+	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxConflictsPerLockConflictError.Default()], 0))
+	t.Run("Byte target checking", checkReportedErrors(testData, expectedErrors[:5000], uint64(TargetBytesPerLockConflictError.Default())))
 }
 
 // TestMVCCExportToSSTSplitMidKey verifies that split mid key in exports will

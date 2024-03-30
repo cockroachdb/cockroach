@@ -2,9 +2,6 @@
 
 MISC_SRCS = [
     "//pkg/ccl/backupccl:data_driven_generated_test.go",
-    "//pkg/ccl/backupccl:restore_entry_cover_generated_test.go",
-    "//pkg/ccl/backupccl:restore_memory_monitoring_generated_test.go",
-    "//pkg/ccl/backupccl:restore_mid_schema_change_generated_test.go",
     "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl:generated_test.go",
     "//pkg/internal/team:TEAMS.yaml",
     "//pkg/kv/kvpb:batch_generated.go",
@@ -35,5 +32,7 @@ MISC_SRCS = [
     "//pkg/util/log/logpb:json_encode_generated.go",
     "//pkg/util/log/severity:severity_generated.go",
     "//pkg/util/log:log_channels_generated.go",
+    "//pkg/util/span:btreefrontierentry_interval_btree.go",
+    "//pkg/util/span:btreefrontierentry_interval_btree_test.go",
     "//pkg/util/timeutil:lowercase_timezones_generated.go",
 ]

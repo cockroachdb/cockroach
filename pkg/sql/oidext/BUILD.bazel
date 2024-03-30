@@ -13,10 +13,6 @@ go_test(
     size = "small",
     srcs = ["oidext_test.go"],
     embed = [":oidext"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//require",

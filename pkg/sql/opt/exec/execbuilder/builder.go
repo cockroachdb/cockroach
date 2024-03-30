@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -61,6 +62,7 @@ type Builder struct {
 	disableTelemetry bool
 	semaCtx          *tree.SemaContext
 	evalCtx          *eval.Context
+	colOrdsAlloc     colOrdMapAllocator
 
 	// subqueries accumulates information about subqueries that are part of scalar
 	// expressions we built. Each entry is associated with a tree.Subquery
@@ -97,11 +99,10 @@ type Builder struct {
 
 	allowInsertFastPath bool
 
-	// forceForUpdateLocking is conditionally passed through to factory methods
-	// for scan operators that serve as the input for mutation operators. When
-	// set to true, it ensures that a FOR UPDATE row-level locking mode is used
-	// by scans. See forUpdateLocking.
-	forceForUpdateLocking bool
+	// forceForUpdateLocking is a set of opt catalog table IDs that serve as input
+	// for mutation operators, and should be locked using forUpdateLocking to
+	// reduce query retries.
+	forceForUpdateLocking intsets.Fast
 
 	// planLazySubqueries is true if the builder should plan subqueries that are
 	// lazily evaluated as routines instead of a subquery which is evaluated
@@ -110,45 +111,19 @@ type Builder struct {
 	// subqueries for statements inside a UDF.
 	planLazySubqueries bool
 
+	// tailCalls is used when building the last body statement of a routine. It
+	// identifies nested routines that are in tail-call position. This information
+	// is used to determine whether tail-call optimization is applicable.
+	tailCalls map[*memo.UDFCallExpr]struct{}
+
 	// -- output --
 
-	// IsDDL is set to true if the statement contains DDL.
-	IsDDL bool
-
-	// ContainsFullTableScan is set to true if the statement contains an
-	// unconstrained primary index scan. This could be a full scan of any
-	// cardinality.
-	ContainsFullTableScan bool
-
-	// ContainsFullIndexScan is set to true if the statement contains an
-	// unconstrained non-partial secondary index scan. This could be a full scan
-	// of any cardinality.
-	ContainsFullIndexScan bool
-
-	// ContainsLargeFullTableScan is set to true if the statement contains an
-	// unconstrained primary index scan estimated to read more than
-	// large_full_scan_rows (or without available stats).
-	ContainsLargeFullTableScan bool
-
-	// ContainsLargeFullIndexScan is set to true if the statement contains an
-	// unconstrained non-partial secondary index scan estimated to read more than
-	// large_full_scan_rows (or without without available stats).
-	ContainsLargeFullIndexScan bool
+	// flags tracks various properties of the plan accumulated while building.
+	flags exec.PlanFlags
 
 	// containsBoundedStalenessScan is true if the query uses bounded
 	// staleness and contains a scan.
 	containsBoundedStalenessScan bool
-
-	// ContainsMutation is set to true if the whole plan contains any mutations.
-	ContainsMutation bool
-
-	// ContainsNonDefaultKeyLocking is set to true if at least one node in the
-	// plan uses non-default key locking strength.
-	ContainsNonDefaultKeyLocking bool
-
-	// CheckContainsNonDefaultKeyLocking is set to true if at least one node in at
-	// least one check query plan uses non-default key locking strength.
-	CheckContainsNonDefaultKeyLocking bool
 
 	// MaxFullScanRows is the maximum number of rows scanned by a full scan, as
 	// estimated by the optimizer.
@@ -236,6 +211,7 @@ func New(
 		initialAllowAutoCommit: allowAutoCommit,
 		IsANSIDML:              isANSIDML,
 	}
+	b.colOrdsAlloc.Init(mem.Metadata().MaxColumn())
 	if evalCtx != nil {
 		sd := evalCtx.SessionData()
 		if sd.SaveTablesPrefix != "" {
@@ -261,13 +237,15 @@ func New(
 // Build constructs the execution node tree and returns its root node if no
 // error occurred.
 func (b *Builder) Build() (_ exec.Plan, err error) {
-	plan, err := b.build(b.e)
+	plan, _, err := b.build(b.e)
 	if err != nil {
 		return nil, err
 	}
 
 	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Statistics().RowCountIfAvailable())
-	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks, rootRowCount)
+	return b.factory.ConstructPlan(
+		plan.root, b.subqueries, b.cascades, b.checks, rootRowCount, b.flags,
+	)
 }
 
 func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference, error) {
@@ -286,7 +264,7 @@ func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference,
 	return tree.WrapFunction(fnName), nil
 }
 
-func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
+func (b *Builder) build(e opt.Expr) (_ execPlan, outputCols colOrdMap, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate errors without adding lots of checks
@@ -303,7 +281,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 
 	rel, ok := e.(memo.RelExpr)
 	if !ok {
-		return execPlan{}, errors.AssertionFailedf(
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"building execution for non-relational operator %s", redact.Safe(e.Op()),
 		)
 	}
@@ -326,12 +304,12 @@ func (b *Builder) BuildScalar() (tree.TypedExpr, error) {
 	if !ok {
 		return nil, errors.AssertionFailedf("BuildScalar cannot be called for non-scalar operator %s", redact.Safe(b.e.Op()))
 	}
-	var ctx buildScalarCtx
 	md := b.mem.Metadata()
-	ctx.ivh = tree.MakeIndexedVarHelper(&mdVarContainer{md: md}, md.NumColumns())
+	cols := b.colOrdsAlloc.Alloc()
 	for i := 0; i < md.NumColumns(); i++ {
-		ctx.ivarMap.Set(i+1, i)
+		cols.Set(opt.ColumnID(i+1), i)
 	}
+	ctx := makeBuildScalarCtx(cols)
 	return b.buildScalar(&ctx, scalar)
 }
 
@@ -349,11 +327,11 @@ type builtWithExpr struct {
 	id opt.WithID
 	// outputCols maps the output ColumnIDs of the With expression to the ordinal
 	// positions they are output to. See execPlan.outputCols for more details.
-	outputCols opt.ColMap
+	outputCols colOrdMap
 	bufferNode exec.Node
 }
 
-func (b *Builder) addBuiltWithExpr(id opt.WithID, outputCols opt.ColMap, bufferNode exec.Node) {
+func (b *Builder) addBuiltWithExpr(id opt.WithID, outputCols colOrdMap, bufferNode exec.Node) {
 	b.withExprs = append(b.withExprs, builtWithExpr{
 		id:         id,
 		outputCols: outputCols,
@@ -381,21 +359,9 @@ type mdVarContainer struct {
 	md *opt.Metadata
 }
 
-var _ eval.IndexedVarContainer = &mdVarContainer{}
-
-// IndexedVarEval is part of the eval.IndexedVarContainer interface.
-func (c *mdVarContainer) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	return nil, errors.AssertionFailedf("no eval allowed in mdVarContainer")
-}
+var _ tree.IndexedVarContainer = &mdVarContainer{}
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (c *mdVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return c.md.ColumnMeta(opt.ColumnID(idx + 1)).Type
-}
-
-// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
-func (c *mdVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return nil
 }

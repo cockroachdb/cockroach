@@ -416,10 +416,10 @@ type ScanFlags struct {
 
 	// ForceIndex forces the use of a specific index (specified in Index).
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
-	ForceIndex  bool
-	ForceZigzag bool
-	Direction   tree.Direction
-	Index       int
+	ForceIndex bool
+	// ForceInvertedIndex forces the use of an inverted index.
+	ForceInvertedIndex bool
+	ForceZigzag        bool
 
 	// When the optimizer is performing unique constraint or foreign key
 	// constraint check, we will temporarily disable the not visible index feature
@@ -431,6 +431,9 @@ type ScanFlags struct {
 	// true, optimizer will also generate equivalent memo group using the
 	// invisible index. Otherwise, optimizer will ignore the invisible indexes.
 	DisableNotVisibleIndex bool
+
+	Direction tree.Direction
+	Index     int
 
 	// ZigzagIndexes makes planner prefer a zigzag with particular indexes.
 	// ForceZigzag must also be true.
@@ -518,6 +521,11 @@ const (
 
 	// AllowOnlyMergeJoin has all "disallow" flags set except DisallowMergeJoin.
 	AllowOnlyMergeJoin = disallowAll ^ DisallowMergeJoin
+
+	// AllowAllJoinsIntoRight has all "disallow" flags set except
+	// DisallowHashJoinStoreRight, DisallowLookupJoinIntoRight,
+	// DisallowInvertedJoinIntoRight, and DisallowMergeJoin.
+	AllowAllJoinsIntoRight = disallowAll ^ DisallowHashJoinStoreRight ^ DisallowLookupJoinIntoRight ^ DisallowInvertedJoinIntoRight ^ DisallowMergeJoin
 )
 
 var joinFlagStr = map[JoinFlags]string{
@@ -709,6 +717,9 @@ type UDFDefinition struct {
 	// builtin function.
 	RoutineType tree.RoutineType
 
+	// RoutineLang indicates the language of the routine (SQL or PL/pgSQL).
+	RoutineLang tree.RoutineLanguage
+
 	// Params is the list of columns representing parameters of the function. The
 	// i-th column in the list corresponds to the i-th parameter of the function.
 	// During execution of the UDF, these columns are replaced with the arguments
@@ -723,6 +734,10 @@ type UDFDefinition struct {
 	// should be optimized if it is rebuilt. Each props corresponds to the RelExpr
 	// at the same position in Body.
 	BodyProps []*physical.Required
+
+	// BodyStmts, if set, is the string representation of each statement in
+	// Body. It is only populated when verbose tracing is enabled.
+	BodyStmts []string
 
 	// ExceptionBlock contains information needed for exception-handling when the
 	// body of this routine returns an error. It can be unset.
@@ -833,6 +848,12 @@ func (s *ScanPrivate) IsFullIndexScan(md *opt.Metadata) bool {
 	return (s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
 		s.InvertedConstraint == nil &&
 		s.HardLimit == 0
+}
+
+// IsInvertedScan returns true if the index being scanned is an inverted
+// index.
+func (s *ScanPrivate) IsInvertedScan() bool {
+	return s.InvertedConstraint != nil
 }
 
 // IsVirtualTable returns true if the table being scanned is a virtual table.

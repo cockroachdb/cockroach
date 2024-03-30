@@ -30,3 +30,31 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"{key1,subkey1}"},{"text":"{11,22}"},{"text":"{UnQuoted,Quoted}"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression test for panicking due to not having binary serialization of
+# multidimensional arrays (#118206).
+# "ResultFormatCodes": [1] = binary
+send
+Parse {"Name": "s", "Query": "SELECT ARRAY[ARRAY[1], ARRAY[2]]"}
+Bind {"PreparedStatement": "s", "ResultFormatCodes": [1]}
+Execute
+Sync
+----
+
+until crdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"0A000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"0000000200000000000000170000000200000001000000010000000100000004000000010000000400000002"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

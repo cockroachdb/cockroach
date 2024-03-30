@@ -12,6 +12,7 @@ package cli
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -300,6 +301,90 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 	}
 
 	return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, certTableHeaders, clisqlexec.NewRowSliceIter(rows, alignment))
+}
+
+// encodeURICmd creates a PG URI for the given parameters.
+var encodeURICmd = func() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "encode-uri USERNAME[:PASSWORD]@HOST",
+		Short: "encode a CRDB connection URL",
+		Args:  cobra.ExactArgs(1),
+		RunE:  clierrorplus.MaybeDecorateError(encodeURI),
+	}
+	f := cmd.PersistentFlags()
+	f.BoolVar(&encodeURIOpts.sslInline, "inline", false, "whether to inline certificates (supported by CRDB's Physical Replication feature)")
+	f.StringVar(&encodeURIOpts.cluster, "cluster", "system", "virtual cluster to connect to")
+	f.StringVar(&encodeURIOpts.caCertPath, "ca-cert", "", "path to CA certificate")
+	f.StringVar(&encodeURIOpts.certPath, "cert", "", "path to certificate for client-cert authentication")
+	f.StringVar(&encodeURIOpts.keyPath, "key", "", "path to key for client-cert authentication")
+	f.StringVar(&encodeURIOpts.database, "database", "defaultdb", "database to connect to")
+	return cmd
+}()
+
+var encodeURIOpts = struct {
+	sslInline  bool
+	cluster    string
+	caCertPath string
+	certPath   string
+	keyPath    string
+	database   string
+}{}
+
+func encodeURI(cmd *cobra.Command, args []string) error {
+	usernameAndHost := args[0]
+
+	pgURL, err := url.Parse(fmt.Sprintf("postgresql://%s/%s", usernameAndHost, encodeURIOpts.database))
+	if err != nil {
+		return err
+	}
+
+	options := pgURL.Query()
+	if encodeURIOpts.cluster != "" {
+		options.Set("options", fmt.Sprintf("-ccluster=%s", encodeURIOpts.cluster))
+	}
+
+	if encodeURIOpts.sslInline {
+		options.Set("sslinline", "true")
+	}
+
+	getCert := func(path string) (string, error) {
+		if !encodeURIOpts.sslInline {
+			return path, nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		return string(content), err
+	}
+
+	if encodeURIOpts.caCertPath != "" {
+		sslRootCert, err := getCert(encodeURIOpts.caCertPath)
+		if err != nil {
+			return err
+		}
+		options.Set("sslrootcert", sslRootCert)
+		options.Set("sslmode", "verify-full")
+	}
+
+	if encodeURIOpts.certPath != "" {
+		sslClientCert, err := getCert(encodeURIOpts.certPath)
+		if err != nil {
+			return err
+		}
+		options.Set("sslcert", sslClientCert)
+	}
+
+	if encodeURIOpts.keyPath != "" {
+		sslClientKey, err := getCert(encodeURIOpts.keyPath)
+		if err != nil {
+			return err
+		}
+		options.Set("sslkey", sslClientKey)
+	}
+	pgURL.RawQuery = options.Encode()
+	fmt.Printf("%s\n", pgURL.String())
+	return nil
 }
 
 var certCmds = []*cobra.Command{

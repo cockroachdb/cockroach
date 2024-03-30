@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"time"
@@ -30,7 +31,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
-	err := WaitFor3XReplication(ctx, t, db)
+	err := WaitFor3XReplication(ctx, t, t.L(), db)
 	require.NoError(t, err)
 
 	lastWords := func(s string) []string {
@@ -47,7 +48,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	nodeStatus := func() (_ string, _ []string, err error) {
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "./cockroach node status --insecure -p {pgport:1}")
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(1)), fmt.Sprintf("./cockroach node status --certs-dir=%s -p {pgport:1}", install.CockroachNodeCertsDir))
 		if err != nil {
 			return "", nil, err
 		}

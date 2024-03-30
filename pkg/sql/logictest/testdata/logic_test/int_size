@@ -58,7 +58,10 @@ SET default_int_size=8
 # Parsing and evaluation are async, so the setting won't take
 # effect until the next statement is evaluated.
 statement ok
-SET default_int_size=4; CREATE TABLE late4 (a INT)
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET default_int_size=4;
+CREATE TABLE late4 (a INT);
+COMMIT;
 
 query TT
 SHOW CREATE TABLE late4

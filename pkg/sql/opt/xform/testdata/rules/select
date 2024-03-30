@@ -133,6 +133,15 @@ CREATE TABLE virtual (
 )
 ----
 
+exec-ddl
+CREATE TABLE singleton_check(
+  singleton BOOL DEFAULT TRUE,
+  count INT NOT NULL,
+  PRIMARY KEY (singleton),
+  CHECK (singleton)
+)
+----
+
 # --------------------------------------------------
 # GeneratePartialIndexScans
 # --------------------------------------------------
@@ -334,7 +343,7 @@ memo (optimized, ~9KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
 memo expect-not=GeneratePartialIndexScans
 SELECT i FROM p WHERE s = 'bar'
 ----
-memo (optimized, ~10KB, required=[presentation: i:2])
+memo (optimized, ~11KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
@@ -1265,7 +1274,7 @@ New expression 2 of 2:
 memo
 SELECT s, i, f FROM kifs WHERE s='foo' ORDER BY s DESC, i
 ----
-memo (optimized, ~7KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)])
+memo (optimized, ~8KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)])
  ├── G1: (select G2 G3) (scan kifs@s_idx,cols=(2-4),constrained) (index-join G4 kifs,cols=(2-4))
  │    ├── [presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]
  │    │    ├── best: (sort G1)
@@ -1733,7 +1742,7 @@ CREATE INDEX idx2 ON p (i) WHERE s = 'foo'
 memo
 SELECT i FROM p WHERE i = 3 AND s = 'foo'
 ----
-memo (optimized, ~22KB, required=[presentation: i:2])
+memo (optimized, ~23KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
@@ -1807,7 +1816,7 @@ CREATE INDEX idx ON p (i) WHERE s = 'foo'
 memo expect-not=GenerateConstrainedScans
 SELECT i FROM p WHERE s = 'bar' AND i = 5
 ----
-memo (optimized, ~9KB, required=[presentation: i:2])
+memo (optimized, ~10KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
@@ -2609,7 +2618,8 @@ project
       ├── fd: ()-->(3)
       ├── scan t114250
       │    ├── columns: x:1!null z:3!null
-      │    └── constraint: /1/2: [/1 - /4]
+      │    └── check constraint expressions
+      │         └── (x:1 > 0) AND (x:1 < 5) [outer=(1), constraints=(/1: [/1 - /4]; tight)]
       └── filters
            └── z:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
 
@@ -2649,6 +2659,21 @@ project
       ├── constraint: /4/1: [/true - /true]
       └── key: (1)
 
+# Regression test for #114470 - allow a non-selective constraint for singleton
+# tables.
+#
+# This is a simplified version of an internal query performed on the
+# system.span_count table, which is vulnerable to the small increase in latency
+# caused by performing a KV Scan instead of a Get.
+opt expect=GenerateConstrainedScans
+SELECT * FROM singleton_check WHERE singleton;
+----
+scan singleton_check
+ ├── columns: singleton:1!null count:2!null
+ ├── constraint: /1: [/true - /true]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1,2)
 
 # --------------------------------------------------
 # GenerateInvertedIndexScans
@@ -2671,7 +2696,7 @@ project
 memo expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j @> '{"a": "b"}'
 ----
-memo (optimized, ~8KB, required=[presentation: k:1])
+memo (optimized, ~9KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k) (project G4 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G4 G3 k)
@@ -2699,7 +2724,7 @@ memo (optimized, ~8KB, required=[presentation: k:1])
 memo expect-not=GenerateInvertedIndexScans
 SELECT k FROM b@{NO_INDEX_JOIN} WHERE j @> '{"a": "b"}'
 ----
-memo (optimized, ~6KB, required=[presentation: k:1])
+memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -2827,7 +2852,7 @@ select
  │    └── inverted-filter
  │         ├── columns: k:1!null
  │         ├── inverted expression: /7
- │         │    ├── tight: false, unique: false
+ │         │    ├── tight: false, unique: true
  │         │    ├── union spans: empty
  │         │    └── UNION
  │         │         ├── span expression
@@ -4460,11 +4485,11 @@ project
       │    └── inverted-filter
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
-      │         │    ├── tight: false, unique: false
+      │         │    ├── tight: false, unique: true
       │         │    ├── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
       │         │    └── UNION
       │         │         ├── span expression
-      │         │         │    ├── tight: false, unique: false
+      │         │         │    ├── tight: false, unique: true
       │         │         │    ├── union spans: empty
       │         │         │    └── INTERSECTION
       │         │         │         ├── span expression
@@ -4855,11 +4880,11 @@ project
       │    └── inverted-filter
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
-      │         │    ├── tight: false, unique: false
+      │         │    ├── tight: false, unique: true
       │         │    ├── union spans: ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
       │         │    └── UNION
       │         │         ├── span expression
-      │         │         │    ├── tight: false, unique: false
+      │         │         │    ├── tight: false, unique: true
       │         │         │    ├── union spans: empty
       │         │         │    └── INTERSECTION
       │         │         │         ├── span expression
@@ -8499,7 +8524,7 @@ inner-join (lookup pqr)
 memo expect=GenerateZigzagJoins
 SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~19KB, required=[presentation: q:2,r:3,s:4])
+memo (optimized, ~20KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
@@ -9096,7 +9121,7 @@ select
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
-memo (optimized, ~39KB, required=[presentation: p:1,q:2,r:3,s:4])
+memo (optimized, ~40KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
@@ -9703,7 +9728,7 @@ select
  │    └── inverted-filter
  │         ├── columns: k:1!null
  │         ├── inverted expression: /9
- │         │    ├── tight: false, unique: false
+ │         │    ├── tight: false, unique: true
  │         │    ├── union spans: ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
  │         │    └── INTERSECTION
  │         │         ├── span expression
@@ -10319,68 +10344,68 @@ project
       ├── fd: (1)-->(2,3)
       ├── union-all
       │    ├── columns: d.k:1!null d.u:2 d.v:3
-      │    ├── left columns: d.k:13 d.u:14 d.v:15
-      │    ├── right columns: d.k:19 d.u:20 d.v:21
+      │    ├── left columns: d.k:14 d.u:15 d.v:16
+      │    ├── right columns: d.k:20 d.u:21 d.v:22
       │    ├── ordering: +1
       │    ├── index-join d
-      │    │    ├── columns: d.k:13!null d.u:14!null d.v:15
-      │    │    ├── key: (13)
-      │    │    ├── fd: ()-->(14), (13)-->(15)
-      │    │    ├── ordering: +13 opt(14) [actual: +13]
+      │    │    ├── columns: d.k:14!null d.u:15!null d.v:16
+      │    │    ├── key: (14)
+      │    │    ├── fd: ()-->(15), (14)-->(16)
+      │    │    ├── ordering: +14 opt(15) [actual: +14]
       │    │    └── select
-      │    │         ├── columns: d.k:13!null d.u:14!null
-      │    │         ├── key: (13)
-      │    │         ├── fd: ()-->(14)
-      │    │         ├── ordering: +13 opt(14) [actual: +13]
+      │    │         ├── columns: d.k:14!null d.u:15!null
+      │    │         ├── key: (14)
+      │    │         ├── fd: ()-->(15)
+      │    │         ├── ordering: +14 opt(15) [actual: +14]
       │    │         ├── scan d@u
-      │    │         │    ├── columns: d.k:13!null d.u:14!null
-      │    │         │    ├── constraint: /14/13: [/1 - /1]
-      │    │         │    ├── key: (13)
-      │    │         │    ├── fd: ()-->(14)
-      │    │         │    └── ordering: +13 opt(14) [actual: +13]
+      │    │         │    ├── columns: d.k:14!null d.u:15!null
+      │    │         │    ├── constraint: /15/14: [/1 - /1]
+      │    │         │    ├── key: (14)
+      │    │         │    ├── fd: ()-->(15)
+      │    │         │    └── ordering: +14 opt(15) [actual: +14]
       │    │         └── filters
       │    │              └── coalesce [subquery]
       │    │                   ├── subquery
       │    │                   │    └── project
-      │    │                   │         ├── columns: column12:12!null
+      │    │                   │         ├── columns: column13:13!null
       │    │                   │         ├── cardinality: [0 - 1]
       │    │                   │         ├── key: ()
-      │    │                   │         ├── fd: ()-->(12)
+      │    │                   │         ├── fd: ()-->(13)
       │    │                   │         ├── scan a
       │    │                   │         │    ├── limit: 1
       │    │                   │         │    └── key: ()
       │    │                   │         └── projections
-      │    │                   │              └── true [as=column12:12]
+      │    │                   │              └── true [as=column13:13]
       │    │                   └── false
       │    └── index-join d
-      │         ├── columns: d.k:19!null d.u:20 d.v:21!null
-      │         ├── key: (19)
-      │         ├── fd: ()-->(21), (19)-->(20)
-      │         ├── ordering: +19 opt(21) [actual: +19]
+      │         ├── columns: d.k:20!null d.u:21 d.v:22!null
+      │         ├── key: (20)
+      │         ├── fd: ()-->(22), (20)-->(21)
+      │         ├── ordering: +20 opt(22) [actual: +20]
       │         └── select
-      │              ├── columns: d.k:19!null d.v:21!null
-      │              ├── key: (19)
-      │              ├── fd: ()-->(21)
-      │              ├── ordering: +19 opt(21) [actual: +19]
+      │              ├── columns: d.k:20!null d.v:22!null
+      │              ├── key: (20)
+      │              ├── fd: ()-->(22)
+      │              ├── ordering: +20 opt(22) [actual: +20]
       │              ├── scan d@v
-      │              │    ├── columns: d.k:19!null d.v:21!null
-      │              │    ├── constraint: /21/19: [/1 - /1]
-      │              │    ├── key: (19)
-      │              │    ├── fd: ()-->(21)
-      │              │    └── ordering: +19 opt(21) [actual: +19]
+      │              │    ├── columns: d.k:20!null d.v:22!null
+      │              │    ├── constraint: /22/20: [/1 - /1]
+      │              │    ├── key: (20)
+      │              │    ├── fd: ()-->(22)
+      │              │    └── ordering: +20 opt(22) [actual: +20]
       │              └── filters
       │                   └── coalesce [subquery]
       │                        ├── subquery
       │                        │    └── project
-      │                        │         ├── columns: column12:12!null
+      │                        │         ├── columns: column13:13!null
       │                        │         ├── cardinality: [0 - 1]
       │                        │         ├── key: ()
-      │                        │         ├── fd: ()-->(12)
+      │                        │         ├── fd: ()-->(13)
       │                        │         ├── scan a
       │                        │         │    ├── limit: 1
       │                        │         │    └── key: ()
       │                        │         └── projections
-      │                        │              └── true [as=column12:12]
+      │                        │              └── true [as=column13:13]
       │                        └── false
       └── aggregations
            ├── const-agg [as=d.u:2, outer=(2)]
@@ -10408,31 +10433,31 @@ project
       │    ├── fd: (1)-->(2,3)
       │    ├── union-all
       │    │    ├── columns: d.k:1!null d.u:2 d.v:3
-      │    │    ├── left columns: d.k:12 d.u:13 d.v:14
-      │    │    ├── right columns: d.k:18 d.u:19 d.v:20
+      │    │    ├── left columns: d.k:13 d.u:14 d.v:15
+      │    │    ├── right columns: d.k:19 d.u:20 d.v:21
       │    │    ├── ordering: +1
       │    │    ├── index-join d
-      │    │    │    ├── columns: d.k:12!null d.u:13!null d.v:14
-      │    │    │    ├── key: (12)
-      │    │    │    ├── fd: ()-->(13), (12)-->(14)
-      │    │    │    ├── ordering: +12 opt(13) [actual: +12]
+      │    │    │    ├── columns: d.k:13!null d.u:14!null d.v:15
+      │    │    │    ├── key: (13)
+      │    │    │    ├── fd: ()-->(14), (13)-->(15)
+      │    │    │    ├── ordering: +13 opt(14) [actual: +13]
       │    │    │    └── scan d@u
-      │    │    │         ├── columns: d.k:12!null d.u:13!null
-      │    │    │         ├── constraint: /13/12: [/1 - /1]
-      │    │    │         ├── key: (12)
-      │    │    │         ├── fd: ()-->(13)
-      │    │    │         └── ordering: +12 opt(13) [actual: +12]
+      │    │    │         ├── columns: d.k:13!null d.u:14!null
+      │    │    │         ├── constraint: /14/13: [/1 - /1]
+      │    │    │         ├── key: (13)
+      │    │    │         ├── fd: ()-->(14)
+      │    │    │         └── ordering: +13 opt(14) [actual: +13]
       │    │    └── index-join d
-      │    │         ├── columns: d.k:18!null d.u:19 d.v:20!null
-      │    │         ├── key: (18)
-      │    │         ├── fd: ()-->(20), (18)-->(19)
-      │    │         ├── ordering: +18 opt(20) [actual: +18]
+      │    │         ├── columns: d.k:19!null d.u:20 d.v:21!null
+      │    │         ├── key: (19)
+      │    │         ├── fd: ()-->(21), (19)-->(20)
+      │    │         ├── ordering: +19 opt(21) [actual: +19]
       │    │         └── scan d@v
-      │    │              ├── columns: d.k:18!null d.v:20!null
-      │    │              ├── constraint: /20/18: [/1 - /1]
-      │    │              ├── key: (18)
-      │    │              ├── fd: ()-->(20)
-      │    │              └── ordering: +18 opt(20) [actual: +18]
+      │    │              ├── columns: d.k:19!null d.v:21!null
+      │    │              ├── constraint: /21/19: [/1 - /1]
+      │    │              ├── key: (19)
+      │    │              ├── fd: ()-->(21)
+      │    │              └── ordering: +19 opt(21) [actual: +19]
       │    └── aggregations
       │         ├── const-agg [as=d.u:2, outer=(2)]
       │         │    └── d.u:2
@@ -10460,31 +10485,31 @@ project
       │    ├── fd: (1)-->(2-4)
       │    ├── union-all
       │    │    ├── columns: d.k:1!null d.u:2 d.v:3 w:4
-      │    │    ├── left columns: d.k:12 d.u:13 d.v:14 w:15
-      │    │    ├── right columns: d.k:18 d.u:19 d.v:20 w:21
+      │    │    ├── left columns: d.k:13 d.u:14 d.v:15 w:16
+      │    │    ├── right columns: d.k:19 d.u:20 d.v:21 w:22
       │    │    ├── ordering: +1
       │    │    ├── index-join d
-      │    │    │    ├── columns: d.k:12!null d.u:13!null d.v:14 w:15
-      │    │    │    ├── key: (12)
-      │    │    │    ├── fd: ()-->(13), (12)-->(14,15)
-      │    │    │    ├── ordering: +12 opt(13) [actual: +12]
+      │    │    │    ├── columns: d.k:13!null d.u:14!null d.v:15 w:16
+      │    │    │    ├── key: (13)
+      │    │    │    ├── fd: ()-->(14), (13)-->(15,16)
+      │    │    │    ├── ordering: +13 opt(14) [actual: +13]
       │    │    │    └── scan d@u
-      │    │    │         ├── columns: d.k:12!null d.u:13!null
-      │    │    │         ├── constraint: /13/12: [/1 - /1]
-      │    │    │         ├── key: (12)
-      │    │    │         ├── fd: ()-->(13)
-      │    │    │         └── ordering: +12 opt(13) [actual: +12]
+      │    │    │         ├── columns: d.k:13!null d.u:14!null
+      │    │    │         ├── constraint: /14/13: [/1 - /1]
+      │    │    │         ├── key: (13)
+      │    │    │         ├── fd: ()-->(14)
+      │    │    │         └── ordering: +13 opt(14) [actual: +13]
       │    │    └── index-join d
-      │    │         ├── columns: d.k:18!null d.u:19 d.v:20!null w:21
-      │    │         ├── key: (18)
-      │    │         ├── fd: ()-->(20), (18)-->(19,21)
-      │    │         ├── ordering: +18 opt(20) [actual: +18]
+      │    │         ├── columns: d.k:19!null d.u:20 d.v:21!null w:22
+      │    │         ├── key: (19)
+      │    │         ├── fd: ()-->(21), (19)-->(20,22)
+      │    │         ├── ordering: +19 opt(21) [actual: +19]
       │    │         └── scan d@v
-      │    │              ├── columns: d.k:18!null d.v:20!null
-      │    │              ├── constraint: /20/18: [/1 - /1]
-      │    │              ├── key: (18)
-      │    │              ├── fd: ()-->(20)
-      │    │              └── ordering: +18 opt(20) [actual: +18]
+      │    │              ├── columns: d.k:19!null d.v:21!null
+      │    │              ├── constraint: /21/19: [/1 - /1]
+      │    │              ├── key: (19)
+      │    │              ├── fd: ()-->(21)
+      │    │              └── ordering: +19 opt(21) [actual: +19]
       │    └── aggregations
       │         ├── const-agg [as=d.u:2, outer=(2)]
       │         │    └── d.u:2
@@ -11173,7 +11198,7 @@ CREATE TABLE t58390 (
 memo
 SELECT * FROM t58390 WHERE a > 1 OR b > 1
 ----
-memo (optimized, ~23KB, required=[presentation: k:1,a:2,b:3,c:4])
+memo (optimized, ~24KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G1: (select G2 G3) (index-join G4 t58390,cols=(1-4)) (distinct-on G5 G6 cols=(1)) (distinct-on G5 G6 cols=(1),ordering=+1)
  │    └── [presentation: k:1,a:2,b:3,c:4]
  │         ├── best: (select G2 G3)
@@ -11288,7 +11313,7 @@ JOIN t61795 AS t2 ON t1.c = t1.b AND t1.b = t2.b
 WHERE t1.a = 10 OR t2.b != abs(t2.b)
 ORDER BY t1.b ASC
 ----
-memo (optimized, ~35KB, required=[presentation: a:1] [ordering: +2])
+memo (optimized, ~36KB, required=[presentation: a:1] [ordering: +2])
  ├── G1: (project G2 G3 a b)
  │    ├── [presentation: a:1] [ordering: +2]
  │    │    ├── best: (sort G1)
@@ -11850,68 +11875,68 @@ project
       ├── fd: (1)-->(2,3)
       ├── union-all
       │    ├── columns: d.k:1!null d.u:2 d.v:3
-      │    ├── left columns: d.k:13 d.u:14 d.v:15
-      │    ├── right columns: d.k:19 d.u:20 d.v:21
+      │    ├── left columns: d.k:14 d.u:15 d.v:16
+      │    ├── right columns: d.k:20 d.u:21 d.v:22
       │    ├── ordering: +1
       │    ├── index-join d
-      │    │    ├── columns: d.k:13!null d.u:14!null d.v:15
-      │    │    ├── key: (13)
-      │    │    ├── fd: ()-->(14), (13)-->(15)
-      │    │    ├── ordering: +13 opt(14) [actual: +13]
+      │    │    ├── columns: d.k:14!null d.u:15!null d.v:16
+      │    │    ├── key: (14)
+      │    │    ├── fd: ()-->(15), (14)-->(16)
+      │    │    ├── ordering: +14 opt(15) [actual: +14]
       │    │    └── select
-      │    │         ├── columns: d.k:13!null d.u:14!null
-      │    │         ├── key: (13)
-      │    │         ├── fd: ()-->(14)
-      │    │         ├── ordering: +13 opt(14) [actual: +13]
+      │    │         ├── columns: d.k:14!null d.u:15!null
+      │    │         ├── key: (14)
+      │    │         ├── fd: ()-->(15)
+      │    │         ├── ordering: +14 opt(15) [actual: +14]
       │    │         ├── scan d@u
-      │    │         │    ├── columns: d.k:13!null d.u:14!null
-      │    │         │    ├── constraint: /14/13: [/1 - /1]
-      │    │         │    ├── key: (13)
-      │    │         │    ├── fd: ()-->(14)
-      │    │         │    └── ordering: +13 opt(14) [actual: +13]
+      │    │         │    ├── columns: d.k:14!null d.u:15!null
+      │    │         │    ├── constraint: /15/14: [/1 - /1]
+      │    │         │    ├── key: (14)
+      │    │         │    ├── fd: ()-->(15)
+      │    │         │    └── ordering: +14 opt(15) [actual: +14]
       │    │         └── filters
       │    │              └── coalesce [subquery]
       │    │                   ├── subquery
       │    │                   │    └── project
-      │    │                   │         ├── columns: column12:12!null
+      │    │                   │         ├── columns: column13:13!null
       │    │                   │         ├── cardinality: [0 - 1]
       │    │                   │         ├── key: ()
-      │    │                   │         ├── fd: ()-->(12)
+      │    │                   │         ├── fd: ()-->(13)
       │    │                   │         ├── scan a
       │    │                   │         │    ├── limit: 1
       │    │                   │         │    └── key: ()
       │    │                   │         └── projections
-      │    │                   │              └── true [as=column12:12]
+      │    │                   │              └── true [as=column13:13]
       │    │                   └── false
       │    └── index-join d
-      │         ├── columns: d.k:19!null d.u:20 d.v:21!null
-      │         ├── key: (19)
-      │         ├── fd: ()-->(21), (19)-->(20)
-      │         ├── ordering: +19 opt(21) [actual: +19]
+      │         ├── columns: d.k:20!null d.u:21 d.v:22!null
+      │         ├── key: (20)
+      │         ├── fd: ()-->(22), (20)-->(21)
+      │         ├── ordering: +20 opt(22) [actual: +20]
       │         └── select
-      │              ├── columns: d.k:19!null d.v:21!null
-      │              ├── key: (19)
-      │              ├── fd: ()-->(21)
-      │              ├── ordering: +19 opt(21) [actual: +19]
+      │              ├── columns: d.k:20!null d.v:22!null
+      │              ├── key: (20)
+      │              ├── fd: ()-->(22)
+      │              ├── ordering: +20 opt(22) [actual: +20]
       │              ├── scan d@v
-      │              │    ├── columns: d.k:19!null d.v:21!null
-      │              │    ├── constraint: /21/19: [/1 - /1]
-      │              │    ├── key: (19)
-      │              │    ├── fd: ()-->(21)
-      │              │    └── ordering: +19 opt(21) [actual: +19]
+      │              │    ├── columns: d.k:20!null d.v:22!null
+      │              │    ├── constraint: /22/20: [/1 - /1]
+      │              │    ├── key: (20)
+      │              │    ├── fd: ()-->(22)
+      │              │    └── ordering: +20 opt(22) [actual: +20]
       │              └── filters
       │                   └── coalesce [subquery]
       │                        ├── subquery
       │                        │    └── project
-      │                        │         ├── columns: column12:12!null
+      │                        │         ├── columns: column13:13!null
       │                        │         ├── cardinality: [0 - 1]
       │                        │         ├── key: ()
-      │                        │         ├── fd: ()-->(12)
+      │                        │         ├── fd: ()-->(13)
       │                        │         ├── scan a
       │                        │         │    ├── limit: 1
       │                        │         │    └── key: ()
       │                        │         └── projections
-      │                        │              └── true [as=column12:12]
+      │                        │              └── true [as=column13:13]
       │                        └── false
       └── aggregations
            ├── const-agg [as=d.u:2, outer=(2)]
@@ -11936,31 +11961,31 @@ semi-join (lookup a@u)
  │         ├── fd: (1)-->(2,3)
  │         ├── union-all
  │         │    ├── columns: d.k:1!null d.u:2 d.v:3
- │         │    ├── left columns: d.k:12 d.u:13 d.v:14
- │         │    ├── right columns: d.k:18 d.u:19 d.v:20
+ │         │    ├── left columns: d.k:13 d.u:14 d.v:15
+ │         │    ├── right columns: d.k:19 d.u:20 d.v:21
  │         │    ├── ordering: +1
  │         │    ├── index-join d
- │         │    │    ├── columns: d.k:12!null d.u:13!null d.v:14
- │         │    │    ├── key: (12)
- │         │    │    ├── fd: ()-->(13), (12)-->(14)
- │         │    │    ├── ordering: +12 opt(13) [actual: +12]
+ │         │    │    ├── columns: d.k:13!null d.u:14!null d.v:15
+ │         │    │    ├── key: (13)
+ │         │    │    ├── fd: ()-->(14), (13)-->(15)
+ │         │    │    ├── ordering: +13 opt(14) [actual: +13]
  │         │    │    └── scan d@u
- │         │    │         ├── columns: d.k:12!null d.u:13!null
- │         │    │         ├── constraint: /13/12: [/1 - /1]
- │         │    │         ├── key: (12)
- │         │    │         ├── fd: ()-->(13)
- │         │    │         └── ordering: +12 opt(13) [actual: +12]
+ │         │    │         ├── columns: d.k:13!null d.u:14!null
+ │         │    │         ├── constraint: /14/13: [/1 - /1]
+ │         │    │         ├── key: (13)
+ │         │    │         ├── fd: ()-->(14)
+ │         │    │         └── ordering: +13 opt(14) [actual: +13]
  │         │    └── index-join d
- │         │         ├── columns: d.k:18!null d.u:19 d.v:20!null
- │         │         ├── key: (18)
- │         │         ├── fd: ()-->(20), (18)-->(19)
- │         │         ├── ordering: +18 opt(20) [actual: +18]
+ │         │         ├── columns: d.k:19!null d.u:20 d.v:21!null
+ │         │         ├── key: (19)
+ │         │         ├── fd: ()-->(21), (19)-->(20)
+ │         │         ├── ordering: +19 opt(21) [actual: +19]
  │         │         └── scan d@v
- │         │              ├── columns: d.k:18!null d.v:20!null
- │         │              ├── constraint: /20/18: [/1 - /1]
- │         │              ├── key: (18)
- │         │              ├── fd: ()-->(20)
- │         │              └── ordering: +18 opt(20) [actual: +18]
+ │         │              ├── columns: d.k:19!null d.v:21!null
+ │         │              ├── constraint: /21/19: [/1 - /1]
+ │         │              ├── key: (19)
+ │         │              ├── fd: ()-->(21)
+ │         │              └── ordering: +19 opt(21) [actual: +19]
  │         └── aggregations
  │              ├── const-agg [as=d.u:2, outer=(2)]
  │              │    └── d.u:2
@@ -11987,31 +12012,31 @@ project
       │         ├── fd: (1)-->(2-4)
       │         ├── union-all
       │         │    ├── columns: d.k:1!null d.u:2 d.v:3 w:4
-      │         │    ├── left columns: d.k:12 d.u:13 d.v:14 w:15
-      │         │    ├── right columns: d.k:18 d.u:19 d.v:20 w:21
+      │         │    ├── left columns: d.k:13 d.u:14 d.v:15 w:16
+      │         │    ├── right columns: d.k:19 d.u:20 d.v:21 w:22
       │         │    ├── ordering: +1
       │         │    ├── index-join d
-      │         │    │    ├── columns: d.k:12!null d.u:13!null d.v:14 w:15
-      │         │    │    ├── key: (12)
-      │         │    │    ├── fd: ()-->(13), (12)-->(14,15)
-      │         │    │    ├── ordering: +12 opt(13) [actual: +12]
+      │         │    │    ├── columns: d.k:13!null d.u:14!null d.v:15 w:16
+      │         │    │    ├── key: (13)
+      │         │    │    ├── fd: ()-->(14), (13)-->(15,16)
+      │         │    │    ├── ordering: +13 opt(14) [actual: +13]
       │         │    │    └── scan d@u
-      │         │    │         ├── columns: d.k:12!null d.u:13!null
-      │         │    │         ├── constraint: /13/12: [/1 - /1]
-      │         │    │         ├── key: (12)
-      │         │    │         ├── fd: ()-->(13)
-      │         │    │         └── ordering: +12 opt(13) [actual: +12]
+      │         │    │         ├── columns: d.k:13!null d.u:14!null
+      │         │    │         ├── constraint: /14/13: [/1 - /1]
+      │         │    │         ├── key: (13)
+      │         │    │         ├── fd: ()-->(14)
+      │         │    │         └── ordering: +13 opt(14) [actual: +13]
       │         │    └── index-join d
-      │         │         ├── columns: d.k:18!null d.u:19 d.v:20!null w:21
-      │         │         ├── key: (18)
-      │         │         ├── fd: ()-->(20), (18)-->(19,21)
-      │         │         ├── ordering: +18 opt(20) [actual: +18]
+      │         │         ├── columns: d.k:19!null d.u:20 d.v:21!null w:22
+      │         │         ├── key: (19)
+      │         │         ├── fd: ()-->(21), (19)-->(20,22)
+      │         │         ├── ordering: +19 opt(21) [actual: +19]
       │         │         └── scan d@v
-      │         │              ├── columns: d.k:18!null d.v:20!null
-      │         │              ├── constraint: /20/18: [/1 - /1]
-      │         │              ├── key: (18)
-      │         │              ├── fd: ()-->(20)
-      │         │              └── ordering: +18 opt(20) [actual: +18]
+      │         │              ├── columns: d.k:19!null d.v:21!null
+      │         │              ├── constraint: /21/19: [/1 - /1]
+      │         │              ├── key: (19)
+      │         │              ├── fd: ()-->(21)
+      │         │              └── ordering: +19 opt(21) [actual: +19]
       │         └── aggregations
       │              ├── const-agg [as=d.u:2, outer=(2)]
       │              │    └── d.u:2

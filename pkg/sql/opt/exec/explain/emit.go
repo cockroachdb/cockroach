@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
@@ -35,21 +34,18 @@ import (
 // Emit produces the EXPLAIN output against the given OutputBuilder. The
 // OutputBuilder flags are taken into account.
 func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
-	var visitedTablesByCascades *intsets.Fast
-	if len(plan.Cascades) > 0 {
-		visitedTablesByCascades = &intsets.Fast{}
-	}
-	return emitInternal(ctx, plan, ob, spanFormatFn, visitedTablesByCascades)
+	return emitInternal(ctx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
 }
 
-// - visitedTablesByCascades is updated on recursive calls for each cascade
-// plan. Can be nil if the plan doesn't have any cascades.
+// - visitedFKsByCascades is updated on recursive calls for each cascade plan.
+// Can be nil if the plan doesn't have any cascades. In this map the key is the
+// "id" of the FK constraint that we construct as OriginTableID || Name.
 func emitInternal(
 	ctx context.Context,
 	plan *Plan,
 	ob *OutputBuilder,
 	spanFormatFn SpanFormatFn,
-	visitedTablesByCascades *intsets.Fast,
+	visitedFKsByCascades map[string]struct{},
 ) error {
 	e := makeEmitter(ob, spanFormatFn)
 	var walk func(n *Node) error
@@ -94,7 +90,7 @@ func emitInternal(
 		// This field contains the original subquery (which could have been modified
 		// by optimizer transformations).
 		if s.ExprNode != nil {
-			flags := tree.FmtSimple
+			flags := tree.FmtSimple | tree.FmtShortenConstants
 			if e.ob.flags.HideValues {
 				flags |= tree.FmtHideConstants
 			}
@@ -132,17 +128,25 @@ func emitInternal(
 		const createPlanIfMissing = true
 		if cascadePlan, err := cascade.GetExplainPlan(ctx, createPlanIfMissing); err != nil {
 			return err
-		} else if fk := cascade.FKConstraint; visitedTablesByCascades.Contains(int(fk.OriginTableID())) {
-			// If the origin table for this FK has already been visited, we
-			// don't recurse into it again to prevent infinite recursion.
-			if buffer := cascade.Buffer; buffer != nil {
-				ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
-			}
 		} else {
-			visitedTablesByCascades.Add(int(fk.OriginTableID()))
-			defer visitedTablesByCascades.Remove(int(fk.OriginTableID()))
-			if err = emitInternal(ctx, cascadePlan.(*Plan), ob, spanFormatFn, visitedTablesByCascades); err != nil {
-				return err
+			if visitedFKsByCascades == nil {
+				visitedFKsByCascades = make(map[string]struct{})
+			}
+			fk := cascade.FKConstraint
+			// Come up with a custom "id" for this FK.
+			fkID := fmt.Sprintf("%d%s", fk.OriginTableID(), fk.Name())
+			if _, visited := visitedFKsByCascades[fkID]; visited {
+				// If we have already visited this particular FK cascade, we
+				// don't recurse into it again to prevent infinite recursion.
+				if buffer := cascade.Buffer; buffer != nil {
+					ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
+				}
+			} else {
+				visitedFKsByCascades[fkID] = struct{}{}
+				defer delete(visitedFKsByCascades, fkID)
+				if err = emitInternal(ctx, cascadePlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades); err != nil {
+					return err
+				}
 			}
 		}
 		ob.LeaveNode()

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -401,9 +402,10 @@ var varGen = map[string]sessionVar{
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-ISOLATION
 	`default_transaction_isolation`: {
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
 			allowReadCommitted := allowReadCommittedIsolation.Get(&m.settings.SV)
 			allowSnapshot := allowSnapshotIsolation.Get(&m.settings.SV)
+			hasLicense := base.CCLDistributionAndEnterpriseEnabled(m.settings)
 			var allowedValues = []string{"serializable"}
 			if allowSnapshot {
 				allowedValues = append(allowedValues, "snapshot")
@@ -412,20 +414,42 @@ var varGen = map[string]sessionVar{
 				allowedValues = append(allowedValues, "read committed")
 			}
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
+			originalLevel := level
+			upgraded := false
+			upgradedDueToLicense := false
 			if !ok {
 				return newVarValueError(`default_transaction_isolation`, s, allowedValues...)
 			}
 			switch level {
-			case tree.ReadUncommittedIsolation, tree.ReadCommittedIsolation:
+			case tree.ReadUncommittedIsolation:
+				upgraded = true
+				fallthrough
+			case tree.ReadCommittedIsolation:
 				level = tree.SerializableIsolation
-				if allowReadCommitted {
+				if allowReadCommitted && hasLicense {
 					level = tree.ReadCommittedIsolation
+				} else {
+					upgraded = true
+					if allowReadCommitted && !hasLicense {
+						upgradedDueToLicense = true
+					}
 				}
-			case tree.RepeatableReadIsolation, tree.SnapshotIsolation:
+			case tree.RepeatableReadIsolation:
+				upgraded = true
+				fallthrough
+			case tree.SnapshotIsolation:
 				level = tree.SerializableIsolation
-				if allowSnapshot {
+				if allowSnapshot && hasLicense {
 					level = tree.SnapshotIsolation
+				} else {
+					upgraded = true
+					if allowSnapshot && !hasLicense {
+						upgradedDueToLicense = true
+					}
 				}
+			}
+			if f := m.upgradedIsolationLevel; upgraded && f != nil {
+				f(ctx, originalLevel, upgradedDueToLicense)
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
 			return nil
@@ -940,7 +964,7 @@ var varGen = map[string]sessionVar{
 			mode, ok := sessiondatapb.SerialNormalizationModeFromString(s)
 			if !ok {
 				return newVarValueError(`serial_normalization`, s,
-					"rowid", "virtual_sequence", "sql_sequence", "sql_sequence_cached")
+					"rowid", "virtual_sequence", "sql_sequence", "sql_sequence_cached", "sql_sequence_cached_node")
 			}
 			m.SetSerialNormalizationMode(mode)
 			return nil
@@ -1242,6 +1266,23 @@ var varGen = map[string]sessionVar{
 				return err
 			}
 			m.SetStrictDDLAtomicity(b)
+			return nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension (inspired by MySQL).
+	`autocommit_before_ddl`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AutoCommitBeforeDDL), nil
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("autocommit_before_ddl"),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("autocommit_before_ddl", s)
+			if err != nil {
+				return err
+			}
+			m.SetAutoCommitBeforeDDL(b)
 			return nil
 		},
 		GlobalDefault: globalFalse,
@@ -1588,8 +1629,7 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
-			m.SetReadOnly(b)
-			return nil
+			return m.SetReadOnly(b)
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.TxnReadOnly), nil
@@ -1611,35 +1651,6 @@ var varGen = map[string]sessionVar{
 			return "off", nil
 		},
 		// Setting is done by the SetTracing statement.
-	},
-
-	// CockroachDB extension.
-	`disable_drop_virtual_cluster`: {
-		Hidden: true,
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisableDropVirtualCluster), nil
-		},
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("disable_drop_virtual_cluster", s)
-			if err != nil {
-				return err
-			}
-			m.SetDisableDropVirtualCluster(b)
-			return nil
-		},
-		GlobalDefault: func(sv *settings.Values) string {
-			// Note:
-			// - We use a cluster setting here instead of a default role option
-			//   because we need this to be settable also for the 'admin' role.
-			// - The cluster setting is named "enable" because boolean cluster
-			//   settings are all ".enabled" -- we do not have ".disabled"
-			//   settings anywhere.
-			// - The session var is named "disable_" because we want the Go
-			//   default value (false) to mean that tenant deletion is enabled.
-			//   This is needed for backward-compatibility with Cockroach Cloud.
-			enabled := !sv.SpecializedToVirtualCluster() && !enableDropVirtualCluster.Get(sv)
-			return formatBoolAsPostgresSetting(enabled)
-		},
 	},
 
 	// CockroachDB extension.
@@ -2290,6 +2301,33 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().CopyWritePipeliningEnabled), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`copy_num_retries_per_batch`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`copy_num_retries_per_batch`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b <= 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"copy_num_retries_per_batch must be a positive value: %d", b)
+			}
+			if b > math.MaxInt32 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set copy_num_retries_per_batch to a value greater than %d: %d", math.MaxInt32, b)
+			}
+			m.SetCopyNumRetriesPerBatch(int32(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(int64(evalCtx.SessionData().CopyNumRetriesPerBatch), 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "5"
+		},
 	},
 
 	// CockroachDB extension.
@@ -3169,6 +3207,57 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(sv *settings.Values) string {
 			return strconv.FormatInt(2, 10)
 		},
+	},
+
+	// CockroachDB extension (oracle compatibility).
+	`close_cursors_at_commit`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`close_cursors_at_commit`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`close_cursors_at_commit`, s)
+			if err != nil {
+				return err
+			}
+			m.SetCloseCursorsAtCommit(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().CloseCursorsAtCommit), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension (oracle compatibility).
+	`plpgsql_use_strict_into`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().PLpgSQLUseStrictInto), nil
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("plpgsql_use_strict_into"),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("plpgsql_use_strict_into", s)
+			if err != nil {
+				return err
+			}
+			m.SetPLpgSQLUseStrictInto(b)
+			return nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`optimizer_use_virtual_computed_column_stats`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_virtual_computed_column_stats`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_virtual_computed_column_stats", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseVirtualComputedColumnStats(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats), nil
+		},
+		GlobalDefault: globalTrue,
 	},
 }
 

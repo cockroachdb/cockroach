@@ -123,9 +123,10 @@ func (*SetZoneConfig) modifiesSchema() bool { return true }
 
 // ZoneConfigSettings represents info needed for zone config setting.
 type ZoneConfigSettings struct {
-	SetDefault bool
-	YAMLConfig Expr
-	Options    KVOptions
+	Discard    bool      // True for `CONFIGURE ZONE DISCARD` stmt
+	SetDefault bool      // True for `CONFIGURE ZONE USING DEFAULT` stmt
+	YAMLConfig Expr      // (Deprecated) Non-empty for `CONFIGURE ZONE = '<...yaml...>'` or `CONFIGURE ZONE = NULL` stmt
+	Options    KVOptions // Non-empty for `CONFIGURE ZONE USING var_set_list` stmt
 }
 
 // Format implements the NodeFormatter interface.

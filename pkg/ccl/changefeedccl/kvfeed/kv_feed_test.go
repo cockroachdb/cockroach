@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -32,9 +33,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 func TestKVFeed(t *testing.T) {
@@ -112,10 +117,10 @@ func TestKVFeed(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
-		mm := mon.NewUnlimitedMonitor(
-			context.Background(), "test", mon.MemoryResource,
-			nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
-		)
+		mm := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
+			Name:     "test",
+			Settings: settings,
+		})
 		metrics := kvevent.MakeMetrics(time.Minute)
 		buf := kvevent.NewMemBuffer(mm.MakeBoundAccount(), &st.SV, &metrics)
 
@@ -463,5 +468,180 @@ func tableSpan(codec keys.SQLCodec, tableID uint32) roachpb.Span {
 	return roachpb.Span{
 		Key:    codec.TablePrefix(tableID),
 		EndKey: codec.TablePrefix(tableID).PrefixEnd(),
+	}
+}
+
+// testKVEventWriter is a mock kvevent.Writer that appends to a slice of events.
+type testKVEventWriter struct {
+	events []kvevent.Event
+}
+
+func (w *testKVEventWriter) Add(ctx context.Context, event kvevent.Event) error {
+	w.events = append(w.events, event)
+	return nil
+}
+
+func (w *testKVEventWriter) Drain(ctx context.Context) error {
+	return nil
+}
+
+func (w *testKVEventWriter) CloseWithReason(ctx context.Context, reason error) error {
+	return nil
+}
+
+var _ kvevent.Writer = (*testKVEventWriter)(nil)
+
+// testKVEventReader is a mock kvevent.Reader that pops and returns events
+// from a queue of events.
+type testKVEventReader struct {
+	events []kvevent.Event
+}
+
+func (r *testKVEventReader) Get(ctx context.Context) (kvevent.Event, error) {
+	if len(r.events) == 0 {
+		return kvevent.Event{}, errors.New("out of events")
+	}
+	ev := r.events[0]
+	r.events = r.events[1:]
+	return ev, nil
+}
+
+var _ kvevent.Reader = (*testKVEventReader)(nil)
+
+// testSchemaFeed is a mock SchemaFeed that operates on a slice of
+// sorted table events.
+type testSchemaFeed struct {
+	tableEvents []schemafeed.TableEvent
+}
+
+func (t *testSchemaFeed) Run(ctx context.Context) error {
+	return nil
+}
+
+func (t *testSchemaFeed) Peek(
+	ctx context.Context, atOrBefore hlc.Timestamp,
+) (events []schemafeed.TableEvent, err error) {
+	return t.peekOrPop(ctx, atOrBefore, false /* pop */)
+}
+
+func (t *testSchemaFeed) Pop(
+	ctx context.Context, atOrBefore hlc.Timestamp,
+) (events []schemafeed.TableEvent, err error) {
+	return t.peekOrPop(ctx, atOrBefore, true /* pop */)
+}
+
+func (t *testSchemaFeed) peekOrPop(
+	ctx context.Context, atOrBefore hlc.Timestamp, pop bool,
+) (events []schemafeed.TableEvent, err error) {
+	i, _ := slices.BinarySearchFunc(t.tableEvents, atOrBefore, func(event schemafeed.TableEvent, timestamp hlc.Timestamp) int {
+		if event.Timestamp().LessEq(timestamp) {
+			return -1
+		} else {
+			return 1
+		}
+	})
+	events = t.tableEvents[:i]
+	if pop {
+		t.tableEvents = t.tableEvents[i:]
+	}
+	return events, nil
+}
+
+var _ schemafeed.SchemaFeed = (*testSchemaFeed)(nil)
+
+// testTableDesc is a mock for catalog.TableDescriptor that only contains a
+// modification time. It is used in lieu of a real table descriptor in
+// test schemafeed.TableEvent structs.
+type testTableDesc struct {
+	catalog.TableDescriptor
+	modTime hlc.Timestamp
+}
+
+func (d *testTableDesc) GetModificationTime() hlc.Timestamp {
+	return d.modTime
+}
+
+func TestCopyFromSourceToDestUntilTableEvent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := func(ts int) hlc.Timestamp { return hlc.Timestamp{WallTime: int64(ts)} }
+	makeSpan := func(key, endKey []byte) roachpb.Span { return roachpb.Span{Key: key, EndKey: endKey} }
+	makeKVEvent := func(key, val []byte, ts hlc.Timestamp) kvevent.Event {
+		return kvevent.NewBackfillKVEvent(key, ts, val, false /* withDiff */, ts)
+	}
+	makeResolvedEvent := func(span roachpb.Span, ts hlc.Timestamp) kvevent.Event {
+		return kvevent.NewBackfillResolvedEvent(span, ts, jobspb.ResolvedSpan_NONE)
+	}
+	makeTableEvent := func(modTime hlc.Timestamp) schemafeed.TableEvent {
+		return schemafeed.TableEvent{After: &testTableDesc{modTime: modTime}}
+	}
+
+	for name, tc := range map[string]struct {
+		spans            []roachpb.Span
+		events           []kvevent.Event
+		endTime          hlc.Timestamp
+		tableEvents      []schemafeed.TableEvent
+		expectedErr      error
+		expectedEvents   []kvevent.Event
+		expectedFrontier hlc.Timestamp
+	}{
+		"end time reached": {
+			spans: []roachpb.Span{makeSpan([]byte("a"), []byte("z"))},
+			events: []kvevent.Event{
+				makeKVEvent([]byte("a"), []byte("a_val"), ts(2)),
+				makeResolvedEvent(makeSpan([]byte("a"), []byte("b")), ts(5)),
+				makeKVEvent([]byte("b"), []byte("b_val"), ts(7)),
+				makeResolvedEvent(makeSpan([]byte("b"), []byte("z")), ts(10)),
+				makeResolvedEvent(makeSpan([]byte("a"), []byte("b")), ts(10)),
+			},
+			endTime:     ts(9),
+			expectedErr: &errEndTimeReached{endTime: ts(9)},
+			expectedEvents: []kvevent.Event{
+				makeKVEvent([]byte("a"), []byte("a_val"), ts(2)),
+				makeResolvedEvent(makeSpan([]byte("a"), []byte("b")), ts(5)),
+				makeKVEvent([]byte("b"), []byte("b_val"), ts(7)),
+				makeResolvedEvent(makeSpan([]byte("b"), []byte("z")), ts(9).Prev()),
+			},
+			expectedFrontier: ts(9).Prev(),
+		},
+		"table event reached": {
+			spans: []roachpb.Span{makeSpan([]byte("a"), []byte("z"))},
+			events: []kvevent.Event{
+				makeKVEvent([]byte("a"), []byte("a_val"), ts(2)),
+				makeResolvedEvent(makeSpan([]byte("a"), []byte("b")), ts(5)),
+				makeKVEvent([]byte("b"), []byte("b_val"), ts(7)),
+				makeResolvedEvent(makeSpan([]byte("b"), []byte("z")), ts(10)),
+				makeResolvedEvent(makeSpan([]byte("a"), []byte("b")), ts(10)),
+			},
+			endTime: ts(9),
+			tableEvents: []schemafeed.TableEvent{
+				makeTableEvent(ts(8)),
+			},
+			expectedErr: &errTableEventReached{makeTableEvent(ts(8))},
+			expectedEvents: []kvevent.Event{
+				makeKVEvent([]byte("a"), []byte("a_val"), ts(2)),
+				makeResolvedEvent(makeSpan([]byte("a"), []byte("b")), ts(5)),
+				makeKVEvent([]byte("b"), []byte("b_val"), ts(7)),
+			},
+			expectedFrontier: ts(8).Prev(),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+
+			dest := &testKVEventWriter{}
+			src := &testKVEventReader{events: tc.events}
+			frontier, err := span.MakeFrontier(tc.spans...)
+			require.NoError(t, err)
+			schemaFeed := &testSchemaFeed{tableEvents: tc.tableEvents}
+			endTime := tc.endTime
+
+			err = copyFromSourceToDestUntilTableEvent(ctx, dest, src, frontier, schemaFeed, endTime, TestingKnobs{})
+			require.Equal(t, tc.expectedErr, err)
+			require.Empty(t, src.events)
+			require.Equal(t, tc.expectedEvents, dest.events)
+			require.Equal(t, tc.expectedFrontier, frontier.Frontier())
+		})
 	}
 }

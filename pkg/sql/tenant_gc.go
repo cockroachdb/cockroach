@@ -78,7 +78,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.T
 		if err != nil {
 			return err
 		}
-		scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV())
+		scKVAccessor := execCfg.SpanConfigKVAccessor.WithISQLTxn(ctx, txn)
 		records, err := scKVAccessor.GetSpanConfigRecords(
 			ctx, []spanconfig.Target{
 				spanconfig.MakeTargetFromSpan(tenantSpan),

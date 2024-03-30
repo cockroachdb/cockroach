@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -261,6 +263,14 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Once more than one region exists on the system database, we will
+	// force it into region survival mode.
+	if n.desc.GetID() == keys.SystemDatabaseID {
+		if err := params.p.setSystemDatabaseSurvival(params.ctx); err != nil {
+			return err
+		}
+	}
+
 	// Validate the type descriptor after the changes. We have to do this explicitly here, because
 	// we're using an internal call to addEnumValue above which doesn't perform validation.
 	if err := validateDescriptor(params.ctx, params.p, typeDesc); err != nil {
@@ -461,7 +471,7 @@ func (p *planner) AlterDatabaseDropRegion(
 	if err != nil {
 		return nil, err
 	}
-	if err := multiregion.CanDropRegion(catpb.RegionName(n.Region), regionConfig); err != nil {
+	if err := multiregion.CanDropRegion(catpb.RegionName(n.Region), regionConfig, dbDesc.GetID() == keys.SystemDatabaseID); err != nil {
 		return nil, err
 	}
 
@@ -571,9 +581,6 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 	// Ensure that only secondary tenants may have their system database
 	// set up for multi-region operations. Even then, ensure that only the
 	// node user may configure the system database.
-	//
-	// Operations to configure the system database will be sent as tasks using
-	// the autoconfig infrastucture.
 	//
 	// TODO(ajwerner): Adopt the auto-config infrastructure for configuring
 	// multi-region primitives in the system database. For now, we also allow
@@ -1318,6 +1325,14 @@ func (p *planner) alterDatabaseSurvivalGoal(
 // to the max survival goal of all non-system databases, which means that the
 // survival goal could be either upgraded or downgraded.
 func (p *planner) maybeUpdateSystemDBSurvivalGoal(ctx context.Context) error {
+	// Now that the zone survival goal is properly supported on the system database,
+	// with region liveness support we no longer to inherit the stronger guarantees
+	// assigned to other databases. i.e. Previously if any database had survive region,
+	// the system database would be forced to inherit those stronger guarantees.
+	if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V24_1_SystemDatabaseSurvivability) {
+		return nil
+	}
+
 	sysDB, err := p.Descriptors().MutableByID(p.Txn()).Database(ctx, keys.SystemDatabaseID)
 	if err != nil {
 		return err
@@ -2217,7 +2232,7 @@ type alterDatabaseSetZoneConfigExtensionNode struct {
 	n          *tree.AlterDatabaseSetZoneConfigExtension
 	desc       *dbdesc.Mutable
 	yamlConfig tree.TypedExpr
-	options    map[tree.Name]optionValue
+	options    map[tree.Name]zone.OptionValue
 }
 
 // AlterDatabaseSetZoneConfigExtension transforms a

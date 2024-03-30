@@ -8,10 +8,6 @@ go_test(
         "telemetry_test.go",
     ],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     shard_count = 16,
     tags = ["ccl_test"],
     deps = [

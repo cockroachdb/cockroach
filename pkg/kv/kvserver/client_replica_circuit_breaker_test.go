@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -716,6 +718,214 @@ func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 	}
 }
 
+// This tests that if the DistSender encounters individual replicas with
+// ReplicaUnavailableError (i.e. tripped replica circuit breakers), then it will
+// go on to try other replicas when possible (e.g. when there is a quorum
+// elsewhere), but not get stuck in infinite retry loops (e.g. when replicas
+// return NLHEs that point to a leaseholder or Raft leader which is unavailable,
+// or when all replicas are unavailable).
+//
+// It does not use setupCircuitBreakerTest, which assumes only 2 nodes.
+func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Timing-sensitive.
+	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
+
+	// Use a context timeout, to prevent test hangs on failures.
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// Always use expiration-based leases, such that the lease will expire when we
+	// partition off Raft traffic on n3.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+
+	// Use a manual clock, so we can expire leases at will.
+	manualClock := hlc.NewHybridManualClock()
+
+	// Set up a 3-node cluster.
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
+				},
+			},
+			Settings: st,
+			RaftConfig: base.RaftConfig{
+				// Speed up the test.
+				RaftTickInterval:           200 * time.Millisecond,
+				RaftElectionTimeoutTicks:   5,
+				RaftHeartbeatIntervalTicks: 1,
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	n1 := tc.Server(0)
+	n2 := tc.Server(1)
+	n3 := tc.Server(2)
+	db1 := n1.ApplicationLayer().DB()
+	db2 := n2.ApplicationLayer().DB()
+	db3 := n3.ApplicationLayer().DB()
+	dbs := []*kv.DB{db1, db2, db3}
+
+	// Specify the key and value to use.
+	prefix := append(n1.ApplicationLayer().Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	key := append(prefix.Clone(), []byte("/foo")...)
+	value := []byte("bar")
+
+	// Split off a range and upreplicate it.
+	_, _, err := n1.StorageLayer().SplitRange(prefix)
+	require.NoError(t, err)
+	desc := tc.AddVotersOrFatal(t, prefix, tc.Targets(1, 2)...)
+	t.Logf("split off range %s", desc)
+
+	repl1 := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(prefix))
+	repl2 := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(prefix))
+	repl3 := tc.GetFirstStoreFromServer(t, 2).LookupReplica(roachpb.RKey(prefix))
+	repls := []*kvserver.Replica{repl1, repl2, repl3}
+
+	// Set up test helpers.
+	requireRUEs := func(t *testing.T, dbs []*kv.DB) {
+		t.Helper()
+		for _, db := range dbs {
+			backoffMetric := (db.NonTransactionalSender().(*kv.CrossRangeTxnWrapperSender)).Wrapped().(*kvcoord.DistSender).Metrics().InLeaseTransferBackoffs
+			initialBackoff := backoffMetric.Count()
+			err := db.Put(ctx, key, value)
+			// Verify that we did not perform any backoff while executing this request.
+			require.EqualValues(t, 0, backoffMetric.Count()-initialBackoff)
+			require.Error(t, err)
+			require.True(t, errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil)),
+				"expected ReplicaUnavailableError, got %v", err)
+		}
+		t.Logf("writes failed with ReplicaUnavailableError")
+	}
+
+	requireNoRUEs := func(t *testing.T, dbs []*kv.DB) {
+		t.Helper()
+		for _, db := range dbs {
+			require.NoError(t, db.Put(ctx, key, value))
+		}
+		t.Logf("writes succeeded")
+	}
+
+	// Move the leaseholder to n3, and wait for it to become the Raft leader too.
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
+	t.Logf("transferred range lease to n3")
+
+	require.Eventually(t, func() bool {
+		for _, repl := range repls {
+			if repl.RaftStatus().Lead != 3 {
+				return false
+			}
+		}
+		return true
+	}, 5*time.Second, 100*time.Millisecond)
+	t.Logf("transferred raft leadership to n3")
+
+	requireNoRUEs(t, dbs)
+
+	// Partition Raft traffic on n3 away from n1 and n2, and eagerly trip its
+	// breaker. Note that we don't partition RPC traffic, such that client
+	// requests and node liveness heartbeats still succeed.
+	partitioned := &atomic.Bool{}
+	partitioned.Store(true)
+	dropRaftMessagesFrom(t, n1, desc.RangeID, []roachpb.ReplicaID{3}, partitioned)
+	dropRaftMessagesFrom(t, n2, desc.RangeID, []roachpb.ReplicaID{3}, partitioned)
+	dropRaftMessagesFrom(t, n3, desc.RangeID, []roachpb.ReplicaID{1, 2}, partitioned)
+	t.Logf("partitioned n3 raft traffic from n1 and n2")
+
+	repl3.TripBreaker()
+	t.Logf("tripped n3 circuit breaker")
+
+	// While n3 is the leaseholder, all gateways should return RUE.
+	requireRUEs(t, dbs)
+
+	// Expire the lease, but not Raft leadership. All gateways should still return
+	// RUE, since followers return NLHE pointing to the Raft leader, and it will
+	// return RUE.
+	lease, _ := repl3.GetLease()
+	manualClock.Forward(lease.Expiration.WallTime)
+	t.Logf("expired n3 lease")
+
+	requireRUEs(t, dbs)
+
+	// Wait for the leadership to move. Writes should now succeed -- they will
+	// initially go to n3, the previous leaseholder, but it will return NLHE. The
+	// DistSender will retry the other replicas, which eventually acquire a new
+	// lease and serve the write.
+	var leader uint64
+	require.Eventually(t, func() bool {
+		for _, repl := range repls {
+			if l := repl.RaftStatus().Lead; l == 3 {
+				return false
+			} else if l > 0 {
+				leader = l
+			}
+		}
+		return true
+	}, 5*time.Second, 100*time.Millisecond)
+	t.Logf("raft leadership moved to n%d", leader)
+
+	requireNoRUEs(t, dbs)
+
+	// Also partition n1 and n2 away from each other, and trip their breakers. All
+	// nodes are now completely partitioned away from each other.
+	dropRaftMessagesFrom(t, n1, desc.RangeID, []roachpb.ReplicaID{2, 3}, partitioned)
+	dropRaftMessagesFrom(t, n2, desc.RangeID, []roachpb.ReplicaID{1, 3}, partitioned)
+
+	repl1.TripBreaker()
+	repl2.TripBreaker()
+	t.Logf("partitioned all nodes and tripped their breakers")
+
+	// n1 or n2 still has the lease. Writes should return a
+	// ReplicaUnavailableError.
+	requireRUEs(t, dbs)
+
+	// Expire the lease, but not raft leadership. Writes should still error
+	// because the leader's circuit breaker is tripped.
+	lease, _ = repl1.GetLease()
+	manualClock.Forward(lease.Expiration.WallTime)
+	t.Logf("expired n%d lease", lease.Replica.ReplicaID)
+
+	requireRUEs(t, dbs)
+
+	// Wait for raft leadership to expire. Writes should error after the
+	// DistSender attempts all 3 replicas and they all fail.
+	require.Eventually(t, func() bool {
+		for _, repl := range repls {
+			if repl.RaftStatus().Lead != 0 {
+				return false
+			}
+		}
+		return true
+	}, 5*time.Second, 100*time.Millisecond)
+	t.Logf("no raft leader")
+
+	requireRUEs(t, dbs)
+
+	// Recover the partition. Writes should soon recover.
+	partitioned.Store(false)
+	t.Logf("partitioned healed")
+
+	require.Eventually(t, func() bool {
+		for _, db := range dbs {
+			if err := db.Put(ctx, key, value); err != nil {
+				return false
+			}
+		}
+		return true
+	}, 5*time.Second, 100*time.Millisecond)
+	t.Logf("writes succeeded")
+
+	require.NoError(t, ctx.Err())
+}
+
 // Test infrastructure below.
 
 func makeBreakerToggleable(b *circuit.Breaker) (setProbeEnabled func(bool)) {
@@ -750,7 +960,7 @@ type circuitBreakerTest struct {
 }
 
 func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 	manualClock := hlc.NewHybridManualClock()
 	var rangeID int64             // atomic
 	slowThresh := &atomic.Value{} // supports .SetSlowThreshold(x)
@@ -803,7 +1013,7 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	raftCfg.SetDefaults()
 	raftCfg.RaftHeartbeatIntervalTicks = 1
 	raftCfg.RaftElectionTimeoutTicks = 2
-	reg := server.NewStickyVFSRegistry()
+	reg := fs.NewStickyRegistry()
 	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{

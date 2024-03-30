@@ -139,7 +139,8 @@ const (
 	// values being lost to errors and/or node failures.
 	SerialUsesCachedSQLSequences SerialNormalizationMode = 3
 	// SerialUsesUnorderedRowID means use INT NOT NULL DEFAULT unordered_unique_rowid().
-	SerialUsesUnorderedRowID SerialNormalizationMode = 4
+	SerialUsesUnorderedRowID         SerialNormalizationMode = 4
+	SerialUsesCachedNodeSQLSequences SerialNormalizationMode = 5
 )
 
 func (m SerialNormalizationMode) String() string {
@@ -172,6 +173,8 @@ func SerialNormalizationModeFromString(val string) (_ SerialNormalizationMode, o
 		return SerialUsesSQLSequences, true
 	case "SQL_SEQUENCE_CACHED":
 		return SerialUsesCachedSQLSequences, true
+	case "SQL_SEQUENCE_CACHED_NODE":
+		return SerialUsesCachedNodeSQLSequences, true
 	default:
 		return 0, false
 	}
@@ -353,14 +356,26 @@ var qosLevelsDict = map[QoSLevel]string{
 	SystemHigh:    SystemHighName,
 }
 
+func init() {
+	// Sanity check that all names for QoS levels use lower case (this
+	// assumption is used in ParseQoSLevelFromString).
+	for _, val := range qosLevelsDict {
+		if strings.ToLower(val) != val {
+			panic(errors.AssertionFailedf(
+				"expected only lower case letters in QoS level name %s", val,
+			))
+		}
+	}
+}
+
 // ParseQoSLevelFromString converts a string into a QoSLevel
 func ParseQoSLevelFromString(val string) (_ QoSLevel, ok bool) {
-	switch strings.ToUpper(val) {
-	case strings.ToUpper(UserHighName):
+	switch strings.ToLower(val) {
+	case UserHighName:
 		return UserHigh, true
-	case strings.ToUpper(UserLowName):
+	case UserLowName:
 		return UserLow, true
-	case strings.ToUpper(NormalName):
+	case NormalName:
 		return Normal, true
 	default:
 		return 0, false

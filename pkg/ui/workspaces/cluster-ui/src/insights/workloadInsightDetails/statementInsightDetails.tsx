@@ -23,7 +23,7 @@ import { StmtInsightEvent } from "../types";
 import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
 import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";
 import { TimeScale, toDateRange } from "../../timeScaleDropdown";
-import { getStmtInsightsApi } from "src/api";
+import { getStmtInsightsApi } from "src/api/stmtInsightsApi";
 import { InsightsError } from "../insightsErrorComponent";
 
 // Styles
@@ -40,10 +40,8 @@ enum TabKeysEnum {
 export interface StatementInsightDetailsStateProps {
   insightEventDetails: StmtInsightEvent;
   insightError: Error | null;
-  isTenant?: boolean;
   timeScale?: TimeScale;
   hasAdminRole: boolean;
-  useObsService: boolean;
 }
 
 export interface StatementInsightDetailsDispatchProps {
@@ -74,11 +72,9 @@ export const StatementInsightDetails: React.FC<
   insightEventDetails,
   insightError,
   match,
-  isTenant,
   timeScale,
   hasAdminRole,
   refreshUserSQLRoles,
-  useObsService,
 }) => {
   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
     explainPlan: null,
@@ -91,7 +87,6 @@ export const StatementInsightDetails: React.FC<
       loaded: insightEventDetails != null,
       error: insightError,
     });
-  const [prevUseObsService, setPrevUseObsService] = useState(useObsService);
 
   const details = insightDetails?.details;
 
@@ -99,7 +94,6 @@ export const StatementInsightDetails: React.FC<
 
   const onTabClick = (key: TabKeysEnum) => {
     if (
-      !isTenant &&
       key === TabKeysEnum.EXPLAIN &&
       details?.planGist &&
       !explainPlanState.loaded
@@ -119,16 +113,14 @@ export const StatementInsightDetails: React.FC<
 
   useEffect(() => {
     refreshUserSQLRoles();
-    if (details != null && prevUseObsService === useObsService) {
+    if (details != null) {
       return;
     }
-    setPrevUseObsService(useObsService);
     const [start, end] = toDateRange(timeScale);
     getStmtInsightsApi({
       stmtExecutionID: executionID,
       start,
       end,
-      useObsService,
     })
       .then(res => {
         setInsightDetails({
@@ -139,14 +131,7 @@ export const StatementInsightDetails: React.FC<
       .catch(e => {
         setInsightDetails({ details: null, error: e, loaded: true });
       });
-  }, [
-    details,
-    executionID,
-    timeScale,
-    refreshUserSQLRoles,
-    useObsService,
-    prevUseObsService,
-  ]);
+  }, [details, executionID, timeScale, refreshUserSQLRoles]);
 
   return (
     <div>
@@ -193,34 +178,30 @@ export const StatementInsightDetails: React.FC<
                 hasAdminRole={hasAdminRole}
               />
             </Tabs.TabPane>
-            {!isTenant && (
-              <Tabs.TabPane tab="Explain Plan" key={TabKeysEnum.EXPLAIN}>
-                <section className={cx("section")}>
-                  <Row gutter={24}>
-                    <Col span={24}>
-                      <Loading
-                        loading={
-                          !explainPlanState.loaded &&
-                          details?.planGist?.length > 0
-                        }
-                        page={"stmt_insight_details"}
-                        error={explainPlanState.error}
-                        renderError={() =>
-                          InsightsError(explainPlanState.error?.message)
-                        }
-                      >
-                        <SqlBox
-                          value={
-                            explainPlanState.explainPlan || "Not available."
-                          }
-                          size={SqlBoxSize.custom}
-                        />
-                      </Loading>
-                    </Col>
-                  </Row>
-                </section>
-              </Tabs.TabPane>
-            )}
+            <Tabs.TabPane tab="Explain Plan" key={TabKeysEnum.EXPLAIN}>
+              <section className={cx("section")}>
+                <Row gutter={24}>
+                  <Col span={24}>
+                    <Loading
+                      loading={
+                        !explainPlanState.loaded &&
+                        details?.planGist?.length > 0
+                      }
+                      page={"stmt_insight_details"}
+                      error={explainPlanState.error}
+                      renderError={() =>
+                        InsightsError(explainPlanState.error?.message)
+                      }
+                    >
+                      <SqlBox
+                        value={explainPlanState.explainPlan || "Not available."}
+                        size={SqlBoxSize.custom}
+                      />
+                    </Loading>
+                  </Col>
+                </Row>
+              </section>
+            </Tabs.TabPane>
           </Tabs>
         </Loading>
       </div>

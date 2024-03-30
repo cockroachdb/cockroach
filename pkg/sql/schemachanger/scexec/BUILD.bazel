@@ -56,10 +56,6 @@ go_test(
         "main_test.go",
         ":mock_scexec",  # keep
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":scexec",
         "//pkg/base",

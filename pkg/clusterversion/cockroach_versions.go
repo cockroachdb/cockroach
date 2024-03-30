@@ -121,15 +121,21 @@ type Key int
 // own documentation in ./pkg/upgrade, which you should peruse should you feel
 // that an upgrade is necessary for your use case.
 //
-// ## Permanent upgrades
+// ## Bootstrap upgrades
 //
-// Permanent upgrades are upgrades that double as initialization steps when
-// bootstrapping a new cluster. As such, they cannot be removed even as the
-// version they are tied to becomes unsupported.
+// Bootstrap upgrades are two upgrades that run as initialization steps when
+// bootstrapping a new cluster, regardless of the version (baked-in migrations)
+// at which the cluster bootstrapped. When all clusters -- both those being
+// freshly created and those being upgraded from some older version -- need to
+// run some piece of code, typically that code is called both in an upgrade
+// migration that existing clusters will run during upgrade and in the bootstrap
+// upgrades that only new clusters will run; bootstrap upgrades are not re-run
+// during later upgrades, so any modifications to them also need to be run as
+// separate upgrades.
 //
 // # Phasing out Versions and Upgrades
 //
-// Versions and non-permanent upgrades can be removed once they are no longer
+// Versions can be removed once they are no longer
 // going to be exercised. This is primarily driven by the
 // MinSupported version, which declares the oldest *cluster* (not binary)
 // version of CockroachDB that may interface with the running node. It typically
@@ -160,54 +166,16 @@ type Key int
 // All "is active" checks for the key will always evaluate to true. You'll also
 // want to delete the constant and remove its entry in the `versionsSingleton`
 // block below.
-//
-// Permanent upgrades and their associated version key cannot be removed (even
-// if it is below MinSupported). The version key should start with `Permanent_`
-// to make this more explicit. The version numbers should not be changed - we
-// want all nodes in a mixed-version cluster to agree on what version a certain
-// upgrade step is tied to (in the unlikely scenario that we have mixed-version
-// nodes while bootstrapping a cluster).
 const (
-	// VPrimordial versions are associated with permanent upgrades that exist for
-	// historical reasons; no new primordial versions should be added, and no new
-	// upgrades should be tied to existing primordial versions.
+	// VBootstrap versions are associated with bootstrap steps; no new bootstrap
+	// versions should be added, as the bootstrap{System,Cluster} functions in the
+	// upgrades package are extended in-place.
+	VBootstrapSystem Key = iota
+	VBootstrapTenant
 
-	VPrimordial1 Key = iota
-	VPrimordial2
-	VPrimordial3
-	VPrimordial4
-	VPrimordial5
-	VPrimordial6
+	// No new VBootstrap versions should be added.
 
-	// No new VPrimordial versions should be added.
-
-	VPrimordialMax
-
-	// Permanent_V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
-	// telemetry logging jobs.
-	// This is a permanent migration which should exist forever.
-	Permanent_V22_2SQLSchemaTelemetryScheduledJobs
-
-	// Permanent_V23_1KeyVisualizerTablesAndJobs adds the system tables that
-	// support the key visualizer.
-	Permanent_V23_1KeyVisualizerTablesAndJobs
-
-	// Permanent_V23_1_CreateJobsMetricsPollingJob creates the permanent job
-	// responsible for polling the jobs table for metrics.
-	Permanent_V23_1_CreateJobsMetricsPollingJob
-
-	// Permanent_V23_1_CreateAutoConfigRunnerJob is the version where the auto
-	// config runner persistent job has been created.
-	Permanent_V23_1_CreateAutoConfigRunnerJob
-
-	// Permanent_V23_1ChangeSQLStatsTTL is the version where the gc TTL was
-	// updated to all SQL Stats tables.
-	Permanent_V23_1ChangeSQLStatsTTL
-
-	// Permanent_V23_1CreateSystemActivityUpdateJob is the version at which
-	// Cockroach adds a job that periodically updates the statement_activity and
-	// transaction_activity tables.
-	Permanent_V23_1CreateSystemActivityUpdateJob
+	VBootstrapMax
 
 	// V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
 	V23_1
@@ -265,10 +233,10 @@ const (
 	// V23_2_PebbleFormatVirtualSSTables above.
 	V23_2_EnablePebbleFormatVirtualSSTables
 
-	// Permanent_V23_2_MVCCStatisticsTable adds the system.mvcc_statistics
+	// V23_2_MVCCStatisticsTable adds the system.mvcc_statistics
 	// table and update job. The table is used to serve fast reads of historical
 	// mvcc data from observability surfaces.
-	Permanent_V23_2_MVCCStatisticsTable
+	V23_2_MVCCStatisticsTable
 
 	// V23_2_AddSystemExecInsightsTable is the version at which Cockroach creates
 	// {statement|transaction}_execution_insights system tables.
@@ -300,6 +268,47 @@ const (
 	// progress columns from system.jobs table.
 	V24_1_DropPayloadAndProgressFromSystemJobsTable
 
+	// V24_1_MigrateOldStylePTSRecords  migrate old-style PTS records
+	// to the new style.
+	V24_1_MigrateOldStylePTSRecords
+
+	// V24_1_SessionBasedLeasingDualWrite both session based and expiry based leases
+	// are written to the system.lease table under different primary indexes.
+	V24_1_SessionBasedLeasingDualWrite
+
+	// V24_1_SessionBasedLeasingDrain all leases are forcefully renewed, so that
+	// a session based equivalent exists.
+	V24_1_SessionBasedLeasingDrain
+
+	// V24_1_SessionBasedLeasingOnly only session based leases are written to
+	// system.lease.
+	V24_1_SessionBasedLeasingOnly
+
+	// V24_1_SessionBasedLeasingUpgradeDescriptor upgrades the leasing descriptor
+	// to be only session based.
+	V24_1_SessionBasedLeasingUpgradeDescriptor
+
+	// V24_1_PebbleFormatSyntheticPrefixSuffix upgrades Pebble's format major version to
+	// FormatSyntheticPrefixSuffix, allowing use of virtual sstables in Pebble.
+	V24_1_PebbleFormatSyntheticPrefixSuffix
+
+	// V24_1_SystemDatabaseSurvivability sets the survival goal for the system
+	// database to be SURVIVE ZONE.
+	V24_1_SystemDatabaseSurvivability
+
+	// V24_1_GossipMaximumIOOverload is the version at which stores begin
+	// populating the store capacity field IOThresholdMax. The field shouldn't be
+	// used for allocator decisions before then.
+	V24_1_GossipMaximumIOOverload
+
+	// V24_1_EstimatedMVCCStatsInSplit introduces MVCC stats estimates during range
+	// splits.
+	V24_1_EstimatedMVCCStatsInSplit
+
+	// V24_1_ReplicatedLockPipelining allows exclusive and shared replicated locks
+	// to be pipelined.
+	V24_1_ReplicatedLockPipelining
+
 	numKeys
 )
 
@@ -323,21 +332,9 @@ const (
 // to ensure that upgrades don't occur between in-development and released
 // versions (see developmentBranch and maybeApplyDevOffset).
 var versionTable = [numKeys]roachpb.Version{
-	VPrimordial1:   {Major: 0, Minor: 0, Internal: 2},
-	VPrimordial2:   {Major: 0, Minor: 0, Internal: 4},
-	VPrimordial3:   {Major: 0, Minor: 0, Internal: 6},
-	VPrimordial4:   {Major: 0, Minor: 0, Internal: 8},
-	VPrimordial5:   {Major: 0, Minor: 0, Internal: 10},
-	VPrimordial6:   {Major: 0, Minor: 0, Internal: 12},
-	VPrimordialMax: {Major: 0, Minor: 0, Internal: 424242},
-
-	// Permanent upgrades from previous versions.
-	Permanent_V22_2SQLSchemaTelemetryScheduledJobs: {Major: 22, Minor: 1, Internal: 42},
-	Permanent_V23_1KeyVisualizerTablesAndJobs:      {Major: 22, Minor: 2, Internal: 32},
-	Permanent_V23_1_CreateJobsMetricsPollingJob:    {Major: 22, Minor: 2, Internal: 38},
-	Permanent_V23_1_CreateAutoConfigRunnerJob:      {Major: 22, Minor: 2, Internal: 90},
-	Permanent_V23_1ChangeSQLStatsTTL:               {Major: 22, Minor: 2, Internal: 98},
-	Permanent_V23_1CreateSystemActivityUpdateJob:   {Major: 22, Minor: 2, Internal: 102},
+	VBootstrapSystem: {Major: 0, Minor: 0, Internal: 2},
+	VBootstrapTenant: {Major: 0, Minor: 0, Internal: 4},
+	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
 
 	V23_1: {Major: 23, Minor: 1, Internal: 0},
 
@@ -354,7 +351,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V23_2_ChangefeedLaggingRangesOpts:          {Major: 23, Minor: 1, Internal: 24},
 	V23_2_GrantExecuteToPublic:                 {Major: 23, Minor: 1, Internal: 26},
 	V23_2_EnablePebbleFormatVirtualSSTables:    {Major: 23, Minor: 1, Internal: 28},
-	Permanent_V23_2_MVCCStatisticsTable:        {Major: 23, Minor: 1, Internal: 30},
+	V23_2_MVCCStatisticsTable:                  {Major: 23, Minor: 1, Internal: 30},
 	V23_2_AddSystemExecInsightsTable:           {Major: 23, Minor: 1, Internal: 32},
 
 	V23_2: {Major: 23, Minor: 2, Internal: 0},
@@ -368,6 +365,18 @@ var versionTable = [numKeys]roachpb.Version{
 	// *************************************************
 
 	V24_1_DropPayloadAndProgressFromSystemJobsTable: {Major: 23, Minor: 2, Internal: 4},
+
+	V24_1_MigrateOldStylePTSRecords: {Major: 23, Minor: 2, Internal: 6},
+
+	V24_1_SessionBasedLeasingDualWrite:         {Major: 23, Minor: 2, Internal: 8},
+	V24_1_SessionBasedLeasingDrain:             {Major: 23, Minor: 2, Internal: 10},
+	V24_1_SessionBasedLeasingOnly:              {Major: 23, Minor: 2, Internal: 12},
+	V24_1_SessionBasedLeasingUpgradeDescriptor: {Major: 23, Minor: 2, Internal: 14},
+	V24_1_PebbleFormatSyntheticPrefixSuffix:    {Major: 23, Minor: 2, Internal: 16},
+	V24_1_SystemDatabaseSurvivability:          {Major: 23, Minor: 2, Internal: 18},
+	V24_1_GossipMaximumIOOverload:              {Major: 23, Minor: 2, Internal: 20},
+	V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 22},
+	V24_1_ReplicatedLockPipelining:             {Major: 23, Minor: 2, Internal: 24},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster
@@ -391,7 +400,7 @@ const PreviousRelease Key = V23_2
 // only need to check that the cluster has upgraded to 24.1.
 const V24_1 = Latest
 
-// developmentBranch must be true on the main development branch but should be
+// DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
 // and associated upgrade implementations are frozen.
 //
@@ -402,7 +411,7 @@ const V24_1 = Latest
 //     binary in a dev cluster.
 //
 // See devOffsetKeyStart for more details.
-const developmentBranch = true
+const DevelopmentBranch = true
 
 // finalVersion should be set on a release branch to the minted final cluster
 // version key, e.g. to V23_2 on the release-23.2 branch once it is minted.
@@ -414,6 +423,16 @@ const finalVersion Key = -1
 func (k Key) Version() roachpb.Version {
 	version := versionTable[k]
 	return maybeApplyDevOffset(k, version)
+}
+
+// FenceVersion is the fence version -- the internal immediately prior -- for
+// the named version, if it is Internal.
+func (k Key) FenceVersion() roachpb.Version {
+	v := k.Version()
+	if v.Internal > 0 {
+		v.Internal -= 1
+	}
+	return v
 }
 
 // IsFinal returns true if the key corresponds to a final version (as opposed to
@@ -435,7 +454,7 @@ func (k Key) IsFinal() bool {
 // version has it.
 func (k Key) ReleaseSeries() roachpb.ReleaseSeries {
 	// Note: TestReleaseSeries ensures that this works for all valid Keys.
-	s, _ := removeDevOffset(k.Version()).ReleaseSeries()
+	s, _ := RemoveDevOffset(k.Version()).ReleaseSeries()
 	return s
 }
 

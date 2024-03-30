@@ -85,7 +85,7 @@ func (i *immediateVisitor) SetAddedColumnType(
 	}
 	// Empty names are allowed for families, in which case AllocateIDs will assign
 	// one.
-	return tbl.AllocateIDsWithoutValidation(ctx)
+	return tbl.AllocateIDsWithoutValidation(ctx, false /* createMissingPrimaryKey */)
 }
 
 func (i *immediateVisitor) MakeDeleteOnlyColumnWriteOnly(
@@ -277,14 +277,24 @@ func (i *immediateVisitor) AddColumnDefaultExpression(
 	d := col.ColumnDesc()
 	expr := string(op.Default.Expr)
 	d.DefaultExpr = &expr
-	refs := catalog.MakeDescriptorIDSet(d.UsesSequenceIds...)
+	seqRefs := catalog.MakeDescriptorIDSet(d.UsesSequenceIds...)
 	for _, seqID := range op.Default.UsesSequenceIDs {
-		if refs.Contains(seqID) {
+		if seqRefs.Contains(seqID) {
 			continue
 		}
 		d.UsesSequenceIds = append(d.UsesSequenceIds, seqID)
-		refs.Add(seqID)
+		seqRefs.Add(seqID)
 	}
+
+	fnRefs := catalog.MakeDescriptorIDSet(d.UsesFunctionIds...)
+	for _, fnID := range op.Default.UsesFunctionIDs {
+		if fnRefs.Contains(fnID) {
+			continue
+		}
+		d.UsesFunctionIds = append(d.UsesFunctionIds, fnID)
+		fnRefs.Add(fnID)
+	}
+
 	return nil
 }
 

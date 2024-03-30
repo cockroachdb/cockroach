@@ -51,11 +51,8 @@ const templateText = `
 {{- define "runLogicTest" }}
 {{- if .LogicTest -}}
 func runLogicTest(t *testing.T, file string) {
-	{{ if .Is3NodeTenant }}skip.UnderRace(t, "large engflow executor is overloaded by 3node-tenant config")
-	{{ else if eq .TestRuleName "local"}}if file == "lookup_join_local" {
-		skip.UnderRace(t, "this file is too slow under race")
-	}
-	{{ end }}skip.UnderDeadlock(t, "times out and/or hangs")
+	{{if and .SkipCclUnderRace .Ccl}}skip.UnderRace(t, "times out and/or hangs")
+	{{end}}skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }
 {{ end }}
@@ -64,8 +61,8 @@ func runLogicTest(t *testing.T, file string) {
 {{- define "runCCLLogicTest" }}
 {{- if .CclLogicTest -}}
 func runCCLLogicTest(t *testing.T, file string) {
-	{{ if or .IsMultiRegion .Is3NodeTenant }}skip.UnderRace(t, "large engflow executor is overloaded by this config")
-	{{ end }}skip.UnderDeadlock(t, "times out and/or hangs")
+	{{if .SkipCclUnderRace}}skip.UnderRace(t, "times out and/or hangs")
+	{{end}}skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(cclLogicTestDir, file))
 }
 {{ end }}
@@ -275,10 +272,10 @@ go_test(
         "//pkg/sql/logictest:testdata",  # keep{{ end }}{{ if .ExecBuildLogicTest }}
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "large"},
-    }),
+    exec_properties = {{ if .SqliteLogicTest }}{"test.Pool": "default"},{{ else if .UseHeavyPool }}select({
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "large"},
+    }),{{ else }}{"test.Pool": "large"},{{ end }}
     shard_count = {{ if gt .TestCount 48 }}48{{ else }}{{ .TestCount }}{{end}},
     tags = [{{ if .Ccl }}
         "ccl_test",{{ end }}

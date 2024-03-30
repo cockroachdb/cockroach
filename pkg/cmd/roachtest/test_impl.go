@@ -445,6 +445,13 @@ func (t *testImpl) suppressFailures() {
 	t.mu.failuresSuppressed = true
 }
 
+func (t *testImpl) resetFailures() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.failures = nil
+	t.mu.failuresSuppressed = false
+}
+
 // We take the "squashed" error that contains information of all the errors for each failure.
 func formatFailure(b *strings.Builder, reportFailures ...failure) {
 	for i, failure := range reportFailures {
@@ -487,25 +494,42 @@ func (t *testImpl) failureMsg() string {
 	return b.String()
 }
 
-// failureContainsError returns true if any of the errors in a given failure
-// matches the reference error
-func failureContainsError(f failure, refError error) bool {
-	for _, err := range f.errors {
-		if errors.Is(err, refError) {
-			return true
-		}
-	}
-	return errors.Is(f.squashedErr, refError)
-}
-
-// failuresContainsError returns true if any of the failures contains the reference error
+// failuresContainError returns true if any of the errors in any of
+// the given failures matches the reference error.
 func failuresContainsError(failures []failure, refError error) bool {
 	for _, f := range failures {
-		if failureContainsError(f, refError) {
+		for _, err := range f.errors {
+			if errors.Is(err, refError) {
+				return true
+			}
+		}
+
+		if errors.Is(f.squashedErr, refError) {
 			return true
 		}
 	}
+
 	return false
+}
+
+// failuresSpecifyOwner checks if any of the errors in any of the
+// given failures is a failure that is associated with an owner. If
+// such an error is found, it is returned; otherwise, nil is returned.
+func failuresSpecifyOwner(failures []failure) *registry.ErrorWithOwnership {
+	var ref registry.ErrorWithOwnership
+	for _, f := range failures {
+		for _, err := range f.errors {
+			if errors.As(err, &ref) {
+				return &ref
+			}
+		}
+
+		if errors.As(f.squashedErr, &ref) {
+			return &ref
+		}
+	}
+
+	return nil
 }
 
 func (t *testImpl) ArtifactsDir() string {

@@ -60,7 +60,7 @@ var _ plpgsqltree.StatementVisitor = &telemetryVisitor{}
 // Visit implements the StatementVisitor interface
 func (v *telemetryVisitor) Visit(
 	stmt plpgsqltree.Statement,
-) (newStmt plpgsqltree.Statement, changed bool) {
+) (newStmt plpgsqltree.Statement, recurse bool) {
 	taggedStmt, ok := stmt.(plpgsqltree.TaggedStatement)
 	if !ok {
 		v.Err = errors.AssertionFailedf("no tag found for stmt %q", stmt)
@@ -77,7 +77,7 @@ func (v *telemetryVisitor) Visit(
 	}
 	v.Err = nil
 
-	return stmt, false
+	return stmt, true
 }
 
 // MakePLpgSQLTelemetryVisitor makes a plpgsql telemetry visitor, for capturing
@@ -98,24 +98,6 @@ func CountPLpgSQLStmt(sql string) (PLpgSQLStmtCounter, error) {
 	plpgsqltree.Walk(&v, stmt.AST)
 
 	return v.StmtCnt, v.Err
-}
-
-// ParseAndCollectTelemetryForPLpgSQLFunc takes a plpgsql function and parses and collects
-// telemetry on the parsable statements.
-func ParseAndCollectTelemetryForPLpgSQLFunc(stmt *tree.CreateRoutine) error {
-	// Assert that the function language is PLPGSQL.
-	var funcBodyStr string
-	for _, option := range stmt.Options {
-		switch opt := option.(type) {
-		case tree.RoutineBodyStr:
-			funcBodyStr = string(opt)
-		}
-	}
-
-	if _, err := CountPLpgSQLStmt(funcBodyStr); err != nil {
-		return errors.Wrap(err, "plpgsql not supported in user-defined functions")
-	}
-	return unimp.New("plpgsql", "plpgsql not supported in user-defined functions")
 }
 
 // SQLStmtVisitor calls Fn for every SQL statement and expression found while
@@ -148,7 +130,7 @@ func simpleVisit(expr tree.Expr, fn tree.SimpleVisitFn) (tree.Expr, error) {
 
 func (v *SQLStmtVisitor) Visit(
 	stmt plpgsqltree.Statement,
-) (newStmt plpgsqltree.Statement, changed bool) {
+) (newStmt plpgsqltree.Statement, recurse bool) {
 	if v.Err != nil {
 		return stmt, false
 	}
@@ -161,8 +143,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Query != s
-		if changed {
+		if t.Query != s {
 			cpy := t.CopyNode()
 			cpy.Query = s
 			newStmt = cpy
@@ -172,8 +153,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.SqlStmt != s
-		if changed {
+		if t.SqlStmt != s {
 			cpy := t.CopyNode()
 			cpy.SqlStmt = s
 			newStmt = cpy
@@ -183,8 +163,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Query != s
-		if changed {
+		if t.Query != s {
 			cpy := t.CopyNode()
 			cpy.Query = s
 			newStmt = cpy
@@ -194,8 +173,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Expr != e
-		if changed {
+		if t.Expr != e {
 			cpy := t.CopyNode()
 			cpy.Expr = e
 			newStmt = cpy
@@ -206,8 +184,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Value != e
-		if changed {
+		if t.Value != e {
 			cpy := t.CopyNode()
 			cpy.Value = e
 			newStmt = cpy
@@ -217,8 +194,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Condition != e
-		if changed {
+		if t.Condition != e {
 			cpy := t.CopyNode()
 			cpy.Condition = e
 			newStmt = cpy
@@ -228,8 +204,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Condition != e
-		if changed {
+		if t.Condition != e {
 			cpy := t.CopyNode()
 			cpy.Condition = e
 			newStmt = cpy
@@ -239,8 +214,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Condition != e
-		if changed {
+		if t.Condition != e {
 			cpy := t.CopyNode()
 			cpy.Condition = e
 			newStmt = cpy
@@ -249,8 +223,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Condition != e
-		if changed {
+		if t.Condition != e {
 			cpy := t.CopyNode()
 			cpy.Condition = e
 			newStmt = cpy
@@ -260,8 +233,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Condition != e
-		if changed {
+		if t.Condition != e {
 			cpy := t.CopyNode()
 			cpy.Condition = e
 			newStmt = cpy
@@ -271,8 +243,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Condition != e
-		if changed {
+		if t.Condition != e {
 			cpy := t.CopyNode()
 			cpy.Condition = e
 			newStmt = cpy
@@ -282,8 +253,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Expr != e
-		if changed {
+		if t.Expr != e {
 			cpy := t.CopyNode()
 			cpy.Expr = e
 			newStmt = cpy
@@ -294,8 +264,7 @@ func (v *SQLStmtVisitor) Visit(
 			if v.Err != nil {
 				return stmt, false
 			}
-			changed = changed || (t.Params[i] != e)
-			if changed {
+			if t.Params[i] != e {
 				if newStmt != stmt {
 					cpy := t.CopyNode()
 					newStmt = cpy
@@ -308,8 +277,7 @@ func (v *SQLStmtVisitor) Visit(
 			if v.Err != nil {
 				return stmt, false
 			}
-			changed = changed || (t.Options[i].Expr != e)
-			if changed {
+			if t.Options[i].Expr != e {
 				if newStmt != stmt {
 					cpy := t.CopyNode()
 					newStmt = cpy
@@ -322,8 +290,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Condition != e
-		if changed {
+		if t.Condition != e {
 			cpy := t.CopyNode()
 			cpy.Condition = e
 			newStmt = cpy
@@ -335,8 +302,7 @@ func (v *SQLStmtVisitor) Visit(
 			if v.Err != nil {
 				return stmt, false
 			}
-			changed = changed || (t.Params[i] != e)
-			if changed {
+			if t.Params[i] != e {
 				if newStmt != stmt {
 					cpy := t.CopyNode()
 					newStmt = cpy
@@ -349,8 +315,7 @@ func (v *SQLStmtVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Expr != e
-		if changed {
+		if t.Expr != e {
 			cpy := t.CopyNode()
 			cpy.Expr = e
 			newStmt = cpy
@@ -364,7 +329,7 @@ func (v *SQLStmtVisitor) Visit(
 	if v.Err != nil {
 		return stmt, false
 	}
-	return newStmt, changed
+	return newStmt, true
 }
 
 // TypeRefVisitor calls the given replace function on each type reference
@@ -379,7 +344,7 @@ var _ plpgsqltree.StatementVisitor = &TypeRefVisitor{}
 
 func (v *TypeRefVisitor) Visit(
 	stmt plpgsqltree.Statement,
-) (newStmt plpgsqltree.Statement, changed bool) {
+) (newStmt plpgsqltree.Statement, recurse bool) {
 	if v.Err != nil {
 		return stmt, false
 	}
@@ -390,13 +355,12 @@ func (v *TypeRefVisitor) Visit(
 		if v.Err != nil {
 			return stmt, false
 		}
-		changed = t.Typ != newTyp
-		if changed {
+		if t.Typ != newTyp {
 			if newStmt == stmt {
 				newStmt = t.CopyNode()
 				newStmt.(*plpgsqltree.Declaration).Typ = newTyp
 			}
 		}
 	}
-	return newStmt, changed
+	return newStmt, true
 }

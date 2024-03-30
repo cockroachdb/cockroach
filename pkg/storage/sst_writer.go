@@ -82,6 +82,7 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 		format = sstable.TableFormatPebblev4
 	}
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
+	opts.Compression = getCompressionAlgorithm(ctx, cs)
 	opts.MergerName = "nullptr"
 	return opts
 }
@@ -117,6 +118,7 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	// block checksums and more index entries are just overhead and smaller blocks
 	// reduce compression ratio.
 	opts.BlockSize = 128 << 10
+	opts.Compression = getCompressionAlgorithm(ctx, cs)
 	opts.MergerName = "nullptr"
 	return SSTWriter{
 		fw:                sstable.NewWriter(&noopFinishAbort{f}, opts),
@@ -125,12 +127,27 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 }
 
 // MakeIngestionSSTWriter creates a new SSTWriter tailored for ingestion SSTs.
-// These SSTs have bloom filters enabled (as set in DefaultPebbleOptions) and
-// format set to RocksDBv2.
+// These SSTs have bloom filters enabled (as set in DefaultPebbleOptions). If
+// the cluster settings permit value blocks, the SST may contain value blocks.
 func MakeIngestionSSTWriter(
 	ctx context.Context, cs *cluster.Settings, w objstorage.Writable,
 ) SSTWriter {
+	return MakeIngestionSSTWriterWithValueBlockOverride(ctx, cs, w, false)
+}
+
+// MakeIngestionSSTWriterWithValueBlockOverride creates a new SSTWriter
+// tailored for ingestion SSTs. These SSTs have bloom filters enabled (as set
+// in DefaultPebbleOptions) and format set to the highest permissible by the
+// cluster settings. Callers that expect to write huge SSTs, say 200+MB, which
+// could contain multiple versions for the same key, should set
+// disableValueBlocks to true. This is because value blocks are buffered
+// in-memory while writing the SST (see
+// https://github.com/cockroachdb/cockroach/issues/117113).
+func MakeIngestionSSTWriterWithValueBlockOverride(
+	ctx context.Context, cs *cluster.Settings, w objstorage.Writable, disableValueBlocks bool,
+) SSTWriter {
 	opts := MakeIngestionWriterOptions(ctx, cs)
+	opts.DisableValueBlocks = disableValueBlocks
 	return SSTWriter{
 		fw:                sstable.NewWriter(w, opts),
 		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,

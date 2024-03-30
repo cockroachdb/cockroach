@@ -81,13 +81,12 @@ import (
 //     Releases the protected timestamp record with id.
 func TestDataDriven(t *testing.T) {
 	t.Cleanup(leaktest.AfterTest(t))
-
-	skip.UnderRace(t, "likely to time out")
-
 	scope := log.Scope(t)
 	t.Cleanup(func() {
 		scope.Close(t)
 	})
+
+	skip.UnderRace(t, "very long-running test under race")
 
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
@@ -154,7 +153,6 @@ func TestDataDriven(t *testing.T) {
 		if strings.Contains(path, "tenant") {
 			tenantID := roachpb.MustMakeTenantID(10)
 			tenant = spanConfigTestCluster.InitializeTenant(ctx, tenantID)
-			spanConfigTestCluster.EnsureTenantCanSetZoneConfigurationsOrFatal(t, tenant)
 		} else {
 			tenant = spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
 		}

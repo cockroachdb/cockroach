@@ -59,10 +59,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":install"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/logger",

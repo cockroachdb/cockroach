@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -1039,25 +1040,42 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 		tblName := "seed"
 		defer s.DB.Close()
 
-		sqlDB.ExecMultiple(t, sqlsmith.Setups[tblName](rng)...)
+		setup := sqlsmith.Setups[tblName](rng)
+		sqlDB.ExecMultiple(t, setup...)
 
 		// TODO: PopulateTableWithRandData doesn't work with enums
-		sqlDB.Exec(t, "ALTER TABLE seed DROP COLUMN _enum")
+		dropEnumQry := "ALTER TABLE seed DROP COLUMN _enum;"
+		sqlDB.Exec(t, dropEnumQry)
 
+		// Attempt to insert a few more than our target 100 values, since there's a
+		// small chance we may not succeed that many inserts.
+		numInserts := 110
+		inserts := make([]string, 0, numInserts)
 		for rows := 0; rows < 100; {
 			var err error
 			var newRows int
-			if newRows, err = randgen.PopulateTableWithRandData(rng, s.DB, tblName, 200); err != nil {
+			if newRows, err = randgen.PopulateTableWithRandData(rng, s.DB, tblName, numInserts, &inserts); err != nil {
 				t.Fatal(err)
 			}
 			rows += newRows
 		}
 
-		sqlDB.Exec(t, `DELETE FROM seed WHERE rowid NOT IN (SELECT rowid FROM seed LIMIT 100)`)
+		limitQry := "DELETE FROM seed WHERE rowid NOT IN (SELECT rowid FROM seed ORDER BY rowid LIMIT 100);"
+		sqlDB.Exec(t, limitQry)
 
 		// Put the enums back. enum_range('hi'::greeting)[rowid%7] will give nulls when rowid%7=0 or 6.
-		sqlDB.Exec(t, `ALTER TABLE seed ADD COLUMN _enum greeting`)
-		sqlDB.Exec(t, `UPDATE seed SET _enum = enum_range('hi'::greeting)[rowid%7]`)
+		addEnumQry := "ALTER TABLE seed ADD COLUMN _enum greeting;"
+		sqlDB.Exec(t, addEnumQry)
+		populateEnumQry := "UPDATE seed SET _enum = enum_range('hi'::greeting)[rowid%7];"
+		sqlDB.Exec(t, populateEnumQry)
+		// Get values to log setup.
+		t.Logf("setup:\n%s\n%s\n%s\n%s\n%s\n%s",
+			strings.Join(setup, "\n"),
+			dropEnumQry,
+			strings.Join(inserts, "\n"),
+			limitQry,
+			addEnumQry,
+			populateEnumQry)
 
 		queryGen, err := sqlsmith.NewSmither(s.DB, rng,
 			sqlsmith.DisableWith(),
@@ -3295,10 +3313,10 @@ func TestChangefeedJobControl(t *testing.T) {
 			waitForJobStatus(userDB, t, currentFeed.JobID(), "running")
 		})
 		asUser(t, f, `userWithSomeGrants`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "pq: user userwithsomegrants does not have CHANGEFEED privilege on relation table_b", "PAUSE job $1", currentFeed.JobID())
+			userDB.ExpectErr(t, "user userwithsomegrants does not have CHANGEFEED privilege on relation table_b", "PAUSE job $1", currentFeed.JobID())
 		})
 		asUser(t, f, `regularUser`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "pq: user regularuser does not have CHANGEFEED privilege on relation (table_a|table_b)", "PAUSE job $1", currentFeed.JobID())
+			userDB.ExpectErr(t, "user regularuser does not have CHANGEFEED privilege on relation (table_a|table_b)", "PAUSE job $1", currentFeed.JobID())
 		})
 		closeCf()
 
@@ -3312,10 +3330,10 @@ func TestChangefeedJobControl(t *testing.T) {
 			waitForJobStatus(userDB, t, currentFeed.JobID(), "paused")
 		})
 		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "pq: only admins can control jobs owned by other admins", "PAUSE job $1", currentFeed.JobID())
+			userDB.ExpectErr(t, "only admins can control jobs owned by other admins", "PAUSE job $1", currentFeed.JobID())
 		})
 		asUser(t, f, `jobController`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "pq: only admins can control jobs owned by other admins", "PAUSE job $1", currentFeed.JobID())
+			userDB.ExpectErr(t, "only admins can control jobs owned by other admins", "PAUSE job $1", currentFeed.JobID())
 		})
 		closeCf()
 	}
@@ -4467,7 +4485,13 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 		defer closeFeed(t, drop)
 		assertPayloads(t, drop, []string{`drop: [1]->{"after": {"a": 1}}`})
 		sqlDB.Exec(t, `DROP TABLE drop`)
-		const dropOrOfflineRE = `"drop" was dropped|CHANGEFEED cannot target offline table: drop`
+		// Dropping the table should cause the schema feed to return an error.
+		// This error can either come from validateDescriptor (the first two)
+		// or the lease manager (catalog.ErrDescriptorDropped).
+		dropOrOfflineRE := fmt.Sprintf(
+			`"drop" was dropped|CHANGEFEED cannot target offline table: drop|%s`,
+			catalog.ErrDescriptorDropped,
+		)
 		if err := drainUntilErr(drop); !testutils.IsError(err, dropOrOfflineRE) {
 			t.Errorf(`expected %q error, instead got: %+v`, dropOrOfflineRE, err)
 		}
@@ -5596,7 +5620,7 @@ func TestChangefeedDescription(t *testing.T) {
 
 			var description string
 			sqlDB.QueryRow(t,
-				`SELECT description FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
+				`SELECT description FROM [SHOW JOB $1]`, jobID,
 			).Scan(&description)
 
 			require.Equal(t, tc.descr, description)
@@ -5928,6 +5952,7 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 120837)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		interval := 24 * time.Hour
@@ -6166,7 +6191,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 								t.Fatal("did not get signal to proceed")
 							}
 						},
-						// Handle tarnsient changefeed error.  We expect to see node drain error.
+						// Handle transient changefeed error.  We expect to see node drain error.
 						// When we do, notify drainNotification, and reset node drain channel.
 						HandleDistChangefeedError: func(err error) error {
 							errCh <- err
@@ -6203,6 +6228,10 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 	serverutils.SetClusterSetting(t, tc, "kv.closed_timestamp.target_duration", 10*time.Millisecond)
 	serverutils.SetClusterSetting(t, tc, "changefeed.experimental_poll_interval", 10*time.Millisecond)
 	serverutils.SetClusterSetting(t, tc, "changefeed.aggregator.heartbeat", 10*time.Millisecond)
+	// Randomizing replica assignment can cause timeouts or other
+	// failures due to assumptions in the testing knobs about balanced
+	// assignments.
+	serverutils.SetClusterSetting(t, tc, "changefeed.random_replica_selection.enabled", false)
 
 	sqlutils.CreateTable(
 		t, db, "foo",
@@ -7509,7 +7538,8 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	// TODO(#119289): re-enable pulsar
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestOmitSinks("pulsar"))
 }
 
 func TestChangefeedOnlyInitialScanCSVSinkless(t *testing.T) {
@@ -7913,11 +7943,12 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 }
 
 func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
-	mm := mon.NewMonitorWithLimit(
-		"test-mm", mon.MemoryResource, budget,
-		nil, nil,
-		128 /* small allocation increment */, 100,
-		cluster.MakeTestingClusterSettings())
+	mm := mon.NewMonitor(mon.Options{
+		Name:      "test-mm",
+		Limit:     budget,
+		Increment: 128, /* small allocation increment */
+		Settings:  cluster.MakeTestingClusterSettings(),
+	})
 	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(budget))
 	return mm
 }
@@ -9229,4 +9260,28 @@ func TestPubsubAttributes(t *testing.T) {
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+}
+
+// TestChangefeedAvroDecimalColumnWithDiff is a regression test for
+// https://github.com/cockroachdb/cockroach/issues/118647.
+func TestChangefeedAvroDecimalColumnWithDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE test1 (c1 INT PRIMARY KEY, c2 INT, c3 DECIMAL(19, 0))`)
+		sqlDB.Exec(t, `INSERT INTO test1 VALUES (1, 2, 3);`)
+
+		schemaReg := cdctest.StartTestSchemaRegistry()
+		defer schemaReg.Close()
+		str := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE test1 WITH OPTIONS (avro_schema_prefix = 'crdb_cdc_', diff, confluent_schema_registry ="%s", format = 'avro', on_error = 'pause', updated);`, schemaReg.URL())
+		testFeed := feed(t, f, str)
+		defer closeFeed(t, testFeed)
+
+		_, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }

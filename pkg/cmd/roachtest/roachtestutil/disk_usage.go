@@ -149,7 +149,7 @@ func GetDiskUsageInBytes(
 		result, err = c.RunWithDetailsSingleNode(
 			ctx,
 			logger,
-			c.Node(nodeIdx),
+			option.WithNodes(c.Node(nodeIdx)),
 			"du -sk {store-dir} 2>/dev/null | grep -oE '^[0-9]+'",
 		)
 		if err != nil {

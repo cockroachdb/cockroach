@@ -7,9 +7,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/settings/cluster",
         "//pkg/sql/colcontainer",
         "//pkg/storage",
+        "//pkg/storage/fs",
         "//pkg/testutils",
     ],
 )

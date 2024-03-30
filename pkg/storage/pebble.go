@@ -16,7 +16,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -28,7 +27,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -60,37 +58,6 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	humanize "github.com/dustin/go-humanize"
 )
-
-// Default for MaxSyncDuration below.
-var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT", 20*time.Second)
-
-// Default maximum wait time before an EventuallyFileOnlySnapshot transitions
-// to a file-only snapshot.
-var MaxEFOSWait = envutil.EnvOrDefaultDuration("COCKROACH_EFOS_MAX_WAIT", func() time.Duration {
-	if buildutil.CrdbTestBuild {
-		return 100 * time.Millisecond
-	}
-	return 3 * time.Second
-}())
-
-// MaxSyncDuration is the threshold above which an observed engine sync duration
-// triggers either a warning or a fatal error.
-var MaxSyncDuration = settings.RegisterDurationSetting(
-	settings.SystemVisible,
-	"storage.max_sync_duration",
-	"maximum duration for disk operations; any operations that take longer"+
-		" than this setting trigger a warning log entry or process crash",
-	maxSyncDurationDefault,
-	settings.WithPublic)
-
-// MaxSyncDurationFatalOnExceeded governs whether disk stalls longer than
-// MaxSyncDuration fatal the Cockroach process. Defaults to true.
-var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
-	settings.ApplicationLevel, // used for temp storage in virtual cluster servers
-	"storage.max_sync_duration.fatal.enabled",
-	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
-	true,
-	settings.WithPublic)
 
 // ValueBlocksEnabled controls whether older versions of MVCC keys in the same
 // sstable will have their values written to value blocks. This only affects
@@ -165,6 +132,50 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	util.ConstantWithMetamorphicTestBool(
 		"storage.ingest_as_flushable.enabled", true))
 
+const (
+	compressionAlgorithmSnappy int64 = 1
+	compressionAlgorithmZstd   int64 = 2
+)
+
+// compressionAlgorithm determines the compression algorithm used to compress
+// data blocks when writing sstables. Users should call getCompressionAlgorithm
+// rather than calling compressionAlgorithm.Get directly.
+var compressionAlgorithm = settings.RegisterEnumSetting(
+	// NB: We can't use settings.SystemOnly today because we may need to read the
+	// value from within a tenant building an sstable for AddSSTable.
+	settings.SystemVisible,
+	"storage.sstable.compression_algorithm",
+	`determines the compression algorithm to use when compressing sstable data blocks;`+
+		` supported values: "snappy", "zstd"`,
+	// TODO(jackson): Consider using a metamorphic constant here, but many tests
+	// will need to override it because they depend on a deterministic sstable
+	// size.
+	"snappy",
+	map[int64]string{
+		compressionAlgorithmSnappy: "snappy",
+		compressionAlgorithmZstd:   "zstd",
+	},
+	settings.WithPublic,
+)
+
+func getCompressionAlgorithm(ctx context.Context, settings *cluster.Settings) pebble.Compression {
+	switch compressionAlgorithm.Get(&settings.SV) {
+	case compressionAlgorithmSnappy:
+		return pebble.SnappyCompression
+	case compressionAlgorithmZstd:
+		// Pre-24.1 Pebble's implementation of zstd had bugs that could cause
+		// in-memory corruption. We require that the cluster version is 24.1 which
+		// implies that all nodes are running 24.1 code and will never run code
+		// < 24.1 again.
+		if settings.Version.ActiveVersionOrEmpty(ctx).IsActive(clusterversion.V24_1) {
+			return pebble.ZstdCompression
+		}
+		return pebble.DefaultCompression
+	default:
+		return pebble.DefaultCompression
+	}
+}
+
 // DO NOT set storage.single_delete.crash_on_invariant_violation.enabled or
 // storage.single_delete.crash_on_ineffectual.enabled to true.
 //
@@ -235,6 +246,26 @@ var SingleDeleteCrashOnIneffectual = settings.RegisterBoolSetting(
 	"set to true to crash if the single delete was ineffectual",
 	false,
 	settings.WithVisibility(settings.Reserved),
+)
+
+var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"storage.wal_failover.unhealthy_op_threshold",
+	"the latency of a WAL write considered unhealthy and triggers a failover to a secondary WAL location",
+	100*time.Millisecond,
+	settings.WithPublic,
+)
+
+// TODO(ssd): This could be SystemOnly but we currently init pebble
+// engines for temporary storage. Temporary engines shouldn't really
+// care about download compactions, but they do currently simply
+// because of code organization.
+var concurrentDownloadCompactions = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.max_download_compaction_concurrency",
+	"the maximum number of concurrent download compactions",
+	8,
+	settings.IntWithMinimum(1),
 )
 
 // ShouldUseEFOS returns true if either of the UseEFOS or UseExciseForSnapshots
@@ -510,6 +541,26 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
+var _ sstable.BlockIntervalSyntheticReplacer = MVCCBlockIntervalSyntheticReplacer{}
+
+type MVCCBlockIntervalSyntheticReplacer struct{}
+
+func (mbsr MVCCBlockIntervalSyntheticReplacer) AdjustIntervalWithSyntheticSuffix(
+	lower uint64, upper uint64, suffix []byte,
+) (adjustedLower uint64, adjustedUpper uint64, err error) {
+	synthDecoded, err := DecodeMVCCTimestampSuffix(suffix)
+	if err != nil {
+		return 0, 0, errors.AssertionFailedf("could not decode synthetic suffix")
+	}
+	synthDecodedWalltime := uint64(synthDecoded.WallTime)
+	if upper >= synthDecodedWalltime {
+		return 0, 0, errors.AssertionFailedf("the synthetic suffix %d is less than or equal to the original upper bound %d", synthDecoded, upper)
+	}
+	// The returned bound includes the synthetic suffix, regardless of its logical
+	// component.
+	return synthDecodedWalltime, synthDecodedWalltime + 1, nil
+}
+
 // pebbleDataBlockMVCCTimeIntervalPointCollector implements
 // pebble.DataBlockIntervalCollector for point keys.
 type pebbleDataBlockMVCCTimeIntervalPointCollector struct {
@@ -634,6 +685,10 @@ func (tc *pebbleDataBlockMVCCTimeIntervalCollector) FinishDataBlock() (
 	tc.min = tc.min[:0]
 	// The actual value encoded into walltime is an int64, so +1 will not
 	// overflow.
+	//
+	// Note that the timestamp with a wall time tc.max+1 and no logical component is
+	// a valid exclusive upper bound for timestamps with wall time tc.max and any
+	// logical component.
 	upper = decodeWallTime(tc.max) + 1
 	tc.max = tc.max[:0]
 	if lower >= upper {
@@ -776,37 +831,6 @@ func shortAttributeExtractorForValues(
 	return 0, nil
 }
 
-// wrapFilesystemMiddleware wraps the Option's vfs.FS with disk-health checking
-// and ENOSPC detection. Returns the new FS and a Closer that should be invoked
-// when the filesystem will no longer be used.
-func wrapFilesystemMiddleware(opts *pebble.Options) (vfs.FS, io.Closer) {
-	// Set disk-health check interval to min(5s, maxSyncDurationDefault). This
-	// is mostly to ease testing; the default of 5s is too infrequent to test
-	// conveniently. See the disk-stalled roachtest for an example of how this
-	// is used.
-	diskHealthCheckInterval := 5 * time.Second
-	if diskHealthCheckInterval.Seconds() > maxSyncDurationDefault.Seconds() {
-		diskHealthCheckInterval = maxSyncDurationDefault
-	}
-	// Instantiate a file system with disk health checking enabled. This FS
-	// wraps the filesystem with a layer that times all write-oriented
-	// operations.
-	fs, closer := vfs.WithDiskHealthChecks(opts.FS, diskHealthCheckInterval,
-		func(info vfs.DiskSlowInfo) {
-			opts.EventListener.DiskSlow(pebble.DiskSlowInfo{
-				Path:      info.Path,
-				OpType:    info.OpType,
-				Duration:  info.Duration,
-				WriteSize: info.WriteSize,
-			})
-		})
-	// If we encounter ENOSPC, exit with an informative exit code.
-	fs = vfs.OnDiskFull(fs, func() {
-		exit.WithCode(exit.DiskFull())
-	})
-	return fs, closer
-}
-
 type pebbleLogger struct {
 	ctx   context.Context
 	depth int
@@ -827,51 +851,53 @@ func (l pebbleLogger) Eventf(ctx context.Context, format string, args ...interfa
 }
 
 func (l pebbleLogger) IsTracingEnabled(ctx context.Context) bool {
-	return log.HasSpanOrEvent(ctx)
+	return log.HasSpan(ctx)
 }
 
 func (l pebbleLogger) Errorf(format string, args ...interface{}) {
 	log.Storage.ErrorfDepth(l.ctx, l.depth, format, args...)
 }
 
-// PebbleConfig holds all configuration parameters and knobs used in setting up
-// a new Pebble instance.
-type PebbleConfig struct {
-	// StorageConfig contains storage configs for all storage engines.
-	// A non-nil cluster.Settings must be provided in the StorageConfig for a
-	// Pebble instance that will be used to write intents.
-	base.StorageConfig
-	// Pebble specific options.
-	Opts *pebble.Options
-	// SharedStorage is a cloud.ExternalStorage that can be used by all Pebble
+// engineConfig holds all configuration parameters and knobs used in setting up
+// a new storage engine.
+type engineConfig struct {
+	attrs roachpb.Attributes
+	// ballastSize is the amount reserved by a ballast file for manual
+	// out-of-disk recovery.
+	ballastSize int64
+	// cacheSize is stored separately so that we can avoid constructing the
+	// PebbleConfig.Opts.Cache until the call to Open. A Cache is created with
+	// a ref count of 1, so creating the Cache during execution of
+	// ConfigOption makes it too easy to leak a cache.
+	cacheSize *int64
+	// env holds the initialized virtual filesystem that the Engine should use.
+	env *fs.Env
+	// maxSize is used for calculating free space and making rebalancing
+	// decisions. Zero indicates that there is no maximum size.
+	maxSize int64
+	// If true, creating the instance fails if the target directory does not hold
+	// an initialized instance.
+	//
+	// Makes no sense for in-memory instances.
+	mustExist bool
+	// pebble specific options.
+	opts *pebble.Options
+	// remoteStorageFactory is used to pass the ExternalStorage factory.
+	remoteStorageFactory *cloud.EarlyBootExternalStorageAccessor
+	// settings instance for cluster-wide knobs. Must not be nil.
+	settings *cluster.Settings
+	// sharedStorage is a cloud.ExternalStorage that can be used by all Pebble
 	// stores on this node and on other nodes to store sstables.
-	SharedStorage cloud.ExternalStorage
+	sharedStorage cloud.ExternalStorage
 
-	// RemoteStorageFactory is used to pass the ExternalStorage factory.
-	RemoteStorageFactory *cloud.EarlyBootExternalStorageAccessor
-
-	// onClose is a slice of functions to be invoked before the engine is closed.
-	onClose []func(*Pebble)
-}
-
-// EncryptionStatsHandler provides encryption related stats.
-type EncryptionStatsHandler interface {
-	// Returns a serialized enginepbccl.EncryptionStatus.
-	GetEncryptionStatus() ([]byte, error)
-	// Returns a serialized enginepbccl.DataKeysRegistry, scrubbed of key contents.
-	GetDataKeysRegistry() ([]byte, error)
-	// Returns the ID of the active data key, or "plain" if none.
-	GetActiveDataKeyID() (string, error)
-	// Returns the enum value of the encryption type.
-	GetActiveStoreKeyType() int32
-	// Returns the KeyID embedded in the serialized EncryptionSettings.
-	GetKeyIDFromSettings(settings []byte) (string, error)
+	// beforeClose is a slice of functions to be invoked before the engine is closed.
+	beforeClose []func(*Pebble)
+	// afterClose is a slice of functions to be invoked after the engine is closed.
+	afterClose []func()
 }
 
 // Pebble is a wrapper around a Pebble database instance.
 type Pebble struct {
-	vfs.FS
-
 	atomic struct {
 		// compactionConcurrency is the current compaction concurrency set on
 		// the Pebble store. The compactionConcurrency option in the Pebble
@@ -883,21 +909,12 @@ type Pebble struct {
 		compactionConcurrency uint64
 	}
 
-	db *pebble.DB
-
-	closed       bool
-	readOnly     bool
-	path         string
-	auxDir       string
-	ballastPath  string
-	ballastSize  int64
-	maxSize      int64
-	attrs        roachpb.Attributes
-	properties   roachpb.StoreProperties
-	settings     *cluster.Settings
-	encryption   *EncryptionEnv
-	fileLock     *pebble.Lock
-	fileRegistry *PebbleFileRegistry
+	cfg         engineConfig
+	db          *pebble.DB
+	closed      bool
+	auxDir      string
+	ballastPath string
+	properties  roachpb.StoreProperties
 
 	// Stats updated by pebble.EventListener invocations, and returned in
 	// GetMetrics. Updated and retrieved atomically.
@@ -919,7 +936,6 @@ type Pebble struct {
 		AggregatedBatchCommitStats
 	}
 	// Relevant options copied over from pebble.Options.
-	unencryptedFS vfs.FS
 	logCtx        context.Context
 	logger        pebble.LoggerAndTracer
 	eventListener *pebble.EventListener
@@ -932,12 +948,6 @@ type Pebble struct {
 
 	// minVersion is the minimum CockroachDB version that can open this store.
 	minVersion roachpb.Version
-
-	// closer is populated when the database is opened. The closer is associated
-	// with the filesystem.
-	closer io.Closer
-	// onClose is a slice of functions to be invoked before the engine closes.
-	onClose []func(*Pebble)
 
 	storeIDPebbleLog *base.StoreIDContainer
 	replayer         *replay.WorkloadCollector
@@ -954,32 +964,10 @@ func (p *Pebble) WorkloadCollector() *replay.WorkloadCollector {
 	return p.replayer
 }
 
-// EncryptionEnv describes the encryption-at-rest environment, providing
-// access to a filesystem with on-the-fly encryption.
-type EncryptionEnv struct {
-	// Closer closes the encryption-at-rest environment. Once the
-	// environment is closed, the environment's VFS may no longer be
-	// used.
-	Closer io.Closer
-	// FS provides the encrypted virtual filesystem. New files are
-	// transparently encrypted.
-	FS vfs.FS
-	// StatsHandler exposes encryption-at-rest state for observability.
-	StatsHandler EncryptionStatsHandler
-}
-
 var _ Engine = &Pebble{}
 
 // WorkloadCollectorEnabled specifies if the workload collector will be enabled
 var WorkloadCollectorEnabled = envutil.EnvOrDefaultBool("COCKROACH_STORAGE_WORKLOAD_COLLECTOR", false)
-
-// NewEncryptedEnvFunc creates an encrypted environment and returns the vfs.FS to use for reading
-// and writing data. This should be initialized by calling engineccl.Init() before calling
-// NewPebble(). The optionBytes is a binary serialized baseccl.EncryptionOptions, so that non-CCL
-// code does not depend on CCL code.
-var NewEncryptedEnvFunc func(
-	fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
-) (*EncryptionEnv, error)
 
 // SetCompactionConcurrency will return the previous compaction concurrency.
 func (p *Pebble) SetCompactionConcurrency(n uint64) uint64 {
@@ -1033,15 +1021,21 @@ func (p *Pebble) GetStoreID() (int32, error) {
 	return storeID, nil
 }
 
-func (p *Pebble) Download(ctx context.Context, span roachpb.Span) error {
-	ctx, sp := tracing.ChildSpan(ctx, "pebble.Download")
+func (p *Pebble) Download(ctx context.Context, span roachpb.Span, copy bool) error {
+	const copySpanName, rewriteSpanName = "pebble.Download", "pebble.DownloadRewrite"
+	spanName := rewriteSpanName
+	if copy {
+		spanName = copySpanName
+	}
+	ctx, sp := tracing.ChildSpan(ctx, spanName)
 	defer sp.Finish()
 	if p == nil {
 		return nil
 	}
 	downloadSpan := pebble.DownloadSpan{
-		StartKey: span.Key,
-		EndKey:   span.EndKey,
+		StartKey:               span.Key,
+		EndKey:                 span.EndKey,
+		ViaBackingFileDownload: copy,
 	}
 	return p.db.Download(ctx, []pebble.DownloadSpan{downloadSpan})
 }
@@ -1057,116 +1051,49 @@ func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Stor
 	return &externalStorageWrapper{p: r.p, ctx: r.ctx, es: es}, err
 }
 
-// ResolveEncryptedEnvOptions creates the EncryptionEnv and associated file
-// registry if this store has encryption-at-rest enabled; otherwise returns a
-// nil EncryptionEnv.
-func ResolveEncryptedEnvOptions(
-	ctx context.Context, cfg *base.StorageConfig, fs vfs.FS, readOnly bool,
-) (*PebbleFileRegistry, *EncryptionEnv, error) {
-	var fileRegistry *PebbleFileRegistry
-	if cfg.UseFileRegistry {
-		fileRegistry = &PebbleFileRegistry{FS: fs, DBDir: cfg.Dir, ReadOnly: readOnly,
-			NumOldRegistryFiles: DefaultNumOldFileRegistryFiles}
-		if err := fileRegistry.Load(ctx); err != nil {
-			return nil, nil, err
-		}
-	} else {
-		if err := CheckNoRegistryFile(fs, cfg.Dir); err != nil {
-			return nil, nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
-				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
-		}
-	}
-
-	var env *EncryptionEnv
-	if cfg.IsEncrypted() {
-		// Encryption is enabled.
-		if !cfg.UseFileRegistry {
-			return nil, nil, fmt.Errorf("file registry is needed to support encryption")
-		}
-		if NewEncryptedEnvFunc == nil {
-			return nil, nil, fmt.Errorf("encryption is enabled but no function to create the encrypted env")
-		}
-		var err error
-		env, err = NewEncryptedEnvFunc(
-			fs,
-			fileRegistry,
-			cfg.Dir,
-			readOnly,
-			cfg.EncryptionOptions,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	return fileRegistry, env, nil
-}
-
 // ConfigureForSharedStorage is used to configure a pebble Options for shared
 // storage.
 var ConfigureForSharedStorage func(opts *pebble.Options, storage remote.Storage) error
 
-// NewPebble creates a new Pebble instance, at the specified path.
+// newPebble creates a new Pebble instance, at the specified path.
 // Do not use directly (except in test); use Open instead.
 //
 // Direct users of NewPebble: cfs.opts.{Logger,LoggerAndTracer} must not be
 // set.
-func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
-	if cfg.Settings == nil {
-		return nil, errors.AssertionFailedf("NewPebble requires cfg.Settings to be set")
-	}
-
-	var opts *pebble.Options
-	if cfg.Opts == nil {
-		opts = DefaultPebbleOptions()
+func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
+	if cfg.opts == nil {
+		cfg.opts = DefaultPebbleOptions()
 	} else {
 		// Open also causes DefaultPebbleOptions before calling NewPebble, so we
 		// are tolerant of Logger being set to pebble.DefaultLogger.
-		if cfg.Opts.Logger != nil && cfg.Opts.Logger != pebble.DefaultLogger {
+		if cfg.opts.Logger != nil && cfg.opts.Logger != pebble.DefaultLogger {
 			return nil, errors.AssertionFailedf("Options.Logger is set to unexpected value")
 		}
 		// Clone the given options so that we are free to modify them.
-		opts = cfg.Opts.Clone()
+		cfg.opts = cfg.opts.Clone()
 	}
-	if opts.FormatMajorVersion < MinimumSupportedFormatVersion {
+	if cfg.opts.FormatMajorVersion < MinimumSupportedFormatVersion {
 		return nil, errors.AssertionFailedf(
 			"FormatMajorVersion is %d, should be at least %d",
-			opts.FormatMajorVersion, MinimumSupportedFormatVersion,
+			cfg.opts.FormatMajorVersion, MinimumSupportedFormatVersion,
 		)
 	}
-
-	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
-	// EnsureDefaults here to make sure we have a working FS.
-	opts.EnsureDefaults()
-
-	// Wrap the FS with disk health-checking and ENOSPC-detection.
-	var filesystemCloser io.Closer
-	opts.FS, filesystemCloser = wrapFilesystemMiddleware(opts)
-	defer func() {
-		if err != nil {
-			filesystemCloser.Close()
-		}
-	}()
-	if !opts.ReadOnly {
-		if err := opts.FS.MkdirAll(cfg.Dir, os.ModePerm); err != nil {
-			return nil, err
+	cfg.opts.FS = cfg.env
+	cfg.opts.Lock = cfg.env.DirectoryLock
+	cfg.opts.ErrorIfNotExists = cfg.mustExist
+	for _, l := range cfg.opts.Levels {
+		l.Compression = func() sstable.Compression {
+			return getCompressionAlgorithm(ctx, cfg.settings)
 		}
 	}
 
-	// Acquire the database lock in the store directory to ensure that no other
-	// process is simultaneously accessing the same store. We manually acquire
-	// the database lock here (rather than allowing Pebble to acquire the lock)
-	// so that we hold the lock when we initialize encryption-at-rest subsystem.
-	opts.Lock, err = pebble.LockDirectory(cfg.Dir, opts.FS)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		// If we fail to open the database, release the file lock before
-		// returning.
-		if err != nil {
-			err = errors.WithSecondaryError(err, opts.Lock.Close())
+	if cfg.opts.MaxConcurrentDownloads == nil {
+		cfg.opts.MaxConcurrentDownloads = func() int {
+			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
 		}
-	}()
+	}
+
+	cfg.opts.EnsureDefaults()
 
 	// The context dance here is done so that we have a clean context without
 	// timeouts that has a copy of the log tags.
@@ -1177,53 +1104,42 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
 	logCtx = logtags.AddTag(logCtx, "pebble", nil)
 
-	opts.ErrorIfNotExists = cfg.MustExist
-	opts.WALMinSyncInterval = func() time.Duration {
-		return minWALSyncInterval.Get(&cfg.Settings.SV)
+	cfg.opts.WALMinSyncInterval = func() time.Duration {
+		return minWALSyncInterval.Get(&cfg.settings.SV)
 	}
-	opts.Experimental.EnableValueBlocks = func() bool {
-		return ValueBlocksEnabled.Get(&cfg.Settings.SV)
+	cfg.opts.Experimental.EnableValueBlocks = func() bool {
+		return ValueBlocksEnabled.Get(&cfg.settings.SV)
 	}
-	opts.Experimental.DisableIngestAsFlushable = func() bool {
+	cfg.opts.Experimental.DisableIngestAsFlushable = func() bool {
 		// Disable flushable ingests if shared storage is enabled. This is because
 		// flushable ingests currently do not support Excise operations.
 		//
 		// TODO(bilal): Remove the first part of this || statement when
 		// https://github.com/cockroachdb/pebble/issues/2676 is completed, or when
 		// Pebble has better guards against this.
-		return cfg.SharedStorage != nil || !IngestAsFlushable.Get(&cfg.Settings.SV)
+		return cfg.sharedStorage != nil || !IngestAsFlushable.Get(&cfg.settings.SV)
 	}
 	// Multi-level compactions were discovered to cause excessively large
 	// compactions that can have adverse affects. We disable these types of
 	// compactions for now.
 	// See https://github.com/cockroachdb/pebble/issues/3120
 	// TODO(travers): Re-enable, once the issues are resolved.
-	opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
-	opts.Experimental.IngestSplit = func() bool {
-		return IngestSplitEnabled.Get(&cfg.Settings.SV)
+	cfg.opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
+	cfg.opts.Experimental.IngestSplit = func() bool {
+		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
 
-	auxDir := opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
-	if err := opts.FS.MkdirAll(auxDir, 0755); err != nil {
-		return nil, err
+	auxDir := cfg.opts.FS.PathJoin(cfg.env.Dir, base.AuxiliaryDir)
+	if !cfg.env.IsReadOnly() {
+		if err := cfg.opts.FS.MkdirAll(auxDir, 0755); err != nil {
+			return nil, err
+		}
 	}
-	ballastPath := base.EmergencyBallastFile(opts.FS.PathJoin, cfg.Dir)
+	ballastPath := base.EmergencyBallastFile(cfg.env.PathJoin, cfg.env.Dir)
 
-	// For some purposes, we want to always use an unencrypted
-	// filesystem.
-	unencryptedFS := opts.FS
-	fileRegistry, encryptionEnv, err :=
-		ResolveEncryptedEnvOptions(ctx, &cfg.StorageConfig, opts.FS, opts.ReadOnly)
-	if err != nil {
-		return nil, err
-	}
-	if encryptionEnv != nil {
-		opts.FS = encryptionEnv.FS
-	}
-
-	opts.Logger = nil // Defensive, since LoggerAndTracer will be used.
-	if opts.LoggerAndTracer == nil {
-		opts.LoggerAndTracer = pebbleLogger{
+	cfg.opts.Logger = nil // Defensive, since LoggerAndTracer will be used.
+	if cfg.opts.LoggerAndTracer == nil {
+		cfg.opts.LoggerAndTracer = pebbleLogger{
 			ctx:   logCtx,
 			depth: 1,
 		}
@@ -1233,65 +1149,39 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// Establish the emergency ballast if we can. If there's not sufficient
 	// disk space, the ballast will be reestablished from Capacity when the
 	// store's capacity is queried periodically.
-	if !opts.ReadOnly {
-		du, err := unencryptedFS.GetDiskUsage(cfg.Dir)
+	if !cfg.opts.ReadOnly {
+		du, err := cfg.env.UnencryptedFS.GetDiskUsage(cfg.env.Dir)
 		// If the FS is an in-memory FS, GetDiskUsage returns
 		// vfs.ErrUnsupported and we skip ballast creation.
 		if err != nil && !errors.Is(err, vfs.ErrUnsupported) {
 			return nil, errors.Wrap(err, "retrieving disk usage")
 		} else if err == nil {
-			resized, err := maybeEstablishBallast(unencryptedFS, ballastPath, cfg.BallastSize, du)
+			resized, err := maybeEstablishBallast(cfg.env.UnencryptedFS, ballastPath, cfg.ballastSize, du)
 			if err != nil {
 				return nil, errors.Wrap(err, "resizing ballast")
 			}
 			if resized {
-				opts.LoggerAndTracer.Infof("resized ballast %s to size %s",
-					ballastPath, humanizeutil.IBytes(cfg.BallastSize))
+				cfg.opts.LoggerAndTracer.Infof("resized ballast %s to size %s",
+					ballastPath, humanizeutil.IBytes(cfg.ballastSize))
 			}
 		}
 	}
 
-	storeProps := computeStoreProperties(ctx, cfg.Dir, opts.ReadOnly, encryptionEnv != nil /* encryptionEnabled */)
-
 	p = &Pebble{
-		FS:                opts.FS,
-		readOnly:          opts.ReadOnly,
-		path:              cfg.Dir,
+		cfg:               cfg,
 		auxDir:            auxDir,
 		ballastPath:       ballastPath,
-		ballastSize:       cfg.BallastSize,
-		maxSize:           cfg.MaxSize,
-		attrs:             cfg.Attrs,
-		properties:        storeProps,
-		settings:          cfg.Settings,
-		encryption:        encryptionEnv,
-		fileLock:          opts.Lock,
-		fileRegistry:      fileRegistry,
-		unencryptedFS:     unencryptedFS,
-		logger:            opts.LoggerAndTracer,
+		properties:        computeStoreProperties(ctx, cfg),
+		logger:            cfg.opts.LoggerAndTracer,
 		logCtx:            logCtx,
 		storeIDPebbleLog:  storeIDContainer,
-		closer:            filesystemCloser,
-		onClose:           cfg.onClose,
-		replayer:          replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
+		replayer:          replay.NewWorkloadCollector(cfg.env.Dir),
 		singleDelLogEvery: log.Every(5 * time.Minute),
 	}
-	// In test builds, add a layer of VFS middleware that ensures users of an
-	// Engine don't try to use the filesystem after the Engine has been closed.
-	// Usage after close causes goroutine leaks.
-	if buildutil.CrdbTestBuild {
-		testFS := &noUseAfterClose{closed: &p.closed, fs: p.FS}
-		p.FS = testFS
-		p.onClose = append(p.onClose, func(p *Pebble) {
-			if openFiles := testFS.openFiles.Load(); openFiles > 0 {
-				panic(errors.AssertionFailedf("during Engine.Close there remain %d files open by client code; all files must be closed before closing the Engine", openFiles))
-			}
-		})
-	}
 
-	opts.Experimental.SingleDeleteInvariantViolationCallback = func(userKey []byte) {
+	cfg.opts.Experimental.SingleDeleteInvariantViolationCallback = func(userKey []byte) {
 		logFunc := func(ctx context.Context, format string, args ...interface{}) {}
-		if SingleDeleteCrashOnInvariantViolation.Get(&cfg.Settings.SV) {
+		if SingleDeleteCrashOnInvariantViolation.Get(&cfg.settings.SV) {
 			logFunc = log.Fatalf
 		} else if p.singleDelLogEvery.ShouldLog() {
 			logFunc = log.Infof
@@ -1299,9 +1189,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		logFunc(logCtx, "SingleDel invariant violation callback (can be false positive) on key %s", roachpb.Key(userKey))
 		atomic.AddInt64(&p.singleDelInvariantViolationCount, 1)
 	}
-	opts.Experimental.IneffectualSingleDeleteCallback = func(userKey []byte) {
+	cfg.opts.Experimental.IneffectualSingleDeleteCallback = func(userKey []byte) {
 		logFunc := func(ctx context.Context, format string, args ...interface{}) {}
-		if SingleDeleteCrashOnInvariantViolation.Get(&cfg.Settings.SV) {
+		if SingleDeleteCrashOnInvariantViolation.Get(&cfg.settings.SV) {
 			logFunc = log.Fatalf
 		} else if p.singleDelLogEvery.ShouldLog() {
 			logFunc = log.Infof
@@ -1312,13 +1202,13 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 
 	// MaxConcurrentCompactions can be set by multiple sources, but all the
 	// sources will eventually call NewPebble. So, we override
-	// Opts.MaxConcurrentCompactions to a closure which will return
+	// cfg.opts.MaxConcurrentCompactions to a closure which will return
 	// Pebble.atomic.compactionConcurrency. This will allow us to both honor
 	// the compactions concurrency which has already been set and allow us
 	// to update the compactionConcurrency on the fly by changing the
 	// Pebble.atomic.compactionConcurrency variable.
-	p.atomic.compactionConcurrency = uint64(opts.MaxConcurrentCompactions())
-	opts.MaxConcurrentCompactions = func() int {
+	p.atomic.compactionConcurrency = uint64(cfg.opts.MaxConcurrentCompactions())
+	cfg.opts.MaxConcurrentCompactions = func() int {
 		return int(atomic.LoadUint64(&p.atomic.compactionConcurrency))
 	}
 
@@ -1339,46 +1229,47 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// significantly in the future, we can improve the logic here by queueing up
 	// most of the logging work (except for the Fatalf call), and have it be done
 	// by a single goroutine.
-	lel := pebble.MakeLoggingEventListener(pebbleLogger{
-		ctx:   logCtx,
-		depth: 2, // skip over the EventListener stack frame
+	// TODO(jackson): Refactor this indirection; there's no need the DiskSlow
+	// callback needs to go through the EventListener and this structure is
+	// confusing.
+	cfg.env.RegisterOnDiskSlow(func(info pebble.DiskSlowInfo) {
+		el := cfg.opts.EventListener
+		p.async(func() { el.DiskSlow(info) })
 	})
-	oldDiskSlow := lel.DiskSlow
-	lel.DiskSlow = func(info pebble.DiskSlowInfo) {
-		// Run oldDiskSlow asynchronously.
-		p.async(func() { oldDiskSlow(info) })
-	}
 	el := pebble.TeeEventListener(
 		p.makeMetricEtcEventListener(logCtx),
-		lel,
+		pebble.MakeLoggingEventListener(pebbleLogger{
+			ctx:   logCtx,
+			depth: 2, // skip over the EventListener stack frame
+		}),
 	)
 
 	p.eventListener = &el
-	opts.EventListener = &el
+	cfg.opts.EventListener = &el
 
-	// If both cfg.SharedStorage and cfg.RemoteStorageFactory are set, CRDB uses
-	// cfg.SharedStorage. Note that eventually we will enable using both at the
+	// If both cfg.sharedStorage and cfg.remoteStorageFactory are set, CRDB uses
+	// cfg.sharedStorage. Note that eventually we will enable using both at the
 	// same time, but we don't have the right abstractions in place to do that
 	// today.
 	//
-	// We prefer cfg.SharedStorage, since the Locator -> Storage mapping contained
+	// We prefer cfg.sharedStorage, since the Locator -> Storage mapping contained
 	// in it is needed for CRDB to function properly.
-	if cfg.SharedStorage != nil {
-		esWrapper := &externalStorageWrapper{p: p, es: cfg.SharedStorage, ctx: ctx}
+	if cfg.sharedStorage != nil {
+		esWrapper := &externalStorageWrapper{p: p, es: cfg.sharedStorage, ctx: ctx}
 		if ConfigureForSharedStorage == nil {
 			return nil, errors.New("shared storage requires CCL features")
 		}
-		if err := ConfigureForSharedStorage(opts, esWrapper); err != nil {
+		if err := ConfigureForSharedStorage(cfg.opts, esWrapper); err != nil {
 			return nil, errors.Wrap(err, "error when configuring shared storage")
 		}
 	} else {
-		if cfg.RemoteStorageFactory != nil {
-			opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: ctx, factory: cfg.RemoteStorageFactory}
+		if cfg.remoteStorageFactory != nil {
+			cfg.opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: ctx, factory: cfg.remoteStorageFactory}
 		}
 	}
 
 	// Read the current store cluster version.
-	storeClusterVersion, minVerFileExists, err := getMinVersion(unencryptedFS, cfg.Dir)
+	storeClusterVersion, minVerFileExists, err := getMinVersion(p.cfg.env.UnencryptedFS, cfg.env.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -1392,7 +1283,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		// sequence (so now some stores have v21.2, but others v22.1) you are
 		// expected to run v22.1 again (hopefully without the crash this time) which
 		// would then rewrite all the stores.
-		if v := cfg.Settings.Version; storeClusterVersion.Less(v.MinSupportedVersion()) {
+		if v := cfg.settings.Version; storeClusterVersion.Less(v.MinSupportedVersion()) {
 			if storeClusterVersion.Major < clusterversion.DevOffset && v.LatestVersion().Major >= clusterversion.DevOffset {
 				return nil, errors.Errorf(
 					"store last used with cockroach non-development version v%s "+
@@ -1406,15 +1297,15 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 				storeClusterVersion, v.LatestVersion(), v.MinSupportedVersion(),
 			)
 		}
-		opts.ErrorIfNotExists = true
+		cfg.opts.ErrorIfNotExists = true
 	} else {
-		if opts.ErrorIfNotExists || opts.ReadOnly {
+		if cfg.opts.ErrorIfNotExists || cfg.opts.ReadOnly {
 			// Make sure the message is not confusing if the store does exist but
 			// there is no min version file.
-			filename := unencryptedFS.PathJoin(cfg.Dir, MinVersionFilename)
+			filename := p.cfg.env.UnencryptedFS.PathJoin(cfg.env.Dir, MinVersionFilename)
 			return nil, errors.Errorf(
 				"pebble: database %q does not exist (missing required file %q)",
-				cfg.StorageConfig.Dir, filename,
+				cfg.env.Dir, filename,
 			)
 		}
 		// If there is no min version file, there should be no store. If there is
@@ -1422,14 +1313,14 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		// to open) or 2) an empty store that was created from a previous bootstrap
 		// attempt that failed right before writing out the min version file. We set
 		// a flag to disallow the open in case 1.
-		opts.ErrorIfNotPristine = true
+		cfg.opts.ErrorIfNotPristine = true
 	}
 
 	if WorkloadCollectorEnabled {
-		p.replayer.Attach(opts)
+		p.replayer.Attach(cfg.opts)
 	}
 
-	db, err := pebble.Open(cfg.StorageConfig.Dir, opts)
+	db, err := pebble.Open(cfg.env.Dir, cfg.opts)
 	if err != nil {
 		// Decorate the errors caused by the flags we set above.
 		if minVerFileExists && errors.Is(err, pebble.ErrDBDoesNotExist) {
@@ -1445,10 +1336,10 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	p.db = db
 
 	if !minVerFileExists {
-		storeClusterVersion = cfg.Settings.Version.ActiveVersionOrEmpty(ctx).Version
+		storeClusterVersion = cfg.settings.Version.ActiveVersionOrEmpty(ctx).Version
 		if storeClusterVersion == (roachpb.Version{}) {
 			// If there is no active version, use the minimum supported version.
-			storeClusterVersion = cfg.Settings.Version.MinSupportedVersion()
+			storeClusterVersion = cfg.settings.Version.MinSupportedVersion()
 		}
 	}
 
@@ -1502,7 +1393,7 @@ func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError er
   A file preventing this node from restarting was placed at:
   %s`, corruptionError.Error(), path)
 
-	if err := fs.WriteFile(p.unencryptedFS, path, []byte(preventStartupMsg)); err != nil {
+	if err := fs.WriteFile(p.cfg.env.UnencryptedFS, path, []byte(preventStartupMsg)); err != nil {
 		log.Warningf(ctx, "%v", err)
 	}
 }
@@ -1535,8 +1426,8 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			atomic.AddInt64((*int64)(&p.writeStallDuration), stallDuration)
 		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
-			maxSyncDuration := MaxSyncDuration.Get(&p.settings.SV)
-			fatalOnExceeded := MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
+			maxSyncDuration := fs.MaxSyncDuration.Get(&p.cfg.settings.SV)
+			fatalOnExceeded := fs.MaxSyncDurationFatalOnExceeded.Get(&p.cfg.settings.SV)
 			if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
 				atomic.AddInt64(&p.diskStallCount, 1)
 				// Note that the below log messages go to the main cockroach log, not
@@ -1578,12 +1469,15 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 	}
 }
 
+// Env implements Engine.
+func (p *Pebble) Env() *fs.Env { return p.cfg.env }
+
 func (p *Pebble) String() string {
-	dir := p.path
+	dir := p.cfg.env.Dir
 	if dir == "" {
 		dir = "<in-mem>"
 	}
-	attrs := p.attrs.String()
+	attrs := p.cfg.attrs.String()
 	if attrs == "" {
 		attrs = "<no-attributes>"
 	}
@@ -1596,7 +1490,7 @@ func (p *Pebble) Close() {
 		p.logger.Infof("closing unopened pebble instance")
 		return
 	}
-	for _, closeFunc := range p.onClose {
+	for _, closeFunc := range p.cfg.beforeClose {
 		closeFunc(p)
 	}
 
@@ -1625,16 +1519,13 @@ func (p *Pebble) Close() {
 	}
 
 	handleErr(p.db.Close())
-	if p.fileRegistry != nil {
-		handleErr(p.fileRegistry.Close())
+	if p.cfg.env != nil {
+		p.cfg.env.Close()
+		p.cfg.env = nil
 	}
-	if p.encryption != nil {
-		handleErr(p.encryption.Closer.Close())
+	for _, closeFunc := range p.cfg.afterClose {
+		closeFunc()
 	}
-	if p.closer != nil {
-		handleErr(p.closer.Close())
-	}
-	handleErr(p.fileLock.Close())
 }
 
 // aggregateIterStats is propagated to all of an engine's iterators, aggregating
@@ -1724,12 +1615,13 @@ func (p *Pebble) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set CategoryAndQoS.
 	return p.db.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile)
+		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 // ConsistentIterators implements the Engine interface.
@@ -1779,7 +1671,7 @@ func (p *Pebble) ClearEngineKey(key EngineKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	if !opts.ValueSizeKnown || !p.settings.Version.ActiveVersionOrEmpty(context.TODO()).
+	if !opts.ValueSizeKnown || !p.cfg.settings.Version.ActiveVersionOrEmpty(context.TODO()).
 		IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones) {
 		return p.db.Delete(key.Encode(), pebble.Sync)
 	}
@@ -1790,7 +1682,7 @@ func (p *Pebble) clear(key MVCCKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	if !opts.ValueSizeKnown || !p.settings.Version.ActiveVersionOrEmpty(context.TODO()).
+	if !opts.ValueSizeKnown || !p.cfg.settings.Version.ActiveVersionOrEmpty(context.TODO()).
 		IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones) {
 		return p.db.Delete(EncodeMVCCKey(key), pebble.Sync)
 	}
@@ -1978,12 +1870,12 @@ func shouldWriteLocalTimestamps(ctx context.Context, settings *cluster.Settings)
 func (p *Pebble) ShouldWriteLocalTimestamps(ctx context.Context) bool {
 	// This is not fast. Pebble should not be used by writers that want
 	// performance. They should use pebbleBatch.
-	return shouldWriteLocalTimestamps(ctx, p.settings)
+	return shouldWriteLocalTimestamps(ctx, p.cfg.settings)
 }
 
 // Attrs implements the Engine interface.
 func (p *Pebble) Attrs() roachpb.Attributes {
-	return p.attrs
+	return p.cfg.attrs
 }
 
 // Properties implements the Engine interface.
@@ -1993,7 +1885,7 @@ func (p *Pebble) Properties() roachpb.StoreProperties {
 
 // Capacity implements the Engine interface.
 func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
-	dir := p.path
+	dir := p.cfg.env.Dir
 	if dir != "" {
 		var err error
 		// Eval directory if it is a symbolic links.
@@ -2001,15 +1893,15 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 			return roachpb.StoreCapacity{}, err
 		}
 	}
-	du, err := p.unencryptedFS.GetDiskUsage(dir)
+	du, err := p.cfg.env.UnencryptedFS.GetDiskUsage(dir)
 	if errors.Is(err, vfs.ErrUnsupported) {
 		// This is an in-memory instance. Pretend we're empty since we
 		// don't know better and only use this for testing. Using any
 		// part of the actual file system here can throw off allocator
 		// rebalancing in a hard-to-trace manner. See #7050.
 		return roachpb.StoreCapacity{
-			Capacity:  p.maxSize,
-			Available: p.maxSize,
+			Capacity:  p.cfg.maxSize,
+			Available: p.cfg.maxSize,
 		}, nil
 	} else if err != nil {
 		return roachpb.StoreCapacity{}, err
@@ -2030,15 +1922,15 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	// This is a no-op if the ballast is already sized or if there's not
 	// enough available capacity to resize it. Capacity is called periodically
 	// by the kvserver, and that drives the automatic resizing of the ballast.
-	if !p.readOnly {
-		resized, err := maybeEstablishBallast(p.unencryptedFS, p.ballastPath, p.ballastSize, du)
+	if !p.cfg.env.IsReadOnly() {
+		resized, err := maybeEstablishBallast(p.cfg.env.UnencryptedFS, p.ballastPath, p.cfg.ballastSize, du)
 		if err != nil {
 			return roachpb.StoreCapacity{}, errors.Wrap(err, "resizing ballast")
 		}
 		if resized {
 			p.logger.Infof("resized ballast %s to size %s",
-				p.ballastPath, humanizeutil.IBytes(p.ballastSize))
-			du, err = p.unencryptedFS.GetDiskUsage(dir)
+				p.ballastPath, humanizeutil.IBytes(p.cfg.ballastSize))
+			du, err = p.cfg.env.UnencryptedFS.GetDiskUsage(dir)
 			if err != nil {
 				return roachpb.StoreCapacity{}, err
 			}
@@ -2085,7 +1977,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	// If no size limitation have been placed on the store size or if the
 	// limitation is greater than what's available, just return the actual
 	// totals.
-	if p.maxSize == 0 || p.maxSize >= fsuTotal || p.path == "" {
+	if p.cfg.maxSize == 0 || p.cfg.maxSize >= fsuTotal || p.cfg.env.Dir == "" {
 		return roachpb.StoreCapacity{
 			Capacity:  fsuTotal,
 			Available: fsuAvail,
@@ -2093,7 +1985,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 		}, nil
 	}
 
-	available := p.maxSize - totalUsedBytes
+	available := p.cfg.maxSize - totalUsedBytes
 	if available > fsuAvail {
 		available = fsuAvail
 	}
@@ -2102,7 +1994,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	}
 
 	return roachpb.StoreCapacity{
-		Capacity:  p.maxSize,
+		Capacity:  p.cfg.maxSize,
 		Available: available,
 		Used:      totalUsedBytes,
 	}, nil
@@ -2136,17 +2028,17 @@ func (p *Pebble) GetMetrics() Metrics {
 }
 
 // GetEncryptionRegistries implements the Engine interface.
-func (p *Pebble) GetEncryptionRegistries() (*EncryptionRegistries, error) {
-	rv := &EncryptionRegistries{}
+func (p *Pebble) GetEncryptionRegistries() (*fs.EncryptionRegistries, error) {
+	rv := &fs.EncryptionRegistries{}
 	var err error
-	if p.encryption != nil {
-		rv.KeyRegistry, err = p.encryption.StatsHandler.GetDataKeysRegistry()
+	if p.cfg.env.Encryption != nil {
+		rv.KeyRegistry, err = p.cfg.env.Encryption.StatsHandler.GetDataKeysRegistry()
 		if err != nil {
 			return nil, err
 		}
 	}
-	if p.fileRegistry != nil {
-		rv.FileRegistry, err = protoutil.Marshal(p.fileRegistry.getRegistryCopy())
+	if p.cfg.env.Registry != nil {
+		rv.FileRegistry, err = protoutil.Marshal(p.cfg.env.Registry.GetRegistrySnapshot())
 		if err != nil {
 			return nil, err
 		}
@@ -2155,21 +2047,21 @@ func (p *Pebble) GetEncryptionRegistries() (*EncryptionRegistries, error) {
 }
 
 // GetEnvStats implements the Engine interface.
-func (p *Pebble) GetEnvStats() (*EnvStats, error) {
+func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 	// TODO(sumeer): make the stats complete. There are no bytes stats. The TotalFiles is missing
 	// files that are not in the registry (from before encryption was enabled).
-	stats := &EnvStats{}
-	if p.encryption == nil {
+	stats := &fs.EnvStats{}
+	if p.cfg.env.Encryption == nil {
 		return stats, nil
 	}
-	stats.EncryptionType = p.encryption.StatsHandler.GetActiveStoreKeyType()
+	stats.EncryptionType = p.cfg.env.Encryption.StatsHandler.GetActiveStoreKeyType()
 	var err error
-	stats.EncryptionStatus, err = p.encryption.StatsHandler.GetEncryptionStatus()
+	stats.EncryptionStatus, err = p.cfg.env.Encryption.StatsHandler.GetEncryptionStatus()
 	if err != nil {
 		return nil, err
 	}
-	fr := p.fileRegistry.getRegistryCopy()
-	activeKeyID, err := p.encryption.StatsHandler.GetActiveDataKeyID()
+	fr := p.cfg.env.Registry.GetRegistrySnapshot()
+	activeKeyID, err := p.cfg.env.Encryption.StatsHandler.GetActiveDataKeyID()
 	if err != nil {
 		return nil, err
 	}
@@ -2195,7 +2087,7 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 	}
 
 	for filePath, entry := range fr.Files {
-		keyID, err := p.encryption.StatsHandler.GetKeyIDFromSettings(entry.EncryptionSettings)
+		keyID, err := p.cfg.env.Encryption.StatsHandler.GetKeyIDFromSettings(entry.EncryptionSettings)
 		if err != nil {
 			return nil, err
 		}
@@ -2207,7 +2099,7 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 		}
 		stats.ActiveKeyFiles++
 
-		filename := p.FS.PathBase(filePath)
+		filename := p.cfg.env.PathBase(filePath)
 		numStr := strings.TrimSuffix(filename, ".sst")
 		if len(numStr) == len(filename) {
 			continue // not a sstable
@@ -2239,7 +2131,12 @@ func (p *Pebble) GetAuxiliaryDir() string {
 
 // NewBatch implements the Engine interface.
 func (p *Pebble) NewBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */, p.settings, p, p)
+	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), p.cfg.settings, p, p)
+}
+
+// NewReader implements the Engine interface.
+func (p *Pebble) NewReader(durability DurabilityRequirement) Reader {
+	return newPebbleReadOnly(p, durability)
 }
 
 // NewReadOnly implements the Engine interface.
@@ -2249,12 +2146,12 @@ func (p *Pebble) NewReadOnly(durability DurabilityRequirement) ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), false /* writeOnly */, p.settings, p, p)
+	return newPebbleBatch(p.db, p.db.NewBatch(), p.cfg.settings, p, p)
 }
 
 // NewWriteBatch implements the Engine interface.
 func (p *Pebble) NewWriteBatch() WriteBatch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), true /* writeOnly */, p.settings, p, p)
+	return newWriteBatch(p.db, p.db.NewBatch(), p.cfg.settings, p, p)
 }
 
 // NewSnapshot implements the Engine interface.
@@ -2299,13 +2196,18 @@ func (p *Pebble) IngestLocalFilesWithStats(
 
 // IngestAndExciseFiles implements the Engine interface.
 func (p *Pebble) IngestAndExciseFiles(
-	ctx context.Context, paths []string, shared []pebble.SharedSSTMeta, exciseSpan roachpb.Span,
+	ctx context.Context,
+	paths []string,
+	shared []pebble.SharedSSTMeta,
+	external []pebble.ExternalFile,
+	exciseSpan roachpb.Span,
+	sstsContainExciseTombstone bool,
 ) (pebble.IngestOperationStats, error) {
 	rawSpan := pebble.KeyRange{
 		Start: EngineKey{Key: exciseSpan.Key}.Encode(),
 		End:   EngineKey{Key: exciseSpan.EndKey}.Encode(),
 	}
-	return p.db.IngestAndExcise(paths, shared, rawSpan)
+	return p.db.IngestAndExcise(paths, shared, external, rawSpan, sstsContainExciseTombstone)
 }
 
 // IngestExternalFiles implements the Engine interface.
@@ -2317,7 +2219,7 @@ func (p *Pebble) IngestExternalFiles(
 
 // PreIngestDelay implements the Engine interface.
 func (p *Pebble) PreIngestDelay(ctx context.Context) {
-	preIngestDelay(ctx, p, p.settings)
+	preIngestDelay(ctx, p, p.cfg.settings)
 }
 
 // GetTableMetrics implements the Engine interface.
@@ -2421,8 +2323,6 @@ func (p *Pebble) RegisterFlushCompletedCallback(cb func()) {
 	p.mu.Unlock()
 }
 
-var _ vfs.FS = &Pebble{}
-
 func checkpointSpansNote(spans []roachpb.Span) []byte {
 	note := "CRDB spans:\n"
 	for _, span := range spans {
@@ -2451,14 +2351,14 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 	}
 
 	// Write out the min version file.
-	if err := writeMinVersionFile(p.unencryptedFS, dir, p.MinVersion()); err != nil {
+	if err := writeMinVersionFile(p.cfg.env.UnencryptedFS, dir, p.MinVersion()); err != nil {
 		return errors.Wrapf(err, "writing min version file for checkpoint")
 	}
 
 	// TODO(#90543, cockroachdb/pebble#2285): move spans info to Pebble manifest.
 	if len(spans) > 0 {
 		if err := fs.SafeWriteToFile(
-			p.FS, dir, p.FS.PathJoin(dir, "checkpoint.txt"),
+			p.cfg.env, dir, p.cfg.env.PathJoin(dir, "checkpoint.txt"),
 			checkpointSpansNote(spans),
 		); err != nil {
 			return err
@@ -2485,18 +2385,15 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // map the persisted cluster version to the corresponding format major version,
 // ratcheting Pebble's format major version if necessary.
 //
-// Note that when introducing a new Pebble format version that relies on _all_
-// engines in a cluster being at the same, newer format major version, two
-// cluster versions should be used. The first is used to enable the feature in
-// Pebble, and should control the version ratchet below. The second is used as a
-// feature flag. The use of two cluster versions relies on a guarantee provided
-// by the migration framework (see pkg/migration) that if a node is at a version
-// X+1, it is guaranteed that all nodes have already ratcheted their store
-// version to the version X that enabled the feature at the Pebble level.
+// The pebble versions are advanced when nodes enter the "fence" version for the
+// named cluster version, if there is one, so that if *any* node moves into the
+// named version, it can be assumed all *nodes* have ratcheted to the pebble
+// version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
 	clusterversion.V23_1: pebble.FormatFlushableIngest,
 	clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete: pebble.FormatDeleteSizedAndObsolete,
 	clusterversion.V23_2_PebbleFormatVirtualSSTables:        pebble.FormatVirtualSSTables,
+	clusterversion.V24_1_PebbleFormatSyntheticPrefixSuffix:  pebble.FormatSyntheticPrefixSuffix,
 }
 
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
@@ -2518,7 +2415,7 @@ func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersi
 	// pebbleFormatVersionKeys are sorted in descending order; find the first one
 	// that is not newer than clusterVersion.
 	for _, k := range pebbleFormatVersionKeys {
-		if clusterVersion.AtLeast(k.Version()) {
+		if clusterVersion.AtLeast(k.FenceVersion()) {
 			return pebbleFormatVersionMap[k]
 		}
 	}
@@ -2532,7 +2429,7 @@ func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersi
 func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	p.minVersion = version
 
-	if p.readOnly {
+	if p.cfg.env.IsReadOnly() {
 		// Don't make any on-disk changes.
 		return nil
 	}
@@ -2542,7 +2439,7 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 
 	// Writing the min version file commits this storage engine to the
 	// provided cluster version.
-	if err := writeMinVersionFile(p.unencryptedFS, p.path, version); err != nil {
+	if err := writeMinVersionFile(p.cfg.env.UnencryptedFS, p.cfg.env.Dir, version); err != nil {
 		return err
 	}
 
@@ -2585,7 +2482,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 		}
 	}
 	for i, fileName := range paths {
-		f, err := p.FS.Open(fileName)
+		f, err := p.cfg.env.Open(fileName)
 		if err != nil {
 			closeFiles()
 			return err
@@ -2598,7 +2495,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			LowerBound: roachpb.KeyMin,
 			UpperBound: roachpb.KeyMax,
-		}, true)
+		})
 	if err != nil {
 		// TODO(sumeer): we don't call closeFiles() since in the error case some
 		// of the files may be closed. See the code in
@@ -2890,8 +2787,9 @@ func (p *pebbleReadOnly) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
-	return p.parent.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile)
+	return p.parent.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 // Writer methods are not implemented for pebbleReadOnly. Ideally, the code
@@ -3080,12 +2978,13 @@ func (p *pebbleSnapshot) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set CategoryAndQoS.
 	return p.snapshot.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile)
+		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 // pebbleEFOS represents an eventually file-only snapshot created using
@@ -3203,12 +3102,13 @@ func (p *pebbleEFOS) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set CategoryAndQoS.
 	return p.efos.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile)
+		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 // ExceedMaxSizeError is the error returned when an export request
@@ -3223,176 +3123,4 @@ var _ error = &ExceedMaxSizeError{}
 
 func (e *ExceedMaxSizeError) Error() string {
 	return fmt.Sprintf("export size (%d bytes) exceeds max size (%d bytes)", e.reached, e.maxSize)
-}
-
-// noUseAfterClose wraps a vfs.FS and ensures the filesystem is not used after
-// an Engine is closed. It's used only in test builds. It ensures that all files
-// are closed before the Engine is closed and that the vfs.FS is not used after
-// the Engine is closed.
-type noUseAfterClose struct {
-	fs        vfs.FS
-	openFiles atomic.Int32
-	closed    *bool
-}
-
-func (fs *noUseAfterClose) ensureStillOpen() {
-	if *fs.closed {
-		panic(errors.AssertionFailedf("engine is closed; the Engine-provided filesystem cannot be used after Close"))
-	}
-}
-
-type noUseAfterCloseFile struct {
-	file vfs.File
-	fs   *noUseAfterClose
-}
-
-func (f *noUseAfterCloseFile) Close() error {
-	f.fs.ensureStillOpen()
-	f.fs.openFiles.Add(-1)
-	return f.file.Close()
-}
-func (f *noUseAfterCloseFile) Read(p []byte) (n int, err error) {
-	f.fs.ensureStillOpen()
-	return f.file.Read(p)
-}
-func (f *noUseAfterCloseFile) ReadAt(p []byte, off int64) (n int, err error) {
-	f.fs.ensureStillOpen()
-	return f.file.ReadAt(p, off)
-}
-func (f *noUseAfterCloseFile) Write(p []byte) (n int, err error) {
-	f.fs.ensureStillOpen()
-	return f.file.Write(p)
-}
-func (f *noUseAfterCloseFile) WriteAt(p []byte, off int64) (n int, err error) {
-	f.fs.ensureStillOpen()
-	return f.file.WriteAt(p, off)
-}
-func (f *noUseAfterCloseFile) Preallocate(offset, length int64) error {
-	f.fs.ensureStillOpen()
-	return f.file.Preallocate(offset, length)
-}
-func (f *noUseAfterCloseFile) Stat() (os.FileInfo, error) {
-	f.fs.ensureStillOpen()
-	return f.file.Stat()
-}
-func (f *noUseAfterCloseFile) Sync() error {
-	f.fs.ensureStillOpen()
-	return f.file.Sync()
-}
-func (f *noUseAfterCloseFile) SyncTo(length int64) (fullSync bool, err error) {
-	f.fs.ensureStillOpen()
-	return f.file.SyncTo(length)
-}
-func (f *noUseAfterCloseFile) SyncData() error {
-	f.fs.ensureStillOpen()
-	return f.file.SyncData()
-}
-func (f *noUseAfterCloseFile) Prefetch(offset int64, length int64) error {
-	f.fs.ensureStillOpen()
-	return f.file.Prefetch(offset, length)
-}
-func (f *noUseAfterCloseFile) Fd() uintptr { return f.file.Fd() }
-
-var _ vfs.FS = &noUseAfterClose{}
-
-func (fs *noUseAfterClose) Create(name string) (vfs.File, error) {
-	fs.ensureStillOpen()
-	return fs.fs.Create(name)
-}
-
-func (fs *noUseAfterClose) Link(oldname, newname string) error {
-	fs.ensureStillOpen()
-	return fs.fs.Link(oldname, newname)
-}
-
-func (fs *noUseAfterClose) Open(name string, opts ...vfs.OpenOption) (vfs.File, error) {
-	fs.ensureStillOpen()
-	f, err := fs.fs.Open(name, opts...)
-	if err != nil {
-		return nil, err
-	}
-	fs.openFiles.Add(1)
-	return &noUseAfterCloseFile{fs: fs, file: f}, nil
-}
-
-func (fs *noUseAfterClose) OpenReadWrite(name string, opts ...vfs.OpenOption) (vfs.File, error) {
-	fs.ensureStillOpen()
-	f, err := fs.fs.OpenReadWrite(name, opts...)
-	if err != nil {
-		return nil, err
-	}
-	fs.openFiles.Add(1)
-	return &noUseAfterCloseFile{fs: fs, file: f}, nil
-}
-
-func (fs *noUseAfterClose) OpenDir(name string) (vfs.File, error) {
-	fs.ensureStillOpen()
-	f, err := fs.fs.OpenDir(name)
-	if err != nil {
-		return nil, err
-	}
-	fs.openFiles.Add(1)
-	return &noUseAfterCloseFile{fs: fs, file: f}, nil
-}
-
-func (fs *noUseAfterClose) Remove(name string) error {
-	fs.ensureStillOpen()
-	return fs.fs.Remove(name)
-}
-
-func (fs *noUseAfterClose) RemoveAll(name string) error {
-	fs.ensureStillOpen()
-	return fs.fs.RemoveAll(name)
-}
-
-func (fs *noUseAfterClose) Rename(oldname, newname string) error {
-	fs.ensureStillOpen()
-	return fs.fs.Rename(oldname, newname)
-}
-
-func (fs *noUseAfterClose) ReuseForWrite(oldname, newname string) (vfs.File, error) {
-	fs.ensureStillOpen()
-	f, err := fs.fs.ReuseForWrite(oldname, newname)
-	if err != nil {
-		return nil, err
-	}
-	fs.openFiles.Add(1)
-	return &noUseAfterCloseFile{fs: fs, file: f}, nil
-}
-
-func (fs *noUseAfterClose) MkdirAll(dir string, perm os.FileMode) error {
-	fs.ensureStillOpen()
-	return fs.fs.MkdirAll(dir, perm)
-}
-
-func (fs *noUseAfterClose) Lock(name string) (io.Closer, error) {
-	fs.ensureStillOpen()
-	return fs.fs.Lock(name)
-}
-
-func (fs *noUseAfterClose) List(dir string) ([]string, error) {
-	fs.ensureStillOpen()
-	return fs.fs.List(dir)
-}
-
-func (fs *noUseAfterClose) Stat(name string) (os.FileInfo, error) {
-	fs.ensureStillOpen()
-	return fs.fs.Stat(name)
-}
-
-func (fs *noUseAfterClose) PathBase(path string) string {
-	return fs.fs.PathBase(path)
-}
-
-func (fs *noUseAfterClose) PathJoin(elem ...string) string {
-	return fs.fs.PathJoin(elem...)
-}
-
-func (fs *noUseAfterClose) PathDir(path string) string {
-	return fs.fs.PathDir(path)
-}
-
-func (fs *noUseAfterClose) GetDiskUsage(path string) (vfs.DiskUsage, error) {
-	fs.ensureStillOpen()
-	return fs.fs.GetDiskUsage(path)
 }

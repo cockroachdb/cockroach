@@ -271,6 +271,7 @@ func GetSequenceOptions(
 	addSequenceOption(tree.SeqOptStart, defaultOpts.Start, opts.Start)
 	addSequenceOption(tree.SeqOptVirtual, defaultOpts.Virtual, opts.Virtual)
 	addSequenceOption(tree.SeqOptCache, defaultOpts.CacheSize, opts.CacheSize)
+	addSequenceOption(tree.SeqOptCacheNode, defaultOpts.NodeCacheSize, opts.NodeCacheSize)
 	addSequenceOption(tree.SeqOptAs, defaultOpts.AsIntegerType, opts.AsIntegerType)
 	return sequenceOptions
 }
@@ -900,6 +901,7 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 			}
 		}
 	}
+	fnBody.UsesFunctionIDs = append(fnBody.UsesFunctionIDs, fnDesc.GetDependsOnFunctions()...)
 	for _, backRef := range fnDesc.GetDependedOnBy() {
 		w.backRefs.Add(backRef.ID)
 	}

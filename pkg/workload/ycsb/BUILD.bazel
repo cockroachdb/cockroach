@@ -38,10 +38,6 @@ go_test(
         "zipfgenerator_test.go",
     ],
     embed = [":ycsb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     shard_count = 16,
     deps = [
         "//pkg/testutils/skip",

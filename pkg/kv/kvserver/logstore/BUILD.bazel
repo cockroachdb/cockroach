@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "logstore",
     srcs = [
+        "bytes_tracker.go",
         "logstore.go",
         "sideload.go",
         "sideload_disk.go",
@@ -18,6 +19,8 @@ go_library(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/raftlog",
+        "//pkg/raft",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -38,8 +41,6 @@ go_library(
         "@com_github_cockroachdb_pebble//record",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
-        "@io_etcd_go_raft_v3//:raft",
-        "@io_etcd_go_raft_v3//raftpb",
         "@org_golang_x_time//rate",
     ],
 )
@@ -47,24 +48,23 @@ go_library(
 go_test(
     name = "logstore_test",
     srcs = [
+        "bytes_tracker_test.go",
         "logstore_bench_test.go",
         "sideload_test.go",
         "sync_waiter_test.go",
     ],
     embed = [":logstore"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/raftlog",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
+        "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
@@ -78,7 +78,6 @@ go_test(
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
-        "@io_etcd_go_raft_v3//raftpb",
         "@org_golang_x_time//rate",
     ],
 )

@@ -54,10 +54,6 @@ go_test(
         "stats_test.go",
     ],
     embed = [":tpcc"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/testutils",
         "//pkg/workload",

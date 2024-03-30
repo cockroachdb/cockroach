@@ -8,12 +8,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "3bedac2f1816095d9f6aa5b3ea6caa8e7f1651de7d67af1fc0e9127148ab9a36",
-    strip_prefix = "cockroachdb-rules_go-d41d6ec",
+    sha256 = "c47bbf3fedda339cf41e9a17964bc76a404e4cb2f1213067cc42b453e8a2eb38",
+    strip_prefix = "cockroachdb-rules_go-0e7e4e3",
     urls = [
-        # cockroachdb/rules_go as of d41d6ecad15f14423f47d94b5fb2bd05d7de9937
-        # (upstream release-0.43 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-405-gd41d6ec.tar.gz",
+        # cockroachdb/rules_go as of 0e7e4e31aa49f1afbb402fbb4895f38bc702c88c
+        # (upstream release-0.46 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-458-g0e7e4e3.tar.gz",
     ],
 )
 
@@ -165,14 +165,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.21.5.darwin-amd64.tar.gz", "6878b009493b8b2e5518b090209f63af478a6bdf889c6db4d3c6b68e43839e8e"),
-        "darwin_arm64": ("go1.21.5.darwin-arm64.tar.gz", "1f3673055f681982bda589bfb23938cb83bef4030efd3516bed0dc3ebd125f41"),
-        "linux_amd64": ("go1.21.5.linux-amd64.tar.gz", "78e55b80d0a5ef27e8e0913321cae31ba9509c05ed79c429e489ae3a25c74885"),
-        "linux_arm64": ("go1.21.5.linux-arm64.tar.gz", "89fe32d10a4a3831154bc740bfbc89405a5a8de0655e0cbe91e5ad952dfd6a52"),
-        "windows_amd64": ("go1.21.5.windows-amd64.tar.gz", "350b40fb129d0eac7eafd5ea2044c6dd1ce8b5a43572f22ef02b53e3d999f28a"),
+        "darwin_amd64": ("go1.22.1.darwin-amd64.tar.gz", "b55191237e25d023348a2096066f1e53af6693b965f0234c547a361805bb9447"),
+        "darwin_arm64": ("go1.22.1.darwin-arm64.tar.gz", "c2d5a541182a953d4c2e0e4fa4326b3935b73cb4053b901324c95aed7238781c"),
+        "linux_amd64": ("go1.22.1.linux-amd64.tar.gz", "9df52f8ae84d8143ce26e0872c44638468c764c4cd688a6737345dc0ba7620b6"),
+        "linux_arm64": ("go1.22.1.linux-arm64.tar.gz", "aa503f0c8450cf08a63e2e2312c2b1418157145160a075674c3b2577b41d184f"),
+        "windows_amd64": ("go1.22.1.windows-amd64.tar.gz", "14bfc09f96e539cf534802e57c0909fdf9534600f3dc4de6008592b0b7a4da08"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231206-175156/{}"],
-    version = "1.21.5",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240306-025504/{}"],
+    version = "1.22.1",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -275,6 +275,7 @@ npm_translate_lock(
         "//pkg/ui:pnpm-workspace.yaml",
         "//pkg/ui/patches:topojson@3.0.2.patch",
         "//pkg/ui/workspaces/cluster-ui:package.json",
+        "//pkg/ui/workspaces/crdb-api-client:package.json",
         "//pkg/ui/workspaces/db-console:package.json",
         "//pkg/ui/workspaces/db-console/src/js:package.json",
         "//pkg/ui/workspaces/e2e-tests:package.json",
@@ -480,11 +481,11 @@ c_deps()
 # Ref: https://github.com/bazelbuild/rules_foreign_cc/blob/main/foreign_cc/repositories.bzl
 http_archive(
     name = "rules_foreign_cc",
-    sha256 = "272ac2cde4efd316c8d7c0140dee411c89da104466701ac179286ef5a89c7b58",
-    strip_prefix = "cockroachdb-rules_foreign_cc-6f7f1b1",
+    sha256 = "03afebfc3f173666a3820a29512265c710c3a08d0082ba77469779d3e3af5a11",
+    strip_prefix = "cockroachdb-rules_foreign_cc-8d34d77",
     urls = [
-        # As of commit 6f7f1b1c6f911db5706c2fcbb3d5669d95974a34 (release 0.7.0 plus a couple patches)
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_foreign_cc-6f7f1b1.tar.gz",
+        # As of commit 8d34d777736b2d895e4e4fbb755deb424ae1f6c7 (release 0.7.0 plus a couple patches)
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_foreign_cc-8d34d77.tar.gz",
     ],
 )
 
@@ -659,8 +660,8 @@ go_download_sdk(
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
     sdks = {
-        "linux_amd64": ("go1.21.5fips.linux-amd64.tar.gz", "4368ab9cf7c8d75d6d33927917426d587f5be39fb18a87fbe2d59281a8569819"),
+        "linux_amd64": ("go1.21.5fips.linux-amd64.tar.gz", "68fefc15b4328244fe78f1269e8856a2a2cd52f1fb9f451bb8bc0c23d590fe14"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231206-175156/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240220-195058/{}"],
     version = "1.21.5fips",
 )

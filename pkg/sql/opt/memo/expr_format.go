@@ -171,6 +171,10 @@ type ExprFmtCtx struct {
 	// seenUDFs is used to ensure that formatting of recursive UDFs does not
 	// infinitely recurse.
 	seenUDFs map[*UDFDefinition]struct{}
+
+	// tailCalls allows for quick lookup of all the routines in tail-call position
+	// when the last body statement of a routine is formatted.
+	tailCalls map[*UDFCallExpr]struct{}
 }
 
 // makeExprFmtCtxForString creates an expression formatting context from a new
@@ -947,43 +951,38 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 func (f *ExprFmtCtx) formatScalarWithLabel(
 	label string, scalar opt.ScalarExpr, tp treeprinter.Node,
 ) {
-	formatUDFInputAndBody := func(udf *UDFCallExpr, tp treeprinter.Node) {
-		var n treeprinter.Node
-		if !udf.Def.CalledOnNullInput {
-			tp.Child("strict")
-		}
-		if len(udf.Args) > 0 {
-			n = tp.Child("args")
-			for i := range udf.Args {
-				f.formatExpr(udf.Args[i], n)
-			}
-		}
-		if _, seen := f.seenUDFs[udf.Def]; !seen {
+	formatUDFDefinition := func(def *UDFDefinition, tp treeprinter.Node) {
+		if _, seen := f.seenUDFs[def]; !seen {
 			// Ensure that the definition of the UDF is not printed out again if it
 			// is recursively called.
-			f.seenUDFs[udf.Def] = struct{}{}
-			if len(udf.Def.Params) > 0 {
-				f.formatColList(tp, "params:", udf.Def.Params, opt.ColSet{} /* notNullCols */)
+			f.seenUDFs[def] = struct{}{}
+			if len(def.Params) > 0 {
+				f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
 			}
-			n = tp.Child("body")
-			for i := range udf.Def.Body {
-				if i == 0 && udf.Def.CursorDeclaration != nil {
+			n := tp.Child("body")
+			for i := range def.Body {
+				stmtNode := n
+				if i == 0 && def.CursorDeclaration != nil {
 					// The first statement is opening a cursor.
-					cur := n.Child("open-cursor")
-					f.formatExpr(udf.Def.Body[i], cur)
-					continue
+					stmtNode = n.Child("open-cursor")
 				}
-				f.formatExpr(udf.Def.Body[i], n)
+				prevTailCalls := f.tailCalls
+				if i == len(def.Body)-1 {
+					f.tailCalls = make(map[*UDFCallExpr]struct{})
+					ExtractTailCalls(def.Body[i], f.tailCalls)
+				}
+				f.formatExpr(def.Body[i], stmtNode)
+				f.tailCalls = prevTailCalls
 			}
-			delete(f.seenUDFs, udf.Def)
+			delete(f.seenUDFs, def)
 		} else {
 			tp.Child("recursive-call")
 		}
-		if udf.Def.ExceptionBlock != nil {
-			n = tp.Child("exception-handler")
-			for i := range udf.Def.ExceptionBlock.Codes {
-				code := udf.Def.ExceptionBlock.Codes[i]
-				body := udf.Def.ExceptionBlock.Actions[i].Body
+		if def.ExceptionBlock != nil {
+			n := tp.Child("exception-handler")
+			for i := range def.ExceptionBlock.Codes {
+				code := def.ExceptionBlock.Codes[i]
+				body := def.ExceptionBlock.Actions[i].Body
 				var branch treeprinter.Node
 				if code.String() == "OTHERS" {
 					branch = n.Child("OTHERS")
@@ -995,6 +994,25 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 				}
 			}
 		}
+	}
+	formatRoutineArgs := func(args ScalarListExpr, tp treeprinter.Node) {
+		if len(args) > 0 {
+			n := tp.Child("args")
+			for i := range args {
+				f.formatExpr(args[i], n)
+			}
+		}
+	}
+	formatUDFInputAndBody := func(udf *UDFCallExpr, tp treeprinter.Node) {
+		if !udf.Def.CalledOnNullInput {
+			tp.Child("strict")
+		}
+		if _, tailCall := f.tailCalls[udf]; tailCall {
+			// This routine is in tail-call position in the parent routine.
+			tp.Child("tail-call")
+		}
+		formatRoutineArgs(udf.Args, tp)
+		formatUDFDefinition(udf.Def, tp)
 	}
 
 	f.Buffer.Reset()
@@ -1058,6 +1076,14 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		tp = tp.Child(f.Buffer.String())
 		formatUDFInputAndBody(udf, tp)
 		return
+
+	case opt.TxnControlOp:
+		controlExpr := scalar.(*TxnControlExpr)
+		fmt.Fprintf(f.Buffer, "%s; CALL %s", controlExpr.TxnOp, controlExpr.Def.Name)
+		f.FormatScalarProps(scalar)
+		tp = tp.Child(f.Buffer.String())
+		formatRoutineArgs(controlExpr.Args, tp)
+		formatUDFDefinition(controlExpr.Def, tp)
 	}
 
 	// Omit various list items from the output, but show some of their properties
@@ -1108,12 +1134,19 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	}
 
 	var intercepted bool
-	if udf, ok := scalar.(*UDFCallExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
-		// A UDF function body will be printed after the scalar props, so
-		// pre-emptively set intercepted=true to avoid the default
-		// formatScalarPrivate formatting below.
-		fmt.Fprintf(f.Buffer, "udf: %s", udf.Def.Name)
-		intercepted = true
+	if !f.HasFlags(ExprFmtHideScalars) {
+		switch t := scalar.(type) {
+		case *UDFCallExpr:
+			// A UDF function body will be printed after the scalar props, so
+			// pre-emptively set intercepted=true to avoid the default
+			// formatScalarPrivate formatting below.
+			fmt.Fprintf(f.Buffer, "udf: %s", t.Def.Name)
+			intercepted = true
+		case *TxnControlExpr:
+			// As for UDFCallExpr, the arguments and body will be printed below.
+			fmt.Fprintf(f.Buffer, "%s; CALL %s", t.TxnOp, t.Def.Name)
+			intercepted = true
+		}
 	}
 	if !intercepted && f.HasFlags(ExprFmtHideScalars) && ScalarFmtInterceptor != nil {
 		if str := ScalarFmtInterceptor(f, scalar); str != "" {
@@ -1132,8 +1165,14 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	}
 	tp = tp.Child(f.Buffer.String())
 
-	if udf, ok := scalar.(*UDFCallExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
-		formatUDFInputAndBody(udf, tp)
+	if !f.HasFlags(ExprFmtHideScalars) {
+		switch t := scalar.(type) {
+		case *UDFCallExpr:
+			formatUDFInputAndBody(t, tp)
+		case *TxnControlExpr:
+			formatRoutineArgs(t.Args, tp)
+			formatUDFDefinition(t.Def, tp)
+		}
 	}
 
 	if !intercepted {
@@ -1530,7 +1569,7 @@ func (f *ExprFmtCtx) formatColSimpleToBuffer(buf *bytes.Buffer, label string, id
 		if f.Memo != nil {
 			md := f.Memo.metadata
 			fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-			label = md.QualifiedAlias(id, fullyQualify, false /* alwaysQualify */, f.Catalog)
+			label = md.QualifiedAlias(f.Ctx, id, fullyQualify, false /* alwaysQualify */, f.Catalog)
 		} else {
 			label = fmt.Sprintf("unknown%d", id)
 		}
@@ -1816,7 +1855,7 @@ func tableName(f *ExprFmtCtx, tabID opt.TableID) string {
 	if f.HasFlags(ExprFmtHideQualifications) {
 		return string(tabMeta.Table.Name())
 	}
-	tn, err := f.Catalog.FullyQualifiedName(context.TODO(), tabMeta.Table)
+	tn, err := f.Catalog.FullyQualifiedName(f.Ctx, tabMeta.Table)
 	if err != nil {
 		panic(err)
 	}

@@ -32,8 +32,8 @@ type testFileTemplateConfig struct {
 	CockroachGoTestserverTest     bool
 	Ccl                           bool
 	ForceProductionValues         bool
-	IsMultiRegion                 bool
-	Is3NodeTenant                 bool
+	SkipCclUnderRace              bool
+	UseHeavyPool                  bool
 	Package, TestRuleName, RelDir string
 	ConfigIdx                     int
 	TestCount                     int
@@ -176,12 +176,19 @@ func (t *testdir) dump() error {
 		tplCfg.RelDir = t.relPathToParent
 		tplCfg.TestCount = testCount
 		tplCfg.CockroachGoTestserverTest = cfg.UseCockroachGoTestserver
-		tplCfg.IsMultiRegion = strings.Contains(cfg.Name, "multiregion")
-		tplCfg.Is3NodeTenant = strings.HasSuffix(cfg.Name, "3node-tenant")
 		// The NumCPU calculation is a guess pulled out of thin air to
 		// allocate the tests which use 3-node clusters 2 vCPUs, and
 		// the ones which use more a bit more.
 		tplCfg.NumCPU = (cfg.NumNodes / 2) + 1
+		if cfg.Name == "3node-tenant" || strings.HasPrefix(cfg.Name, "multiregion-") {
+			tplCfg.SkipCclUnderRace = true
+		}
+		if strings.Contains(cfg.Name, "5node") ||
+			strings.Contains(cfg.Name, "fakedist") ||
+			(strings.HasPrefix(cfg.Name, "local-") && !tplCfg.Ccl) ||
+			(cfg.Name == "local" && !tplCfg.Ccl) {
+			tplCfg.UseHeavyPool = true
+		}
 		subdir := filepath.Join(t.dir, cfg.Name)
 		f, buildF, cleanup, err := openTestSubdir(subdir)
 		if err != nil {
@@ -351,6 +358,14 @@ func generate() error {
 		if err != nil {
 			return err
 		}
+		readCommittedCalc := logictestbase.ConfigCalculator{
+			ConfigOverrides: []string{"local-read-committed"},
+			RunCCLConfigs:   true,
+		}
+		err = t.addCclLogicTests("TestReadCommittedLogicCCL", readCommittedCalc)
+		if err != nil {
+			return err
+		}
 		tenantCalc := logictestbase.ConfigCalculator{
 			ConfigOverrides:       []string{"3node-tenant"},
 			ConfigFilterOverrides: []string{"3node-tenant-multiregion"},
@@ -361,6 +376,10 @@ func generate() error {
 			return err
 		}
 		err = t.addLogicTests("TestTenantLogic", tenantCalc)
+		if err != nil {
+			return err
+		}
+		err = t.addExecBuildLogicTests("TestReadCommittedExecBuild", readCommittedCalc)
 		if err != nil {
 			return err
 		}

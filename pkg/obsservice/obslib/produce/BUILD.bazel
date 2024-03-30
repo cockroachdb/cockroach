@@ -23,10 +23,6 @@ go_test(
     name = "produce_test",
     srcs = ["producer_test.go"],
     embed = [":produce"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/obsservice/obslib/transform",
         "//pkg/obsservice/obslib/validate",

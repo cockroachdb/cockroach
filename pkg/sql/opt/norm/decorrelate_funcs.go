@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -45,6 +46,44 @@ func (c *CustomFuncs) HasHoistableSubquery(scalar opt.ScalarExpr) bool {
 }
 
 func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
+	if c.deriveHasUnhoistableExpr(scalar) {
+		// Some expressions disqualify subquery-hoisting entirely.
+		return false
+	}
+	return c.deriveHasHoistableSubqueryImpl(scalar)
+}
+
+// deriveHasUnhoistableExpr checks for expressions within the given scalar
+// expression which cannot be hoisted. This is necessary beyond existing
+// volatility checks because of #97432: when a subquery-hoisting rule is
+// triggered, *all* correlated subqueries are hoisted, not just the leak-proof
+// subqueries. Therefore, it is necessary for correctness to avoid hoisting
+// entirely in the presence of certain expressions.
+func (c *CustomFuncs) deriveHasUnhoistableExpr(expr opt.Expr) bool {
+	switch t := expr.(type) {
+	case *memo.BarrierExpr:
+		// An optimization barrier indicates the presence of an expression which
+		// cannot be reordered with other expressions.
+		return true
+	case *memo.UDFCallExpr:
+		if t.Def.RoutineLang == tree.RoutineLangPLpgSQL {
+			// Hoisting a PL/pgSQL sub-routine could move it out of tail-call
+			// position, forcing inefficient nested execution.
+			//
+			// TODO(#119956): consider relaxing this for routines which aren't already
+			// in tail-call position.
+			return true
+		}
+	}
+	for i := 0; i < expr.ChildCount(); i++ {
+		if c.deriveHasUnhoistableExpr(expr.Child(i)) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *CustomFuncs) deriveHasHoistableSubqueryImpl(scalar opt.ScalarExpr) bool {
 	switch t := scalar.(type) {
 	case *memo.SubqueryExpr:
 		return !t.Input.Relational().OuterCols.Empty()
@@ -731,6 +770,16 @@ func (c *CustomFuncs) ConstructAnyCondition(
 ) opt.ScalarExpr {
 	inputVar := c.referenceSingleColumn(input)
 	return c.ConstructBinary(private.Cmp, scalar, inputVar)
+}
+
+// ConvertSubToExistsPrivate converts the given SubqueryPrivate to an
+// ExistsPrivate.
+func (c *CustomFuncs) ConvertSubToExistsPrivate(sub *memo.SubqueryPrivate) *memo.ExistsPrivate {
+	col := c.f.Metadata().AddColumn("exists", types.Bool)
+	return &memo.ExistsPrivate{
+		LazyEvalProjectionCol: col,
+		SubqueryPrivate:       *sub,
+	}
 }
 
 // ConstructBinary builds a dynamic binary expression, given the binary

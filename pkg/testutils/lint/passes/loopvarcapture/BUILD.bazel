@@ -35,10 +35,6 @@ go_test(
     env = {
         "CGO_ENABLED": "0",
     },
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":loopvarcapture",
         "//pkg/build/bazel",

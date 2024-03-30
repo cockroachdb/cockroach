@@ -33,6 +33,7 @@ type tpceSpec struct {
 	loadNode         int
 	roachNodes       option.NodeListOption
 	roachNodeIPFlags []string
+	portFlag         string
 }
 
 type tpceCmdOptions struct {
@@ -42,6 +43,27 @@ type tpceCmdOptions struct {
 	duration        time.Duration
 	threads         int
 	skipCleanup     bool
+	connectionOpts  tpceConnectionOpts
+}
+
+type tpceConnectionOpts struct {
+	fixtureBucket string
+	user          string
+	password      string
+}
+
+const (
+	defaultFixtureBucket = "gs://cockroach-fixtures-us-east1/tpce-csv"
+	defaultUser          = install.DefaultUser
+	defaultPassword      = install.DefaultPassword
+)
+
+func defaultTPCEConnectionOpts() tpceConnectionOpts {
+	return tpceConnectionOpts{
+		fixtureBucket: defaultFixtureBucket,
+		user:          defaultUser,
+		password:      defaultPassword,
+	}
 }
 
 func (to tpceCmdOptions) AddCommandOptions(cmd *roachtestutil.Command) {
@@ -51,6 +73,9 @@ func (to tpceCmdOptions) AddCommandOptions(cmd *roachtestutil.Command) {
 	cmd.MaybeFlag(to.duration != 0, "duration", to.duration)
 	cmd.MaybeFlag(to.threads != 0, "threads", to.threads)
 	cmd.MaybeFlag(to.skipCleanup, "skip-cleanup", "")
+	cmd.MaybeFlag(to.connectionOpts.fixtureBucket != "", "bucket", to.connectionOpts.fixtureBucket)
+	cmd.MaybeFlag(to.connectionOpts.user != "", "pg-user", to.connectionOpts.user)
+	cmd.MaybeFlag(to.connectionOpts.password != "", "pg-password", to.connectionOpts.password)
 }
 
 func initTPCESpec(
@@ -72,15 +97,21 @@ func initTPCESpec(
 	for i, ip := range roachNodeIPs {
 		roachNodeIPFlags[i] = fmt.Sprintf("--hosts=%s", ip)
 	}
+	ports, err := c.SQLPorts(ctx, l, roachNodes, "" /* tenant */, 0 /* sqlInstance */)
+	if err != nil {
+		return nil, err
+	}
+	port := fmt.Sprintf("--pg-port=%d", ports[0])
 	return &tpceSpec{
 		loadNode:         loadNode,
 		roachNodes:       roachNodes,
 		roachNodeIPFlags: roachNodeIPFlags,
+		portFlag:         port,
 	}, nil
 }
 
 func (ts *tpceSpec) newCmd(o tpceCmdOptions) *roachtestutil.Command {
-	cmd := roachtestutil.NewCommand(`sudo docker run us-east1-docker.pkg.dev/crl-ci-images/cockroach/tpc-e:latest`)
+	cmd := roachtestutil.NewCommand(`sudo docker run us-east1-docker.pkg.dev/crl-ci-images/cockroach/tpc-e:master`)
 	o.AddCommandOptions(cmd)
 	return cmd
 }
@@ -89,15 +120,15 @@ func (ts *tpceSpec) newCmd(o tpceCmdOptions) *roachtestutil.Command {
 // import of the data and schema creation.
 func (ts *tpceSpec) init(ctx context.Context, t test.Test, c cluster.Cluster, o tpceCmdOptions) {
 	cmd := ts.newCmd(o).Option("init")
-	c.Run(ctx, option.WithNodes(c.Node(ts.loadNode)), fmt.Sprintf("%s %s", cmd, ts.roachNodeIPFlags[0]))
+	c.Run(ctx, option.WithNodes(c.Node(ts.loadNode)), fmt.Sprintf("%s %s %s", cmd, ts.portFlag, ts.roachNodeIPFlags[0]))
 }
 
 // run runs the tpce workload on cluster that has been initialized with the tpce schema.
 func (ts *tpceSpec) run(
 	ctx context.Context, t test.Test, c cluster.Cluster, o tpceCmdOptions,
 ) (install.RunResultDetails, error) {
-	cmd := fmt.Sprintf("%s %s", ts.newCmd(o), strings.Join(ts.roachNodeIPFlags, " "))
-	return c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(ts.loadNode), cmd)
+	cmd := fmt.Sprintf("%s %s %s", ts.newCmd(o), ts.portFlag, strings.Join(ts.roachNodeIPFlags, " "))
+	return c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(ts.loadNode)), cmd)
 }
 
 type tpceOptions struct {
@@ -147,7 +178,6 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 			t.Status("installing cockroach")
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.StoreCount = opts.ssds
-			roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
 			settings := install.MakeClusterSettings(install.NumRacksOption(racks))
 			c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
 		}
@@ -186,8 +216,9 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 			}
 			t.Status(fmt.Sprintf("initializing %d tpc-e customers%s", opts.customers, estimatedSetupTimeStr))
 			tpceSpec.init(ctx, t, c, tpceCmdOptions{
-				customers: opts.customers,
-				racks:     racks,
+				customers:      opts.customers,
+				racks:          racks,
+				connectionOpts: defaultTPCEConnectionOpts(),
 			})
 			return nil
 		})
@@ -207,10 +238,11 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 			workloadDuration = 2 * time.Hour
 		}
 		runOptions := tpceCmdOptions{
-			customers: opts.customers,
-			racks:     racks,
-			duration:  workloadDuration,
-			threads:   opts.nodes * opts.cpus,
+			customers:      opts.customers,
+			racks:          racks,
+			duration:       workloadDuration,
+			threads:        opts.nodes * opts.cpus,
+			connectionOpts: defaultTPCEConnectionOpts(),
 		}
 		if opts.activeCustomers != 0 {
 			runOptions.activeCustomers = opts.activeCustomers

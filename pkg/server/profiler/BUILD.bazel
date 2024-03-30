@@ -45,10 +45,6 @@ go_test(
         "profilestore_test.go",
     ],
     embed = [":profiler"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/clusterversion",
         "//pkg/server/dumpstore",

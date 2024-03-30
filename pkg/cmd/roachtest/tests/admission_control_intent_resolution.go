@@ -64,17 +64,18 @@ func registerIntentResolutionOverload(r registry.Registry) {
 				WithGrafanaDashboardJSON(grafana.ChangefeedAdmissionControlGrafana)
 			err := c.StartGrafana(ctx, t.L(), promCfg)
 			require.NoError(t, err)
+
+			startOpts := option.NewStartOpts(option.NoBackupSchedule)
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+				"--vmodule=io_load_listener=2")
+			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
+			settings := install.MakeClusterSettings()
+			c.Start(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes))
+
 			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
 			require.NoError(t, err)
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 
-			startOpts := option.DefaultStartOptsNoBackups()
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
-				"--vmodule=io_load_listener=2")
-			roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
-			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
-			settings := install.MakeClusterSettings()
-			c.Start(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes))
 			setAdmissionControl(ctx, t, c, true)
 			t.Status("running txn")
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
@@ -172,20 +173,4 @@ func registerIntentResolutionOverload(r registry.Registry) {
 			m.Wait()
 		},
 	})
-}
-
-// Returns the mean over the last n samples. If n > len(items), returns the mean
-// over the entire items slice.
-func getMeanOverLastN(n int, items []float64) float64 {
-	count := n
-	if len(items) < n {
-		count = len(items)
-	}
-	sum := float64(0)
-	i := 0
-	for i < count {
-		sum += items[len(items)-1-i]
-		i++
-	}
-	return sum / float64(count)
 }

@@ -13,6 +13,7 @@ package tscache
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -74,6 +75,14 @@ func (tc *sklImpl) GetMax(ctx context.Context, start, end roachpb.Key) (hlc.Time
 		val = tc.cache.LookupTimestampRange(ctx, nonNil(start), end, excludeTo)
 	}
 	return val.ts, val.txnID
+}
+
+// Serialize implements the Cache interface.
+func (tc *sklImpl) Serialize(ctx context.Context, start, end roachpb.Key) rspb.Segment {
+	if len(end) == 0 {
+		end = start.Next()
+	}
+	return tc.cache.Serialize(ctx, nonNil(start), end)
 }
 
 // boundKeyLengths makes sure that the key lengths provided are well below the

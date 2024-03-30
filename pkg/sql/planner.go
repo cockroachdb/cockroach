@@ -34,13 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
@@ -54,9 +55,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -201,7 +202,16 @@ type planner struct {
 		innerPlansMustUseLeafTxn int32
 	}
 
+	// monitor tracks the memory usage of txn-bound objects - for example,
+	// execution operators.
 	monitor *mon.BytesMonitor
+
+	// sessionMonitor tracks the memory of session-bound objects. It is currently
+	// only used internally for tracking SQL cursors declared using WITH HOLD.
+	//
+	// NOTE: sessionMonitor is unset for queries that are not associated with a
+	// session (e.g. internal queries).
+	sessionMonitor *mon.BytesMonitor
 
 	// Corresponding Statement for this query.
 	stmt Statement
@@ -230,6 +240,8 @@ type planner struct {
 
 	sqlCursors sqlCursors
 
+	storedProcTxnState storedProcTxnStateAccessor
+
 	createdSequences createdSequences
 
 	// autoCommit indicates whether the plan is allowed (but not required) to
@@ -253,9 +265,8 @@ type planner struct {
 	curPlan planTop
 
 	// Avoid allocations by embedding commonly used objects and visitors.
-	txCtx                 transform.ExprTransformContext
-	nameResolutionVisitor schemaexpr.NameResolutionVisitor
-	tableName             tree.TableName
+	txCtx     transform.ExprTransformContext
+	tableName tree.TableName
 
 	// optPlanningCtx stores the optimizer planning context, which contains
 	// data structures that can be reused between queries (for efficiency).
@@ -298,11 +309,6 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 	flow.Resume(recv)
 	return recv.commErr
 }
-
-// noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
-// internal SQL pool before the pool starts explicitly logging overall usage
-// growth in the log.
-var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 1<<20 /* 1 MB */)
 
 // internalPlannerParams encapsulates configurable planner fields. The defaults
 // are set in newInternalPlanner.
@@ -409,11 +415,12 @@ func newInternalPlanner(
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
 	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(execCfg.Settings.Version)
 
-	plannerMon := mon.NewMonitor(redact.Sprintf("internal-planner.%s.%s", user, opName),
-		mon.MemoryResource,
-		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
-		-1, /* increment */
-		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
+	plannerMon := mon.NewMonitor(mon.Options{
+		Name:     redact.Sprintf("internal-planner.%s.%s", user, opName),
+		CurCount: memMetrics.CurBytesCount,
+		MaxHist:  memMetrics.MaxBytesHist,
+		Settings: execCfg.Settings,
+	})
 	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
 	p.monitor = plannerMon
 
@@ -550,6 +557,8 @@ func internalExtendedEvalCtx(
 		statsProvider:   sqlStatsProvider,
 		jobs:            newTxnJobsCollection(),
 	}
+	rng, _ := randutil.NewPseudoRand()
+	ret.RNG = rng
 	ret.SetDeprecatedContext(ctx)
 	ret.copyFromExecCfg(execCfg)
 	return ret
@@ -606,6 +615,11 @@ func (p *planner) GetOrInitSequenceCache() sessiondatapb.SequenceCache {
 		)
 	}
 	return p.SessionData().SequenceCache
+}
+
+// GetSequenceCacheNode returns the node-level sequence cache.
+func (p *planner) GetSequenceCacheNode() *sessiondatapb.SequenceCacheNode {
+	return p.execCfg.SequenceCacheNode
 }
 
 func (p *planner) LeaseMgr() *lease.Manager {
@@ -680,12 +694,12 @@ func (p *planner) SpanStatsConsumer() keyvisualizer.SpanStatsConsumer {
 
 // GetTypeFromValidSQLSyntax implements the eval.Planner interface.
 // We define this here to break the dependency from eval.go to the parser.
-func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
+func (p *planner) GetTypeFromValidSQLSyntax(ctx context.Context, sql string) (*types.T, error) {
 	ref, err := parser.GetTypeFromValidSQLSyntax(sql)
 	if err != nil {
 		return nil, err
 	}
-	return tree.ResolveType(context.TODO(), ref, p.semaCtx.GetTypeResolver())
+	return tree.ResolveType(ctx, ref, p.semaCtx.GetTypeResolver())
 }
 
 // ResolveTableName implements the eval.DatabaseCatalog interface.
@@ -875,11 +889,13 @@ func (p *planner) resetPlanner(
 	stmtTS time.Time,
 	sd *sessiondata.SessionData,
 	plannerMon *mon.BytesMonitor,
+	sessionMon *mon.BytesMonitor,
 ) {
 	p.txn = txn
 	p.stmt = Statement{}
 	p.instrumentation = instrumentationHelper{}
 	p.monitor = plannerMon
+	p.sessionMonitor = sessionMon
 
 	p.cancelChecker.Reset(ctx)
 
@@ -979,4 +995,18 @@ func (p *planner) AutoCommit() bool {
 // mustUseLeafTxn returns true if inner plans must use a leaf transaction.
 func (p *planner) mustUseLeafTxn() bool {
 	return atomic.LoadInt32(&p.atomic.innerPlansMustUseLeafTxn) >= 1
+}
+
+func (p *planner) StartHistoryRetentionJob(
+	ctx context.Context, desc string, protectTS hlc.Timestamp, expiration time.Duration,
+) (jobspb.JobID, error) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V24_1) {
+		return 0, pgerror.New(pgcode.FeatureNotSupported,
+			"history retention job not supported before V24.1")
+	}
+	return StartHistoryRetentionJob(ctx, p.EvalContext(), p.InternalSQLTxn(), desc, protectTS, expiration)
+}
+
+func (p *planner) ExtendHistoryRetention(ctx context.Context, jobID jobspb.JobID) error {
+	return ExtendHistoryRetention(ctx, p.EvalContext(), p.InternalSQLTxn(), jobID)
 }

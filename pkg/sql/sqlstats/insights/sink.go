@@ -10,11 +10,6 @@
 
 package insights
 
-import "context"
-
 type sink interface {
 	AddInsight(*Insight)
-
-	// ExportInsight export an Insight to obsservice.
-	ExportInsight(context.Context, *Insight) error
 }

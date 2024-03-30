@@ -16,10 +16,6 @@ go_test(
         "resolver_test.go",
     ],
     embed = [":caller"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/util/log",
         "@com_github_stretchr_testify//require",

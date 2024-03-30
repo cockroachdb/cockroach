@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -33,7 +34,6 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/sstable"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
@@ -604,6 +604,7 @@ type Reader interface {
 		visitRangeDel func(start, end []byte, seqNum uint64) error,
 		visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
 		visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+		visitExternalFile func(sst *pebble.ExternalFile) error,
 	) error
 	// ConsistentIterators returns true if the Reader implementation guarantees
 	// that the different iterators constructed by this Reader will see the same
@@ -934,6 +935,8 @@ type Engine interface {
 	Properties() roachpb.StoreProperties
 	// Compact forces compaction over the entire database.
 	Compact() error
+	// Env returns the filesystem environment used by the Engine.
+	Env() *fs.Env
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
@@ -941,10 +944,10 @@ type Engine interface {
 	GetMetrics() Metrics
 	// GetEncryptionRegistries returns the file and key registries when encryption is enabled
 	// on the store.
-	GetEncryptionRegistries() (*EncryptionRegistries, error)
+	GetEncryptionRegistries() (*fs.EncryptionRegistries, error)
 	// GetEnvStats retrieves stats about the engine's environment
 	// For RocksDB, this includes details of at-rest encryption.
-	GetEnvStats() (*EnvStats, error)
+	GetEnvStats() (*fs.EnvStats, error)
 	// GetAuxiliaryDir returns a path under which files can be stored
 	// persistently, and from which data can be ingested by the engine.
 	//
@@ -954,6 +957,14 @@ type Engine interface {
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
 	NewBatch() Batch
+	// NewReader returns a new instance of a Reader that wraps this engine, and
+	// with the given durability requirement. This wrapper caches iterators to
+	// avoid the overhead of creating multiple iterators for batched reads.
+	//
+	// All iterators created from a read-only engine are guaranteed to provide a
+	// consistent snapshot of the underlying engine. See the comment on the
+	// Reader interface and the Reader.ConsistentIterators method.
+	NewReader(durability DurabilityRequirement) Reader
 	// NewReadOnly returns a new instance of a ReadWriter that wraps this
 	// engine, and with the given durability requirement. This wrapper panics
 	// when unexpected operations (e.g., write operations) are executed on it
@@ -963,6 +974,9 @@ type Engine interface {
 	// All iterators created from a read-only engine are guaranteed to provide a
 	// consistent snapshot of the underlying engine. See the comment on the
 	// Reader interface and the Reader.ConsistentIterators method.
+	//
+	// TODO(sumeer,jackson): Remove this method and force the caller to operate
+	// explicitly with a separate WriteBatch and Reader.
 	NewReadOnly(durability DurabilityRequirement) ReadWriter
 	// NewUnindexedBatch returns a new instance of a batched engine which wraps
 	// this engine. It is unindexed, in that writes to the batch are not
@@ -1019,11 +1033,22 @@ type Engine interface {
 	// additionally returns ingestion stats.
 	IngestLocalFilesWithStats(
 		ctx context.Context, paths []string) (pebble.IngestOperationStats, error)
-	// IngestAndExciseFiles is a variant of IngestLocalFilesWithStats
-	// that excises an ExciseSpan, and ingests either local or shared sstables or
-	// both.
+	// IngestAndExciseFiles is a variant of IngestLocalFilesWithStats that excises
+	// an ExciseSpan, and ingests either local or shared sstables or both. It also
+	// takes the flag sstsContainExciseTombstone to signal that the exciseSpan
+	// contains RANGEDELs and RANGEKEYDELs.
+	//
+	// NB: It is the caller's responsibility to ensure if
+	// sstsContainExciseTombstone is set to true, the ingestion sstables must
+	// contain a tombstone for the exciseSpan.
 	IngestAndExciseFiles(
-		ctx context.Context, paths []string, shared []pebble.SharedSSTMeta, exciseSpan roachpb.Span) (pebble.IngestOperationStats, error)
+		ctx context.Context,
+		paths []string,
+		shared []pebble.SharedSSTMeta,
+		external []pebble.ExternalFile,
+		exciseSpan roachpb.Span,
+		sstsContainExciseTombstone bool,
+	) (pebble.IngestOperationStats, error)
 	// IngestExternalFiles is a variant of IngestLocalFiles that takes external
 	// files. These files can be referred to by multiple stores, but are not
 	// modified or deleted by the Engine doing the ingestion.
@@ -1066,8 +1091,6 @@ type Engine interface {
 	// of the callback since it could cause a deadlock (since the callback may
 	// be invoked while holding mutexes).
 	RegisterFlushCompletedCallback(cb func())
-	// Filesystem functionality.
-	vfs.FS
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used. If spans is not empty, the checkpoint excludes
@@ -1101,8 +1124,10 @@ type Engine interface {
 	GetStoreID() (int32, error)
 
 	// Download informs the engine to download remote files corresponding to the
-	// given span.
-	Download(ctx context.Context, span roachpb.Span) error
+	// given span. The parameter copy controls how it is downloaded -- i.e. if it
+	// just copies the backing bytes to a local file of if it rewrites the file
+	// key-by-key to a new file.
+	Download(ctx context.Context, span roachpb.Span, copy bool) error
 }
 
 // Batch is the interface for batch specific operations.
@@ -1369,34 +1394,6 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 		})
 	}
 	return e
-}
-
-// EnvStats is a set of RocksDB env stats, including encryption status.
-type EnvStats struct {
-	// TotalFiles is the total number of files reported by rocksdb.
-	TotalFiles uint64
-	// TotalBytes is the total size of files reported by rocksdb.
-	TotalBytes uint64
-	// ActiveKeyFiles is the number of files using the active data key.
-	ActiveKeyFiles uint64
-	// ActiveKeyBytes is the size of files using the active data key.
-	ActiveKeyBytes uint64
-	// EncryptionType is an enum describing the active encryption algorithm.
-	// See: ccl/storageccl/engineccl/enginepbccl/key_registry.proto
-	EncryptionType int32
-	// EncryptionStatus is a serialized enginepbccl/stats.proto::EncryptionStatus protobuf.
-	EncryptionStatus []byte
-}
-
-// EncryptionRegistries contains the encryption-related registries:
-// Both are serialized protobufs.
-type EncryptionRegistries struct {
-	// FileRegistry is the list of files with encryption status.
-	// serialized storage/engine/enginepb/file_registry.proto::FileRegistry
-	FileRegistry []byte
-	// KeyRegistry is the list of keys, scrubbed of actual key data.
-	// serialized ccl/storageccl/engineccl/enginepbccl/key_registry.proto::DataKeysRegistry
-	KeyRegistry []byte
 }
 
 // GetIntent will look up an intent given a key. It there is no intent for a
@@ -2042,6 +2039,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	start, end roachpb.Key,
 	intents *[]roachpb.Intent,
 	maxLockConflicts int64,
+	targetLockConflictBytes int64,
 ) (needIntentHistory bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -2078,9 +2076,15 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 
 	var meta enginepb.MVCCMetadata
 	var ok bool
+	intentSize := int64(0)
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
 		if maxLockConflicts != 0 && int64(len(*intents)) >= maxLockConflicts {
 			// Return early if we're done accumulating intents; make no claims about
+			// not needing intent history.
+			return true /* needsIntentHistory */, nil
+		}
+		if targetLockConflictBytes != 0 && intentSize >= targetLockConflictBytes {
+			// Return early if we're exceed intent byte limits; make no claims about
 			// not needing intent history.
 			return true /* needsIntentHistory */, nil
 		}
@@ -2125,7 +2129,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 			needIntentHistory = true
 			continue
 		}
-		if conflictingIntent := meta.Timestamp.ToTimestamp().LessEq(ts); !conflictingIntent {
+		if intentConflicts := meta.Timestamp.ToTimestamp().LessEq(ts); !intentConflicts {
 			continue
 		}
 		key, err := iter.EngineKey()
@@ -2139,7 +2143,9 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		if ltKey.Strength != lock.Intent {
 			return false, errors.AssertionFailedf("unexpected strength for LockTableKey %s", ltKey.Strength)
 		}
-		*intents = append(*intents, roachpb.MakeIntent(meta.Txn, ltKey.Key))
+		conflictingIntent := roachpb.MakeIntent(meta.Txn, ltKey.Key)
+		intentSize += int64(conflictingIntent.Size())
+		*intents = append(*intents, conflictingIntent)
 	}
 	if err != nil {
 		return false, err

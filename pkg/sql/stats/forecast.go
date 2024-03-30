@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -70,7 +71,7 @@ const minGoodnessOfFit = 0.95
 // ForecastTableStatistics is deterministic: given the same observations it will
 // return the same forecasts.
 func ForecastTableStatistics(
-	ctx context.Context, sv *settings.Values, observed []*TableStatistic,
+	ctx context.Context, st *cluster.Settings, observed []*TableStatistic,
 ) []*TableStatistic {
 	// Group observed statistics by column set, skipping over partial statistics
 	// and statistics with inverted histograms.
@@ -113,7 +114,7 @@ func ForecastTableStatistics(
 		latest := observedByCols[colKey][0].CreatedAt
 		at := latest.Add(avgRefresh)
 
-		forecast, err := forecastColumnStatistics(ctx, sv, observedByCols[colKey], at, minGoodnessOfFit)
+		forecast, err := forecastColumnStatistics(ctx, st, observedByCols[colKey], at, minGoodnessOfFit)
 		if err != nil {
 			log.VEventf(
 				ctx, 2, "could not forecast statistics for table %v columns %s: %v",
@@ -146,7 +147,7 @@ func ForecastTableStatistics(
 // forecast time, it will return the same forecast.
 func forecastColumnStatistics(
 	ctx context.Context,
-	sv *settings.Values,
+	st *cluster.Settings,
 	observed []*TableStatistic,
 	at time.Time,
 	minRequiredFit float64,
@@ -290,7 +291,7 @@ func forecastColumnStatistics(
 		hist.adjustCounts(compareCtx, observed[0].HistogramData.ColumnType, nonNullRowCount, nonNullDistinctCount)
 
 		// Finally, convert back to HistogramData.
-		histData, err := hist.toHistogramData(observed[0].HistogramData.ColumnType)
+		histData, err := hist.toHistogramData(ctx, observed[0].HistogramData.ColumnType, st)
 		if err != nil {
 			return nil, err
 		}
@@ -343,7 +344,7 @@ func forecastColumnStatistics(
 					"forecasted histogram had first bucket with non-zero NumRange or DistinctRange: %s",
 					debugging,
 				)
-				sentryutil.SendReport(ctx, sv, err)
+				sentryutil.SendReport(ctx, &st.SV, err)
 				return nil, err
 			}
 			if bucket.UpperBound != tree.DNull {

@@ -29,12 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -235,9 +233,25 @@ func (sc *TableStatisticsCache) GetTableStats(
 	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast)
 }
 
-func statsDisallowedSystemTable(tableID descpb.ID) bool {
+// DisallowedOnSystemTable returns true if this tableID belongs to a special
+// system table on which we want to disallow stats collection and stats usage.
+func DisallowedOnSystemTable(tableID descpb.ID) bool {
 	switch tableID {
-	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID:
+	// Disable stats on system.table_statistics because it can lead to deadlocks
+	// around the stats cache (which issues an internal query in
+	// getTableStatsFromDB to fetch statistics for a single table, and that
+	// query in turn will want table stats on system.table_statistics to come up
+	// with a plan).
+	//
+	// Disable stats on system.lease since it's known to cause hangs.
+	// TODO(yuzefovich): check whether it's still a problem.
+	//
+	// Disable stats on system.scheduled_jobs because the table is mutated too
+	// frequently and would trigger too many stats collections. The potential
+	// benefit is not worth the potential performance hit.
+	// TODO(yuzefovich): re-evaluate this assumption. Perhaps we could at
+	// least enable manual collection on this table.
+	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID:
 		return true
 	}
 	return false
@@ -247,12 +261,7 @@ func statsDisallowedSystemTable(tableID descpb.ID) bool {
 // used by the query optimizer.
 func statsUsageAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Settings) bool {
 	if catalog.IsSystemDescriptor(table) {
-		// Disable stats usage on system.table_statistics and system.lease. Looking
-		// up stats on system.lease is known to cause hangs, and the same could
-		// happen with system.table_statistics. Stats on system.jobs and
-		// system.scheduled_jobs are also disallowed because autostats are disabled
-		// on them.
-		if statsDisallowedSystemTable(table.GetID()) {
+		if DisallowedOnSystemTable(table.GetID()) {
 			return false
 		}
 		// Return whether the optimizer is allowed to use stats on system tables.
@@ -267,14 +276,7 @@ func autostatsCollectionAllowed(
 	table catalog.TableDescriptor, clusterSettings *cluster.Settings,
 ) bool {
 	if catalog.IsSystemDescriptor(table) {
-		// Disable autostats on system.table_statistics and system.lease. Looking
-		// up stats on system.lease is known to cause hangs, and the same could
-		// happen with system.table_statistics. No need to collect stats if we
-		// cannot use them. Stats on system.jobs and system.scheduled_jobs
-		// are also disallowed because they are mutated too frequently and would
-		// trigger too many stats collections. The potential benefit is not worth
-		// the potential performance hit.
-		if statsDisallowedSystemTable(table.GetID()) {
+		if DisallowedOnSystemTable(table.GetID()) {
 			return false
 		}
 		// Return whether autostats collection is allowed on system tables,
@@ -396,7 +398,7 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 		defer sc.mu.Lock()
 
 		log.VEventf(ctx, 1, "reading statistics for table %d", tableID)
-		stats, err = sc.getTableStatsFromDB(ctx, tableID, forecast)
+		stats, err = sc.getTableStatsFromDB(ctx, tableID, forecast, sc.settings)
 		log.VEventf(ctx, 1, "finished reading statistics for table %d", tableID)
 	}()
 
@@ -461,7 +463,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 
 			log.VEventf(ctx, 1, "refreshing statistics for table %d", tableID)
 			// TODO(radu): pass the timestamp and use AS OF SYSTEM TIME.
-			stats, err = sc.getTableStatsFromDB(ctx, tableID, forecast)
+			stats, err = sc.getTableStatsFromDB(ctx, tableID, forecast, sc.settings)
 			log.VEventf(ctx, 1, "done refreshing statistics for table %d", tableID)
 		}()
 		if e.lastRefreshTimestamp.Equal(ts) {
@@ -647,6 +649,7 @@ func (sc *TableStatisticsCache) parseStats(
 // DecodeHistogramBuckets decodes encoded HistogramData in tabStat and writes
 // the resulting buckets into tabStat.Histogram.
 func DecodeHistogramBuckets(tabStat *TableStatistic) error {
+	h := tabStat.HistogramData
 	var offset int
 	if tabStat.NullCount > 0 {
 		// A bucket for NULL is not persisted, but we create a fake one to
@@ -655,7 +658,7 @@ func DecodeHistogramBuckets(tabStat *TableStatistic) error {
 		// buckets.
 		// TODO(michae2): Combine this with setHistogramBuckets, especially if we
 		// need to change both after #6224 is fixed (NULLS LAST in index ordering).
-		tabStat.Histogram = make([]cat.HistogramBucket, len(tabStat.HistogramData.Buckets)+1)
+		tabStat.Histogram = make([]cat.HistogramBucket, len(h.Buckets)+1)
 		tabStat.Histogram[0] = cat.HistogramBucket{
 			NumEq:         float64(tabStat.NullCount),
 			NumRange:      0,
@@ -664,15 +667,15 @@ func DecodeHistogramBuckets(tabStat *TableStatistic) error {
 		}
 		offset = 1
 	} else {
-		tabStat.Histogram = make([]cat.HistogramBucket, len(tabStat.HistogramData.Buckets))
+		tabStat.Histogram = make([]cat.HistogramBucket, len(h.Buckets))
 		offset = 0
 	}
 
 	// Decode the histogram data so that it's usable by the opt catalog.
 	var a tree.DatumAlloc
 	for i := offset; i < len(tabStat.Histogram); i++ {
-		bucket := &tabStat.HistogramData.Buckets[i-offset]
-		datum, _, err := keyside.Decode(&a, tabStat.HistogramData.ColumnType, bucket.UpperBound, encoding.Ascending)
+		bucket := &h.Buckets[i-offset]
+		datum, err := DecodeUpperBound(h.Version, h.ColumnType, &a, bucket.UpperBound)
 		if err != nil {
 			return err
 		}
@@ -749,7 +752,7 @@ func (tsp *TableStatisticProto) IsAuto() bool {
 // It ignores any statistics that cannot be decoded (e.g. because a user-defined
 // type that doesn't exist) and returns the rest (with no error).
 func (sc *TableStatisticsCache) getTableStatsFromDB(
-	ctx context.Context, tableID descpb.ID, forecast bool,
+	ctx context.Context, tableID descpb.ID, forecast bool, st *cluster.Settings,
 ) ([]*TableStatistic, error) {
 	getTableStatisticsStmt := `
 SELECT
@@ -795,11 +798,11 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 
 	// TODO(faizaanmadhani): Wrap merging behind a boolean so
 	// that it can be turned off.
-	merged := MergedStatistics(ctx, statsList)
+	merged := MergedStatistics(ctx, statsList, st)
 	statsList = append(merged, statsList...)
 
 	if forecast {
-		forecasts := ForecastTableStatistics(ctx, &sc.settings.SV, statsList)
+		forecasts := ForecastTableStatistics(ctx, sc.settings, statsList)
 		statsList = append(statsList, forecasts...)
 		// Some forecasts could have a CreatedAt time before or after some collected
 		// stats, so make sure the list is sorted in descending CreatedAt order.

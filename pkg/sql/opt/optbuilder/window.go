@@ -429,16 +429,20 @@ func (b *Builder) buildWindowOrdering(
 		cols := flattenTuples([]tree.TypedExpr{te})
 
 		nullsDefaultOrder := b.hasDefaultNullsOrder(t)
+		if !nullsDefaultOrder && isRangeModeWithOffsets {
+			// TODO(#94032): teach the execution engine to support this special
+			// case.
+			panic(errors.New("NULLS LAST with RANGE mode with OFFSET is currently unsupported"))
+		}
 		for k, e := range cols {
 			if !nullsDefaultOrder {
 				expr := tree.NewTypedIsNullExpr(e)
+				// TODO(#94032): reusing an existing column for the temporary IS
+				// NULL expression can be incorrect if that column was created
+				// for the previous window function (perhaps it's incorrect only
+				// when different PARTITION BY clauses are specified).
 				col := outScope.findExistingCol(expr, false /* allowSideEffects */)
 				if col == nil {
-					if isRangeModeWithOffsets {
-						// TODO(yuzefovich): teach the execution engine to
-						// support this special case (#94032).
-						panic(errors.New("NULLS LAST with RANGE mode with OFFSET is currently unsupported"))
-					}
 					// Use an anonymous name because the column cannot be referenced
 					// in other expressions.
 					colName := scopeColName("").WithMetadataName(

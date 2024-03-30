@@ -28,10 +28,6 @@ go_test(
     srcs = ["agg_metric_test.go"],
     data = glob(["testdata/**"]),
     embed = [":aggmetric"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/roachpb",

@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"math"
 	"net"
 	"net/url"
 	"os"
@@ -55,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server/autoconfig"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
@@ -444,19 +442,13 @@ var vmoduleSetting = settings.RegisterStringSetting(
 // metrics.
 func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
 	rootSQLMetrics := sql.MakeBaseMemMetrics("root", opts.histogramWindowInterval)
-	// We do not set memory monitors or a noteworthy limit because the children of
-	// this monitor will be setting their own noteworthy limits.
-	rootSQLMemoryMonitor := mon.NewMonitor(
-		"root",
-		mon.NewMemoryResourceWithErrorHint(
-			"Consider increasing --max-sql-memory startup parameter.", /* hint */
-		),
-		rootSQLMetrics.CurBytesCount,
-		rootSQLMetrics.MaxBytesHist,
-		-1,            /* increment: use default increment */
-		math.MaxInt64, /* noteworthy */
-		opts.settings,
-	)
+	rootSQLMemoryMonitor := mon.NewMonitor(mon.Options{
+		Name:     "root",
+		CurCount: rootSQLMetrics.CurBytesCount,
+		MaxHist:  rootSQLMetrics.MaxBytesHist,
+		Settings: opts.settings,
+	})
+	rootSQLMemoryMonitor.MarkAsRootSQLMonitor()
 	// Set the limit to the memoryPoolSize. Note that this memory monitor also
 	// serves as a parent for a memory monitor that accounts for memory used in
 	// the KV layer at the same node.
@@ -515,8 +507,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 			}
 			if _, err := r.cfg.sqlInstanceStorage.CreateNodeInstance(
 				ctx,
-				s.ID(),
-				s.Expiration(),
+				s,
 				r.cfg.AdvertiseAddr,
 				r.cfg.SQLAdvertiseAddr,
 				r.cfg.Locality,
@@ -679,6 +670,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.clock,
 		cfg.Settings,
 		settingsWatcher,
+		cfg.sqlLivenessProvider,
 		codec,
 		lmKnobs,
 		cfg.stopper,
@@ -972,6 +964,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RoleMemberCache: sql.NewMembershipCache(
 			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper,
 		),
+		SequenceCacheNode: sessiondatapb.NewSequenceCacheNode(),
 		SessionInitCache: sessioninit.NewCache(
 			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper,
 		),
@@ -996,7 +989,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
-			execinfra.Version,
 			cfg.Settings,
 			cfg.nodeIDContainer.SQLInstanceID(),
 			cfg.rpcContext,
@@ -1035,7 +1027,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		EventsExporter:             cfg.eventsExporter,
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
-		AutoConfigProvider:         cfg.AutoConfigProvider,
 	}
 
 	if codec.ForSystemTenant() {
@@ -1116,12 +1107,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if externalConnKnobs := cfg.TestingKnobs.ExternalConnection; externalConnKnobs != nil {
 		execCfg.ExternalConnectionTestingKnobs = externalConnKnobs.(*externalconn.TestingKnobs)
 	}
-	if autoConfigKnobs := cfg.TestingKnobs.AutoConfig; autoConfigKnobs != nil {
-		knobs := autoConfigKnobs.(*autoconfig.TestingKnobs)
-		if knobs.Provider != nil {
-			execCfg.AutoConfigProvider = knobs.Provider
-		}
-	}
 
 	statsRefresher := stats.MakeRefresher(
 		cfg.AmbientCtx,
@@ -1145,7 +1130,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlMemMetrics,
 		rootSQLMemoryMonitor,
 		cfg.HistogramWindowInterval(),
-		cfg.eventsExporter,
 		execCfg,
 	)
 
@@ -1161,15 +1145,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// to server, if server is closed, we don't have to worry about
 	// returning the memory allocated to internalDBMonitor since the
 	// parent monitor is being closed anyway.
-	internalDBMonitor := mon.NewMonitor(
-		"internal sql executor",
-		mon.MemoryResource,
-		internalMemMetrics.CurBytesCount,
-		internalMemMetrics.MaxBytesHist,
-		-1,            /* use default increment */
-		math.MaxInt64, /* noteworthy */
-		cfg.Settings,
-	)
+	internalDBMonitor := mon.NewMonitor(mon.Options{
+		Name:     "internal sql executor",
+		CurCount: internalMemMetrics.CurBytesCount,
+		MaxHist:  internalMemMetrics.MaxBytesHist,
+		Settings: cfg.Settings,
+	})
 	internalDBMonitor.StartNoReserved(ctx, pgServer.SQLServer.GetBytesMonitor())
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
@@ -1448,6 +1429,24 @@ func (s *SQLServer) preStart(
 		}
 	}
 
+	// Initialize the version cluster setting from storage.
+	//
+	// NB: In the context of the system tenant, we may not have
+	// the version setting in SQL yet even though the in memory
+	// setting has been initialized in.
+	currentVersion := s.execCfg.Settings.Version.ActiveVersionOrEmpty(ctx).Version
+	if currentVersion.Equal(roachpb.Version{}) {
+		if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			v, err := s.settingsWatcher.GetClusterVersionFromStorage(ctx, txn)
+			if err != nil {
+				return err
+			}
+			return clusterversion.Initialize(ctx, v.Version, &s.execCfg.Settings.SV)
+		}); err != nil {
+			return errors.Wrap(err, "initializing cluster version")
+		}
+	}
+
 	// Initialize the settings watcher early in sql server startup. Settings
 	// values are meaningless before the watcher is initialized and most sub
 	// systems depend on system settings.
@@ -1506,8 +1505,7 @@ func (s *SQLServer) preStart(
 				// Write/acquire our instance row.
 				return s.sqlInstanceStorage.CreateNodeInstance(
 					ctx,
-					session.ID(),
-					session.Expiration(),
+					session,
 					s.cfg.AdvertiseAddr,
 					s.cfg.SQLAdvertiseAddr,
 					s.distSQLServer.Locality,
@@ -1517,8 +1515,7 @@ func (s *SQLServer) preStart(
 			}
 			return s.sqlInstanceStorage.CreateInstance(
 				ctx,
-				session.ID(),
-				session.Expiration(),
+				session,
 				s.cfg.AdvertiseAddr,
 				s.cfg.SQLAdvertiseAddr,
 				s.distSQLServer.Locality,
@@ -1721,8 +1718,6 @@ func (s *SQLServer) preStart(
 		}
 	}
 
-	s.waitForActiveAutoConfigEnvironments(ctx)
-
 	return nil
 }
 
@@ -1751,50 +1746,6 @@ func (s *SQLServer) startJobScheduler(ctx context.Context, knobs base.TestingKno
 		},
 		scheduledjobs.ProdJobSchedulerEnv,
 	)
-}
-
-// waitForActiveAutoConfigEnvironments waits until the set of
-// ActiveEnvironments is empty. ActiveEnvironments is empty once there
-// are no more tasks to run.
-//
-// This is sufficient to ensure all configuration task jobs have
-// completed becuase the environment runner only enqueues a task after
-// the previous task has completed and configuration profiles include
-// an "end task" that runs after all previous tasks.
-func (s *SQLServer) waitForActiveAutoConfigEnvironments(ctx context.Context) {
-	maxWait := 2 * time.Minute
-	serverKnobs := s.cfg.TestingKnobs.Server
-	if serverKnobs != nil && serverKnobs.(*TestingKnobs).AutoConfigProfileStartupWaitTime != nil {
-		maxWait = *serverKnobs.(*TestingKnobs).AutoConfigProfileStartupWaitTime
-	}
-
-	if maxWait == 0 {
-		log.Infof(ctx, "waiting for auto-configuration environments disabled")
-		return
-	}
-
-	envs := s.execCfg.AutoConfigProvider.ActiveEnvironments()
-	if len(envs) == 0 {
-		log.Infof(ctx, "auto-configuration environments not set or already complete")
-		return
-	}
-
-	log.Infof(ctx, "waiting up to %s for auto-configuration environments %v to complete", maxWait, envs)
-	ctx, cancel := context.WithTimeout(ctx, maxWait) // nolint:context
-	defer cancel()
-	retryCfg := retry.Options{
-		InitialBackoff: 100 * time.Millisecond,
-		MaxBackoff:     5 * time.Second,
-	}
-	waitStart := timeutil.Now()
-	for i := retry.StartWithCtx(ctx, retryCfg); i.Next(); {
-		envs := s.execCfg.AutoConfigProvider.ActiveEnvironments()
-		if len(envs) == 0 {
-			log.Infof(ctx, "auto-configuration environments reported no active tasks after %s", timeutil.Since(waitStart))
-			return
-		}
-	}
-	log.Warningf(ctx, "auto-configuration environments still running after %s, moving on", timeutil.Since(waitStart))
 }
 
 // startCheckService verifies that the tenant has the right
@@ -1897,12 +1848,13 @@ func startServeSQL(
 	pgPreServer *pgwire.PreServeConnHandler,
 	serveConn func(ctx context.Context, conn net.Conn, preServeStatus pgwire.PreServeStatus) error,
 	pgL net.Listener,
+	st *cluster.Settings,
 	socketFileCfg *string,
 ) error {
 	log.Ops.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
 
-	tcpKeepAlive := makeTCPKeepAliveManager()
+	tcpKeepAlive := makeTCPKeepAliveManager(st)
 
 	// The connManager is responsible for tearing down the net.Conn
 	// objects when the stopper tells us to shut down.
@@ -2085,4 +2037,9 @@ func (s *SQLServer) ExecutorConfig() *sql.ExecutorConfig {
 // InternalExecutor returns an executor for internal SQL queries.
 func (s *SQLServer) InternalExecutor() isql.Executor {
 	return s.internalExecutor
+}
+
+// MetricsRegistry returns the application-level metrics registry.
+func (s *SQLServer) MetricsRegistry() *metric.Registry {
+	return s.metricsRegistry
 }

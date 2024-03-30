@@ -16,14 +16,15 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"regexp"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -41,10 +42,11 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-// seqNum may be shared across multiple instances of this, so it should only
-// be change atomically.
+// All of the fields of operationGeneratorParams should only be accessed by
+// one goroutine.
 type operationGeneratorParams struct {
-	seqNum             *atomic.Int64
+	workerID           int
+	seqNum             int
 	errorRate          int
 	enumPct            int
 	rng                *rand.Rand
@@ -194,7 +196,10 @@ func (og *operationGenerator) randOp(
 		og.resetOpState(useDeclarativeSchemaChanger)
 		stmt, err = opFuncs[op](og, ctx, tx)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			// We can only ignore this error, if no other PgErrors
+			// were set in the clean up process.
+			if errors.Is(err, pgx.ErrNoRows) &&
+				!errors.HasType(err, &pgconn.PgError{}) {
 				continue
 			}
 			// Table select had a primary key swap, so no statement
@@ -454,7 +459,7 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 			// existing crdb_region column, but it is nullable, and therefore
 			// cannot be used as the implicit partitioning column.
 			if !columnForAsUsed {
-				columnNames, err := og.getTableColumns(ctx, tx, tableName.String(), true)
+				columnNames, err := og.getTableColumns(ctx, tx, tableName, true)
 				if err != nil {
 					return "", err
 				}
@@ -672,7 +677,7 @@ func (og *operationGenerator) alterDatabaseAddSuperRegion(
 			return PickAtLeast(og.params.rng, 1, nonSuperRegionRegions)
 		},
 		"UniqueName": func() *tree.Name {
-			name := tree.Name(fmt.Sprintf("super_region_%d", og.newUniqueSeqNum()))
+			name := tree.Name(fmt.Sprintf("super_region_%s", og.newUniqueSeqNumSuffix()))
 			return &name
 		},
 		"RegionsNotPartOfDatabase": func() (Values, error) {
@@ -882,9 +887,6 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	stmt.potentialExecErrors.add(pgcode.ForeignKeyViolation)
 	og.potentialCommitErrors.add(pgcode.ForeignKeyViolation)
 
-	// TODO why did I add this??
-	stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
-
 	// It's possible for the table to be dropped concurrently, while we are running
 	// validation. In which case a potential commit error is an undefined table
 	// error.
@@ -920,7 +922,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	columnNames, err := og.getTableColumns(ctx, tx, tableName.String(), true)
+	columnNames, err := og.getTableColumns(ctx, tx, tableName, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1191,13 +1193,16 @@ func (og *operationGenerator) createSequence(ctx context.Context, tx pgx.Tx) (*o
 	return stmt, nil
 }
 
+var trailingDigits = regexp.MustCompile(`\d+$`)
+
 func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
 	tableName, err := og.randTable(ctx, tx, og.pctExisting(false), "")
 	if err != nil {
 		return nil, err
 	}
 
-	tableIdx, err := strconv.Atoi(strings.TrimPrefix(tableName.Table(), "table"))
+	tableIdxStr := trailingDigits.FindString(tableName.Table())
+	tableIdx, err := strconv.Atoi(tableIdxStr)
 	if err != nil {
 		return nil, err
 	}
@@ -1214,7 +1219,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	}
 	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(
 		og.params.rng, "table", tableIdx, databaseHasMultiRegion,
-		!partiallyVisibleIndexNotSupported, og.newUniqueSeqNum,
+		!partiallyVisibleIndexNotSupported, og.newUniqueSeqNumSuffix,
 	)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
@@ -2795,7 +2800,12 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	stmt.sql = fmt.Sprintf(`COMMENT ON %s IS 'comment from the RSW'`, picked)
+	comment := "comment from the RSW"
+	if og.params.rng.Float64() < 0.3 {
+		// Delete the comment with some probability.
+		comment = ""
+	}
+	stmt.sql = fmt.Sprintf(`COMMENT ON %s IS '%s'`, picked, comment)
 	return stmt, nil
 }
 
@@ -2816,7 +2826,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			),
 			pgcode.UndefinedTable), nil
 	}
-	allColumns, err := og.getTableColumns(ctx, tx, tableName.String(), false)
+	allColumns, err := og.getTableColumns(ctx, tx, tableName, false)
 	nonGeneratedCols := allColumns
 	if err != nil {
 		return nil, errors.Wrapf(err, "error getting table columns for insert row")
@@ -2832,10 +2842,10 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 		nonGeneratedCols = truncated
 	}
-	colNames := []string{}
+	nonGeneratedColNames := []string{}
 	rows := [][]string{}
 	for _, col := range nonGeneratedCols {
-		colNames = append(colNames, col.name)
+		nonGeneratedColNames = append(nonGeneratedColNames, col.name)
 	}
 	numRows := og.randIntn(3) + 1
 	for i := 0; i < numRows; i++ {
@@ -2847,6 +2857,15 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			// instead.
 			if col.typ.Family() == types.Oid.Family() {
 				d = tree.NewDOid(randgen.RandColumnType(og.params.rng).Oid())
+			}
+			// We have seen cases where randomly generated ints easily hit an
+			// integer overflow in our workload when we allow large numbers.
+			// Since there is no real advantage to testing such numbers,
+			// limit the largeness by always setting the amount of bits to
+			// 8 (-128 to 127) - ensuring we won't overflow even with the
+			// smallest int (INT2, -32768 to 32767).
+			if col.typ.Family() == types.IntFamily {
+				d = tree.NewDInt(tree.DInt(int8(og.params.rng.Uint64())))
 			}
 			str := tree.AsStringWithFlags(d, tree.FmtParsable)
 			// For strings use the actual type, so that comparisons for NULL values are sane.
@@ -2862,7 +2881,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	anyInvalidInserts := false
 	stmt = makeOpStmt(OpStmtDML)
 	for _, row := range rows {
-		invalidInsert, generatedErrors, potentialErrors, err := og.validateGeneratedExpressionsForInsert(ctx, tx, tableName, colNames, allColumns, row)
+		invalidInsert, generatedErrors, potentialErrors, err := og.validateGeneratedExpressionsForInsert(ctx, tx, tableName, nonGeneratedColNames, allColumns, row)
 		if err != nil {
 			return nil, err
 		}
@@ -2873,9 +2892,9 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			// We will be pessimistic and assume that other column related errors can
 			// be hit, since the function above fails only on generated columns. But,
 			// there maybe index expressions with the exact same problem.
-			stmt.expectedExecErrors.add(pgcode.NumericValueOutOfRange)
-			stmt.expectedExecErrors.add(pgcode.FloatingPointException)
-			stmt.expectedExecErrors.add(pgcode.NotNullViolation)
+			stmt.potentialExecErrors.add(pgcode.NumericValueOutOfRange)
+			stmt.potentialExecErrors.add(pgcode.FloatingPointException)
+			stmt.potentialExecErrors.add(pgcode.NotNullViolation)
 			anyInvalidInserts = true
 		}
 	}
@@ -2888,7 +2907,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		// Verify if the new row will violate unique constraints by checking the constraints and
 		// existing rows in the database.
 		var generatedErrors codesWithConditions
-		uniqueConstraintViolation, generatedErrors, err = og.valuesViolateUniqueConstraints(ctx, tx, tableName, colNames, allColumns, rows)
+		uniqueConstraintViolation, generatedErrors, err = og.valuesViolateUniqueConstraints(ctx, tx, tableName, nonGeneratedColNames, allColumns, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -2897,7 +2916,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
-		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
+		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -2921,7 +2940,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	stmt.sql = fmt.Sprintf(
 		`INSERT INTO %s (%s) VALUES %s`,
 		tableName,
-		strings.Join(colNames, ","),
+		strings.Join(nonGeneratedColNames, ","),
 		strings.Join(formattedRows, ","),
 	)
 	return stmt, nil
@@ -3168,13 +3187,14 @@ type column struct {
 	nullable            bool
 	generated           bool
 	generatedExpression string
+	ordinal             int
 }
 
 func (og *operationGenerator) getTableColumns(
-	ctx context.Context, tx pgx.Tx, tableName string, shuffle bool,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, shuffle bool,
 ) ([]column, error) {
 	q := fmt.Sprintf(`
-    WITH tab_json AS (
+   WITH tab_json AS (
                     SELECT crdb_internal.pb_to_json(
                             'desc',
                             descriptor
@@ -3187,14 +3207,16 @@ func (og *operationGenerator) getTableColumns(
                       ),
          columns AS (
                   SELECT c->>'computeExpr' AS generation_expression,
-                         c->>'name' AS column_name
+                         c->>'name' AS column_name,
+												 c->>'id' AS ordinal
                     FROM columns_json
                  )
-  SELECT show_columns.column_name,
+  SELECT quote_ident(show_columns.column_name),
          show_columns.data_type,
          show_columns.is_nullable,
          columns.generation_expression IS NOT NULL AS is_generated,
-         COALESCE(columns.generation_expression, '') as generated_expression
+         COALESCE(columns.generation_expression, '') AS generated_expression,
+			   columns.ordinal::INT-1
     FROM [SHOW COLUMNS FROM %s] AS show_columns, columns
    WHERE show_columns.column_name != 'rowid'
          AND show_columns.column_name = columns.column_name
@@ -3204,12 +3226,13 @@ func (og *operationGenerator) getTableColumns(
 		return nil, errors.Wrapf(err, "getting table columns from %s", tableName)
 	}
 	defer rows.Close()
+
 	var typNames []string
 	var ret []column
 	for rows.Next() {
 		var c column
 		var typName string
-		err := rows.Scan(&c.name, &typName, &c.nullable, &c.generated, &c.generatedExpression)
+		err := rows.Scan(&c.name, &typName, &c.nullable, &c.generated, &c.generatedExpression, &c.ordinal)
 		if err != nil {
 			return nil, err
 		}
@@ -3244,11 +3267,14 @@ func (og *operationGenerator) getTableColumns(
 func (og *operationGenerator) randColumn(
 	ctx context.Context, tx pgx.Tx, tableName tree.TableName, pctExisting int,
 ) (string, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return "", err
+	}
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
-		return fmt.Sprintf("col%s_%d",
-			strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNum()), nil
+		return fmt.Sprintf("col%s_%s",
+			strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNumSuffix()), nil
 	}
 	q := fmt.Sprintf(`
   SELECT column_name
@@ -3270,12 +3296,15 @@ ORDER BY random()
 func (og *operationGenerator) randColumnWithMeta(
 	ctx context.Context, tx pgx.Tx, tableName tree.TableName, pctExisting int,
 ) (column, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return column{}, err
+	}
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
 		return column{
-			name: fmt.Sprintf("col%s_%d",
-				strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNum()),
+			name: fmt.Sprintf("col%s_%s",
+				strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNumSuffix()),
 		}, nil
 	}
 	q := fmt.Sprintf(`
@@ -3314,7 +3343,7 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 	query.WriteString(`
     SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable
       FROM information_schema.columns
-		 WHERE table_name ~ 'table[0-9]+' AND column_name <> 'rowid'
+		 WHERE table_name SIMILAR TO 'table_w[0-9]_+%' AND column_name <> 'rowid'
   `)
 	query.WriteString(fmt.Sprintf(`
 			AND crdb_sql_type = '%s'
@@ -3359,7 +3388,9 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 func (og *operationGenerator) randParentColumnForFkRelation(
 	ctx context.Context, tx pgx.Tx, unique bool,
 ) (*tree.TableName, *column, error) {
-
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, nil, err
+	}
 	subQuery := strings.Builder{}
 	subQuery.WriteString(`
 		SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable, contype, conkey
@@ -3373,7 +3404,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 		        SELECT contype, conkey, conrelid
 		          FROM pg_catalog.pg_constraint
 		       ) AS cons ON cons.conrelid = cols.tableid
-		 WHERE table_name ~ 'table[0-9]+'
+		 WHERE table_name SIMILAR TO 'table_w[0-9]_+%'
   `)
 	if unique {
 		subQuery.WriteString(`
@@ -3404,7 +3435,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
 	if err != nil {
 		if rbErr := nestedTxn.Rollback(ctx); rbErr != nil {
-			err = errors.CombineErrors(err, errors.WithStack(rbErr))
+			err = errors.CombineErrors(rbErr, err)
 		}
 		return nil, nil, err
 	}
@@ -3432,6 +3463,9 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 func (og *operationGenerator) randConstraint(
 	ctx context.Context, tx pgx.Tx, tableName string,
 ) (string, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return "", err
+	}
 	q := fmt.Sprintf(`
   SELECT constraint_name
     FROM [SHOW CONSTRAINTS FROM %s]
@@ -3449,11 +3483,14 @@ ORDER BY random()
 func (og *operationGenerator) randIndex(
 	ctx context.Context, tx pgx.Tx, tableName tree.TableName, pctExisting int,
 ) (string, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return "", err
+	}
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all indices by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
-		return fmt.Sprintf("index%s_%d",
-			strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNum()), nil
+		return fmt.Sprintf("index%s_%s",
+			strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNumSuffix()), nil
 	}
 	q := fmt.Sprintf(`
   SELECT index_name
@@ -3473,13 +3510,15 @@ ORDER BY random()
 func (og *operationGenerator) randSequence(
 	ctx context.Context, tx pgx.Tx, pctExisting int, desiredSchema string,
 ) (*tree.TableName, error) {
-
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, err
+	}
 	if desiredSchema != "" {
 		if og.randIntn(100) >= pctExisting {
 			treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 				SchemaName:     tree.Name(desiredSchema),
 				ExplicitSchema: true,
-			}, tree.Name(fmt.Sprintf("seq%d", og.newUniqueSeqNum())))
+			}, tree.Name(fmt.Sprintf("seq_%s", og.newUniqueSeqNumSuffix())))
 			return &treeSeqName, nil
 		}
 		q := fmt.Sprintf(`
@@ -3515,7 +3554,7 @@ func (og *operationGenerator) randSequence(
 		treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 			SchemaName:     tree.Name(randSchema),
 			ExplicitSchema: true,
-		}, tree.Name(fmt.Sprintf("seq%d", og.newUniqueSeqNum())))
+		}, tree.Name(fmt.Sprintf("seq_%s", og.newUniqueSeqNumSuffix())))
 		return &treeSeqName, nil
 	}
 
@@ -3552,7 +3591,7 @@ func (og *operationGenerator) randEnum(
 		if err != nil {
 			return nil, false, err
 		}
-		typeName := tree.MakeSchemaQualifiedTypeName(randSchema, fmt.Sprintf("enum%d", og.newUniqueSeqNum()))
+		typeName := tree.MakeSchemaQualifiedTypeName(randSchema, fmt.Sprintf("enum_%s", og.newUniqueSeqNumSuffix()))
 		return &typeName, false, nil
 	}
 	const q = `
@@ -3575,19 +3614,21 @@ ORDER BY random()
 func (og *operationGenerator) randTable(
 	ctx context.Context, tx pgx.Tx, pctExisting int, desiredSchema string,
 ) (*tree.TableName, error) {
-
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, err
+	}
 	if desiredSchema != "" {
 		if og.randIntn(100) >= pctExisting {
 			treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 				SchemaName:     tree.Name(desiredSchema),
 				ExplicitSchema: true,
-			}, tree.Name(fmt.Sprintf("table%d", og.newUniqueSeqNum())))
+			}, tree.Name(fmt.Sprintf("table_%s", og.newUniqueSeqNumSuffix())))
 			return &treeTableName, nil
 		}
 		q := fmt.Sprintf(`
 		  SELECT table_name
 		    FROM [SHOW TABLES]
-		   WHERE table_name ~ 'table[0-9]+'
+		   WHERE table_name SIMILAR TO 'table_w[0-9]_+%%'
 				 AND schema_name = '%s'
 		ORDER BY random()
 		   LIMIT 1;
@@ -3618,14 +3659,14 @@ func (og *operationGenerator) randTable(
 		treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 			SchemaName:     tree.Name(randSchema),
 			ExplicitSchema: true,
-		}, tree.Name(fmt.Sprintf("table%d", og.newUniqueSeqNum())))
+		}, tree.Name(fmt.Sprintf("table_%s", og.newUniqueSeqNumSuffix())))
 		return &treeTableName, nil
 	}
 
 	const q = `
   SELECT schema_name, table_name
     FROM [SHOW TABLES]
-   WHERE table_name ~ 'table[0-9]+'
+   WHERE table_name SIMILAR TO 'table_w[0-9]_+%'
 ORDER BY random()
    LIMIT 1;
 `
@@ -3646,12 +3687,15 @@ ORDER BY random()
 func (og *operationGenerator) randView(
 	ctx context.Context, tx pgx.Tx, pctExisting int, desiredSchema string,
 ) (*tree.TableName, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, err
+	}
 	if desiredSchema != "" {
 		if og.randIntn(100) >= pctExisting {
 			treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 				SchemaName:     tree.Name(desiredSchema),
 				ExplicitSchema: true,
-			}, tree.Name(fmt.Sprintf("view%d", og.newUniqueSeqNum())))
+			}, tree.Name(fmt.Sprintf("view_%s", og.newUniqueSeqNumSuffix())))
 			return &treeViewName, nil
 		}
 
@@ -3687,8 +3731,11 @@ func (og *operationGenerator) randView(
 		treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 			SchemaName:     tree.Name(randSchema),
 			ExplicitSchema: true,
-		}, tree.Name(fmt.Sprintf("view%d", og.newUniqueSeqNum())))
+		}, tree.Name(fmt.Sprintf("view_%s", og.newUniqueSeqNumSuffix())))
 		return &treeViewName, nil
+	}
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, err
 	}
 	const q = `
   SELECT schema_name, table_name
@@ -3787,12 +3834,7 @@ func (og *operationGenerator) createSchema(ctx context.Context, tx pgx.Tx) (*opS
 		opStmt.expectedExecErrors.add(pgcode.DuplicateSchema)
 	}
 
-	// TODO(sql-foundations): CREATE SCHEMA AUTHORIZATION is not currently
-	// support in the DSC. Either add support and re-enable it here or gate the
-	// AUTHORIZATION aspect by checking if the DSC is enabled or not. Previously,
-	// `username.RootUserName().Normalized()` was used for
-	// MakeRoleSpecWithRoleName.
-	stmt := randgen.MakeSchemaName(ifNotExists, schemaName, tree.MakeRoleSpecWithRoleName(""))
+	stmt := randgen.MakeSchemaName(ifNotExists, schemaName, tree.MakeRoleSpecWithRoleName(username.RootUserName().Normalized()))
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
 }
@@ -3800,8 +3842,11 @@ func (og *operationGenerator) createSchema(ctx context.Context, tx pgx.Tx) (*opS
 func (og *operationGenerator) randSchema(
 	ctx context.Context, tx pgx.Tx, pctExisting int,
 ) (string, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return "", err
+	}
 	if og.randIntn(100) >= pctExisting {
-		return fmt.Sprintf("schema%d", og.newUniqueSeqNum()), nil
+		return fmt.Sprintf("schema_%s", og.newUniqueSeqNumSuffix()), nil
 	}
 	const q = `
   SELECT schema_name
@@ -3830,17 +3875,24 @@ func (og *operationGenerator) dropSchema(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 	crossReferences := false
+	crossSchemaFunctionReferences := false
 	if schemaExists {
 		crossReferences, err = og.schemaContainsTypesWithCrossSchemaReferences(ctx, tx, schemaName)
 		if err != nil {
 			return nil, err
 		}
+		crossSchemaFunctionReferences, err = og.schemaContainsHasReferredFunctions(ctx, tx, schemaName)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedSchema, !schemaExists},
 		{pgcode.InvalidSchemaName, schemaName == catconstants.PublicSchemaName},
-		{pgcode.FeatureNotSupported, crossReferences},
+		{pgcode.FeatureNotSupported, crossReferences && !og.useDeclarativeSchemaChanger},
+		{pgcode.DependentObjectsStillExist, crossSchemaFunctionReferences && !og.useDeclarativeSchemaChanger},
 	})
 
 	stmt.sql = fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName)
@@ -3859,6 +3911,14 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	enumQuery := With([]CTE{
 		{"descriptors", descJSONQuery},
 		{"enums", enumDescsQuery},
+	}, `SELECT
+				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
+				COALESCE((descriptor->'state')::INT != 0, false) AS non_public
+			FROM enums
+		`)
+	enumMemberQuery := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"enums", enumDescsQuery},
 		{"enum_members", enumMemberDescsQuery},
 	}, `SELECT
 				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
@@ -3866,8 +3926,33 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 				COALESCE(member->>'direction' = 'REMOVE', false) AS dropping
 			FROM enum_members
 		`)
+	schemasQuery := With([]CTE{
+		{"descriptors", descJSONQuery},
+	}, `SELECT quote_ident(name) FROM descriptors WHERE descriptor ? 'schema'`)
 
+	functionsQuery := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT
+	quote_ident(schema_id::REGNAMESPACE::STRING) AS schema,
+	quote_ident(name) AS name,
+	array_to_string(proargnames, ',') AS args
+FROM
+	functions
+	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000);`)
 	enums, err := Collect(ctx, og, tx, pgx.RowToMap, enumQuery)
+	if err != nil {
+		return nil, err
+	}
+	enumMembers, err := Collect(ctx, og, tx, pgx.RowToMap, enumMemberQuery)
+	if err != nil {
+		return nil, err
+	}
+	schemas, err := Collect(ctx, og, tx, pgx.RowTo[string], schemasQuery)
+	if err != nil {
+		return nil, err
+	}
+	functions, err := Collect(ctx, og, tx, pgx.RowToMap, functionsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -3878,19 +3963,28 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	useParamRefs := og.randIntn(2) == 0
 	useReturnRefs := og.randIntn(2) == 0
 
-	var droppingEnums []string
+	var nonPublicEnums []string
+	var droppingEnumMembers []string
 	var possibleBodyReferences []string
 	var possibleParamReferences []string
 	var possibleReturnReferences []string
+	var fnDuplicate bool
 
 	for i, enum := range enums {
-		if enum["dropping"].(bool) {
-			droppingEnums = append(droppingEnums, enum["name"].(string))
+		if enum["non_public"].(bool) {
+			nonPublicEnums = append(nonPublicEnums, enum["name"].(string))
 			continue
 		}
 		possibleReturnReferences = append(possibleReturnReferences, enum["name"].(string))
 		possibleParamReferences = append(possibleParamReferences, fmt.Sprintf(`enum_%d %s`, i, enum["name"]))
-		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`(%s::%s IS NULL)`, enum["value"], enum["name"]))
+	}
+
+	for _, member := range enumMembers {
+		if member["dropping"].(bool) {
+			droppingEnumMembers = append(droppingEnumMembers, fmt.Sprintf(`%s::%s`, member["value"], member["name"]))
+			continue
+		}
+		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`(%s::%s IS NULL)`, member["value"], member["name"]))
 	}
 
 	for _, table := range tables {
@@ -3898,30 +3992,41 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`((SELECT count(*) FROM %s LIMIT 0) = 0)`, table))
 	}
 
-	// TODO(chrisseto): There's no randomization across STRICT, VOLATILE,
-	// IMMUTABLE, STABLE, STRICT, and [NOT] LEAKPROOF. That's likely not relevant
-	// to the schema workload but may become a nice to have.
-	stmt, expectedCode, err := Generate[*tree.CreateRoutine](og.params.rng, og.produceError(), []GenerationCase{
-		// 1. Nothing special, fully self contained function.
-		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
-		// 2. 1 or more table or type references spread across parameters, return types, or the function body.
-		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $$ SELECT NULL WHERE { BodyRefs } $$`},
-		// 3. Reference a table that does not exist.
-		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT * FROM "ThisTableDoesNotExist" $$`},
-		// 4. Reference a UDT that does not exist.
-		{pgcode.UndefinedObject, `CREATE FUNCTION { UniqueName } (IN p1 "ThisTypeDoesNotExist") RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
-		// 5. Reference an Enum that's in the process of being dropped
-		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } (IN p1 { DroppingEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
-	}, template.FuncMap{
+	// For each function generate a possible invocation passing in null arguments.
+	for _, function := range functions {
+		args := ""
+		if function["args"] != nil {
+			args = function["args"].(string)
+			argIn := strings.Builder{}
+			// TODO(fqazi): Longer term we should populate actual arguments and
+			// not just NULLs.
+			for range strings.Split(args, ",") {
+				if argIn.Len() > 0 {
+					argIn.WriteString(",")
+				}
+				argIn.WriteString("NULL")
+			}
+			args = argIn.String()
+		}
+		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf("(SELECT %s.%s(%s) IS NOT NULL)", function["schema"].(string), function["name"].(string), args))
+	}
+
+	placeholderMap := template.FuncMap{
 		"UniqueName": func() *tree.Name {
-			name := tree.Name(fmt.Sprintf("udf_%d", og.newUniqueSeqNum()))
+			name := tree.Name(fmt.Sprintf("udf_%s", og.newUniqueSeqNumSuffix()))
 			return &name
 		},
-		"DroppingEnum": func() (string, error) {
-			return PickOne(og.params.rng, droppingEnums)
+		"Schema": func() (string, error) {
+			return PickOne(og.params.rng, schemas)
+		},
+		"NonPublicEnum": func() (string, error) {
+			return PickOne(og.params.rng, nonPublicEnums)
+		},
+		"DroppingEnumMember": func() (string, error) {
+			return PickOne(og.params.rng, droppingEnumMembers)
 		},
 		"ParamRefs": func() (string, error) {
-			refs, err := PickAtLeast(og.params.rng, 1, possibleParamReferences)
+			refs, err := PickBetween(og.params.rng, 1, 99, possibleParamReferences)
 			if useParamRefs && err == nil {
 				return strings.Join(refs, ", "), nil
 			}
@@ -3941,13 +4046,49 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 			}
 			return "TRUE", nil //nolint:returnerrcheck
 		},
-	})
+	}
 
+	// TODO(chrisseto): There's no randomization across STRICT, VOLATILE,
+	// IMMUTABLE, STABLE, STRICT, and [NOT] LEAKPROOF. That's likely not relevant
+	// to the schema workload but may become a nice to have.
+	stmt, expectedCode, err := Generate[*tree.CreateRoutine](og.params.rng, og.produceError(), []GenerationCase{
+		// 1. Nothing special, fully self contained function.
+		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } (i int, j int) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+		// 2. 1 or more table or type references spread across parameters, return types, or the function body.
+		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $$ SELECT NULL WHERE { BodyRefs } $$`},
+		// 3. Reference a table that does not exist.
+		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT * FROM "ThisTableDoesNotExist" $$`},
+		// 4. Reference a UDT that does not exist.
+		{pgcode.UndefinedObject, `CREATE FUNCTION { UniqueName } (IN p1 "ThisTypeDoesNotExist") RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+		// 5. Reference an Enum that's in the process of being dropped
+		{pgcode.UndefinedObject, `CREATE FUNCTION { UniqueName } (IN p1 { NonPublicEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+		// 6. Reference an Enum value that's in the process of being dropped
+		{pgcode.InvalidParameterValue, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT { DroppingEnumMember } $$`},
+	}, placeholderMap)
 	if err != nil {
 		return nil, err
 	}
+
+	// We don't necessarily generate unique function names all the time.
+	// Upon a successful completion, let's check to make sure that our
+	// function doesn't exist already (overloads are fine).
+	if expectedCode == pgcode.SuccessfulCompletion {
+		params := util.Map(stmt.Params, func(t tree.RoutineParam) string {
+			return t.Type.SQLString()
+		})
+
+		name := stmt.Name.ObjectName.String()
+		formattedParams := strings.Join(params, ", ")
+
+		fnDuplicate, err = og.fnExists(ctx, tx, name, formattedParams)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return newOpStmt(stmt, codesWithConditions{
 		{expectedCode, true},
+		{pgcode.DuplicateFunction, fnDuplicate},
 	}), nil
 }
 
@@ -3956,7 +4097,8 @@ func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opS
 		{"descriptors", descJSONQuery},
 		{"functions", functionDescsQuery},
 	}, `SELECT
-			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')'
+			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')' as name,
+			(id + 100000) as func_oid
 			FROM functions
 			JOIN LATERAL (
 				SELECT
@@ -3969,18 +4111,55 @@ func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opS
 			`,
 	)
 
-	functions, err := Collect(ctx, og, tx, pgx.RowTo[string], q)
+	functions, err := Collect(ctx, og, tx, pgx.RowToMap, q)
 	if err != nil {
 		return nil, err
+	}
+
+	functionDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"function_deps", functionDepsQuery},
+		},
+			`SELECT DISTINCT to_oid::INT8 FROM function_deps;`,
+		))
+	if err != nil {
+		return nil, err
+	}
+
+	functionDepsMap := make(map[int64]struct{})
+	for _, f := range functionDeps {
+		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+
+	functionWithDeps := make([]map[string]any, 0, len(functions))
+	functionWithoutDeps := make([]map[string]any, 0, len(functions))
+	for _, f := range functions {
+		if _, ok := functionDepsMap[f["func_oid"].(int64)]; ok {
+			functionWithDeps = append(functionWithDeps, f)
+		} else {
+			functionWithoutDeps = append(functionWithoutDeps, f)
+		}
 	}
 
 	stmt, expectedCode, err := Generate[*tree.DropRoutine](og.params.rng, og.produceError(), []GenerationCase{
 		{pgcode.UndefinedFunction, `DROP FUNCTION "NoSuchFunction"`},
 		{pgcode.SuccessfulCompletion, `DROP FUNCTION IF EXISTS "NoSuchFunction"`},
-		{pgcode.SuccessfulCompletion, `DROP FUNCTION { Function }`},
+		{pgcode.SuccessfulCompletion, `DROP FUNCTION { FunctionWithoutDeps }`},
+		{pgcode.DependentObjectsStillExist, `DROP FUNCTION { FunctionWithDeps }`},
 	}, template.FuncMap{
-		"Function": func() (string, error) {
-			return PickOne(og.params.rng, functions)
+		"FunctionWithoutDeps": func() (string, error) {
+			one, err := PickOne(og.params.rng, functionWithoutDeps)
+			if err != nil {
+				return "", err
+			}
+			return one["name"].(string), nil
+		},
+		"FunctionWithDeps": func() (string, error) {
+			one, err := PickOne(og.params.rng, functionWithDeps)
+			if err != nil {
+				return "", err
+			}
+			return one["name"].(string), nil
 		},
 	})
 
@@ -3999,7 +4178,8 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 	}, `SELECT
 				quote_ident(schema_id::REGNAMESPACE::TEXT) AS schema,
 				quote_ident(name) AS name,
-				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')' AS qualified_name
+				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')' AS qualified_name,
+				(id + 100000) as func_oid
 			FROM functions
 			JOIN LATERAL (
 				SELECT
@@ -4016,6 +4196,31 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
+	functionDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"function_deps", functionDepsQuery},
+		},
+			`SELECT DISTINCT to_oid::INT8 FROM function_deps;`,
+		))
+	if err != nil {
+		return nil, err
+	}
+
+	functionDepsMap := make(map[int64]struct{})
+	for _, f := range functionDeps {
+		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+
+	functionWithDeps := make([]map[string]any, 0, len(functions))
+	functionWithoutDeps := make([]map[string]any, 0, len(functions))
+	for _, f := range functions {
+		if _, ok := functionDepsMap[f["func_oid"].(int64)]; ok {
+			functionWithDeps = append(functionWithDeps, f)
+		} else {
+			functionWithoutDeps = append(functionWithoutDeps, f)
+		}
+	}
+
 	stmt, expectedCode, err := Generate[*tree.AlterRoutineRename](og.params.rng, og.produceError(), []GenerationCase{
 		{pgcode.UndefinedFunction, `ALTER FUNCTION "NoSuchFunction" RENAME TO "IrrelevantFunctionName"`},
 		// TODO(chrisseto): Neither of these seem to work as expected. Renaming a
@@ -4024,14 +4229,18 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		// something to do with search paths and/or function overloads.
 		// {pgcode.DuplicateFunction, `{ with ExistingFunction } ALTER FUNCTION { .qualified_name } RENAME TO { ConflictingName . } { end }`},
 		// {pgcode.DuplicateFunction, `{ with ExistingFunction } ALTER FUNCTION { .qualified_name } RENAME TO { .name } { end }`},
-		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { (ExistingFunction).qualified_name } RENAME TO { UniqueName }`},
+		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { (ExistingFunctionWithoutDeps).qualified_name } RENAME TO { UniqueName }`},
+		{pgcode.FeatureNotSupported, `ALTER FUNCTION { (ExistingFunctionWithDeps).qualified_name } RENAME TO { UniqueName }`},
 	}, template.FuncMap{
 		"UniqueName": func() *tree.Name {
-			name := tree.Name(fmt.Sprintf("udf_%d", og.newUniqueSeqNum()))
+			name := tree.Name(fmt.Sprintf("udf_%s", og.newUniqueSeqNumSuffix()))
 			return &name
 		},
-		"ExistingFunction": func() (map[string]any, error) {
-			return PickOne(og.params.rng, functions)
+		"ExistingFunctionWithoutDeps": func() (map[string]any, error) {
+			return PickOne(og.params.rng, functionWithoutDeps)
+		},
+		"ExistingFunctionWithDeps": func() (map[string]any, error) {
+			return PickOne(og.params.rng, functionWithDeps)
 		},
 		"ConflictingName": func(existing map[string]any) (string, error) {
 			selected, err := PickOne(og.params.rng, util.Filter(functions, func(other map[string]any) bool {
@@ -4059,7 +4268,19 @@ func (og *operationGenerator) alterFunctionSetSchema(
 	functionsQuery := With([]CTE{
 		{"descriptors", descJSONQuery},
 		{"functions", functionDescsQuery},
-	}, `SELECT quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) FROM functions`)
+	}, `SELECT
+			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')'
+			FROM functions
+			JOIN LATERAL (
+				SELECT
+					COALESCE(array_agg(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname)), '{}') AS funcargs
+				FROM pg_catalog.pg_type
+				JOIN LATERAL (
+					SELECT unnest(proargtypes) AS oid FROM pg_catalog.pg_proc WHERE oid = (id + 100000)
+				) args ON args.oid = pg_type.oid
+			) funcargs ON TRUE
+			`,
+	)
 
 	schemasQuery := With([]CTE{
 		{"descriptors", descJSONQuery},
@@ -4121,7 +4342,7 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 			allTableExists = false
 			continue
 		}
-		colInfo, err := og.getTableColumns(ctx, tx, tableName.String(), false)
+		colInfo, err := og.getTableColumns(ctx, tx, tableName, false)
 		if err != nil {
 			return nil, err
 		}
@@ -4144,10 +4365,10 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 		}
 		col := colInfos[tableIdx][og.randIntn(len(colInfos[tableIdx]))]
 		if colIdx != 0 {
-			selectColumns.WriteString(",")
+			selectColumns.WriteString(", ")
 		}
 		selectColumns.WriteString(fmt.Sprintf("t%d.", tableIdx))
-		selectColumns.WriteString(tree.NameString(col.name))
+		selectColumns.WriteString(col.name)
 		selectColumns.WriteString(" AS ")
 		selectColumns.WriteString(fmt.Sprintf("col%d", colIdx))
 	}
@@ -4170,7 +4391,7 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 		selectQuery.WriteString(fmt.Sprintf("t%d ", idx))
 	}
 	if maxRowsToConsume > 0 {
-		selectQuery.WriteString(fmt.Sprintf(" FETCH FIRST %d ROWS ONLY", maxRowsToConsume))
+		selectQuery.WriteString(fmt.Sprintf("FETCH FIRST %d ROWS ONLY", maxRowsToConsume))
 	}
 	// Setup a statement with the query and a call back to validate the result
 	// set.
@@ -4254,8 +4475,14 @@ func (og *operationGenerator) randIntn(topBound int) int {
 	return og.params.rng.Intn(topBound)
 }
 
-func (og *operationGenerator) newUniqueSeqNum() int64 {
-	return og.params.seqNum.Add(1)
+// randFloat64 returns an float64 in the range [0,1.0).
+func (og *operationGenerator) randFloat64() float64 {
+	return og.params.rng.Float64()
+}
+
+func (og *operationGenerator) newUniqueSeqNumSuffix() string {
+	og.params.seqNum++
+	return fmt.Sprintf("w%d_%d", og.params.workerID, og.params.seqNum)
 }
 
 // typeFromTypeName resolves a type string to a types.T struct so that it can be
@@ -4279,7 +4506,7 @@ func (og *operationGenerator) typeFromTypeName(
 }
 
 // Check if the test is running with a mixed version cluster, with a version
-// less than or equal to the target version number. This can be used to detect
+// less than the target version number. This can be used to detect
 // in mixed version environments if certain errors should be encountered.
 func isClusterVersionLessThan(
 	ctx context.Context, tx pgx.Tx, targetVersion roachpb.Version,
@@ -4293,5 +4520,19 @@ func isClusterVersionLessThan(
 	if err != nil {
 		return false, err
 	}
-	return clusterVersion.LessEq(targetVersion), nil
+	return clusterVersion.Less(targetVersion), nil
+}
+
+func (og *operationGenerator) setSeedInDB(ctx context.Context, tx pgx.Tx) error {
+	if notSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V24_1.Version()); err != nil {
+		return err
+	} else if notSupported {
+		// To allow the schemachange workload to work in a mixed-version state,
+		// this should not be treated as an error.
+		return nil
+	}
+	if _, err := tx.Exec(ctx, "SELECT setseed($1)", og.randFloat64()); err != nil {
+		return err
+	}
+	return nil
 }

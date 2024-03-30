@@ -47,7 +47,6 @@ type stmtKey struct {
 // sampledPlanKey is used by the Optimizer to determine if we should build a full EXPLAIN plan.
 type sampledPlanKey struct {
 	stmtNoConstants string
-	failed          bool
 	implicitTxn     bool
 	database        string
 }
@@ -57,9 +56,6 @@ func (p sampledPlanKey) size() int64 {
 }
 
 func (s stmtKey) String() string {
-	if s.failed {
-		return "!" + s.stmtNoConstants
-	}
 	return s.stmtNoConstants
 }
 
@@ -235,7 +231,6 @@ func NewTempContainerFromExistingStmtStats(
 		key := stmtKey{
 			sampledPlanKey: sampledPlanKey{
 				stmtNoConstants: statistics[i].Key.KeyData.Query,
-				failed:          statistics[i].Key.KeyData.Failed,
 				implicitTxn:     statistics[i].Key.KeyData.ImplicitTxn,
 				database:        statistics[i].Key.KeyData.Database,
 			},
@@ -252,7 +247,7 @@ func NewTempContainerFromExistingStmtStats(
 		stmtStats.mu.data.Add(&statistics[i].Stats)
 
 		// Setting all metadata fields.
-		if stmtStats.mu.data.SensitiveInfo.LastErr == "" && key.failed {
+		if stmtStats.mu.data.SensitiveInfo.LastErr == "" {
 			stmtStats.mu.data.SensitiveInfo.LastErr = statistics[i].Stats.SensitiveInfo.LastErr
 		}
 
@@ -446,7 +441,7 @@ func (s *stmtStats) mergeStatsLocked(statistics *appstatspb.CollectedStatementSt
 	s.mu.data.Add(&statistics.Stats)
 
 	// Setting all metadata fields.
-	if s.mu.data.SensitiveInfo.LastErr == "" && statistics.Key.Failed {
+	if s.mu.data.SensitiveInfo.LastErr == "" {
 		s.mu.data.SensitiveInfo.LastErr = statistics.Stats.SensitiveInfo.LastErr
 	}
 
@@ -469,7 +464,6 @@ func (s *Container) getStatsForStmt(
 	stmtNoConstants string,
 	implicitTxn bool,
 	database string,
-	failed bool,
 	planHash uint64,
 	transactionFingerprintID appstatspb.TransactionFingerprintID,
 	createIfNonexistent bool,
@@ -485,7 +479,6 @@ func (s *Container) getStatsForStmt(
 	key = stmtKey{
 		sampledPlanKey: sampledPlanKey{
 			stmtNoConstants: stmtNoConstants,
-			failed:          failed,
 			implicitTxn:     implicitTxn,
 			database:        database,
 		},
@@ -594,12 +587,84 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
 }
 
+// PopAllStats returns all collected statement and transaction stats in memory to the caller and clears SQL stats
+// make sure that new arriving stats won't be interfering with existing one.
+func (s *Container) PopAllStats(
+	ctx context.Context,
+) ([]*appstatspb.CollectedStatementStatistics, []*appstatspb.CollectedTransactionStatistics) {
+	statementStats := make([]*appstatspb.CollectedStatementStatistics, 0)
+	var stmts map[stmtKey]*stmtStats
+
+	transactionStats := make([]*appstatspb.CollectedTransactionStatistics, 0)
+	var txns map[appstatspb.TransactionFingerprintID]*txnStats
+
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		stmts = s.mu.stmts
+		txns = s.mu.txns
+		// Reset statementStats and transactions after they're assigned to local variables.
+		s.clearLocked(ctx)
+	}()
+
+	var data appstatspb.StatementStatistics
+	var distSQLUsed, vectorized, fullScan bool
+	var database, querySummary string
+
+	for key, stmt := range stmts {
+		func() {
+			stmt.mu.Lock()
+			defer stmt.mu.Unlock()
+			data = stmt.mu.data
+			distSQLUsed = stmt.mu.distSQLUsed
+			vectorized = stmt.mu.vectorized
+			fullScan = stmt.mu.fullScan
+			database = stmt.mu.database
+			querySummary = stmt.mu.querySummary
+		}()
+
+		statementStats = append(statementStats, &appstatspb.CollectedStatementStatistics{
+			Key: appstatspb.StatementStatisticsKey{
+				Query:                    key.stmtNoConstants,
+				QuerySummary:             querySummary,
+				DistSQL:                  distSQLUsed,
+				Vec:                      vectorized,
+				ImplicitTxn:              key.implicitTxn,
+				FullScan:                 fullScan,
+				App:                      s.appName,
+				Database:                 database,
+				PlanHash:                 key.planHash,
+				TransactionFingerprintID: key.transactionFingerprintID,
+			},
+			ID:    constructStatementFingerprintIDFromStmtKey(key),
+			Stats: data,
+		})
+	}
+
+	for key, txnStats := range txns {
+		transactionStats = append(transactionStats, &appstatspb.CollectedTransactionStatistics{
+			StatementFingerprintIDs:  txnStats.statementFingerprintIDs,
+			App:                      s.appName,
+			Stats:                    txnStats.mu.data,
+			TransactionFingerprintID: key,
+		})
+	}
+	return statementStats, transactionStats
+}
+
 // Clear clears the data stored in this Container and prepare the Container
 // for reuse.
 func (s *Container) Clear(ctx context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.clearLocked(ctx)
+}
 
+func (s *Container) clearLocked(ctx context.Context) {
+	// freeLocked needs to be called before we clear the containers as
+	// it uses the size of each container to decrements counters that
+	// track the node-wide unique in-memory fingerprint counts for stmts
+	// and txns.
 	s.freeLocked(ctx)
 
 	// Clear the map, to release the memory; make the new map somewhat already
@@ -607,6 +672,9 @@ func (s *Container) Clear(ctx context.Context) {
 	s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
 	s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
 	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
+	if s.knobs != nil && s.knobs.OnAfterClear != nil {
+		s.knobs.OnAfterClear()
+	}
 }
 
 // Free frees the accounted resources from the Container. The Container is
@@ -631,19 +699,16 @@ func (s *Container) freeLocked(ctx context.Context) {
 func (s *Container) MergeApplicationStatementStats(
 	ctx context.Context,
 	other sqlstats.ApplicationStats,
-	transformer func(*appstatspb.CollectedStatementStatistics),
+	transactionFingerprintID appstatspb.TransactionFingerprintID,
 ) (discardedStats uint64) {
 	if err := other.IterateStatementStats(
 		ctx,
 		sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			if transformer != nil {
-				transformer(statistics)
-			}
+			statistics.Key.TransactionFingerprintID = transactionFingerprintID
 			key := stmtKey{
 				sampledPlanKey: sampledPlanKey{
 					stmtNoConstants: statistics.Key.Query,
-					failed:          statistics.Key.Failed,
 					implicitTxn:     statistics.Key.ImplicitTxn,
 					database:        statistics.Key.Database,
 				},
@@ -929,6 +994,6 @@ type transactionCounts struct {
 
 func constructStatementFingerprintIDFromStmtKey(key stmtKey) appstatspb.StmtFingerprintID {
 	return appstatspb.ConstructStatementFingerprintID(
-		key.stmtNoConstants, key.failed, key.implicitTxn, key.database,
+		key.stmtNoConstants, key.implicitTxn, key.database,
 	)
 }

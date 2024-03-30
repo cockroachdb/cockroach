@@ -11,6 +11,8 @@ package streamingest
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -30,12 +33,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -52,7 +57,6 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.SrcClusterSettings[`stream_replication.job_liveness.timeout`] = `'1m'`
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
@@ -60,6 +64,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1m'`, c.Args.SrcTenantName))
 
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
@@ -70,9 +75,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	require.True(t, srcTime.LessEq(stats.ReplicationLagInfo.MinIngestedTimestamp))
 
 	// Make producer job easily times out
-	c.SrcSysSQL.ExecMultiple(t, replicationtestutils.ConfigureClusterSettings(map[string]string{
-		`stream_replication.job_liveness.timeout`: `'100ms'`,
-	})...)
+	c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, c.Args.SrcTenantName))
 
 	jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	// The ingestion job will stop retrying as this is a permanent job error.
@@ -522,6 +525,46 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 }
 
+func TestTenantStreamingImport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, replicationtestutils.DefaultTenantStreamingClustersArgs)
+	defer cleanup()
+
+	dataSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			if _, err := w.Write([]byte("42,hello,goodbye\n")); err != nil {
+				t.Logf("failed to write: %s", err.Error())
+			}
+		}
+	}))
+	defer dataSrv.Close()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	srcTime := c.SrcSysServer.Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	c.SrcTenantSQL.Exec(t, `
+CREATE TABLE d.t_for_import(i int primary key, a string, b string);
+INSERT INTO d.t_for_import (i) VALUES (1);
+`)
+	c.SrcSysSQL.Exec(t, "SET CLUSTER SETTING kv.bulk_io_write.small_write_size = '1'")
+	c.SrcTenantSQL.Exec(t, "SET CLUSTER SETTING kv.bulk_io_write.small_write_size = '1'")
+	c.SrcTenantSQL.Exec(t, "IMPORT INTO d.t_for_import CSV DATA ($1)", dataSrv.URL)
+
+	srcTime = c.SrcSysServer.Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	cutoverTime := c.SrcSysServer.Clock().Now()
+	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
+	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
+
+}
+
 func TestTenantStreamingDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -764,6 +807,8 @@ func TestStreamingReplanOnLag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 120688)
+
 	skip.UnderDuressWithIssue(t, 115850, "time to scatter ranges takes too long under duress")
 
 	ctx := context.Background()
@@ -927,13 +972,6 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 
-			if !pauseBeforeTerminal {
-				// Only set a short job liveness timeout if the job will not get paused.
-				// Else, the producer job may inadvertently timeout while the job is
-				// paused.
-				c.DestSysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '100ms'")
-			}
-
 			producerJobID, replicationJobID := c.StartStreamReplication(ctx)
 
 			jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
@@ -971,6 +1009,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 				jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 				var emptyCutoverTime time.Time
 				c.Cutover(producerJobID, replicationJobID, emptyCutoverTime, false)
+				c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, c.Args.SrcTenantName))
 			}
 
 			// Set GC TTL low, so that the GC job completes quickly in the test.
@@ -978,16 +1017,12 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			c.DestSysSQL.Exec(t, fmt.Sprintf("DROP TENANT %s", c.Args.DestTenantName))
 
 			if !completeReplication {
+				c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1ms'`, c.Args.SrcTenantName))
 				jobutils.WaitForJobToCancel(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 				jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 			}
 
-			// Check if the producer job has released protected timestamp if the job
-			// completed with a low stream_replication.job_liveness_timeout, or if the
-			// replication stream didn't complete.
-			if !pauseBeforeTerminal || !completeReplication {
-				requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
-			}
+			requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
 
 			// Check if the replication job has released protected timestamp.
 			checkNoDestinationProtection(c, replicationJobID)
@@ -1040,33 +1075,33 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	replicationDetails := details.Details().(jobspb.StreamIngestionDetails)
 
 	var (
-		id            int
-		dest          string
-		status        string
-		serviceMode   string
-		source        string
-		sourceUri     string
-		jobId         int
-		maxReplTime   time.Time
-		protectedTime time.Time
-		cutoverTime   []byte // should be nil
+		id             int
+		dest           string
+		status         string
+		source         string
+		sourceUri      string
+		replicationLag string
+		maxReplTime    time.Time
+		protectedTime  time.Time
+		cutoverTime    []byte // should be nil
 	)
 	row := c.DestSysSQL.QueryRow(t, fmt.Sprintf("SHOW TENANT %s WITH REPLICATION STATUS", args.DestTenantName))
-	row.Scan(&id, &dest, &status, &serviceMode, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime, &cutoverTime)
+	row.Scan(&id, &dest, &source, &sourceUri, &protectedTime, &maxReplTime, &replicationLag, &cutoverTime, &status)
 	require.Equal(t, 2, id)
 	require.Equal(t, "destination", dest)
 	require.Equal(t, "replicating", status)
-	require.Equal(t, "none", serviceMode)
-	require.Equal(t, "source", source)
-	expectedURI, err := redactSourceURI(c.SrcURL.String())
+	expectedURI, err := streamclient.RedactSourceURI(c.SrcURL.String())
 	require.NoError(t, err)
 	require.Equal(t, expectedURI, sourceUri)
-	require.Equal(t, ingestionJobID, jobId)
 	require.Less(t, maxReplTime, timeutil.Now())
 	require.Less(t, protectedTime, timeutil.Now())
 	require.GreaterOrEqual(t, maxReplTime, targetReplicatedTime.GoTime())
 	require.GreaterOrEqual(t, protectedTime, replicationDetails.ReplicationStartTime.GoTime())
 	require.Nil(t, cutoverTime)
+	repLagDuration, err := duration.ParseInterval(duration.IntervalStyle_POSTGRES, replicationLag, types.DefaultIntervalTypeMetadata)
+	require.NoError(t, err)
+	require.Greater(t, repLagDuration.Nanos(), int64(0))
+	require.Less(t, repLagDuration.Nanos(), time.Second*30)
 
 	// Verify the SHOW command prints the right cutover timestamp. Adding some
 	// logical component to make sure we handle it correctly.
@@ -1221,7 +1256,7 @@ func TestLoadProducerAndIngestionProgress(t *testing.T) {
 func TestStreamingRegionalConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "takes too long under stress race")
+	skip.UnderRace(t, "takes too long under race")
 
 	ctx := context.Background()
 	regions := []string{"mars", "venus", "mercury"}
@@ -1319,10 +1354,7 @@ func TestStreamingMismatchedMRDatabase(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime(), false)
 
-	cleanupTenant := c.StartDestTenant(ctx, nil, 0)
-	defer func() {
-		require.NoError(t, cleanupTenant())
-	}()
+	defer c.StartDestTenant(ctx, nil, 0)()
 
 	// Check how MR primitives have replicated to non-mr stand by cluster
 	t.Run("mr db only with primary region", func(t *testing.T) {
@@ -1356,11 +1388,11 @@ func checkLocalityRanges(
 ) {
 	targetPrefix := codec.TablePrefix(tableID)
 	distinctQuery := fmt.Sprintf(`
-SELECT 
+SELECT
   DISTINCT replica_localities
-FROM 
+FROM
   [SHOW CLUSTER RANGES]
-WHERE 
+WHERE
   start_key ~ '%s'
 `, targetPrefix)
 	var locality string
@@ -1397,10 +1429,7 @@ func TestStreamingZoneConfigsMismatchedRegions(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime(), false)
 
-	cleanupTenant := c.StartDestTenant(ctx, nil, 0)
-	defer func() {
-		require.NoError(t, cleanupTenant())
-	}()
+	defer c.StartDestTenant(ctx, nil, 0)()
 
 	// Note that the unsatisfiable zone config does not appear in the create statement.
 	var res string

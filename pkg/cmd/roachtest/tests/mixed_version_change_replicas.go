@@ -55,7 +55,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 			return err
 		}
 		_, db := h.RandomDB(r, c.All())
-		if err := WaitFor3XReplication(ctx, t, db); err != nil {
+		if err := WaitFor3XReplication(ctx, t, l, db); err != nil {
 			return err
 		}
 
@@ -196,7 +196,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 			// If ranges still failed after exhausting retries, give up.
 			if len(rangeErrors) > 0 {
 				for rangeID, result := range rangeErrors {
-					t.L().Printf("failed to move r%d from n%d to n%d: %s",
+					l.Printf("failed to move r%d from n%d to n%d: %s",
 						rangeID, node, target, result)
 				}
 				return errors.Errorf("failed to move %d replicas from n%d to n%d",
@@ -253,7 +253,12 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 
 	// Set up and run test.
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), mixedversion.ClusterSettingOption(
-		install.EnvOption{"COCKROACH_SCAN_MAX_IDLE_TIME=10ms"})) // speed up queues
+		// Speed up the queues.
+		install.EnvOption{"COCKROACH_SCAN_MAX_IDLE_TIME=10ms"}),
+		// Avoid repeatedly running into #114549 on earlier minor versions.
+		// TODO(kvoli): Remove in 24.2.
+		mixedversion.AlwaysUseLatestPredecessors,
+	)
 
 	mvt.OnStartup("create test table", createTable)
 	mvt.InMixedVersion("move replicas", moveReplicas)

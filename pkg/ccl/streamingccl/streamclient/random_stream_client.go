@@ -467,6 +467,7 @@ func (m *RandomStreamClient) Close(_ context.Context) error {
 func (m *RandomStreamClient) Subscribe(
 	_ context.Context,
 	_ streampb.StreamID,
+	_ int32,
 	spec SubscriptionToken,
 	initialScanTime hlc.Timestamp,
 	_ hlc.Timestamp,
@@ -551,8 +552,8 @@ func (m *RandomStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ 
 // PriorReplicationDetails implements the streamclient.Client interface.
 func (p *RandomStreamClient) PriorReplicationDetails(
 	ctx context.Context, tenant roachpb.TenantName,
-) (string, hlc.Timestamp, error) {
-	return "", hlc.Timestamp{}, nil
+) (string, string, hlc.Timestamp, error) {
+	return "", "", hlc.Timestamp{}, nil
 
 }
 

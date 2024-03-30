@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -39,6 +40,30 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+// MaxMVCCStatCountDiff defines the maximum number of units (e.g. keys or
+// intents) that is acceptable for an individual MVCC stat to diverge from the
+// real value when computed during splits. If this threshold is
+// exceeded, the split will fall back to computing 100% accurate stats.
+// It takes effect only if kv.split.estimated_mvcc_stats.enabled is true.
+var MaxMVCCStatCountDiff = settings.RegisterIntSetting(
+	settings.SystemVisible,
+	"kv.split.max_mvcc_stat_count_diff",
+	"defines the max number of units that are acceptable for an individual "+
+		"MVCC stat to diverge; needs kv.split.estimated_mvcc_stats.enabled to be true",
+	5000)
+
+// MaxMVCCStatBytesDiff defines the maximum number of bytes (e.g. keys bytes or
+// intents bytes) that is acceptable for an individual MVCC stat to diverge
+// from the real value when computed during splits. If this threshold is
+// exceeded, the split will fall back to computing 100% accurate stats.
+// It takes effect only if kv.split.estimated_mvcc_stats.enabled is true.
+var MaxMVCCStatBytesDiff = settings.RegisterIntSetting(
+	settings.SystemVisible,
+	"kv.split.max_mvcc_stat_bytes_diff",
+	"defines the max number of bytes that are acceptable for an individual "+
+		"MVCC stat to diverge; needs kv.split.estimated_mvcc_stats.enabled to be true",
+	5120000) // 5.12 MB = 1% of the max range size
 
 func init() {
 	RegisterReadWriteCommand(kvpb.EndTxn, declareKeysEndTxn, EndTxn)
@@ -1032,6 +1057,17 @@ func splitTrigger(
 			"unable to determine whether right hand side of split is empty")
 	}
 
+	// The intentInterleavingIterator doesn't like iterating over spans containing
+	// both local and global keys. Here we only care about global keys.
+	spanWithNoLocals := split.LeftDesc.KeySpan().AsRawSpanWithNoLocals()
+	emptyLHS, err := storage.MVCCIsSpanEmpty(ctx, batch, storage.MVCCIsSpanEmptyOptions{
+		StartKey: spanWithNoLocals.Key, EndKey: spanWithNoLocals.EndKey,
+	})
+	if err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrapf(err,
+			"unable to determine whether left hand side of split is empty")
+	}
+
 	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(ctx, batch, split.LeftDesc, split.RightDesc)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
@@ -1055,12 +1091,20 @@ func splitTrigger(
 	}
 
 	h := splitStatsHelperInput{
-		AbsPreSplitBothStored: currentStats,
-		DeltaBatchEstimated:   bothDeltaMS,
-		DeltaRangeKey:         rangeKeyDeltaMS,
-		PostSplitScanLeftFn:   makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
-		PostSplitScanRightFn:  makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
-		ScanRightFirst:        splitScansRightForStatsFirst || emptyRHS,
+		AbsPreSplitBothStored:    currentStats,
+		DeltaBatchEstimated:      bothDeltaMS,
+		DeltaRangeKey:            rangeKeyDeltaMS,
+		PreSplitLeftUser:         split.PreSplitLeftUserStats,
+		PreSplitStats:            split.PreSplitStats,
+		PostSplitScanLeftFn:      makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side", false /* excludeUserSpans */),
+		PostSplitScanRightFn:     makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side", false /* excludeUserSpans */),
+		PostSplitScanLocalLeftFn: makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "local left hand side", true /* excludeUserSpans */),
+		ScanRightFirst:           splitScansRightForStatsFirst || emptyRHS,
+		LeftUserIsEmpty:          emptyLHS,
+		RightUserIsEmpty:         emptyRHS,
+		MaxCountDiff:             MaxMVCCStatCountDiff.Get(&rec.ClusterSettings().SV),
+		MaxBytesDiff:             MaxMVCCStatBytesDiff.Get(&rec.ClusterSettings().SV),
+		UseEstimatesBecauseExternalBytesArePresent: split.UseEstimatesBecauseExternalBytesArePresent,
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
@@ -1081,9 +1125,14 @@ func makeScanStatsFn(
 	ts hlc.Timestamp,
 	sideDesc *roachpb.RangeDescriptor,
 	sideName string,
+	excludeUserSpans bool,
 ) splitStatsScanFn {
+	computeStatsFn := rditer.ComputeStatsForRange
+	if excludeUserSpans {
+		computeStatsFn = rditer.ComputeStatsForRangeExcludingUser
+	}
 	return func() (enginepb.MVCCStats, error) {
-		sideMS, err := rditer.ComputeStatsForRange(ctx, sideDesc, reader, ts.WallTime)
+		sideMS, err := computeStatsFn(ctx, sideDesc, reader, ts.WallTime)
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrapf(err,
 				"unable to compute stats for %s range after split", sideName)
@@ -1128,7 +1177,53 @@ func splitTriggerHelper(
 	// modifications to the left hand side are allowed after this line and any
 	// modifications to the right hand side are accounted for by updating the
 	// helper's AbsPostSplitRight() reference.
-	h, err := makeSplitStatsHelper(statsInput)
+	var h splitStatsHelper
+	// There are three conditions under which we want to fall back to accurate
+	// stats computation:
+	// 1. There are no pre-computed stats for the LHS. This can happen if
+	// kv.split.estimated_mvcc_stats.enabled is disabled, or if the leaseholder
+	// node is running an older version. Pre-computed stats are necessary for
+	// makeEstimatedSplitStatsHelper to estimate the stats.
+	// Note that PreSplitLeftUserStats can also be equal to enginepb.MVCCStats{}
+	// when the user LHS stats are all zero, but in that case it's ok to fall back
+	// to accurate stats computation because scanning the empty LHS is not
+	// expensive.
+	noPreComputedStats := split.PreSplitLeftUserStats == enginepb.MVCCStats{}
+	// 2. If either side contains no user data; scanning the empty ranges is
+	// cheap.
+	emptyLeftOrRight := statsInput.LeftUserIsEmpty || statsInput.RightUserIsEmpty
+	// 3. If the user pre-split stats differ significantly from the current stats
+	// stored on disk. Note that the current stats on disk were corrected in
+	// AdminSplit, so any differences we see here are due to writes concurrent
+	// with this split (not compounded estimates from previous splits).
+	preComputedStatsDiff := !statsInput.AbsPreSplitBothStored.HasUserDataCloseTo(
+		statsInput.PreSplitStats, statsInput.MaxCountDiff, statsInput.MaxBytesDiff)
+	// 4. If we haven't been asked to use estimated stats because of
+	// external bytes being present in the underlying store. This should
+	// only be true when an online restore has recently been performed.
+	shouldUseCrudeEstimates := statsInput.UseEstimatesBecauseExternalBytesArePresent &&
+		statsInput.AbsPreSplitBothStored.ContainsEstimates > 0
+
+	computeAccurateStats := (noPreComputedStats || emptyLeftOrRight || preComputedStatsDiff)
+	computeAccurateStats = computeAccurateStats && !shouldUseCrudeEstimates
+	if computeAccurateStats {
+		var reason redact.RedactableString
+		if noPreComputedStats {
+			reason = "there are no pre-split LHS stats (or they're empty)"
+		} else if emptyLeftOrRight {
+			reason = "the in-split LHS or RHS is empty"
+		} else {
+			reason = redact.Sprintf("the pre-split user stats differ too much "+
+				"from the in-split stats; pre-split: %+v, in-split: %+v",
+				statsInput.PreSplitStats, statsInput.AbsPreSplitBothStored)
+		}
+		log.Infof(ctx, "falling back to accurate stats computation because %v", reason)
+		h, err = makeSplitStatsHelper(statsInput)
+	} else if statsInput.UseEstimatesBecauseExternalBytesArePresent {
+		h, err = makeCrudelyEstimatedSplitStatsHelper(statsInput)
+	} else {
+		h, err = makeEstimatedSplitStatsHelper(statsInput)
+	}
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
@@ -1247,6 +1342,10 @@ func splitTriggerHelper(
 		RHSDelta: *h.AbsPostSplitRight(),
 	}
 
+	pd.Local.Metrics = &result.Metrics{
+		SplitsWithEstimatedStats:     h.splitsWithEstimates,
+		SplitEstimatedTotalBytesDiff: h.estimatedTotalBytesDiff,
+	}
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
 	return deltaPostSplitLeft, pd, nil
 }
@@ -1305,6 +1404,8 @@ func mergeTrigger(
 		} else if priorSum != nil {
 			mergedSum.Merge(*priorSum)
 		}
+		// Compress the persisted read summary, as it will likely never be needed.
+		mergedSum.Compress(0)
 		if err := readsummary.Set(ctx, batch, rec.GetRangeID(), ms, mergedSum); err != nil {
 			return result.Result{}, err
 		}

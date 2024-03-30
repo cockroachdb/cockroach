@@ -94,6 +94,13 @@ var cutoverSignalPollInterval = settings.RegisterDurationSetting(
 	settings.WithName("physical_replication.consumer.cutover_signal_poll_interval"),
 )
 
+var quantize = settings.RegisterDurationSettingWithExplicitUnit(
+	settings.SystemOnly,
+	"physical_replication.consumer.timestamp_granularity",
+	"the granularity at which replicated times are quantized to make tracking more efficient",
+	5*time.Second,
+)
+
 var streamIngestionResultTypes = []*types.T{
 	types.Bytes, // jobspb.ResolvedSpans
 }
@@ -215,7 +222,7 @@ type streamIngestionProcessor struct {
 	batcher *bulk.SSTBatcher
 	// rangeBatcher is used to flush range KVs into SST to the storage layer.
 	rangeBatcher      *rangeKeyBatcher
-	maxFlushRateTimer *timeutil.Timer
+	maxFlushRateTimer timeutil.Timer
 
 	// client is a streaming client which provides a stream of events from a given
 	// address.
@@ -266,7 +273,7 @@ type streamIngestionProcessor struct {
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// backupDataProcessors' trace recording.
 	agg      *bulkutil.TracingAggregator
-	aggTimer *timeutil.Timer
+	aggTimer timeutil.Timer
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -311,10 +318,9 @@ func newStreamIngestionDataProcessor(
 	}
 
 	sip := &streamIngestionProcessor{
-		flowCtx:           flowCtx,
-		spec:              spec,
-		frontier:          frontier,
-		maxFlushRateTimer: timeutil.NewTimer(),
+		flowCtx:  flowCtx,
+		spec:     spec,
+		frontier: frontier,
 		cutoverProvider: &cutoverFromJobProgress{
 			jobID: jobspb.JobID(spec.JobID),
 			db:    flowCtx.Cfg.DB,
@@ -373,7 +379,6 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
 	log.Infof(ctx, "starting ingest proc")
 	sip.agg = bulkutil.TracingAggregatorForContext(ctx)
-	sip.aggTimer = timeutil.NewTimer()
 
 	// If the aggregator is nil, we do not want the timer to fire.
 	if sip.agg != nil {
@@ -393,7 +398,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		ctx, db.KV(), rc, evalCtx.Settings, sip.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
 		sip.flowCtx.Cfg.BulkSenderLimiter, sip.onFlushUpdateMetricUpdate)
 	if err != nil {
-		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
+		sip.MoveToDrainingAndLogError(errors.Wrap(err, "creating stream sst batcher"))
 		return
 	}
 
@@ -413,6 +418,10 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		id := partitionSpec.PartitionID
 		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
 		addr := partitionSpec.Address
+		redactedAddr, redactedErr := streamclient.RedactSourceURI(addr)
+		if redactedErr != nil {
+			log.Warning(sip.Ctx(), "could not redact stream address")
+		}
 		var streamClient streamclient.Client
 		if sip.forceClientForTests != nil {
 			streamClient = sip.forceClientForTests
@@ -421,7 +430,8 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			streamClient, err = streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(addr), db,
 				streamclient.WithStreamID(streampb.StreamID(sip.spec.StreamID)))
 			if err != nil {
-				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr))
+
+				sip.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, redactedAddr))
 				return
 			}
 			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
@@ -435,41 +445,46 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			}
 		}
 
-		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), token,
+		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), int32(sip.flowCtx.NodeID.SQLInstanceID()), token,
 			sip.spec.InitialScanTimestamp, previousReplicatedTimestamp)
 
 		if err != nil {
-			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
+			sip.MoveToDrainingAndLogError(errors.Wrapf(err, "consuming partition %v", redactedAddr))
 			return
 		}
 		subscriptions[id] = sub
-		sip.subscriptionGroup.GoCtx(sub.Subscribe)
+		sip.subscriptionGroup.GoCtx(func(ctx context.Context) error {
+			if err := sub.Subscribe(ctx); err != nil {
+				sip.sendError(errors.Wrap(err, "subscription"))
+			}
+			return nil
+		})
 	}
 
 	sip.mergedSubscription = mergeSubscriptions(sip.Ctx(), subscriptions)
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
 		if err := sip.mergedSubscription.Run(); err != nil {
-			sip.sendError(err)
+			sip.sendError(errors.Wrap(err, "merge subscription"))
 		}
 		return nil
 	})
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
 		if err := sip.checkForCutoverSignal(ctx); err != nil {
-			sip.sendError(err)
+			sip.sendError(errors.Wrap(err, "cutover signal check"))
 		}
 		return nil
 	})
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(sip.flushCh)
 		if err := sip.consumeEvents(ctx); err != nil {
-			sip.sendError(err)
+			sip.sendError(errors.Wrap(err, "consume events"))
 		}
 		return nil
 	})
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(sip.checkpointCh)
 		if err := sip.flushLoop(ctx); err != nil {
-			sip.sendError(err)
+			sip.sendError(errors.Wrap(err, "flush loop"))
 		}
 		return nil
 	})
@@ -486,7 +501,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		if ok {
 			progressBytes, err := protoutil.Marshal(progressUpdate)
 			if err != nil {
-				sip.MoveToDraining(err)
+				sip.MoveToDrainingAndLogError(err)
 				return nil, sip.DrainHelper()
 			}
 			row := rowenc.EncDatumRow{
@@ -500,17 +515,24 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(sip.Ctx(),
 			sip.flowCtx.NodeID.SQLInstanceID(), sip.flowCtx.ID, sip.agg)
 	case err := <-sip.errCh:
-		sip.MoveToDraining(err)
+		sip.MoveToDrainingAndLogError(err)
 		return nil, sip.DrainHelper()
 	}
 	select {
 	case err := <-sip.errCh:
-		sip.MoveToDraining(err)
+		sip.MoveToDrainingAndLogError(err)
 		return nil, sip.DrainHelper()
 	default:
-		sip.MoveToDraining(nil /* error */)
+		sip.MoveToDrainingAndLogError(nil /* error */)
 		return nil, sip.DrainHelper()
 	}
+}
+
+func (sip *streamIngestionProcessor) MoveToDrainingAndLogError(err error) {
+	if err != nil {
+		log.Infof(sip.Ctx(), "gracefully draining with error %s", err)
+	}
+	sip.MoveToDraining(err)
 }
 
 // MustBeStreaming implements the Processor interface.
@@ -561,9 +583,7 @@ func (sip *streamIngestionProcessor) close() {
 	if sip.batcher != nil {
 		sip.batcher.Close(sip.Ctx())
 	}
-	if sip.maxFlushRateTimer != nil {
-		sip.maxFlushRateTimer.Stop()
-	}
+	sip.maxFlushRateTimer.Stop()
 	sip.aggTimer.Stop()
 
 	sip.InternalClose()
@@ -754,10 +774,19 @@ func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error
 	defer sp.Finish()
 	return replicationutils.ScanSST(sst, sst.Span,
 		func(keyVal storage.MVCCKeyValue) error {
+			// TODO(ssd): We technically get MVCCValueHeaders in our
+			// SSTs. But currently there are so many ways _not_ to
+			// get them that writing them here would just be
+			// confusing until we fix them all.
+			mvccValue, err := storage.DecodeValueFromMVCCValue(keyVal.Value)
+			if err != nil {
+				return err
+			}
+
 			return sip.bufferKV(&roachpb.KeyValue{
 				Key: keyVal.Key.Key,
 				Value: roachpb.Value{
-					RawBytes:  keyVal.Value,
+					RawBytes:  mvccValue.RawBytes,
 					Timestamp: keyVal.Key.Timestamp,
 				},
 			})
@@ -861,7 +890,17 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 
 	lowestTimestamp := hlc.MaxTimestamp
 	highestTimestamp := hlc.MinTimestamp
+	d := quantize.Get(&sip.EvalCtx.Settings.SV)
 	for _, resolvedSpan := range resolvedSpans {
+		// If quantizing is enabled, round the timestamp down to an even multiple of
+		// the quantization amount, to maximize the number of spans that share the
+		// same resolved timestamp -- even if they were individually resolved to
+		// _slightly_ different/newer timestamps -- to allow them to merge into
+		// fewer and larger spans in the frontier.
+		if d > 0 {
+			resolvedSpan.Timestamp.Logical = 0
+			resolvedSpan.Timestamp.WallTime -= resolvedSpan.Timestamp.WallTime % int64(d)
+		}
 		if resolvedSpan.Timestamp.Less(lowestTimestamp) {
 			lowestTimestamp = resolvedSpan.Timestamp
 		}

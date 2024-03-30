@@ -55,22 +55,28 @@ import (
 )
 
 const (
-	defaultImage  = "docker.io/library/ubuntu:focal-20210119"
+	// We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
+	// See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
+	defaultImage  = "us-east1-docker.pkg.dev/crl-docker-sync/docker-mirror/docker.io/library/ubuntu:focal-20210119"
 	networkPrefix = "cockroachdb_acceptance"
 )
 
 // DefaultTCP is the default SQL/RPC port specification.
-const DefaultTCP nat.Port = base.DefaultPort + "/tcp"
-const defaultHTTP nat.Port = base.DefaultHTTPPort + "/tcp"
+const (
+	DefaultTCP  nat.Port = base.DefaultPort + "/tcp"
+	defaultHTTP nat.Port = base.DefaultHTTPPort + "/tcp"
+)
 
 // CockroachBinaryInContainer is the container-side path to the CockroachDB
 // binary.
 const CockroachBinaryInContainer = "/cockroach/cockroach"
 
-var cockroachImage = flag.String("i", defaultImage, "the docker image to run")
-var cockroachEntry = flag.String("e", "", "the entry point for the image")
-var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
-var maxRangeBytes = *zonepb.DefaultZoneConfig().RangeMaxBytes
+var (
+	cockroachImage = flag.String("i", defaultImage, "the docker image to run")
+	cockroachEntry = flag.String("e", "", "the entry point for the image")
+	waitOnStop     = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
+	maxRangeBytes  = *zonepb.DefaultZoneConfig().RangeMaxBytes
+)
 
 // CockroachBinary is the path to the host-side binary to use.
 var CockroachBinary = flag.String("b", "", "the host-side binary to run")

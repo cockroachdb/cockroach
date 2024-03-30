@@ -94,7 +94,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 
 				var dummyHelper tree.IndexedVarHelper
 				typedValue, err := p.analyzeExpr(
-					ctx, expr, nil, dummyHelper, types.String, false, "SET SESSION "+name)
+					ctx, expr, dummyHelper, types.String, false, "SET SESSION "+name)
 				if err != nil {
 					return nil, wrapSetVarError(err, name, expr.String())
 				}
@@ -364,7 +364,7 @@ func makeTimeoutVarGetter(
 		case *tree.DString:
 			return string(*v), nil
 		case *tree.DInterval:
-			timeout, err = intervalToDuration(v)
+			timeout, err = durationToTotalNanos(v.Duration)
 			if err != nil {
 				return "", wrapSetVarError(err, varName, values[0].String())
 			}
@@ -378,7 +378,7 @@ func makeTimeoutVarGetter(
 func validateTimeoutVar(
 	style duration.IntervalStyle, timeString string, varName string,
 ) (time.Duration, error) {
-	interval, err := tree.ParseDIntervalWithTypeMetadata(
+	interval, err := tree.ParseIntervalWithTypeMetadata(
 		style,
 		timeString,
 		types.IntervalTypeMetadata{
@@ -390,7 +390,7 @@ func validateTimeoutVar(
 	if err != nil {
 		return 0, wrapSetVarError(err, varName, timeString)
 	}
-	timeout, err := intervalToDuration(interval)
+	timeout, err := durationToTotalNanos(interval)
 	if err != nil {
 		return 0, wrapSetVarError(err, varName, timeString)
 	}
@@ -474,8 +474,8 @@ func idleInTransactionSessionTimeoutVarSet(
 	return nil
 }
 
-func intervalToDuration(interval *tree.DInterval) (time.Duration, error) {
-	nanos, _, _, err := interval.Encode()
+func durationToTotalNanos(duration duration.Duration) (time.Duration, error) {
+	nanos, _, _, err := duration.Encode()
 	if err != nil {
 		return 0, err
 	}

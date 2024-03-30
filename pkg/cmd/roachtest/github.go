@@ -16,7 +16,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -27,13 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/errors"
 )
 
 type githubIssues struct {
 	disable      bool
 	cluster      *clusterImpl
 	vmCreateOpts *vm.CreateOpts
-	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest, *issues.Options) error
+	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest, *issues.Options) (*issues.TestFailureIssue, error)
 	teamLoader   func() (team.Map, error)
 }
 
@@ -147,37 +148,46 @@ func (g *githubIssues) createPostRequest(
 	var mention []string
 	var projColID int
 
-	issueOwner := spec.Owner
-	issueName := testName
-	issueClusterName := ""
+	var (
+		issueOwner    = spec.Owner
+		issueName     = testName
+		messagePrefix string
+		infraFlake    bool
+	)
 
-	messagePrefix := ""
-	var infraFlake bool
-	firstFailure := failures[0]
-	// Overrides to shield eng teams from potential flakes
+	// handleErrorWithOwnership updates the local variables in this
+	// function that contain the name of the issue being created,
+	// message prefix, and team that will own it.
+	handleErrorWithOwnership := func(err registry.ErrorWithOwnership) {
+		issueOwner = err.Owner
+		infraFlake = err.InfraFlake
+
+		if err.TitleOverride != "" {
+			issueName = err.TitleOverride
+			messagePrefix = fmt.Sprintf("test %s failed: ", testName)
+		}
+	}
+
+	issueClusterName := ""
+	errWithOwnership := failuresSpecifyOwner(failures)
 	switch {
-	case failuresContainsError(failures, errVMPreemption):
-		issueOwner = registry.OwnerTestEng
-		issueName = "vm_preemption"
-		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
-		infraFlake = true
-	case failureContainsError(firstFailure, errClusterProvisioningFailed):
-		issueOwner = registry.OwnerTestEng
-		issueName = "cluster_creation"
-		messagePrefix = fmt.Sprintf("test %s was skipped due to ", testName)
-		infraFlake = true
-	case failureContainsError(firstFailure, rperrors.ErrSSH255):
-		issueOwner = registry.OwnerTestEng
-		issueName = "ssh_problem"
-		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
-		infraFlake = true
-	case failureContainsError(firstFailure, gce.ErrDNSOperation):
-		issueOwner = registry.OwnerTestEng
-		issueName = "dns_problem"
-		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
-		infraFlake = true
-	case failureContainsError(firstFailure, errDuringPostAssertions):
-		messagePrefix = fmt.Sprintf("test %s failed during post test assertions (see test-post-assertions.log) due to ", testName)
+	// The following errors come from various entrypoints in roachprod,
+	// but we know that they should be handled by TestEng whenever they
+	// happen during a test.
+	case failuresContainsError(failures, rperrors.ErrSSH255):
+		handleErrorWithOwnership(registry.ErrorWithOwner(
+			registry.OwnerTestEng, errors.New("SSH problem"),
+			registry.WithTitleOverride("ssh_problem"),
+			registry.InfraFlake,
+		))
+	case failuresContainsError(failures, gce.ErrDNSOperation):
+		handleErrorWithOwnership(registry.ErrorWithOwner(
+			registry.OwnerTestEng, errors.New("DNS problem"),
+			registry.WithTitleOverride("dns_problem"),
+			registry.InfraFlake,
+		))
+	case errWithOwnership != nil:
+		handleErrorWithOwnership(*errWithOwnership)
 	}
 
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers
@@ -290,11 +300,13 @@ func (g *githubIssues) createPostRequest(
 	}, nil
 }
 
-func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) error {
+func (g *githubIssues) MaybePost(
+	t *testImpl, l *logger.Logger, message string,
+) (*issues.TestFailureIssue, error) {
 	doPost, skipReason := g.shouldPost(t)
 	if !doPost {
 		l.Printf("skipping GitHub issue posting (%s)", skipReason)
-		return nil
+		return nil, nil
 	}
 
 	var metamorphicBuild bool
@@ -308,7 +320,7 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 	}
 	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.failures(), message, metamorphicBuild, t.goCoverEnabled)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	opts := issues.DefaultOptionsFromEnv()
 

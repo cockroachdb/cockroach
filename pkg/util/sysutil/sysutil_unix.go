@@ -23,6 +23,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// StatT is syscall.Stat_t.
+type StatT = syscall.Stat_t
+
 // ProcessIdentity returns a string describing the user and group that this
 // process is running as.
 func ProcessIdentity() string {

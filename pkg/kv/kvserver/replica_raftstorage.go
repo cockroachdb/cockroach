@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -37,8 +39,6 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
 )
 
 var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
@@ -115,7 +115,7 @@ func (r *replicaRaftStorage) TypedEntries(
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
 	ents, _, loadedSize, err := logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
+		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes, &r.raftMu.bytesAccount)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
 	return ents, err
 }
@@ -380,13 +380,15 @@ type IncomingSnapshot struct {
 	// Size of the key-value pairs.
 	DataSize int64
 	// Size of the ssts containing these key-value pairs.
-	SSTSize          int64
-	SharedSize       int64
-	placeholder      *ReplicaPlaceholder
-	raftAppliedIndex kvpb.RaftIndex      // logging only
-	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
-	sharedSSTs       []pebble.SharedSSTMeta
-	doExcise         bool
+	SSTSize                     int64
+	SharedSize                  int64
+	placeholder                 *ReplicaPlaceholder
+	raftAppliedIndex            kvpb.RaftIndex      // logging only
+	msgAppRespCh                chan raftpb.Message // receives MsgAppResp if/when snap is applied
+	sharedSSTs                  []pebble.SharedSSTMeta
+	externalSSTs                []pebble.ExternalFile
+	doExcise                    bool
+	includesRangeDelForLastSpan bool
 	// clearedSpans represents the key spans in the existing store that will be
 	// cleared by doing the Ingest*. This is tracked so that we can convert the
 	// ssts into a WriteBatch if the total size of the ssts is small.
@@ -470,12 +472,12 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	}
 
 	// Find span config for this range.
-	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+	conf, sp, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to lookup span config", r)
 	}
 
-	changed := r.SetSpanConfig(conf)
+	changed := r.SetSpanConfig(conf, sp)
 	if changed {
 		r.MaybeQueue(ctx, r.store.cfg.Clock.NowAsClockTimestamp())
 	}
@@ -672,9 +674,16 @@ func (r *Replica) applySnapshot(
 	// https://github.com/cockroachdb/cockroach/issues/93251
 	if inSnap.doExcise {
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-		if ingestStats, err =
-			r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, exciseSpan); err != nil {
-			return errors.Wrapf(err, "while ingesting %s and excising %s-%s", inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
+		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
+			ctx,
+			inSnap.SSTStorageScratch.SSTs(),
+			inSnap.sharedSSTs,
+			inSnap.externalSSTs,
+			exciseSpan,
+			inSnap.includesRangeDelForLastSpan,
+		); err != nil {
+			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
+				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {
 		if inSnap.SSTSize > snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) {

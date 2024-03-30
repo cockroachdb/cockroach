@@ -15,8 +15,10 @@ import (
 	gosql "database/sql"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -66,8 +68,13 @@ type Cluster interface {
 
 	// Starting virtual clusters.
 
-	StartServiceForVirtualClusterE(ctx context.Context, l *logger.Logger, externalNodes option.NodeListOption, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error
-	StartServiceForVirtualCluster(ctx context.Context, l *logger.Logger, externalNodes option.NodeListOption, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option)
+	StartServiceForVirtualClusterE(ctx context.Context, l *logger.Logger, startOpts option.StartOpts, settings install.ClusterSettings) error
+	StartServiceForVirtualCluster(ctx context.Context, l *logger.Logger, startOpts option.StartOpts, settings install.ClusterSettings)
+
+	// Stopping virtual clusters.
+
+	StopServiceForVirtualClusterE(ctx context.Context, l *logger.Logger, stopOpts option.StopOpts) error
+	StopServiceForVirtualCluster(ctx context.Context, l *logger.Logger, stopOpts option.StopOpts)
 
 	// Hostnames and IP addresses of the nodes.
 
@@ -75,11 +82,12 @@ type Cluster interface {
 	InternalIP(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	ExternalAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	ExternalIP(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	SQLPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]int, error)
 
 	// SQL connection strings.
 
-	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]string, error)
-	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]string, error)
+	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, opts roachprod.PGURLOptions) ([]string, error)
+	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, opts roachprod.PGURLOptions) ([]string, error)
 
 	// SQL clients to nodes.
 
@@ -90,15 +98,17 @@ type Cluster interface {
 
 	InternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	ExternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
-	AdminUIPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]int, error)
+	AdminUIPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]int, error)
 
 	// Running commands on nodes.
 
-	// RunWithDetails runs a command on the specified nodes and returns results details and an error.
-	// The returned error is only for a major failure in roachprod run command so the caller needs
-	// to check for individual node errors in `[]install.RunResultDetails`.
+	// RunWithDetails runs a command on the specified nodes (option.WithNodes) and
+	// returns results details and an error. The returned error is only for a
+	// major failure in roachprod run command so the caller needs to check for
+	// individual node errors in `[]install.RunResultDetails`.
 	// Use it when you need output details such as stdout or stderr, or remote exit status.
-	RunWithDetails(ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string) ([]install.RunResultDetails, error)
+	// See install.RunOptions for more details on available options.
+	RunWithDetails(ctx context.Context, testLogger *logger.Logger, options install.RunOptions, args ...string) ([]install.RunResultDetails, error)
 
 	// Run is just like RunE, except it is fatal on errors.
 	// Use it when an error means the test should fail.
@@ -119,7 +129,7 @@ type Cluster interface {
 	// on a single node AND 2) an error from roachprod itself would be treated the same way
 	// you treat an error from the command. This makes error checking easier / friendlier
 	// and helps us avoid code replication.
-	RunWithDetailsSingleNode(ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string) (install.RunResultDetails, error)
+	RunWithDetailsSingleNode(ctx context.Context, testLogger *logger.Logger, options install.RunOptions, args ...string) (install.RunResultDetails, error)
 
 	// Metadata about the provisioned nodes.
 
@@ -134,8 +144,8 @@ type Cluster interface {
 
 	// Deleting CockroachDB data and logs on nodes.
 
-	WipeE(ctx context.Context, l *logger.Logger, preserveCerts bool, opts ...option.Option) error
-	Wipe(ctx context.Context, preserveCerts bool, opts ...option.Option)
+	WipeE(ctx context.Context, l *logger.Logger, opts ...option.Option) error
+	Wipe(ctx context.Context, opts ...option.Option)
 
 	// DNS
 
@@ -162,6 +172,8 @@ type Cluster interface {
 
 	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error
 	StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error
+	AddGrafanaAnnotation(ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest) error
+	AddInternalGrafanaAnnotation(ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest) error
 
 	// Volume snapshot related APIs.
 	//

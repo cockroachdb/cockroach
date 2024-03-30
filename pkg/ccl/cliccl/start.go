@@ -19,11 +19,11 @@ import (
 // This does not define a `start` command, only modifications to the existing command
 // in `pkg/cli/start.go`.
 
-var storeEncryptionSpecs baseccl.StoreEncryptionSpecList
+var encryptionSpecs baseccl.EncryptionSpecList
 
 func init() {
 	for _, cmd := range cli.StartCmds {
-		cliflagcfg.VarFlag(cmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+		cliflagcfg.VarFlag(cmd.Flags(), &encryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
 		// Add a new pre-run command to match encryption specs to store specs.
 		cli.AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
@@ -32,8 +32,13 @@ func init() {
 	}
 }
 
-// populateStoreSpecsEncryption is a PreRun hook that matches store encryption specs with the
-// parsed stores and populates some fields in the StoreSpec.
+// populateStoreSpecsEncryption is a PreRun hook that matches store encryption
+// specs with the parsed stores and populates some fields in the StoreSpec and
+// WAL failover config.
 func populateStoreSpecsEncryption() error {
-	return baseccl.PopulateStoreSpecWithEncryption(cli.GetServerCfgStores(), storeEncryptionSpecs)
+	return baseccl.PopulateWithEncryptionOpts(
+		cli.GetServerCfgStores(),
+		cli.GetWALFailoverConfig(),
+		encryptionSpecs,
+	)
 }

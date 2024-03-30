@@ -62,6 +62,9 @@ func strongerOrEqualStrengths(str lock.Strength) []lock.Strength {
 // the provided lock strength.
 func minConflictLockStrength(str lock.Strength) (lock.Strength, error) {
 	switch str {
+	case lock.None:
+		// Don't conflict with any locks held by other transactions.
+		return lock.None, nil
 	case lock.Shared:
 		return lock.Exclusive, nil
 	case lock.Exclusive, lock.Intent:
@@ -88,11 +91,16 @@ type lockTableKeyScanner struct {
 	// Stop adding conflicting locks and abort scan once the maxConflicts limit
 	// is reached. Ignored if zero.
 	maxConflicts int64
+	// Stop adding conflicting locks and abort scan once the targetBytesPerConflict
+	// limit is reached via collected intent size. Ignored if zero.
+	targetBytesPerConflict int64
 
 	// Stores any error returned. If non-nil, iteration short circuits.
 	err error
 	// Stores any locks that conflict with the transaction and locking strength.
 	conflicts []roachpb.Lock
+	// Stores the total byte size of conflicts.
+	conflictBytes int64
 	// Stores any locks that the transaction has already acquired.
 	ownLocks [len(replicatedLockStrengths)]*enginepb.MVCCMetadata
 
@@ -108,30 +116,32 @@ var lockTableKeyScannerPool = sync.Pool{
 
 // newLockTableKeyScanner creates a new lockTableKeyScanner.
 //
-// txn is the transaction attempting to acquire locks. If txn is not nil, locks
-// held by the transaction with any strength will be accumulated into the
-// ownLocks array. Otherwise, if txn is nil, the request is non-transactional
-// and no locks will be accumulated into the ownLocks array.
+// txnID corresponds to the ID of the transaction attempting to acquire locks.
+// If txnID is valid (non-empty), locks held by the transaction with any
+// strength will be accumulated into the ownLocks array. Otherwise, if txnID is
+// empty, the request is non-transactional and no locks will be accumulated into
+// the ownLocks array.
 //
 // str is the strength of the lock that the transaction (or non-transactional
 // request) is attempting to acquire. The scanner will search for locks held by
-// other transactions that conflict with this strength.
+// other transactions that conflict with this strength[1].
 //
 // maxConflicts is the maximum number of conflicting locks that the scanner
 // should accumulate before returning an error. If maxConflicts is zero, the
 // scanner will accumulate all conflicting locks.
+//
+// [1] It's valid to pass in lock.None for str. lock.None doesn't conflict with
+// any other replicated locks; as such, passing lock.None configures the scanner
+// to only return locks from the supplied txnID.
 func newLockTableKeyScanner(
 	ctx context.Context,
 	reader Reader,
-	txn *roachpb.Transaction,
+	txnID uuid.UUID,
 	str lock.Strength,
 	maxConflicts int64,
+	targetBytesPerConflict int64,
 	readCategory ReadCategory,
 ) (*lockTableKeyScanner, error) {
-	var txnID uuid.UUID
-	if txn != nil {
-		txnID = txn.ID
-	}
 	minConflictStr, err := minConflictLockStrength(str)
 	if err != nil {
 		return nil, err
@@ -149,6 +159,7 @@ func newLockTableKeyScanner(
 	s.iter = iter
 	s.txnID = txnID
 	s.maxConflicts = maxConflicts
+	s.targetBytesPerConflict = targetBytesPerConflict
 	return s, nil
 }
 
@@ -172,6 +183,7 @@ func (s *lockTableKeyScanner) scan(key roachpb.Key) error {
 func (s *lockTableKeyScanner) resetScanState() {
 	s.err = nil
 	s.conflicts = nil
+	s.conflictBytes = 0
 	for i := range s.ownLocks {
 		s.ownLocks[i] = nil
 	}
@@ -300,8 +312,13 @@ func (s *lockTableKeyScanner) consumeConflictingLock(
 	ltKey LockTableKey, ltValue *enginepb.MVCCMetadata,
 ) bool {
 	conflict := roachpb.MakeLock(ltValue.Txn, ltKey.Key.Clone(), ltKey.Strength)
+	conflictSize := int64(conflict.Size())
+	s.conflictBytes += conflictSize
 	s.conflicts = append(s.conflicts, conflict)
 	if s.maxConflicts != 0 && s.maxConflicts == int64(len(s.conflicts)) {
+		return false
+	}
+	if s.targetBytesPerConflict != 0 && s.conflictBytes >= s.targetBytesPerConflict {
 		return false
 	}
 	return true

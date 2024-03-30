@@ -29,10 +29,6 @@ go_test(
         "schema_changer_state_test.go",
     ],
     embed = [":validate"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/clusterversion",
         "//pkg/sql/catalog",

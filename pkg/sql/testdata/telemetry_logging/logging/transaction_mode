@@ -1,0 +1,490 @@
+# Test that transaction mode for telemetry logging logs all stmts for a tracked txn.
+
+subtest transaction_mode_events
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.max_event_frequency = 10;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 100;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
+----
+
+exec-sql
+CREATE TABLE t()
+----
+
+spy-sql unixSecs=0.1
+BEGIN; TRUNCATE t; COMMIT
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlanGist": "Ais=",
+	"SkippedQueries": 1,
+	"Statement": "TRUNCATE TABLE defaultdb.public.t",
+	"StatementFingerprintID": 554456288574568600,
+	"StmtPosInTxn": 1,
+	"Tag": "TRUNCATE",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"Statement": "COMMIT TRANSACTION",
+	"StatementFingerprintID": 6247508841109746000,
+	"StmtPosInTxn": 2,
+	"Tag": "COMMIT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		554456288574568600
+	],
+	"TransactionFingerprintID": 12164906773462274000,
+	"User": "root"
+}
+
+# Note that because we skip BEGIN statements in transaction mode, the first
+# statement logged from this transaction has SkippedQueries=1 even though
+# we logged the statements in the previous transaction.
+spy-sql unixSecs=1
+BEGIN; SELECT 1; SELECT 2; SELECT 3; COMMIT
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"SkippedQueries": 1,
+	"Statement": "SELECT ‹1›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT ‹2›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 2,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT ‹3›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 3,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"Statement": "COMMIT TRANSACTION",
+	"StatementFingerprintID": 6247508841109746000,
+	"StmtPosInTxn": 4,
+	"Tag": "COMMIT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 3,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		2101516650360650000,
+		2101516650360650000,
+		2101516650360650000
+	],
+	"TransactionFingerprintID": 5966815618996220000,
+	"User": "root"
+}
+
+# Skipped due to not enough time elapsed.
+spy-sql unixSecs=1
+SELECT 1, 2
+----
+
+# Logged due to tracing, even though not enough time has elapsed.
+spy-sql unixSecs=1 tracing=true
+SELECT 1, 2
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICBAYE",
+	"SkippedQueries": 1,
+	"Statement": "SELECT ‹1›, ‹2›",
+	"StatementFingerprintID": 7240897616531532000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 1,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		7240897616531532000
+	],
+	"TransactionFingerprintID": 14636535271870697000,
+	"User": "root"
+}
+
+# Skipped due to not enough time elapsed.
+spy-sql unixSecs=1.05
+SELECT * FROM t LIMIT 1
+----
+
+# Skipped due to not enough time elapsed.
+spy-sql unixSecs=1.08
+SELECT * FROM t LIMIT 1
+----
+
+# Logged, enough time has elapsed.
+spy-sql unixSecs=1.1
+SELECT * FROM t LIMIT 2
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "full",
+	"EventType": "sampled_query",
+	"PlanGist": "AgHQAQQAAAAAAg==",
+	"ScanCount": 1,
+	"SkippedQueries": 2,
+	"Statement": "SELECT * FROM \"\".\"\".t LIMIT ‹2›",
+	"StatementFingerprintID": 13897981974204410000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 2,
+	"StatementFingerprintIDs": [
+		13897981974204410000
+	],
+	"TransactionFingerprintID": 8051364883217634000,
+	"User": "root"
+}
+
+# Skipped, not enough time elapsed.
+spy-sql unixSecs=1.15
+BEGIN; SELECT * FROM t LIMIT 3; COMMIT
+----
+
+# Logged, enough time has elapsed.
+spy-sql unixSecs=1.2
+BEGIN; SELECT * FROM t LIMIT 4; SELECT * FROM t LIMIT 5; COMMIT
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "full",
+	"EventType": "sampled_query",
+	"PlanGist": "AgHQAQQAAAAAAg==",
+	"ScanCount": 1,
+	"SkippedQueries": 4,
+	"Statement": "SELECT * FROM \"\".\"\".t LIMIT ‹4›",
+	"StatementFingerprintID": 13897981974204410000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "full",
+	"EventType": "sampled_query",
+	"PlanGist": "AgHQAQQAAAAAAg==",
+	"ScanCount": 1,
+	"Statement": "SELECT * FROM \"\".\"\".t LIMIT ‹5›",
+	"StatementFingerprintID": 13897981974204410000,
+	"StmtPosInTxn": 2,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"Statement": "COMMIT TRANSACTION",
+	"StatementFingerprintID": 6247508841109746000,
+	"StmtPosInTxn": 3,
+	"Tag": "COMMIT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		13897981974204410000,
+		13897981974204410000
+	],
+	"TransactionFingerprintID": 15727566099450096000,
+	"User": "root"
+}
+
+subtest end
+
+subtest no_sampling_reset_on_txn_retry
+
+# This test ensures that if a transaction is retried, the sampling decision is not reset.
+
+exec-sql
+CREATE SEQUENCE seq START WITH 1
+----
+
+reset-last-sampled
+----
+
+# Execute a query at time=1 so that the the next txn executed at time=1 is not sampled.
+spy-sql unixSecs=1
+SELECT 1, 2, 3
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICBgYG",
+	"Statement": "SELECT ‹1›, ‹2›, ‹3›",
+	"StatementFingerprintID": 16048716862824137000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 1,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		16048716862824137000
+	],
+	"TransactionFingerprintID": 8204366343298190000,
+	"User": "root"
+}
+
+# This transaction will not be sampled due to not enough time having elapsed. Its
+# retries should also not be sampled, even though the stub time will be advanced
+# for the retries such that enough time has elapsed for sampling to be enabled,
+# the sampling decision should not be reset and should use the sampling decision
+# initially set for this transaction.
+spy-sql unixSecs=1 restartUnixSecs=2
+BEGIN;
+SELECT 'hello';
+SELECT CASE nextval('seq') WHEN 1 THEN crdb_internal.force_retry('1s') ELSE 2 END;
+COMMIT;
+----
+
+
+# This is the reverse scenario to the above. We will execute a txn at time=2 so that it
+# is sampled (enough time elapsed). On its retry, we will not advance the stub time so that
+# the retry also runs at t=2. The retry should be sampled even though not enough time has
+# elapsed due to it being a retry of asampled txn.
+spy-sql unixSecs=2 restartUnixSecs=2
+BEGIN;
+SELECT 'hello';
+SELECT CASE nextval('seq') WHEN 3 THEN crdb_internal.force_retry('1s') ELSE 2 END;
+COMMIT;
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"SkippedQueries": 7,
+	"Statement": "SELECT ‹'hello'›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"ErrorText": "crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()",
+	"EventType": "sampled_query",
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"SQLSTATE": "40001",
+	"Statement": "SELECT CASE nextval(‹'seq'›) WHEN ‹3› THEN crdb_internal.force_retry(‹'00:00:01'›) ELSE ‹2› END",
+	"StatementFingerprintID": 8086151951699049000,
+	"StmtPosInTxn": 2,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRetries": 1,
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT ‹'hello'›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRetries": 1,
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT CASE nextval(‹'seq'›) WHEN ‹3› THEN crdb_internal.force_retry(‹'00:00:01'›) ELSE ‹2› END",
+	"StatementFingerprintID": 8086151951699049000,
+	"StmtPosInTxn": 2,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRetries": 1,
+	"Statement": "COMMIT TRANSACTION",
+	"StatementFingerprintID": 6247508841109746000,
+	"StmtPosInTxn": 3,
+	"Tag": "COMMIT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"LastAutoRetryReason": "crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()",
+	"NumRetries": 1,
+	"NumRows": 2,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		2101516650360650000,
+		8086151951699049000
+	],
+	"TransactionFingerprintID": 3750030760852548600,
+	"User": "root"
+}
+
+subtest end
+
+subtest redacts_sensitive_info
+
+reset-last-sampled
+----
+
+
+# testuser name should be redacted
+spy-sql user=testuser unixSecs=1
+SELECT 1/0
+----
+pq: division by zero
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"ErrorText": "division by zero",
+	"EventType": "sampled_query",
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"SQLSTATE": "22012",
+	"Statement": "SELECT ‹1› / ‹0›",
+	"StatementFingerprintID": 7375745143010362000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "‹testuser›"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": false,
+	"ErrorText": "division by zero",
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SQLSTATE": "22012",
+	"StatementFingerprintIDs": [
+		7375745143010362000
+	],
+	"TransactionFingerprintID": 14499431829946480000,
+	"User": "‹testuser›"
+}
+
+subtest end

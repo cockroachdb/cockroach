@@ -684,6 +684,36 @@ export const dataFromServerAlertSelector = createSelector(
   },
 );
 
+const licenseTypeNames = new Map<
+  string,
+  "Trial" | "Enterprise" | "Non-Commercial" | "None"
+>([
+  ["Evaluation", "Trial"],
+  ["Enterprise", "Enterprise"],
+  ["NonCommercial", "Non-Commercial"],
+  ["OSS", "None"],
+  ["BSD", "None"],
+]);
+
+// licenseTypeSelector returns user-friendly names of license types.
+export const licenseTypeSelector = createSelector(
+  getDataFromServer,
+  data => licenseTypeNames.get(data.LicenseType) || "None",
+);
+
+// daysUntilLicenseExpiresSelector returns number of days remaining before license expires.
+export const daysUntilLicenseExpiresSelector = createSelector(
+  getDataFromServer,
+  data => {
+    return Math.ceil(data.SecondsUntilLicenseExpiry / 86400); // seconds in 1 day
+  },
+);
+
+export const isManagedClusterSelector = createSelector(
+  getDataFromServer,
+  data => data.IsManaged,
+);
+
 /**
  * Selector which returns an array of all active alerts which should be
  * displayed as a banner, which appears at the top of the page and overlaps

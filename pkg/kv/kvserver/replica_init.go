@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -34,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"go.etcd.io/raft/v3"
 )
 
 const (
@@ -120,18 +121,20 @@ func newUninitializedReplicaWithoutRaftGroup(
 		store:          store,
 		abortSpan:      abortspan.New(rangeID),
 		concMgr: concurrency.NewManager(concurrency.Config{
-			NodeDesc:          store.nodeDesc,
-			RangeDesc:         uninitState.Desc,
-			Settings:          store.ClusterSettings(),
-			DB:                store.DB(),
-			Clock:             store.Clock(),
-			Stopper:           store.Stopper(),
-			IntentResolver:    store.intentResolver,
-			TxnWaitMetrics:    store.txnWaitMetrics,
-			SlowLatchGauge:    store.metrics.SlowLatchRequests,
-			DisableTxnPushing: store.TestingKnobs().DontPushOnLockConflictError,
-			TxnWaitKnobs:      store.TestingKnobs().TxnWaitKnobs,
+			NodeDesc:           store.nodeDesc,
+			RangeDesc:          uninitState.Desc,
+			Settings:           store.ClusterSettings(),
+			DB:                 store.DB(),
+			Clock:              store.Clock(),
+			Stopper:            store.Stopper(),
+			IntentResolver:     store.intentResolver,
+			TxnWaitMetrics:     store.txnWaitMetrics,
+			SlowLatchGauge:     store.metrics.SlowLatchRequests,
+			LatchWaitDurations: store.metrics.LatchWaitDurations,
+			DisableTxnPushing:  store.TestingKnobs().DontPushOnLockConflictError,
+			TxnWaitKnobs:       store.TestingKnobs().TxnWaitKnobs,
 		}),
+		allocatorToken: &plan.AllocatorToken{},
 	}
 	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, rangeID)
 

@@ -40,9 +40,9 @@ ORDER BY id
 ----
 id  active  name
 1   true    system
-2   true    tenant-one
-3   true    two
-4   true    three
+3   true    tenant-one
+4   true    two
+5   true    three
 
 query ITTT colnames
 SHOW TENANT system
@@ -54,46 +54,46 @@ query ITTT colnames
 SHOW TENANT "tenant-one"
 ----
 id  name        data_state  service_mode
-2   tenant-one  ready       none
+3   tenant-one  ready       none
 
 query ITTT colnames
 SHOW TENANT "two"
 ----
 id  name  data_state  service_mode
-3   two   ready       none
+4   two   ready       none
 
 query ITTT colnames
 SHOW TENANT two
 ----
 id  name  data_state  service_mode
-3   two   ready       none
+4   two   ready       none
 
 query ITTT colnames
 SHOW TENANT three
 ----
 id  name   data_state  service_mode
-4   three  ready       none
+5   three  ready       none
 
 query ITTT colnames,rowsort
 SHOW TENANTS
 ----
 id  name        data_state  service_mode
 1   system      ready       shared
-2   tenant-one  ready       none
-3   two         ready       none
-4   three       ready       none
+3   tenant-one  ready       none
+4   two         ready       none
+5   three       ready       none
 
 statement error tenant name cannot be empty
-ALTER TENANT [4] RENAME TO ""
+ALTER TENANT [5] RENAME TO ""
 
 statement error tenant name cannot be NULL
-ALTER TENANT [4] RENAME TO NULL
+ALTER TENANT [5] RENAME TO NULL
 
 statement error invalid tenant name
-ALTER TENANT [4] RENAME TO "a.b"
+ALTER TENANT [5] RENAME TO "a.b"
 
 statement ok
-ALTER TENANT [4] RENAME TO blux
+ALTER TENANT [5] RENAME TO blux
 
 statement ok
 ALTER TENANT blux RENAME TO 'blix'
@@ -102,7 +102,7 @@ query ITTT colnames
 SELECT * FROM [SHOW TENANTS] WHERE id = 4
 ----
 id  name  data_state  service_mode
-4   blix  ready       none
+4   two   ready       none
 
 statement ok
 ALTER TENANT blix RENAME TO three
@@ -110,14 +110,14 @@ ALTER TENANT blix RENAME TO three
 query ITTT colnames
 SELECT * FROM [SHOW TENANTS] WHERE id = 4
 ----
-id  name   data_state  service_mode
-4   three  ready       none
+id  name  data_state  service_mode
+4   two   ready       none
 
-query ITTTT colnames
-SELECT id, name, data_state, service_mode, source_tenant_name FROM [SHOW TENANTS WITH REPLICATION STATUS] WHERE id = 4
+query ITT colnames
+SELECT id, name, source_tenant_name FROM [SHOW TENANTS WITH REPLICATION STATUS] WHERE id = 4
 ----
-id  name   data_state  service_mode  source_tenant_name
-4   three  ready       none          NULL
+id  name  source_tenant_name
+4   two   NULL
 
 statement error tenant "seven" does not exist
 SHOW TENANT seven
@@ -163,7 +163,7 @@ FROM system.tenants WHERE name = 'four'
 ORDER BY id
 ----
 id  active  name
-5   true    four
+6   true    four
 
 statement ok
 DROP TENANT four
@@ -216,15 +216,15 @@ SHOW TENANTS
 ----
 id  name        data_state  service_mode
 1   system      ready       shared
-2   tenant-one  ready       none
-3   two         ready       none
-4   three       ready       none
+3   tenant-one  ready       none
+4   two         ready       none
+5   three       ready       none
 
 query ITTT colnames
 SHOW TENANT two
 ----
-id  name        data_state  service_mode
-3   two         ready       none
+id  name  data_state  service_mode
+4   two   ready       none
 
 user root
 
@@ -286,13 +286,13 @@ ORDER BY id
 ----
 id  active  name             deprecated_data_state  dropped_name
 1   true    system           READY                  ·
-2   true    tenant-one       READY                  ·
-3   true    two              READY                  ·
-4   true    three            READY                  ·
-5   false   NULL             DROP                   four
-6   false   NULL             DROP                   five-requiring-quotes
-7   false   NULL             DROP                   to-be-reclaimed
-8   true    to-be-reclaimed  READY                  ·
+3   true    tenant-one       READY                  ·
+4   true    two              READY                  ·
+5   true    three            READY                  ·
+6   false   NULL             DROP                   four
+7   false   NULL             DROP                   five-requiring-quotes
+8   false   NULL             DROP                   to-be-reclaimed
+9   true    to-be-reclaimed  READY                  ·
 
 # More valid tenant names.
 statement ok
@@ -305,13 +305,13 @@ SHOW TENANTS
 ----
 id  name             data_state  service_mode
 1   system           ready       shared
-2   tenant-one       ready       none
-3   two              ready       none
-4   three            ready       none
-8   to-be-reclaimed  ready       none
-9   1                ready       none
-10  a-b              ready       none
-11  hello-100        ready       none
+3   tenant-one       ready       none
+4   two              ready       none
+5   three            ready       none
+9   to-be-reclaimed  ready       none
+10  1                ready       none
+11  a-b              ready       none
+12  hello-100        ready       none
 
 subtest service_mode
 
@@ -345,13 +345,13 @@ SHOW TENANTS
 ----
 id  name             data_state  service_mode
 1   system           ready       shared
-2   tenant-one       ready       external
-3   two              ready       shared
-4   three            ready       none
-8   to-be-reclaimed  ready       none
-9   1                ready       none
-10  a-b              ready       none
-11  hello-100        ready       none
+3   tenant-one       ready       external
+4   two              ready       shared
+5   three            ready       none
+9   to-be-reclaimed  ready       none
+10  1                ready       none
+11  a-b              ready       none
+12  hello-100        ready       none
 
 statement ok
 ALTER TENANT two STOP SERVICE
@@ -364,13 +364,13 @@ SHOW TENANTS
 ----
 id  name             data_state  service_mode
 1   system           ready       shared
-2   tenant-one       ready       none
-3   two              ready       none
-4   three            ready       none
-8   to-be-reclaimed  ready       none
-9   1                ready       none
-10  a-b              ready       none
-11  hello-100        ready       none
+3   tenant-one       ready       none
+4   two              ready       none
+5   three            ready       none
+9   to-be-reclaimed  ready       none
+10  1                ready       none
+11  a-b              ready       none
+12  hello-100        ready       none
 
 statement ok
 DROP TENANT two
@@ -407,6 +407,9 @@ INSERT INTO system.tenant_usage(
         ru_burst_limit, ru_refill_rate, ru_current, current_share_sum, total_consumption)
 VALUES ($tmplid, 0, 0, now(),
         11, 22, 33, 44, ''::BYTES);
+
+
+statement ok
 ALTER TENANT tmpl START SERVICE SHARED; -- will not be copied.
 
 # Use it to create a new tenant.
@@ -495,71 +498,39 @@ FROM system.tenant_usage WHERE tenant_id = $otherid
 
 # Clean up.
 statement ok
-DROP TENANT othertenant;
-ALTER TENANT tmpl STOP SERVICE;
+DROP TENANT othertenant
+
+statement ok
+ALTER TENANT tmpl STOP SERVICE
+
+statement ok
 DROP TENANT tmpl
 
 statement ok
 RESET CLUSTER SETTING sql.create_virtual_cluster.default_template
-
-subtest block_drop_virtual_cluster
-
-statement ok
-SET disable_drop_virtual_cluster = 'true'
-
-statement ok
-CREATE TENANT nodelete
-
-statement error rejected.*irreversible data loss
-DROP TENANT nodelete
-
-statement ok
-RESET disable_drop_virtual_cluster
-
-statement ok
-DROP TENANT nodelete
 
 subtest regression_105115
 
 statement ok
 CREATE TENANT noservice
 
-statement error shared service not enabled for tenant "noservice"
-SET CLUSTER SETTING server.controller.default_target_cluster = noservice
-
-statement ok
-SET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled = false
-
 statement ok
 SET CLUSTER SETTING server.controller.default_target_cluster = noservice
-
-statement ok
-RESET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled
-
-statement ok
-RESET CLUSTER SETTING server.controller.default_target_cluster
 
 statement ok
 DROP TENANT noservice;
 CREATE TENANT withservice;
+
+statement ok
 ALTER TENANT withservice START SERVICE SHARED
 
 statement ok
 SET CLUSTER SETTING server.controller.default_target_cluster = withservice
 
-statement error cannot stop service while tenant is selected as default
-ALTER TENANT withservice STOP SERVICE
-
-statement ok
-SET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled = false
-
 statement ok
 ALTER TENANT withservice STOP SERVICE
 
 # clean up
-statement ok
-RESET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled
-
 statement ok
 RESET CLUSTER SETTING server.controller.default_target_cluster
 

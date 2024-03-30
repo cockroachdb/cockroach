@@ -710,6 +710,11 @@ func SchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites jobspb.DescRe
 				if err := rewriteIDsInTypesT(sig.ReturnType, descriptorRewrites); err != nil {
 					return err
 				}
+				for _, typ := range sig.OutParamTypes {
+					if err := rewriteIDsInTypesT(typ, descriptorRewrites); err != nil {
+						return err
+					}
+				}
 				newSigs = append(newSigs, *sig)
 			}
 			if len(newSigs) > 0 {
@@ -748,7 +753,7 @@ func rewriteSchemaChangerState(
 		t := &state.Targets[i]
 		// Since the parent database ID is never written in the descriptorRewrites
 		// map we need to special case certain elements that need their ParentID
-		// re-written.
+		// re-written
 		if data := t.GetTableData(); data != nil {
 			rewrite, ok := descriptorRewrites[data.TableID]
 			if !ok {
@@ -756,6 +761,15 @@ func rewriteSchemaChangerState(
 			}
 			data.TableID = rewrite.ID
 			data.DatabaseID = rewrite.ParentID
+			continue
+		} else if data := t.GetNamespace(); data != nil {
+			rewrite, ok := descriptorRewrites[data.DescriptorID]
+			if !ok {
+				return errors.Errorf("missing rewrite for id %d in %s", data.DescriptorID, screl.ElementString(t.Element()))
+			}
+			data.DescriptorID = rewrite.ID
+			data.DatabaseID = rewrite.ParentID
+			data.SchemaID = rewrite.ParentSchemaID
 			continue
 		}
 		if err := screl.WalkDescIDs(t.Element(), func(id *descpb.ID) error {
@@ -1052,6 +1066,16 @@ func FunctionDescs(
 				return errors.AssertionFailedf(
 					"cannot restore function %q because referenced type %d was not found",
 					fnDesc.Name, typID)
+			}
+		}
+
+		for i, funcID := range fnDesc.DependsOnFunctions {
+			if funcRewrite, ok := descriptorRewrites[funcID]; ok {
+				fnDesc.DependsOnFunctions[i] = funcRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore function %q because referenced function %d was not found",
+					fnDesc.Name, funcID)
 			}
 		}
 

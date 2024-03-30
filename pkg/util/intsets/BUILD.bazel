@@ -25,9 +25,5 @@ go_test(
         "sparse_test.go",
     ],
     embed = [":intsets"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = ["//pkg/util/randutil"],
 )

@@ -29,7 +29,7 @@ ElementState:
     isProcedure: false
     params:
     - class:
-        class: IN
+        class: DEFAULT
       name: a
       type:
         closedTypeIds:
@@ -82,6 +82,7 @@ ElementState:
     functionId: 110
     lang:
       lang: SQL
+    usesFunctionIds: []
     usesSequenceIds:
     - 105
     usesTables:

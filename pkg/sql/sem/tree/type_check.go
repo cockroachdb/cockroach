@@ -136,6 +136,11 @@ func (s *SemaProperties) Restore(orig SemaProperties) {
 	*s = orig
 }
 
+// Context returns the required context string set by Require.
+func (s *SemaProperties) Context() string {
+	return s.required.context
+}
+
 // SemaRejectFlags contains flags to filter out certain kinds of
 // expressions.
 type SemaRejectFlags int
@@ -229,10 +234,6 @@ const (
 	// checking condition expressions CASE, COALESCE, and IF. Used to reject
 	// set-returning functions within conditional expressions.
 	ConditionalAncestor
-
-	// CallAncestor is added to ScalarAncestors while type checking children of
-	// a CALL statement. Used to print sensible error messages for procedures.
-	CallAncestor
 )
 
 // Push adds the given ancestor to s.
@@ -538,7 +539,7 @@ func resolveCast(context string, castFrom, castTo *types.T, allowStable bool) er
 		// the same, and if there are casts resolvable across all of the elements
 		// pointwise. Casts to AnyTuple are always allowed since they are
 		// implemented as a no-op.
-		if castTo == types.AnyTuple {
+		if castTo.Identical(types.AnyTuple) {
 			return nil
 		}
 		fromTuple := castFrom.TupleContents()
@@ -1135,6 +1136,21 @@ func CheckIsWindowOrAgg(def *ResolvedFunctionDefinition) error {
 	return nil
 }
 
+func (expr *FuncExpr) typeCheckWithFuncAncestor(semaCtx *SemaContext, fn func() error) error {
+	if semaCtx != nil {
+		defer semaCtx.Properties.Restore(semaCtx.Properties)
+		// We'll need to remember we are in a function application to generate
+		// suitable errors in checkFunctionUsage().
+		semaCtx.Properties.Ancestors.Push(FuncExprAncestor)
+		if expr.WindowDef != nil {
+			semaCtx.Properties.Ancestors.Push(WindowFuncAncestor)
+		}
+		// Disallow procedures in function arguments.
+		semaCtx.Properties.Reject(RejectProcedures)
+	}
+	return fn()
+}
+
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
@@ -1150,10 +1166,12 @@ func (expr *FuncExpr) TypeCheck(
 
 	def, err := expr.Func.Resolve(ctx, searchPath, resolver)
 	if err != nil {
-		if errors.Is(err, ErrRoutineUndefined) {
-			if procErr := procedureDoesNotExistErr(expr.Func.String(), semaCtx); procErr != nil {
-				return nil, procErr
-			}
+		if errors.Is(err, ErrRoutineUndefined) && expr.InCall {
+			return nil, errors.WithHint(
+				pgerror.Newf(pgcode.UndefinedFunction, "procedure %s does not exist", expr.Func),
+				"No procedure matches the given name and argument types. "+
+					"You might need to add explicit type casts.",
+			)
 		}
 		return nil, err
 	}
@@ -1163,17 +1181,17 @@ func (expr *FuncExpr) TypeCheck(
 			"%s()", def.Name)
 	}
 
-	if semaCtx != nil {
-		// We'll need to remember we are in a function application to generate
-		// suitable errors in checkFunctionUsage(). We cannot enter
-		// FuncExprAncestor earlier (in particular not before the call to
-		// checkFunctionUsage() above) because the top-level FuncExpr must be
-		// acceptable even if it is a SRF and RejectNestedGenerators is set.
-		defer semaCtx.Properties.Ancestors.PopTo(semaCtx.Properties.Ancestors)
-		semaCtx.Properties.Ancestors.Push(FuncExprAncestor)
-		if expr.WindowDef != nil {
-			semaCtx.Properties.Ancestors.Push(WindowFuncAncestor)
+	typeNames := func(typedExprs []TypedExpr) string {
+		var sb strings.Builder
+		sb.WriteByte('(')
+		for i := range typedExprs {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(typedExprs[i].ResolvedType().Name())
 		}
+		sb.WriteByte(')')
+		return sb.String()
 	}
 
 	s := getOverloadTypeChecker(
@@ -1181,17 +1199,48 @@ func (expr *FuncExpr) TypeCheck(
 	)
 	defer s.release()
 
-	if err := func() error {
-		// Disallow procedures in function arguments.
-		if semaCtx != nil {
-			defer semaCtx.Properties.Restore(semaCtx.Properties)
-			semaCtx.Properties.Reject(RejectProcedures)
-		}
-		if err := s.typeCheckOverloadedExprs(ctx, semaCtx, desired, false); err != nil {
+	if err = expr.typeCheckWithFuncAncestor(semaCtx, func() error {
+		if err := s.typeCheckOverloadedExprs(ctx, semaCtx, desired, false /* inBinOp */); err != nil {
 			return pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 		}
+		if expr.InCall && len(s.overloadIdxs) == 0 {
+			// Since we didn't find the overload, let's see whether the user
+			// made a mistake and attempted to call a UDF. We attempt this by
+			// temporarily adjusting the RoutineType of each UDF to be
+			// Procedure, then running type-checking on adjusted overloads, and
+			// resetting the UDF overloads to their original state.
+			var functionIdxs []int
+			var functionOverloads []QualifiedOverload
+			for idx, o := range def.Overloads {
+				if o.Type == UDFRoutine {
+					o.Type = ProcedureRoutine
+					functionIdxs = append(functionIdxs, idx)
+					functionOverloads = append(functionOverloads, o)
+				}
+			}
+			if len(functionIdxs) > 0 {
+				defer func() {
+					for _, idx := range functionIdxs {
+						def.Overloads[idx].Type = UDFRoutine
+					}
+				}()
+				s2 := getOverloadTypeChecker((*qualifiedOverloads)(&functionOverloads), expr.Exprs...)
+				defer s2.release()
+				err2 := s2.typeCheckOverloadedExprs(ctx, semaCtx, desired, false /* inBinOp */)
+				if err2 == nil && len(s2.overloadIdxs) > 0 {
+					// This time we found a match, so return the proper error.
+					return errors.WithHint(
+						pgerror.Newf(
+							pgcode.WrongObjectType,
+							"%s%s is not a procedure", def.Name, typeNames(s2.typedExprs),
+						),
+						"To call a function, use SELECT.",
+					)
+				}
+			}
+		}
 		return nil
-	}(); err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
@@ -1249,6 +1298,21 @@ func (expr *FuncExpr) TypeCheck(
 		s.overloadIdxs = truncated
 	}
 
+	if len(s.overloadIdxs) == 0 {
+		if expr.InCall {
+			return nil, errors.WithHint(
+				pgerror.Newf(pgcode.UndefinedFunction, "procedure %s%s does not exist",
+					def.Name, typeNames(s.typedExprs)),
+				"No procedure matches the given name and argument types. "+
+					"You might need to add explicit type casts.",
+			)
+		}
+		return nil, errors.WithHint(
+			pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig(expr, s.typedExprs, desired)),
+			"No function matches the given name and argument types. You might need to add explicit type casts.",
+		)
+	}
+
 	// Return NULL if at least one overload is possible, no overload accepts
 	// NULL arguments, the function isn't a generator or aggregate builtin, and
 	// NULL is given as an argument. We do not perform this transformation
@@ -1257,22 +1321,12 @@ func (expr *FuncExpr) TypeCheck(
 	// type-checking.
 	if len(s.overloadIdxs) > 0 && calledOnNullInputFns.Len() == 0 && funcCls != GeneratorClass &&
 		funcCls != AggregateClass && !hasUDFOverload &&
-		semaCtx != nil && !semaCtx.Properties.Ancestors.Has(CallAncestor) {
+		semaCtx != nil && !expr.InCall {
 		for _, expr := range s.typedExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {
 				return DNull, nil
 			}
 		}
-	}
-
-	if len(s.overloadIdxs) == 0 {
-		if procErr := procedureDoesNotExistErr(expr.Func.String(), semaCtx); procErr != nil {
-			return nil, procErr
-		}
-		return nil, errors.WithHint(
-			pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig(expr, s.typedExprs, desired)),
-			"No function matches the given name and argument types. You might need to add explicit type casts.",
-		)
 	}
 
 	var favoredOverload QualifiedOverload
@@ -1338,7 +1392,7 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
-		if funcCls == WindowClass {
+		if !expr.InCall && funcCls == WindowClass {
 			return nil, pgerror.Newf(pgcode.WrongObjectType,
 				"window function %s() requires an OVER clause", &expr.Func)
 		}
@@ -1352,20 +1406,30 @@ func (expr *FuncExpr) TypeCheck(
 				"FILTER specified but %s() is not an aggregate function", &expr.Func)
 		}
 
-		typedFilter, err := typeCheckAndRequireBoolean(ctx, semaCtx, expr.Filter, "FILTER expression")
-		if err != nil {
+		if err = expr.typeCheckWithFuncAncestor(semaCtx, func() error {
+			typedFilter, err := typeCheckAndRequireBoolean(ctx, semaCtx, expr.Filter, "FILTER expression")
+			if err != nil {
+				return err
+			}
+			expr.Filter = typedFilter
+			return nil
+		}); err != nil {
 			return nil, err
 		}
-		expr.Filter = typedFilter
 	}
 
 	if expr.OrderBy != nil {
-		for i := range expr.OrderBy {
-			typedExpr, err := expr.OrderBy[i].Expr.TypeCheck(ctx, semaCtx, types.Any)
-			if err != nil {
-				return nil, err
+		if err = expr.typeCheckWithFuncAncestor(semaCtx, func() error {
+			for i := range expr.OrderBy {
+				typedExpr, err := expr.OrderBy[i].Expr.TypeCheck(ctx, semaCtx, types.Any)
+				if err != nil {
+					return err
+				}
+				expr.OrderBy[i].Expr = typedExpr
 			}
-			expr.OrderBy[i].Expr = typedExpr
+			return nil
+		}); err != nil {
+			return nil, err
 		}
 	}
 
@@ -1392,29 +1456,10 @@ func (expr *FuncExpr) TypeCheck(
 	if err := semaCtx.checkVolatility(overloadImpl.Volatility); err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
-	if overloadImpl.OnTypeCheck != nil && *overloadImpl.OnTypeCheck != nil {
-		(*overloadImpl.OnTypeCheck)()
+	if overloadImpl.OnTypeCheck != nil {
+		overloadImpl.OnTypeCheck()
 	}
 	return expr, nil
-}
-
-// procedureDoesNotExistErr returns a "procedure does not exist" error if the
-// current ancestors indicate that type checking is occuring at the top-level
-// child of a CALL statement.
-//
-// TODO(#111139): We'll need to reconsider how we determine that we're looking
-// for a procedure once we support calling procedures from within UDFs.
-func procedureDoesNotExistErr(fnName string, semaCtx *SemaContext) error {
-	if semaCtx != nil &&
-		semaCtx.Properties.Ancestors.Has(CallAncestor) &&
-		!semaCtx.Properties.Ancestors.Has(FuncExprAncestor) {
-		return errors.WithHint(
-			pgerror.Newf(pgcode.UndefinedFunction, "procedure %s does not exist", fnName),
-			"No procedure matches the given name and argument types. "+
-				"You might need to add explicit type casts.",
-		)
-	}
-	return nil
 }
 
 // TypeCheck implements the Expr interface.
@@ -1833,7 +1878,7 @@ func (expr *Array) TypeCheck(
 	}
 
 	if len(expr.Exprs) == 0 {
-		if desiredParam == types.Any {
+		if desiredParam.Family() == types.AnyFamily {
 			return nil, errAmbiguousArrayType
 		}
 		expr.typ = types.MakeArray(desiredParam)
@@ -2109,7 +2154,8 @@ func (d *DArray) TypeCheck(_ context.Context, _ *SemaContext, desired *types.T) 
 	// mark the array's type as the desired one.
 	// ARRAY[]
 	// ARRAY[NULL, NULL]
-	if (d.ParamTyp == types.Unknown || d.ParamTyp == types.Any) && (!d.HasNonNulls) {
+	if (d.ParamTyp.Family() == types.UnknownFamily || d.ParamTyp.Family() == types.AnyFamily) &&
+		(!d.HasNonNulls) {
 		if desired.Family() != types.ArrayFamily {
 			// We can't desire a non-array type here.
 			return d, nil
@@ -2712,7 +2758,7 @@ func typeCheckSameTypedExprs(
 			return nil, nil, err
 		}
 		typ := typedExpr.ResolvedType()
-		if typ == types.Unknown && !desired.IsWildcardType() {
+		if typ.Family() == types.UnknownFamily && !desired.IsWildcardType() {
 			// The expression had a NULL type, so we can return the desired type as
 			// the expression type.
 			typ = desired
@@ -3401,6 +3447,9 @@ func getMostSignificantOverload(
 	getFuncSig func() string,
 ) (QualifiedOverload, error) {
 	ambiguousError := func() error {
+		if expr.InCall {
+			return pgerror.Newf(pgcode.AmbiguousFunction, "procedure %s is not unique", getFuncSig())
+		}
 		return pgerror.Newf(
 			pgcode.AmbiguousFunction,
 			"ambiguous call: %s, candidates are:\n%s",
@@ -3532,7 +3581,7 @@ func CheckUnsupportedType(ctx context.Context, semaCtx *SemaContext, typ *types.
 // various locations throughout the codebase.
 func checkRefCursorComparison(op treecmp.ComparisonOperatorSymbol, left, right *types.T) error {
 	if (op == treecmp.IsNotDistinctFrom || op == treecmp.IsDistinctFrom) &&
-		(left.Family() == types.RefCursorFamily && right == types.Unknown) {
+		(left.Family() == types.RefCursorFamily && right.Family() == types.UnknownFamily) {
 		// Special case: "REFCURSOR IS [NOT] DISTINCT FROM NULL" is allowed.
 		return nil
 	}

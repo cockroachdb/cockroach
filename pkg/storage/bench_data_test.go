@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testfixtures"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -55,15 +56,10 @@ type initialState interface {
 	Build(context.Context, *testing.B, Engine) error
 }
 
-type engineWithLocation struct {
-	Engine
-	Location
-}
-
 var previousReleaseFormatMajorVersion = pebbleFormatVersion(clusterversion.PreviousRelease.Version())
 
 var previousReleaseFormatMajorVersionOpt ConfigOption = func(cfg *engineConfig) error {
-	cfg.PebbleConfig.Opts.FormatMajorVersion = previousReleaseFormatMajorVersion
+	cfg.opts.FormatMajorVersion = previousReleaseFormatMajorVersion
 	return nil
 }
 
@@ -76,7 +72,7 @@ var previousReleaseFormatMajorVersionOpt ConfigOption = func(cfg *engineConfig) 
 // configuration, because the Key() value is used to key cached initial databases.
 func getInitialStateEngine(
 	ctx context.Context, b *testing.B, initial initialState, inMemory bool,
-) engineWithLocation {
+) Engine {
 	name := strings.Join(initial.Key(), "-")
 	dir := testfixtures.ReuseOrGenerate(b, name, func(dir string) {
 		buildInitialState(ctx, b, initial, dir)
@@ -88,27 +84,27 @@ func getInitialStateEngine(
 		previousReleaseFormatMajorVersionOpt,
 	}, initial.ConfigOptions()...)
 
-	var loc Location
+	var env *fs.Env
 	if inMemory {
-		loc = InMemory()
+		env = fs.InMemory()
 	} else {
 		// The caller wants a durable engine; use a temp directory.
-		loc = Filesystem(b.TempDir())
+		env = fs.MustInitPhysicalTestingEnv(b.TempDir())
 	}
 
 	// We now copy the initial state to the desired FS.
-	ok, err := vfs.Clone(vfs.Default, loc.fs, dataDir, loc.dir, vfs.CloneSync)
+	ok, err := vfs.Clone(vfs.Default, env, dataDir, env.Dir, vfs.CloneSync)
 	require.NoError(b, err)
 	require.True(b, ok)
 
 	if !inMemory {
 		// Load all the files into the OS buffer cache for better determinism.
-		testutils.ReadAllFiles(filepath.Join(loc.dir, "*"))
+		testutils.ReadAllFiles(filepath.Join(env.Dir, "*"))
 	}
 
-	e, err := Open(ctx, loc, cluster.MakeClusterSettings(), opts...)
+	e, err := Open(ctx, env, cluster.MakeClusterSettings(), opts...)
 	require.NoError(b, err)
-	return engineWithLocation{Engine: e, Location: loc}
+	return e
 }
 
 func buildInitialState(
@@ -128,7 +124,7 @@ func buildInitialState(
 		e := getInitialStateEngine(ctx, b, base, true /* inMemory */)
 		require.NoError(b, initial.Build(ctx, b, e))
 		e.Close()
-		buildFS = e.Location.fs
+		buildFS = e.Env().UnencryptedFS
 	} else {
 		opts := append([]ConfigOption{previousReleaseFormatMajorVersionOpt}, initial.ConfigOptions()...)
 
@@ -136,12 +132,11 @@ func buildInitialState(
 		// or not, we build the conditions using an in-memory engine for
 		// performance.
 		buildFS = vfs.NewMem()
-
-		var err error
-		e, err := Open(ctx, Location{fs: buildFS}, cluster.MakeClusterSettings(), opts...)
-
+		env, err := fs.InitEnv(ctx, buildFS, "", fs.EnvConfig{})
 		require.NoError(b, err)
 
+		e, err := Open(ctx, env, cluster.MakeClusterSettings(), opts...)
+		require.NoError(b, err)
 		require.NoError(b, initial.Build(ctx, b, e))
 		e.Close()
 	}
@@ -273,7 +268,7 @@ func (d mvccBenchData) Build(ctx context.Context, b *testing.B, eng Engine) erro
 			startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(start)))
 			endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(end)))
 			require.NoError(b, MVCCDeleteRangeUsingTombstone(
-				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
+				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil))
 		}
 		require.NoError(b, batch.Commit(false /* sync */))
 	}

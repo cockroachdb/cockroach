@@ -1,11 +1,13 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "plan",
     srcs = [
+        "lease.go",
         "op.go",
         "replicate.go",
         "replicate_stats.go",
+        "token.go",
         "util.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan",
@@ -17,13 +19,25 @@ go_library(
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/benignerror",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft",
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/retry",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@io_etcd_go_raft_v3//:raft",
+    ],
+)
+
+go_test(
+    name = "plan_test",
+    srcs = ["token_test.go"],
+    embed = [":plan"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )

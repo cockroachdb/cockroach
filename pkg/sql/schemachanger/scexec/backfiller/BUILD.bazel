@@ -34,10 +34,6 @@ go_test(
         "tracker_test.go",
     ],
     embed = [":backfiller"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",

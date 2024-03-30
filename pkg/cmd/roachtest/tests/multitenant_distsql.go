@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/stretchr/testify/require"
@@ -61,7 +62,7 @@ func runMultiTenantDistSQL(
 	// This test sets a smaller default range size than the default due to
 	// performance and resource limitations. We set the minimum range max bytes to
 	// 1 byte to bypass the guardrails.
-	settings := install.MakeClusterSettings(install.SecureOption(true))
+	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_MIN_RANGE_MAX_BYTES=1")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(1))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(2))
@@ -73,9 +74,13 @@ func runMultiTenantDistSQL(
 	for i := 0; i < numInstances; i++ {
 		node := (i % c.Spec().NodeCount) + 1
 		sqlInstance := i / c.Spec().NodeCount
-		instStartOps := option.DefaultStartVirtualClusterOpts(tenantName, sqlInstance)
+		instStartOps := option.StartVirtualClusterOpts(
+			tenantName, c.Node(node),
+			option.StorageCluster(storageNodes),
+			option.VirtualClusterInstance(sqlInstance),
+		)
 		t.L().Printf("Starting instance %d on node %d", i, node)
-		c.StartServiceForVirtualCluster(ctx, t.L(), c.Node(node), instStartOps, settings, storageNodes)
+		c.StartServiceForVirtualCluster(ctx, t.L(), instStartOps, settings)
 		nodes.Add(i + 1)
 	}
 
@@ -86,7 +91,7 @@ func runMultiTenantDistSQL(
 
 	m := c.NewMonitor(ctx, c.Nodes(1, 2, 3))
 
-	inst1Conn, err := c.ConnE(ctx, t.L(), 1, option.TenantName(tenantName))
+	inst1Conn, err := c.ConnE(ctx, t.L(), 1, option.VirtualClusterName(tenantName))
 	require.NoError(t, err)
 	_, err = inst1Conn.Exec("CREATE TABLE t(n INT, i INT,s STRING, PRIMARY KEY(n,i))")
 	require.NoError(t, err)
@@ -105,7 +110,7 @@ func runMultiTenantDistSQL(
 		m.Go(func(ctx context.Context) error {
 			node := (li % c.Spec().NodeCount) + 1
 			sqlInstance := li / c.Spec().NodeCount
-			dbi, err := c.ConnE(ctx, t.L(), node, option.TenantName(tenantName), option.SQLInstance(sqlInstance))
+			dbi, err := c.ConnE(ctx, t.L(), node, option.VirtualClusterName(tenantName), option.SQLInstance(sqlInstance))
 			require.NoError(t, err)
 			iter := 0
 			for {
@@ -198,7 +203,7 @@ func runMultiTenantDistSQL(
 		if bundle {
 			// Open bundle and verify its contents
 			sqlConnCtx := clisqlclient.Context{}
-			pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(1), tenantName, 0)
+			pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{VirtualClusterName: tenantName})
 			require.NoError(t, err)
 			conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, pgURL[0])
 			bundles, err := clisqlclient.StmtDiagListBundles(ctx, conn)

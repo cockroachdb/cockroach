@@ -102,7 +102,7 @@ SELECT count(1), max(%[2]s) FROM d`,
 				ctx,
 				opName,
 				nil, /* txn */
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				deleteStmt,
 				timestampLowerBound,
 				timestampUpperBound,
@@ -252,7 +252,7 @@ func startSystemLogsGC(ctx context.Context, sqlServer *SQLServer) error {
 			return period
 		}
 		period := getPeriod()
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		defer timer.Stop()
 		// The very first period is 25% off the configured period, to
 		// avoid a thundering herd effect on the system table between

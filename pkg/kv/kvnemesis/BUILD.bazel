@@ -27,7 +27,6 @@ go_library(
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
-        "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/concurrency",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
@@ -37,6 +36,7 @@ go_library(
         "//pkg/sql/catalog/bootstrap",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/bufalloc",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
@@ -72,10 +72,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":kvnemesis"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
+    exec_properties = {"test.Pool": "heavy"},
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",

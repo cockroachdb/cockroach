@@ -69,10 +69,6 @@ go_test(
         "tsvector_test.go",
     ],
     embed = [":tsearch"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/inverted",
         "//pkg/testutils/skip",

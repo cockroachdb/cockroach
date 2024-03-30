@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 17
+const configIdx = 18
 
 var logicTestDir string
 
@@ -799,13 +799,6 @@ func TestLogic_fk(
 	runLogicTest(t, "fk")
 }
 
-func TestLogic_fk_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "fk_read_committed")
-}
-
 func TestLogic_float(
 	t *testing.T,
 ) {
@@ -951,13 +944,6 @@ func TestLogic_hash_sharded_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "hash_sharded_index")
-}
-
-func TestLogic_hash_sharded_index_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "hash_sharded_index_read_committed")
 }
 
 func TestLogic_hidden_columns(

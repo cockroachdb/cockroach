@@ -47,6 +47,15 @@ type InternalExecutorOverride struct {
 	// does **not** propagate further to "nested" executors that are spawned up
 	// by the "top" executor.
 	InjectRetryErrorsEnabled bool
+	// OptimizerUseHistograms indicates whether we should use histograms for
+	// cardinality estimation in the optimizer.
+	// TODO(#102954): this should be removed when #102954 is fixed.
+	OptimizerUseHistograms bool
+	// MultiOverride, if set, is a comma-separated list of variable_name=value
+	// overrides. For example, 'Database=foo,OptimizerUseHistograms=true'. These
+	// overrides are performed on the best-effort basis - see SessionData.Update
+	// for more details.
+	MultiOverride string
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
@@ -57,10 +66,4 @@ var NoSessionDataOverride = InternalExecutorOverride{}
 // the user to the NodeUser.
 var NodeUserSessionDataOverride = InternalExecutorOverride{
 	User: username.MakeSQLUsernameFromPreNormalizedString(username.NodeUser),
-}
-
-// RootUserSessionDataOverride is an InternalExecutorOverride which overrides
-// the user to the RootUser.
-var RootUserSessionDataOverride = InternalExecutorOverride{
-	User: username.MakeSQLUsernameFromPreNormalizedString(username.RootUser),
 }

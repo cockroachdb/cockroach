@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "builder.go",
         "cascades.go",
+        "col_ord_map.go",
         "format.go",
         "mutation.go",
         "relational.go",
@@ -65,6 +66,7 @@ go_test(
     name = "execbuilder_test",
     size = "small",
     srcs = [
+        "col_ord_map_test.go",
         "main_test.go",
         "mutation_test.go",
     ],
@@ -73,10 +75,6 @@ go_test(
         "//c-deps:libgeos",
     ],
     embed = [":execbuilder"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

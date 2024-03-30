@@ -20,11 +20,14 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,6 +40,22 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 )
+
+type testResult int
+
+const (
+	// NB: These are in a particular order corresponding to the order we
+	// want these tests to appear in the generated Markdown report.
+	testResultFailure testResult = iota
+	testResultSuccess
+	testResultSkip
+)
+
+type testReportForGitHub struct {
+	name     string
+	duration time.Duration
+	status   testResult
+}
 
 // runTests is the main function for the run and bench commands.
 // Assumes initRunFlagsBinariesAndLibraries was called.
@@ -169,6 +188,11 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		// Collect the runner logs.
 		fmt.Printf("##teamcity[publishArtifacts '%s']\n", filepath.Join(literalArtifactsDir, runnerLogsDir))
 	}
+
+	if summaryErr := maybeDumpSummaryMarkdown(runner); summaryErr != nil {
+		shout(ctx, l, os.Stdout, "failed to write to GITHUB_STEP_SUMMARY file (%+v)", summaryErr)
+	}
+
 	return err
 }
 
@@ -273,6 +297,11 @@ func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegi
 		// Signal runner.Run() to stop.
 		cancel()
 		<-time.After(5 * time.Second)
+		if cr == nil {
+			shout(ctx, l, os.Stderr, "5s elapsed. No clusters registered; nothing to destroy.")
+			l.Printf("all stacks:\n\n%s\n", allstacks.Get())
+			os.Exit(2)
+		}
 		shout(ctx, l, os.Stderr, "5s elapsed. Will brutally destroy all clusters.")
 		// Make sure there are no leftover clusters.
 		destroyCh := make(chan struct{})
@@ -326,4 +355,179 @@ func testRunnerLogger(
 	}
 	shout(ctx, l, os.Stdout, "test runner logs in: %s", runnerLogPath)
 	return l, teeOpt
+}
+
+func maybeDumpSummaryMarkdown(r *testRunner) error {
+	if !roachtestflags.GitHubActions {
+		return nil
+	}
+	summaryPath := os.Getenv("GITHUB_STEP_SUMMARY")
+	if summaryPath == "" {
+		return nil
+	}
+	summaryFile, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+
+	_, err = summaryFile.WriteString(`| TestName | Status | Duration |
+| --- | --- | --- |
+`)
+	if err != nil {
+		return err
+	}
+
+	var allTests []testReportForGitHub
+	for test := range r.status.pass {
+		allTests = append(allTests, testReportForGitHub{
+			name:     test.Name(),
+			duration: test.duration(),
+			status:   testResultSuccess,
+		})
+	}
+
+	for test := range r.status.fail {
+		allTests = append(allTests, testReportForGitHub{
+			name:     test.Name(),
+			duration: test.duration(),
+			status:   testResultFailure,
+		})
+	}
+
+	for test := range r.status.skip {
+		allTests = append(allTests, testReportForGitHub{
+			name:     test.Name(),
+			duration: test.duration(),
+			status:   testResultSkip,
+		})
+	}
+
+	// Sort the test results: first fails, then successes, then skips, and
+	// within each category sort by test duration in descending order.
+	// Ties are very unlikely to happen but we break them by test name.
+	slices.SortFunc(allTests, func(a, b testReportForGitHub) int {
+		if a.status < b.status {
+			return -1
+		} else if a.status > b.status {
+			return 1
+		} else if a.duration > b.duration {
+			return -1
+		} else if a.duration < b.duration {
+			return 1
+		}
+		return strings.Compare(a.name, b.name)
+	})
+
+	for _, test := range allTests {
+		var statusString string
+		if test.status == testResultFailure {
+			statusString = "❌ FAILED"
+		} else if test.status == testResultSuccess {
+			statusString = "✅ SUCCESS"
+		} else {
+			statusString = "🟨 SKIPPED"
+		}
+		_, err := fmt.Fprintf(summaryFile, "| `%s` | %s | `%s` |\n", test.name, statusString, test.duration.String())
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// runOperation sequentially runs one operation matched by the passed-in filter.
+func runOperation(register func(registry.Registry), filter string, clusterName string) error {
+	//lint:ignore SA1019 deprecated
+	rand.Seed(roachtestflags.GlobalSeed)
+	r := makeTestRegistry()
+
+	register(&r)
+	ctx := context.Background()
+	// NB: root logger with no path always tees to Stdout.
+	l, err := logger.RootLogger("", logger.NoTee)
+	if err != nil {
+		return err
+	}
+	// TODO(bilal): This is excessive for just getting the number of nodes in the
+	// cluster. We should expose a roachprod.Nodes method or so.
+	nodes, err := roachprod.PgURL(ctx, l, clusterName, roachtestflags.CertsDir, roachprod.PGURLOptions{})
+	if err != nil {
+		return errors.Wrap(err, "roachtest: run-operation: error when getting number of nodes")
+	}
+
+	cSpec := spec.ClusterSpec{NodeCount: len(nodes)}
+	c := &clusterImpl{
+		name:       clusterName,
+		spec:       cSpec,
+		l:          l,
+		expiration: cSpec.Expiration(),
+		destroyState: destroyState{
+			owned: false,
+		},
+		localCertsDir: roachtestflags.CertsDir,
+	}
+
+	specs, err := opsToRun(r, filter)
+	if err != nil {
+		return err
+	}
+	var opSpec *registry.OperationSpec
+	if len(specs) > 1 {
+		opSpec = &specs[rand.Intn(len(specs))]
+		l.Printf("more than one operation found for filter %s, randomly selected %s to run", filter, opSpec.Name)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Cancel this context if we get an interrupt.
+	CtrlC(ctx, l, cancel, nil /* registry */)
+	// Install goroutine leak checker and run it at the end of the entire operation
+	// run. This is good hygiene for operations, as operations can one day be
+	// called from roachtests as well.
+	defer leaktest.AfterTest(l)()
+
+	op := &operationImpl{
+		spec:      opSpec,
+		cockroach: roachtestflags.CockroachBinaryPath,
+		l:         l,
+	}
+	op.mu.cancel = cancel
+	var cleanup registry.OperationCleanup
+	func() {
+		ctx, cancel := context.WithTimeout(ctx, opSpec.Timeout)
+		defer cancel()
+
+		cleanup = opSpec.Run(ctx, op, c)
+	}()
+	if op.Failed() {
+		op.Status("operation failed")
+		return op.mu.failures[0]
+	}
+
+	if cleanup == nil {
+		op.Status("operation ran successfully")
+		return nil
+	}
+
+	op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", roachtestflags.WaitBeforeCleanup))
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(roachtestflags.WaitBeforeCleanup):
+	}
+	op.Status("running cleanup")
+	func() {
+		ctx, cancel := context.WithTimeout(ctx, opSpec.Timeout)
+		defer cancel()
+
+		cleanup.Cleanup(ctx, op, c)
+	}()
+
+	if op.Failed() {
+		op.Status("operation cleanup failed")
+		return op.mu.failures[0]
+	}
+
+	return nil
 }

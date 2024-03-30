@@ -753,7 +753,7 @@ func TestWaitWithRetryableError(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				DisableAutoCommitDuringExec: true,
-				AfterExecute: func(ctx context.Context, stmt string, err error) {
+				AfterExecute: func(ctx context.Context, stmt string, isInternal bool, err error) {
 					if targetJobID.Load() > 0 &&
 						strings.Contains(stmt, "SELECT count(*) FROM system.jobs") &&
 						strings.Contains(stmt, fmt.Sprintf("%d", targetJobID.Load())) {
@@ -797,7 +797,7 @@ func TestWaitWithRetryableError(t *testing.T) {
 		registry.WaitForJobs(
 			ctx, []jobspb.JobID{id},
 		))
-	if !skip.Stress() {
+	if !skip.Duress() {
 		require.Equalf(t, int64(targetNumberOfRetries), numberOfTimesDetected.Load(), "jobs query did not retry")
 	} else {
 		// For stress be lenient since we are relying on timing for leasing

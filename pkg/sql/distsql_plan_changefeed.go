@@ -85,7 +85,9 @@ func PlanCDCExpression(
 	p.stmt = makeStatement(statements.Statement[tree.Statement]{
 		AST: cdcExpr,
 		SQL: tree.AsString(cdcExpr),
-	}, clusterunique.ID{} /* queryID */)
+	}, clusterunique.ID{}, /* queryID */
+		tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)),
+	)
 
 	p.curPlan.init(&p.stmt, &p.instrumentation)
 	opc := &p.optPlanningCtx
@@ -172,7 +174,7 @@ func PlanCDCExpression(
 		return cdcPlan, errors.AssertionFailedf("unexpected query structure")
 	}
 
-	planCtx := p.DistSQLPlanner().NewPlanningCtx(ctx, &p.extendedEvalCtx, p, p.txn, DistributionTypeNone)
+	planCtx := p.DistSQLPlanner().NewPlanningCtx(ctx, &p.extendedEvalCtx, p, p.txn, LocalDistribution)
 
 	return CDCExpressionPlan{
 		Plan:         p.curPlan.main,

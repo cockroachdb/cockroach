@@ -31,10 +31,6 @@ go_test(
     name = "colconv_test",
     srcs = ["batch_test.go"],
     embed = [":colconv"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/col/coldata",
         "//pkg/sql/types",

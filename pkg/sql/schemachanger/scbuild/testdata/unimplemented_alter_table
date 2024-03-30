@@ -21,10 +21,6 @@ ALTER TABLE defaultdb.foo ALTER COLUMN i SET DATA TYPE STRING
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo ADD COLUMN p INT NOT NULL UNIQUE
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo ALTER COLUMN i DROP NOT NULL
 ----
 
@@ -42,14 +38,6 @@ ALTER TABLE defaultdb.foo RENAME CONSTRAINT foobar TO baz
 
 unimplemented
 ALTER TABLE defaultdb.foo EXPERIMENTAL_AUDIT SET READ WRITE
-----
-
-unimplemented
-ALTER TABLE defaultdb.foo ALTER COLUMN i SET DEFAULT 42
-----
-
-unimplemented
-ALTER TABLE defaultdb.foo ALTER COLUMN i DROP DEFAULT
 ----
 
 unimplemented

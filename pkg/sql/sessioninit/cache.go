@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/go-ldap/ldap/v3"
 )
 
 // CacheEnabledSettingName is the name of the CacheEnabled cluster setting.
@@ -76,6 +77,9 @@ type AuthInfo struct {
 	HashedPassword password.PasswordHash
 	// ValidUntil is the VALID UNTIL role option.
 	ValidUntil *tree.DTimestamp
+	// Subject is the SUBJECT role option. It is used to match the subject
+	// distinguished name in a client certificate.
+	Subject *ldap.DN
 }
 
 // SettingsCacheKey is the key used for the settingsCache.
@@ -240,10 +244,18 @@ func (a *Cache) maybeWriteAuthInfoBackToCache(
 	if aInfo.HashedPassword != nil {
 		hpSize = aInfo.HashedPassword.Size()
 	}
+	subjectSize := 0
+	if aInfo.Subject != nil {
+		for _, rdn := range aInfo.Subject.RDNs {
+			for _, attr := range rdn.Attributes {
+				subjectSize += len(attr.Type)
+				subjectSize += len(attr.Value)
+			}
+		}
+	}
 
 	sizeOfEntry := sizeOfUsername + len(user.Normalized()) +
-		sizeOfAuthInfo + hpSize +
-		sizeOfTimestamp
+		sizeOfAuthInfo + hpSize + sizeOfTimestamp + subjectSize
 	if err := a.boundAccount.Grow(ctx, int64(sizeOfEntry)); err != nil {
 		// If there is no memory available to cache the entry, we can still
 		// proceed with authentication so that users are not locked out of

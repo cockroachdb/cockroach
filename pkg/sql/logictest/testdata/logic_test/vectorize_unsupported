@@ -1,3 +1,5 @@
+skip under race
+
 statement ok
 CREATE TABLE a (a INT, b INT, c INT4, PRIMARY KEY (a, b));
 INSERT INTO a SELECT g//2, g, g FROM generate_series(0,2000) g(g)

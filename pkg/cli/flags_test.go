@@ -1222,6 +1222,7 @@ Available Commands:
   debug             debugging commands
   sqlfmt            format SQL statements
   workload          generators for data and query loads
+  encode-uri        encode a CRDB connection URL
   help              Help about any command
 
 Flags:
@@ -1343,7 +1344,7 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 
 	defer initCLIDefaults()
 
-	expectedDefaultDir, err := base.GetAbsoluteStorePath("", "cockroach-data-tenant-9")
+	expectedDefaultDir, err := base.GetAbsoluteFSPath("", "cockroach-data-tenant-9")
 	if err != nil {
 		t.Fatal(err)
 	}

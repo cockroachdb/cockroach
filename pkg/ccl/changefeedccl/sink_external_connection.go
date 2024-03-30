@@ -78,7 +78,7 @@ func validateExternalConnectionSinkURI(
 	// TODO(adityamaru): When we add `CREATE EXTERNAL CONNECTION ... WITH` support
 	// to accept JSONConfig we should validate that here too.
 	_, err := getSink(ctx, serverCfg, jobspb.ChangefeedDetails{SinkURI: uri}, nil, env.Username,
-		jobspb.JobID(0), nil)
+		jobspb.JobID(0), (*sliMetrics)(nil))
 	if err != nil {
 		return errors.Wrap(err, "invalid changefeed sink URI")
 	}
@@ -100,6 +100,7 @@ var supportedExternalConnectionTypes = map[string]connectionpb.ConnectionProvide
 	changefeedbase.SinkSchemeWebhookHTTP:           connectionpb.ConnectionProvider_webhookhttp,
 	changefeedbase.SinkSchemeWebhookHTTPS:          connectionpb.ConnectionProvider_webhookhttps,
 	changefeedbase.SinkSchemeConfluentKafka:        connectionpb.ConnectionProvider_kafka,
+	changefeedbase.SinkSchemeAzureKafka:            connectionpb.ConnectionProvider_kafka,
 	// TODO (zinger): Not including SinkSchemeExperimentalSQL for now because A: it's undocumented
 	// and B, in tests it leaks a *gosql.DB and I can't figure out why.
 }

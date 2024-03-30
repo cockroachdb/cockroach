@@ -118,7 +118,7 @@ func initializeMultiRegionMetadata(
 		descpb.ZoneConfigExtensions{},
 		multiregion.WithSecondaryRegion(secondaryRegion),
 	)
-	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
+	if err := multiregion.ValidateRegionConfig(regionConfig, false); err != nil {
 		return nil, err
 	}
 

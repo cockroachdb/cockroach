@@ -28,10 +28,6 @@ go_test(
         "resolver_bench_test.go",
         "resolver_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":resolver",
         "//pkg/base",

@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/multitenant/tenantcapabilities",
+        "//pkg/raft",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
@@ -40,7 +41,6 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_stretchr_testify//require",
-        "@io_etcd_go_raft_v3//:raft",
     ],
 )
 
@@ -52,10 +52,7 @@ go_test(
         "testcluster_test.go",
     ],
     embed = [":testcluster"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "large"},
-    }),
+    exec_properties = {"test.Pool": "large"},
     deps = [
         "//pkg/base",
         "//pkg/keys",
@@ -67,6 +64,7 @@ go_test(
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",

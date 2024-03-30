@@ -33,8 +33,12 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*kvpb.GetResponse)
 
-	if err := maybeDisallowSkipLockedRequest(h, args.KeyLockingStrength); err != nil {
-		return result.Result{}, err
+	var lockTableForSkipLocked storage.LockTableView
+	if h.WaitPolicy == lock.WaitPolicy_SkipLocked {
+		lockTableForSkipLocked = newRequestBoundLockTableView(
+			readWriter, cArgs.Concurrency, h.Txn, args.KeyLockingStrength,
+		)
+		defer lockTableForSkipLocked.Close()
 	}
 
 	getRes, err := storage.MVCCGet(ctx, readWriter, args.Key, h.Timestamp, storage.MVCCGetOptions{
@@ -45,7 +49,7 @@ func Get(
 		ScanStats:             cArgs.ScanStats,
 		Uncertainty:           cArgs.Uncertainty,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
-		LockTable:             cArgs.Concurrency,
+		LockTable:             lockTableForSkipLocked,
 		DontInterleaveIntents: cArgs.DontInterleaveIntents,
 		MaxKeys:               cArgs.Header.MaxSpanRequestKeys,
 		TargetBytes:           cArgs.Header.TargetBytes,
@@ -88,13 +92,15 @@ func Get(
 	}
 
 	var res result.Result
-	if args.KeyLockingStrength != lock.None && h.Txn != nil && getRes.Value != nil {
+	if args.KeyLockingStrength != lock.None && getRes.Value != nil {
 		acq, err := acquireLockOnKey(ctx, readWriter, h.Txn, args.KeyLockingStrength,
 			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
-			return result.Result{}, maybeInterceptDisallowedSkipLockedUsage(h, err)
+			return result.Result{}, err
 		}
-		res.Local.AcquiredLocks = []roachpb.LockAcquisition{acq}
+		if !acq.Empty() {
+			res.Local.AcquiredLocks = []roachpb.LockAcquisition{acq}
+		}
 	}
 	res.Local.EncounteredIntents = intents
 	return res, err

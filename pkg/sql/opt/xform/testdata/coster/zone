@@ -868,8 +868,8 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: a1.r:1!null a1.a:2!null a1.b:3!null a1.c:4!null
- │    │    ├── left columns: a1.r:13 a1.a:14 a1.b:15 a1.c:16
- │    │    ├── right columns: a1.r:19 a1.a:20 a1.b:21 a1.c:22
+ │    │    ├── left columns: a1.r:14 a1.a:15 a1.b:16 a1.c:17
+ │    │    ├── right columns: a1.r:20 a1.a:21 a1.b:22 a1.c:23
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── stats: [rows=0.91, distinct(2)=0.91, null(2)=0, distinct(3)=0.91, null(3)=0, distinct(4)=0.91, null(4)=0, distinct(3,4)=0.91, null(3,4)=0]
  │    │    ├── cost: 5.6885176
@@ -877,20 +877,20 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │    ├── fd: ()-->(1-4)
  │    │    ├── distribution: east
  │    │    ├── scan abc_part@bc_idx [as=a1]
- │    │    │    ├── columns: a1.r:13!null a1.a:14!null a1.b:15!null a1.c:16!null
- │    │    │    ├── constraint: /13/15/16: [/'east'/1/'foo' - /'east'/1/'foo']
+ │    │    │    ├── columns: a1.r:14!null a1.a:15!null a1.b:16!null a1.c:17!null
+ │    │    │    ├── constraint: /14/16/17: [/'east'/1/'foo' - /'east'/1/'foo']
  │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── stats: [rows=0.9001, distinct(13)=0.9001, null(13)=0, distinct(15)=0.9001, null(15)=0, distinct(16)=0.9001, null(16)=0, distinct(13,15,16)=0.9001, null(13,15,16)=0]
+ │    │    │    ├── stats: [rows=0.9001, distinct(14)=0.9001, null(14)=0, distinct(16)=0.9001, null(16)=0, distinct(17)=0.9001, null(17)=0, distinct(14,16,17)=0.9001, null(14,16,17)=0]
  │    │    │    ├── cost: 5.154016
  │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(13-16)
+ │    │    │    └── fd: ()-->(14-17)
  │    │    └── scan abc_part@bc_idx [as=a1]
- │    │         ├── columns: a1.r:19!null a1.a:20!null a1.b:21!null a1.c:22!null
- │    │         ├── constraint: /19/21/22: [/'west'/1/'foo' - /'west'/1/'foo']
+ │    │         ├── columns: a1.r:20!null a1.a:21!null a1.b:22!null a1.c:23!null
+ │    │         ├── constraint: /20/22/23: [/'west'/1/'foo' - /'west'/1/'foo']
  │    │         ├── cardinality: [0 - 1]
- │    │         ├── stats: [rows=0.9001, distinct(19)=0.9001, null(19)=0, distinct(21)=0.9001, null(21)=0, distinct(22)=0.9001, null(22)=0, distinct(19,21,22)=0.9001, null(19,21,22)=0]
+ │    │         ├── stats: [rows=0.9001, distinct(20)=0.9001, null(20)=0, distinct(22)=0.9001, null(22)=0, distinct(23)=0.9001, null(23)=0, distinct(20,22,23)=0.9001, null(20,22,23)=0]
  │    │         ├── cost: 5.154016
  │    │         ├── key: ()
- │    │         └── fd: ()-->(19-22)
+ │    │         └── fd: ()-->(20-23)
  │    └── filters (true)
  └── filters (true)

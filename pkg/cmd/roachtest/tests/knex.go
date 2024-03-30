@@ -12,13 +12,14 @@ package tests
 
 import (
 	"context"
+	_ "embed"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
@@ -26,6 +27,13 @@ import (
 // WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
 // This is used by docs automation to produce a list of supported versions for ORM's.
 const supportedKnexTag = "2.5.1"
+
+// Embed the config file, so we don't need to know where it is
+// relative to the roachtest runner, just relative to this test.
+// This way we can still find it if roachtest changes paths.
+//
+//go:embed knexfile.js
+var knexfile string
 
 // This test runs one of knex's test suite against a single cockroach
 // node.
@@ -41,9 +49,7 @@ func registerKnex(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		startOpts := option.DefaultStartOptsInMemory()
-		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), install.MakeClusterSettings())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		require.NoError(t, err)
@@ -57,7 +63,7 @@ func registerKnex(r registry.Registry) {
 			c,
 			node,
 			"create sql database",
-			`./cockroach sql --insecure -e "CREATE DATABASE test"`,
+			`./cockroach sql --url={pgurl:1} -e "CREATE DATABASE test"`,
 		)
 		require.NoError(t, err)
 
@@ -121,12 +127,19 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 		)
 		require.NoError(t, err)
 
+		// Write the knexfile test config into the test suite to use.
+		// The default test config does not support ssl connections.
+		err = c.PutString(ctx, knexfile, "/mnt/data1/knex/knexfile.js", 0755, c.Node(1))
+		require.NoError(t, err)
+
 		t.Status("running knex tests")
 		result, err := c.RunWithDetailsSingleNode(
 			ctx,
 			t.L(),
-			node,
-			`cd /mnt/data1/knex/ && DB='cockroachdb' npm test`,
+			option.WithNodes(node),
+			fmt.Sprintf(`cd /mnt/data1/knex/ && PGUSER=%s PGPASSWORD=%s PGPORT={pgport:1} PGSSLROOTCERT=$HOME/%s/ca.crt \
+				KNEX_TEST='/mnt/data1/knex/knexfile.js' DB='cockroachdb' npm test`,
+				install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir),
 		)
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)

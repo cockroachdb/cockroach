@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 type execFactory struct {
@@ -167,7 +169,7 @@ func (ef *execFactory) ConstructScan(
 		return nil, err
 	}
 	scan.reqOrdering = ReqOrdering(reqOrdering)
-	scan.estimatedRowCount = uint64(params.EstimatedRowCount)
+	scan.estimatedRowCount = params.EstimatedRowCount
 	scan.lockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
 	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	scan.lockingDurability = descpb.ToScanLockingDurability(params.Locking.Durability)
@@ -225,12 +227,7 @@ func (ef *execFactory) ConstructFilter(
 	f := &filterNode{
 		source: src,
 	}
-	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.columns))
-	f.filter = f.ivarHelper.Rebind(filter)
-	if f.filter == nil {
-		// Filter statically evaluates to true. Just return the input plan.
-		return n, nil
-	}
+	f.filter = filter
 	f.reqOrdering = ReqOrdering(reqOrdering)
 
 	// If there's a spool, pull it up.
@@ -296,9 +293,14 @@ func constructSimpleProjectForPlanNode(
 	var rb renderBuilder
 	rb.init(n, reqOrdering)
 
+	// TODO(mgartner): With an indexed var helper we are potentially allocating
+	// more indexed variables than we need. We only need len(cols) indexed vars
+	// but we have to allocate len(inputCols) to make sure there is an indexed
+	// variable for all possible input ordinals.
+	ivh := tree.MakeIndexedVarHelper(rb.r, len(inputCols))
 	exprs := make(tree.TypedExprs, len(cols))
 	for i, col := range cols {
-		exprs[i] = rb.r.ivarHelper.IndexedVar(int(col))
+		exprs[i] = ivh.IndexedVar(int(col))
 	}
 	var resultTypes []*types.T
 	if colNames != nil {
@@ -382,9 +384,6 @@ func (ef *execFactory) ConstructRender(
 ) (exec.Node, error) {
 	var rb renderBuilder
 	rb.init(n, reqOrdering)
-	for i, expr := range exprs {
-		exprs[i] = rb.r.ivarHelper.Rebind(expr)
-	}
 	rb.setOutput(exprs, columns)
 	return rb.res, nil
 }
@@ -400,7 +399,7 @@ func (ef *execFactory) ConstructHashJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
+	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns, extraOnCond)
 
 	numEqCols := len(leftEqCols)
 	pred.leftEqualityIndices = leftEqCols
@@ -416,8 +415,6 @@ func (ef *execFactory) ConstructHashJoin(
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 
-	pred.onCond = pred.iVarHelper.Rebind(extraOnCond)
-
 	return p.makeJoinNode(leftSrc, rightSrc, pred), nil
 }
 
@@ -430,8 +427,7 @@ func (ef *execFactory) ConstructApplyJoin(
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (exec.Node, error) {
 	leftSrc := asDataSource(left)
-	pred := makePredicate(joinType, leftSrc.columns, rightColumns)
-	pred.onCond = pred.iVarHelper.Rebind(onCond)
+	pred := makePredicate(joinType, leftSrc.columns, rightColumns, onCond)
 	return newApplyJoinNode(joinType, leftSrc, rightColumns, pred, planRightSideFn)
 }
 
@@ -448,8 +444,7 @@ func (ef *execFactory) ConstructMergeJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
-	pred.onCond = pred.iVarHelper.Rebind(onCond)
+	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns, onCond)
 	node := p.makeJoinNode(leftSrc, rightSrc, pred)
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
@@ -503,19 +498,21 @@ func (ef *execFactory) ConstructGroupBy(
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
 	groupingOrderType exec.GroupingOrderType,
+	estimatedRowCount uint64,
 ) (exec.Node, error) {
 	inputPlan := input.(planNode)
 	inputCols := planColumns(inputPlan)
 	// TODO(harding): Use groupingOrder to determine when to use a hash
 	// aggregator.
 	n := &groupNode{
-		plan:             inputPlan,
-		funcs:            make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
-		columns:          getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
-		groupCols:        convertNodeOrdinalsToInts(groupCols),
-		groupColOrdering: groupColOrdering,
-		isScalar:         false,
-		reqOrdering:      ReqOrdering(reqOrdering),
+		plan:              inputPlan,
+		funcs:             make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
+		columns:           getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
+		groupCols:         convertNodeOrdinalsToInts(groupCols),
+		groupColOrdering:  groupColOrdering,
+		isScalar:          false,
+		reqOrdering:       ReqOrdering(reqOrdering),
+		estimatedRowCount: estimatedRowCount,
 	}
 	for _, col := range n.groupCols {
 		// TODO(radu): only generate the grouping columns we actually need.
@@ -524,6 +521,7 @@ func (ef *execFactory) ConstructGroupBy(
 			[]int{col},
 			nil,   /* arguments */
 			false, /* isDistinct */
+			false, /* distsqlBlocklist */
 		)
 		n.funcs = append(n.funcs, f)
 	}
@@ -543,6 +541,7 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 			renderIdxs,
 			agg.ConstArgs,
 			agg.Distinct,
+			agg.DistsqlBlocklist,
 		)
 		f.filterRenderIdx = int(agg.Filter)
 
@@ -753,17 +752,12 @@ func (ef *execFactory) ConstructLookupJoin(
 	for i, c := range eqCols {
 		n.eqCols[i] = int(c)
 	}
-	pred := makePredicate(joinType, planColumns(input.(planNode)), planColumns(tableScan))
-	if lookupExpr != nil {
-		n.lookupExpr = pred.iVarHelper.Rebind(lookupExpr)
+	n.columns = getJoinResultColumns(joinType, planColumns(input.(planNode)), planColumns(tableScan))
+	n.lookupExpr = lookupExpr
+	n.remoteLookupExpr = remoteLookupExpr
+	if onCond != tree.DBoolTrue {
+		n.onCond = onCond
 	}
-	if remoteLookupExpr != nil {
-		n.remoteLookupExpr = pred.iVarHelper.Rebind(remoteLookupExpr)
-	}
-	if onCond != nil && onCond != tree.DBoolTrue {
-		n.onCond = pred.iVarHelper.Rebind(onCond)
-	}
-	n.columns = pred.cols
 	if isFirstJoinInPairedJoiner {
 		n.columns = append(n.columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
 	}
@@ -826,8 +820,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	default:
 		return nil, errors.AssertionFailedf("unexpected join type for virtual lookup join: %s", joinType.String())
 	}
-	pred := makePredicate(joinType, inputCols, projectedVtableCols)
-	pred.onCond = pred.iVarHelper.Rebind(onCond)
+	pred := makePredicate(joinType, inputCols, projectedVtableCols, onCond)
 	n := &vTableLookupJoinNode{
 		input:             input.(planNode),
 		joinType:          joinType,
@@ -1174,12 +1167,13 @@ func (ef *execFactory) ConstructPlan(
 	cascades []exec.Cascade,
 	checks []exec.Node,
 	rootRowCount int64,
+	flags exec.PlanFlags,
 ) (exec.Plan, error) {
 	// No need to spool at the root.
 	if spool, ok := root.(*spoolNode); ok {
 		root = spool.source
 	}
-	return constructPlan(ef.planner, root, subqueries, cascades, checks, rootRowCount)
+	return constructPlan(ef.planner, root, subqueries, cascades, checks, rootRowCount, flags)
 }
 
 // urlOutputter handles writing strings into an encoded URL for EXPLAIN (OPT,
@@ -1861,7 +1855,7 @@ func (ef *execFactory) ConstructCreateView(
 		return nil, err
 	}
 
-	planDeps, typeDepSet, err := toPlanDependencies(deps, typeDeps)
+	planDeps, typeDepSet, _, err := toPlanDependencies(deps, typeDeps, intsets.Fast{} /* funcDeps */)
 	if err != nil {
 		return nil, err
 	}
@@ -1878,7 +1872,11 @@ func (ef *execFactory) ConstructCreateView(
 
 // ConstructCreateFunction is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateFunction(
-	schema cat.Schema, cf *tree.CreateRoutine, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
+	schema cat.Schema,
+	cf *tree.CreateRoutine,
+	deps opt.SchemaDeps,
+	typeDeps opt.SchemaTypeDeps,
+	functionDeps opt.SchemaFunctionDeps,
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
@@ -1897,28 +1895,29 @@ func (ef *execFactory) ConstructCreateFunction(
 		return plan, nil
 	}
 
-	planDeps, typeDepSet, err := toPlanDependencies(deps, typeDeps)
+	planDeps, typeDepSet, funcDepList, err := toPlanDependencies(deps, typeDeps, functionDeps)
 	if err != nil {
 		return nil, err
 	}
 
 	return &createFunctionNode{
-		cf:       cf,
-		dbDesc:   schema.(*optSchema).database,
-		scDesc:   schema.(*optSchema).schema,
-		planDeps: planDeps,
-		typeDeps: typeDepSet,
+		cf:           cf,
+		dbDesc:       schema.(*optSchema).database,
+		scDesc:       schema.(*optSchema).schema,
+		planDeps:     planDeps,
+		typeDeps:     typeDepSet,
+		functionDeps: funcDepList,
 	}, nil
 }
 
 func toPlanDependencies(
-	deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
-) (planDependencies, typeDependencies, error) {
+	deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps, funcDeps opt.SchemaFunctionDeps,
+) (planDependencies, typeDependencies, functionDependencies, error) {
 	planDeps := make(planDependencies, len(deps))
 	for _, d := range deps {
 		desc, err := getDescForDataSource(d.DataSource)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		var ref descpb.TableDescriptor_Reference
 		if d.SpecificIndex {
@@ -1942,7 +1941,12 @@ func toPlanDependencies(
 		typeDepSet[descpb.ID(id)] = struct{}{}
 	})
 
-	return planDeps, typeDepSet, nil
+	funcDepList := make(functionDependencies, funcDeps.Len())
+	funcDeps.ForEach(func(i int) {
+		descID := funcdesc.UserDefinedFunctionOIDToID(oid.Oid(i))
+		funcDepList[descID] = struct{}{}
+	})
+	return planDeps, typeDepSet, funcDepList, nil
 }
 
 // ConstructSequenceSelect is part of the exec.Factory interface.
@@ -2203,7 +2207,6 @@ func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering) {
 	rb.r = &renderNode{
 		source: src,
 	}
-	rb.r.ivarHelper = tree.MakeIndexedVarHelper(rb.r, len(src.columns))
 	rb.r.reqOrdering = ReqOrdering(reqOrdering)
 
 	// If there's a spool, pull it up.

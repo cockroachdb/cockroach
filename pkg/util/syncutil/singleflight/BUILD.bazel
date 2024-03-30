@@ -22,10 +22,6 @@ go_test(
     size = "small",
     srcs = ["singleflight_test.go"],
     embed = [":singleflight"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/testutils",
         "//pkg/util/leaktest",

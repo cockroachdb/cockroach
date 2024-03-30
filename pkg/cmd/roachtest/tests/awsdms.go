@@ -56,7 +56,7 @@ const (
 	// by CRL employees who have proper AWS credentials. The password can't be
 	// auto rotated due to constraints with postgres DMS source endpoint restrictions
 	// where the password can't contain %, ;, or +.
-	awsrdsSecretName     = "rds!db-074de488-6274-4b3e-ad27-d008b8ffa750"
+	awsrdsSecretName     = "rds!db-bf11a38a-4ba2-425d-b2b2-acab58357f2e"
 	awsrdsDBIdentifier   = "migrations-dms"
 	awsrdsNumInitialRows = 200000000
 )
@@ -562,7 +562,8 @@ func setupAWSDMS(
 func setupCockroachDBCluster(ctx context.Context, t test.Test, c cluster.Cluster) func() error {
 	return func() error {
 		t.L().Printf("setting up cockroach")
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		settings := install.MakeClusterSettings(install.SecureOption(false))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.All())
 
 		db := c.Conn(ctx, t.L(), 1)
 		for _, stmt := range []string{
@@ -766,11 +767,9 @@ func setupDMSEndpointsAndTask(
 				PostgreSQLSettings: &dmstypes.PostgreSQLSettings{
 					DatabaseName: proto.String(awsdmsCRDBDatabase),
 					Username:     proto.String(awsdmsCRDBUser),
-					// Password is a required field, but CockroachDB doesn't take passwords in
-					// --insecure mode. As such, put in some garbage.
-					Password:   proto.String("garbage"),
-					Port:       proto.Int32(26257),
-					ServerName: proto.String(externalCRDBAddr[0]),
+					Password:     proto.String(awsdmsPassword),
+					Port:         proto.Int32(26257),
+					ServerName:   proto.String(externalCRDBAddr[0]),
 				},
 			},
 			endpoint: dmsEndpoints.defaultTarget,

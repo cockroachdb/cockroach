@@ -20,8 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -30,8 +31,8 @@ import (
 
 // WaitFor3XReplication is like WaitForReplication but specifically requires
 // three as the minimum number of voters a range must be replicated on.
-func WaitFor3XReplication(ctx context.Context, t test.Test, db *gosql.DB) error {
-	return WaitForReplication(ctx, t, db, 3 /* replicationFactor */, atLeastReplicationFactor)
+func WaitFor3XReplication(ctx context.Context, t test.Test, l *logger.Logger, db *gosql.DB) error {
+	return WaitForReplication(ctx, t, l, db, 3 /* replicationFactor */, atLeastReplicationFactor)
 }
 
 // WaitForReady waits until the given nodes report ready via health checks.
@@ -40,8 +41,9 @@ func WaitFor3XReplication(ctx context.Context, t test.Test, db *gosql.DB) error 
 func WaitForReady(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
 ) {
+	client := roachtestutil.DefaultHTTPClient(c, t.L())
 	checkReady := func(ctx context.Context, url string) error {
-		resp, err := httputil.Get(ctx, url)
+		resp, err := client.Get(ctx, url)
 		if err != nil {
 			return err
 		}
@@ -62,7 +64,7 @@ func WaitForReady(
 	require.NoError(t, timeutil.RunWithTimeout(
 		ctx, "waiting for ready", time.Minute, func(ctx context.Context) error {
 			for i, adminAddr := range adminAddrs {
-				url := fmt.Sprintf(`http://%s/health?ready=1`, adminAddr)
+				url := fmt.Sprintf(`https://%s/health?ready=1`, adminAddr)
 
 				for err := checkReady(ctx, url); err != nil; err = checkReady(ctx, url) {
 					t.L().Printf("n%d not ready, retrying: %s", nodes[i], err)
@@ -95,11 +97,12 @@ const (
 func WaitForReplication(
 	ctx context.Context,
 	t test.Test,
+	l *logger.Logger,
 	db *gosql.DB,
 	replicationFactor int,
 	waitForReplicationType waitForReplicationType,
 ) error {
-	t.L().Printf("waiting for initial up-replication... (<%s)", 2*time.Minute)
+	l.Printf("waiting for initial up-replication... (<%s)", 2*time.Minute)
 	tStart := timeutil.Now()
 	var compStr string
 	switch waitForReplicationType {
@@ -124,11 +127,11 @@ func WaitForReplication(
 			return err
 		}
 		if n == 0 {
-			t.L().Printf("up-replication complete")
+			l.Printf("up-replication complete")
 			return nil
 		}
 		if timeutil.Since(tStart) > 30*time.Second || oldN != n {
-			t.L().Printf("still waiting for full replication (%d ranges left)", n)
+			l.Printf("still waiting for full replication (%d ranges left)", n)
 		}
 		oldN = n
 		time.Sleep(time.Second)
@@ -218,7 +221,7 @@ func UsingRuntimeAssertions(t test.Test) bool {
 // if runtime assertions are enabled, and the default values otherwise.
 // A scheduled backup will not begin at the start of the roachtest.
 func maybeUseMemoryBudget(t test.Test, budget int) option.StartOpts {
-	startOpts := option.DefaultStartOptsNoBackups()
+	startOpts := option.NewStartOpts(option.NoBackupSchedule)
 	if UsingRuntimeAssertions(t) {
 		// When running tests with runtime assertions enabled, increase
 		// SQL's memory budget to avoid 'budget exceeded' failures.
@@ -228,4 +231,20 @@ func maybeUseMemoryBudget(t test.Test, budget int) option.StartOpts {
 		)
 	}
 	return startOpts
+}
+
+// Returns the mean over the last n samples. If n > len(items), returns the mean
+// over the entire items slice.
+func getMeanOverLastN(n int, items []float64) float64 {
+	count := n
+	if len(items) < n {
+		count = len(items)
+	}
+	sum := float64(0)
+	i := 0
+	for i < count {
+		sum += items[len(items)-1-i]
+		i++
+	}
+	return sum / float64(count)
 }

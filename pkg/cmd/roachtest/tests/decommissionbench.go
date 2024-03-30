@@ -16,7 +16,6 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
-	t "log"
 	"math"
 	"os"
 	"path/filepath"
@@ -79,7 +78,7 @@ type decommissionBenchSpec struct {
 	drainFirst bool
 
 	// When true, the test will add a node to the cluster prior to decommission,
-	// so that the upreplication will overlap with the the decommission.
+	// so that the upreplication will overlap with the decommission.
 	whileUpreplicating bool
 
 	// When true, attempts to simulate decommissioning a node with high read
@@ -377,7 +376,7 @@ func setupDecommissionBench(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	for i := 1; i <= benchSpec.nodes; i++ {
 		// Don't start a scheduled backup as this roachtest reports to roachperf.
-		startOpts := option.DefaultStartOptsNoBackups()
+		startOpts := option.NewStartOpts(option.NoBackupSchedule)
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 			fmt.Sprintf("--attrs=node%d", i),
 			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
@@ -395,17 +394,14 @@ func setupDecommissionBench(
 		// import can saturate snapshots and leave underreplicated system ranges
 		// struggling.
 		// See GH issue #101532 for longer term solution.
-		if err := WaitForReplication(ctx, t, db, 3, atLeastReplicationFactor); err != nil {
+		if err := WaitForReplication(ctx, t, t.L(), db, 3, atLeastReplicationFactor); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status(fmt.Sprintf("initializing cluster with %d warehouses", benchSpec.warehouses))
 		// Add the connection string here as the port is not decided until c.Start() is called.
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
-		if err != nil {
-			t.Fatal(err)
-		}
-		importCmd = fmt.Sprintf("%s '%s'", importCmd, pgurl)
+
+		importCmd = fmt.Sprintf("%s {pgurl:1}", importCmd)
 		c.Run(ctx, option.WithNodes(c.Node(pinnedNode)), importCmd)
 
 		if benchSpec.snapshotRate != 0 {
@@ -437,7 +433,7 @@ func setupDecommissionBench(
 		}
 
 		// Wait for initial up-replication.
-		err = WaitFor3XReplication(ctx, t, db)
+		err := WaitFor3XReplication(ctx, t, t.L(), db)
 		require.NoError(t, err)
 	}
 }
@@ -929,11 +925,7 @@ func runSingleDecommission(
 
 	if drainFirst {
 		h.t.Status(fmt.Sprintf("draining node%d", target))
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, h.t.L(), c.Node(target))
-		if err != nil {
-			t.Fatal(err)
-		}
-		cmd := fmt.Sprintf("./cockroach node drain --url=%s --self --insecure", pgurl)
+		cmd := fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport%s} --self", install.CockroachNodeCertsDir, c.Node(target))
 		if err := h.c.RunE(ctx, option.WithNodes(h.c.Node(target)), cmd); err != nil {
 			return err
 		}
@@ -1107,7 +1099,7 @@ func logLSMHealth(ctx context.Context, l *logger.Logger, c cluster.Cluster, targ
 	if err != nil {
 		return err
 	}
-	result, err := c.RunWithDetailsSingleNode(ctx, l, c.Node(target),
+	result, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(c.Node(target)),
 		"curl", "-s", fmt.Sprintf("http://%s/debug/lsm",
 			adminAddrs[0]))
 	if err == nil {

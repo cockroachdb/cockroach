@@ -13,6 +13,7 @@
 #   SHEET_DESCRIPTION: Adds a description to the name of the published spreadsheets (e.g., "22.2 -> 22.1")
 #   BENCH_TIMEOUT: timeout for each microbenchmark on a function level (default: 20m)
 #   BENCH_EXCLUDE: comma-separated list of benchmarks to exclude (default: none)
+#   BENCH_IGNORE_PACKAGES: comma-separated list of packages to exclude completely from listing and execution (default: none)
 #   TEST_ARGS: additional arguments to pass to the test binary (default: none)
 #   ROACHPROD_CREATE_ARGS: additional arguments to pass to `roachprod create` (default: none)
 #   MICROBENCH_SLACK_TOKEN: token to use to post to slack (default: none)
@@ -27,6 +28,7 @@ exit_status=0
 # Set up credentials
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 log_into_gcloud
+generate_ssh_key
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 export ROACHPROD_USER=teamcity
 export ROACHPROD_CLUSTER=teamcity-microbench-${TC_BUILD_ID}
@@ -81,6 +83,7 @@ fi
   ${bench_compare_binaries:+--compare-binaries="$bench_compare_binaries"} \
   ${BENCH_TIMEOUT:+--timeout="$BENCH_TIMEOUT"} \
   ${BENCH_EXCLUDE:+--exclude="$BENCH_EXCLUDE"} \
+  ${BENCH_IGNORE_PACKAGES:+--ignore-package="$BENCH_IGNORE_PACKAGES"} \
   --quiet \
   -- "$TEST_ARGS" \
   || exit_status=$?

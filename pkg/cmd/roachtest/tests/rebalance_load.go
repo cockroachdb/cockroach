@@ -77,7 +77,7 @@ func registerRebalanceLoad(r registry.Registry) {
 		// This test asserts on the distribution of CPU utilization between nodes
 		// in the cluster, having backups also running could lead to unrelated
 		// flakes - disable backup schedule.
-		startOpts := option.DefaultStartOptsNoBackups()
+		startOpts := option.NewStartOpts(option.NoBackupSchedule)
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		appNode := c.Node(c.Spec().NodeCount)
 		numNodes := len(roachNodes)
@@ -95,14 +95,6 @@ func registerRebalanceLoad(r registry.Registry) {
 
 		if mixedVersion {
 			mvt := mixedversion.NewTest(ctx, t, t.L(), c, roachNodes, mixedversion.NeverUseFixtures,
-				// The http requests to the admin UI performed by the test don't play
-				// well with secure clusters. As of the time of writing, they return
-				// either of the following errors:
-				//  tls: failed to verify certificate: x509: “node” certificate is not standards compliant
-				//  tls: failed to verify certificate: x509: certificate signed by unknown authority
-				//
-				// Disable secure mode for simplicity.
-				mixedversion.ClusterSettingOption(install.SecureOption(false)),
 				mixedversion.ClusterSettingOption(install.ClusterSettingsOption(settings.ClusterSettings)),
 			)
 			mvt.InMixedVersion("rebalance load run",
@@ -244,7 +236,7 @@ func rebalanceByLoad(
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
-	require.NoError(t, WaitFor3XReplication(ctx, t, db))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), db))
 
 	var m *errgroup.Group
 	m, ctx = errgroup.WithContext(ctx)
@@ -337,7 +329,7 @@ func makeStoreCPUFn(
 	return func(ctx context.Context) ([]float64, error) {
 		now := timeutil.Now()
 		resp, err := getMetricsWithSamplePeriod(
-			ctx, url, startTime, now, statSamplePeriod, tsQueries)
+			ctx, c, t, url, startTime, now, statSamplePeriod, tsQueries)
 		if err != nil {
 			return nil, err
 		}

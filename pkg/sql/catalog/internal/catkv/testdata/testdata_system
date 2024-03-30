@@ -227,6 +227,7 @@ catalog:
   "011":
     descriptor: relation
     namespace: (1, 29, "lease")
+    zone: gc.ttlseconds=600
   "012":
     descriptor: relation
     namespace: (1, 29, "eventlog")
@@ -435,6 +436,15 @@ trace:
 
 # After scanning everything we also know what doesn't exist.
 is_desc_id_known_to_not_exist id=123
+----
+true
+
+# Make sure scan_all properly updated the cache.
+is_id_in_cache id=107
+----
+true
+
+is_id_in_cache id=108
 ----
 true
 

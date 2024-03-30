@@ -39,7 +39,7 @@ func BenchmarkCoverageChecks(b *testing.B) {
 						b.Run(fmt.Sprintf("numFiles=%d", baseFiles), func(b *testing.B) {
 							for _, hasExternalFilesList := range []bool{true, false} {
 								b.Run(fmt.Sprintf("slim=%t", hasExternalFilesList), func(b *testing.B) {
-									backups, err := MockBackupChain(ctx, numBackups, numSpans, baseFiles, r, hasExternalFilesList, execCfg)
+									backups, err := MockBackupChain(ctx, numBackups, numSpans, baseFiles, 1<<20, r, hasExternalFilesList, execCfg)
 									require.NoError(b, err)
 									b.ResetTimer()
 
@@ -75,7 +75,7 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 							for _, hasExternalFilesList := range []bool{true, false} {
 								b.Run(fmt.Sprintf("hasExternalFilesList=%t", hasExternalFilesList),
 									func(b *testing.B) {
-										backups, err := MockBackupChain(ctx, numBackups, numSpans, baseFiles, r, hasExternalFilesList, execCfg)
+										backups, err := MockBackupChain(ctx, numBackups, numSpans, baseFiles, 1<<20, r, hasExternalFilesList, execCfg)
 										require.NoError(b, err)
 										b.ResetTimer()
 										for i := 0; i < b.N; i++ {
@@ -111,6 +111,7 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 													layerToBackupManifestFileIterFactory,
 													nil,
 													filter,
+													&inclusiveEndKeyComparator{},
 													spanCh)
 											})
 

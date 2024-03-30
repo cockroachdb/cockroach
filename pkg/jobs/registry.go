@@ -186,10 +186,7 @@ type Registry struct {
 func (r *Registry) UpdateJobWithTxn(
 	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc UpdateFn,
 ) error {
-	job, err := r.LoadJobWithTxn(ctx, jobID, txn)
-	if err != nil {
-		return err
-	}
+	job := Job{registry: r, id: jobID}
 	return job.WithTxn(txn).Update(ctx, updateFunc)
 }
 
@@ -315,12 +312,11 @@ const (
 	// JobMetricsPollerJobID A static job ID is used for the job metrics polling job.
 	JobMetricsPollerJobID = jobspb.JobID(101)
 
-	// AutoConfigRunnerJobID A static job ID is used for the auto config runner job.
-	AutoConfigRunnerJobID = jobspb.JobID(102)
-
 	// SqlActivityUpdaterJobID A static job ID is used for the SQL activity tables.
 	SqlActivityUpdaterJobID = jobspb.JobID(103)
 
+	// MVCCStatisticsJobID A static job ID used for the MVCC statistics update
+	// job.
 	MVCCStatisticsJobID = jobspb.JobID(104)
 )
 
@@ -424,7 +420,7 @@ func createJobsInBatchWithTxn(
 	}
 	_, err = txn.ExecEx(
 		ctx, "job-rows-batch-insert", txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		stmt, args...,
 	)
 	if err != nil {
@@ -596,7 +592,7 @@ func (r *Registry) CreateJobWithTxn(
 		}
 		// We need to override the database in case we're in a situation where the
 		// database in question is being dropped.
-		override := sessiondata.RootUserSessionDataOverride
+		override := sessiondata.NodeUserSessionDataOverride
 		override.Database = catconstants.SystemDatabaseName
 		insertStmt := fmt.Sprintf(`INSERT INTO system.jobs (%s) VALUES (%s)`,
 			strings.Join(cols[:numCols], ","), placeholders())
@@ -655,7 +651,7 @@ func (r *Registry) CreateIfNotExistAdoptableJobWithTxn(
 		ctx,
 		"check if job exists",
 		txn.KV(),
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		"SELECT id FROM system.jobs WHERE id = $1",
 		record.JobID,
 	)
@@ -796,7 +792,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 	if err != nil {
 		return err
 	}
-	resumer, err := r.createResumer(j, r.settings)
+	resumer, err := r.createResumer(j)
 	if err != nil {
 		return err
 	}
@@ -938,7 +934,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := txn.ExecEx(
 				ctx, "expire-sessions", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				removeClaimsForDeadSessionsQuery,
 				s.ID().UnsafeBytes(),
 				cancellationsUpdateLimitSetting.Get(&r.settings.SV),
@@ -988,7 +984,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := txn.ExecEx(
 				ctx, "remove-claims-for-session", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				removeClaimsForSessionQuery, s.ID().UnsafeBytes(),
 			)
 			return err
@@ -1025,8 +1021,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		defer cancel()
 
 		cancelLoopTask(ctx)
-		lc, cleanup := makeLoopController(r.settings, cancelIntervalSetting, r.knobs.IntervalOverrides.Cancel)
-		defer cleanup()
+		lc := makeLoopController(r.settings, cancelIntervalSetting, r.knobs.IntervalOverrides.Cancel)
+		defer lc.cleanup()
 		for {
 			select {
 			case <-lc.updated:
@@ -1057,8 +1053,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		lc, cleanup := makeLoopController(r.settings, gcIntervalSetting, r.knobs.IntervalOverrides.Gc)
-		defer cleanup()
+		lc := makeLoopController(r.settings, gcIntervalSetting, r.knobs.IntervalOverrides.Gc)
+		defer lc.cleanup()
 
 		// Retention duration of terminal job records.
 		retentionDuration := func() time.Duration {
@@ -1096,8 +1092,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
-		lc, cleanup := makeLoopController(r.settings, adoptIntervalSetting, r.knobs.IntervalOverrides.Adopt)
-		defer cleanup()
+		lc := makeLoopController(r.settings, adoptIntervalSetting, r.knobs.IntervalOverrides.Adopt)
+		defer lc.cleanup()
 		for {
 			select {
 			case <-lc.updated:
@@ -1153,6 +1149,15 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 		}
 	}
 }
+
+// AbandonedJobInfoRowsCleanupQuery is used by the CLI command
+// job-cleanup-job-info to delete jobs that were abandoned because of
+// previous CRDB bugs. It is exposed here for testing.
+const AbandonedJobInfoRowsCleanupQuery = `
+	DELETE
+FROM system.job_info
+WHERE written < $1 AND job_id NOT IN (SELECT id FROM system.jobs)
+LIMIT $2`
 
 // The ordering is important as we keep track of the maximum ID we've seen.
 const expiredJobsQueryWithJobInfoTable = `
@@ -1249,74 +1254,78 @@ func (r *Registry) cleanupOldJobsPage(
 	return !morePages, maxID, nil
 }
 
-// getJobFn attempts to get a resumer from the given job id. If the job id
-// does not have a resumer then it returns an error message suitable for users.
-func (r *Registry) getJobFn(
-	ctx context.Context, txn isql.Txn, id jobspb.JobID,
-) (*Job, Resumer, error) {
-	job, err := r.LoadJobWithTxn(ctx, id, txn)
-	if err != nil {
-		return nil, nil, err
-	}
-	resumer, err := r.createResumer(job, r.settings)
-	if err != nil {
-		return job, nil, errors.Errorf("job %d is not controllable", id)
-	}
-	return job, resumer, nil
-}
-
-// cancelRequested marks the job as cancel-requested using the specified txn (may be nil).
-func (r *Registry) cancelRequested(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
-	if err != nil {
-		return err
-	}
-	return job.WithTxn(txn).CancelRequested(ctx)
+// DeleteTerminalJobByID deletes the given job ID if it is in a
+// terminal state. If it is is in a non-terminal state, an error is
+// returned.
+func (r *Registry) DeleteTerminalJobByID(ctx context.Context, id jobspb.JobID) error {
+	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		row, err := txn.QueryRow(ctx, "get-job-status", txn.KV(),
+			"SELECT status FROM system.jobs WHERE id = $1", id)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return nil
+		}
+		status := Status(*row[0].(*tree.DString))
+		switch status {
+		case StatusSucceeded, StatusCanceled, StatusFailed:
+			_, err := txn.Exec(
+				ctx, "delete-job", txn.KV(), "DELETE FROM system.jobs WHERE id = $1", id,
+			)
+			if err != nil {
+				return err
+			}
+			_, err = txn.Exec(
+				ctx, "delete-job-info", txn.KV(), "DELETE FROM system.job_info WHERE job_id = $1", id,
+			)
+			return err
+		default:
+			return errors.Newf("job %d has non-terminal status: %q", id, status)
+		}
+	})
 }
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
 func (r *Registry) PauseRequested(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, reason string,
 ) error {
-	job, resumer, err := r.getJobFn(ctx, txn, id)
-	if err != nil {
-		return err
-	}
-	var onPauseRequested onPauseRequestFunc
-	if pr, ok := resumer.(PauseRequester); ok {
-		onPauseRequested = pr.OnPauseRequest
-	}
-	return job.WithTxn(txn).PauseRequestedWithFunc(ctx, onPauseRequested, reason)
+	return r.UpdateJobWithTxn(ctx, id, txn, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+		return ju.PauseRequestedWithFunc(ctx, txn, md, nil /* fn */, reason)
+	})
 }
 
-// Succeeded marks the job with id as succeeded.
-func (r *Registry) Succeeded(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
-	if err != nil {
-		return err
-	}
-	return job.WithTxn(txn).succeeded(ctx, nil)
+// Unpause changes the paused job with id to running or reverting using the
+// specified txn (may be nil).
+func (r *Registry) Unpause(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
+	return r.UpdateJobWithTxn(ctx, id, txn, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+		return ju.Unpaused(ctx, md)
+	})
 }
 
-// Failed marks the job with id as failed.
-func (r *Registry) Failed(
+// UnsafeFailed marks the job with id as failed. Use outside of the
+// job system is discouraged.
+//
+// This function does not stop a currently running Resumer.
+func (r *Registry) UnsafeFailed(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, causingError error,
 ) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return err
 	}
 	return job.WithTxn(txn).failed(ctx, causingError)
 }
 
-// Unpause changes the paused job with id to running or reverting using the
-// specified txn (may be nil).
-func (r *Registry) Unpause(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+// Succeeded marks the job with id as succeeded.
+//
+// Exported for testing purposes only.
+func (r *Registry) Succeeded(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).Unpaused(ctx)
+	return job.WithTxn(txn).succeeded(ctx, nil)
 }
 
 // Resumer is a resumable job, and is associated with a Job object. Jobs can be
@@ -1416,17 +1425,6 @@ type registerOptions struct {
 	metrics metric.Struct
 }
 
-// PauseRequester is an extension of Resumer which allows job implementers to inject
-// logic during the transaction which moves a job to PauseRequested.
-type PauseRequester interface {
-	Resumer
-
-	// OnPauseRequest is called in the transaction that moves a job to PauseRequested.
-	// If an error is returned, the pause request will fail. execCtx is a
-	// sql.JobExecCtx.
-	OnPauseRequest(ctx context.Context, execCtx interface{}, txn isql.Txn, details *jobspb.Progress) error
-}
-
 // JobResultsReporter is an interface for reporting the results of the job execution.
 // Resumer implementations may also implement this interface if they wish to return
 // data to the user upon successful completion.
@@ -1512,8 +1510,16 @@ func RegisterConstructor(typ jobspb.Type, fn Constructor, opts ...RegisterOption
 	globalMu.options[typ] = resOpts
 }
 
-func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer, error) {
+func (r *Registry) createResumer(job *Job) (Resumer, error) {
 	payload := job.Payload()
+	fn, err := r.resumerConstructorForPayload(&payload)
+	if err != nil {
+		return nil, err
+	}
+	return fn(job, r.settings), nil
+}
+
+func (r *Registry) resumerConstructorForPayload(payload *jobspb.Payload) (Constructor, error) {
 	fn := func() Constructor {
 		globalMu.Lock()
 		defer globalMu.Unlock()
@@ -1524,9 +1530,11 @@ func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer,
 	}
 	if v, ok := r.creationKnobs.Load(payload.Type()); ok {
 		wrapper := v.(func(Resumer) Resumer)
-		return wrapper(fn(job, settings)), nil
+		return func(job *Job, settings *cluster.Settings) Resumer {
+			return wrapper(fn(job, settings))
+		}, nil
 	}
-	return fn(job, settings), nil
+	return fn, nil
 }
 
 // stepThroughStateMachine implements the state machine of the job lifecycle.
@@ -1540,7 +1548,8 @@ func (r *Registry) stepThroughStateMachine(
 	payload := job.Payload()
 	jobType := payload.Type()
 	if jobErr != nil {
-		if pgerror.HasCandidateCode(jobErr) {
+		isExpectedError := pgerror.HasCandidateCode(jobErr) || HasErrJobCanceled(jobErr)
+		if isExpectedError {
 			log.Infof(ctx, "%s job %d: stepping through state %s with error: %v", jobType, job.ID(), status, jobErr)
 		} else {
 			log.Errorf(ctx, "%s job %d: stepping through state %s with unexpected error: %+v", jobType, job.ID(), status, jobErr)

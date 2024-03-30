@@ -138,13 +138,16 @@ func (s *systemStatusServer) spanStatsFanOut(
 
 		nodeResponse := resp.(*roachpb.SpanStatsResponse)
 
-		// Values of ApproximateDiskBytes, RemoteFileBytes, and ExternalFileBytes should be physical values, but
-		// TotalStats (MVCC stats) should be the logical, pre-replicated value.
+		// Values of ApproximateTotalStats, ApproximateDiskBytes,
+		// RemoteFileBytes, and ExternalFileBytes should be physical values, but
+		// TotalStats should be the logical, pre-replicated value.
+		//
 		// Note: This implementation can return arbitrarily stale values, because instead of getting
 		// MVCC stats from the leaseholder, MVCC stats are taken from the node that responded first.
 		// See #108779.
 		for spanStr, spanStats := range nodeResponse.SpanToStats {
 			// Accumulate physical values across all replicas:
+			res.SpanToStats[spanStr].ApproximateTotalStats.Add(spanStats.TotalStats)
 			res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
 			res.SpanToStats[spanStr].RemoteFileBytes += spanStats.RemoteFileBytes
 			res.SpanToStats[spanStr].ExternalFileBytes += spanStats.ExternalFileBytes
@@ -203,22 +206,6 @@ func (s *systemStatusServer) statsForSpan(
 	ctx, sp := tracing.ChildSpan(ctx, "systemStatusServer.statsForSpan")
 	defer sp.Finish()
 
-	var descriptors []roachpb.RangeDescriptor
-	scanner := rangedesc.NewScanner(s.db)
-	pageSize := int(RangeDescPageSize.Get(&s.st.SV))
-	err := scanner.Scan(ctx, pageSize, func() {
-		// If the underlying txn fails and needs to be retried,
-		// clear the descriptors we've collected so far.
-		descriptors = nil
-	}, span, func(scanned ...roachpb.RangeDescriptor) error {
-		descriptors = append(descriptors, scanned...)
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
 	spanStats := &roachpb.SpanStats{}
 	rSpan, err := keys.SpanAddr(span)
 	if err != nil {
@@ -243,6 +230,22 @@ func (s *systemStatusServer) statsForSpan(
 
 	if skipMVCCStats {
 		return spanStats, nil
+	}
+
+	var descriptors []roachpb.RangeDescriptor
+	scanner := rangedesc.NewScanner(s.db)
+	pageSize := int(RangeDescPageSize.Get(&s.st.SV))
+	err = scanner.Scan(ctx, pageSize, func() {
+		// If the underlying txn fails and needs to be retried,
+		// clear the descriptors we've collected so far.
+		descriptors = nil
+	}, span, func(scanned ...roachpb.RangeDescriptor) error {
+		descriptors = append(descriptors, scanned...)
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
 	var fullyContainedKeysBatch []roachpb.Key

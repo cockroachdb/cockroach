@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -308,7 +309,7 @@ func (kv replicateKV) runDriver(
 		require.NotEqual(t, "", kv.antiRegion, "if partitionKVDatabaseInRegion is set, then antiRegion must be set")
 		t.L().Printf("constrain the kv database to region %s", kv.partitionKVDatabaseInRegion)
 		alterStmt := fmt.Sprintf("ALTER DATABASE kv CONFIGURE ZONE USING constraints = '[+region=%s]'", kv.partitionKVDatabaseInRegion)
-		srcTenantConn := c.Conn(workloadCtx, t.L(), setup.src.nodes.RandNode()[0], option.TenantName(setup.src.name))
+		srcTenantConn := c.Conn(workloadCtx, t.L(), setup.src.nodes.RandNode()[0], option.VirtualClusterName(setup.src.name))
 		srcTenantSQL := sqlutils.MakeSQLRunner(srcTenantConn)
 		srcTenantSQL.Exec(t, alterStmt)
 		defer kv.checkRegionalConstraints(t, setup, srcTenantSQL)
@@ -497,24 +498,24 @@ func (rd *replicationDriver) setupC2C(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 
 	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
-	srcStartOps := option.DefaultStartOptsNoBackups()
+	srcStartOps := option.NewStartOpts(option.NoBackupSchedule)
 	srcStartOps.RoachprodOpts.InitTarget = 1
 
 	roachtestutil.SetDefaultAdminUIPort(c, &srcStartOps.RoachprodOpts)
-	srcClusterSetting := install.MakeClusterSettings(install.SecureOption(true))
+	srcClusterSetting := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), srcStartOps, srcClusterSetting, srcCluster)
 
 	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
-	dstStartOps := option.DefaultStartOptsNoBackups()
+	dstStartOps := option.NewStartOpts(option.NoBackupSchedule)
 	dstStartOps.RoachprodOpts.InitTarget = rd.rs.srcNodes + 1
 	roachtestutil.SetDefaultAdminUIPort(c, &dstStartOps.RoachprodOpts)
-	dstClusterSetting := install.MakeClusterSettings(install.SecureOption(true))
+	dstClusterSetting := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), dstStartOps, dstClusterSetting, dstCluster)
 
 	srcNode := srcCluster.SeededRandNode(rd.rng)
 	destNode := dstCluster.SeededRandNode(rd.rng)
 
-	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, "" /* tenant */, 0 /* sqlInstance */)
+	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, roachprod.PGURLOptions{})
 	t.L().Printf("Randomly chosen src node %d for gateway with address %s", srcNode, addr)
 	t.L().Printf("Randomly chosen dst node %d for gateway", destNode)
 
@@ -530,14 +531,14 @@ func (rd *replicationDriver) setupC2C(
 
 	overrideSrcAndDestTenantTTL(t, srcSQL, destSQL, rd.rs.overrideTenantTTL)
 
-	createTenantAdminRole(t, "src-system", srcSQL)
-	createTenantAdminRole(t, "dst-system", destSQL)
+	deprecatedCreateTenantAdminRole(t, "src-system", srcSQL)
+	deprecatedCreateTenantAdminRole(t, "dst-system", destSQL)
 
-	srcTenantID, destTenantID := 2, 2
+	srcTenantID, destTenantID := 3, 3
 	srcTenantName := "src-tenant"
 	destTenantName := "destination-tenant"
 
-	createInMemoryTenant(ctx, t, c, srcTenantName, srcCluster, true)
+	deprecatedCreateInMemoryTenant(ctx, t, c, srcTenantName, srcCluster, true)
 
 	pgURL, err := copyPGCertsAndMakeURL(ctx, t, c, srcNode, srcClusterSetting.PGUrlCertsDir, addr[0])
 	require.NoError(t, err)
@@ -791,9 +792,9 @@ func (rd *replicationDriver) onFingerprintMismatch(
 	ctx context.Context, startTime, endTime hlc.Timestamp,
 ) {
 	rd.t.L().Printf("conducting table level fingerprints")
-	srcTenantConn := rd.c.Conn(ctx, rd.t.L(), 1, option.TenantName(rd.setup.src.name))
+	srcTenantConn := rd.c.Conn(ctx, rd.t.L(), 1, option.VirtualClusterName(rd.setup.src.name))
 	defer srcTenantConn.Close()
-	dstTenantConn := rd.c.Conn(ctx, rd.t.L(), rd.rs.srcNodes+1, option.TenantName(rd.setup.dst.name))
+	dstTenantConn := rd.c.Conn(ctx, rd.t.L(), rd.rs.srcNodes+1, option.VirtualClusterName(rd.setup.dst.name))
 	defer dstTenantConn.Close()
 	fingerprintBisectErr := replicationutils.InvestigateFingerprints(ctx, srcTenantConn, dstTenantConn,
 		startTime,
@@ -879,7 +880,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	// the probability that the producer returns a topology with more than one node in it,
 	// else the node shutdown tests can flake.
 	if rd.rs.srcNodes >= 3 {
-		require.NoError(rd.t, WaitFor3XReplication(ctx, rd.t, rd.setup.src.db))
+		require.NoError(rd.t, WaitFor3XReplication(ctx, rd.t, rd.t.L(), rd.setup.src.db))
 	}
 
 	rd.t.L().Printf("begin workload on src cluster")
@@ -982,7 +983,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.metrics.cutoverEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
 
 	rd.t.L().Printf("starting the destination tenant")
-	conn := startInMemoryTenant(ctx, rd.t, rd.c, rd.setup.dst.name, rd.setup.dst.gatewayNodes)
+	conn := deprecatedStartInMemoryTenant(ctx, rd.t, rd.c, rd.setup.dst.name, rd.setup.dst.gatewayNodes)
 	conn.Close()
 
 	rd.metrics.export(rd.t, len(rd.setup.src.nodes))
@@ -1609,7 +1610,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 					shutdownNode:    rrd.shutdownNode,
 					watcherNode:     destinationWatcherNode,
 					crdbNodes:       rrd.crdbNodes(),
-					restartSettings: []install.ClusterSettingOption{install.SecureOption(true)},
+					restartSettings: []install.ClusterSettingOption{},
 					rng:             rrd.rng,
 				}
 				if err := executeNodeShutdown(ctx, t, c, shutdownCfg, shutdownStarter()); err != nil {
@@ -1755,7 +1756,7 @@ func srcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 }
 
 func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration time.Duration) {
-	db.ExecMultiple(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`,
+	db.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
 		`SET CLUSTER SETTING stream_replication.replan_flow_threshold = 0.1;`,
 		`SET CLUSTER SETTING physical_replication.consumer.node_lag_replanning_threshold = '5m';`)
@@ -1791,7 +1792,7 @@ func copyPGCertsAndMakeURL(
 		return "", err
 	}
 
-	tmpDir, err := os.MkdirTemp("", "certs")
+	tmpDir, err := os.MkdirTemp("", install.CockroachNodeCertsDir)
 	if err != nil {
 		return "", err
 	}
@@ -1805,11 +1806,11 @@ func copyPGCertsAndMakeURL(
 	if err != nil {
 		return "", err
 	}
-	sslClientCert, err := os.ReadFile(filepath.Join(tmpDir, "client.root.crt"))
+	sslClientCert, err := os.ReadFile(filepath.Join(tmpDir, fmt.Sprintf("client.%s.crt", install.DefaultUser)))
 	if err != nil {
 		return "", err
 	}
-	sslClientKey, err := os.ReadFile(filepath.Join(tmpDir, "client.root.key"))
+	sslClientKey, err := os.ReadFile(filepath.Join(tmpDir, fmt.Sprintf("client.%s.key", install.DefaultUser)))
 	if err != nil {
 		return "", err
 	}

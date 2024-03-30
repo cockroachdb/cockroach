@@ -14,17 +14,21 @@ go_library(
 
 go_test(
     name = "lint_test",
+    size = "enormous",
+    # keep
     srcs = [
-        "lint_test.go",
+        "gen-lint_test.go",
         "nightly_lint_test.go",
     ],
     data = glob(["testdata/**"]) + [
+        "//.github:CODEOWNERS",
+        "//build/bazelutil:nogo_config.json",
+        "//pkg/sql/opt/optgen/cmd/optfmt",
         "@co_honnef_go_tools//cmd/staticcheck",
-        "@go_sdk//:files",
+        "@com_github_cockroachdb_crlfmt//:crlfmt",
     ],
     embed = [":lint"],
     embedsrcs = ["gcassert_paths.txt"],
-    gotags = ["lint"],
     tags = [
         "integration",
         "no-remote-exec",
@@ -38,10 +42,19 @@ go_test(
         "//pkg/sql/sem/builtins",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
+        "//pkg/util/envutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_ghemawat_stream//:stream",
         "@com_github_jordanlewis_gcassert//:gcassert",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_tools//go/packages",
     ],
+)
+
+genrule(
+    name = "gen-lint-test",
+    srcs = ["lint_test.go"],
+    outs = ["gen-lint_test.go"],
+    cmd = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@",
 )

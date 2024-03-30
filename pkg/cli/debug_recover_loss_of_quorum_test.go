@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -280,7 +281,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 
 	for i := 0; i < len(tcAfter.Servers); i++ {
 		require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			store.SetReplicateQueueActive(true)
+			store.TestingSetReplicateQueueActive(true)
 			return nil
 		}), "Failed to activate replication queue")
 	}
@@ -345,7 +346,7 @@ func TestStageVersionCheck(t *testing.T) {
 	listenerReg := listenerutil.NewListenerRegistry()
 	defer listenerReg.Close()
 
-	storeReg := server.NewStickyVFSRegistry()
+	storeReg := fs.NewStickyRegistry()
 	tc := testcluster.NewTestCluster(t, 4, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// This logic is specific to the storage layer.
@@ -468,7 +469,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		sa[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 				},
 			},
 			StoreSpecs: []base.StoreSpec{

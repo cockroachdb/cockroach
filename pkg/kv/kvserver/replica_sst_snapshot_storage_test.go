@@ -52,7 +52,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 
 	// Check that the storage lazily creates the directories on first write.
-	_, err := eng.Stat(scratch.snapDir)
+	_, err := eng.Env().Stat(scratch.snapDir)
 	if !oserror.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", scratch.snapDir)
 	}
@@ -65,7 +65,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 
 	// Check that the storage lazily creates the files on write.
 	for _, fileName := range scratch.SSTs() {
-		_, err := eng.Stat(fileName)
+		_, err := eng.Env().Stat(fileName)
 		if !oserror.IsNotExist(err) {
 			t.Fatalf("expected %s to not exist", fileName)
 		}
@@ -75,7 +75,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 
 	// After writing to files, check that they have been flushed to disk.
 	for _, fileName := range scratch.SSTs() {
-		f, err := eng.Open(fileName)
+		f, err := eng.Env().Open(fileName)
 		require.NoError(t, err)
 		data, err := io.ReadAll(f)
 		require.NoError(t, err)
@@ -98,17 +98,17 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	// Check that Close removes the snapshot directory as well as the range
 	// directory.
 	require.NoError(t, scratch.Close())
-	_, err = eng.Stat(scratch.snapDir)
+	_, err = eng.Env().Stat(scratch.snapDir)
 	if !oserror.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", scratch.snapDir)
 	}
 	rangeDir := filepath.Join(sstSnapshotStorage.dir, strconv.Itoa(int(scratch.rangeID)))
-	_, err = eng.Stat(rangeDir)
+	_, err = eng.Env().Stat(rangeDir)
 	if !oserror.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", rangeDir)
 	}
 	require.NoError(t, sstSnapshotStorage.Clear())
-	_, err = eng.Stat(sstSnapshotStorage.dir)
+	_, err = eng.Env().Stat(sstSnapshotStorage.dir)
 	if !oserror.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", sstSnapshotStorage.dir)
 	}
@@ -134,7 +134,7 @@ func TestSSTSnapshotStorageConcurrentRange(t *testing.T) {
 		scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, snapUUID)
 
 		// Check that the storage lazily creates the directories on first write.
-		_, err := eng.Stat(scratch.snapDir)
+		_, err := eng.Env().Stat(scratch.snapDir)
 		if !oserror.IsNotExist(err) {
 			return errors.Errorf("expected %s to not exist", scratch.snapDir)
 		}
@@ -147,7 +147,7 @@ func TestSSTSnapshotStorageConcurrentRange(t *testing.T) {
 
 		// Check that the storage lazily creates the files on write.
 		for _, fileName := range scratch.SSTs() {
-			_, err := eng.Stat(fileName)
+			_, err := eng.Env().Stat(fileName)
 			if !oserror.IsNotExist(err) {
 				return errors.Errorf("expected %s to not exist", fileName)
 			}
@@ -157,7 +157,7 @@ func TestSSTSnapshotStorageConcurrentRange(t *testing.T) {
 
 		// After writing to files, check that they have been flushed to disk.
 		for _, fileName := range scratch.SSTs() {
-			f, err := eng.Open(fileName)
+			f, err := eng.Env().Open(fileName)
 			require.NoError(t, err)
 			data, err := io.ReadAll(f)
 			require.NoError(t, err)
@@ -179,7 +179,7 @@ func TestSSTSnapshotStorageConcurrentRange(t *testing.T) {
 
 		// Check that Close removes the snapshot directory.
 		require.NoError(t, scratch.Close())
-		_, err = eng.Stat(scratch.snapDir)
+		_, err = eng.Env().Stat(scratch.snapDir)
 		if !oserror.IsNotExist(err) {
 			return errors.Errorf("expected %s to not exist", scratch.snapDir)
 		}
@@ -207,12 +207,12 @@ func TestSSTSnapshotStorageConcurrentRange(t *testing.T) {
 	// Ensure that the range directory was deleted after the scratches were
 	// closed.
 	rangeDir := filepath.Join(sstSnapshotStorage.dir, strconv.Itoa(int(testRangeID)))
-	_, err := eng.Stat(rangeDir)
+	_, err := eng.Env().Stat(rangeDir)
 	if !oserror.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", rangeDir)
 	}
 	require.NoError(t, sstSnapshotStorage.Clear())
-	_, err = eng.Stat(sstSnapshotStorage.dir)
+	_, err = eng.Env().Stat(sstSnapshotStorage.dir)
 	if !oserror.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", sstSnapshotStorage.dir)
 	}
@@ -288,7 +288,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	var actualSSTs [][]byte
 	fileNames := msstw.scratch.SSTs()
 	for _, file := range fileNames {
-		sst, err := fs.ReadFile(eng, file)
+		sst, err := fs.ReadFile(eng.Env(), file)
 		require.NoError(t, err)
 		actualSSTs = append(actualSSTs, sst)
 	}
@@ -360,7 +360,7 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 			var actualSSTs [][]byte
 			fileNames := msstw.scratch.SSTs()
 			for _, file := range fileNames {
-				sst, err := fs.ReadFile(eng, file)
+				sst, err := fs.ReadFile(eng.Env(), file)
 				require.NoError(t, err)
 				actualSSTs = append(actualSSTs, sst)
 			}
@@ -398,7 +398,7 @@ func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine)
 	dir, cleanup := testutils.TempDir(t)
 	eng, err := storage.Open(
 		ctx,
-		storage.Filesystem(dir),
+		fs.MustInitPhysicalTestingEnv(dir),
 		cluster.MakeClusterSettings(),
 		storage.CacheSize(1<<20 /* 1 MiB */))
 	if err != nil {

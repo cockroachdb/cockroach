@@ -206,7 +206,7 @@ type RequestSequencer interface {
 	// the request had against conflicting requests and allowing conflicting
 	// requests that are blocked on this one to proceed. The guard should not
 	// be used after being released.
-	FinishReq(*Guard)
+	FinishReq(context.Context, *Guard)
 }
 
 // ContentionHandler is concerned with handling contention-related errors. This
@@ -521,7 +521,7 @@ type latchManager interface {
 	Poison(latchGuard)
 
 	// Release a guard's latches, relinquish its protection from conflicting requests.
-	Release(latchGuard)
+	Release(ctx context.Context, lg latchGuard)
 
 	// Metrics returns information about the state of the latchManager.
 	Metrics() LatchMetrics
@@ -801,7 +801,7 @@ type lockTableGuard interface {
 	// for conflicts. This helps prevent a stream of locking SKIP LOCKED requests
 	// from starving out regular locking requests. In such cases, true is
 	// returned, but so is nil.
-	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta, error)
+	IsKeyLockedByConflictingTxn(context.Context, roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta, error)
 }
 
 // lockTableWaiter is concerned with waiting in lock wait-queues for locks held

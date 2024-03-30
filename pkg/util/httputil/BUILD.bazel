@@ -24,10 +24,6 @@ go_test(
         "etag_handler_test.go",
     ],
     embed = [":httputil"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/targz",

@@ -50,10 +50,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":roachprod-microbench_lib"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/cmd/roachprod-microbench/model",
         "//pkg/testutils/datapathutils",

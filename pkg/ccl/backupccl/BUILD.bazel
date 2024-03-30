@@ -128,6 +128,7 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util",
+        "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/bulk",
         "//pkg/util/ctxgroup",
@@ -142,8 +143,8 @@ go_library(
         "//pkg/util/log/logutil",
         "//pkg/util/metric",
         "//pkg/util/mon",
+        "//pkg/util/pprofutil",
         "//pkg/util/protoutil",
-        "//pkg/util/quotapool",
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/span",
@@ -186,9 +187,6 @@ go_test(
         "main_test.go",
         "partitioned_backup_test.go",
         "restore_data_processor_test.go",
-        "restore_entry_cover_generated_test.go",  # keep
-        "restore_memory_monitoring_generated_test.go",  # keep
-        "restore_mid_schema_change_generated_test.go",  # keep
         "restore_mid_schema_change_test.go",
         "restore_multiregion_rbr_test.go",
         "restore_old_sequences_test.go",
@@ -206,8 +204,8 @@ go_test(
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":backupccl"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "large"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "large"},
     }),
     shard_count = 48,
     tags = ["ccl_test"],
@@ -291,7 +289,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlclustersettings",
-        "//pkg/sql/sqlliveness/slinstance",
+        "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/stats",
         "//pkg/storage",
         "//pkg/testutils",
@@ -361,15 +359,11 @@ genrule(
     name = "gen-backupccl-tests",
     srcs = glob(["testdata/**"]),
     outs = [
-        "restore_memory_monitoring_generated_test.go",
         "data_driven_generated_test.go",
-        "restore_entry_cover_generated_test.go",
-        "restore_mid_schema_change_generated_test.go",
     ],
     cmd = """
-        $(location //pkg/ccl/backupccl/testgen) -restore-memory-monitoring=$(location restore_memory_monitoring_generated_test.go) \
-        -data-driven=$(location data_driven_generated_test.go) -restore-entry-cover=$(location restore_entry_cover_generated_test.go) \
-        -restore-mid-schema-change=$(location restore_mid_schema_change_generated_test.go)
+        $(location //pkg/ccl/backupccl/testgen) \
+        -data-driven=$(location data_driven_generated_test.go) 
        """,
     exec_tools = [
         "//pkg/ccl/backupccl/testgen",

@@ -21,10 +21,6 @@ go_test(
     srcs = ["prometheus_test.go"],
     data = glob(["testdata/**"]),
     embed = [":prometheus"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/roachprod/install",
         "//pkg/testutils/datapathutils",

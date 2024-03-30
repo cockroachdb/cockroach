@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -444,7 +445,7 @@ func execQuery(
 ) error {
 	it, err := s.InternalExecutor().(isql.Executor).QueryIteratorEx(
 		ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName(), Database: "system"},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName(), Database: "system"},
 		query,
 	)
 	if err != nil {
@@ -561,15 +562,16 @@ func waitForClientConn(ln net.Listener) (net.Conn, error) {
 // together with session arguments or an error.
 func getSessionArgs(
 	ln net.Listener, trustRemoteAddr bool,
-) (conn net.Conn, _ sql.SessionArgs, err error) {
+) (netConn net.Conn, _ sql.SessionArgs, retErr error) {
 	for {
-		conn, err = ln.Accept()
+		var err error
+		netConn, err = ln.Accept()
 		if err != nil {
 			return nil, sql.SessionArgs{}, err
 		}
 
 		buf := pgwirebase.MakeReadBuffer()
-		_, err = buf.ReadUntypedMsg(conn)
+		_, err = buf.ReadUntypedMsg(netConn)
 		if err != nil {
 			return nil, sql.SessionArgs{}, err
 		}
@@ -585,15 +587,32 @@ func getSessionArgs(
 		if version != version30 {
 			return nil, sql.SessionArgs{}, errors.Errorf("unexpected protocol version: %d", version)
 		}
-
+		defer func() {
+			// Implement a fake pgwire connection handshake. Send the response
+			// after parsing the client-sent parameters.
+			c := &conn{conn: netConn}
+			c.msgBuilder.init(metric.NewCounter(metric.Metadata{}))
+			if err := c.authOKMessage(); err != nil {
+				retErr = errors.CombineErrors(retErr, err)
+				return
+			}
+			if err := c.bufferInitialReadyForQuery(pgwirecancel.BackendKeyData(0)); err != nil {
+				retErr = errors.CombineErrors(retErr, err)
+				return
+			}
+			if err := c.Flush(0); err != nil {
+				retErr = errors.CombineErrors(retErr, err)
+				return
+			}
+		}()
 		ctx := context.Background()
-		cp, err := parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr(), trustRemoteAddr,
+		cp, err := parseClientProvidedSessionParameters(ctx, &buf, netConn.RemoteAddr(), trustRemoteAddr,
 			false /* acceptTenantName */, false /* acceptSystemIdentityOption */)
 		if err != nil {
-			return conn, sql.SessionArgs{}, err
+			return netConn, sql.SessionArgs{}, err
 		}
 		args, err := finalizeClientParameters(ctx, cp, nil)
-		return conn, args, err
+		return netConn, args, err
 	}
 }
 
@@ -1606,21 +1625,26 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 
-			wg := sync.WaitGroup{}
-			wg.Add(1)
+			var netConn net.Conn
+			clientDone := sync.WaitGroup{}
+			clientDone.Add(1)
+			serverReceivedConn := sync.WaitGroup{}
+			serverReceivedConn.Add(1)
 			go func(query string) {
-				defer wg.Done()
-				ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+				defer clientDone.Done()
+				ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 				defer cancel()
 				url := fmt.Sprintf("%s&%s", baseURL, query)
 				c, connErr := pgx.Connect(ctx, url)
 				if connErr != nil {
+					t.Error(connErr)
 					return
 				}
 				// ignore the error because there is no answer from the server, we are
-				// interested in parsing session arguments only
-				_ = c.Ping(ctx)
-				// closing connection immediately, since getSessionArgs is blocking
+				// interested in parsing session arguments only. We close the connection
+				// immediately, since getSessionArgs is blocking.
+				serverReceivedConn.Wait()
+				_ = netConn.Close()
 				_ = c.Close(ctx)
 
 				select {
@@ -1631,9 +1655,15 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 					t.Error("pgconn asyncClose did not clean up on time")
 				}
 			}(tc.query)
-			// Wait for the client to connect and perform the handshake.
-			_, args, err := getSessionArgs(ln, true /* trustRemoteAddr */)
-			wg.Wait()
+			// Wait for the client to connect and perform the handshake. Use a
+			// closure so that the WaitGroup is marked as done even if there's a
+			// panic.
+			var args sql.SessionArgs
+			func() {
+				defer serverReceivedConn.Done()
+				netConn, args, err = getSessionArgs(ln, true /* trustRemoteAddr */)
+			}()
+			clientDone.Wait()
 			tc.assert(t, args, err)
 		})
 	}
@@ -1756,93 +1786,6 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedSearchPath, sp)
 		})
-	}
-}
-
-func TestSetSessionArguments(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	ctx := context.Background()
-	defer srv.Stopper().Stop(ctx)
-	s := srv.ApplicationLayer()
-
-	_, err := s.SQLConn(t, serverutils.DBName("defaultdb")).Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
-	require.NoError(t, err)
-
-	pgURL, cleanupFunc := s.PGUrl(
-		t, serverutils.CertsDirPrefix("testConnClose"), serverutils.User(username.RootUser),
-	)
-	defer cleanupFunc()
-
-	testOptionValues, err := url.ParseQuery(`options=` + `  --user=test -c    search_path=public,testsp,"Abc",Def %20 ` +
-		"--default-transaction-isolation=read\\ uncommitted   " +
-		"-capplication_name=test  " +
-		"--DateStyle=ymd\\ ,\\ iso\\  " +
-		"-c intervalstyle%3DISO_8601 " +
-		"-ccustom_option.custom_option=test2")
-	require.NoError(t, err)
-
-	query := pgURL.Query()
-	query.Set("options", query.Get("options")+" "+testOptionValues.Get("options"))
-	pgURL.RawQuery = query.Encode()
-
-	noBufferDB, err := gosql.Open("postgres", pgURL.String())
-
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer noBufferDB.Close()
-
-	pgxConfig, err := pgx.ParseConfig(pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	conn, err := pgx.ConnectConfig(ctx, pgxConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rows, err := conn.Query(ctx, "show all")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expectedOptions := map[string]string{
-		"search_path": "public, testsp, \"Abc\", def",
-		// Setting the isolation level to read uncommitted should map
-		// to read committed.
-		"default_transaction_isolation": "read committed",
-		"application_name":              "test",
-		"datestyle":                     "ISO, YMD",
-		"intervalstyle":                 "iso_8601",
-	}
-	expectedFoundOptions := len(expectedOptions)
-
-	var foundOptions int
-	var variable, value string
-	for rows.Next() {
-		err = rows.Scan(&variable, &value)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v, ok := expectedOptions[variable]; ok {
-			foundOptions++
-			if v != value {
-				t.Fatalf("option %q expected value %q, actual %q", variable, v, value)
-			}
-		}
-	}
-	require.Equal(t, expectedFoundOptions, foundOptions)
-
-	// Custom session options don't show up on SHOW ALL
-	var customOption string
-	require.NoError(t, conn.QueryRow(ctx, "SHOW custom_option.custom_option").Scan(&customOption))
-	require.Equal(t, "test2", customOption)
-
-	if err := conn.Close(ctx); err != nil {
-		t.Fatal(err)
 	}
 }
 

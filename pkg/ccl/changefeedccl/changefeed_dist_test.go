@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -30,18 +31,70 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// mockRangeIterator iterates over ranges in a span assuming that each range
+// contains one character.
+type mockRangeIterator struct {
+	rangeDesc *roachpb.RangeDescriptor
+}
+
+var _ rangeIterator = (*mockRangeIterator)(nil)
+
+func nextKey(startKey []byte) []byte {
+	return []byte{startKey[0] + 1}
+}
+
+// Desc implements the rangeIterator interface.
+func (ri *mockRangeIterator) Desc() *roachpb.RangeDescriptor {
+	return ri.rangeDesc
+}
+
+// NeedAnother implements the rangeIterator interface.
+func (ri *mockRangeIterator) NeedAnother(rs roachpb.RSpan) bool {
+	return ri.rangeDesc.EndKey.Less(rs.EndKey)
+}
+
+// Valid implements the rangeIterator interface.
+func (ri *mockRangeIterator) Valid() bool {
+	return true
+}
+
+// Error implements the rangeIterator interface.
+func (ri *mockRangeIterator) Error() error {
+	panic("unexpected call to Error()")
+}
+
+// Next implements the rangeIterator interface.
+func (ri *mockRangeIterator) Next(ctx context.Context) {
+	ri.rangeDesc.StartKey = nextKey(ri.rangeDesc.StartKey)
+	ri.rangeDesc.EndKey = nextKey(ri.rangeDesc.EndKey)
+}
+
+// Seek implements the rangeIterator interface.
+func (ri *mockRangeIterator) Seek(_ context.Context, key roachpb.RKey, _ kvcoord.ScanDirection) {
+	ri.rangeDesc = &roachpb.RangeDescriptor{
+		StartKey: key,
+		EndKey:   nextKey(key),
+	}
+}
 
 var partitions = func(p ...sql.SpanPartition) []sql.SpanPartition {
 	return p
 }
 
 var mkPart = func(n base.SQLInstanceID, spans ...roachpb.Span) sql.SpanPartition {
-	return sql.SpanPartition{SQLInstanceID: n, Spans: spans}
+	var count int
+	for _, sp := range spans {
+		count += int(rune(sp.EndKey[0]) - rune(sp.Key[0]))
+	}
+	return sql.MakeSpanPartitionWithRangeCount(n, spans, count)
 }
 
 // mkRange makes a range containing a single rune.
@@ -67,30 +120,19 @@ var mkSingleLetterRanges = func(start, end rune) (result []roachpb.Span) {
 	return result
 }
 
-// letterRangeResolver resolves spans such that each letter is a range.
-type letterRangeResolver struct{}
-
-func (r *letterRangeResolver) getRangesForSpans(
-	_ context.Context, inSpans []roachpb.Span,
-) (spans []roachpb.Span, _ error) {
-	for _, sp := range inSpans {
-		spans = append(spans, mkSingleLetterRanges(rune(sp.Key[0]), rune(sp.EndKey[0]))...)
-	}
-	return spans, nil
-}
-
 // TestPartitionSpans unit tests the rebalanceSpanPartitions function.
 func TestPartitionSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	const sensitivity = 0.01
+	defer log.Scope(t).Close(t)
 
 	// 26 nodes, 1 range per node.
 	make26NodesBalanced := func() (p []sql.SpanPartition) {
 		for i := rune(0); i < 26; i += 1 {
-			p = append(p, sql.SpanPartition{
-				SQLInstanceID: base.SQLInstanceID(i + 1),
-				Spans:         []roachpb.Span{mkRange('a' + i)},
-			})
+			p = append(p, sql.MakeSpanPartitionWithRangeCount(
+				base.SQLInstanceID(i+1),
+				[]roachpb.Span{mkRange('z' - i)},
+				1,
+			))
 		}
 		return p
 	}
@@ -98,13 +140,13 @@ func TestPartitionSpans(t *testing.T) {
 	// 26 nodes. All empty except for the first, which has 26 ranges.
 	make26NodesImBalanced := func() (p []sql.SpanPartition) {
 		for i := rune(0); i < 26; i += 1 {
-			sp := sql.SpanPartition{
-				SQLInstanceID: base.SQLInstanceID(i + 1),
-			}
 			if i == 0 {
-				sp.Spans = append(sp.Spans, mkSpan('a', 'z'+1))
+				p = append(p, sql.MakeSpanPartitionWithRangeCount(
+					base.SQLInstanceID(i+1), []roachpb.Span{mkSpan('a', 'z'+1)}, 26))
+			} else {
+				p = append(p, sql.MakeSpanPartitionWithRangeCount(base.SQLInstanceID(i+1), []roachpb.Span{}, 0))
 			}
-			p = append(p, sp)
+
 		}
 		return p
 	}
@@ -122,9 +164,9 @@ func TestPartitionSpans(t *testing.T) {
 				mkPart(3, mkSpan('q', 'z'+1)), // 10
 			),
 			expect: partitions(
-				mkPart(1, mkSpan('a', 'j')),               // 9
-				mkPart(2, mkSpan('j', 'q'), mkRange('z')), // 8
-				mkPart(3, mkSpan('q', 'z')),               // 9
+				mkPart(1, mkSpan('a', 'j')),   // 9
+				mkPart(2, mkSpan('j', 'r')),   // 8
+				mkPart(3, mkSpan('r', 'z'+1)), // 9
 			),
 		},
 		{
@@ -135,9 +177,9 @@ func TestPartitionSpans(t *testing.T) {
 				mkPart(3, mkSpan('c', 'e'), mkSpan('p', 'r')), // 4
 			),
 			expect: partitions(
-				mkPart(1, mkSpan('a', 'c'), mkSpan('e', 'l')), // 9
-				mkPart(2, mkSpan('r', 'z')),                   // 8
-				mkPart(3, mkSpan('c', 'e'), mkSpan('l', 'r')), // 8
+				mkPart(1, mkSpan('o', 'p'), mkSpan('r', 'z')),                   // 9
+				mkPart(2, mkSpan('a', 'c'), mkSpan('e', 'l')),                   // 9
+				mkPart(3, mkSpan('c', 'e'), mkSpan('l', 'o'), mkSpan('p', 'r')), // 7
 			),
 		},
 		{
@@ -148,9 +190,9 @@ func TestPartitionSpans(t *testing.T) {
 				mkPart(3, mkRange('z')),                      // 1
 			),
 			expect: partitions(
-				mkPart(1, mkSpan('a', 'k')),                   // 10
-				mkPart(2, mkSpan('k', 'r'), mkSpan('y', 'z')), // 8
-				mkPart(3, mkSpan('r', 'y'), mkRange('z')),     // 7
+				mkPart(1, mkSpan('p', 'y')),                   // 9
+				mkPart(2, mkSpan('i', 'p'), mkSpan('y', 'z')), // 8
+				mkPart(3, mkSpan('a', 'i'), mkRange('z')),     // 9
 			),
 		},
 		{
@@ -190,7 +232,7 @@ func TestPartitionSpans(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sp, err := rebalanceSpanPartitions(context.Background(),
-				&letterRangeResolver{}, sensitivity, tc.input)
+				&mockRangeIterator{}, 0.00, tc.input)
 			t.Log("expected partitions")
 			for _, p := range tc.expect {
 				t.Log(p)
@@ -203,6 +245,80 @@ func TestPartitionSpans(t *testing.T) {
 			require.Equal(t, tc.expect, sp)
 		})
 	}
+
+	dedupe := func(in []int) []int {
+		ret := intsets.Fast{}
+		for _, id := range in {
+			ret.Add(id)
+		}
+		return ret.Ordered()
+	}
+	copySpans := func(partitions []sql.SpanPartition) (g roachpb.SpanGroup) {
+		for _, p := range partitions {
+			for _, sp := range p.Spans {
+				g.Add(sp)
+			}
+		}
+		return
+	}
+	// Create a random input and assert that the output has the same
+	// spans as the input.
+	t.Run("random", func(t *testing.T) {
+		rng, _ := randutil.NewTestRand()
+		numPartitions := rng.Intn(8) + 1
+		numSpans := rng.Intn(25) + 1
+
+		// Randomly create spans and assign them to nodes. For example,
+		// {1 {h-i}, {m-n}, {t-u}}
+		// {2 {a-c}, {d-f}, {l-m}, {s-t}, {x-z}}
+		// {3 {c-d}, {i-j}, {u-w}}
+		// {4 {w-x}}
+		// {5 {f-h}, {p-s}}
+		// {6 {j-k}, {k-l}, {n-o}, {o-p}}
+
+		// First, select some indexes in ['a' ... 'z'] to partition at.
+		spanIdxs := make([]int, numSpans)
+		for i := range spanIdxs {
+			spanIdxs[i] = rng.Intn((int('z')-int('a'))-1) + int('a') + 1
+		}
+		sort.Slice(spanIdxs, func(i int, j int) bool {
+			return spanIdxs[i] < spanIdxs[j]
+		})
+		// Make sure indexes are unique.
+		spanIdxs = dedupe(spanIdxs)
+
+		// Generate spans and assign them randomly to partitions.
+		input := make([]sql.SpanPartition, numPartitions)
+		for i, key := range spanIdxs {
+			assignTo := rng.Intn(numPartitions)
+			if i == 0 {
+				input[assignTo].Spans = append(input[assignTo].Spans, mkSpan('a', (rune(key))))
+			} else {
+				input[assignTo].Spans = append(input[assignTo].Spans, mkSpan((rune(spanIdxs[i-1])), rune(key)))
+			}
+		}
+		last := rng.Intn(numPartitions)
+		input[last].Spans = append(input[last].Spans, mkSpan(rune(spanIdxs[len(spanIdxs)-1]), 'z'))
+
+		// Populate the remaining fields in the partitions.
+		for i := range input {
+			input[i] = mkPart(base.SQLInstanceID(i+1), input[i].Spans...)
+		}
+
+		t.Log(input)
+
+		// Ensure the set of input spans matches the set of output spans.
+		g1 := copySpans(input)
+		output, err := rebalanceSpanPartitions(context.Background(),
+			&mockRangeIterator{}, 0.00, input)
+		require.NoError(t, err)
+
+		t.Log(output)
+
+		g2 := copySpans(output)
+		require.True(t, g1.Encloses(g2.Slice()...))
+		require.True(t, g2.Encloses(g1.Slice()...))
+	})
 }
 
 type rangeDistributionTester struct {
@@ -296,7 +412,11 @@ func newRangeDistributionTester(
 
 	// Distribute the leases exponentially across the first 5 nodes.
 	for i := 0; i < 64; i += 1 {
-		nodeID := int(math.Floor(math.Log2(float64(i)))) + 1
+		nodeID := 1
+		// Avoid log(0).
+		if i != 0 {
+			nodeID = int(math.Floor(math.Log2(float64(i)))) + 1
+		}
 		cmd := fmt.Sprintf(`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], %d)`,
 			nodeID, i,
 		)
@@ -349,12 +469,14 @@ func TestChangefeedWithNoDistributionStrategy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 120470)
+
 	// The test is slow and will time out under deadlock/race/stress.
 	skip.UnderShort(t)
 	skip.UnderDuress(t)
 
 	noLocality := func(i int) []roachpb.Tier {
-		return make([]roachpb.Tier, 0)
+		return nil
 	}
 
 	// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
@@ -363,7 +485,8 @@ func TestChangefeedWithNoDistributionStrategy(t *testing.T) {
 	tester := newRangeDistributionTester(t, noLocality)
 	defer tester.cleanup()
 
-	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
+	serverutils.SetClusterSetting(t, tester.tc, "changefeed.default_range_distribution_strategy", "default")
+	serverutils.SetClusterSetting(t, tester.tc, "changefeed.random_replica_selection.enabled", false)
 	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
 	partitions := tester.getPartitions()
 	counts := tester.countRangesPerNode(partitions)
@@ -389,6 +512,8 @@ func TestChangefeedWithSimpleDistributionStrategy(t *testing.T) {
 	tester := newRangeDistributionTester(t, noLocality)
 	defer tester.cleanup()
 	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_simple'")
+	// We need to disable the bulk oracle in order to ensure the leaseholder is selected.
+	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.random_replica_selection.enabled = false")
 	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
 	partitions := tester.getPartitions()
 	counts := tester.countRangesPerNode(partitions)

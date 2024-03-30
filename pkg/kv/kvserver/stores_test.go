@@ -12,7 +12,9 @@ package kvserver
 
 import (
 	"context"
+	"path"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -20,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -337,5 +342,38 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 	}
 	if !reflect.DeepEqual(bi, verifyBI) {
 		t.Errorf("bootstrap info %+v not equal to expected %+v", verifyBI, bi)
+	}
+}
+
+func TestRegisterDiskMonitors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	_, stores, ls, stopper := createStores(2)
+	defer stopper.Stop(context.Background())
+	defer ls.CloseDiskMonitors()
+
+	ls.AddStore(stores[0])
+	ls.AddStore(stores[1])
+
+	fs := vfs.Default
+	pathToStore := make(map[string]roachpb.StoreID, len(stores))
+	for i, store := range stores {
+		storePath := path.Join(dir, strconv.Itoa(i))
+		pathToStore[storePath] = store.StoreID()
+
+		_, err := fs.Create(storePath)
+		require.NoError(t, err)
+		require.Nil(t, store.diskMonitor)
+	}
+
+	diskManager := disk.NewMonitorManager(fs)
+	err := ls.RegisterDiskMonitors(diskManager, pathToStore)
+	require.NoError(t, err)
+	for _, store := range stores {
+		require.NotNil(t, store.diskMonitor)
 	}
 }

@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -47,8 +49,6 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/tracker"
 )
 
 var simpleSpanConfig = &roachpb.SpanConfig{
@@ -349,22 +349,22 @@ var oneStoreHighIOOverload = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1800, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1800, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 5)},
 	},
 	{
 		StoreID:  4,
 		Node:     roachpb.NodeDescriptor{NodeID: 4},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
 	},
 }
 
@@ -372,17 +372,17 @@ var allStoresHighIOOverload = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 }
 
@@ -390,17 +390,17 @@ var allStoresHighIOOverloadSkewed = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 50)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 50)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 55)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 55)},
 	},
 }
 
@@ -408,27 +408,27 @@ var threeStoresHighIOOverloadAscRangeCount = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 100, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 100, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 400, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 400, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1600, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
 	},
 	{
 		StoreID:  4,
 		Node:     roachpb.NodeDescriptor{NodeID: 4},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 6400, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 6400, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 10)},
 	},
 	{
 		StoreID:  5,
 		Node:     roachpb.NodeDescriptor{NodeID: 5},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 25000, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 25000, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 10)},
 	},
 }
 
@@ -2081,8 +2081,8 @@ func TestAllocatorTransferLeaseTargetIOOverloadCheck(t *testing.T) {
 					StoreID: roachpb.StoreID(i + 1),
 					Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)},
 					Capacity: roachpb.StoreCapacity{
-						LeaseCount:  int32(tc.leaseCounts[i]),
-						IOThreshold: TestingIOThresholdWithScore(tc.IOScores[i]),
+						LeaseCount:     int32(tc.leaseCounts[i]),
+						IOThresholdMax: TestingIOThresholdWithScore(tc.IOScores[i]),
 					},
 				}
 			}
@@ -2682,21 +2682,21 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 	testCases := []struct {
 		leaseholder roachpb.StoreID
 		existing    []roachpb.ReplicaDescriptor
-		expected    bool
+		expected    TransferLeaseDecision
 	}{
-		{leaseholder: 1, existing: nil, expected: false},
-		{leaseholder: 2, existing: nil, expected: false},
-		{leaseholder: 3, existing: nil, expected: false},
-		{leaseholder: 4, existing: nil, expected: false},
-		{leaseholder: 3, existing: replicas(1), expected: true},
-		{leaseholder: 3, existing: replicas(1, 2), expected: true},
-		{leaseholder: 3, existing: replicas(2), expected: false},
-		{leaseholder: 3, existing: replicas(3), expected: false},
-		{leaseholder: 3, existing: replicas(4), expected: false},
-		{leaseholder: 4, existing: replicas(1), expected: true},
-		{leaseholder: 4, existing: replicas(2), expected: true},
-		{leaseholder: 4, existing: replicas(3), expected: true},
-		{leaseholder: 4, existing: replicas(1, 2, 3), expected: true},
+		{leaseholder: 1, existing: nil, expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 2, existing: nil, expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 3, existing: nil, expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 4, existing: nil, expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 3, existing: replicas(1), expected: TransferLeaseForCountBalance},
+		{leaseholder: 3, existing: replicas(1, 2), expected: TransferLeaseForCountBalance},
+		{leaseholder: 3, existing: replicas(2), expected: DontTransferLeaseBalanced},
+		{leaseholder: 3, existing: replicas(3), expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 3, existing: replicas(4), expected: DontTransferLeaseBalanced},
+		{leaseholder: 4, existing: replicas(1), expected: TransferLeaseForCountBalance},
+		{leaseholder: 4, existing: replicas(2), expected: TransferLeaseForCountBalance},
+		{leaseholder: 4, existing: replicas(3), expected: TransferLeaseForCountBalance},
+		{leaseholder: 4, existing: replicas(1, 2, 3), expected: TransferLeaseForCountBalance},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -2752,20 +2752,20 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 	testCases := []struct {
 		leaseholder roachpb.StoreID
 		existing    []roachpb.ReplicaDescriptor
-		expected    bool
+		expected    TransferLeaseDecision
 	}{
-		{leaseholder: 1, existing: nil, expected: false},
-		{leaseholder: 2, existing: nil, expected: false},
-		{leaseholder: 3, existing: nil, expected: false},
-		{leaseholder: 4, existing: nil, expected: false},
-		{leaseholder: 2, existing: replicas(1), expected: false},
-		{leaseholder: 3, existing: replicas(1), expected: false},
-		{leaseholder: 3, existing: replicas(1, 2), expected: false},
-		{leaseholder: 3, existing: replicas(1, 2, 4), expected: false},
-		{leaseholder: 4, existing: replicas(1), expected: false},
-		{leaseholder: 4, existing: replicas(1, 2), expected: true},
-		{leaseholder: 4, existing: replicas(1, 3), expected: true},
-		{leaseholder: 4, existing: replicas(1, 2, 3), expected: true},
+		{leaseholder: 1, existing: nil, expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 2, existing: nil, expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 3, existing: nil, expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 4, existing: nil, expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 2, existing: replicas(1), expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 3, existing: replicas(1), expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 3, existing: replicas(1, 2), expected: DontTransferLeaseBalanced},
+		{leaseholder: 3, existing: replicas(1, 2, 4), expected: DontTransferLeaseBalanced},
+		{leaseholder: 4, existing: replicas(1), expected: DontTransferLeaseNoValidTargets},
+		{leaseholder: 4, existing: replicas(1, 2), expected: TransferLeaseForCountBalance},
+		{leaseholder: 4, existing: replicas(1, 3), expected: TransferLeaseForCountBalance},
+		{leaseholder: 4, existing: replicas(1, 2, 3), expected: TransferLeaseForCountBalance},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -2826,7 +2826,7 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 			&mockRepl{storeID: 2, replicationFactor: 3},
 			allocator.RangeUsageInfo{},
 		)
-		require.Equal(t, expected, result)
+		require.Equal(t, expected, result.ShouldTransfer())
 	}
 	timeAfterNodeSuspect := liveness.TimeAfterNodeSuspect.Get(&a.st.SV)
 	// Based on capacity node 1 is desirable.
@@ -2861,7 +2861,7 @@ func TestAllocatorShouldTransferLeaseIOOverload(t *testing.T) {
 		leaseCounts, IOScores []float64
 		leaseholder           roachpb.StoreID
 		excludeLeaseRepl      bool
-		expected              bool
+		expected              TransferLeaseDecision
 		enforcement           IOOverloadEnforcementLevel
 	}{
 		{
@@ -2869,7 +2869,7 @@ func TestAllocatorShouldTransferLeaseIOOverload(t *testing.T) {
 			leaseCounts: floats(100, 100, 100, 100, 100),
 			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
 			leaseholder: 1,
-			expected:    false,
+			expected:    DontTransferLeaseBalanced,
 			enforcement: IOOverloadThresholdBlockTransfers,
 		},
 		{
@@ -2879,7 +2879,7 @@ func TestAllocatorShouldTransferLeaseIOOverload(t *testing.T) {
 			leaseholder: 1,
 			// Store 3 is above the threshold (1.0 > 0.8), but equal to the avg (1.0), so
 			// it is still considered a non-IO-overloaded candidate.
-			expected:    true,
+			expected:    TransferLeaseForIOOverload,
 			enforcement: IOOverloadThresholdShed,
 		},
 		{
@@ -2887,7 +2887,7 @@ func TestAllocatorShouldTransferLeaseIOOverload(t *testing.T) {
 			leaseCounts: floats(0, 100, 100, 400, 400),
 			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
 			leaseholder: 5,
-			expected:    true,
+			expected:    TransferLeaseForCountBalance,
 			enforcement: IOOverloadThresholdIgnore,
 		},
 		{
@@ -2895,7 +2895,7 @@ func TestAllocatorShouldTransferLeaseIOOverload(t *testing.T) {
 			leaseCounts: floats(0, 0, 0, 0, 0),
 			IOScores:    floats(0.89, 0, 0, 0, 0),
 			leaseholder: 1,
-			expected:    false,
+			expected:    DontTransferLeaseBalanced,
 			enforcement: IOOverloadThresholdShed,
 		},
 	}
@@ -2912,8 +2912,8 @@ func TestAllocatorShouldTransferLeaseIOOverload(t *testing.T) {
 					StoreID: roachpb.StoreID(i + 1),
 					Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)},
 					Capacity: roachpb.StoreCapacity{
-						LeaseCount:  int32(tc.leaseCounts[i]),
-						IOThreshold: TestingIOThresholdWithScore(tc.IOScores[i]),
+						LeaseCount:     int32(tc.leaseCounts[i]),
+						IOThresholdMax: TestingIOThresholdWithScore(tc.IOScores[i]),
 					},
 				}
 			}
@@ -3006,54 +3006,55 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 		preferences            []roachpb.LeasePreference
 		expectAllowLeaseRepl   roachpb.StoreID /* excludeLeaseRepl = false */
 		expectExcludeLeaseRepl roachpb.StoreID /* excludeLeaseRepl = true */
+		expectShouldTransfer   TransferLeaseDecision
 	}{
-		{1, nil, preferDC1, 0, 0},
-		{1, replicas(1, 2, 3, 4), preferDC1, 0, 2},
-		{1, replicas(2, 3, 4), preferDC1, 0, 2},
-		{2, replicas(1, 2, 3, 4), preferDC1, 1, 1},
-		{2, replicas(2, 3, 4), preferDC1, 0, 3},
-		{4, replicas(2, 3, 4), preferDC1, 2, 2},
-		{1, nil, preferDC4Then3Then2, 0, 0},
-		{1, replicas(1, 2, 3, 4), preferDC4Then3Then2, 4, 4},
-		{1, replicas(1, 2, 3), preferDC4Then3Then2, 3, 3},
-		{1, replicas(1, 2), preferDC4Then3Then2, 2, 2},
-		{3, replicas(1, 2, 3, 4), preferDC4Then3Then2, 4, 4},
-		{3, replicas(1, 2, 3), preferDC4Then3Then2, 0, 2},
-		{3, replicas(1, 3), preferDC4Then3Then2, 0, 1},
-		{4, replicas(1, 2, 3, 4), preferDC4Then3Then2, 0, 3},
-		{4, replicas(1, 2, 4), preferDC4Then3Then2, 0, 2},
-		{4, replicas(1, 4), preferDC4Then3Then2, 0, 1},
-		{1, replicas(1, 2, 3, 4), preferN2ThenS3, 2, 2},
-		{1, replicas(1, 3, 4), preferN2ThenS3, 3, 3},
-		{1, replicas(1, 4), preferN2ThenS3, 0, 4},
-		{2, replicas(1, 2, 3, 4), preferN2ThenS3, 0, 3},
-		{2, replicas(1, 2, 4), preferN2ThenS3, 0, 1},
-		{3, replicas(1, 2, 3, 4), preferN2ThenS3, 2, 2},
-		{3, replicas(1, 3, 4), preferN2ThenS3, 0, 1},
-		{4, replicas(1, 4), preferN2ThenS3, 1, 1},
-		{1, replicas(1, 2, 3, 4), preferNotS1ThenNotN2, 2, 2},
-		{1, replicas(1, 3, 4), preferNotS1ThenNotN2, 3, 3},
-		{1, replicas(1, 2), preferNotS1ThenNotN2, 2, 2},
-		{1, replicas(1), preferNotS1ThenNotN2, 0, 0},
-		{2, replicas(1, 2, 3, 4), preferNotS1ThenNotN2, 0, 3},
-		{2, replicas(2, 3, 4), preferNotS1ThenNotN2, 0, 3},
-		{2, replicas(1, 2, 3), preferNotS1ThenNotN2, 0, 3},
-		{2, replicas(1, 2, 4), preferNotS1ThenNotN2, 0, 4},
-		{4, replicas(1, 2, 3, 4), preferNotS1ThenNotN2, 2, 2},
-		{4, replicas(1, 4), preferNotS1ThenNotN2, 0, 1},
-		{1, replicas(1, 2, 3, 4), preferNotS1AndNotN2, 3, 3},
-		{1, replicas(1, 2), preferNotS1AndNotN2, 0, 2},
-		{2, replicas(1, 2, 3, 4), preferNotS1AndNotN2, 3, 3},
-		{2, replicas(2, 3, 4), preferNotS1AndNotN2, 3, 3},
-		{2, replicas(1, 2, 3), preferNotS1AndNotN2, 3, 3},
-		{2, replicas(1, 2, 4), preferNotS1AndNotN2, 4, 4},
-		{3, replicas(1, 3), preferNotS1AndNotN2, 0, 1},
-		{4, replicas(1, 4), preferNotS1AndNotN2, 0, 1},
-		{1, replicas(1, 2, 3, 4), preferMatchesNothing, 0, 2},
-		{2, replicas(1, 2, 3, 4), preferMatchesNothing, 0, 1},
-		{3, replicas(1, 3, 4), preferMatchesNothing, 1, 1},
-		{4, replicas(1, 3, 4), preferMatchesNothing, 1, 1},
-		{4, replicas(2, 3, 4), preferMatchesNothing, 2, 2},
+		{1, nil, preferDC1, 0, 0, DontTransferLeaseNoValidTargets},
+		{1, replicas(1, 2, 3, 4), preferDC1, 0, 2, DontTransferLeaseNoValidTargets},
+		{1, replicas(2, 3, 4), preferDC1, 0, 2, DontTransferLeaseBalanced},
+		{2, replicas(1, 2, 3, 4), preferDC1, 1, 1, TransferLeaseForPreferences},
+		{2, replicas(2, 3, 4), preferDC1, 0, 3, DontTransferLeaseBalanced},
+		{4, replicas(2, 3, 4), preferDC1, 2, 2, TransferLeaseForCountBalance},
+		{1, nil, preferDC4Then3Then2, 0, 0, DontTransferLeaseNoValidTargets},
+		{1, replicas(1, 2, 3, 4), preferDC4Then3Then2, 4, 4, TransferLeaseForPreferences},
+		{1, replicas(1, 2, 3), preferDC4Then3Then2, 3, 3, TransferLeaseForPreferences},
+		{1, replicas(1, 2), preferDC4Then3Then2, 2, 2, TransferLeaseForPreferences},
+		{3, replicas(1, 2, 3, 4), preferDC4Then3Then2, 4, 4, TransferLeaseForPreferences},
+		{3, replicas(1, 2, 3), preferDC4Then3Then2, 0, 2, DontTransferLeaseNoValidTargets},
+		{3, replicas(1, 3), preferDC4Then3Then2, 0, 1, DontTransferLeaseNoValidTargets},
+		{4, replicas(1, 2, 3, 4), preferDC4Then3Then2, 0, 3, DontTransferLeaseNoValidTargets},
+		{4, replicas(1, 2, 4), preferDC4Then3Then2, 0, 2, DontTransferLeaseNoValidTargets},
+		{4, replicas(1, 4), preferDC4Then3Then2, 0, 1, DontTransferLeaseNoValidTargets},
+		{1, replicas(1, 2, 3, 4), preferN2ThenS3, 2, 2, TransferLeaseForPreferences},
+		{1, replicas(1, 3, 4), preferN2ThenS3, 3, 3, TransferLeaseForPreferences},
+		{1, replicas(1, 4), preferN2ThenS3, 0, 4, DontTransferLeaseBalanced},
+		{2, replicas(1, 2, 3, 4), preferN2ThenS3, 0, 3, DontTransferLeaseNoValidTargets},
+		{2, replicas(1, 2, 4), preferN2ThenS3, 0, 1, DontTransferLeaseNoValidTargets},
+		{3, replicas(1, 2, 3, 4), preferN2ThenS3, 2, 2, TransferLeaseForPreferences},
+		{3, replicas(1, 3, 4), preferN2ThenS3, 0, 1, DontTransferLeaseNoValidTargets},
+		{4, replicas(1, 4), preferN2ThenS3, 1, 1, TransferLeaseForCountBalance},
+		{1, replicas(1, 2, 3, 4), preferNotS1ThenNotN2, 2, 2, TransferLeaseForPreferences},
+		{1, replicas(1, 3, 4), preferNotS1ThenNotN2, 3, 3, TransferLeaseForPreferences},
+		{1, replicas(1, 2), preferNotS1ThenNotN2, 2, 2, TransferLeaseForPreferences},
+		{1, replicas(1), preferNotS1ThenNotN2, 0, 0, DontTransferLeaseNoValidTargets},
+		{2, replicas(1, 2, 3, 4), preferNotS1ThenNotN2, 0, 3, DontTransferLeaseBalanced},
+		{2, replicas(2, 3, 4), preferNotS1ThenNotN2, 0, 3, DontTransferLeaseBalanced},
+		{2, replicas(1, 2, 3), preferNotS1ThenNotN2, 0, 3, DontTransferLeaseBalanced},
+		{2, replicas(1, 2, 4), preferNotS1ThenNotN2, 0, 4, DontTransferLeaseBalanced},
+		{4, replicas(1, 2, 3, 4), preferNotS1ThenNotN2, 2, 2, TransferLeaseForCountBalance},
+		{4, replicas(1, 4), preferNotS1ThenNotN2, 0, 1, DontTransferLeaseNoValidTargets},
+		{1, replicas(1, 2, 3, 4), preferNotS1AndNotN2, 3, 3, TransferLeaseForPreferences},
+		{1, replicas(1, 2), preferNotS1AndNotN2, 0, 2, DontTransferLeaseBalanced},
+		{2, replicas(1, 2, 3, 4), preferNotS1AndNotN2, 3, 3, TransferLeaseForPreferences},
+		{2, replicas(2, 3, 4), preferNotS1AndNotN2, 3, 3, TransferLeaseForPreferences},
+		{2, replicas(1, 2, 3), preferNotS1AndNotN2, 3, 3, TransferLeaseForPreferences},
+		{2, replicas(1, 2, 4), preferNotS1AndNotN2, 4, 4, TransferLeaseForPreferences},
+		{3, replicas(1, 3), preferNotS1AndNotN2, 0, 1, DontTransferLeaseNoValidTargets},
+		{4, replicas(1, 4), preferNotS1AndNotN2, 0, 1, DontTransferLeaseNoValidTargets},
+		{1, replicas(1, 2, 3, 4), preferMatchesNothing, 0, 2, DontTransferLeaseBalanced},
+		{2, replicas(1, 2, 3, 4), preferMatchesNothing, 0, 1, DontTransferLeaseBalanced},
+		{3, replicas(1, 3, 4), preferMatchesNothing, 1, 1, TransferLeaseForCountBalance},
+		{4, replicas(1, 3, 4), preferMatchesNothing, 1, 1, TransferLeaseForCountBalance},
+		{4, replicas(2, 3, 4), preferMatchesNothing, 2, 2, TransferLeaseForCountBalance},
 	}
 
 	for _, c := range testCases {
@@ -3071,9 +3072,8 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 				},
 				allocator.RangeUsageInfo{},
 			)
-			expectTransfer := c.expectAllowLeaseRepl != 0
-			if expectTransfer != result {
-				t.Errorf("expected %v, but found %v", expectTransfer, result)
+			if c.expectShouldTransfer != result {
+				t.Errorf("expected %v, but found %v", c.expectShouldTransfer, result)
 			}
 			target := a.TransferLeaseTarget(
 				ctx,
@@ -4698,7 +4698,11 @@ func TestAllocatorRebalanceIOOverloadCheck(t *testing.T) {
 			sg.GossipStores(test.stores, t)
 			// Enable read disk health checking in candidate exclusion.
 			options := a.ScorerOptions(ctx)
-			options.IOOverloadOptions = IOOverloadOptions{ReplicaEnforcementLevel: test.enforcement, ReplicaIOOverloadThreshold: 1}
+			options.IOOverloadOptions = IOOverloadOptions{
+				ReplicaEnforcementLevel:    test.enforcement,
+				ReplicaIOOverloadThreshold: 1,
+				UseIOThresholdMax:          true,
+			}
 			add, remove, _, ok := a.RebalanceVoter(
 				ctx,
 				sp,

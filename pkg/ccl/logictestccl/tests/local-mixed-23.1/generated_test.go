@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 17
+const configIdx = 18
 
 var cclLogicTestDir string
 
@@ -90,6 +90,20 @@ func TestCCLLogic_fips_ready(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "fips_ready")
+}
+
+func TestCCLLogic_fk_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "fk_read_committed")
+}
+
+func TestCCLLogic_hash_sharded_index_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "hash_sharded_index_read_committed")
 }
 
 func TestCCLLogic_new_schema_changer(

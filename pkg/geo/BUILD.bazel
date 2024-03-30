@@ -53,10 +53,6 @@ go_test(
         "parse_test.go",
     ],
     embed = [":geo"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",

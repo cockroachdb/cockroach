@@ -72,57 +72,6 @@ func getSequenceIntegerBounds(
 	)
 }
 
-func setSequenceIntegerBounds(
-	opts *descpb.TableDescriptor_SequenceOpts,
-	integerType *types.T,
-	isAscending bool,
-	setMinValue bool,
-	setMaxValue bool,
-) error {
-	var minValue int64 = math.MinInt64
-	var maxValue int64 = math.MaxInt64
-
-	if isAscending {
-		minValue = 1
-
-		switch integerType {
-		case types.Int2:
-			maxValue = math.MaxInt16
-		case types.Int4:
-			maxValue = math.MaxInt32
-		case types.Int:
-			// Do nothing, it's the default.
-		default:
-			return errors.AssertionFailedf(
-				"CREATE SEQUENCE option AS received type %s, must be integer",
-				integerType,
-			)
-		}
-	} else {
-		maxValue = -1
-		switch integerType {
-		case types.Int2:
-			minValue = math.MinInt16
-		case types.Int4:
-			minValue = math.MinInt32
-		case types.Int:
-			// Do nothing, it's the default.
-		default:
-			return errors.AssertionFailedf(
-				"CREATE SEQUENCE option AS received type %s, must be integer",
-				integerType,
-			)
-		}
-	}
-	if setMinValue {
-		opts.MinValue = minValue
-	}
-	if setMaxValue {
-		opts.MaxValue = maxValue
-	}
-	return nil
-}
-
 // AssignSequenceOptions moves options from the AST node to the sequence options descriptor,
 // starting with defaults and overriding them with user-provided options.
 func AssignSequenceOptions(
@@ -132,7 +81,6 @@ func AssignSequenceOptions(
 	setDefaults bool,
 	existingType *types.T,
 ) error {
-	wasAscending := opts.Increment > 0
 
 	// Set the default integer type of a sequence.
 	integerType := parser.NakedIntTypeFromDefaultIntSize(defaultIntSize)
@@ -171,32 +119,20 @@ func AssignSequenceOptions(
 		opts.CacheSize = 1
 	}
 
-	// Set default MINVALUE and MAXVALUE if AS option value for integer type is specified.
-	if opts.AsIntegerType != "" {
-		// We change MINVALUE and MAXVALUE if it is the originally set to the default during ALTER.
-		setMinValue := setDefaults
-		setMaxValue := setDefaults
-		if !setDefaults && existingType != nil {
-			existingLowerIntBound, existingUpperIntBound, err := getSequenceIntegerBounds(existingType)
-			if err != nil {
-				return err
-			}
-			if (wasAscending && opts.MinValue == 1) || (!wasAscending && opts.MinValue == existingLowerIntBound) {
-				setMinValue = true
-			}
-			if (wasAscending && opts.MaxValue == existingUpperIntBound) || (!wasAscending && opts.MaxValue == -1) {
-				setMaxValue = true
-			}
+	// Set Minvalue and Maxvalue to new types bounds if at current bounds.
+	if !setDefaults && existingType != nil && opts.AsIntegerType != "" {
+		existingLowerIntBound, existingUpperIntBound, err := getSequenceIntegerBounds(existingType)
+		if err != nil {
+			return err
+		}
+		// If Minvalue is bounded to the existing type, set it to the bounds of the new type.
+		if opts.MinValue == existingLowerIntBound {
+			opts.MinValue = lowerIntBound
 		}
 
-		if err := setSequenceIntegerBounds(
-			opts,
-			integerType,
-			isAscending,
-			setMinValue,
-			setMaxValue,
-		); err != nil {
-			return err
+		// If MaxValue is bounded to the existing type, set it to the bounds of the new type.
+		if opts.MaxValue == existingUpperIntBound {
+			opts.MaxValue = upperIntBound
 		}
 	}
 
@@ -224,16 +160,35 @@ func AssignSequenceOptions(
 				return errors.Newf(
 					"CACHE (%d) must be greater than zero", v)
 			}
+		case tree.SeqOptCacheNode:
+			if v := *option.IntVal; v >= 1 {
+				opts.NodeCacheSize = v
+			} else {
+				return errors.Newf(
+					"PER NODE CACHE (%d) must be greater than zero", v)
+			}
 		case tree.SeqOptIncrement:
 			// Do nothing; this has already been set.
 		case tree.SeqOptMinValue:
 			// A value of nil represents the user explicitly saying `NO MINVALUE`.
-			if option.IntVal != nil {
+			if option.IntVal == nil {
+				if isAscending {
+					opts.MinValue = 1
+				} else {
+					opts.MinValue = lowerIntBound
+				}
+			} else {
 				opts.MinValue = *option.IntVal
 			}
 		case tree.SeqOptMaxValue:
 			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
-			if option.IntVal != nil {
+			if option.IntVal == nil {
+				if isAscending {
+					opts.MaxValue = upperIntBound
+				} else {
+					opts.MaxValue = -1
+				}
+			} else {
 				opts.MaxValue = *option.IntVal
 			}
 		case tree.SeqOptStart:
@@ -246,7 +201,7 @@ func AssignSequenceOptions(
 		}
 	}
 
-	if setDefaults || (wasAscending && opts.Start == 1) || (!wasAscending && opts.Start == -1) {
+	if setDefaults {
 		// If start option not specified, set it to MinValue (for ascending sequences)
 		// or MaxValue (for descending sequences).
 		// We only do this if we're setting it for the first time, or the sequence was

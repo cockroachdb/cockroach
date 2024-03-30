@@ -29,9 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,7 +44,6 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/raftpb"
 	"golang.org/x/time/rate"
 )
 
@@ -101,7 +102,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	assertExists := func(exists bool) {
 		t.Helper()
-		_, err := ss.eng.Stat(ss.dir)
+		_, err := ss.eng.Env().Stat(ss.dir)
 		if !exists {
 			require.True(t, oserror.IsNotExist(err), err)
 		} else {
@@ -259,7 +260,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		// First add a file that shouldn't be in the sideloaded storage to ensure
 		// sane behavior when directory can't be removed after full truncate.
 		nonRemovableFile := filepath.Join(ss.Dir(), "cantremove.xx")
-		f, err := eng.Create(nonRemovableFile)
+		f, err := eng.Env().Create(nonRemovableFile)
 		if err != nil {
 			t.Fatalf("could not create non i*.t* file in sideloaded storage: %+v", err)
 		}
@@ -272,18 +273,18 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		// is optional. But the file should still be there!
 		require.NoError(t, err)
 		{
-			_, err := eng.Stat(nonRemovableFile)
+			_, err := eng.Env().Stat(nonRemovableFile)
 			require.NoError(t, err)
 		}
 
 		// Now remove extra file and let truncation proceed to remove directory.
-		require.NoError(t, eng.Remove(nonRemovableFile))
+		require.NoError(t, eng.Env().Remove(nonRemovableFile))
 
 		// Test that directory is removed when filepath.Glob returns 0 matches.
 		_, _, err = ss.TruncateTo(ctx, math.MaxUint64)
 		require.NoError(t, err)
 		// Ensure directory is removed, now that all files should be gone.
-		_, err = eng.Stat(ss.Dir())
+		_, err = eng.Env().Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
 		// Ensure HasAnyEntry doesn't find anything.
 		found, err := ss.HasAnyEntry(ctx, 0, 10000)
@@ -322,7 +323,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		require.Zero(t, retainedByTruncateTo)
 		require.Equal(t, freedByTruncateTo, freed)
 		// Ensure directory is removed when all records are removed.
-		_, err = eng.Stat(ss.Dir())
+		_, err = eng.Env().Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
 	}()
 
@@ -569,7 +570,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			if test.size != size {
 				t.Fatalf("expected %d sideloadedSize, but found %d", test.size, size)
 			}
-			actKeys, err := sideloaded.eng.List(sideloaded.Dir())
+			actKeys, err := sideloaded.eng.Env().List(sideloaded.Dir())
 			if oserror.IsNotExist(err) {
 				t.Log("swallowing IsNotExist")
 				err = nil
@@ -587,7 +588,7 @@ func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine)
 	dir, cleanup := testutils.TempDir(t)
 	eng, err := storage.Open(
 		ctx,
-		storage.Filesystem(dir),
+		fs.MustInitPhysicalTestingEnv(dir),
 		cluster.MakeClusterSettings(),
 		storage.CacheSize(1<<20 /* 1 MiB */))
 	if err != nil {
@@ -606,9 +607,11 @@ func TestSideloadStorageSync(t *testing.T) {
 		// Create a sideloaded storage with an in-memory FS. Use strict MemFS to be
 		// able to emulate crash restart by rolling it back to last synced state.
 		ctx := context.Background()
-		fs := vfs.NewStrictMem()
-		eng := storage.InMemFromFS(ctx, fs, "",
-			cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		memFS := vfs.NewStrictMem()
+		env, err := fs.InitEnv(ctx, memFS, "", fs.EnvConfig{})
+		require.NoError(t, err)
+		eng, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		require.NoError(t, err)
 		ss := newTestingSideloadStorage(eng)
 
 		// Put an entry which should trigger the lazy creation of the sideloaded
@@ -619,21 +622,23 @@ func TestSideloadStorageSync(t *testing.T) {
 			require.NoError(t, ss.Sync())
 		}
 		// Cut off all syncs from this point, to emulate a crash.
-		fs.SetIgnoreSyncs(true)
+		memFS.SetIgnoreSyncs(true)
 		ss = nil
 		eng.Close()
 		// Reset filesystem to the last synced state.
-		fs.ResetToSyncedState()
-		fs.SetIgnoreSyncs(false)
+		memFS.ResetToSyncedState()
+		memFS.SetIgnoreSyncs(false)
 
 		// Emulate process restart. Load from the last synced state.
-		eng = storage.InMemFromFS(ctx, fs, "",
-			cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		env, err = fs.InitEnv(ctx, memFS, "", fs.EnvConfig{})
+		require.NoError(t, err)
+		eng, err = storage.Open(ctx, env, cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		require.NoError(t, err)
 		defer eng.Close()
 		ss = newTestingSideloadStorage(eng)
 
 		// The sideloaded directory must exist because all its parents are synced.
-		_, err := eng.Stat(ss.Dir())
+		_, err = eng.Env().Stat(ss.Dir())
 		require.NoError(t, err)
 
 		// The stored entry is still durable if we synced the sideloaded storage

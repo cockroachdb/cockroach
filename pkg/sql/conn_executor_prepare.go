@@ -73,7 +73,8 @@ func (ex *connExecutor) execPrepare(
 		ex.deletePreparedStmt(ctx, "")
 	}
 
-	stmt := makeStatement(parseCmd.Statement, ex.server.cfg.GenerateID())
+	stmt := makeStatement(parseCmd.Statement, ex.server.cfg.GenerateID(),
+		tree.FmtFlags(queryFormattingForFingerprintsMask.Get(ex.server.cfg.SV())))
 	_, err := ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,
@@ -315,9 +316,7 @@ func (ex *connExecutor) populatePrepared(
 	}
 	stmt := &p.stmt
 
-	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {
-		return 0, err
-	}
+	p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints)
 	p.extendedEvalCtx.PrepareOnly = true
 	// If the statement is being prepared by a session migration, then we should
 	// not evaluate the AS OF SYSTEM TIME timestamp. During session migration,

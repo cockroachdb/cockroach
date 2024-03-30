@@ -65,6 +65,10 @@ var LookupJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.lookup-j
 // inverted join via a query hint.
 var InvertedJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.inverted-join")
 
+// StraightJoinHintUseCounter is to be incremented whenever a query specifies a
+// straight join via a query hint.
+var StraightJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.straight-join")
+
 // IndexHintUseCounter is to be incremented whenever a query specifies an index
 // hint. Incremented whenever one of the more specific variants below is
 // incremented.

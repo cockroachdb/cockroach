@@ -196,7 +196,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		n.roleName,
 	)
@@ -415,7 +415,7 @@ func (p *planner) processSetOrResetClause(
 		expr = paramparse.UnresolvedNameToStrVal(expr)
 
 		typedValue, err := p.analyzeExpr(
-			ctx, expr, nil, tree.IndexedVarHelper{}, types.String, false, "ALTER ROLE ... SET ",
+			ctx, expr, tree.IndexedVarHelper{}, types.String, false, "ALTER ROLE ... SET ",
 		)
 		if err != nil {
 			return unknown, "", sessionVar{}, nil, wrapSetVarError(err, varName, expr.String())
@@ -471,7 +471,7 @@ VALUES ($1, $2, $3, (
 				params.ctx,
 				opName,
 				params.p.txn,
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				deleteQuery,
 				n.dbDescID,
 				roleName,
@@ -481,7 +481,7 @@ VALUES ($1, $2, $3, (
 				params.ctx,
 				opName,
 				params.p.txn,
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				upsertQuery,
 				n.dbDescID,
 				roleName,
@@ -586,7 +586,7 @@ func (n *alterRoleSetNode) getRoleName(
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		n.roleName,
 	)
@@ -611,9 +611,9 @@ func (n *alterRoleSetNode) getRoleName(
 				"only users with the admin role are allowed to alter another admin")
 		}
 
-		// Note that admins implicitly have the REPAIRCLUSTERMETADATA privilege.
+		// Note that admins implicitly have the REPAIRCLUSTER privilege.
 		if err := params.p.CheckPrivilege(
-			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 		); err != nil {
 			return false, username.SQLUsername{}, err
 		}
@@ -647,7 +647,7 @@ func (n *alterRoleSetNode) makeNewSettings(
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		selectQuery,
 		n.dbDescID,
 		roleName,

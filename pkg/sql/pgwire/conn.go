@@ -857,7 +857,7 @@ func cookTag(
 		tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 
 	case tree.Rows:
-		if tagStr != "SHOW" && tagStr != "EXPLAIN" {
+		if tagStr != "SHOW" && tagStr != "EXPLAIN" && tagStr != "CALL" {
 			tag = append(tag, ' ')
 			tag = strconv.AppendUint(tag, uint64(rowsAffected), 10)
 		}
@@ -881,12 +881,9 @@ func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult)
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 	c.msgBuilder.putInt16(int16(len(row)))
 	for i, col := range row {
-		fmtCode := pgwirebase.FormatText
-		if r.formatCodes != nil {
-			if i >= len(r.formatCodes) {
-				return errors.AssertionFailedf("could not find format code for column %d in %v", i, r.formatCodes)
-			}
-			fmtCode = r.formatCodes[i]
+		fmtCode, err := r.GetFormatCode(i)
+		if err != nil {
+			return err
 		}
 		switch fmtCode {
 		case pgwirebase.FormatText:
@@ -898,10 +895,10 @@ func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult)
 		}
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer")
+		return err
 	}
 	if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer")
+		return err
 	}
 	c.maybeReallocate()
 	return nil
@@ -926,12 +923,9 @@ func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandR
 			c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 			c.msgBuilder.putInt16(width)
 			for vecIdx := 0; vecIdx < len(c.vecsScratch.Vecs); vecIdx++ {
-				fmtCode := pgwirebase.FormatText
-				if r.formatCodes != nil {
-					if vecIdx >= len(r.formatCodes) {
-						return errors.AssertionFailedf("could not find format code for column %d in %v", vecIdx, r.formatCodes)
-					}
-					fmtCode = r.formatCodes[vecIdx]
+				fmtCode, err := r.GetFormatCode(vecIdx)
+				if err != nil {
+					return err
 				}
 				switch fmtCode {
 				case pgwirebase.FormatText:
@@ -943,7 +937,7 @@ func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandR
 				}
 			}
 			if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-				panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+				return err
 			}
 			if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
 				return err

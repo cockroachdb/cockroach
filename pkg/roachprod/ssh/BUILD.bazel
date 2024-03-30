@@ -14,8 +14,4 @@ go_test(
     name = "ssh_test",
     srcs = ["io_test.go"],
     embed = [":ssh"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
 )

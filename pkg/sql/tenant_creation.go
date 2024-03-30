@@ -46,10 +46,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-const (
-	tenantCreationMinSupportedVersionKey = clusterversion.MinSupported
-)
-
 // CreateTenant implements the tree.TenantOperator interface.
 func (p *planner) CreateTenant(
 	ctx context.Context, parameters string,
@@ -137,7 +133,7 @@ func (p *planner) createTenantInternal(
 		p.ExecCfg().Codec,
 		p.ExecCfg().Settings,
 		p.InternalSQLTxn(),
-		p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, p.Txn()),
+		p.ExecCfg().SpanConfigKVAccessor.WithISQLTxn(ctx, p.InternalSQLTxn()),
 		info,
 		initialTenantZoneConfig,
 		ctcfg.IfNotExists,
@@ -161,24 +157,28 @@ func (p *planner) createTenantInternal(
 	var splits []roachpb.RKey
 
 	var bootstrapVersionOverride clusterversion.Key
-	if p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride != 0 {
+	switch {
+	case p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride != 0:
 		// An override was passed using testing knobs. Bootstrap the cluster
 		// using this override.
 		tenantVersion.Version = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride.Version()
 		bootstrapVersionOverride = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride
-	} else if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.Latest) {
-		// The cluster is not running the latest version.
-		// Use the previous major version to create the tenant and bootstrap it
-		// just like the previous major version binary would, using hardcoded
-		// initial values.
-		tenantVersion.Version = tenantCreationMinSupportedVersionKey.Version()
-		bootstrapVersionOverride = tenantCreationMinSupportedVersionKey
-	} else {
+	case p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.Latest):
 		// The cluster is running the latest version.
 		// Use this version to create the tenant and bootstrap it using the host
 		// cluster's bootstrapping logic.
 		tenantVersion.Version = clusterversion.Latest.Version()
 		bootstrapVersionOverride = 0
+	case p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.PreviousRelease):
+		// If the previous major version is active, use that version to create the
+		// tenant and bootstrap it just like the previous major version binary
+		// would, using hardcoded initial values.
+		tenantVersion.Version = clusterversion.PreviousRelease.Version()
+		bootstrapVersionOverride = clusterversion.PreviousRelease
+	default:
+		// Otherwise, use the initial values from the min supported version.
+		tenantVersion.Version = clusterversion.MinSupported.Version()
+		bootstrapVersionOverride = clusterversion.MinSupported
 	}
 
 	initialValuesOpts := bootstrap.InitialValuesOpts{
@@ -600,6 +600,12 @@ HAVING ($1 = '' OR NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.name = $1)
 	nextID := nextIDFromTable
 	if uint64(lastIDFromSequence+1) > nextIDFromTable {
 		nextID = uint64(lastIDFromSequence + 1)
+	}
+	// ID 2 is reserved for future use: it was a "template" tenant in 23.2 UA and
+	// used for an internal test in serverless, so we can reclaim it if we want it
+	// so long as we don't allow it to be used for real tenants.
+	if nextID == 2 {
+		nextID = 3
 	}
 
 	return roachpb.MakeTenantID(nextID)

@@ -17,10 +17,6 @@ go_test(
     size = "small",
     srcs = ["flagutil_test.go"],
     embed = [":flagutil"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/util/log",
         "//pkg/util/timeutil",

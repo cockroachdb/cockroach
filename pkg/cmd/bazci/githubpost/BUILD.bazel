@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build/util",
-        "//pkg/cmd/internal/issues",
+        "//pkg/cmd/bazci/githubpost/issues",
         "//pkg/internal/codeowners",
         "//pkg/internal/team",
         "@com_github_cockroachdb_errors//:errors",
@@ -23,13 +23,9 @@ go_test(
         "//.github:CODEOWNERS",
     ],
     embed = [":githubpost"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/build/util",
-        "//pkg/cmd/internal/issues",
+        "//pkg/cmd/bazci/githubpost/issues",
         "//pkg/testutils/datapathutils",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

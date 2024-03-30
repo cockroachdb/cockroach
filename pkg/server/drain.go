@@ -442,7 +442,10 @@ func (s *drainServer) drainClients(
 
 	// Flush in-memory SQL stats into the statement stats system table.
 	statsProvider := s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
-	statsProvider.Flush(ctx)
+	// If the SQL server is disabled there is nothing to drain here.
+	if !s.sqlServer.cfg.DisableSQLServer {
+		statsProvider.Flush(ctx, s.stopper)
+	}
 	statsProvider.Stop(ctx)
 
 	// Inform the async tasks for table stats that the node is draining

@@ -1983,7 +1983,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │                   └── • scan
 │                         missing stats
 │                         table: regional_by_row_table_virt@regional_by_row_table_virt_pkey
-│                         spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
+│                         spans: FULL SCAN (SOFT LIMIT)
 │
 └── • constraint-check
     │
@@ -2162,7 +2162,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │                   └── • scan
 │                         missing stats
 │                         table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-│                         spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
+│                         spans: FULL SCAN (SOFT LIMIT)
 │
 └── • constraint-check
     │
@@ -2182,7 +2182,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
                     └── • scan
                           missing stats
                           table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-                          spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
+                          spans: FULL SCAN (SOFT LIMIT)
 
 query T retry
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
@@ -3321,13 +3321,13 @@ limit
  │    │    └── semi-join (lookup regional_by_row_table_virt_partial)
  │    │         ├── lookup columns are key
  │    │         ├── scan regional_by_row_table [as=t1]
- │    │         │    └── constraint: /93/88: [/'ap-southeast-2' - /'ap-southeast-2']
+ │    │         │    └── constraint: /94/89: [/'ap-southeast-2' - /'ap-southeast-2']
  │    │         └── filters (true)
  │    └── project
  │         └── semi-join (lookup regional_by_row_table_virt_partial)
  │              ├── lookup columns are key
  │              ├── scan regional_by_row_table [as=t1]
- │              │    └── constraint: /102/97: [/'ca-central-1' - /'us-east-1']
+ │              │    └── constraint: /103/98: [/'ca-central-1' - /'us-east-1']
  │              └── filters (true)
  └── 1
 

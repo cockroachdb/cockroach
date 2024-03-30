@@ -178,4 +178,546 @@ CALL get_rows(3);
 ----
 NOTICE: (1,)
 
+# Regression test for #120439 - maintain the execution ordering of PL/pgSQL
+# subroutines.
+subtest regression_120439
+
+statement ok
+CREATE PROCEDURE p(x INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    IF pg_sleep(0.1) IS NOT NULL THEN
+      RAISE NOTICE 'foo %', x;
+    ELSE
+      SELECT x;
+    END IF;
+  END
+$$;
+
+query T noticetrace
+CALL p(1);
+----
+NOTICE: foo 1
+
+subtest exit_continue_cond
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(a INT, b INT, c INT) AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    LOOP
+      RAISE NOTICE 'iteration %', i;
+      i := i + 1;
+      CONTINUE WHEN i = a;
+      RAISE NOTICE 'new value of i: %', i;
+      EXIT WHEN i >= b;
+      CONTINUE WHEN i <> c;
+      RAISE NOTICE 'returning';
+      RETURN;
+    END LOOP;
+    RAISE NOTICE 'exited loop';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p(2, 1, 4);
+----
+NOTICE: iteration 0
+NOTICE: new value of i: 1
+NOTICE: exited loop
+
+query T noticetrace
+CALL p(2, 3, 4);
+----
+NOTICE: iteration 0
+NOTICE: new value of i: 1
+NOTICE: iteration 1
+NOTICE: iteration 2
+NOTICE: new value of i: 3
+NOTICE: exited loop
+
+query T noticetrace
+CALL p(2, 4, 4);
+----
+NOTICE: iteration 0
+NOTICE: new value of i: 1
+NOTICE: iteration 1
+NOTICE: iteration 2
+NOTICE: new value of i: 3
+NOTICE: iteration 3
+NOTICE: new value of i: 4
+NOTICE: exited loop
+
+query T noticetrace
+CALL p(2, 5, 4);
+----
+NOTICE: iteration 0
+NOTICE: new value of i: 1
+NOTICE: iteration 1
+NOTICE: iteration 2
+NOTICE: new value of i: 3
+NOTICE: iteration 3
+NOTICE: new value of i: 4
+NOTICE: returning
+
+subtest exit_continue_label
+
+# EXIT can apply to a block with a label.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<foo>>
+    BEGIN
+      RAISE NOTICE 'before EXIT';
+      EXIT foo;
+      RAISE NOTICE 'after EXIT';
+    END;
+    RAISE NOTICE 'after block';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: before EXIT
+NOTICE: after block
+
+statement ok
+DROP PROCEDURE p;
+
+# EXIT without a label cannot apply to a block.
+statement error pgcode 42601 pq: EXIT cannot be used outside a loop, unless it has a label
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<foo>>
+    BEGIN
+      RAISE NOTICE 'before EXIT';
+      EXIT;
+      RAISE NOTICE 'after EXIT';
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# CONTINUE cannot apply to a block.
+statement error pgcode 42601 pq: block label \"foo\" cannot be used in CONTINUE
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<foo>>
+    BEGIN
+      RAISE NOTICE 'before EXIT';
+      CONTINUE foo;
+      RAISE NOTICE 'after EXIT';
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# The nested block takes precedence over the loop with the same label.
+statement error pgcode 42601 pq: block label \"foo\" cannot be used in CONTINUE
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    <<foo>>
+    WHILE i < 5 LOOP
+      <<foo>>
+      BEGIN
+        RAISE NOTICE 'before EXIT';
+        CONTINUE foo;
+        RAISE NOTICE 'after EXIT';
+      END;
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# EXIT with a nonexistent label.
+statement error pgcode 42601 pq: there is no label \"foo\" attached to any block or loop enclosing this statement
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<bar>>
+    BEGIN
+      EXIT foo;
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# CONTINUE with a nonexistent label.
+statement error pgcode 42601 pq: there is no label \"foo\" attached to any block or loop enclosing this statement
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<bar>>
+    BEGIN
+      CONTINUE foo;
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# It is possible to EXIT the root block.
+statement ok
+CREATE PROCEDURE p() AS $$
+  <<foo>>
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 5 LOOP
+      RAISE NOTICE 'here';
+      EXIT foo;
+      RAISE NOTICE 'still here';
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: here
+
+# It is possible to EXIT the routine, but this always results in an
+# end-of-function error, even for a void-returning proc.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 5 LOOP
+      EXIT p;
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 2F005 control reached end of function without RETURN
+CALL p();
+
+# CONTINUE the inner loop.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x INT) AS $$
+  <<b1>>
+  DECLARE
+    i INT := 0;
+  BEGIN
+    RAISE NOTICE '>> b1 %', i;
+    <<l1>>
+    WHILE i < 2 LOOP
+      i := i + 1;
+      RAISE NOTICE '>> l1 %', i;
+      <<b2>>
+      DECLARE
+        j int := 0;
+      BEGIN
+        RAISE NOTICE '>> b2 % %', i, j;
+        <<l2>>
+        WHILE j < i LOOP
+          j := j + 1;
+          RAISE NOTICE '>> l2 % %', i, j;
+          IF x = 0 THEN
+            IF j = 1 THEN RAISE NOTICE 'CONTINUE l2'; END IF;
+            CONTINUE l2 WHEN j = 1;
+          ELSIF x = 1 THEN
+            IF j = 1 THEN RAISE NOTICE 'EXIT l2'; END IF;
+            EXIT l2 WHEN j = 1;
+          ELSIF x = 2 THEN
+            IF j = 1 THEN RAISE NOTICE 'CONTINUE l1'; END IF;
+            CONTINUE l1 WHEN j = 1;
+          ELSIF x = 3 THEN
+            IF j = 1 THEN RAISE NOTICE 'EXIT l1'; END IF;
+            EXIT l1 WHEN j = 1;
+          ELSIF x = 4 THEN
+            IF j = 1 THEN RAISE NOTICE 'EXIT b2'; END IF;
+            EXIT b2 WHEN j = 1;
+          ELSIF x = 5 THEN
+            EXIT b1 WHEN j = 1;
+          ELSE
+            EXIT p WHEN j = 1;
+          END IF;
+          RAISE NOTICE '<< l2 % %', i, j;
+        END LOOP l2;
+        RAISE NOTICE '<< b2 % %', i, j;
+      END;
+      RAISE NOTICE '<< l1 %', i;
+    END LOOP l1;
+    RAISE NOTICE '<< b1 %', i;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+# CONTINUE inner loop.
+query T noticetrace
+CALL p(0);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+NOTICE: CONTINUE l2
+NOTICE: << b2 1 1
+NOTICE: << l1 1
+NOTICE: >> l1 2
+NOTICE: >> b2 2 0
+NOTICE: >> l2 2 1
+NOTICE: CONTINUE l2
+NOTICE: >> l2 2 2
+NOTICE: << l2 2 2
+NOTICE: << b2 2 2
+NOTICE: << l1 2
+NOTICE: << b1 2
+
+# EXIT inner loop.
+query T noticetrace
+CALL p(1);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+NOTICE: EXIT l2
+NOTICE: << b2 1 1
+NOTICE: << l1 1
+NOTICE: >> l1 2
+NOTICE: >> b2 2 0
+NOTICE: >> l2 2 1
+NOTICE: EXIT l2
+NOTICE: << b2 2 1
+NOTICE: << l1 2
+NOTICE: << b1 2
+
+# CONTINUE outer loop.
+query T noticetrace
+CALL p(2);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+NOTICE: CONTINUE l1
+NOTICE: >> l1 2
+NOTICE: >> b2 2 0
+NOTICE: >> l2 2 1
+NOTICE: CONTINUE l1
+NOTICE: << b1 2
+
+# EXIT outer loop.
+query T noticetrace
+CALL p(3);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+NOTICE: EXIT l1
+NOTICE: << b1 1
+
+# EXIT inner block.
+query T noticetrace
+CALL p(4);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+NOTICE: EXIT b2
+NOTICE: << l1 1
+NOTICE: >> l1 2
+NOTICE: >> b2 2 0
+NOTICE: >> l2 2 1
+NOTICE: EXIT b2
+NOTICE: << l1 2
+NOTICE: << b1 2
+
+# EXIT outer block.
+query T noticetrace
+CALL p(5);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+
+# EXIT the routine.
+statement error pgcode 2F005 control reached end of function without RETURN
+CALL p(6);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    <<l1>>
+    LOOP
+      i := i + 1;
+      EXIT l1 WHEN i >= 5;
+      DECLARE
+        j int := 0;
+      BEGIN
+        <<l2>>
+        LOOP
+          j := j + 1;
+          RAISE NOTICE '% %', i, j;
+          CONTINUE l1 WHEN j >= i;
+        END LOOP l2;
+      END;
+    END LOOP l1;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: 1 1
+NOTICE: 2 1
+NOTICE: 2 2
+NOTICE: 3 1
+NOTICE: 3 2
+NOTICE: 3 3
+NOTICE: 4 1
+NOTICE: 4 2
+NOTICE: 4 3
+NOTICE: 4 4
+
 subtest end
+
+# TODO(120818): uncomment these tests.
+# statement ok
+# CREATE PROCEDURE p_inner(OUT p_param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+#
+# statement ok
+# CREATE FUNCTION f(OUT f_param INT) AS $$ BEGIN CALL p_inner(NULL); END; $$ LANGUAGE PLpgSQL;
+#
+# statement error pgcode 42601 procedure parameter "param" is an output parameter but corresponding argument is not writable
+# SELECT f();
+#
+# statement ok
+# CREATE OR REPLACE FUNCTION f(OUT f_param INT) AS $$ BEGIN CALL p_inner(f_param); END; $$ LANGUAGE PLpgSQL;
+#
+# query I colnames
+# SELECT f();
+# ----
+# f
+# 1
+#
+# query I colnames
+# SELECT * FROM f();
+# ----
+# f_param
+# 1
+#
+# statement ok
+# CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+# DECLARE
+#   v INT;
+# BEGIN
+#   CALL p_inner(v);
+#   RETURN v;
+# END; $$ LANGUAGE PLpgSQL;
+#
+# query I colnames
+# SELECT f();
+# ----
+# f
+# 1
+#
+# query I colnames
+# SELECT * FROM f();
+# ----
+# f
+# 1
+#
+# statement ok
+# DROP FUNCTION f;
+#
+# statement ok
+# CREATE PROCEDURE p_outer(OUT p_outer_param INT) AS $$ BEGIN CALL p_inner(p_outer_param); END; $$ LANGUAGE PLpgSQL;
+#
+# query I colnames
+# CALL p_outer(NULL);
+# ----
+# p_outer_param
+# 1
+#
+# statement ok
+# CREATE OR REPLACE PROCEDURE p_outer(OUT p_outer_param INT) AS $$
+# DECLARE
+#   v INT;
+# BEGIN
+#   CALL p_inner(v);
+# END; $$ LANGUAGE PLpgSQL;
+#
+# query I colnames
+# CALL p_outer(NULL);
+# ----
+# p_outer_param
+# NULL
+#
+# statement ok
+# CREATE OR REPLACE PROCEDURE p_outer(OUT p_outer_param INT) AS $$
+# DECLARE
+#   v INT;
+# BEGIN
+#   CALL p_inner(v);
+#   SELECT v INTO p_outer_param;
+# END; $$ LANGUAGE PLpgSQL;
+#
+# query I colnames
+# CALL p_outer(NULL);
+# ----
+# p_outer_param
+# 1
+#
+# statement ok
+# DROP PROCEDURE p_outer;
+#
+# statement ok
+# DROP PROCEDURE p_inner;
+
+# Regression test for not ignoring results produced by the TxnControlExpr
+# (#119937).
+
+statement ok
+CREATE TABLE temp (k INT PRIMARY KEY);
+
+statement ok
+CREATE PROCEDURE p(INOUT param INT) AS $$
+BEGIN
+  INSERT INTO temp VALUES(param);
+  COMMIT;
+END; $$ LANGUAGE PLpgSQL;
+
+query I colnames
+CALL p(17);
+----
+param
+17
+
+query I
+SELECT * FROM temp;
+----
+17
+
+statement ok
+DROP PROCEDURE p(INOUT int);
+
+statement ok
+CREATE PROCEDURE p(INOUT INT) AS $$
+BEGIN
+  INSERT INTO temp VALUES(1);
+  COMMIT;
+END; $$ LANGUAGE PLpgSQL;
+
+# TODO(120521): this should return 42 instead of NULL. We currently cannot
+# reference the unnamed parameter to get its input expression.
+query I colnames
+CALL p(42);
+----
+column1
+NULL
+
+query I rowsort
+SELECT * FROM temp;
+----
+1
+17
+
+statement ok
+DROP PROCEDURE p(INOUT int);

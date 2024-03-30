@@ -1,0 +1,25 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+ALTER TABLE t ALTER COLUMN j SET DEFAULT 42;
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE t ALTER COLUMN j DROP DEFAULT;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› DROP DEFAULT;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward ABSENT
+ │         │    └── PUBLIC → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j), Expr: 42:::INT8}
+ │         └── 1 Mutation operation
+ │              └── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── ABSENT → PUBLIC ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j), Expr: 42:::INT8}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward ABSENT
+           │    └── PUBLIC → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j), Expr: 42:::INT8}
+           └── 1 Mutation operation
+                └── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":104}

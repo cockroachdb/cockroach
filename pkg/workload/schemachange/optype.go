@@ -252,7 +252,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 
 var opWeights = []int{
 	// Non-DDL
-	insertRow:  0, // Disabled and tracked with #91863
+	insertRow:  10,
 	selectStmt: 10,
 	validate:   2, // validate twice more often
 
@@ -262,24 +262,24 @@ var opWeights = []int{
 	alterDatabaseDropSuperRegion:      0, // Disabled and tracked with #111299
 	alterDatabasePrimaryRegion:        0, // Disabled and tracked with #83831
 	alterDatabaseSurvivalGoal:         0, // Disabled and tracked with #83831
-	alterFunctionRename:               0, // Disabled and tracked with #116794.
-	alterFunctionSetSchema:            0, // Disabled and tracked with #116794.
+	alterFunctionRename:               1,
+	alterFunctionSetSchema:            1,
 	alterTableAddColumn:               1,
-	alterTableAddConstraintForeignKey: 1, // Tentatively re-enabled, see #91195.
+	alterTableAddConstraintForeignKey: 1,
 	alterTableAddConstraintUnique:     0,
 	alterTableAlterColumnType:         0, // Disabled and tracked with #66662.
 	alterTableAlterPrimaryKey:         1,
 	alterTableDropColumn:              0,
 	alterTableDropColumnDefault:       1,
-	alterTableDropConstraint:          0, // TODO(spaskob): unimplemented
+	alterTableDropConstraint:          1,
 	alterTableDropNotNull:             1,
 	alterTableDropStored:              1,
 	alterTableLocality:                1,
 	alterTableRenameColumn:            1,
 	alterTableSetColumnDefault:        1,
 	alterTableSetColumnNotNull:        1,
-	alterTypeDropValue:                0, // Disabled and tracked with #114844, #113859, and #115612.
-	commentOn:                         0, // Disabled and tracked with #116795.
+	alterTypeDropValue:                1,
+	commentOn:                         1,
 	createFunction:                    1,
 	createIndex:                       1,
 	createSchema:                      1,
@@ -288,9 +288,9 @@ var opWeights = []int{
 	createTableAs:                     1,
 	createTypeEnum:                    1,
 	createView:                        1,
-	dropFunction:                      0, // Disabled and tracked with #116794.
+	dropFunction:                      1,
 	dropIndex:                         1,
-	dropSchema:                        0, // Disabled and tracked with 116792.
+	dropSchema:                        1,
 	dropSequence:                      1,
 	dropTable:                         1,
 	dropView:                          1,

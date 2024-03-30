@@ -25,7 +25,7 @@ CREATE FUNCTION public.f_test_drop()
   AS $$
   SELECT 1;
 $$
-CREATE FUNCTION public.f_test_drop(IN INT8)
+CREATE FUNCTION public.f_test_drop(INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -38,7 +38,7 @@ $$
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 ----
-CREATE FUNCTION sc1.f_test_drop(IN INT8)
+CREATE FUNCTION sc1.f_test_drop(INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -62,7 +62,7 @@ DROP FUNCTION f_not_existing;
 
 # drop a function twice should fail.
 statement error pgcode 42883 pq: function f_test_drop\(\) does not exist
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 DROP FUNCTION f_test_drop();
 DROP FUNCTION f_test_drop();
 COMMIT;
@@ -88,7 +88,7 @@ DROP FUNCTION f_test_drop()
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
 ----
-CREATE FUNCTION public.f_test_drop(IN INT8)
+CREATE FUNCTION public.f_test_drop(INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -101,7 +101,7 @@ $$
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 ----
-CREATE FUNCTION sc1.f_test_drop(IN INT8)
+CREATE FUNCTION sc1.f_test_drop(INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -122,7 +122,7 @@ SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 ----
-CREATE FUNCTION sc1.f_test_drop(IN INT8)
+CREATE FUNCTION sc1.f_test_drop(INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -205,7 +205,7 @@ CREATE FUNCTION f114677(v t114677_2) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$
 query T nosort
 SELECT create_statement FROM [SHOW CREATE FUNCTION f114677] ORDER BY create_statement;
 ----
-CREATE FUNCTION public.f114677(IN v T114677)
+CREATE FUNCTION public.f114677(v T114677)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -214,7 +214,7 @@ CREATE FUNCTION public.f114677(IN v T114677)
   AS $$
   SELECT 0;
 $$
-CREATE FUNCTION public.f114677(IN v T114677_2)
+CREATE FUNCTION public.f114677(v T114677_2)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -233,7 +233,7 @@ DROP FUNCTION f114677(t114677);
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f114677];
 ----
-CREATE FUNCTION public.f114677(IN v T114677_2)
+CREATE FUNCTION public.f114677(v T114677_2)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -250,3 +250,67 @@ statement error pgcode 42883 unknown function: f114677\(\)
 SHOW CREATE FUNCTION f114677;
 
 subtest end
+
+
+subtest functions_calling_functions
+
+statement ok
+CREATE FUNCTION f_called_by_b() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_called_by_b2() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 + f_called_by_b() $$;
+
+statement ok;
+CREATE FUNCTION f_b()  RETURNS INT LANGUAGE SQL AS $$ SELECT (f_called_by_b2()) /f_called_by_b2() FROM f_called_by_b() $$;
+
+statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other objects \(\[test.public.f_called_by_b2, test.public.f_b\]\) still depend on it
+DROP FUNCTION f_called_by_b;
+
+statement error pgcode 2BP01 cannot drop function \"f_called_by_b2\" because other objects \(\[test.public.f_b\]\) still depend on it
+DROP FUNCTION f_called_by_b2;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_b()  RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other objects \(\[test.public.f_called_by_b2\]\) still depend on it
+DROP FUNCTION f_called_by_b;
+
+statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other objects \(\[test.public.f_called_by_b2\]\) still depend on it
+DROP FUNCTION f_called_by_b;
+
+statement ok
+CREATE TABLE t1_with_b_2_ref(j int default f_called_by_b() CHECK (f_called_by_b() > 0));
+CREATE SCHEMA altSchema;
+
+statement ok
+ALTER FUNCTION f_called_by_b SET SCHEMA altSchema;
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP SCHEMA altSchema CASCADE;
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other object \(\[test.public.f_called_by_b2, test.public.t1_with_b_2_ref\]\) still depend on it
+DROP SCHEMA altSchema CASCADE;
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42883 unknown function: f_called_by_b2()
+SELECT * FROM  f_called_by_b2();
+
+skipif config local-legacy-schema-changer
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t1_with_b_2_ref];
+----
+CREATE TABLE public.t1_with_b_2_ref (
+  j INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t1_with_b_2_ref_pkey PRIMARY KEY (rowid ASC)
+)
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP FUNCTION f_called_by_b2;
+DROP TABLE t1_with_b_2_ref;
+
+statement ok
+DROP FUNCTION f_b;

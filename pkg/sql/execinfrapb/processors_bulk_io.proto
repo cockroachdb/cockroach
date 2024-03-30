@@ -289,6 +289,12 @@ message StreamIngestionFrontierSpec {
   optional StreamIngestionPartitionSpecs partition_specs = 9 [(gogoproto.nullable) = false];
 }
 
+enum ElidePrefix {
+  None = 0;
+  Tenant = 1;
+  TenantAndTable = 2;
+}
+
 message BackupDataSpec {
   // TODO(lidor): job_id is not needed when interoperability with 22.2 is
   // dropped, the new way to send the job tag is using 'job_tag' in the
@@ -311,7 +317,15 @@ message BackupDataSpec {
   // when using FileTable ExternalStorage.
   optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
 
-  // NEXTID: 12.
+  optional ElidePrefix elide_prefix = 12 [(gogoproto.nullable) = false];
+
+  // IncludeMVCCValueHeader indicates whether the backup should be
+  // created with MVCCValueHeaders in the exported data. This should
+  // only be set on backups starting on cluster version 24.1 or
+  // greater.
+  optional bool include_mvcc_value_header = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IncludeMVCCValueHeader"];
+
+  // NEXTID: 14.
 }
 
 message RestoreFileSpec {
@@ -322,6 +336,8 @@ message RestoreFileSpec {
   optional roachpb.Span backup_file_entry_span = 5 [(gogoproto.nullable) = false];
   optional roachpb.RowCount backup_file_entry_counts = 6 [(gogoproto.nullable) = false];
   optional uint64 backing_file_size = 7 [(gogoproto.nullable) = false];
+  optional uint64 approximate_physical_size = 8 [(gogoproto.nullable) = false];
+  // NEXT ID: 9.
 }
 
 message TableRekey {
@@ -346,6 +362,7 @@ message RestoreSpanEntry {
   optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
   repeated RestoreFileSpec files = 2 [(gogoproto.nullable) = false];
   optional int64 progressIdx = 3 [(gogoproto.nullable) = false];
+  optional ElidePrefix elided_prefix = 4 [(gogoproto.nullable) = false];
 }
 
 message RestoreDataSpec {
@@ -362,13 +379,7 @@ message RestoreDataSpec {
   map<uint64, bool> pk_ids = 4 [(gogoproto.customname) = "PKIDs"];
   reserved 7;
   optional bool validate_only = 8 [(gogoproto.nullable) = false];
-  // MemoryMonitorSSTs, if true, is used to signal to restore data processors
-  // that they are permitted to memory monitor opening of external SSTs and send
-  // partial iterators if necessary. A true value means that the coordinating
-  // node is able to receive progress for these partial iterators and not mark a
-  // span as completed until all of the SSTs for the span have been restored.
-  optional bool memory_monitor_ssts = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "MemoryMonitorSSTs"];
-
+  reserved 9;
   // NEXT ID: 10.
 }
 
@@ -444,6 +455,9 @@ message GenerativeSplitAndScatterSpec {
   optional int64 job_id = 18 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   optional bool use_frontier_checkpointing = 20 [(gogoproto.nullable) = false];
   repeated jobs.jobspb.RestoreProgress.FrontierEntry checkpointed_spans = 21 [(gogoproto.nullable) = false];
+  // ExclusiveFileSpanComparison is true if the backup can safely use
+  // exclusive file span comparison.
+  optional bool exclusive_file_span_comparison = 22 [(gogoproto.nullable) = false];
 
   reserved 19;
 }

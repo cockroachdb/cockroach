@@ -1,4 +1,4 @@
-# LogicTest: local 3node-tenant
+# LogicTest: local 3node-tenant local-mixed-23.2
 
 statement error a role/user named admin already exists
 CREATE ROLE admin
@@ -1857,5 +1857,27 @@ REVOKE SYSTEM CREATEDB FROM creator_of_databases
 
 statement ok
 DROP ROLE creator_of_databases
+
+subtest end
+
+subtest subject
+
+skipif config 3node-tenant
+skipif config local-mixed-23.2
+statement error OSS binaries do not include enterprise features
+CREATE ROLE role_with_subject SUBJECT 'foo'
+
+skipif config 3node-tenant
+skipif config local-mixed-23.2
+statement error OSS binaries do not include enterprise features
+ALTER ROLE testuser SUBJECT 'foo'
+
+onlyif config local-mixed-23.2
+statement error SUBJECT role option is only supported after v24.1 upgrade is finalized
+CREATE ROLE role_with_subject SUBJECT 'foo'
+
+onlyif config local-mixed-23.2
+statement error SUBJECT role option is only supported after v24.1 upgrade is finalized
+ALTER ROLE testuser SUBJECT 'foo'
 
 subtest end

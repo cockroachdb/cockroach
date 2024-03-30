@@ -81,10 +81,6 @@ go_test(
     size = "small",
     srcs = ["format_test.go"],
     embed = [":cli"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/util/leaktest",
         "//pkg/workload/histogram",

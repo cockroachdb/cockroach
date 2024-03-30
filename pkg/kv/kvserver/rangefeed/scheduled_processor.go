@@ -12,7 +12,6 @@ package rangefeed
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -47,7 +46,20 @@ type ScheduledProcessor struct {
 
 	// processCtx is the annotated background context used for process(). It is
 	// stored here to avoid reconstructing it on every call.
-	processCtx   context.Context
+	processCtx context.Context
+	// taskCtx is the context used to spawn async tasks (e.g. the txn pusher),
+	// along with its cancel function which is called when the processor stops or
+	// the stopper quiesces. It is independent of processCtx, and constructed
+	// during Start().
+	//
+	// TODO(erikgrinaker): the context handling here should be cleaned up.
+	// processCtx should be passed in from the scheduler and propagate stopper
+	// quiescence, and the async tasks should probably be run on scheduler
+	// threads or at least a separate bounded worker pool. But this will do for
+	// now.
+	taskCtx    context.Context
+	taskCancel func()
+
 	requestQueue chan request
 	eventC       chan *event
 	// If true, processor is not processing data anymore and waiting for registrations
@@ -55,9 +67,6 @@ type ScheduledProcessor struct {
 	stopping bool
 	stoppedC chan struct{}
 
-	// Processor startup runs background tasks to scan intents. If processor is
-	// stopped early, this task needs to be terminated to avoid resource waste.
-	startupCancel func()
 	// stopper passed by start that is used for firing up async work from scheduler.
 	stopper       *stop.Stopper
 	txnPushActive bool
@@ -72,7 +81,7 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 		Config:     cfg,
 		scheduler:  cfg.Scheduler.NewClientScheduler(),
 		reg:        makeRegistry(cfg.Metrics),
-		rts:        makeResolvedTimestamp(),
+		rts:        makeResolvedTimestamp(cfg.Settings),
 		processCtx: cfg.AmbientContext.AnnotateCtx(context.Background()),
 
 		requestQueue: make(chan request, 20),
@@ -94,9 +103,9 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 func (p *ScheduledProcessor) Start(
 	stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor,
 ) error {
-	ctx := p.Config.AmbientContext.AnnotateCtx(context.Background())
-	ctx, p.startupCancel = context.WithCancel(ctx)
 	p.stopper = stopper
+	p.taskCtx, p.taskCancel = p.stopper.WithCancelOnQuiesce(
+		p.Config.AmbientContext.AnnotateCtx(context.Background()))
 
 	// Note that callback registration must be performed before starting resolved
 	// timestamp init because resolution posts resolvedTS event when it is done.
@@ -112,13 +121,14 @@ func (p *ScheduledProcessor) Start(
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		// TODO(oleg): we need to cap number of tasks that we can fire up across
 		// all feeds as they could potentially generate O(n) tasks during start.
-		if err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run); err != nil {
+		err := stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run)
+		if err != nil {
 			initScan.Cancel()
 			p.scheduler.StopProcessor()
 			return err
 		}
 	} else {
-		p.initResolvedTS(ctx)
+		p.initResolvedTS(p.taskCtx, nil)
 	}
 
 	p.Metrics.RangeFeedProcessorsScheduler.Inc(1)
@@ -195,7 +205,7 @@ func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
 			// Launch an async transaction push attempt that pushes the
 			// timestamp of all transactions beneath the push offset.
 			// Ignore error if quiescing.
-			pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, func() {
+			pushTxns := newTxnPushAttempt(p.Settings, p.Span, p.TxnPusher, p, toPush, now, func() {
 				p.enqueueRequest(func(ctx context.Context) {
 					p.txnPushActive = false
 				})
@@ -203,7 +213,7 @@ func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
 			p.txnPushActive = true
 			// TODO(oleg): we need to cap number of tasks that we can fire up across
 			// all feeds as they could potentially generate O(n) tasks for push.
-			err := p.stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
+			err := p.stopper.RunAsyncTask(p.taskCtx, "rangefeed: pushing old txns", pushTxns.Run)
 			if err != nil {
 				pushTxns.Cancel()
 			}
@@ -217,6 +227,7 @@ func (p *ScheduledProcessor) processStop() {
 }
 
 func (p *ScheduledProcessor) cleanup() {
+	ctx := p.AmbientContext.AnnotateCtx(context.Background())
 	// Cleanup is normally called when all registrations are disconnected and
 	// unregistered or were not created yet (processor start failure).
 	// However, there's a case where processor is stopped by replica action while
@@ -226,14 +237,14 @@ func (p *ScheduledProcessor) cleanup() {
 	// To avoid leaking any registry resources and metrics, processor performs
 	// explicit registry termination in that case.
 	pErr := kvpb.NewError(&kvpb.NodeUnavailableError{})
-	p.reg.DisconnectAllOnShutdown(pErr)
+	p.reg.DisconnectAllOnShutdown(ctx, pErr)
 
 	// Unregister callback from scheduler
 	p.scheduler.Unregister()
 
-	p.startupCancel()
+	p.taskCancel()
 	close(p.stoppedC)
-	p.MemBudget.Close(context.Background())
+	p.MemBudget.Close(ctx)
 }
 
 // Stop shuts down the processor and closes all registrations. Safe to call on
@@ -260,13 +271,13 @@ func (p *ScheduledProcessor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb
 		return
 	}
 	p.enqueueRequest(func(ctx context.Context) {
-		p.reg.DisconnectWithErr(span, pErr)
+		p.reg.DisconnectWithErr(ctx, span, pErr)
 	})
 }
 
 func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
 	p.enqueueRequest(func(ctx context.Context) {
-		p.reg.DisconnectWithErr(all, pErr)
+		p.reg.DisconnectWithErr(ctx, all, pErr)
 		// First set stopping flag to ensure that once all registrations are removed
 		// processor should stop.
 		p.stopping = true
@@ -320,7 +331,7 @@ func (p *ScheduledProcessor) Register(
 		}
 
 		// Add the new registration to the registry.
-		p.reg.Register(&r)
+		p.reg.Register(ctx, &r)
 
 		// Prep response with filter that includes the new registration.
 		f := p.reg.NewFilter()
@@ -343,6 +354,7 @@ func (p *ScheduledProcessor) Register(
 				}
 			}
 		}
+		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
 			// If we can't schedule internally, processor is already stopped which
 			// could only happen on shutdown. Disconnect stream and just remove
@@ -436,7 +448,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 	// inserting value into channel.
 	var alloc *SharedBudgetAllocation
 	if p.MemBudget != nil {
-		size := calculateDateEventSize(e)
+		size := e.MemUsage()
 		if size > 0 {
 			var err error
 			// First we will try non-blocking fast path to allocate memory budget.
@@ -626,14 +638,14 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 	case e.ops != nil:
 		p.consumeLogicalOps(ctx, e.ops, e.alloc)
 	case !e.ct.IsEmpty():
-		p.forwardClosedTS(ctx, e.ct.Timestamp)
+		p.forwardClosedTS(ctx, e.ct.Timestamp, e.alloc)
 	case bool(e.initRTS):
-		p.initResolvedTS(ctx)
+		p.initResolvedTS(ctx, e.alloc)
 	case e.sst != nil:
 		p.consumeSSTable(ctx, e.sst.data, e.sst.span, e.sst.ts, e.alloc)
 	case e.sync != nil:
 		if e.sync.testRegCatchupSpan != nil {
-			if err := p.reg.waitForCaughtUp(*e.sync.testRegCatchupSpan); err != nil {
+			if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
 				log.Errorf(
 					ctx,
 					"error waiting for registries to catch up during test, results might be impacted: %s",
@@ -643,7 +655,7 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 		}
 		close(e.sync.c)
 	default:
-		panic(fmt.Sprintf("missing event variant: %+v", e))
+		log.Fatalf(ctx, "missing event variant: %+v", e)
 	}
 }
 
@@ -681,13 +693,13 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 			// No updates to publish.
 
 		default:
-			panic(errors.AssertionFailedf("unknown logical op %T", t))
+			log.Fatalf(ctx, "unknown logical op %T", t)
 		}
 
 		// Determine whether the operation caused the resolved timestamp to
 		// move forward. If so, publish a RangeFeedCheckpoint notification.
-		if p.rts.ConsumeLogicalOp(op) {
-			p.publishCheckpoint(ctx)
+		if p.rts.ConsumeLogicalOp(ctx, op) {
+			p.publishCheckpoint(ctx, nil)
 		}
 	}
 }
@@ -702,15 +714,17 @@ func (p *ScheduledProcessor) consumeSSTable(
 	p.publishSSTable(ctx, sst, sstSpan, sstWTS, alloc)
 }
 
-func (p *ScheduledProcessor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
-	if p.rts.ForwardClosedTS(newClosedTS) {
-		p.publishCheckpoint(ctx)
+func (p *ScheduledProcessor) forwardClosedTS(
+	ctx context.Context, newClosedTS hlc.Timestamp, alloc *SharedBudgetAllocation,
+) {
+	if p.rts.ForwardClosedTS(ctx, newClosedTS) {
+		p.publishCheckpoint(ctx, alloc)
 	}
 }
 
-func (p *ScheduledProcessor) initResolvedTS(ctx context.Context) {
-	if p.rts.Init() {
-		p.publishCheckpoint(ctx)
+func (p *ScheduledProcessor) initResolvedTS(ctx context.Context, alloc *SharedBudgetAllocation) {
+	if p.rts.Init(ctx) {
+		p.publishCheckpoint(ctx, alloc)
 	}
 }
 
@@ -769,10 +783,10 @@ func (p *ScheduledProcessor) publishSSTable(
 	alloc *SharedBudgetAllocation,
 ) {
 	if sstSpan.Equal(roachpb.Span{}) {
-		panic(errors.AssertionFailedf("received SSTable without span"))
+		log.Fatalf(ctx, "received SSTable without span")
 	}
 	if sstWTS.IsEmpty() {
-		panic(errors.AssertionFailedf("received SSTable without write timestamp"))
+		log.Fatalf(ctx, "received SSTable without write timestamp")
 	}
 	p.reg.PublishToOverlapping(ctx, sstSpan, &kvpb.RangeFeedEvent{
 		SST: &kvpb.RangeFeedSSTable{
@@ -783,12 +797,12 @@ func (p *ScheduledProcessor) publishSSTable(
 	}, false /* omitInRangefeeds */, alloc)
 }
 
-func (p *ScheduledProcessor) publishCheckpoint(ctx context.Context) {
+func (p *ScheduledProcessor) publishCheckpoint(ctx context.Context, alloc *SharedBudgetAllocation) {
 	// TODO(nvanbenschoten): persist resolvedTimestamp. Give Processor a client.DB.
 	// TODO(nvanbenschoten): rate limit these? send them periodically?
 
 	event := p.newCheckpointEvent()
-	p.reg.PublishToOverlapping(ctx, all, event, false /* omitInRangefeeds */, nil)
+	p.reg.PublishToOverlapping(ctx, all, event, false /* omitInRangefeeds */, alloc)
 }
 
 func (p *ScheduledProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {

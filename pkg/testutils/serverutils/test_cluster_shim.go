@@ -153,6 +153,21 @@ type TestClusterInterface interface {
 		hint *roachpb.ReplicationTarget,
 	) (roachpb.ReplicationTarget, error)
 
+	// FindRangeLeaseEx returns information about a range's lease. As opposed to
+	// FindRangeLeaseHolder, it doesn't check the validity of the lease; instead it
+	// returns a timestamp from a node's clock.
+	//
+	// If hint is not nil, the respective node will be queried. If that node doesn't
+	// have a replica able to serve a LeaseInfoRequest, an error will be returned.
+	// If hint is nil, the first node is queried. In either case, if the returned
+	// lease is not valid, it's possible that the returned lease information is
+	// stale - i.e. there might be a newer lease unbeknownst to the queried node.
+	FindRangeLeaseEx(
+		ctx context.Context,
+		rangeDesc roachpb.RangeDescriptor,
+		hint *roachpb.ReplicationTarget,
+	) (_ roachpb.LeaseInfo, now hlc.ClockTimestamp, _ error)
+
 	// TransferRangeLease transfers the lease for a range from whoever has it to
 	// a particular store. That store must already have a replica of the range. If
 	// that replica already has the (active) lease, this method is a no-op.
@@ -253,6 +268,10 @@ type TestClusterInterface interface {
 	// ToggleReplicateQueues activates or deactivates the replication queues on all
 	// the stores on all the nodes.
 	ToggleReplicateQueues(active bool)
+
+	// TogglesplitQueues activates or deactivates the split queues on all
+	// the stores on all the nodes.
+	ToggleSplitQueues(active bool)
 }
 
 // SplitPoint describes a split point that is passed to SplitTable.

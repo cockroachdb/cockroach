@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,8 +56,6 @@ func sharedTestdata(t *testing.T) string {
 func TestImportMultiRegion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRaceWithIssue(t, 116049, "probable OOM")
 
 	baseDir := sharedTestdata(t)
 	tc, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -156,6 +153,7 @@ DROP VIEW IF EXISTS v`,
 			table     string
 			sql       string
 			create    string
+			setting   string
 			args      []interface{}
 			errString string
 			data      string
@@ -196,6 +194,17 @@ DROP VIEW IF EXISTS v`,
 				args:      []interface{}{srv.URL},
 				data:      "1,us-east1\n",
 				errString: `failed to validate unique constraint`,
+			},
+			{
+				name:  "import-into-multi-region-regional-by-row-dupes-no-validate",
+				db:    "multi_region",
+				table: "mr_regional_by_row",
+				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY) LOCALITY REGIONAL BY ROW;" +
+					"INSERT INTO mr_regional_by_row (i, crdb_region) VALUES (1, 'us-east2')",
+				setting: "SET CLUSTER SETTING bulkio.import.constraint_validation.enabled=false",
+				sql:     "IMPORT INTO mr_regional_by_row (i, crdb_region) CSV DATA ($1)",
+				args:    []interface{}{srv.URL},
+				data:    "1,us-east1\n",
 			},
 			{
 				name:   "import-into-multi-region-regional-by-row-to-multi-region-database-concurrent-table-add",
@@ -269,6 +278,10 @@ CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY RE
 				tdb.Exec(t, fmt.Sprintf(`SET DATABASE = %q`, test.db))
 				tdb.Exec(t, fmt.Sprintf("DROP TABLE IF EXISTS %q CASCADE", test.table))
 
+				if test.setting != "" {
+					tdb.Exec(t, test.setting)
+				}
+
 				if test.data != "" {
 					data = test.data
 				}
@@ -305,8 +318,6 @@ CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY RE
 func TestMultiRegionExportImportRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "probable OOM")
 
 	validateNumRows := func(sqlDB *gosql.DB, tableName string, expected int) {
 		res := sqlDB.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s`, tableName))

@@ -65,35 +65,6 @@ func (p *planner) ResolveMutableTableDescriptor(
 	return prefix, desc, nil
 }
 
-// TODO(ajwerner): Remove this and things like it to use more generic
-// functionality. We really need to centralize the privilege checking.
-func (p *planner) resolveUncachedTableDescriptor(
-	ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind,
-) (table catalog.TableDescriptor, err error) {
-	var prefix catalog.ResolvedObjectPrefix
-	var desc catalog.Descriptor
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		lookupFlags := tree.ObjectLookupFlags{
-			Required:             required,
-			DesiredObjectKind:    tree.TableObject,
-			DesiredTableDescKind: requiredType,
-		}
-		desc, prefix, err = resolver.ResolveExistingObject(
-			ctx, p, tn.ToUnresolvedObjectName(), lookupFlags,
-		)
-	})
-	if err != nil || desc == nil {
-		return nil, err
-	}
-	table = desc.(catalog.TableDescriptor)
-	// Ensure that the current user can access the target schema.
-	if err := p.canResolveDescUnderSchema(ctx, prefix.Schema, table); err != nil {
-		return nil, err
-	}
-
-	return table, nil
-}
-
 func (p *planner) ResolveTargetObject(
 	ctx context.Context, un *tree.UnresolvedObjectName,
 ) (
@@ -361,7 +332,9 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		descs := make([]DescriptorWithObjectType, 0, len(targetRoutines))
 		fnResolved := catalog.DescriptorIDSet{}
 		for _, f := range targetRoutines {
-			overload, err := p.matchRoutine(ctx, &f, true /* required */, routineType)
+			overload, err := p.matchRoutine(
+				ctx, &f, true /* required */, routineType, false, /* inDropContext */
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -374,13 +347,13 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			if err != nil {
 				return nil, err
 			}
-			if isFuncs && fnDesc.IsProcedure() {
+			if isFuncs == fnDesc.IsProcedure() {
+				arg := "function"
+				if fnDesc.IsProcedure() {
+					arg = "procedure"
+				}
 				return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
-					fnDesc.Name, "function")
-			}
-			if !isFuncs && !fnDesc.IsProcedure() {
-				return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
-					fnDesc.Name, "procedure")
+					fnDesc.Name, arg)
 			}
 			descs = append(descs, DescriptorWithObjectType{
 				descriptor: fnDesc,
@@ -426,7 +399,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 									descs,
 									DescriptorWithObjectType{
 										descriptor: mut,
-										objectType: privilege.Table,
+										objectType: mut.GetObjectType(),
 									})
 							}
 						}
@@ -991,8 +964,8 @@ func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor,
 func (l *internalLookupCtx) getTypeByID(id descpb.ID) (catalog.TypeDescriptor, error) {
 	typ, ok := l.typDescs[id]
 	if !ok {
-		return nil, sqlerrors.NewUndefinedRelationError(
-			tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("[%d]", id))))
+		return nil, sqlerrors.NewUndefinedTypeError(
+			tree.NewUnqualifiedTypeName(fmt.Sprintf("[%d]", id)))
 	}
 	return typ, nil
 }

@@ -203,7 +203,7 @@ func RandColumnTypes(rng *rand.Rand, numCols int) []*types.T {
 // RandSortingType returns a column type which can be key-encoded.
 func RandSortingType(rng *rand.Rand) *types.T {
 	typ := RandType(rng)
-	for colinfo.MustBeValueEncoded(typ) || typ == types.Void {
+	for colinfo.MustBeValueEncoded(typ) || typ.Family() == types.VoidFamily {
 		typ = RandType(rng)
 	}
 	return typ
@@ -222,65 +222,4 @@ func RandSortingTypes(rng *rand.Rand, numCols int) []*types.T {
 // RandCollationLocale returns a random element of collationLocales.
 func RandCollationLocale(rng *rand.Rand) *string {
 	return &collationLocales[rng.Intn(len(collationLocales))]
-}
-
-// RandEncodableType wraps RandType in order to workaround #36736, which fails
-// when name[] (or other type using DTypeWrapper) is encoded.
-//
-// TODO(andyk): Remove this workaround once #36736 is resolved. Also, RandDatum
-// really should be extended to create DTypeWrapper datums with alternate OIDs
-// like oid.T_varchar for better testing.
-func RandEncodableType(rng *rand.Rand) *types.T {
-	var isEncodableType func(t *types.T) bool
-	isEncodableType = func(t *types.T) bool {
-		switch t.Family() {
-		case types.ArrayFamily:
-			// Due to #36736, any type returned by RandType that gets turned into
-			// a DTypeWrapper random datum will not work. Currently, that's just
-			// types.Name.
-			if t.ArrayContents().Oid() == oid.T_name {
-				return false
-			}
-			return isEncodableType(t.ArrayContents())
-
-		case types.TupleFamily:
-			for i := range t.TupleContents() {
-				if !isEncodableType(t.TupleContents()[i]) {
-					return false
-				}
-			}
-
-		case types.VoidFamily:
-			return false
-
-		}
-		return true
-	}
-
-	for {
-		typ := RandType(rng)
-		if isEncodableType(typ) {
-			return typ
-		}
-	}
-}
-
-// RandEncodableColumnTypes works around #36736, which fails when name[] (or
-// other type using DTypeWrapper) is encoded.
-//
-// TODO(andyk): Remove this workaround once #36736 is resolved. Replace calls to
-// it with calls to RandColumnTypes.
-func RandEncodableColumnTypes(rng *rand.Rand, numCols int) []*types.T {
-	ctx := context.Background()
-	version := clustersettings.MakeTestingClusterSettings().Version
-	types := make([]*types.T, numCols)
-	for i := range types {
-		for {
-			types[i] = RandEncodableType(rng)
-			if err := colinfo.ValidateColumnDefType(ctx, version, types[i]); err == nil {
-				break
-			}
-		}
-	}
-	return types
 }

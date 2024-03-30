@@ -227,7 +227,7 @@ inner-join (merge)
 memo expect=ReorderJoins
 SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
 ----
-memo (optimized, ~45KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
+memo (optimized, ~46KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (merge-join G2 G3 G10 inner-join,+1,+7) (merge-join G3 G2 G10 inner-join,+7,+1) (lookup-join G3 G10 abc@ab,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G5 G6 G10 inner-join,+7,+12) (merge-join G6 G5 G10 inner-join,+12,+7) (lookup-join G6 G10 stu,keyCols=[12],outCols=(1-3,7-9,12-14)) (merge-join G8 G9 G10 inner-join,+7,+12) (lookup-join G8 G10 xyz@xy,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G9 G8 G10 inner-join,+12,+7)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14]
  │         ├── best: (merge-join G5="[ordering: +7]" G6="[ordering: +(1|12)]" G10 inner-join,+7,+12)
@@ -289,7 +289,7 @@ memo (optimized, ~45KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:1
 memo
 SELECT * FROM abc, stu, xyz, pqr WHERE a = 1
 ----
-memo (optimized, ~29KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~30KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (inner-join G3 G2 G4)
@@ -335,7 +335,7 @@ SELECT *
 FROM stu, abc, xyz, pqr
 WHERE u = a AND a = x AND x = p
 ----
-memo (optimized, ~39KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~40KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+3,+6) (merge-join G3 G2 G5 inner-join,+6,+3) (lookup-join G3 G5 stu@uts,keyCols=[6],outCols=(1-3,6-8,12-14,18-22))
  │    └── [presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (merge-join G2="[ordering: +3]" G3="[ordering: +(6|12|18)]" G5 inner-join,+3,+6)
@@ -714,20 +714,20 @@ FROM
 INNER JOIN small ON small.n = medium.n
 ----
 project
- ├── columns: n:2!null m:11 n:12!null
- ├── fd: (2)==(12), (12)==(2)
+ ├── columns: n:2!null m:12 n:13!null
+ ├── fd: (2)==(13), (13)==(2)
  └── semi-join (hash)
-      ├── columns: medium.m:1 medium.n:2!null small.m:11 small.n:12!null
-      ├── fd: (2)==(12), (12)==(2)
+      ├── columns: medium.m:1 medium.n:2!null small.m:12 small.n:13!null
+      ├── fd: (2)==(13), (13)==(2)
       ├── inner-join (hash)
-      │    ├── columns: medium.m:1 medium.n:2!null small.m:11 small.n:12!null
-      │    ├── fd: (2)==(12), (12)==(2)
+      │    ├── columns: medium.m:1 medium.n:2!null small.m:12 small.n:13!null
+      │    ├── fd: (2)==(13), (13)==(2)
       │    ├── scan medium
       │    │    └── columns: medium.m:1 medium.n:2
       │    ├── scan small
-      │    │    └── columns: small.m:11 small.n:12
+      │    │    └── columns: small.m:12 small.n:13
       │    └── filters
-      │         └── small.n:12 = medium.n:2 [outer=(2,12), constraints=(/2: (/NULL - ]; /12: (/NULL - ]), fd=(2)==(12), (12)==(2)]
+      │         └── small.n:13 = medium.n:2 [outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
       ├── scan large
       │    └── columns: large.m:6
       └── filters
@@ -746,20 +746,20 @@ FROM
 INNER JOIN small ON small.n = medium.n
 ----
 project
- ├── columns: n:2!null m:11 n:12!null
- ├── fd: (2)==(12), (12)==(2)
+ ├── columns: n:2!null m:12 n:13!null
+ ├── fd: (2)==(13), (13)==(2)
  └── anti-join (cross)
-      ├── columns: medium.m:1 medium.n:2!null small.m:11 small.n:12!null
-      ├── fd: (2)==(12), (12)==(2)
+      ├── columns: medium.m:1 medium.n:2!null small.m:12 small.n:13!null
+      ├── fd: (2)==(13), (13)==(2)
       ├── inner-join (hash)
-      │    ├── columns: medium.m:1 medium.n:2!null small.m:11 small.n:12!null
-      │    ├── fd: (2)==(12), (12)==(2)
+      │    ├── columns: medium.m:1 medium.n:2!null small.m:12 small.n:13!null
+      │    ├── fd: (2)==(13), (13)==(2)
       │    ├── scan medium
       │    │    └── columns: medium.m:1 medium.n:2
       │    ├── scan small
-      │    │    └── columns: small.m:11 small.n:12
+      │    │    └── columns: small.m:12 small.n:13
       │    └── filters
-      │         └── small.n:12 = medium.n:2 [outer=(2,12), constraints=(/2: (/NULL - ]; /12: (/NULL - ]), fd=(2)==(12), (12)==(2)]
+      │         └── small.n:13 = medium.n:2 [outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
       ├── scan large
       │    └── columns: large.m:6
       └── filters
@@ -1355,7 +1355,7 @@ full-join (hash)
 memo expect-not=ReorderJoins
 SELECT * FROM abc INNER LOOKUP JOIN xyz ON a=x
 ----
-memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,7-9))
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,7-9))
@@ -1607,30 +1607,30 @@ project
       ├── fd: (4)-->(1-3)
       ├── union-all
       │    ├── columns: a:1 b:2 c:3 rowid:4!null
-      │    ├── left columns: a:12 b:13 c:14 rowid:15
-      │    ├── right columns: a:23 b:24 c:25 rowid:26
+      │    ├── left columns: a:13 b:14 c:15 rowid:16
+      │    ├── right columns: a:24 b:25 c:26 rowid:27
       │    ├── semi-join (lookup def)
-      │    │    ├── columns: a:12 b:13 c:14 rowid:15!null
-      │    │    ├── key columns: [12] = [18]
-      │    │    ├── key: (15)
-      │    │    ├── fd: (15)-->(12-14)
+      │    │    ├── columns: a:13 b:14 c:15 rowid:16!null
+      │    │    ├── key columns: [13] = [19]
+      │    │    ├── key: (16)
+      │    │    ├── fd: (16)-->(13-15)
       │    │    ├── scan abc
-      │    │    │    ├── columns: a:12 b:13 c:14 rowid:15!null
-      │    │    │    ├── key: (15)
-      │    │    │    └── fd: (15)-->(12-14)
+      │    │    │    ├── columns: a:13 b:14 c:15 rowid:16!null
+      │    │    │    ├── key: (16)
+      │    │    │    └── fd: (16)-->(13-15)
       │    │    └── filters (true)
       │    └── semi-join (hash)
-      │         ├── columns: a:23 b:24 c:25 rowid:26!null
-      │         ├── key: (26)
-      │         ├── fd: (26)-->(23-25)
+      │         ├── columns: a:24 b:25 c:26 rowid:27!null
+      │         ├── key: (27)
+      │         ├── fd: (27)-->(24-26)
       │         ├── scan abc
-      │         │    ├── columns: a:23 b:24 c:25 rowid:26!null
-      │         │    ├── key: (26)
-      │         │    └── fd: (26)-->(23-25)
+      │         │    ├── columns: a:24 b:25 c:26 rowid:27!null
+      │         │    ├── key: (27)
+      │         │    └── fd: (27)-->(24-26)
       │         ├── scan def
-      │         │    └── columns: e:30!null
+      │         │    └── columns: e:31!null
       │         └── filters
-      │              └── c:25 = e:30 [outer=(25,30), constraints=(/25: (/NULL - ]; /30: (/NULL - ]), fd=(25)==(30), (30)==(25)]
+      │              └── c:26 = e:31 [outer=(26,31), constraints=(/26: (/NULL - ]; /31: (/NULL - ]), fd=(26)==(31), (31)==(26)]
       └── aggregations
            ├── const-agg [as=a:1, outer=(1)]
            │    └── a:1
@@ -1937,7 +1937,7 @@ inner-join (lookup xyz@xy)
 memo disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
-memo (optimized, ~19KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
+memo (optimized, ~20KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+2,+3,+6,+7,+8) (merge-join G2 G3 G5 inner-join,+3,+2,+1,+8,+7,+6) (lookup-join G2 G5 stu [as=r],keyCols=[1 2 3],outCols=(1-3,6-8)) (lookup-join G2 G5 stu@uts [as=r],keyCols=[3 2 1],outCols=(1-3,6-8)) (merge-join G3 G2 G5 inner-join,+6,+7,+8,+1,+2,+3) (merge-join G3 G2 G5 inner-join,+8,+7,+6,+3,+2,+1) (lookup-join G3 G5 stu [as=l],keyCols=[6 7 8],outCols=(1-3,6-8)) (lookup-join G3 G5 stu@uts [as=l],keyCols=[8 7 6],outCols=(1-3,6-8))
  │    └── [presentation: s:1,t:2,u:3,s:6,t:7,u:8]
  │         ├── best: (merge-join G2="[ordering: +1,+2,+3]" G3="[ordering: +6,+7,+8]" G5 inner-join,+1,+2,+3,+6,+7,+8)
@@ -2715,14 +2715,14 @@ SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c)
 ----
 semi-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── key columns: [16] = [9]
+ ├── key columns: [17] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── inner-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1!null n:2 a:13!null abcd.rowid:16!null continuation:19
- │    ├── key columns: [1] = [13]
- │    ├── first join in paired joiner; continuation column: continuation:19
- │    ├── fd: (16)-->(13,19), (1)==(13), (13)==(1)
+ │    ├── columns: m:1!null n:2 a:14!null abcd.rowid:17!null continuation:20
+ │    ├── key columns: [1] = [14]
+ │    ├── first join in paired joiner; continuation column: continuation:20
+ │    ├── fd: (17)-->(14,20), (1)==(14), (14)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters (true)
@@ -2747,14 +2747,14 @@ SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c
 ----
 anti-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── key columns: [16] = [9]
+ ├── key columns: [17] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── left-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1 n:2 a:13 abcd.rowid:16 continuation:19
- │    ├── key columns: [1] = [13]
- │    ├── first join in paired joiner; continuation column: continuation:19
- │    ├── fd: (16)-->(13,19)
+ │    ├── columns: m:1 n:2 a:14 abcd.rowid:17 continuation:20
+ │    ├── key columns: [1] = [14]
+ │    ├── first join in paired joiner; continuation column: continuation:20
+ │    ├── fd: (17)-->(14,20)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters (true)
@@ -2817,15 +2817,15 @@ SELECT m FROM small WHERE EXISTS (SELECT * FROM shard WHERE small.m = shard.a)
 ----
 semi-join (lookup shard@shard_a_idx)
  ├── columns: m:1
- ├── key columns: [14 1] = [9 7]
+ ├── key columns: [15 1] = [9 7]
  ├── project
- │    ├── columns: shard_a_eq:14 m:1
+ │    ├── columns: shard_a_eq:15 m:1
  │    ├── immutable
- │    ├── fd: (1)-->(14)
+ │    ├── fd: (1)-->(15)
  │    ├── scan small
  │    │    └── columns: m:1
  │    └── projections
- │         └── mod(fnv32(crdb_internal.datums_to_bytes(m:1)), 3) [as=shard_a_eq:14, outer=(1), immutable]
+ │         └── mod(fnv32(crdb_internal.datums_to_bytes(m:1)), 3) [as=shard_a_eq:15, outer=(1), immutable]
  └── filters (true)
 
 # Generate an anti lookup join by synthesizing an equality constraint for an
@@ -2835,15 +2835,15 @@ SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM shard WHERE small.m = shard.
 ----
 anti-join (lookup shard@shard_a_idx)
  ├── columns: m:1
- ├── key columns: [14 1] = [9 7]
+ ├── key columns: [15 1] = [9 7]
  ├── project
- │    ├── columns: shard_a_eq:14 m:1
+ │    ├── columns: shard_a_eq:15 m:1
  │    ├── immutable
- │    ├── fd: (1)-->(14)
+ │    ├── fd: (1)-->(15)
  │    ├── scan small
  │    │    └── columns: m:1
  │    └── projections
- │         └── mod(fnv32(crdb_internal.datums_to_bytes(m:1)), 3) [as=shard_a_eq:14, outer=(1), immutable]
+ │         └── mod(fnv32(crdb_internal.datums_to_bytes(m:1)), 3) [as=shard_a_eq:15, outer=(1), immutable]
  └── filters (true)
 
 exec-ddl
@@ -4107,18 +4107,18 @@ SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c AND
 ----
 semi-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── key columns: [16] = [9]
+ ├── key columns: [17] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── inner-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1!null n:2 a:13!null b:14!null abcd.rowid:16!null continuation:19
- │    ├── key columns: [1] = [13]
- │    ├── first join in paired joiner; continuation column: continuation:19
- │    ├── fd: (16)-->(13,14,19), (1)==(13), (13)==(1)
+ │    ├── columns: m:1!null n:2 a:14!null b:15!null abcd.rowid:17!null continuation:20
+ │    ├── key columns: [1] = [14]
+ │    ├── first join in paired joiner; continuation column: continuation:20
+ │    ├── fd: (17)-->(14,15,20), (1)==(14), (14)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters
- │         └── a:13 > b:14 [outer=(13,14), constraints=(/13: (/NULL - ]; /14: (/NULL - ])]
+ │         └── a:14 > b:15 [outer=(14,15), constraints=(/14: (/NULL - ]; /15: (/NULL - ])]
  └── filters
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
@@ -4141,18 +4141,18 @@ SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c
 ----
 anti-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── key columns: [16] = [9]
+ ├── key columns: [17] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── left-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1 n:2 a:13 b:14 abcd.rowid:16 continuation:19
- │    ├── key columns: [1] = [13]
- │    ├── first join in paired joiner; continuation column: continuation:19
- │    ├── fd: (16)-->(13,14,19)
+ │    ├── columns: m:1 n:2 a:14 b:15 abcd.rowid:17 continuation:20
+ │    ├── key columns: [1] = [14]
+ │    ├── first join in paired joiner; continuation column: continuation:20
+ │    ├── fd: (17)-->(14,15,20)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters
- │         └── a:13 > b:14 [outer=(13,14), constraints=(/13: (/NULL - ]; /14: (/NULL - ])]
+ │         └── a:14 > b:15 [outer=(14,15), constraints=(/14: (/NULL - ]; /15: (/NULL - ])]
  └── filters
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
@@ -4411,14 +4411,14 @@ project
  ├── columns: m:1
  └── semi-join (lookup partial_tab)
       ├── columns: m:1 n:2
-      ├── key columns: [12] = [6]
+      ├── key columns: [13] = [6]
       ├── lookup columns are key
       ├── second join in paired joiner
       ├── inner-join (lookup partial_tab@partial_idx,partial)
-      │    ├── columns: m:1 n:2!null k:12!null i:13!null continuation:17
-      │    ├── key columns: [2] = [13]
-      │    ├── first join in paired joiner; continuation column: continuation:17
-      │    ├── fd: (12)-->(13,17), (2)==(13), (13)==(2)
+      │    ├── columns: m:1 n:2!null k:13!null i:14!null continuation:18
+      │    ├── key columns: [2] = [14]
+      │    ├── first join in paired joiner; continuation column: continuation:18
+      │    ├── fd: (13)-->(14,18), (2)==(14), (14)==(2)
       │    ├── scan small
       │    │    └── columns: m:1 n:2
       │    └── filters (true)
@@ -4448,14 +4448,14 @@ project
  ├── columns: m:1
  └── anti-join (lookup partial_tab)
       ├── columns: m:1 n:2
-      ├── key columns: [12] = [6]
+      ├── key columns: [13] = [6]
       ├── lookup columns are key
       ├── second join in paired joiner
       ├── left-join (lookup partial_tab@partial_idx,partial)
-      │    ├── columns: m:1 n:2 k:12 i:13 continuation:17
-      │    ├── key columns: [2] = [13]
-      │    ├── first join in paired joiner; continuation column: continuation:17
-      │    ├── fd: (12)-->(13,17)
+      │    ├── columns: m:1 n:2 k:13 i:14 continuation:18
+      │    ├── key columns: [2] = [14]
+      │    ├── first join in paired joiner; continuation column: continuation:18
+      │    ├── fd: (13)-->(14,18)
       │    ├── scan small
       │    │    └── columns: m:1 n:2
       │    └── filters (true)
@@ -6097,15 +6097,15 @@ SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE virt.l = 1 AND m = vi
 ----
 semi-join (lookup virt@l_v1)
  ├── columns: m:1
- ├── key columns: [16 1] = [13 9]
+ ├── key columns: [17 1] = [13 9]
  ├── immutable
  ├── project
- │    ├── columns: "lookup_join_const_col_@13":16!null m:1
- │    ├── fd: ()-->(16)
+ │    ├── columns: "lookup_join_const_col_@13":17!null m:1
+ │    ├── fd: ()-->(17)
  │    ├── scan small
  │    │    └── columns: m:1
  │    └── projections
- │         └── 1 [as="lookup_join_const_col_@13":16]
+ │         └── 1 [as="lookup_join_const_col_@13":17]
  └── filters (true)
 
 # Semi-join with multiple constant values for the leading lookup column.
@@ -6161,15 +6161,15 @@ SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE virt.l = 1 AND m 
 ----
 anti-join (lookup virt@l_v1)
  ├── columns: m:1
- ├── key columns: [16 1] = [13 9]
+ ├── key columns: [17 1] = [13 9]
  ├── immutable
  ├── project
- │    ├── columns: "lookup_join_const_col_@13":16!null m:1
- │    ├── fd: ()-->(16)
+ │    ├── columns: "lookup_join_const_col_@13":17!null m:1
+ │    ├── fd: ()-->(17)
  │    ├── scan small
  │    │    └── columns: m:1
  │    └── projections
- │         └── 1 [as="lookup_join_const_col_@13":16]
+ │         └── 1 [as="lookup_join_const_col_@13":17]
  └── filters (true)
 
 # Anti-join with multiple constant values for the leading lookup column.
@@ -7204,7 +7204,7 @@ WHERE n.name = 'Upper West Side'
 OR n.name = 'Upper East Side'
 GROUP BY n.name, n.geom
 ----
-memo (optimized, ~35KB, required=[presentation: name:16,popn_per_sqkm:22])
+memo (optimized, ~36KB, required=[presentation: name:16,popn_per_sqkm:22])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:16,popn_per_sqkm:22]
  │         ├── best: (project G2 G3 name)
@@ -7614,19 +7614,19 @@ WHERE EXISTS (
 ----
 semi-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
- ├── key columns: [21] = [14]
+ ├── key columns: [22] = [14]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:21!null continuation:28
- │    ├── first join in paired joiner; continuation column: continuation:28
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:22!null continuation:29
+ │    ├── first join in paired joiner; continuation column: continuation:29
  │    ├── inverted-expr
- │    │    └── st_covers(c.geom:10, n.geom:24)
- │    ├── key: (1,21)
- │    ├── fd: (1)-->(2-10), (21)-->(28)
+ │    │    └── st_covers(c.geom:10, n.geom:25)
+ │    ├── key: (1,22)
+ │    ├── fd: (1)-->(2-10), (22)-->(29)
  │    ├── scan nyc_census_blocks [as=c]
  │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
  │    │    ├── key: (1)
@@ -7648,19 +7648,19 @@ WHERE NOT EXISTS (
 ----
 anti-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
- ├── key columns: [21] = [14]
+ ├── key columns: [22] = [14]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:21 continuation:28
- │    ├── first join in paired joiner; continuation column: continuation:28
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:22 continuation:29
+ │    ├── first join in paired joiner; continuation column: continuation:29
  │    ├── inverted-expr
- │    │    └── st_covers(c.geom:10, n.geom:24)
- │    ├── key: (1,21)
- │    ├── fd: (1)-->(2-10), (21)-->(28)
+ │    │    └── st_covers(c.geom:10, n.geom:25)
+ │    ├── key: (1,22)
+ │    ├── fd: (1)-->(2-10), (22)-->(29)
  │    ├── scan nyc_census_blocks [as=c]
  │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
  │    │    ├── key: (1)
@@ -7684,16 +7684,16 @@ project
  ├── immutable
  └── anti-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10
-      ├── key columns: [22] = [14]
+      ├── key columns: [23] = [14]
       ├── lookup columns are key
       ├── second join in paired joiner
       ├── immutable
       ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:22 continuation:29
-      │    ├── first join in paired joiner; continuation column: continuation:29
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:23 continuation:30
+      │    ├── first join in paired joiner; continuation column: continuation:30
       │    ├── inverted-expr
-      │    │    └── st_covers(c.geom:10, n.geom:25)
-      │    ├── fd: (22)-->(29)
+      │    │    └── st_covers(c.geom:10, n.geom:26)
+      │    ├── fd: (23)-->(30)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters
@@ -8395,19 +8395,19 @@ WHERE EXISTS (
 ----
 semi-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
- ├── key columns: [15] = [7]
+ ├── key columns: [16] = [7]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── inner-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:15!null continuation:23
- │    ├── first join in paired joiner; continuation column: continuation:23
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:16!null continuation:24
+ │    ├── first join in paired joiner; continuation column: continuation:24
  │    ├── inverted-expr
- │    │    └── t1.j:17 @> t2.j:3
- │    ├── key: (1,15)
- │    ├── fd: (1)-->(2-4), (15)-->(23)
+ │    │    └── t1.j:18 @> t2.j:3
+ │    ├── key: (1,16)
+ │    ├── fd: (1)-->(2-4), (16)-->(24)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
  │    │    ├── key: (1)
@@ -8425,19 +8425,19 @@ WHERE EXISTS (
 ----
 semi-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
- ├── key columns: [15] = [7]
+ ├── key columns: [16] = [7]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── inner-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:15!null continuation:23
- │    ├── first join in paired joiner; continuation column: continuation:23
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:16!null continuation:24
+ │    ├── first join in paired joiner; continuation column: continuation:24
  │    ├── inverted-expr
- │    │    └── t1.j:17 <@ t2.j:3
- │    ├── key: (1,15)
- │    ├── fd: (1)-->(2-4), (15)-->(23)
+ │    │    └── t1.j:18 <@ t2.j:3
+ │    ├── key: (1,16)
+ │    ├── fd: (1)-->(2-4), (16)-->(24)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
  │    │    ├── key: (1)
@@ -8455,19 +8455,19 @@ WHERE NOT EXISTS (
 ----
 anti-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
- ├── key columns: [15] = [7]
+ ├── key columns: [16] = [7]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── left-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:15 continuation:23
- │    ├── first join in paired joiner; continuation column: continuation:23
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:16 continuation:24
+ │    ├── first join in paired joiner; continuation column: continuation:24
  │    ├── inverted-expr
- │    │    └── t1.j:17 @> t2.j:3
- │    ├── key: (1,15)
- │    ├── fd: (1)-->(2-4), (15)-->(23)
+ │    │    └── t1.j:18 @> t2.j:3
+ │    ├── key: (1,16)
+ │    ├── fd: (1)-->(2-4), (16)-->(24)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
  │    │    ├── key: (1)
@@ -8485,19 +8485,19 @@ WHERE NOT EXISTS (
 ----
 anti-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
- ├── key columns: [15] = [7]
+ ├── key columns: [16] = [7]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── left-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:15 continuation:23
- │    ├── first join in paired joiner; continuation column: continuation:23
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:16 continuation:24
+ │    ├── first join in paired joiner; continuation column: continuation:24
  │    ├── inverted-expr
- │    │    └── t1.j:17 <@ t2.j:3
- │    ├── key: (1,15)
- │    ├── fd: (1)-->(2-4), (15)-->(23)
+ │    │    └── t1.j:18 <@ t2.j:3
+ │    ├── key: (1,16)
+ │    ├── fd: (1)-->(2-4), (16)-->(24)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
  │    │    ├── key: (1)
@@ -9228,18 +9228,18 @@ project
       ├── fd: (1)-->(2-4)
       ├── inner-join (lookup json_arr1 [as=t1])
       │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 i:8!null t1.j:9
-      │    ├── key columns: [22] = [7]
+      │    ├── key columns: [23] = [7]
       │    ├── lookup columns are key
       │    ├── immutable
       │    ├── fd: (1)-->(2-4)
       │    ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:22!null i:23!null
-      │    │    ├── prefix key columns: [21] = [23]
+      │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:23!null i:24!null
+      │    │    ├── prefix key columns: [22] = [24]
       │    │    ├── inverted-expr
-      │    │    │    └── t1.j:24 @> t2.j:3
-      │    │    ├── fd: (1)-->(2-4), (22)-->(23)
+      │    │    │    └── t1.j:25 @> t2.j:3
+      │    │    ├── fd: (1)-->(2-4), (23)-->(24)
       │    │    ├── inner-join (cross)
-      │    │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 "inverted_join_const_col_@8":21!null
+      │    │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 "inverted_join_const_col_@8":22!null
       │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
       │    │    │    ├── fd: (1)-->(2-4)
       │    │    │    ├── scan json_arr2 [as=t2]
@@ -9247,7 +9247,7 @@ project
       │    │    │    │    ├── key: (1)
       │    │    │    │    └── fd: (1)-->(2-4)
       │    │    │    ├── values
-      │    │    │    │    ├── columns: "inverted_join_const_col_@8":21!null
+      │    │    │    │    ├── columns: "inverted_join_const_col_@8":22!null
       │    │    │    │    ├── cardinality: [2 - 2]
       │    │    │    │    ├── (3,)
       │    │    │    │    └── (4,)
@@ -9273,20 +9273,20 @@ WHERE EXISTS (
 ----
 semi-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
- ├── key columns: [21] = [7]
+ ├── key columns: [22] = [7]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── inner-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:21!null i:22!null continuation:35
- │    ├── prefix key columns: [1] = [22]
- │    ├── first join in paired joiner; continuation column: continuation:35
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:22!null i:23!null continuation:36
+ │    ├── prefix key columns: [1] = [23]
+ │    ├── first join in paired joiner; continuation column: continuation:36
  │    ├── inverted-expr
- │    │    └── t1.j:23 @> t2.j:3
- │    ├── key: (21)
- │    ├── fd: (1)-->(2-4), (21)-->(22,35), (1)==(22), (22)==(1)
+ │    │    └── t1.j:24 @> t2.j:3
+ │    ├── key: (22)
+ │    ├── fd: (1)-->(2-4), (22)-->(23,36), (1)==(23), (23)==(1)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
  │    │    ├── key: (1)
@@ -9331,20 +9331,20 @@ WHERE NOT EXISTS (
 ----
 anti-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
- ├── key columns: [21] = [7]
+ ├── key columns: [22] = [7]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── left-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:21 i:22 continuation:35
- │    ├── prefix key columns: [1] = [22]
- │    ├── first join in paired joiner; continuation column: continuation:35
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:22 i:23 continuation:36
+ │    ├── prefix key columns: [1] = [23]
+ │    ├── first join in paired joiner; continuation column: continuation:36
  │    ├── inverted-expr
- │    │    └── t1.j:23 @> t2.j:3
- │    ├── key: (1,21)
- │    ├── fd: (1)-->(2-4), (21)-->(22,35)
+ │    │    └── t1.j:24 @> t2.j:3
+ │    ├── key: (1,22)
+ │    ├── fd: (1)-->(2-4), (22)-->(23,36)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
  │    │    ├── key: (1)
@@ -9659,19 +9659,19 @@ WHERE EXISTS (
 ----
 semi-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
- ├── key columns: [23] = [14]
+ ├── key columns: [24] = [14]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:23!null continuation:32
- │    ├── first join in paired joiner; continuation column: continuation:32
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:24!null continuation:33
+ │    ├── first join in paired joiner; continuation column: continuation:33
  │    ├── inverted-expr
- │    │    └── st_covers(c.geom:10, n.geom:26)
- │    ├── key: (1,23)
- │    ├── fd: (1)-->(2-10), (23)-->(32)
+ │    │    └── st_covers(c.geom:10, n.geom:27)
+ │    ├── key: (1,24)
+ │    ├── fd: (1)-->(2-10), (24)-->(33)
  │    ├── scan nyc_census_blocks [as=c]
  │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
  │    │    ├── key: (1)
@@ -9691,19 +9691,19 @@ WHERE NOT EXISTS (
 ----
 anti-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
- ├── key columns: [23] = [14]
+ ├── key columns: [24] = [14]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:23 continuation:32
- │    ├── first join in paired joiner; continuation column: continuation:32
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:24 continuation:33
+ │    ├── first join in paired joiner; continuation column: continuation:33
  │    ├── inverted-expr
- │    │    └── st_covers(c.geom:10, n.geom:26)
- │    ├── key: (1,23)
- │    ├── fd: (1)-->(2-10), (23)-->(32)
+ │    │    └── st_covers(c.geom:10, n.geom:27)
+ │    ├── key: (1,24)
+ │    ├── fd: (1)-->(2-10), (24)-->(33)
  │    ├── scan nyc_census_blocks [as=c]
  │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
  │    │    ├── key: (1)
@@ -9859,70 +9859,70 @@ project
       ├── fd: (1)-->(2,3)
       ├── union-all
       │    ├── columns: a:1!null b:2 c:3
-      │    ├── left columns: a:13 b:14 c:15
-      │    ├── right columns: a:25 b:26 c:27
+      │    ├── left columns: a:14 b:15 c:16
+      │    ├── right columns: a:26 b:27 c:28
       │    ├── cardinality: [0 - 2]
       │    ├── ordering: +1
       │    ├── semi-join (lookup pqr@q)
-      │    │    ├── columns: a:13!null b:14 c:15!null
-      │    │    ├── key columns: [14 105] = [19 18]
+      │    │    ├── columns: a:14!null b:15 c:16!null
+      │    │    ├── key columns: [15 106] = [20 19]
       │    │    ├── lookup columns are key
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
-      │    │    ├── fd: ()-->(13-15)
+      │    │    ├── fd: ()-->(14-16)
       │    │    ├── project
-      │    │    │    ├── columns: "lookup_join_const_col_@18":105!null a:13!null b:14 c:15!null
+      │    │    │    ├── columns: "lookup_join_const_col_@19":106!null a:14!null b:15 c:16!null
       │    │    │    ├── cardinality: [0 - 1]
       │    │    │    ├── key: ()
-      │    │    │    ├── fd: ()-->(13-15,105)
+      │    │    │    ├── fd: ()-->(14-16,106)
       │    │    │    ├── index-join zz
-      │    │    │    │    ├── columns: a:13!null b:14 c:15!null
+      │    │    │    │    ├── columns: a:14!null b:15 c:16!null
       │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    ├── key: ()
-      │    │    │    │    ├── fd: ()-->(13-15)
+      │    │    │    │    ├── fd: ()-->(14-16)
       │    │    │    │    └── scan zz@idx_c
-      │    │    │    │         ├── columns: a:13!null c:15!null
-      │    │    │    │         ├── constraint: /15: [/0 - /0]
+      │    │    │    │         ├── columns: a:14!null c:16!null
+      │    │    │    │         ├── constraint: /16: [/0 - /0]
       │    │    │    │         ├── cardinality: [0 - 1]
       │    │    │    │         ├── key: ()
-      │    │    │    │         └── fd: ()-->(13,15)
+      │    │    │    │         └── fd: ()-->(14,16)
       │    │    │    └── projections
-      │    │    │         └── 0 [as="lookup_join_const_col_@18":105]
+      │    │    │         └── 0 [as="lookup_join_const_col_@19":106]
       │    │    └── filters (true)
       │    └── project
-      │         ├── columns: a:25!null b:26 c:27
+      │         ├── columns: a:26!null b:27 c:28
       │         ├── cardinality: [0 - 1]
-      │         ├── key: (25)
-      │         ├── fd: (25)-->(26,27), (27)~~>(25,26)
-      │         ├── ordering: +25
+      │         ├── key: (26)
+      │         ├── fd: (26)-->(27,28), (28)~~>(26,27)
+      │         ├── ordering: +26
       │         └── project
-      │              ├── columns: a:25!null b:26!null c:27!null q:31!null r:32!null
+      │              ├── columns: a:26!null b:27!null c:28!null q:32!null r:33!null
       │              ├── cardinality: [0 - 1]
       │              ├── key: ()
-      │              ├── fd: ()-->(25-27,31,32), (27)==(32), (32)==(27), (26)==(31), (31)==(26)
+      │              ├── fd: ()-->(26-28,32,33), (28)==(33), (33)==(28), (27)==(32), (32)==(27)
       │              └── inner-join (lookup zz)
-      │                   ├── columns: a:25!null b:26!null c:27!null p:30!null q:31!null r:32!null
-      │                   ├── key columns: [25] = [25]
+      │                   ├── columns: a:26!null b:27!null c:28!null p:31!null q:32!null r:33!null
+      │                   ├── key columns: [26] = [26]
       │                   ├── lookup columns are key
       │                   ├── cardinality: [0 - 1]
       │                   ├── key: ()
-      │                   ├── fd: ()-->(25-27,30-32), (31)==(26), (27)==(32), (32)==(27), (26)==(31)
+      │                   ├── fd: ()-->(26-28,31-33), (32)==(27), (28)==(33), (33)==(28), (27)==(32)
       │                   ├── inner-join (lookup zz@idx_c)
-      │                   │    ├── columns: a:25!null c:27!null p:30!null q:31 r:32!null
-      │                   │    ├── key columns: [32] = [27]
+      │                   │    ├── columns: a:26!null c:28!null p:31!null q:32 r:33!null
+      │                   │    ├── key columns: [33] = [28]
       │                   │    ├── lookup columns are key
       │                   │    ├── cardinality: [0 - 1]
       │                   │    ├── key: ()
-      │                   │    ├── fd: ()-->(25,27,30-32), (32)==(27), (27)==(32)
+      │                   │    ├── fd: ()-->(26,28,31-33), (33)==(28), (28)==(33)
       │                   │    ├── scan pqr
-      │                   │    │    ├── columns: p:30!null q:31 r:32
-      │                   │    │    ├── constraint: /30: [/0 - /0]
+      │                   │    │    ├── columns: p:31!null q:32 r:33
+      │                   │    │    ├── constraint: /31: [/0 - /0]
       │                   │    │    ├── cardinality: [0 - 1]
       │                   │    │    ├── key: ()
-      │                   │    │    └── fd: ()-->(30-32)
+      │                   │    │    └── fd: ()-->(31-33)
       │                   │    └── filters (true)
       │                   └── filters
-      │                        └── q:31 = b:26 [outer=(26,31), constraints=(/26: (/NULL - ]; /31: (/NULL - ]), fd=(26)==(31), (31)==(26)]
+      │                        └── q:32 = b:27 [outer=(27,32), constraints=(/27: (/NULL - ]; /32: (/NULL - ]), fd=(27)==(32), (32)==(27)]
       └── aggregations
            ├── const-agg [as=b:2, outer=(2)]
            │    └── b:2
@@ -10157,7 +10157,7 @@ SELECT 1 FROM (VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true
 UNION ALL
 SELECT 1 FROM (VALUES (1), (1), (1)) JOIN (VALUES (1), (1)) ON true
 ----
-memo (optimized, ~22KB, required=[presentation: ?column?:7])
+memo (optimized, ~23KB, required=[presentation: ?column?:7])
  ├── G1: (union-all G2 G3)
  │    └── [presentation: ?column?:7]
  │         ├── best: (union-all G2 G3)
@@ -11032,26 +11032,26 @@ anti-join (lookup abc_part)
  │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
  │    │    ├── distribution: east
  │    │    ├── scan def_part
- │    │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    │    ├── constraint: /14/15: [/'east'/1 - /'east'/1]
+ │    │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    │    ├── constraint: /15/16: [/'east'/1 - /'east'/1]
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(14-17)
+ │    │    │    └── fd: ()-->(15-18)
  │    │    └── scan def_part
- │    │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │    │         ├── constraint: /20/21
+ │    │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │    │         ├── constraint: /21/22
  │    │         │    ├── [/'central'/1 - /'central'/1]
  │    │         │    └── [/'west'/1 - /'west'/1]
  │    │         ├── cardinality: [0 - 1]
  │    │         ├── key: ()
- │    │         └── fd: ()-->(20-23)
+ │    │         └── fd: ()-->(21-24)
  │    └── filters (true)
  └── filters (true)
 
@@ -11083,26 +11083,26 @@ anti-join (lookup abc_part)
  │    ├── distribution: west
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
  │    │    ├── distribution: west
  │    │    ├── scan def_part
- │    │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    │    ├── constraint: /14/15: [/'west'/1 - /'west'/1]
+ │    │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    │    ├── constraint: /15/16: [/'west'/1 - /'west'/1]
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(14-17)
+ │    │    │    └── fd: ()-->(15-18)
  │    │    └── scan def_part
- │    │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │    │         ├── constraint: /20/21
+ │    │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │    │         ├── constraint: /21/22
  │    │         │    ├── [/'central'/1 - /'central'/1]
  │    │         │    └── [/'east'/1 - /'east'/1]
  │    │         ├── cardinality: [0 - 1]
  │    │         ├── key: ()
- │    │         └── fd: ()-->(20-23)
+ │    │         └── fd: ()-->(21-24)
  │    └── filters (true)
  └── filters (true)
 
@@ -11134,26 +11134,26 @@ anti-join (lookup abc_part@b_idx)
  │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
  │    │    ├── distribution: east
  │    │    ├── scan def_part
- │    │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    │    ├── constraint: /14/15: [/'east'/10 - /'east'/10]
+ │    │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    │    ├── constraint: /15/16: [/'east'/10 - /'east'/10]
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(14-17)
+ │    │    │    └── fd: ()-->(15-18)
  │    │    └── scan def_part
- │    │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │    │         ├── constraint: /20/21
+ │    │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │    │         ├── constraint: /21/22
  │    │         │    ├── [/'central'/10 - /'central'/10]
  │    │         │    └── [/'west'/10 - /'west'/10]
  │    │         ├── cardinality: [0 - 1]
  │    │         ├── key: ()
- │    │         └── fd: ()-->(20-23)
+ │    │         └── fd: ()-->(21-24)
  │    └── filters (true)
  └── filters (true)
 
@@ -11185,26 +11185,26 @@ anti-join (lookup abc_part)
  │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
  │    │    ├── distribution: east
  │    │    ├── scan def_part
- │    │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    │    ├── constraint: /14/15: [/'east'/1 - /'east'/1]
+ │    │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    │    ├── constraint: /15/16: [/'east'/1 - /'east'/1]
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(14-17)
+ │    │    │    └── fd: ()-->(15-18)
  │    │    └── scan def_part
- │    │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │    │         ├── constraint: /20/21
+ │    │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │    │         ├── constraint: /21/22
  │    │         │    ├── [/'central'/1 - /'central'/1]
  │    │         │    └── [/'west'/1 - /'west'/1]
  │    │         ├── cardinality: [0 - 1]
  │    │         ├── key: ()
- │    │         └── fd: ()-->(20-23)
+ │    │         └── fd: ()-->(21-24)
  │    └── filters
  │         └── f:4 > b:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ])]
  └── filters
@@ -11280,26 +11280,26 @@ anti-join (lookup abc_part@c_idx)
  │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
  │    │    ├── distribution: east
  │    │    ├── scan def_part
- │    │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    │    ├── constraint: /14/15: [/'east'/10 - /'east'/10]
+ │    │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    │    ├── constraint: /15/16: [/'east'/10 - /'east'/10]
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(14-17)
+ │    │    │    └── fd: ()-->(15-18)
  │    │    └── scan def_part
- │    │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │    │         ├── constraint: /20/21
+ │    │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │    │         ├── constraint: /21/22
  │    │         │    ├── [/'central'/10 - /'central'/10]
  │    │         │    └── [/'west'/10 - /'west'/10]
  │    │         ├── cardinality: [0 - 1]
  │    │         ├── key: ()
- │    │         └── fd: ()-->(20-23)
+ │    │         └── fd: ()-->(21-24)
  │    └── filters (true)
  └── filters (true)
 
@@ -11332,26 +11332,26 @@ anti-join (lookup abc_part@c_idx)
  │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
  │    │    ├── distribution: east
  │    │    ├── scan def_part
- │    │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    │    ├── constraint: /14/15: [/'east'/10 - /'east'/10]
+ │    │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    │    ├── constraint: /15/16: [/'east'/10 - /'east'/10]
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(14-17)
+ │    │    │    └── fd: ()-->(15-18)
  │    │    └── scan def_part
- │    │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │    │         ├── constraint: /20/21
+ │    │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │    │         ├── constraint: /21/22
  │    │         │    ├── [/'central'/10 - /'central'/10]
  │    │         │    └── [/'west'/10 - /'west'/10]
  │    │         ├── cardinality: [0 - 1]
  │    │         ├── key: ()
- │    │         └── fd: ()-->(20-23)
+ │    │         └── fd: ()-->(21-24)
  │    └── filters
  │         └── (e:3 % a:8) = 0 [outer=(3,8), immutable]
  └── filters
@@ -11367,26 +11367,26 @@ anti-join (lookup abc_part@c_b_idx)
  ├── lookup expression
  │    └── filters
  │         ├── r:2 IN ('central', 'west') [outer=(2), constraints=(/2: [/'central' - /'central'] [/'west' - /'west']; tight)]
- │         ├── "lookup_join_const_col_@5":18 = c:5 [outer=(5,18), constraints=(/5: (/NULL - ]; /18: (/NULL - ]), fd=(5)==(18), (18)==(5)]
+ │         ├── "lookup_join_const_col_@5":19 = c:5 [outer=(5,19), constraints=(/5: (/NULL - ]; /19: (/NULL - ]), fd=(5)==(19), (19)==(5)]
  │         └── column1:1 = b:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  ├── lookup columns are key
  ├── cardinality: [0 - 2]
  ├── distribution: east
  ├── anti-join (lookup abc_part@c_b_idx)
- │    ├── columns: column1:1!null "lookup_join_const_col_@5":18!null
+ │    ├── columns: column1:1!null "lookup_join_const_col_@5":19!null
  │    ├── lookup expression
  │    │    └── filters
  │    │         ├── r:2 = 'east' [outer=(2), constraints=(/2: [/'east' - /'east']; tight), fd=()-->(2)]
- │    │         ├── "lookup_join_const_col_@5":18 = c:5 [outer=(5,18), constraints=(/5: (/NULL - ]; /18: (/NULL - ]), fd=(5)==(18), (18)==(5)]
+ │    │         ├── "lookup_join_const_col_@5":19 = c:5 [outer=(5,19), constraints=(/5: (/NULL - ]; /19: (/NULL - ]), fd=(5)==(19), (19)==(5)]
  │    │         └── column1:1 = b:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 2]
- │    ├── fd: ()-->(18)
+ │    ├── fd: ()-->(19)
  │    ├── distribution: east
  │    ├── project
- │    │    ├── columns: "lookup_join_const_col_@5":18!null column1:1!null
+ │    │    ├── columns: "lookup_join_const_col_@5":19!null column1:1!null
  │    │    ├── cardinality: [2 - 2]
- │    │    ├── fd: ()-->(18)
+ │    │    ├── fd: ()-->(19)
  │    │    ├── distribution: east
  │    │    ├── values
  │    │    │    ├── columns: column1:1!null
@@ -11395,7 +11395,7 @@ anti-join (lookup abc_part@c_b_idx)
  │    │    │    ├── (2,)
  │    │    │    └── (4,)
  │    │    └── projections
- │    │         └── 1 [as="lookup_join_const_col_@5":18]
+ │    │         └── 1 [as="lookup_join_const_col_@5":19]
  │    └── filters (true)
  └── filters (true)
 
@@ -11420,26 +11420,26 @@ semi-join (lookup abc_part)
  ├── distribution: central
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
  │    ├── distribution: central
  │    ├── scan def_part
- │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    ├── constraint: /14/15: [/'central'/1 - /'central'/1]
+ │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    ├── constraint: /15/16: [/'central'/1 - /'central'/1]
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    └── fd: ()-->(14-17)
+ │    │    └── fd: ()-->(15-18)
  │    └── scan def_part
- │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │         ├── constraint: /20/21
+ │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │         ├── constraint: /21/22
  │         │    ├── [/'east'/1 - /'east'/1]
  │         │    └── [/'west'/1 - /'west'/1]
  │         ├── cardinality: [0 - 1]
  │         ├── key: ()
- │         └── fd: ()-->(20-23)
+ │         └── fd: ()-->(21-24)
  └── filters (true)
 
 exec-ddl
@@ -11575,26 +11575,26 @@ semi-join (lookup abc_part)
  ├── distribution: central
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
  │    ├── distribution: central
  │    ├── scan def_part
- │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    ├── constraint: /14/15: [/'central'/1 - /'central'/1]
+ │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    ├── constraint: /15/16: [/'central'/1 - /'central'/1]
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    └── fd: ()-->(14-17)
+ │    │    └── fd: ()-->(15-18)
  │    └── scan def_part
- │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │         ├── constraint: /20/21
+ │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │         ├── constraint: /21/22
  │         │    ├── [/'east'/1 - /'east'/1]
  │         │    └── [/'west'/1 - /'west'/1]
  │         ├── cardinality: [0 - 1]
  │         ├── key: ()
- │         └── fd: ()-->(20-23)
+ │         └── fd: ()-->(21-24)
  └── filters (true)
 
 # Locality optimized semi join, with an extra ON filter.
@@ -11618,26 +11618,26 @@ semi-join (lookup abc_part)
  ├── distribution: west
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
  │    ├── distribution: west
  │    ├── scan def_part
- │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    ├── constraint: /14/15: [/'west'/1 - /'west'/1]
+ │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    ├── constraint: /15/16: [/'west'/1 - /'west'/1]
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    └── fd: ()-->(14-17)
+ │    │    └── fd: ()-->(15-18)
  │    └── scan def_part
- │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │         ├── constraint: /20/21
+ │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │         ├── constraint: /21/22
  │         │    ├── [/'central'/1 - /'central'/1]
  │         │    └── [/'east'/1 - /'east'/1]
  │         ├── cardinality: [0 - 1]
  │         ├── key: ()
- │         └── fd: ()-->(20-23)
+ │         └── fd: ()-->(21-24)
  └── filters
       └── f:4 > b:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ])]
 
@@ -11821,26 +11821,26 @@ semi-join (lookup abc_part@c_idx)
  ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
  │    ├── distribution: east
  │    ├── scan def_part
- │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    ├── constraint: /14/15: [/'east'/10 - /'east'/10]
+ │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    ├── constraint: /15/16: [/'east'/10 - /'east'/10]
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    └── fd: ()-->(14-17)
+ │    │    └── fd: ()-->(15-18)
  │    └── scan def_part
- │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │         ├── constraint: /20/21
+ │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │         ├── constraint: /21/22
  │         │    ├── [/'central'/10 - /'central'/10]
  │         │    └── [/'west'/10 - /'west'/10]
  │         ├── cardinality: [0 - 1]
  │         ├── key: ()
- │         └── fd: ()-->(20-23)
+ │         └── fd: ()-->(21-24)
  └── filters (true)
 
 # Optimization does not apply for a semi join that may have more than one
@@ -11864,26 +11864,26 @@ semi-join (lookup abc_part@c_idx)
  ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
  │    ├── distribution: east
  │    ├── scan def_part
- │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    ├── constraint: /14/15: [/'east'/10 - /'east'/10]
+ │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    ├── constraint: /15/16: [/'east'/10 - /'east'/10]
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    └── fd: ()-->(14-17)
+ │    │    └── fd: ()-->(15-18)
  │    └── scan def_part
- │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │         ├── constraint: /20/21
+ │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │         ├── constraint: /21/22
  │         │    ├── [/'central'/10 - /'central'/10]
  │         │    └── [/'west'/10 - /'west'/10]
  │         ├── cardinality: [0 - 1]
  │         ├── key: ()
- │         └── fd: ()-->(20-23)
+ │         └── fd: ()-->(21-24)
  └── filters
       └── (e:3 % a:8) = 0 [outer=(3,8), immutable]
 
@@ -11972,26 +11972,26 @@ anti-join (lookup abc_part)
  │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
- │    │    ├── left columns: def_part.r:14 d:15 e:16 f:17
- │    │    ├── right columns: def_part.r:20 d:21 e:22 f:23
+ │    │    ├── left columns: def_part.r:15 d:16 e:17 f:18
+ │    │    ├── right columns: def_part.r:21 d:22 e:23 f:24
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
  │    │    ├── distribution: east
  │    │    ├── scan def_part
- │    │    │    ├── columns: def_part.r:14!null d:15!null e:16 f:17
- │    │    │    ├── constraint: /14/15: [/'east'/1 - /'east'/1]
+ │    │    │    ├── columns: def_part.r:15!null d:16!null e:17 f:18
+ │    │    │    ├── constraint: /15/16: [/'east'/1 - /'east'/1]
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(14-17)
+ │    │    │    └── fd: ()-->(15-18)
  │    │    └── scan def_part
- │    │         ├── columns: def_part.r:20!null d:21!null e:22 f:23
- │    │         ├── constraint: /20/21
+ │    │         ├── columns: def_part.r:21!null d:22!null e:23 f:24
+ │    │         ├── constraint: /21/22
  │    │         │    ├── [/'central'/1 - /'central'/1]
  │    │         │    └── [/'west'/1 - /'west'/1]
  │    │         ├── cardinality: [0 - 1]
  │    │         ├── key: ()
- │    │         └── fd: ()-->(20-23)
+ │    │         └── fd: ()-->(21-24)
  │    └── filters (true)
  └── filters (true)
 
@@ -12285,14 +12285,14 @@ SELECT m FROM small WHERE m IN (
 ----
 semi-join (lookup t87306@t87306_a_c_idx)
  ├── columns: m:1
- ├── key columns: [12 1] = [6 8]
+ ├── key columns: [13 1] = [6 8]
  ├── project
- │    ├── columns: "lookup_join_const_col_@6":12!null m:1
- │    ├── fd: ()-->(12)
+ │    ├── columns: "lookup_join_const_col_@6":13!null m:1
+ │    ├── fd: ()-->(13)
  │    ├── scan small
  │    │    └── columns: m:1
  │    └── projections
- │         └── 0 [as="lookup_join_const_col_@6":12]
+ │         └── 0 [as="lookup_join_const_col_@6":13]
  └── filters (true)
 
 # --------------------------------------------------
@@ -12595,46 +12595,46 @@ project
       ├── fd: (1,2)-->(3)
       ├── union-all
       │    ├── columns: a:1!null b:2!null c:3
-      │    ├── left columns: a:12 b:13 c:14
-      │    ├── right columns: a:23 b:24 c:25
+      │    ├── left columns: a:13 b:14 c:15
+      │    ├── right columns: a:24 b:25 c:26
       │    ├── project
-      │    │    ├── columns: a:12!null b:13!null c:14
-      │    │    ├── key: (12,13)
-      │    │    ├── fd: (12,13)-->(14)
+      │    │    ├── columns: a:13!null b:14!null c:15
+      │    │    ├── key: (13,14)
+      │    │    ├── fd: (13,14)-->(15)
       │    │    └── inner-join (merge)
-      │    │         ├── columns: a:12!null b:13!null c:14 x:17!null
-      │    │         ├── left ordering: +12
-      │    │         ├── right ordering: +17
-      │    │         ├── key: (13,17)
-      │    │         ├── fd: (12,13)-->(14), (12)==(17), (17)==(12)
+      │    │         ├── columns: a:13!null b:14!null c:15 x:18!null
+      │    │         ├── left ordering: +13
+      │    │         ├── right ordering: +18
+      │    │         ├── key: (14,18)
+      │    │         ├── fd: (13,14)-->(15), (13)==(18), (18)==(13)
       │    │         ├── scan abc
-      │    │         │    ├── columns: a:12!null b:13!null c:14
-      │    │         │    ├── key: (12,13)
-      │    │         │    ├── fd: (12,13)-->(14)
-      │    │         │    └── ordering: +12
+      │    │         │    ├── columns: a:13!null b:14!null c:15
+      │    │         │    ├── key: (13,14)
+      │    │         │    ├── fd: (13,14)-->(15)
+      │    │         │    └── ordering: +13
       │    │         ├── distinct-on
-      │    │         │    ├── columns: x:17
-      │    │         │    ├── grouping columns: x:17
-      │    │         │    ├── key: (17)
-      │    │         │    ├── ordering: +17
+      │    │         │    ├── columns: x:18
+      │    │         │    ├── grouping columns: x:18
+      │    │         │    ├── key: (18)
+      │    │         │    ├── ordering: +18
       │    │         │    └── scan xyz@xy
-      │    │         │         ├── columns: x:17
-      │    │         │         └── ordering: +17
+      │    │         │         ├── columns: x:18
+      │    │         │         └── ordering: +18
       │    │         └── filters (true)
       │    └── semi-join (merge)
-      │         ├── columns: a:23!null b:24!null c:25
-      │         ├── left ordering: +24
-      │         ├── right ordering: +29
-      │         ├── key: (23,24)
-      │         ├── fd: (23,24)-->(25)
+      │         ├── columns: a:24!null b:25!null c:26
+      │         ├── left ordering: +25
+      │         ├── right ordering: +30
+      │         ├── key: (24,25)
+      │         ├── fd: (24,25)-->(26)
       │         ├── scan abc@bc
-      │         │    ├── columns: a:23!null b:24!null c:25
-      │         │    ├── key: (23,24)
-      │         │    ├── fd: (23,24)-->(25)
-      │         │    └── ordering: +24
+      │         │    ├── columns: a:24!null b:25!null c:26
+      │         │    ├── key: (24,25)
+      │         │    ├── fd: (24,25)-->(26)
+      │         │    └── ordering: +25
       │         ├── scan xyz@yz
-      │         │    ├── columns: y:29
-      │         │    └── ordering: +29
+      │         │    ├── columns: y:30
+      │         │    └── ordering: +30
       │         └── filters (true)
       └── aggregations
            └── const-agg [as=c:3, outer=(3)]
@@ -12655,47 +12655,47 @@ project
       ├── fd: (1,2)-->(3)
       ├── union-all
       │    ├── columns: a:1!null b:2!null c:3
-      │    ├── left columns: a:12 b:13 c:14
-      │    ├── right columns: a:23 b:24 c:25
+      │    ├── left columns: a:13 b:14 c:15
+      │    ├── right columns: a:24 b:25 c:26
       │    ├── project
-      │    │    ├── columns: a:12!null b:13!null c:14
-      │    │    ├── key: (12,13)
-      │    │    ├── fd: (12,13)-->(14)
+      │    │    ├── columns: a:13!null b:14!null c:15
+      │    │    ├── key: (13,14)
+      │    │    ├── fd: (13,14)-->(15)
       │    │    └── inner-join (hash)
-      │    │         ├── columns: a:12!null b:13!null c:14 x:17!null
+      │    │         ├── columns: a:13!null b:14!null c:15 x:18!null
       │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │         ├── key: (13,17)
-      │    │         ├── fd: (12,13)-->(14), (12)==(17), (17)==(12)
+      │    │         ├── key: (14,18)
+      │    │         ├── fd: (13,14)-->(15), (13)==(18), (18)==(13)
       │    │         ├── scan abc@bc
-      │    │         │    ├── columns: a:12!null b:13!null c:14
-      │    │         │    ├── constraint: /13/14/12: [ - /0]
-      │    │         │    ├── key: (12,13)
-      │    │         │    └── fd: (12,13)-->(14)
+      │    │         │    ├── columns: a:13!null b:14!null c:15
+      │    │         │    ├── constraint: /14/15/13: [ - /0]
+      │    │         │    ├── key: (13,14)
+      │    │         │    └── fd: (13,14)-->(15)
       │    │         ├── distinct-on
-      │    │         │    ├── columns: x:17
-      │    │         │    ├── grouping columns: x:17
-      │    │         │    ├── key: (17)
+      │    │         │    ├── columns: x:18
+      │    │         │    ├── grouping columns: x:18
+      │    │         │    ├── key: (18)
       │    │         │    └── scan xyz@yz
-      │    │         │         ├── columns: x:17 y:18!null
-      │    │         │         └── constraint: /18/19/20: [/2 - ]
+      │    │         │         ├── columns: x:18 y:19!null
+      │    │         │         └── constraint: /19/20/21: [/2 - ]
       │    │         └── filters
-      │    │              └── a:12 = x:17 [outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
+      │    │              └── a:13 = x:18 [outer=(13,18), constraints=(/13: (/NULL - ]; /18: (/NULL - ]), fd=(13)==(18), (18)==(13)]
       │    └── semi-join (merge)
-      │         ├── columns: a:23!null b:24!null c:25
-      │         ├── left ordering: +24
-      │         ├── right ordering: +29
-      │         ├── key: (23,24)
-      │         ├── fd: (23,24)-->(25)
+      │         ├── columns: a:24!null b:25!null c:26
+      │         ├── left ordering: +25
+      │         ├── right ordering: +30
+      │         ├── key: (24,25)
+      │         ├── fd: (24,25)-->(26)
       │         ├── scan abc@bc
-      │         │    ├── columns: a:23!null b:24!null c:25
-      │         │    ├── constraint: /24/25/23: [ - /0]
-      │         │    ├── key: (23,24)
-      │         │    ├── fd: (23,24)-->(25)
-      │         │    └── ordering: +24
+      │         │    ├── columns: a:24!null b:25!null c:26
+      │         │    ├── constraint: /25/26/24: [ - /0]
+      │         │    ├── key: (24,25)
+      │         │    ├── fd: (24,25)-->(26)
+      │         │    └── ordering: +25
       │         ├── scan xyz@yz
-      │         │    ├── columns: y:29!null
-      │         │    ├── constraint: /29/30/31: [/2 - ]
-      │         │    └── ordering: +29
+      │         │    ├── columns: y:30!null
+      │         │    ├── constraint: /30/31/32: [/2 - ]
+      │         │    └── ordering: +30
       │         └── filters (true)
       └── aggregations
            └── const-agg [as=c:3, outer=(3)]
@@ -12718,47 +12718,47 @@ project
            ├── fd: (1,2)-->(3)
            ├── union-all
            │    ├── columns: a:1!null b:2!null c:3
-           │    ├── left columns: a:12 b:13 c:14
-           │    ├── right columns: a:23 b:24 c:25
+           │    ├── left columns: a:13 b:14 c:15
+           │    ├── right columns: a:24 b:25 c:26
            │    ├── project
-           │    │    ├── columns: a:12!null b:13!null c:14
-           │    │    ├── key: (12,13)
-           │    │    ├── fd: (12,13)-->(14)
+           │    │    ├── columns: a:13!null b:14!null c:15
+           │    │    ├── key: (13,14)
+           │    │    ├── fd: (13,14)-->(15)
            │    │    └── inner-join (hash)
-           │    │         ├── columns: a:12!null b:13!null c:14 x:17!null
+           │    │         ├── columns: a:13!null b:14!null c:15 x:18!null
            │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-           │    │         ├── key: (13,17)
-           │    │         ├── fd: (12,13)-->(14), (12)==(17), (17)==(12)
+           │    │         ├── key: (14,18)
+           │    │         ├── fd: (13,14)-->(15), (13)==(18), (18)==(13)
            │    │         ├── scan abc@bc
-           │    │         │    ├── columns: a:12!null b:13!null c:14
-           │    │         │    ├── constraint: /13/14/12: [ - /0]
-           │    │         │    ├── key: (12,13)
-           │    │         │    └── fd: (12,13)-->(14)
+           │    │         │    ├── columns: a:13!null b:14!null c:15
+           │    │         │    ├── constraint: /14/15/13: [ - /0]
+           │    │         │    ├── key: (13,14)
+           │    │         │    └── fd: (13,14)-->(15)
            │    │         ├── distinct-on
-           │    │         │    ├── columns: x:17
-           │    │         │    ├── grouping columns: x:17
-           │    │         │    ├── key: (17)
+           │    │         │    ├── columns: x:18
+           │    │         │    ├── grouping columns: x:18
+           │    │         │    ├── key: (18)
            │    │         │    └── scan xyz@yz
-           │    │         │         ├── columns: x:17 y:18!null
-           │    │         │         └── constraint: /18/19/20: [/2 - ]
+           │    │         │         ├── columns: x:18 y:19!null
+           │    │         │         └── constraint: /19/20/21: [/2 - ]
            │    │         └── filters
-           │    │              └── a:12 = x:17 [outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
+           │    │              └── a:13 = x:18 [outer=(13,18), constraints=(/13: (/NULL - ]; /18: (/NULL - ]), fd=(13)==(18), (18)==(13)]
            │    └── semi-join (merge)
-           │         ├── columns: a:23!null b:24!null c:25
-           │         ├── left ordering: +24
-           │         ├── right ordering: +29
-           │         ├── key: (23,24)
-           │         ├── fd: (23,24)-->(25)
+           │         ├── columns: a:24!null b:25!null c:26
+           │         ├── left ordering: +25
+           │         ├── right ordering: +30
+           │         ├── key: (24,25)
+           │         ├── fd: (24,25)-->(26)
            │         ├── scan abc@bc
-           │         │    ├── columns: a:23!null b:24!null c:25
-           │         │    ├── constraint: /24/25/23: [ - /0]
-           │         │    ├── key: (23,24)
-           │         │    ├── fd: (23,24)-->(25)
-           │         │    └── ordering: +24
+           │         │    ├── columns: a:24!null b:25!null c:26
+           │         │    ├── constraint: /25/26/24: [ - /0]
+           │         │    ├── key: (24,25)
+           │         │    ├── fd: (24,25)-->(26)
+           │         │    └── ordering: +25
            │         ├── scan xyz@yz
-           │         │    ├── columns: y:29!null
-           │         │    ├── constraint: /29/30/31: [/2 - ]
-           │         │    └── ordering: +29
+           │         │    ├── columns: y:30!null
+           │         │    ├── constraint: /30/31/32: [/2 - ]
+           │         │    └── ordering: +30
            │         └── filters (true)
            └── aggregations
                 └── const-agg [as=c:3, outer=(3)]
@@ -12790,39 +12790,39 @@ project
  ├── fd: (1,2)-->(3)
  └── intersect-all
       ├── columns: a:1!null b:2!null c:3
-      ├── left columns: a:12 b:13 c:14
-      ├── right columns: a:23 b:24 c:25
+      ├── left columns: a:13 b:14 c:15
+      ├── right columns: a:24 b:25 c:26
       ├── key: (1,2)
       ├── fd: (1,2)-->(3)
       ├── anti-join (merge)
-      │    ├── columns: a:12!null b:13!null c:14
-      │    ├── left ordering: +12
-      │    ├── right ordering: +17
-      │    ├── key: (12,13)
-      │    ├── fd: (12,13)-->(14)
+      │    ├── columns: a:13!null b:14!null c:15
+      │    ├── left ordering: +13
+      │    ├── right ordering: +18
+      │    ├── key: (13,14)
+      │    ├── fd: (13,14)-->(15)
       │    ├── scan abc
-      │    │    ├── columns: a:12!null b:13!null c:14
-      │    │    ├── key: (12,13)
-      │    │    ├── fd: (12,13)-->(14)
-      │    │    └── ordering: +12
+      │    │    ├── columns: a:13!null b:14!null c:15
+      │    │    ├── key: (13,14)
+      │    │    ├── fd: (13,14)-->(15)
+      │    │    └── ordering: +13
       │    ├── scan xyz@xy
-      │    │    ├── columns: x:17
-      │    │    └── ordering: +17
+      │    │    ├── columns: x:18
+      │    │    └── ordering: +18
       │    └── filters (true)
       └── anti-join (merge)
-           ├── columns: a:23!null b:24!null c:25
-           ├── left ordering: +24
-           ├── right ordering: +29
-           ├── key: (23,24)
-           ├── fd: (23,24)-->(25)
+           ├── columns: a:24!null b:25!null c:26
+           ├── left ordering: +25
+           ├── right ordering: +30
+           ├── key: (24,25)
+           ├── fd: (24,25)-->(26)
            ├── scan abc@bc
-           │    ├── columns: a:23!null b:24!null c:25
-           │    ├── key: (23,24)
-           │    ├── fd: (23,24)-->(25)
-           │    └── ordering: +24
+           │    ├── columns: a:24!null b:25!null c:26
+           │    ├── key: (24,25)
+           │    ├── fd: (24,25)-->(26)
+           │    └── ordering: +25
            ├── scan xyz@yz
-           │    ├── columns: y:29
-           │    └── ordering: +29
+           │    ├── columns: y:30
+           │    └── ordering: +30
            └── filters (true)
 
 # Antijoin with constraints
@@ -12835,40 +12835,40 @@ project
  ├── fd: (1,2)-->(3)
  └── intersect-all
       ├── columns: a:1!null b:2!null c:3
-      ├── left columns: a:12 b:13 c:14
-      ├── right columns: a:23 b:24 c:25
+      ├── left columns: a:13 b:14 c:15
+      ├── right columns: a:24 b:25 c:26
       ├── key: (1,2)
       ├── fd: (1,2)-->(3)
       ├── anti-join (hash)
-      │    ├── columns: a:12!null b:13!null c:14
-      │    ├── key: (12,13)
-      │    ├── fd: (12,13)-->(14)
+      │    ├── columns: a:13!null b:14!null c:15
+      │    ├── key: (13,14)
+      │    ├── fd: (13,14)-->(15)
       │    ├── scan abc@bc
-      │    │    ├── columns: a:12!null b:13!null c:14
-      │    │    ├── constraint: /13/14/12: [ - /0]
-      │    │    ├── key: (12,13)
-      │    │    └── fd: (12,13)-->(14)
+      │    │    ├── columns: a:13!null b:14!null c:15
+      │    │    ├── constraint: /14/15/13: [ - /0]
+      │    │    ├── key: (13,14)
+      │    │    └── fd: (13,14)-->(15)
       │    ├── scan xyz@yz
-      │    │    ├── columns: x:17 y:18!null
-      │    │    └── constraint: /18/19/20: [/2 - ]
+      │    │    ├── columns: x:18 y:19!null
+      │    │    └── constraint: /19/20/21: [/2 - ]
       │    └── filters
-      │         └── a:12 = x:17 [outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
+      │         └── a:13 = x:18 [outer=(13,18), constraints=(/13: (/NULL - ]; /18: (/NULL - ]), fd=(13)==(18), (18)==(13)]
       └── anti-join (merge)
-           ├── columns: a:23!null b:24!null c:25
-           ├── left ordering: +24
-           ├── right ordering: +29
-           ├── key: (23,24)
-           ├── fd: (23,24)-->(25)
+           ├── columns: a:24!null b:25!null c:26
+           ├── left ordering: +25
+           ├── right ordering: +30
+           ├── key: (24,25)
+           ├── fd: (24,25)-->(26)
            ├── scan abc@bc
-           │    ├── columns: a:23!null b:24!null c:25
-           │    ├── constraint: /24/25/23: [ - /0]
-           │    ├── key: (23,24)
-           │    ├── fd: (23,24)-->(25)
-           │    └── ordering: +24
+           │    ├── columns: a:24!null b:25!null c:26
+           │    ├── constraint: /25/26/24: [ - /0]
+           │    ├── key: (24,25)
+           │    ├── fd: (24,25)-->(26)
+           │    └── ordering: +25
            ├── scan xyz@yz
-           │    ├── columns: y:29!null
-           │    ├── constraint: /29/30/31: [/2 - ]
-           │    └── ordering: +29
+           │    ├── columns: y:30!null
+           │    ├── constraint: /30/31/32: [/2 - ]
+           │    └── ordering: +30
            └── filters (true)
 
 # Regression for #79886
@@ -13050,7 +13050,6 @@ explain
            │    │    │    ├── columns: u85353.a:6 u85353.b:7
            │    │    │    └── scan u85353@b_idx
            │    │    │         ├── columns: u85353.b:7 u85353.rowid:10!null
-           │    │    │         ├── constraint: /9/7/10: [/0 - /7]
            │    │    │         ├── flags: force-index=b_idx
            │    │    │         ├── key: (10)
            │    │    │         └── fd: (10)-->(7)
@@ -13750,49 +13749,49 @@ limit
  ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: c_id:1!null c_p_id:2 c.crdb_region:3!null
- │    ├── left columns: c_id:36 c_p_id:37 c.crdb_region:38
- │    ├── right columns: c_id:41 c_p_id:42 c.crdb_region:43
+ │    ├── left columns: c_id:37 c_p_id:38 c.crdb_region:39
+ │    ├── right columns: c_id:42 c_p_id:43 c.crdb_region:44
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── limit hint: 1.00
  │    ├── distribution: east
  │    ├── semi-join (lookup parent@id2_idx [as=p])
- │    │    ├── columns: c_id:36!null c_p_id:37 c.crdb_region:38!null
+ │    │    ├── columns: c_id:37!null c_p_id:38 c.crdb_region:39!null
  │    │    ├── lookup expression
  │    │    │    └── filters
- │    │    │         ├── p.crdb_region:49 = 'east' [outer=(49), constraints=(/49: [/'east' - /'east']; tight), fd=()-->(49)]
- │    │    │         └── c_p_id:37 = id2:47 [outer=(37,47), constraints=(/37: (/NULL - ]; /47: (/NULL - ]), fd=(37)==(47), (47)==(37)]
+ │    │    │         ├── p.crdb_region:50 = 'east' [outer=(50), constraints=(/50: [/'east' - /'east']; tight), fd=()-->(50)]
+ │    │    │         └── c_p_id:38 = id2:48 [outer=(38,48), constraints=(/38: (/NULL - ]; /48: (/NULL - ]), fd=(38)==(48), (48)==(38)]
  │    │    ├── remote lookup expression
  │    │    │    └── filters
- │    │    │         ├── p.crdb_region:49 IN ('central', 'west') [outer=(49), constraints=(/49: [/'central' - /'central'] [/'west' - /'west']; tight)]
- │    │    │         └── c_p_id:37 = id2:47 [outer=(37,47), constraints=(/37: (/NULL - ]; /47: (/NULL - ]), fd=(37)==(47), (47)==(37)]
+ │    │    │         ├── p.crdb_region:50 IN ('central', 'west') [outer=(50), constraints=(/50: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ │    │    │         └── c_p_id:38 = id2:48 [outer=(38,48), constraints=(/38: (/NULL - ]; /48: (/NULL - ]), fd=(38)==(48), (48)==(38)]
  │    │    ├── lookup columns are key
- │    │    ├── key: (36)
- │    │    ├── fd: ()-->(38), (36)-->(37)
+ │    │    ├── key: (37)
+ │    │    ├── fd: ()-->(39), (37)-->(38)
  │    │    ├── limit hint: 1.00
  │    │    ├── scan child [as=c]
- │    │    │    ├── columns: c_id:36!null c_p_id:37 c.crdb_region:38!null
- │    │    │    ├── constraint: /38/36: [/'east' - /'east']
- │    │    │    ├── key: (36)
- │    │    │    └── fd: ()-->(38), (36)-->(37)
+ │    │    │    ├── columns: c_id:37!null c_p_id:38 c.crdb_region:39!null
+ │    │    │    ├── constraint: /39/37: [/'east' - /'east']
+ │    │    │    ├── key: (37)
+ │    │    │    └── fd: ()-->(39), (37)-->(38)
  │    │    └── filters (true)
  │    └── semi-join (lookup parent@id2_idx [as=p])
- │         ├── columns: c_id:41!null c_p_id:42 c.crdb_region:43!null
+ │         ├── columns: c_id:42!null c_p_id:43 c.crdb_region:44!null
  │         ├── lookup expression
  │         │    └── filters
- │         │         ├── p.crdb_region:55 IN ('central', 'east', 'west') [outer=(55), constraints=(/55: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
- │         │         └── c_p_id:42 = id2:53 [outer=(42,53), constraints=(/42: (/NULL - ]; /53: (/NULL - ]), fd=(42)==(53), (53)==(42)]
+ │         │         ├── p.crdb_region:56 IN ('central', 'east', 'west') [outer=(56), constraints=(/56: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │         │         └── c_p_id:43 = id2:54 [outer=(43,54), constraints=(/43: (/NULL - ]; /54: (/NULL - ]), fd=(43)==(54), (54)==(43)]
  │         ├── lookup columns are key
- │         ├── key: (41)
- │         ├── fd: (41)-->(42,43)
+ │         ├── key: (42)
+ │         ├── fd: (42)-->(43,44)
  │         ├── limit hint: 1.00
  │         ├── scan child [as=c]
- │         │    ├── columns: c_id:41!null c_p_id:42 c.crdb_region:43!null
- │         │    ├── constraint: /43/41
+ │         │    ├── columns: c_id:42!null c_p_id:43 c.crdb_region:44!null
+ │         │    ├── constraint: /44/42
  │         │    │    ├── [/'central' - /'central']
  │         │    │    └── [/'west' - /'west']
- │         │    ├── key: (41)
- │         │    └── fd: (41)-->(42,43)
+ │         │    ├── key: (42)
+ │         │    └── fd: (42)-->(43,44)
  │         └── filters (true)
  └── 1
 
@@ -14024,40 +14023,40 @@ limit
  ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
- │    ├── left columns: c_id:12 c_p_id:13 v:14 crdb_region:15
- │    ├── right columns: c_id:18 c_p_id:19 v:20 crdb_region:21
+ │    ├── left columns: c_id:13 c_p_id:14 v:15 crdb_region:16
+ │    ├── right columns: c_id:19 c_p_id:20 v:21 crdb_region:22
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 1.00
  │    ├── distribution: east
  │    ├── semi-join (lookup parent2@id2_idx [as=p])
- │    │    ├── columns: c_id:12!null c_p_id:13 v:14!null crdb_region:15!null
- │    │    ├── key columns: [13] = [25]
+ │    │    ├── columns: c_id:13!null c_p_id:14 v:15!null crdb_region:16!null
+ │    │    ├── key columns: [14] = [26]
  │    │    ├── lookup columns are key
- │    │    ├── key: (12)
- │    │    ├── fd: ()-->(15), (12)-->(13,14)
+ │    │    ├── key: (13)
+ │    │    ├── fd: ()-->(16), (13)-->(14,15)
  │    │    ├── limit hint: 1.00
  │    │    ├── scan child2 [as=c]
- │    │    │    ├── columns: c_id:12!null c_p_id:13 v:14!null crdb_region:15!null
- │    │    │    ├── constraint: /15/12: [/'east' - /'east']
- │    │    │    ├── key: (12)
- │    │    │    ├── fd: ()-->(15), (12)-->(13,14)
+ │    │    │    ├── columns: c_id:13!null c_p_id:14 v:15!null crdb_region:16!null
+ │    │    │    ├── constraint: /16/13: [/'east' - /'east']
+ │    │    │    ├── key: (13)
+ │    │    │    ├── fd: ()-->(16), (13)-->(14,15)
  │    │    │    └── limit hint: 10.00
  │    │    └── filters (true)
  │    └── semi-join (lookup parent2@id2_idx [as=p])
- │         ├── columns: c_id:18!null c_p_id:19 v:20!null crdb_region:21!null
- │         ├── key columns: [19] = [30]
+ │         ├── columns: c_id:19!null c_p_id:20 v:21!null crdb_region:22!null
+ │         ├── key columns: [20] = [31]
  │         ├── lookup columns are key
- │         ├── key: (18)
- │         ├── fd: (18)-->(19-21)
+ │         ├── key: (19)
+ │         ├── fd: (19)-->(20-22)
  │         ├── limit hint: 1.00
  │         ├── scan child2 [as=c]
- │         │    ├── columns: c_id:18!null c_p_id:19 v:20!null crdb_region:21!null
- │         │    ├── constraint: /21/18
+ │         │    ├── columns: c_id:19!null c_p_id:20 v:21!null crdb_region:22!null
+ │         │    ├── constraint: /22/19
  │         │    │    ├── [/'central' - /'central']
  │         │    │    └── [/'west' - /'west']
- │         │    ├── key: (18)
- │         │    ├── fd: (18)-->(19-21)
+ │         │    ├── key: (19)
+ │         │    ├── fd: (19)-->(20-22)
  │         │    └── limit hint: 20.00
  │         └── filters (true)
  └── 1
@@ -14118,19 +14117,19 @@ distribute
       ├── fd: ()-->(1-4)
       ├── semi-join (lookup parent2 [as=p])
       │    ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
-      │    ├── key columns: [12] = [7]
+      │    ├── key columns: [13] = [7]
       │    ├── lookup columns are key
       │    ├── second join in paired joiner
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4)
       │    ├── limit hint: 1.00
       │    ├── inner-join (lookup parent2@id2_idx [as=p])
-      │    │    ├── columns: c_id:1!null c_p_id:2!null v:3!null crdb_region:4!null p_id:12!null id2:13!null continuation:17
-      │    │    ├── key columns: [2] = [13]
+      │    │    ├── columns: c_id:1!null c_p_id:2!null v:3!null crdb_region:4!null p_id:13!null id2:14!null continuation:18
+      │    │    ├── key columns: [2] = [14]
       │    │    ├── lookup columns are key
-      │    │    ├── first join in paired joiner; continuation column: continuation:17
+      │    │    ├── first join in paired joiner; continuation column: continuation:18
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-4), (12)-->(13,17), (13)-->(12), (2)==(13), (13)==(2)
+      │    │    ├── fd: (1)-->(2-4), (13)-->(14,18), (14)-->(13), (2)==(14), (14)==(2)
       │    │    ├── limit hint: 100.00
       │    │    ├── scan child2 [as=c]
       │    │    │    ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
@@ -14230,39 +14229,39 @@ limit
  │              ├── distribution: east
  │              ├── locality-optimized-search
  │              │    ├── columns: c_id:1!null c_p_id:2!null v:3!null crdb_region:4!null p_id:7!null id2:8!null
- │              │    ├── left columns: c_id:18 c_p_id:19 v:20 crdb_region:21 p_id:30 id2:31
- │              │    ├── right columns: c_id:24 c_p_id:25 v:26 crdb_region:27 p_id:35 id2:36
+ │              │    ├── left columns: c_id:19 c_p_id:20 v:21 crdb_region:22 p_id:31 id2:32
+ │              │    ├── right columns: c_id:25 c_p_id:26 v:27 crdb_region:28 p_id:36 id2:37
  │              │    ├── key: (1)
  │              │    ├── fd: (1)-->(2-4), (7)-->(8), (8)-->(7), (2)==(8), (8)==(2)
  │              │    ├── limit hint: 100.00
  │              │    ├── distribution: east
  │              │    ├── inner-join (lookup parent2@id2_idx [as=p])
- │              │    │    ├── columns: c_id:18!null c_p_id:19!null v:20!null crdb_region:21!null p_id:30!null id2:31!null
- │              │    │    ├── key columns: [19] = [31]
+ │              │    │    ├── columns: c_id:19!null c_p_id:20!null v:21!null crdb_region:22!null p_id:31!null id2:32!null
+ │              │    │    ├── key columns: [20] = [32]
  │              │    │    ├── lookup columns are key
- │              │    │    ├── key: (18)
- │              │    │    ├── fd: ()-->(21), (18)-->(19,20), (30)-->(31), (31)-->(30), (19)==(31), (31)==(19)
+ │              │    │    ├── key: (19)
+ │              │    │    ├── fd: ()-->(22), (19)-->(20,21), (31)-->(32), (32)-->(31), (20)==(32), (32)==(20)
  │              │    │    ├── limit hint: 100.00
  │              │    │    ├── scan child2 [as=c]
- │              │    │    │    ├── columns: c_id:18!null c_p_id:19 v:20!null crdb_region:21!null
- │              │    │    │    ├── constraint: /21/18: [/'east' - /'east']
- │              │    │    │    ├── key: (18)
- │              │    │    │    └── fd: ()-->(21), (18)-->(19,20)
+ │              │    │    │    ├── columns: c_id:19!null c_p_id:20 v:21!null crdb_region:22!null
+ │              │    │    │    ├── constraint: /22/19: [/'east' - /'east']
+ │              │    │    │    ├── key: (19)
+ │              │    │    │    └── fd: ()-->(22), (19)-->(20,21)
  │              │    │    └── filters (true)
  │              │    └── inner-join (lookup parent2@id2_idx [as=p])
- │              │         ├── columns: c_id:24!null c_p_id:25!null v:26!null crdb_region:27!null p_id:35!null id2:36!null
- │              │         ├── key columns: [25] = [36]
+ │              │         ├── columns: c_id:25!null c_p_id:26!null v:27!null crdb_region:28!null p_id:36!null id2:37!null
+ │              │         ├── key columns: [26] = [37]
  │              │         ├── lookup columns are key
- │              │         ├── key: (24)
- │              │         ├── fd: (24)-->(25-27), (35)-->(36), (36)-->(35), (25)==(36), (36)==(25)
+ │              │         ├── key: (25)
+ │              │         ├── fd: (25)-->(26-28), (36)-->(37), (37)-->(36), (26)==(37), (37)==(26)
  │              │         ├── limit hint: 100.00
  │              │         ├── scan child2 [as=c]
- │              │         │    ├── columns: c_id:24!null c_p_id:25 v:26!null crdb_region:27!null
- │              │         │    ├── constraint: /27/24
+ │              │         │    ├── columns: c_id:25!null c_p_id:26 v:27!null crdb_region:28!null
+ │              │         │    ├── constraint: /28/25
  │              │         │    │    ├── [/'central' - /'central']
  │              │         │    │    └── [/'west' - /'west']
- │              │         │    ├── key: (24)
- │              │         │    └── fd: (24)-->(25-27)
+ │              │         │    ├── key: (25)
+ │              │         │    └── fd: (25)-->(26-28)
  │              │         └── filters (true)
  │              └── filters
  │                   └── c_id:1 > id3:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ])]

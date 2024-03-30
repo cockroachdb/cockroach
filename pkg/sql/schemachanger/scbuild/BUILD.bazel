@@ -57,6 +57,7 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/mon",
+        "//pkg/util/randutil",
         "//pkg/util/ulid",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
@@ -73,10 +74,6 @@ go_test(
         "main_test.go",
     ],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":scbuild",
         "//pkg/base",

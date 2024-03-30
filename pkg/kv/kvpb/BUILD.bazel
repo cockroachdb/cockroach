@@ -65,10 +65,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":kvpb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvnemesis/kvnemesisutil",
@@ -106,6 +102,7 @@ proto_library(
         "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb_proto",
         "//pkg/roachpb:roachpb_proto",
+        "//pkg/rpc/rpcpb:rpcpb_proto",
         "//pkg/settings:settings_proto",
         "//pkg/sql/catalog/fetchpb:fetchpb_proto",
         "//pkg/storage/enginepb:enginepb_proto",
@@ -128,6 +125,7 @@ go_proto_library(
         "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
+        "//pkg/rpc/rpcpb",
         "//pkg/settings",
         "//pkg/sql/catalog/fetchpb",
         "//pkg/storage/enginepb",

@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 14
+const configIdx = 15
 
 var cclLogicTestDir string
 
@@ -60,7 +60,7 @@ func TestMain(m *testing.M) {
 }
 
 func runCCLLogicTest(t *testing.T, file string) {
-	skip.UnderRace(t, "large engflow executor is overloaded by this config")
+	skip.UnderRace(t, "times out and/or hangs")
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(cclLogicTestDir, file))
 }

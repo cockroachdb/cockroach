@@ -452,7 +452,7 @@ func (s scheduledJobStorageTxn) DeleteByID(
 		ctx,
 		"delete-schedule",
 		s.txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(
 			"DELETE FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),
@@ -466,7 +466,7 @@ func (s scheduledJobStorageTxn) Load(
 	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id jobspb.ScheduleID,
 ) (*ScheduledJob, error) {
 	row, cols, err := s.txn.QueryRowExWithCols(ctx, "lookup-schedule", s.txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = %d",
 			env.ScheduledJobsTableName(), id))
 
@@ -504,7 +504,7 @@ func (s scheduledJobStorageTxn) Create(ctx context.Context, j *ScheduledJob) err
 	}
 
 	row, retCols, err := s.txn.QueryRowExWithCols(ctx, "sched-create", s.txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s) RETURNING schedule_id",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","), generatePlaceholders(len(qargs))),
 		qargs...,
@@ -525,7 +525,7 @@ func (s scheduledJobStorageTxn) Delete(ctx context.Context, j *ScheduledJob) err
 		return errors.New("cannot delete schedule: missing schedule id")
 	}
 	_, err := s.txn.ExecEx(ctx, "sched-delete", s.txn.KV(),
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("DELETE FROM %s WHERE schedule_id = %d",
 			j.env.ScheduledJobsTableName(), j.ScheduleID()),
 	)
@@ -552,7 +552,7 @@ func (s scheduledJobStorageTxn) Update(ctx context.Context, j *ScheduledJob) err
 	}
 
 	n, err := s.txn.ExecEx(ctx, "sched-update", s.txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("UPDATE %s SET (%s) = (%s) WHERE schedule_id = %d",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","),
 			generatePlaceholders(len(qargs)), j.ScheduleID()),

@@ -7,6 +7,7 @@ go_library(
         "doc.go",
         "list.go",
         "manager.go",
+        "settings.go",
         "signal.go",
         ":latch_interval_btree.go",  # keep
     ],
@@ -18,6 +19,8 @@ go_library(
         "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/spanset",
         "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
@@ -38,10 +41,6 @@ go_test(
         ":latch_interval_btree_test.go",  # keep
     ],
     embed = [":spanlatch"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     shard_count = 16,
     deps = [
         "//pkg/keys",

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -110,6 +111,13 @@ var (
 	)
 
 	testingDiscardBackupData = envutil.EnvOrDefaultBool("COCKROACH_BACKUP_TESTING_DISCARD_DATA", false)
+
+	fileSSTSinkElasticCPUControlEnabled = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"bulkio.backup.file_sst_sink_elastic_control.enabled",
+		"determines whether the file sst sink integrates with elastic CPU control",
+		true,
+	)
 )
 
 const (
@@ -148,7 +156,7 @@ type backupDataProcessor struct {
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// backupDataProcessors' trace recording.
 	agg      *bulk.TracingAggregator
-	aggTimer *timeutil.Timer
+	aggTimer timeutil.Timer
 
 	// completedSpans tracks how many spans have been successfully backed up by
 	// the backup processor.
@@ -206,7 +214,6 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 	// Construct an Aggregator to aggregate and render AggregatorEvents emitted in
 	// bps' trace recording.
 	bp.agg = bulk.TracingAggregatorForContext(ctx)
-	bp.aggTimer = timeutil.NewTimer()
 	// If the aggregator is nil, we do not want the timer to fire.
 	if bp.agg != nil {
 		bp.aggTimer.Reset(15 * time.Second)
@@ -333,7 +340,8 @@ func runBackupProcessor(
 			remainingSpan := fullSpan
 
 			if rangeSizedSpans {
-				rdi, err := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).RangeDescIteratorFactory.NewIterator(ctx, fullSpan)
+				const pageSize = 100
+				rdi, err := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).RangeDescIteratorFactory.NewLazyIterator(ctx, fullSpan, pageSize)
 				if err != nil {
 					return err
 				}
@@ -346,6 +354,9 @@ func runBackupProcessor(
 					}
 					requestSpans = append(requestSpans, spanAndTime{span: subspan, start: start, end: end})
 					remainingSpan.Key = subspan.EndKey
+				}
+				if err := rdi.Error(); err != nil {
+					return err
 				}
 			}
 
@@ -451,10 +462,30 @@ func runBackupProcessor(
 	if len(chunk) > 0 {
 		todo <- chunk
 	}
-
 	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
 		readTime := spec.BackupEndTime.GoTime()
-		sink := makeFileSSTSink(sinkConf, storage)
+
+		// Passing a nil pacer is effectively a noop if CPU control is disabled.
+		var pacer *admission.Pacer = nil
+		if fileSSTSinkElasticCPUControlEnabled.Get(&clusterSettings.SV) {
+			tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+			if !ok {
+				tenantID = roachpb.SystemTenantID
+			}
+			pacer = flowCtx.Cfg.AdmissionPacerFactory.NewPacer(
+				100*time.Millisecond,
+				admission.WorkInfo{
+					TenantID:        tenantID,
+					Priority:        admissionpb.BulkNormalPri,
+					CreateTime:      timeutil.Now().UnixNano(),
+					BypassAdmission: false,
+				},
+			)
+		}
+		// It is safe to close a nil pacer.
+		defer pacer.Close()
+
+		sink := makeFileSSTSink(sinkConf, storage, pacer)
 		defer func() {
 			if err := sink.flush(ctx); err != nil {
 				log.Warningf(ctx, "failed to flush SST sink: %s", err)
@@ -462,10 +493,12 @@ func runBackupProcessor(
 			logClose(ctx, sink, "SST sink")
 		}()
 
+		sink.elideMode = spec.ElidePrefix
+
 		// priority becomes true when we're sending re-attempts of reads far enough
 		// in the past that we want to run them with priority.
 		var priority bool
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		defer timer.Stop()
 
 		ctxDone := ctx.Done()
@@ -482,14 +515,14 @@ func runBackupProcessor(
 						if !span.firstKeyTS.IsEmpty() {
 							splitMidKey = true
 						}
-
 						req := &kvpb.ExportRequest{
-							RequestHeader:  kvpb.RequestHeaderFromSpan(span.span),
-							ResumeKeyTS:    span.firstKeyTS,
-							StartTime:      span.start,
-							MVCCFilter:     spec.MVCCFilter,
-							TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
-							SplitMidKey:    splitMidKey,
+							RequestHeader:          kvpb.RequestHeaderFromSpan(span.span),
+							ResumeKeyTS:            span.firstKeyTS,
+							StartTime:              span.start,
+							MVCCFilter:             spec.MVCCFilter,
+							TargetFileSize:         batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
+							SplitMidKey:            splitMidKey,
+							IncludeMVCCValueHeader: spec.IncludeMVCCValueHeader,
 						}
 
 						// If we're doing re-attempts but are not yet in the priority regime,
@@ -570,14 +603,22 @@ func runBackupProcessor(
 								return nil
 							})
 						if exportRequestErr != nil {
-							if lockErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok {
-								span.lastTried = timeutil.Now()
-								span.attempts++
-								todo <- []spanAndTime{span}
+							// If we got a write intent error because we requested it rather
+							// than blocking, either put the request on the back of the queue
+							// to revisit later or, if the request was resuming in the middle
+							// of a key, reattempt it immediately.
+							if lockErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok && header.WaitPolicy == lock.WaitPolicy_Error {
 								// TODO(dt): send a progress update to update job progress to note
 								// the intents being hit.
+								span.lastTried = timeutil.Now()
+								span.attempts++
 								log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, lockErr.Error())
-								span = spanAndTime{}
+								// If we're not mid-key we can put this on the the queue to give
+								// it time to resolve on its own while we work on other spans.
+								if span.firstKeyTS.IsEmpty() {
+									todo <- []spanAndTime{span}
+									span = spanAndTime{}
+								}
 								continue
 							}
 							// TimeoutError improves the opaque `context deadline exceeded` error
@@ -622,14 +663,9 @@ func runBackupProcessor(
 							if fileCount := len(resp.Files); fileCount > 0 {
 								resumeTS = resp.Files[fileCount-1].EndKeyTS
 							}
-							resumeSpan = spanAndTime{
-								span:       *resp.ResumeSpan,
-								firstKeyTS: resumeTS,
-								start:      span.start,
-								end:        span.end,
-								attempts:   span.attempts,
-								lastTried:  span.lastTried,
-							}
+							resumeSpan = span
+							resumeSpan.span = *resp.ResumeSpan
+							resumeSpan.firstKeyTS = resumeTS
 						}
 
 						if backupKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
@@ -660,11 +696,11 @@ func runBackupProcessor(
 								// to store the metadata we need, but there's no actual File
 								// on-disk anywhere yet.
 								metadata: backuppb.BackupManifest_File{
-									Span:            file.Span,
-									Path:            file.Path,
-									EntryCounts:     entryCounts,
-									LocalityKV:      destLocalityKV,
-									BackingFileSize: uint64(len(file.SST)),
+									Span:                    file.Span,
+									Path:                    file.Path,
+									EntryCounts:             entryCounts,
+									LocalityKV:              destLocalityKV,
+									ApproximatePhysicalSize: uint64(len(file.SST)),
 								},
 								dataSST:       file.SST,
 								revStart:      resp.StartTime,

@@ -25,7 +25,6 @@ func TestErrBreakerOpenIsRetriable(t *testing.T) {
 		AsyncProbe: func(_ func(error), done func()) {
 			done() // never untrip
 		},
-		EventHandler: &circuit.EventLogger{Log: func(redact.StringBuilder) {}},
 	})
 	br.Report(errors.New("test error"))
 	require.False(t, IsPermanentBulkJobError(br.Signal().Err()))

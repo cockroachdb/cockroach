@@ -52,10 +52,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":dev_lib"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/build/bazel",
         "//pkg/cmd/dev/io/exec",

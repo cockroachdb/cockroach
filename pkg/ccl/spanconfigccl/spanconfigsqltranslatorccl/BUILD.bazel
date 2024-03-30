@@ -7,10 +7,7 @@ go_test(
         "main_test.go",
     ],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "large"},
-    }),
+    exec_properties = {"test.Pool": "large"},
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",

@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"path"
 	"reflect"
@@ -93,6 +94,12 @@ var useBulkOracle = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"bulkio.backup.balanced_distribution.enabled",
 	"randomize the selection of which replica backs up each range",
+	true)
+
+var elidePrefixes = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.backup.elide_common_prefix.enabled",
+	"remove common prefixes from backup file",
 	true)
 
 func countRows(raw kvpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
@@ -208,7 +215,9 @@ func backup(
 
 	oracle := physicalplan.DefaultReplicaChooser
 	if useBulkOracle.Get(&evalCtx.Settings.SV) {
-		oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), execLocality)
+		oracle = kvfollowerreadsccl.NewBulkOracle(
+			dsp.ReplicaOracleConfig(evalCtx.Locality), execLocality, kvfollowerreadsccl.StreakConfig{},
+		)
 	}
 
 	// We don't return the compatible nodes here since PartitionSpans will
@@ -237,6 +246,8 @@ func backup(
 		kvpb.MVCCFilter(backupManifest.MVCCFilter),
 		backupManifest.StartTime,
 		backupManifest.EndTime,
+		backupManifest.ElidedPrefix,
+		backupManifest.ClusterVersion.AtLeast(clusterversion.V24_1.Version()),
 	)
 	if err != nil {
 		return roachpb.RowCount{}, 0, err
@@ -386,6 +397,13 @@ func backup(
 		), "running distributed backup to export %d ranges", errors.Safe(numTotalSpans))
 	}
 
+	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+	if testingKnobs != nil && testingKnobs.RunBeforeBackupFlow != nil {
+		if err := testingKnobs.RunBeforeBackupFlow(); err != nil {
+			return roachpb.RowCount{}, 0, err
+		}
+	}
+
 	if err := ctxgroup.GoAndWait(
 		ctx,
 		jobProgressLoop,
@@ -395,6 +413,12 @@ func backup(
 		runBackup,
 	); err != nil {
 		return roachpb.RowCount{}, 0, err
+	}
+
+	if testingKnobs != nil && testingKnobs.RunAfterBackupFlow != nil {
+		if err := testingKnobs.RunAfterBackupFlow(); err != nil {
+			return roachpb.RowCount{}, 0, err
+		}
 	}
 
 	backupID := uuid.MakeV4()
@@ -809,6 +833,11 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		MaxRetries: 5,
 	}
 
+	if p.ExecCfg().BackupRestoreTestingKnobs != nil &&
+		p.ExecCfg().BackupRestoreTestingKnobs.BackupDistSQLRetryPolicy != nil {
+		retryOpts = *p.ExecCfg().BackupRestoreTestingKnobs.BackupDistSQLRetryPolicy
+	}
+
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.before.flow"); err != nil {
 		return err
 	}
@@ -816,6 +845,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// We want to retry a backup if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	var res roachpb.RowCount
+	var lastProgress float32
 	var numBackupInstances int
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		res, numBackupInstances, err = backup(
@@ -859,6 +889,25 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			defaultStore, details, p.User(), &kmsEnv)
 		if reloadBackupErr != nil {
 			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
+		}
+		// Re-load the job in order to update our progress object, which
+		// may have been updated since the flow started.
+		reloadedJob, reloadErr := p.ExecCfg().JobRegistry.LoadClaimedJob(ctx, b.job.ID())
+		if reloadErr != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Warningf(ctx, "BACKUP job %d could not reload job progress when retrying: %+v",
+				b.job.ID(), reloadErr)
+		} else {
+			curProgress := reloadedJob.FractionCompleted()
+			// If we made decent progress with the BACKUP, reset the last
+			// progress state.
+			if madeProgress := curProgress - lastProgress; madeProgress >= 0.01 {
+				log.Infof(ctx, "backport made %d%% progress, resetting retry duration", int(math.Round(float64(100*madeProgress))))
+				lastProgress = curProgress
+				r.Reset()
+			}
 		}
 	}
 
@@ -1620,6 +1669,16 @@ func createBackupManifest(
 	if jobDetails.FullCluster {
 		coverage = tree.AllDescriptors
 	}
+	elide := execinfrapb.ElidePrefix_None
+	if len(prevBackups) > 0 {
+		elide = prevBackups[0].ElidedPrefix
+	} else if execCfg.Settings.Version.IsActive(ctx, clusterversion.V24_1) && elidePrefixes.Get(&execCfg.Settings.SV) {
+		if len(tenants) > 0 {
+			elide = execinfrapb.ElidePrefix_Tenant
+		} else {
+			elide = execinfrapb.ElidePrefix_TenantAndTable
+		}
+	}
 
 	backupManifest := backuppb.BackupManifest{
 		StartTime:           startTime,
@@ -1637,6 +1696,7 @@ func createBackupManifest(
 		ClusterID:           execCfg.NodeInfo.LogicalClusterID(),
 		StatisticsFilenames: statsFiles,
 		DescriptorCoverage:  coverage,
+		ElidedPrefix:        elide,
 	}
 	if err := checkCoverage(ctx, backupManifest.Spans, append(prevBackups, backupManifest)); err != nil {
 		return backuppb.BackupManifest{}, errors.Wrap(err, "new backup would not cover expected time")

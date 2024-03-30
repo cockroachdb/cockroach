@@ -220,7 +220,7 @@ func performCastWithoutPrecisionTruncation(
 			if math.IsNaN(f) || f <= float64(math.MinInt64) || f >= float64(math.MaxInt64) {
 				return nil, tree.ErrIntOutOfRange
 			}
-			res = tree.NewDInt(tree.DInt(f))
+			res = tree.NewDInt(tree.DInt(math.RoundToEven(f)))
 		case *tree.DDecimal:
 			i, err := roundDecimalToInt(&v.Decimal)
 			if err != nil {
@@ -961,7 +961,7 @@ func performCastWithoutPrecisionTruncation(
 	case types.TupleFamily:
 		switch v := d.(type) {
 		case *tree.DTuple:
-			if t == types.AnyTuple {
+			if t.Identical(types.AnyTuple) {
 				// If AnyTuple is the target type, we can just use the input tuple.
 				return v, nil
 			}

@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
@@ -47,10 +48,11 @@ var alterReplicationCutoverHeader = colinfo.ResultColumns{
 }
 
 // ResolvedTenantReplicationOptions represents options from an
-// evaluated CREATE VIRTUAL CLUSTER FROM REPLICATION command.
+// evaluated CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
 type resolvedTenantReplicationOptions struct {
-	resumeTimestamp hlc.Timestamp
-	retention       *int32
+	resumeTimestamp  hlc.Timestamp
+	retention        *int32
+	expirationWindow *time.Duration
 }
 
 func evalTenantReplicationOptions(
@@ -78,7 +80,14 @@ func evalTenantReplicationOptions(
 		retSeconds := int32(retSeconds64)
 		r.retention = &retSeconds
 	}
-
+	if options.ExpirationWindow != nil {
+		dur, err := eval.Duration(ctx, options.ExpirationWindow)
+		if err != nil {
+			return nil, err
+		}
+		expirationWindow := time.Duration(dur.Nanos())
+		r.expirationWindow = &expirationWindow
+	}
 	return r, nil
 }
 
@@ -87,6 +96,17 @@ func (r *resolvedTenantReplicationOptions) GetRetention() (int32, bool) {
 		return 0, false
 	}
 	return *r.retention, true
+}
+
+func (r *resolvedTenantReplicationOptions) GetExpirationWindow() (time.Duration, bool) {
+	if r == nil || r.expirationWindow == nil {
+		return 0, false
+	}
+	return *r.expirationWindow, true
+}
+
+func (r *resolvedTenantReplicationOptions) DestinationOptionsSet() bool {
+	return r != nil && (r.retention != nil || r.resumeTimestamp.IsSet())
 }
 
 func alterReplicationJobTypeCheck(
@@ -118,26 +138,12 @@ func alterReplicationJobTypeCheck(
 	return true, nil, nil
 }
 
-var physicalReplicationDisabledErr = errors.WithTelemetry(
-	pgerror.WithCandidateCode(
-		errors.WithHint(
-			errors.Newf("physical replication is disabled"),
-			"You can enable physical replication by running `SET CLUSTER SETTING physical_replication.enabled = true`.",
-		),
-		pgcode.ExperimentalFeature,
-	),
-	"physical_replication.enabled")
-
 func alterReplicationJobHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 	alterTenantStmt, ok := stmt.(*tree.AlterTenantReplication)
 	if !ok {
 		return nil, nil, nil, false, nil
-	}
-
-	if !streamingccl.CrossClusterReplicationEnabled.Get(&p.ExecCfg().Settings.SV) {
-		return nil, nil, nil, false, physicalReplicationDisabledErr
 	}
 
 	if !p.ExecCfg().Codec.ForSystemTenant() {
@@ -219,12 +225,15 @@ func alterReplicationJobHook(
 				alterTenantStmt,
 			)
 		}
-
-		if tenInfo.PhysicalReplicationConsumerJobID == 0 {
-			return errors.Newf("tenant %q (%d) does not have an active replication job",
-				tenInfo.Name, tenInfo.ID)
-		}
 		jobRegistry := p.ExecCfg().JobRegistry
+		if !alterTenantStmt.Options.IsDefault() {
+			// If the statement contains options, then the user provided the ALTER
+			// TENANT ... SET REPLICATION [options] form of the command.
+			return alterTenantSetReplication(ctx, p.InternalSQLTxn(), jobRegistry, options, tenInfo)
+		}
+		if err := checkForActiveIngestionJob(tenInfo); err != nil {
+			return err
+		}
 		if alterTenantStmt.Cutover != nil {
 			pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 			actualCutoverTime, err := alterTenantJobCutover(
@@ -233,10 +242,6 @@ func alterReplicationJobHook(
 				return err
 			}
 			resultsCh <- tree.Datums{eval.TimestampToDecimalDatum(actualCutoverTime)}
-		} else if !alterTenantStmt.Options.IsDefault() {
-			if err := alterTenantOptions(ctx, p.InternalSQLTxn(), jobRegistry, options, tenInfo); err != nil {
-				return err
-			}
 		} else {
 			switch alterTenantStmt.Command {
 			case tree.ResumeJob:
@@ -258,6 +263,38 @@ func alterReplicationJobHook(
 		return fn, alterReplicationCutoverHeader, nil, false, nil
 	}
 	return fn, nil, nil, false, nil
+}
+
+func alterTenantSetReplication(
+	ctx context.Context,
+	txn isql.Txn,
+	jobRegistry *jobs.Registry,
+	options *resolvedTenantReplicationOptions,
+	tenInfo *mtinfopb.TenantInfo,
+) error {
+
+	if expirationWindow, ok := options.GetExpirationWindow(); ok {
+		if err := alterTenantExpirationWindow(ctx, txn, jobRegistry, expirationWindow, tenInfo); err != nil {
+			return err
+		}
+	}
+	if options.DestinationOptionsSet() {
+		if err := checkForActiveIngestionJob(tenInfo); err != nil {
+			return err
+		}
+		if err := alterTenantConsumerOptions(ctx, txn, jobRegistry, options, tenInfo); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkForActiveIngestionJob(tenInfo *mtinfopb.TenantInfo) error {
+	if tenInfo.PhysicalReplicationConsumerJobID == 0 {
+		return errors.Newf("tenant %q (%d) does not have an active replication consumer job",
+			tenInfo.Name, tenInfo.ID)
+	}
+	return nil
 }
 
 func alterTenantRestartReplication(
@@ -287,6 +324,10 @@ func alterTenantRestartReplication(
 		)
 	}
 
+	if alterTenantStmt.Options.ExpirationWindowSet() {
+		return CannotSetExpirationWindowErr
+	}
+
 	streamAddress := streamingccl.StreamAddress(srcAddr)
 	streamURL, err := streamAddress.URL()
 	if err != nil {
@@ -298,7 +339,8 @@ func alterTenantRestartReplication(
 	if err != nil {
 		return errors.Wrap(err, "creating client")
 	}
-	srcID, resumeTS, err := client.PriorReplicationDetails(ctx, roachpb.TenantName(srcTenant))
+
+	srcID, srcReplicatedFrom, srcActivatedAt, err := client.PriorReplicationDetails(ctx, roachpb.TenantName(srcTenant))
 	if err != nil {
 		return errors.CombineErrors(errors.Wrap(err, "fetching prior replication details"), client.Close(ctx))
 	}
@@ -306,11 +348,10 @@ func alterTenantRestartReplication(
 		return err
 	}
 
-	if expected := fmt.Sprintf("%s:%s", p.ExtendedEvalContext().ClusterID, dstTenantID); srcID != expected {
-		return errors.Newf(
-			"tenant %q on specified cluster reports it was replicated from %q; %q cannot be rewound to start replication",
-			srcTenant, srcID, expected,
-		)
+	dstID := fmt.Sprintf("%s:%s", p.ExtendedEvalContext().ClusterID, dstTenantID)
+	resumeTS, err := pickReplicationResume(ctx, srcID, srcReplicatedFrom, srcActivatedAt, dstID, tenInfo.PreviousSourceTenant)
+	if err != nil {
+		return err
 	}
 
 	const revertFirst = true
@@ -342,6 +383,62 @@ func alterTenantRestartReplication(
 			Options:                     alterTenantStmt.Options,
 		},
 	), "creating replication job")
+}
+
+// pickReplicationResume picks the timestamp to which dst can be reverted to
+// begin replication into dst from src.
+//
+// This timestamp must be either the time as of which dst previously concluded
+// replication from src -- replication which it is now resuming --, or the
+// timestamp at which src previously concluded replication from dst (which it is
+// now reversing).
+//
+// If neither of these conditions are determined to have previously held, no
+// such resumption timestamp exists and and error is returned. If both held, the
+// more recent of the two is used. This could arise e.g. if we first reverse
+// replication, then cutover, but then resume the (reversed) replication.
+func pickReplicationResume(
+	ctx context.Context,
+	srcHistoryID string,
+	srcReplicatedFrom string,
+	srcActivatedAt hlc.Timestamp,
+	dstHistoryID string,
+	dstPreviousReplicatedFrom *mtinfopb.PreviousSourceTenant,
+) (hlc.Timestamp, error) {
+
+	var resumeTS, reversalTS hlc.Timestamp
+
+	var wasReplicatingFrom string
+
+	// If the destination tenant was previously replicating from some some source,
+	// if it is the same source that it will replicate from now, time it cutover
+	// could be used to (re-)start replication.
+	if from := dstPreviousReplicatedFrom; from != nil {
+		wasReplicatingFrom = fmt.Sprintf("%s:%s", from.ClusterID, from.TenantID)
+		if wasReplicatingFrom == srcHistoryID {
+			resumeTS = from.CutoverTimestamp
+		}
+	}
+
+	// If the remote source from which we will replicate was replicated from the
+	// tenant into which we are about to replicate, i.e. we are reversing the
+	// direction, then we can resume from the time the other side was activated.
+	if srcReplicatedFrom == dstHistoryID && !srcActivatedAt.IsEmpty() {
+		reversalTS = srcActivatedAt
+	}
+
+	if resumeTS.IsEmpty() && reversalTS.IsEmpty() {
+		return hlc.Timestamp{}, errors.Newf(
+			`cannot reconfigure existing tenant to replicate from specified source: it was neither previously replicating from this source (prior replication source was %q), nor was the source previously replicating from it (%q)`,
+			wasReplicatingFrom,
+			srcReplicatedFrom,
+		)
+	}
+
+	if resumeTS.Less(reversalTS) {
+		return reversalTS, nil
+	}
+	return resumeTS, nil
 }
 
 // alterTenantJobCutover returns the cutover timestamp that was used to initiate
@@ -414,7 +511,7 @@ func applyCutoverTime(
 	ctx context.Context, job *jobs.Job, txn isql.Txn, cutoverTimestamp hlc.Timestamp,
 ) error {
 	log.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
-	if err := job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		progress := md.Progress.GetStreamIngest()
 		details := md.Payload.GetStreamIngestion()
 		if progress.ReplicationStatus == jobspb.ReplicationCuttingOver {
@@ -428,15 +525,40 @@ func applyCutoverTime(
 		progress.CutoverTime = cutoverTimestamp
 		progress.RemainingCutoverSpans = roachpb.Spans{details.Span}
 		ju.UpdateProgress(md.Progress)
-		return nil
-	}); err != nil {
-		return err
-	}
-	// Unpause the job if it is paused.
-	return job.WithTxn(txn).Unpaused(ctx)
+		return ju.Unpaused(ctx, md)
+	})
 }
 
-func alterTenantOptions(
+func alterTenantExpirationWindow(
+	ctx context.Context,
+	txn isql.Txn,
+	jobRegistry *jobs.Registry,
+	expirationWindow time.Duration,
+	tenInfo *mtinfopb.TenantInfo,
+) error {
+	for _, producerJobID := range tenInfo.PhysicalReplicationProducerJobIDs {
+		if err := jobRegistry.UpdateJobWithTxn(ctx, producerJobID, txn,
+			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+
+				streamProducerDetails := md.Payload.GetStreamReplication()
+				previousExpirationWindow := streamProducerDetails.ExpirationWindow
+				streamProducerDetails.ExpirationWindow = expirationWindow
+				ju.UpdatePayload(md.Payload)
+
+				difference := expirationWindow - previousExpirationWindow
+				currentExpiration := md.Progress.GetStreamReplication().Expiration
+				newExpiration := currentExpiration.Add(difference)
+				md.Progress.GetStreamReplication().Expiration = newExpiration
+				ju.UpdateProgress(md.Progress)
+				return nil
+			}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func alterTenantConsumerOptions(
 	ctx context.Context,
 	txn isql.Txn,
 	jobRegistry *jobs.Registry,

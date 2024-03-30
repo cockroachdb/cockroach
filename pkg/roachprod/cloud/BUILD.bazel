@@ -13,6 +13,7 @@ go_library(
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
         "//pkg/util/timeutil",
         "@com_github_aws_aws_sdk_go_v2_config//:config",
         "@com_github_aws_aws_sdk_go_v2_service_ec2//:ec2",
@@ -31,10 +32,6 @@ go_test(
     name = "cloud_test",
     srcs = ["cloud_test.go"],
     embed = [":cloud"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "@com_github_aws_aws_sdk_go_v2_service_ec2//types",
         "@com_github_stretchr_testify//assert",

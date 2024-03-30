@@ -12,12 +12,14 @@ package rangefeed
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 )
 
 // Option configures a RangeFeed.
@@ -40,7 +42,9 @@ type config struct {
 	withDiff             bool
 	onUnrecoverableError OnUnrecoverableError
 	onCheckpoint         OnCheckpoint
+	frontierQuantize     time.Duration
 	onFrontierAdvance    OnFrontierAdvance
+	frontierVisitor      FrontierSpanVisitor
 	onSSTable            OnSSTable
 	onDeleteRange        OnDeleteRange
 	extraPProfLabels     []string
@@ -222,6 +226,24 @@ func WithOnFrontierAdvance(f OnFrontierAdvance) Option {
 	})
 }
 
+// VisitableFrontier is the subset of the span.Frontier interface required to
+// inspect the content of the frontier.
+type VisitableFrontier interface {
+	Entries(span.Operation)
+}
+
+// FrontierSpanVisitor is called when the FrontierSpanVisitTrigger requests the
+// frontier be visited after a checkpoint.
+type FrontierSpanVisitor func(ctx context.Context, advanced bool, frontier VisitableFrontier)
+
+// WithFrontierSpanVisitor sets up a callback to optionally inspect the frontier
+// after a checkpoint is processed.
+func WithFrontierSpanVisitor(fn FrontierSpanVisitor) Option {
+	return optionFunc(func(c *config) {
+		c.frontierVisitor = fn
+	})
+}
+
 func initConfig(c *config, options []Option) {
 	*c = config{} // the default config is its zero value
 	for _, o := range options {
@@ -301,5 +323,15 @@ func WithPProfLabel(key, value string) Option {
 func WithSystemTablePriority() Option {
 	return optionFunc(func(c *config) {
 		c.overSystemTable = true
+	})
+}
+
+// WithFrontierQuantized enables quantization of timestamps down to the nearest
+// multiple of d to potentially reduce overhead in the frontier thanks to more
+// sub-spans having equal timestamps and thus being able to be merged, resulting
+// in fewer distinct spans in the frontier.
+func WithFrontierQuantized(d time.Duration) Option {
+	return optionFunc(func(c *config) {
+		c.frontierQuantize = d
 	})
 }

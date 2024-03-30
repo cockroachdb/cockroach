@@ -1,0 +1,53 @@
+# This test ensures that online restore generates an IMPORT ROLLBACK
+# job.
+
+reset test-nodelocal
+----
+
+new-cluster name=s1 disable-tenant
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
+INSERT INTO foo VALUES (4, 'a');
+----
+
+exec-sql
+EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM baz;
+----
+NOTICE: EXPORT is not the recommended way to move data out of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+import expect-pausepoint tag=a
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster/';
+----
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/cluster/' WITH EXPERIMENTAL DEFERRED COPY, new_db_name=d2;
+----
+
+exec-sql
+SHOW JOB WHEN COMPLETE (SELECT id FROM system.jobs WHERE job_type = 'IMPORT ROLLBACK')
+----
+
+query-sql
+SELECT description, status FROM [SHOW JOBS (SELECT id FROM system.jobs WHERE job_type = 'IMPORT ROLLBACK')]
+----
+ROLLBACK IMPORT INTO foo succeeded
+
+query-sql
+SELECT count(1) FROM d2.foo
+----
+1

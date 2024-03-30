@@ -1,0 +1,988 @@
+# LogicTest: !local-mixed-23.1
+
+statement ok
+CREATE TABLE t (x INT);
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+# Variables are preserved across both COMMIT and ROLLBACK.
+statement ok
+CREATE PROCEDURE p(a INT, b INT) LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 0;
+    y INT := 1;
+  BEGIN
+    RAISE NOTICE 'a: % b: % x: % y: %', a, b, x, y;
+    a := a + 1;
+    COMMIT;
+    RAISE NOTICE 'a: % b: % x: % y: %', a, b, x, y;
+    b := b + 1;
+    COMMIT;
+    RAISE NOTICE 'a: % b: % x: % y: %', a, b, x, y;
+    x := x + 1;
+    ROLLBACK;
+    RAISE NOTICE 'a: % b: % x: % y: %', a, b, x, y;
+    y := y + 1;
+    ROLLBACK;
+    RAISE NOTICE 'a: % b: % x: % y: %', a, b, x, y;
+  END;
+$$;
+
+query T noticetrace
+CALL p(100, 101);
+----
+NOTICE: a: 100 b: 101 x: 0 y: 1
+NOTICE: a: 101 b: 101 x: 0 y: 1
+NOTICE: a: 101 b: 102 x: 0 y: 1
+NOTICE: a: 101 b: 102 x: 1 y: 1
+NOTICE: a: 101 b: 102 x: 1 y: 2
+
+# Verify that mutations are correctly committed or reverted.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'max: %', (SELECT max(x) FROM t);
+    RAISE NOTICE 'INSERT (1)';
+    INSERT INTO t VALUES (1);
+    RAISE NOTICE 'max: %', (SELECT max(x) FROM t);
+    RAISE NOTICE 'COMMIT;';
+    COMMIT;
+    RAISE NOTICE 'max: %', (SELECT max(x) FROM t);
+    RAISE NOTICE 'INSERT (2)';
+    INSERT INTO t VALUES (2);
+    RAISE NOTICE 'max: %', (SELECT max(x) FROM t);
+    RAISE NOTICE 'ROLLBACK;';
+    ROLLBACK;
+    RAISE NOTICE 'max: %', (SELECT max(x) FROM t);
+    RAISE NOTICE 'DELETE (1)';
+    DELETE FROM t WHERE x = 1;
+    RAISE NOTICE 'max: %', (SELECT max(x) FROM t);
+    RAISE NOTICE 'ROLLBACK;';
+    ROLLBACK;
+    RAISE NOTICE 'max: %', (SELECT max(x) FROM t);
+  END;
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: max: <NULL>
+NOTICE: INSERT (1)
+NOTICE: max: 1
+NOTICE: COMMIT;
+NOTICE: max: 1
+NOTICE: INSERT (2)
+NOTICE: max: 2
+NOTICE: ROLLBACK;
+NOTICE: max: 1
+NOTICE: DELETE (1)
+NOTICE: max: <NULL>
+NOTICE: ROLLBACK;
+NOTICE: max: 1
+
+query I rowsort
+SELECT * FROM t;
+----
+1
+
+# Verify that the transaction timestamp is advanced.
+statement ok
+CREATE TABLE txn_timestamps (ts TIMESTAMP);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO txn_timestamps VALUES (now());
+    COMMIT;
+    INSERT INTO txn_timestamps VALUES (now());
+    ROLLBACK;
+    INSERT INTO txn_timestamps VALUES (now());
+  END;
+$$;
+
+statement ok
+CALL p();
+
+query I
+SELECT count(DISTINCT ts) FROM txn_timestamps;
+----
+2
+
+# There should be no blocking when updating and locking the same row in
+# different transactions, since they never overlap.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT * FROM t FOR UPDATE;
+    COMMIT;
+    UPDATE t SET x = x + 1;
+    ROLLBACK;
+    UPDATE t SET x = x + 1;
+  END;
+$$;
+CALL p();
+
+query I
+SELECT * FROM t;
+----
+2
+
+subtest branches_loops
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(a INT) LANGUAGE PLpgSQL AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    IF i IS NULL THEN
+      i := 0;
+      ROLLBACK;
+    END IF;
+    WHILE i < 5 LOOP
+      IF i = 2 THEN
+        ROLLBACK;
+      END IF;
+      i := i + 1;
+      COMMIT;
+      IF i = a THEN
+        EXIT;
+      END IF;
+    END LOOP;
+    RAISE NOTICE '%', i;
+  END;
+$$;
+
+query T noticetrace
+CALL p(2);
+----
+NOTICE: 2
+
+query T noticetrace
+CALL p(10);
+----
+NOTICE: 5
+
+subtest cursors
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(a INT) LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo CURSOR FOR SELECT 1;
+    foundException BOOL := false;
+  BEGIN
+    IF a = 0 THEN
+      OPEN foo;
+      COMMIT;
+      BEGIN
+        CLOSE foo;
+      EXCEPTION WHEN SQLSTATE '34000' THEN
+        foundException := true;
+      END;
+    ELSIF a = 1 THEN
+      OPEN foo;
+      ROLLBACK;
+      BEGIN
+        CLOSE foo;
+      EXCEPTION WHEN SQLSTATE '34000' THEN
+        foundException := true;
+      END;
+    ELSIF a = 3 THEN
+      COMMIT;
+      OPEN foo;
+      BEGIN
+        CLOSE foo;
+      EXCEPTION WHEN SQLSTATE '34000' THEN
+        foundException := true;
+      END;
+    ELSE
+      ROLLBACK;
+      OPEN foo;
+      BEGIN
+        CLOSE foo;
+      EXCEPTION WHEN SQLSTATE '34000' THEN
+        foundException := true;
+      END;
+    END IF;
+    RAISE NOTICE 'found exception: %', foundException;
+  END;
+$$;
+
+# Closing the transaction causes the cursor to be closed as well.
+query T noticetrace
+CALL p(0);
+----
+NOTICE: found exception: true
+
+# Closing the transaction causes the cursor to be closed as well.
+query T noticetrace
+CALL p(1);
+----
+NOTICE: found exception: true
+
+# The cursor is opened after the new transaction starts, so no exception.
+query T noticetrace
+CALL p(2);
+----
+NOTICE: found exception: false
+
+# The cursor is opened after the new transaction starts, so no exception.
+query T noticetrace
+CALL p(3);
+----
+NOTICE: found exception: false
+
+statement ok
+SET close_cursors_at_commit = false;
+
+# The cursor stays open after commit due to the setting.
+query T noticetrace
+CALL p(0);
+----
+NOTICE: found exception: false
+
+# The cursor is still closed, because the transaction was aborted.
+query T noticetrace
+CALL p(1);
+----
+NOTICE: found exception: true
+
+statement ok
+RESET close_cursors_at_commit;
+CLOSE ALL;
+
+subtest blocks
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(a INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', (SELECT max(x) FROM t);
+    INSERT INTO t VALUES (3);
+    ROLLBACK;
+    RAISE NOTICE '%', (SELECT max(x) FROM t);
+    IF a > 0 THEN
+      BEGIN
+        RAISE NOTICE '%', (SELECT max(x) FROM t);
+        INSERT INTO t VALUES (4);
+        COMMIT;
+        RAISE NOTICE '%', (SELECT max(x) FROM t);
+      END;
+    END IF;
+    RAISE NOTICE '%', (SELECT max(x) FROM t);
+    INSERT INTO t VALUES (5);
+    COMMIT;
+    RAISE NOTICE '%', (SELECT max(x) FROM t);
+    IF a > 0 THEN
+      BEGIN
+        RAISE NOTICE '%', (SELECT max(x) FROM t);
+        INSERT INTO t VALUES (6);
+        ROLLBACK;
+        RAISE NOTICE '%', (SELECT max(x) FROM t);
+      END;
+    END IF;
+    RAISE NOTICE '%', (SELECT max(x) FROM t);
+  END;
+$$;
+
+query T noticetrace
+CALL p(0);
+----
+NOTICE: 2
+NOTICE: 2
+NOTICE: 2
+NOTICE: 5
+NOTICE: 5
+
+statement ok
+DELETE FROM t WHERE x > 2;
+
+query T noticetrace
+CALL p(1);
+----
+NOTICE: 2
+NOTICE: 2
+NOTICE: 2
+NOTICE: 4
+NOTICE: 4
+NOTICE: 5
+NOTICE: 5
+NOTICE: 5
+NOTICE: 5
+
+query I rowsort
+SELECT * FROM t;
+----
+2
+4
+5
+
+subtest exceptions
+
+statement ok
+DELETE FROM t WHERE True;
+INSERT INTO t VALUES (1);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(a INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', (SELECT max(x) FROM t);
+    INSERT INTO t VALUES (2);
+    COMMIT;
+    RAISE NOTICE '%', (SELECT max(x) FROM t);
+    BEGIN
+      IF (a // 0) > 0 THEN
+        RAISE NOTICE 'foo';
+      END IF;
+    EXCEPTION WHEN division_by_zero THEN
+      RAISE NOTICE 'bar';
+    END;
+    RAISE NOTICE '%', (SELECT max(x) FROM t);
+    INSERT INTO t VALUES (3);
+    ROLLBACK;
+    RAISE NOTICE '%', (SELECT max(x) FROM t);
+  END;
+$$;
+
+query T noticetrace
+CALL p(1);
+----
+NOTICE: 1
+NOTICE: 2
+NOTICE: bar
+NOTICE: 2
+NOTICE: 2
+
+query I rowsort
+SELECT * FROM t;
+----
+1
+2
+
+statement ok
+DROP PROCEDURE p;
+
+# COMMIT is not valid in a block with an exception handler.
+#
+# NOTE: postgres throws the error lazily, so procedure creation would succeed
+# and p(0) would also execute without error (see #119750).
+statement error pgcode 2D000 pq: invalid transaction termination
+CREATE PROCEDURE p(a INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    IF a > 0 THEN
+      COMMIT;
+    END IF;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'foo';
+  END;
+$$;
+
+statement error pgcode 2D000 pq: invalid transaction termination
+CREATE PROCEDURE p(a INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    IF a > 0 THEN
+      ROLLBACK;
+    END IF;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'foo';
+  END;
+$$;
+
+# The cases above, with a nested block.
+statement error pgcode 2D000 pq: invalid transaction termination
+CREATE PROCEDURE p(a INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    BEGIN
+      IF a > 0 THEN
+        COMMIT;
+      END IF;
+    EXCEPTION WHEN division_by_zero THEN
+      RAISE NOTICE 'foo';
+    END;
+  END;
+$$;
+
+statement error pgcode 2D000 pq: invalid transaction termination
+CREATE PROCEDURE p(a INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    BEGIN
+      IF a > 0 THEN
+        ROLLBACK;
+      END IF;
+    EXCEPTION WHEN division_by_zero THEN
+      RAISE NOTICE 'foo';
+    END;
+  END;
+$$;
+
+subtest postgres_example
+
+# This case is adopted from the postgres "Transaction Management" docs page.
+statement ok
+CREATE TABLE test1 (a INT);
+
+statement ok
+CREATE PROCEDURE transaction_test1() LANGUAGE plpgsql AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i <= 9 LOOP
+      RAISE NOTICE 'i = %', i;
+      INSERT INTO test1 (a) VALUES (i);
+      IF i % 2 = 0 THEN
+        RAISE NOTICE 'COMMIT;';
+        COMMIT;
+      ELSE
+        RAISE NOTICE 'ROLLBACK;';
+        ROLLBACK;
+      END IF;
+      i := i + 1;
+    END LOOP;
+  END;
+$$;
+
+query T noticetrace
+CALL transaction_test1();
+----
+NOTICE: i = 0
+NOTICE: COMMIT;
+NOTICE: i = 1
+NOTICE: ROLLBACK;
+NOTICE: i = 2
+NOTICE: COMMIT;
+NOTICE: i = 3
+NOTICE: ROLLBACK;
+NOTICE: i = 4
+NOTICE: COMMIT;
+NOTICE: i = 5
+NOTICE: ROLLBACK;
+NOTICE: i = 6
+NOTICE: COMMIT;
+NOTICE: i = 7
+NOTICE: ROLLBACK;
+NOTICE: i = 8
+NOTICE: COMMIT;
+NOTICE: i = 9
+NOTICE: ROLLBACK;
+
+query I rowsort
+SELECT * FROM test1;
+----
+0
+2
+4
+6
+8
+
+subtest function
+
+# NOTE: postgres succeeds in creating the function here, but fails at execution
+# time with the '2D000' error.
+statement error pgcode 2D000 pq: invalid transaction termination
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    COMMIT;
+    RETURN 1;
+  END;
+$$;
+
+statement error pgcode 2D000 pq: invalid transaction termination
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    ROLLBACK;
+    RETURN 1;
+  END;
+$$;
+
+subtest explicit_txn
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    COMMIT;
+  END;
+$$;
+
+statement ok
+BEGIN;
+
+statement error pgcode 2D000 pq: invalid transaction termination
+CALL p();
+
+statement ok
+ABORT;
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    ROLLBACK;
+  END;
+$$;
+
+statement ok
+BEGIN;
+
+statement error pgcode 2D000 pq: invalid transaction termination
+CALL p();
+
+statement ok
+ABORT;
+
+subtest retries
+
+# NOTE: logictest configurations will ensure this test gets coverage for both
+# serializable and read-committed isolation.
+statement ok
+DELETE FROM t WHERE x <> 1;
+
+statement ok
+CREATE SEQUENCE s1;
+CREATE SEQUENCE s2;
+
+# TODO(#119632): we can't use RAISE statements in/before the retrying
+# transactions, since they cause results to be flushed to the client,
+# which prevents retries.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  DECLARE
+    buf STRING[];
+  BEGIN
+    buf = array_append(buf, format('1: %L', (SELECT max(x) FROM t)));
+    INSERT INTO t VALUES (2);
+    COMMIT;
+    buf = array_append(buf, format('2: %L', (SELECT max(x) FROM t)));
+    INSERT INTO t VALUES (3);
+    SELECT IF(nextval('s1')<3, crdb_internal.force_retry('1h':::INTERVAL), 0);
+    ROLLBACK;
+    buf = array_append(buf, format('3: %L', (SELECT max(x) FROM t)));
+    INSERT INTO t VALUES (4);
+    SELECT IF(nextval('s2')<3, crdb_internal.force_retry('1h':::INTERVAL), 0);
+    COMMIT;
+    buf = array_append(buf, format('4: %L', (SELECT max(x) FROM t)));
+    RAISE NOTICE '%', buf;
+  END
+$$;
+
+# Verify that there are no repeated entries due to txn retries.
+query T noticetrace
+CALL p();
+----
+NOTICE: {"1: '1'","2: '2'","3: '2'","4: '4'"}
+
+query I rowsort
+SELECT * FROM t;
+----
+1
+2
+4
+
+# Verify that the automatic retries happened.
+query II
+SELECT currval('s1'), currval('s2');
+----
+3  3
+
+subtest err
+
+statement ok
+DROP PROCEDURE p;
+
+statement error pgcode 0A000 pq: unimplemented: COMMIT or ROLLBACK with AND CHAIN syntax is not yet implemented
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    COMMIT AND CHAIN;
+  END
+$$;
+
+statement error pgcode 0A000 pq: unimplemented: COMMIT or ROLLBACK with AND CHAIN syntax is not yet implemented
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    ROLLBACK AND CHAIN;
+  END
+$$;
+
+subtest set_priority
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    NULL;
+    COMMIT;
+    SET TRANSACTION PRIORITY HIGH;
+    RAISE NOTICE 'COMMIT; SET PRIORITY HIGH';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    COMMIT;
+    SET TRANSACTION PRIORITY LOW;
+    RAISE NOTICE 'COMMIT; SET PRIORITY LOW';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    COMMIT;
+    RAISE NOTICE 'COMMIT;';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    ROLLBACK;
+    SET TRANSACTION PRIORITY HIGH;
+    RAISE NOTICE 'ROLLBACK; SET PRIORITY HIGH';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION PRIORITY LOW;
+    RAISE NOTICE 'ROLLBACK; SET PRIORITY LOW';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    ROLLBACK;
+    RAISE NOTICE 'ROLLBACK;';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+  END
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: normal
+NOTICE: COMMIT; SET PRIORITY HIGH
+NOTICE: high
+NOTICE: COMMIT; SET PRIORITY LOW
+NOTICE: low
+NOTICE: COMMIT;
+NOTICE: normal
+NOTICE: ROLLBACK; SET PRIORITY HIGH
+NOTICE: high
+NOTICE: ROLLBACK; SET PRIORITY LOW
+NOTICE: low
+NOTICE: ROLLBACK;
+NOTICE: normal
+
+query T
+SHOW TRANSACTION PRIORITY;
+----
+normal
+
+subtest set_read
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    COMMIT;
+    SET TRANSACTION READ ONLY;
+    RAISE NOTICE 'COMMIT; SET READ ONLY';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    NULL;
+    COMMIT;
+    SET TRANSACTION READ WRITE;
+    RAISE NOTICE 'COMMIT; SET READ WRITE';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    COMMIT;
+    SET TRANSACTION READ ONLY;
+    RAISE NOTICE 'COMMIT; SET READ ONLY';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    COMMIT;
+    RAISE NOTICE 'COMMIT;';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    ROLLBACK;
+    SET TRANSACTION READ ONLY;
+    RAISE NOTICE 'ROLLBACK; SET READ ONLY';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION READ WRITE;
+    RAISE NOTICE 'ROLLBACK; SET READ WRITE';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    ROLLBACK;
+    SET TRANSACTION READ ONLY;
+    RAISE NOTICE 'ROLLBACK; SET READ ONLY';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    ROLLBACK;
+    RAISE NOTICE 'ROLLBACK;';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+  END
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: off
+NOTICE: COMMIT; SET READ ONLY
+NOTICE: on
+NOTICE: COMMIT; SET READ WRITE
+NOTICE: off
+NOTICE: COMMIT; SET READ ONLY
+NOTICE: on
+NOTICE: COMMIT;
+NOTICE: off
+NOTICE: ROLLBACK; SET READ ONLY
+NOTICE: on
+NOTICE: ROLLBACK; SET READ WRITE
+NOTICE: off
+NOTICE: ROLLBACK; SET READ ONLY
+NOTICE: on
+NOTICE: ROLLBACK;
+NOTICE: off
+
+query T
+SHOW transaction_read_only;
+----
+off
+
+subtest set_timestamp
+
+let $start_ts
+SELECT now()::TIMESTAMP;
+
+let $ts_1
+SELECT ('$start_ts'::TIMESTAMP - '1s'::INTERVAL)::TIMESTAMP;
+
+let $ts_2
+SELECT ('$start_ts'::TIMESTAMP - '2s'::INTERVAL)::TIMESTAMP;
+
+let $ts_3
+SELECT ('$start_ts'::TIMESTAMP - '3s'::INTERVAL)::TIMESTAMP;
+
+let $ts_4
+SELECT ('$start_ts'::TIMESTAMP - '4s'::INTERVAL)::TIMESTAMP;
+
+# We can't directly check the txn timestamps, since they would change on each
+# test iteration. So instead, we check how they compare to one another, e.g.
+# $ts_1 > $ts_2.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  DECLARE
+    ts TIMESTAMP := now();
+  BEGIN
+    IF now() <> ts THEN RAISE EXCEPTION '1'; END IF;
+    COMMIT;
+    IF now() < ts THEN RAISE EXCEPTION '2 %s, %s', now(), ts; END IF;
+    COMMIT;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_1';
+    IF now() <> '$ts_1' THEN RAISE EXCEPTION '3'; END IF;
+    COMMIT;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_2';
+    IF now() <> '$ts_2' THEN RAISE EXCEPTION '4'; END IF;
+    ROLLBACK;
+    -- The behavior should revert to the default, and the timestamp should
+    -- once again be larger than that of the original transaction.
+    IF now() <= ts THEN RAISE EXCEPTION '5'; END IF;
+    ROLLBACK;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_3';
+    IF now() <> '$ts_3' THEN RAISE EXCEPTION '6'; END IF;
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_4';
+    IF now() <> '$ts_4' THEN RAISE EXCEPTION '7'; END IF;
+  END
+$$;
+
+statement ok
+CALL p();
+
+let $ts_1
+SELECT now();
+
+statement ok
+INSERT INTO xy VALUES (1, 1);
+
+let $ts_2
+SELECT now();
+
+statement ok
+INSERT INTO xy VALUES (2, 2);
+
+let $ts_3
+SELECT now();
+
+statement ok
+INSERT INTO xy VALUES (3, 3);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', (SELECT count(*) FROM xy);
+    NULL;
+    COMMIT;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_1';
+    RAISE NOTICE '%', (SELECT count(*) FROM xy);
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_2';
+    RAISE NOTICE '%', (SELECT count(*) FROM xy);
+    COMMIT;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_3';
+    RAISE NOTICE '%', (SELECT count(*) FROM xy);
+    ROLLBACK;
+    RAISE NOTICE '%', (SELECT count(*) FROM xy);
+  END
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: 3
+NOTICE: 0
+NOTICE: 1
+NOTICE: 2
+NOTICE: 3
+
+subtest set_isolation
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    COMMIT;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    RAISE NOTICE 'COMMIT; SET ISOLATION LEVEL READ COMMITTED';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    COMMIT;
+    SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+    RAISE NOTICE 'COMMIT; SET ISOLATION LEVEL SERIALIZABLE';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    NULL;
+    COMMIT;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    RAISE NOTICE 'COMMIT; SET ISOLATION LEVEL READ COMMITTED';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    COMMIT;
+    RAISE NOTICE 'COMMIT;';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    RAISE NOTICE 'ROLLBACK; SET ISOLATION LEVEL READ COMMITTED';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    ROLLBACK;
+    SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+    RAISE NOTICE 'ROLLBACK; SET ISOLATION LEVEL SERIALIZABLE';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    RAISE NOTICE 'ROLLBACK; SET ISOLATION LEVEL READ COMMITTED';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    ROLLBACK;
+    RAISE NOTICE 'ROLLBACK;';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+  END
+$$;
+
+skipif config local-read-committed
+query T noticetrace
+CALL p();
+----
+NOTICE: serializable
+NOTICE: COMMIT; SET ISOLATION LEVEL READ COMMITTED
+NOTICE: read committed
+NOTICE: COMMIT; SET ISOLATION LEVEL SERIALIZABLE
+NOTICE: serializable
+NOTICE: COMMIT; SET ISOLATION LEVEL READ COMMITTED
+NOTICE: read committed
+NOTICE: COMMIT;
+NOTICE: serializable
+NOTICE: ROLLBACK; SET ISOLATION LEVEL READ COMMITTED
+NOTICE: read committed
+NOTICE: ROLLBACK; SET ISOLATION LEVEL SERIALIZABLE
+NOTICE: serializable
+NOTICE: ROLLBACK; SET ISOLATION LEVEL READ COMMITTED
+NOTICE: read committed
+NOTICE: ROLLBACK;
+NOTICE: serializable
+
+skipif config local-read-committed
+query T
+SHOW TRANSACTION ISOLATION LEVEL;
+----
+serializable
+
+# It is possible to execute multiple SET TRANSACTION statements.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    COMMIT;
+    SET TRANSACTION PRIORITY HIGH;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    RAISE NOTICE '%', current_setting('transaction_priority');
+  END
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: read committed
+NOTICE: high
+
+statement ok
+DROP PROCEDURE p;
+
+# SET TRANSACTION cannot be run after any statement other than COMMIT, ROLLBACK,
+# or another SET TRANSACTION statement.
+statement error pgcode 25001 pq: SET TRANSACTION must be called before any query
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    COMMIT;
+    RAISE NOTICE 'setting isolation level';
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+  END
+$$;
+
+statement error pgcode 25001 pq: SET TRANSACTION must be called before any query
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    COMMIT;
+    x := x + 1;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+  END
+$$;
+
+# The same SET TRANSACTION statement cannot be run twice in the same
+# transaction.
+statement error pgcode 42601 pq: isolation level specified multiple times
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    COMMIT;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+  END
+$$;
+
+statement error pgcode 42601 pq: user priority specified multiple times
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    ROLLBACK;
+    SET TRANSACTION PRIORITY HIGH;
+    SET TRANSACTION PRIORITY LOW;
+  END
+$$;
+
+statement error pgcode 42601 pq: read mode specified multiple times
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    COMMIT;
+    SET TRANSACTION READ ONLY;
+    SET TRANSACTION READ ONLY;
+  END
+$$;
+
+statement error pgcode 42601 pq: AS OF SYSTEM TIME specified multiple times
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    ROLLBACK;
+    SET TRANSACTION AS OF SYSTEM TIME '-1s';
+    SET TRANSACTION AS OF SYSTEM TIME '-1s';
+  END
+$$;
+
+subtest end

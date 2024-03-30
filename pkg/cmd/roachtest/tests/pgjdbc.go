@@ -41,7 +41,7 @@ func registerPgjdbc(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
+		c.Start(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -50,36 +50,6 @@ func registerPgjdbc(r registry.Registry) {
 
 		if err := alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0]); err != nil {
 			t.Fatal(err)
-		}
-
-		t.Status("create admin user for tests")
-		db, err := c.ConnE(ctx, t.L(), node[0])
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
-		stmts := []string{
-			"CREATE USER test_admin WITH PASSWORD 'testpw'",
-			"GRANT admin TO test_admin",
-			"ALTER ROLE ALL SET serial_normalization = 'sql_sequence_cached'",
-			"ALTER ROLE ALL SET statement_timeout = '60s'",
-		}
-		for _, stmt := range stmts {
-			_, err = db.ExecContext(ctx, stmt)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if UsingRuntimeAssertions(t) {
-			// This test assumes that multiple_active_portals_enabled is false, but through
-			// metamorphic constants, it is possible for them to be enabled.
-			if _, err = db.ExecContext(ctx, "SET multiple_active_portals_enabled=false"); err != nil {
-				t.Fatal(err)
-			}
-			if _, err = db.ExecContext(ctx, "ALTER DATABASE defaultdb SET multiple_active_portals_enabled=false"); err != nil {
-				t.Fatal(err)
-			}
 		}
 
 		t.Status("cloning pgjdbc and installing prerequisites")
@@ -161,7 +131,7 @@ func registerPgjdbc(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		const blocklistName = "pgjdbcBlocklist"
+		const blocklistName = "pgjdbcBlockList"
 		const ignorelistName = "pgjdbcIgnorelist"
 		expectedFailures := pgjdbcBlockList
 		ignorelist := pgjdbcIgnoreList

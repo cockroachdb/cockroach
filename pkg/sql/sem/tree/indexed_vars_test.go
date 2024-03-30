@@ -12,7 +12,6 @@ package tree_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -28,19 +27,12 @@ type testVarContainer []tree.Datum
 
 var _ eval.IndexedVarContainer = testVarContainer{}
 
-func (d testVarContainer) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	return d[idx].Eval(ctx, e)
+func (d testVarContainer) IndexedVarEval(idx int) (tree.Datum, error) {
+	return d[idx], nil
 }
 
 func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return d[idx].ResolvedType()
-}
-
-func (d testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("var%d", idx))
-	return &n
 }
 
 func TestIndexedVars(t *testing.T) {
@@ -59,11 +51,6 @@ func TestIndexedVars(t *testing.T) {
 	v1 := h.IndexedVar(1)
 	v2 := h.IndexedVar(2)
 
-	if !h.IndexedVarUsed(0) || !h.IndexedVarUsed(1) || !h.IndexedVarUsed(2) || h.IndexedVarUsed(3) {
-		t.Errorf("invalid IndexedVarUsed results %t %t %t %t (expected false false false true)",
-			h.IndexedVarUsed(0), h.IndexedVarUsed(1), h.IndexedVarUsed(2), h.IndexedVarUsed(3))
-	}
-
 	binary := func(op treebin.BinaryOperator, left, right tree.Expr) tree.Expr {
 		return &tree.BinaryExpr{Operator: op, Left: left, Right: right}
 	}
@@ -78,32 +65,20 @@ func TestIndexedVars(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Verify that the expression can be formatted correctly.
 	str := typedExpr.String()
-	expectedStr := "var0 + (var1 * var2)"
+	expectedStr := "@1 + (@2 * @3)"
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
 	}
 
-	// Test formatting using the indexed var format interceptor.
-	f := tree.NewFmtCtx(
-		tree.FmtSimple,
-		tree.FmtIndexedVarFormat(
-			func(ctx *tree.FmtCtx, idx int) {
-				ctx.Printf("customVar%d", idx)
-			}),
-	)
-	f.FormatNode(typedExpr)
-	str = f.CloseAndGetString()
-
-	expectedStr = "customVar0 + (customVar1 * customVar2)"
-	if str != expectedStr {
-		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
-	}
-
+	// Verify the expression is fully typed.
 	typ := typedExpr.ResolvedType()
 	if !typ.Equivalent(types.Int) {
 		t.Errorf("invalid expression type %s", typ)
 	}
+
+	// Verify the expression evaluates correctly.
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	evalCtx.IVarContainer = c

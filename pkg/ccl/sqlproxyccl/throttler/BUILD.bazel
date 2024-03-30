@@ -24,10 +24,6 @@ go_test(
         "throttle_test.go",
     ],
     embed = [":throttler"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/util/timeutil",

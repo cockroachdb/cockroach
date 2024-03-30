@@ -1,0 +1,293 @@
+name: GitHub Actions Essential CI
+on:
+  pull_request:
+    types: [ opened, reopened, synchronize, edited ]
+    branches: [ master ]
+  push:
+    branches:
+      - 'master'
+      - 'release-*'
+      - 'staging'
+      - 'trying'
+      - '!release-1.0*'
+      - '!release-1.1*'
+      - '!release-2.0*'
+      - '!release-2.1*'
+      - '!release-19.1*'
+      - '!release-19.2*'
+      - '!release-20.1*'
+      - '!release-20.2*'
+      - '!release-21.1*'
+      - '!release-21.2*'
+      - '!release-22.1*'
+      - '!release-22.2*'
+      - '!release-23.1*'
+      - '!release-23.2*'
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  EXPERIMENTAL_acceptance:
+    runs-on: [self-hosted, basic_big_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: run acceptance tests
+        run: ./build/github/acceptance-test.sh
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: acceptance artifacts
+          path: artifacts
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  check_generated_code:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - name: check generated code
+        run: ./build/github/check-generated-code.sh
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  docker_image_amd64:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: run docker tests
+        run: ./build/github/docker-image.sh amd64
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  examples_orms:
+    runs-on: [self-hosted, basic_big_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cockroach
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - uses: actions/checkout@v4
+        with:
+          path: examples-orms
+          repository: cockroachdb/examples-orms
+          ref: 876b2d52ae2b63aa9cc1741c8d189ff0b66ab0d7
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./cockroach/build/github/get-engflow-keys.sh
+      - name: run tests
+        run: ./cockroach/build/github/examples-orms.sh
+      - name: clean up
+        run: ./cockroach/build/github/cleanup-engflow-keys.sh
+        if: always()
+  EXPERIMENTAL_lint:
+    runs-on: [self-hosted, basic_big_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          submodules: true
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      # We need this commit for TestRaftCopyrightHeaders.
+      - run: git fetch --depth 1 origin cd6f4f263bd42688096064825dfa668bde2d3720
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: run lint tests
+        run: ./build/github/lint.sh
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  EXPERIMENTAL_local_roachtest:
+    runs-on: [self-hosted, basic_big_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          submodules: true
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - name: run local roachtests
+        run: ./build/github/local-roachtest.sh crosslinux
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: local roachtest artifacts
+          path: artifacts
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  EXPERIMENTAL_local_roachtest_fips:
+    runs-on: [self-hosted, basic_runner_group_fips]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          submodules: true
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - name: run local roachtests
+        run: ./build/github/local-roachtest.sh crosslinuxfips
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: local roachtest (FIPS) artifacts
+          path: artifacts
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  linux_amd64_build:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: build
+        run: ./build/github/build.sh crosslinux
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  linux_amd64_fips_build:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: build
+        run: ./build/github/build.sh crosslinuxfips
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  linux_arm64_build:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: build
+        run: ./build/github/build.sh crosslinuxarm
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  macos_amd64_build:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: build
+        run: ./build/github/build.sh crossmacos
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  macos_arm64_build:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: build
+        run: ./build/github/build.sh crossmacosarm
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  EXPERIMENTAL_unit_tests:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # By default, checkout merges the PR into the current master.
+          # Instead, we want to check out the PR as is.
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: run tests
+        run: bazel test //pkg:all_tests //pkg/ui:lint //pkg/ui:test --config crosslinux --jobs 300 --remote_download_minimal --bes_keywords ci-unit-test --config=use_ci_timeouts --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
+      - name: upload test results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  windows_build:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: build
+        run: ./build/github/build.sh crosswindows
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()

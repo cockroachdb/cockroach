@@ -110,6 +110,14 @@ ALTER ROLE foo WITH NOCREATELOGIN -- literals removed
 ALTER ROLE _ WITH NOCREATELOGIN -- identifiers removed
 
 parse
+ALTER ROLE foo SUBJECT 'bar'
+----
+ALTER ROLE foo WITH SUBJECT 'bar' -- normalized!
+ALTER ROLE foo WITH SUBJECT ('bar') -- fully parenthesized
+ALTER ROLE foo WITH SUBJECT '_' -- literals removed
+ALTER ROLE _ WITH SUBJECT 'bar' -- identifiers removed
+
+parse
 ALTER USER foo SET search_path = 'abc'
 ----
 ALTER USER foo SET search_path = 'abc'

@@ -75,7 +75,8 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 			}
 
 			// Try to plan the cursor query to make sure that it's valid.
-			stmt := makeStatement(statements.Statement[tree.Statement]{AST: s.Select}, clusterunique.ID{})
+			stmt := makeStatement(statements.Statement[tree.Statement]{AST: s.Select}, clusterunique.ID{},
+				tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)))
 			pt := planTop{}
 			pt.init(&stmt, &p.instrumentation)
 			opc := &p.optPlanningCtx
@@ -285,7 +286,7 @@ func (p *planner) CloseCursor(ctx context.Context, n *tree.CloseCursor) (planNod
 		name: n.String(),
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			if n.All {
-				return newZeroNode(nil /* columns */), p.sqlCursors.closeAll(false /* errorOnWithHold */)
+				return newZeroNode(nil /* columns */), p.sqlCursors.closeAll(cursorCloseForExplicitClose)
 			}
 			return newZeroNode(nil /* columns */), p.sqlCursors.closeCursor(n.Name)
 		},
@@ -344,8 +345,14 @@ type sqlCursor struct {
 	withHold   bool
 	// eagerExecution indicates that the cursor's query was executed eagerly and
 	// stored in a row container. If true, there is no need to set the transaction
-	// sequence number, since the query is no longer active.
+	// sequence number, since the query is no longer active. In addition, the
+	// cursor need not be closed when its parent transaction closes.
 	eagerExecution bool
+	// committed is set when the transaction that created the cursor has
+	// successfully committed. It is only used for cursors declared using
+	// WITH HOLD. It is used to ensure that aborting a transaction only closes
+	// cursors that were opened by that transaction.
+	committed bool
 }
 
 // Next implements the Rows interface.
@@ -359,10 +366,17 @@ func (s *sqlCursor) Next(ctx context.Context) (bool, error) {
 
 // sqlCursors contains a set of active cursors for a session.
 type sqlCursors interface {
-	// closeAll closes all cursors in the set. If any of the cursors were
-	// created WITH HOLD, and the errorOnWithHold flag is true, an error is
-	// returned.
-	closeAll(errorOnWithHold bool) error
+	// closeAll closes cursors in the set according to the following rules:
+	//   * If the reason for closing is txn commit, non-HOLD cursors are closed.
+	//   * If the reason for closing is txn rollback, all cursors created by the
+	//     current transaction are closed.
+	//   * If the reason for closing is an explicit CLOSE ALL or the session
+	//     closing, all cursors are closed unconditionally.
+	//
+	// NOTE: a SQL cursor declared WITH HOLD will currently result in an
+	// "unimplemented" error if the reason for closing is txn commit, since
+	// WITH HOLD is not yet implemented for SQL cursors.
+	closeAll(reason cursorCloseReason) error
 	// closeCursor closes the named cursor, returning an error if that cursor
 	// didn't exist in the set.
 	closeCursor(tree.Name) error
@@ -385,7 +399,7 @@ type emptySqlCursors struct{}
 
 var _ sqlCursors = emptySqlCursors{}
 
-func (e emptySqlCursors) closeAll(bool) error {
+func (e emptySqlCursors) closeAll(cursorCloseReason) error {
 	return errors.AssertionFailedf("closeAll not supported in emptySqlCursors")
 }
 
@@ -417,16 +431,44 @@ type cursorMap struct {
 	nameCounter int
 }
 
-func (c *cursorMap) closeAll(errorOnWithHold bool) error {
-	for n, c := range c.cursors {
-		if c.withHold && errorOnWithHold {
-			return unimplemented.NewWithIssuef(77101, "cursor %s WITH HOLD must be closed before committing", n)
+type cursorCloseReason uint8
+
+const (
+	cursorCloseForTxnCommit cursorCloseReason = iota
+	cursorCloseForTxnRollback
+	cursorCloseForExplicitClose
+)
+
+func (c *cursorMap) closeAll(reason cursorCloseReason) error {
+	for n, curs := range c.cursors {
+		switch reason {
+		case cursorCloseForTxnCommit:
+			if curs.withHold {
+				if curs.eagerExecution {
+					// Cursors declared using WITH HOLD are not closed at transaction
+					// commit, and become the responsibility of the session.
+					curs.committed = true
+					continue
+				}
+				return unimplemented.NewWithIssuef(77101, "cursor %s WITH HOLD must be closed before committing", n)
+			}
+		case cursorCloseForTxnRollback:
+			if curs.committed {
+				// Transaction rollback should only remove cursors that were created in
+				// the current transaction.
+				continue
+			}
 		}
-		if err := c.Close(); err != nil {
+		if err := curs.Close(); err != nil {
 			return err
 		}
+		delete(c.cursors, n)
 	}
-	c.cursors = nil
+	if reason == cursorCloseForExplicitClose {
+		// All cursors are closed for explicit close, so we can lose the reference
+		// to the map.
+		c.cursors = nil
+	}
 	return nil
 }
 
@@ -476,8 +518,8 @@ type connExCursorAccessor struct {
 	ex *connExecutor
 }
 
-func (c connExCursorAccessor) closeAll(errorOnWithHold bool) error {
-	return c.ex.extraTxnState.sqlCursors.closeAll(errorOnWithHold)
+func (c connExCursorAccessor) closeAll(reason cursorCloseReason) error {
+	return c.ex.extraTxnState.sqlCursors.closeAll(reason)
 }
 
 func (c connExCursorAccessor) closeCursor(s tree.Name) error {

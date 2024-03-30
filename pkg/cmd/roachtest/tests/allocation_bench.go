@@ -261,6 +261,7 @@ func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchS
 			allocSpec.nodes+1,
 			specOptions...,
 		),
+		Timeout:           time.Duration(allocSpec.samples) * time.Hour,
 		NonReleaseBlocker: true,
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
@@ -278,7 +279,7 @@ func setupAllocationBench(
 	t.Status("starting cluster")
 	for i := 1; i <= spec.nodes; i++ {
 		// Don't start a backup schedule as this test reports to roachperf.
-		startOpts := option.DefaultStartOptsNoBackups()
+		startOpts := option.NewStartOpts(option.NoBackupSchedule)
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 			"--vmodule=store_rebalancer=2,allocator=2,replicate_queue=2")
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
@@ -306,7 +307,7 @@ func setupStatCollector(
 		if err := c.StopGrafana(ctx, t.L(), t.ArtifactsDir()); err != nil {
 			t.L().ErrorfCtx(ctx, "Error(s) shutting down prom/grafana %s", err)
 		}
-		c.Wipe(ctx, false /* preserveCerts */)
+		c.Wipe(ctx)
 	}
 
 	promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), cfg)

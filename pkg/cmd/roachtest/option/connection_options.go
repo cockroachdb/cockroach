@@ -13,14 +13,17 @@ package option
 import (
 	"fmt"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 type ConnOption struct {
-	User        string
-	DBName      string
-	TenantName  string
-	SQLInstance int
-	Options     map[string]string
+	User               string
+	DBName             string
+	VirtualClusterName string
+	SQLInstance        int
+	AuthMode           install.PGAuthMode
+	Options            map[string]string
 }
 
 func User(user string) func(*ConnOption) {
@@ -29,9 +32,9 @@ func User(user string) func(*ConnOption) {
 	}
 }
 
-func TenantName(tenantName string) func(*ConnOption) {
+func VirtualClusterName(name string) func(*ConnOption) {
 	return func(option *ConnOption) {
-		option.TenantName = tenantName
+		option.VirtualClusterName = name
 	}
 }
 
@@ -61,5 +64,11 @@ func ConnectTimeout(t time.Duration) func(*ConnOption) {
 func DBName(dbName string) func(*ConnOption) {
 	return func(option *ConnOption) {
 		option.DBName = dbName
+	}
+}
+
+func AuthMode(authMode install.PGAuthMode) func(*ConnOption) {
+	return func(option *ConnOption) {
+		option.AuthMode = authMode
 	}
 }

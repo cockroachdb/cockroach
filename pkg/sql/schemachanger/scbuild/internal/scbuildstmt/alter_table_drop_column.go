@@ -306,7 +306,7 @@ func dropColumn(
 	})
 	// TODO(ajwerner): Track the undropped backrefs to populate a detail
 	// message like postgres does. For example:
-	//
+	//  SET serial_normalization = sql_sequence;
 	//  create table t (i serial);
 	//  create table t2 (i int default nextval('t_i_seq'::regclass));
 	//  drop table t restrict;

@@ -16,8 +16,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
@@ -348,7 +350,13 @@ func (r *Replica) leasePostApplyLocked(
 			// the same lease. This can happen when callers are using
 			// leasePostApply for some of its side effects, like with
 			// splitPostApply. It can also happen during lease extensions.
-			if !prevLease.Equivalent(*newLease) {
+			//
+			// NOTE: we pass true for expToEpochEquiv because we may be in a cluster
+			// where some node has detected the version upgrade and is considering
+			// this lease type promotion to be valid, even if our local node has not
+			// yet detected the upgrade. Passing true broadens the definition of
+			// equivalence and weakens the assertion.
+			if !prevLease.Equivalent(*newLease, true /* expToEpochEquiv */) {
 				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
 					redact.Safe(prevLease), redact.Safe(newLease))
 			}
@@ -371,7 +379,7 @@ func (r *Replica) leasePostApplyLocked(
 		// Log lease acquisitions loudly when verbose logging is enabled or when the
 		// new leaseholder is draining, in which case it should be shedding leases.
 		// Otherwise, log a trace event.
-		if log.V(1) || r.store.IsDraining() {
+		if log.V(1) || (leaseChangingHands && r.store.IsDraining()) {
 			log.Infof(ctx, "new range lease %s following %s", newLease, prevLease)
 		} else {
 			log.Eventf(ctx, "new range lease %s following %s", newLease, prevLease)
@@ -546,15 +554,20 @@ func (r *Replica) leasePostApplyLocked(
 		preferenceStatus := CheckStoreAgainstLeasePreferences(r.store.StoreID(), r.store.Attrs(),
 			r.store.nodeDesc.Attrs, r.store.nodeDesc.Locality, r.mu.conf.LeasePreferences)
 		switch preferenceStatus {
-		case LeasePreferencesOK, LeasePreferencesLessPreferred:
-			// We could also enqueue the lease when we are a less preferred
-			// leaseholder, however the replicate queue will eventually get to it and
-			// we already satisfy _some_ preference.
+		case LeasePreferencesOK:
 		case LeasePreferencesViolating:
 			log.VEventf(ctx, 2,
 				"acquired lease violates lease preferences, enqueuing for transfer [lease=%v preferences=%v]",
 				newLease, r.mu.conf.LeasePreferences)
-			r.store.replicateQueue.AddAsync(ctx, r, replicateQueueLeasePreferencePriority)
+			r.store.leaseQueue.AddAsync(ctx, r, allocatorimpl.TransferLeaseForPreferences.Priority())
+		case LeasePreferencesLessPreferred:
+			// Enqueue the replica at a slightly lower priority than violation to
+			// process the lease transfer after ranges where the leaseholder is
+			// violating the preference.
+			log.VEventf(ctx, 2,
+				"acquired lease is less preferred, enqueuing for transfer [lease=%v preferences=%v]",
+				newLease, r.mu.conf.LeasePreferences)
+			r.store.leaseQueue.AddAsync(ctx, r, allocatorimpl.TransferLeaseForPreferences.Priority()-1)
 		default:
 			log.Fatalf(ctx, "unknown lease preferences status: %v", preferenceStatus)
 		}
@@ -639,45 +652,6 @@ func addSSTablePreApply(
 	index kvpb.RaftIndex,
 	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) bool {
-	if sst.RemoteFilePath != "" {
-		log.Infof(ctx,
-			"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s",
-			sst.RemoteFilePath,
-			sst.BackingFileSize,
-			sst.Span,
-			sst.RemoteFileLoc,
-		)
-		start := storage.EngineKey{Key: sst.Span.Key}
-		end := storage.EngineKey{Key: sst.Span.EndKey}
-		externalFile := pebble.ExternalFile{
-			Locator:         remote.Locator(sst.RemoteFileLoc),
-			ObjName:         sst.RemoteFilePath,
-			Size:            sst.BackingFileSize,
-			SmallestUserKey: start.Encode(),
-			LargestUserKey:  end.Encode(),
-
-			// TODO(msbutler): I guess we need to figure out if the backing external
-			// file has point or range keys in the target span.
-			HasPointKey: true,
-		}
-		tBegin := timeutil.Now()
-		defer func() {
-			if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
-				log.Infof(ctx,
-					"ingesting SST of size %s at index %d took %.2fs",
-					humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(),
-				)
-			}
-		}()
-
-		_, ingestErr := env.eng.IngestExternalFiles(ctx, []pebble.ExternalFile{externalFile})
-		if ingestErr != nil {
-			log.Fatalf(ctx, "while ingesting %s: %v", sst.RemoteFilePath, ingestErr)
-		}
-		// Adding without modification succeeded, no copy necessary.
-		log.Eventf(ctx, "ingested SSTable at index %d, term %d: external %s", index, term, sst.RemoteFilePath)
-		return false
-	}
 	checksum := util.CRC32(sst.Data)
 
 	if checksum != sst.CRC32 {
@@ -710,7 +684,7 @@ func addSSTablePreApply(
 	// filesystem supports it, rather than writing a new copy of it. We cannot
 	// pass it the path in the sideload store as the engine deletes the passed
 	// path on success.
-	if linkErr := env.eng.Link(path, ingestPath); linkErr != nil {
+	if linkErr := env.eng.Env().Link(path, ingestPath); linkErr != nil {
 		// We're on a weird file system that doesn't support Link. This is unlikely
 		// to happen in any "normal" deployment but we have a fallback path anyway.
 		log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, ingestPath)
@@ -731,6 +705,70 @@ func addSSTablePreApply(
 	return false /* copied */
 }
 
+func linkExternalSStablePreApply(
+	ctx context.Context,
+	env postAddEnv,
+	term kvpb.RaftTerm,
+	index kvpb.RaftIndex,
+	sst kvserverpb.ReplicatedEvalResult_LinkExternalSSTable,
+) {
+	log.Infof(ctx,
+		"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s (size %d) at rewrite ts %s, synth prefix %s",
+		sst.RemoteFilePath,
+		sst.ApproximatePhysicalSize,
+		sst.Span,
+		sst.RemoteFileLoc,
+		sst.BackingFileSize,
+		sst.RemoteRewriteTimestamp,
+		sst.RemoteSyntheticPrefix,
+	)
+
+	start := storage.EngineKey{Key: sst.Span.Key}
+	// NB: sst.Span.EndKey may be nil if the span represents a single key. In
+	// that case, we produce an inclusive end bound equal to the start.
+	// Otherwise we produce an exclusive end bound.
+	end := start
+	endInclusive := true
+	if sst.Span.EndKey != nil {
+		end = storage.EngineKey{Key: sst.Span.EndKey}
+		endInclusive = false
+	}
+	var syntheticSuffix []byte
+	if sst.RemoteRewriteTimestamp.IsSet() {
+		syntheticSuffix = storage.EncodeMVCCTimestampSuffix(sst.RemoteRewriteTimestamp)
+	}
+	var syntheticPrefix []byte
+	if len(sst.RemoteSyntheticPrefix) > 0 {
+		syntheticPrefix = sst.RemoteSyntheticPrefix
+	}
+
+	externalFile := pebble.ExternalFile{
+		Locator:           remote.Locator(sst.RemoteFileLoc),
+		ObjName:           sst.RemoteFilePath,
+		Size:              sst.ApproximatePhysicalSize,
+		StartKey:          start.Encode(),
+		EndKey:            end.Encode(),
+		EndKeyIsInclusive: endInclusive,
+		SyntheticSuffix:   syntheticSuffix,
+		SyntheticPrefix:   syntheticPrefix,
+		HasPointKey:       true,
+	}
+	tBegin := timeutil.Now()
+	defer func() {
+		if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
+			log.Infof(ctx,
+				"ingesting External SST at index %d took %.2fs", index, dur.Seconds(),
+			)
+		}
+	}()
+
+	_, ingestErr := env.eng.IngestExternalFiles(ctx, []pebble.ExternalFile{externalFile})
+	if ingestErr != nil {
+		log.Fatalf(ctx, "while ingesting %s: %v", sst.RemoteFilePath, ingestErr)
+	}
+	log.Eventf(ctx, "ingested SSTable at index %d, term %d: external %s", index, term, sst.RemoteFilePath)
+}
+
 // ingestViaCopy writes the SST to ingestPath (with rate limiting) and then ingests it
 // into the Engine.
 //
@@ -747,19 +785,19 @@ func ingestViaCopy(
 ) error {
 	// TODO(tschottdorf): remove this once sideloaded storage guarantees its
 	// existence.
-	if err := eng.MkdirAll(filepath.Dir(ingestPath), os.ModePerm); err != nil {
+	if err := eng.Env().MkdirAll(filepath.Dir(ingestPath), os.ModePerm); err != nil {
 		panic(err)
 	}
-	if _, err := eng.Stat(ingestPath); err == nil {
+	if _, err := eng.Env().Stat(ingestPath); err == nil {
 		// The file we want to ingest exists. This can happen since the
 		// ingestion may apply twice (we ingest before we mark the Raft
 		// command as committed). Just unlink the file (the storage engine
 		// created a hard link); after that we're free to write it again.
-		if err := eng.Remove(ingestPath); err != nil {
+		if err := eng.Env().Remove(ingestPath); err != nil {
 			return errors.Wrapf(err, "while removing existing file during ingestion of %s", ingestPath)
 		}
 	}
-	if err := kvserverbase.WriteFileSyncing(ctx, ingestPath, sst.Data, eng, 0600, st, limiter); err != nil {
+	if err := kvserverbase.WriteFileSyncing(ctx, ingestPath, sst.Data, eng.Env(), 0600, st, limiter); err != nil {
 		return errors.Wrapf(err, "while ingesting %s", ingestPath)
 	}
 	if err := eng.IngestLocalFiles(ctx, []string{ingestPath}); err != nil {
@@ -977,6 +1015,15 @@ func (r *Replica) evaluateProposal(
 		// Set the proposal's replicated result, which contains metadata and
 		// side-effects that are to be replicated to all replicas.
 		res.Replicated.IsLeaseRequest = ba.IsSingleRequestLeaseRequest()
+		if res.Replicated.IsLeaseRequest {
+			// NOTE: this cluster version check may return true even after the
+			// corresponding check in evalNewLease has returned false. That's ok, as
+			// this check is used to inform raft about whether an expiration-based
+			// lease **can** be promoted to an epoch-based lease without a sequence
+			// change, not that it **is** being promoted without a sequence change.
+			isV24_1 := r.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start)
+			res.Replicated.IsLeaseRequestWithExpirationToEpochEquivalent = isV24_1
+		}
 		if ba.AppliesTimestampCache() {
 			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
 		}

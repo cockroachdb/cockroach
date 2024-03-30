@@ -20,17 +20,8 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 13 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #104
-   table:
-  +  checks:
-  +  - constraintId: 2
-  +    expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
-  +    fromHashShardedColumn: true
-  +    name: check_crdb_internal_j_shard_3
-  +    validity: Validating
-     columns:
-     - id: 1
   ...
      id: 104
      modificationTime: {}
@@ -49,19 +40,6 @@ upsert descriptor #104
   +    direction: ADD
   +    mutationId: 1
   +    state: DELETE_ONLY
-  +  - constraint:
-  +      check:
-  +        constraintId: 2
-  +        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
-  +        fromHashShardedColumn: true
-  +        name: crdb_internal_constraint_2_name_placeholder
-  +        validity: Validating
-  +      foreignKey: {}
-  +      name: crdb_internal_constraint_2_name_placeholder
-  +      uniqueWithoutIndexConstraint: {}
-  +    direction: ADD
-  +    mutationId: 1
-  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 5
@@ -151,17 +129,8 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 17 MutationType ops
+## PreCommitPhase stage 2 of 2 with 15 MutationType ops
 upsert descriptor #104
-   table:
-  +  checks:
-  +  - constraintId: 2
-  +    expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
-  +    fromHashShardedColumn: true
-  +    name: check_crdb_internal_j_shard_3
-  +    validity: Validating
-     columns:
-     - id: 1
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -214,19 +183,6 @@ upsert descriptor #104
   +    direction: ADD
   +    mutationId: 1
   +    state: DELETE_ONLY
-  +  - constraint:
-  +      check:
-  +        constraintId: 2
-  +        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
-  +        fromHashShardedColumn: true
-  +        name: crdb_internal_constraint_2_name_placeholder
-  +        validity: Validating
-  +      foreignKey: {}
-  +      name: crdb_internal_constraint_2_name_placeholder
-  +      uniqueWithoutIndexConstraint: {}
-  +    direction: ADD
-  +    mutationId: 1
-  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 5
@@ -321,11 +277,10 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 1 of 15 with 5 MutationType ops
+## PostCommitPhase stage 1 of 16 with 5 MutationType ops
 upsert descriptor #104
-  ...
-       name: check_crdb_internal_j_shard_3
-       validity: Validating
+   table:
+  +  checks:
   +  - columnIds:
   +    - 3
   +    expr: crdb_internal_j_shard_3 IS NOT NULL
@@ -339,8 +294,8 @@ upsert descriptor #104
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
-     - constraint:
-         check:
+     - direction: ADD
+       index:
   ...
          version: 4
        mutationId: 1
@@ -370,14 +325,14 @@ upsert descriptor #104
   -  version: "2"
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 2 of 15 with 1 BackfillType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 2 of 16 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 15 with 1 BackfillType op
+## PostCommitPhase stage 2 of 16 with 1 BackfillType op
 backfill indexes [4] from index #1 in table #104
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 3 of 15 with 3 MutationType ops
+## PostCommitPhase stage 3 of 16 with 3 MutationType ops
 upsert descriptor #104
   ...
          version: 4
@@ -392,10 +347,10 @@ upsert descriptor #104
   -  version: "3"
   +  version: "4"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 4 of 15 with 1 MutationType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 4 of 16 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
-## PostCommitPhase stage 4 of 15 with 3 MutationType ops
+## PostCommitPhase stage 4 of 16 with 3 MutationType ops
 upsert descriptor #104
   ...
          version: 4
@@ -410,14 +365,14 @@ upsert descriptor #104
   -  version: "4"
   +  version: "5"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 5 of 15 with 1 BackfillType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 5 of 16 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
-## PostCommitPhase stage 5 of 15 with 1 BackfillType op
+## PostCommitPhase stage 5 of 16 with 1 BackfillType op
 merge temporary indexes [5] into backfilled indexes [4] in table #104
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 15 with 4 MutationType ops
+## PostCommitPhase stage 6 of 16 with 4 MutationType ops
 upsert descriptor #104
   ...
          version: 4
@@ -441,27 +396,25 @@ upsert descriptor #104
   -  version: "5"
   +  version: "6"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 7 of 15 with 3 ValidationType ops pending"
+update progress of schema change job #1: "PostCommitPhase stage 7 of 16 with 2 ValidationType ops pending"
 commit transaction #8
 begin transaction #9
-## PostCommitPhase stage 7 of 15 with 3 ValidationType ops
+## PostCommitPhase stage 7 of 16 with 2 ValidationType ops
 validate forward indexes [4] in table #104
 validate CHECK constraint crdb_internal_j_shard_3_auto_not_null in table #104
-validate CHECK constraint check_crdb_internal_j_shard_3 in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitPhase stage 8 of 15 with 19 MutationType ops
+## PostCommitPhase stage 8 of 16 with 18 MutationType ops
 upsert descriptor #104
-  ...
-       fromHashShardedColumn: true
-       name: check_crdb_internal_j_shard_3
-  -    validity: Validating
+   table:
+  -  checks:
   -  - columnIds:
   -    - 3
   -    expr: crdb_internal_j_shard_3 IS NOT NULL
   -    isNonNullConstraint: true
   -    name: crdb_internal_j_shard_3_auto_not_null
   -    validity: Validating
+  +  checks: []
      columns:
      - id: 1
   ...
@@ -473,19 +426,6 @@ upsert descriptor #104
   ...
        mutationId: 1
        state: WRITE_ONLY
-  -  - constraint:
-  -      check:
-  -        constraintId: 2
-  -        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
-  -        fromHashShardedColumn: true
-  -        name: crdb_internal_constraint_2_name_placeholder
-  -        validity: Validating
-  -      foreignKey: {}
-  -      name: crdb_internal_constraint_2_name_placeholder
-  -      uniqueWithoutIndexConstraint: {}
-  -    direction: ADD
-  -    mutationId: 1
-  -    state: WRITE_ONLY
   -  - direction: ADD
   +  - direction: DROP
        index:
@@ -672,10 +612,10 @@ upsert descriptor #104
   -  version: "6"
   +  version: "7"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 9 of 15 with 1 MutationType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 9 of 16 with 1 MutationType op pending"
 commit transaction #10
 begin transaction #11
-## PostCommitPhase stage 9 of 15 with 3 MutationType ops
+## PostCommitPhase stage 9 of 16 with 3 MutationType ops
 upsert descriptor #104
   ...
          version: 4
@@ -690,14 +630,14 @@ upsert descriptor #104
   -  version: "7"
   +  version: "8"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 10 of 15 with 1 BackfillType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 10 of 16 with 1 BackfillType op pending"
 commit transaction #11
 begin transaction #12
-## PostCommitPhase stage 10 of 15 with 1 BackfillType op
+## PostCommitPhase stage 10 of 16 with 1 BackfillType op
 backfill indexes [2] from index #4 in table #104
 commit transaction #12
 begin transaction #13
-## PostCommitPhase stage 11 of 15 with 3 MutationType ops
+## PostCommitPhase stage 11 of 16 with 3 MutationType ops
 upsert descriptor #104
   ...
          version: 4
@@ -712,10 +652,10 @@ upsert descriptor #104
   -  version: "8"
   +  version: "9"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 12 of 15 with 1 MutationType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 12 of 16 with 1 MutationType op pending"
 commit transaction #13
 begin transaction #14
-## PostCommitPhase stage 12 of 15 with 3 MutationType ops
+## PostCommitPhase stage 12 of 16 with 3 MutationType ops
 upsert descriptor #104
   ...
          version: 4
@@ -730,14 +670,14 @@ upsert descriptor #104
   -  version: "9"
   +  version: "10"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 13 of 15 with 1 BackfillType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 13 of 16 with 1 BackfillType op pending"
 commit transaction #14
 begin transaction #15
-## PostCommitPhase stage 13 of 15 with 1 BackfillType op
+## PostCommitPhase stage 13 of 16 with 1 BackfillType op
 merge temporary indexes [3] into backfilled indexes [2] in table #104
 commit transaction #15
 begin transaction #16
-## PostCommitPhase stage 14 of 15 with 4 MutationType ops
+## PostCommitPhase stage 14 of 16 with 4 MutationType ops
 upsert descriptor #104
   ...
          version: 4
@@ -761,29 +701,15 @@ upsert descriptor #104
   -  version: "10"
   +  version: "11"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 15 of 15 with 1 ValidationType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 15 of 16 with 1 ValidationType op pending"
 commit transaction #16
 begin transaction #17
-## PostCommitPhase stage 15 of 15 with 1 ValidationType op
+## PostCommitPhase stage 15 of 16 with 1 ValidationType op
 validate forward indexes [2] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 2 with 16 MutationType ops
+## PostCommitPhase stage 16 of 16 with 4 MutationType ops
 upsert descriptor #104
-  ...
-         oid: 20
-         width: 64
-  +  - computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 3:::INT8)
-  +    hidden: true
-  +    id: 3
-  +    name: crdb_internal_j_shard_3
-  +    type:
-  +      family: IntFamily
-  +      oid: 20
-  +      width: 64
-  +    virtual: true
-     createAsOfTime:
-       wallTime: "1640995200000000000"
   ...
            statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
            statementTag: ALTER TABLE
@@ -816,6 +742,79 @@ upsert descriptor #104
   +    storeColumnNames: []
   +    unique: true
   +    version: 4
+     modificationTime: {}
+     mutations:
+  ...
+       mutationId: 1
+       state: WRITE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 3
+  -      createdAtNanos: "1640998800000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      keySuffixColumnIds:
+  -      - 3
+  -      - 2
+  -      name: t_i_key
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     - direction: DROP
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "11"
+  +  version: "12"
+persist all catalog changes to storage
+adding table for stats refresh: 104
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 3 with 14 MutationType ops pending"
+set schema change job #1 to non-cancellable
+commit transaction #18
+begin transaction #19
+## PostCommitNonRevertiblePhase stage 1 of 3 with 16 MutationType ops
+upsert descriptor #104
+   table:
+  -  checks: []
+  +  checks:
+  +  - columnIds:
+  +    - 3
+  +    constraintId: 2
+  +    expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
+  +    fromHashShardedColumn: true
+  +    name: check_crdb_internal_j_shard_3
+  +    validity: Validating
+     columns:
+     - id: 1
+  ...
+         oid: 20
+         width: 64
+  +  - computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 3:::INT8)
+  +    hidden: true
+  +    id: 3
+  +    name: crdb_internal_j_shard_3
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +    virtual: true
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
      modificationTime: {}
      mutations:
   -  - column:
@@ -874,37 +873,21 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: WRITE_ONLY
-  -  - direction: ADD
-  -    index:
-  -      constraintId: 3
-  -      createdAtNanos: "1640998800000000000"
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 2
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 1
-  -      keyColumnNames:
-  -      - i
-  -      keySuffixColumnIds:
-  -      - 3
-  -      - 2
-  -      name: t_i_key
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnNames: []
-  -      unique: true
-  -      version: 4
-  -    mutationId: 1
-  -    state: WRITE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 4
   -      createdExplicitly: true
-  -      foreignKey: {}
+  +    state: DELETE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 3
+  +        constraintId: 2
+  +        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
+  +        fromHashShardedColumn: true
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Validating
+         foreignKey: {}
   -      geoConfig: {}
   -      id: 3
   -      interleave: {}
@@ -924,22 +907,36 @@ upsert descriptor #104
   -      unique: true
   -      useDeletePreservingEncoding: true
   -      version: 4
-  -    mutationId: 1
-       state: DELETE_ONLY
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
      name: t
+     nextColumnId: 4
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "11"
-  +  version: "12"
+  -  version: "12"
+  +  version: "13"
 persist all catalog changes to storage
 adding table for stats refresh: 104
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending"
-set schema change job #1 to non-cancellable
-commit transaction #18
-begin transaction #19
-## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 1 ValidationType op pending"
+commit transaction #19
+begin transaction #20
+## PostCommitNonRevertiblePhase stage 2 of 3 with 1 ValidationType op
+validate CHECK constraint check_crdb_internal_j_shard_3 in table #104
+commit transaction #20
+begin transaction #21
+## PostCommitNonRevertiblePhase stage 3 of 3 with 7 MutationType ops
 upsert descriptor #104
+  ...
+       fromHashShardedColumn: true
+       name: check_crdb_internal_j_shard_3
+  -    validity: Validating
+     columns:
+     - id: 1
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -1003,14 +1000,28 @@ upsert descriptor #104
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
-  +  mutations: []
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 3
+  -        constraintId: 2
+  -        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
+  -        fromHashShardedColumn: true
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        validity: Validating
+  -      foreignKey: {}
+  -      name: crdb_internal_constraint_2_name_placeholder
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
      name: t
      nextColumnId: 4
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "12"
-  +  version: "13"
+  -  version: "13"
+  +  version: "14"
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)"
   descriptor IDs: [104]
@@ -1020,6 +1031,6 @@ updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #19
+commit transaction #21
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

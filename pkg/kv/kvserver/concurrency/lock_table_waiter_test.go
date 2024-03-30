@@ -38,7 +38,7 @@ import (
 )
 
 type mockIntentResolver struct {
-	pushTxn        func(context.Context, *enginepb.TxnMeta, kvpb.Header, kvpb.PushTxnType) (*roachpb.Transaction, *Error)
+	pushTxn        func(context.Context, *enginepb.TxnMeta, kvpb.Header, kvpb.PushTxnType) (*roachpb.Transaction, bool, *Error)
 	resolveIntent  func(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
 	resolveIntents func(context.Context, []roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
 }
@@ -46,7 +46,7 @@ type mockIntentResolver struct {
 // mockIntentResolver implements the IntentResolver interface.
 func (m *mockIntentResolver) PushTransaction(
 	ctx context.Context, txn *enginepb.TxnMeta, h kvpb.Header, pushType kvpb.PushTxnType,
-) (*roachpb.Transaction, *Error) {
+) (*roachpb.Transaction, bool, *Error) {
 	return m.pushTxn(ctx, txn, h, pushType)
 }
 
@@ -88,7 +88,7 @@ func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet
 	return true
 }
 func (g *mockLockTableGuard) IsKeyLockedByConflictingTxn(
-	roachpb.Key, lock.Strength,
+	context.Context, roachpb.Key, lock.Strength,
 ) (bool, *enginepb.TxnMeta, error) {
 	panic("unimplemented")
 }
@@ -115,8 +115,7 @@ func setupLockTableWaiterTest() (
 ) {
 	ir := &mockIntentResolver{}
 	st := cluster.MakeTestingClusterSettings()
-	LockTableLivenessPushDelay.Override(context.Background(), &st.SV, 0)
-	LockTableDeadlockDetectionPushDelay.Override(context.Background(), &st.SV, 0)
+	LockTableDeadlockOrLivenessDetectionPushDelay.Override(context.Background(), &st.SV, 0)
 	manual := timeutil.NewManualTime(lockTableWaiterTestClock.GoTime())
 	guard := &mockLockTableGuard{
 		signal: make(chan struct{}, 1),
@@ -169,10 +168,6 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 	t.Run("state", func(t *testing.T) {
 		t.Run("waitFor", func(t *testing.T) {
 			testWaitPush(t, waitFor, makeReq, expPushTS())
-		})
-
-		t.Run("waitForDistinguished", func(t *testing.T) {
-			testWaitPush(t, waitForDistinguished, makeReq, expPushTS())
 		})
 
 		t.Run("waitElsewhere", func(t *testing.T) {
@@ -246,12 +241,7 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 
 	t.Run("state", func(t *testing.T) {
 		t.Run("waitFor", func(t *testing.T) {
-			t.Log("waitFor does not cause non-transactional requests to push")
-			testWaitNoopUntilDone(t, waitFor, makeReq)
-		})
-
-		t.Run("waitForDistinguished", func(t *testing.T) {
-			testWaitPush(t, waitForDistinguished, makeReq, reqHeaderTS)
+			testWaitPush(t, waitFor, makeReq, reqHeaderTS)
 		})
 
 		t.Run("waitElsewhere", func(t *testing.T) {
@@ -349,7 +339,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 				pusheeArg *enginepb.TxnMeta,
 				h kvpb.Header,
 				pushType kvpb.PushTxnType,
-			) (*roachpb.Transaction, *Error) {
+			) (*roachpb.Transaction, bool, *Error) {
 				require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
 				require.Equal(t, req.Txn, h.Txn)
 				require.Equal(t, expPushTS, h.Timestamp)
@@ -384,7 +374,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 					g.state = waitingState{kind: doneWaiting}
 					g.notify()
 				}
-				return resp, nil
+				return resp, false, nil
 			}
 
 			err := w.WaitOn(ctx, req, g)
@@ -465,10 +455,6 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 
 		t.Run("waitFor high priority", func(t *testing.T) {
 			testErrorWaitPush(t, waitFor, makeHighPriReq, expPushTS, reasonWaitPolicy)
-		})
-
-		t.Run("waitForDistinguished", func(t *testing.T) {
-			testErrorWaitPush(t, waitForDistinguished, makeReq, expPushTS, reasonWaitPolicy)
 		})
 
 		t.Run("waitElsewhere", func(t *testing.T) {
@@ -552,7 +538,7 @@ func testErrorWaitPush(
 				pusheeArg *enginepb.TxnMeta,
 				h kvpb.Header,
 				pushType kvpb.PushTxnType,
-			) (*roachpb.Transaction, *Error) {
+			) (*roachpb.Transaction, bool, *Error) {
 				require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
 				require.Equal(t, req.Txn, h.Txn)
 				require.Equal(t, expPushTS, h.Timestamp)
@@ -560,7 +546,7 @@ func testErrorWaitPush(
 
 				resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.PENDING}
 				if pusheeActive {
-					return nil, kvpb.NewError(&kvpb.TransactionPushError{
+					return nil, false, kvpb.NewError(&kvpb.TransactionPushError{
 						PusheeTxn: *resp,
 					})
 				}
@@ -583,7 +569,7 @@ func testErrorWaitPush(
 					return nil
 				}
 				resp.Status = roachpb.ABORTED
-				return resp, nil
+				return resp, false, nil
 			}
 
 			err := w.WaitOn(ctx, req, g)
@@ -637,10 +623,6 @@ func TestLockTableWaiterWithLockTimeout(t *testing.T) {
 		t.Run("state", func(t *testing.T) {
 			t.Run("waitFor", func(t *testing.T) {
 				testWaitPushWithTimeout(t, waitFor, makeReq)
-			})
-
-			t.Run("waitForDistinguished", func(t *testing.T) {
-				testWaitPushWithTimeout(t, waitForDistinguished, makeReq)
 			})
 
 			t.Run("waitElsewhere", func(t *testing.T) {
@@ -724,7 +706,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					pusheeArg *enginepb.TxnMeta,
 					h kvpb.Header,
 					pushType kvpb.PushTxnType,
-				) (*roachpb.Transaction, *Error) {
+				) (*roachpb.Transaction, bool, *Error) {
 					require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
 					require.Equal(t, req.Txn, h.Txn)
 
@@ -737,7 +719,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 
 						// Wait for the context to hit its timeout.
 						<-ctx.Done()
-						return nil, kvpb.NewError(ctx.Err())
+						return nil, false, kvpb.NewError(ctx.Err())
 					}
 
 					require.Equal(t, kvpb.PUSH_ABORT, pushType)
@@ -748,7 +730,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 
 					resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.PENDING}
 					if pusheeActive {
-						return nil, kvpb.NewError(&kvpb.TransactionPushError{
+						return nil, false, kvpb.NewError(&kvpb.TransactionPushError{
 							PusheeTxn: *resp,
 						})
 					}
@@ -771,7 +753,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 						return nil
 					}
 					resp.Status = roachpb.ABORTED
-					return resp, nil
+					return resp, false, nil
 				}
 
 				err := w.WaitOn(ctx, req, g)
@@ -820,7 +802,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 		pusheeTxn := makeTxnProto("pushee")
 		lockHeld := sync
 		g.state = waitingState{
-			kind:          waitForDistinguished,
+			kind:          waitFor,
 			txn:           &pusheeTxn.TxnMeta,
 			key:           keyA,
 			held:          lockHeld,
@@ -831,8 +813,8 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 		g.notify()
 		ir.pushTxn = func(
 			_ context.Context, _ *enginepb.TxnMeta, _ kvpb.Header, _ kvpb.PushTxnType,
-		) (*roachpb.Transaction, *Error) {
-			return nil, err1
+		) (*roachpb.Transaction, bool, *Error) {
+			return nil, false, err1
 		}
 		err := w.WaitOn(ctx, req, g)
 		require.Equal(t, err1, err)
@@ -842,8 +824,8 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 			g.notify()
 			ir.pushTxn = func(
 				_ context.Context, _ *enginepb.TxnMeta, _ kvpb.Header, _ kvpb.PushTxnType,
-			) (*roachpb.Transaction, *Error) {
-				return &pusheeTxn, nil
+			) (*roachpb.Transaction, bool, *Error) {
+				return &pusheeTxn, false, nil
 			}
 			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
 				return err2
@@ -1011,7 +993,7 @@ func TestContentionEventTracer(t *testing.T) {
 		events = append(events, ev)
 	})
 	h.notify(ctx, waitingState{
-		kind: waitForDistinguished,
+		kind: waitFor,
 		key:  roachpb.Key("a"),
 		txn:  &txn1.TxnMeta,
 	})
@@ -1068,7 +1050,7 @@ func TestContentionEventTracer(t *testing.T) {
 	// emit an event.
 	manual.Advance(12)
 	h.notify(ctx, waitingState{
-		kind: waitForDistinguished,
+		kind: waitFor,
 		key:  roachpb.Key("b"),
 		txn:  &txn2.TxnMeta,
 	})

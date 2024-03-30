@@ -1,4 +1,8 @@
-# LogicTest: local
+# LogicTest: local-read-committed
+
+# Begin with SERIALIZABLE; later in the test the default is changed to READ COMMITTED
+statement ok
+SET default_transaction_isolation = 'SERIALIZABLE'
 
 # Create a table, write a row, lock it, then switch users.
 statement ok
@@ -349,9 +353,6 @@ SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name IN ('t','t2')
 0
 
 # Test with different isolation levels.
-
-statement ok
-SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
 
 statement ok
 SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true

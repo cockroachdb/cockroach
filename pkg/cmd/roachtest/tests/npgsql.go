@@ -42,7 +42,7 @@ func registerNpgsql(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
+		c.Start(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -105,7 +105,7 @@ sudo ln -s /snap/dotnet-sdk/current/dotnet /usr/local/bin/dotnet`,
 		t.L().Printf("Latest npgsql release is %s.", latestTag)
 		t.L().Printf("Supported release is %s.", npgsqlSupportedTag)
 
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Nodes(1), "echo -n {pgport:1}")
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Nodes(1)), "echo -n {pgport:1}")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -134,7 +134,7 @@ echo '%s' | git apply --ignore-whitespace -`, fmt.Sprintf(npgsqlPatch, result.St
 		t.Status("running npgsql test suite")
 		// Running the test suite is expected to error out, so swallow the error.
 		result, err = c.RunWithDetailsSingleNode(
-			ctx, t.L(), node,
+			ctx, t.L(), option.WithNodes(node),
 			`cd /mnt/data1/npgsql && dotnet test test/Npgsql.Tests --logger trx`,
 		)
 

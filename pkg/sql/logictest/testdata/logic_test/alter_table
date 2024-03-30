@@ -391,7 +391,13 @@ ALTER TABLE t DROP COLUMN IF EXISTS e
 
 # Negative test to assert that NOTICEs are NOT emitted if there are no indexes
 # being dropped.
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 statement notice ^$
+ALTER TABLE t DROP COLUMN IF EXISTS e CASCADE
+
+onlyif config local-read-committed
+statement ok
 ALTER TABLE t DROP COLUMN IF EXISTS e CASCADE
 
 statement ok
@@ -533,10 +539,12 @@ INSERT INTO add_default (a) VALUES (1)
 statement ok
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 42
 
-# query TTBTTTB colnames
-# SHOW COLUMNS FROM add_default
-# ----
-# column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
+query TTBTTTB colnames,rowsort
+SHOW COLUMNS FROM add_default
+----
+column_name  data_type  is_nullable  column_default  generation_expression  indices             is_hidden
+a            INT8       false        NULL            ·                      {add_default_pkey}  false
+b            INT8       false        42              ·                      {add_default_pkey}  false
 
 statement ok
 INSERT INTO add_default (a) VALUES (2)
@@ -655,7 +663,7 @@ ALTER TABLE add_default ADD g INT DEFAULT 'foo'::regtype::INT
 subtest 26422
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER TABLE add_default ADD fee FLOAT NOT NULL DEFAULT 2.99
@@ -665,6 +673,29 @@ ALTER TABLE add_default ALTER COLUMN fee DROP DEFAULT
 
 statement error pgcode XXA00 null value in column "fee" violates not-null constraint
 COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE add_default ALTER COLUMN a SET DEFAULT 2
+
+statement ok
+ALTER TABLE add_default ALTER COLUMN a DROP DEFAULT
+
+statement ok
+COMMIT
+
+query TTBTTTB colnames,rowsort
+SHOW COLUMNS FROM add_default
+----
+column_name  data_type  is_nullable  column_default           generation_expression  indices             is_hidden
+a            INT8       false        NULL                     ·                      {add_default_pkey}  false
+b            INT8       true         NULL                     ·                      {add_default_pkey}  false
+c            TIMESTAMP  true         current_timestamp()      ·                      {add_default_pkey}  false
+d            TIMESTAMP  true         transaction_timestamp()  ·                      {add_default_pkey}  false
+e            TIMESTAMP  true         statement_timestamp()    ·                      {add_default_pkey}  false
+f            TIMESTAMP  true         NULL                     ·                      {add_default_pkey}  false
 
 query T rowsort
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.change_in_explicit_txn'
@@ -1144,7 +1175,7 @@ DROP TABLE telemetry_test
 
 # Disable stats injection in explicit transactions.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 CREATE TABLE inject_stats (k CHAR PRIMARY KEY, v TIMESTAMPTZ)
@@ -1229,7 +1260,7 @@ CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (x INT, y INT, INDEX i (x))
 
 statement error pq: column \"x\" does not exist
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE t2 DROP COLUMN x;
 ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1(x);
 
@@ -1267,7 +1298,7 @@ statement ok
 DROP TABLE t1, t2 CASCADE
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (y INT);
 ALTER TABLE t2 ADD COLUMN x INT REFERENCES t1 (x);
@@ -1289,7 +1320,7 @@ statement ok
 DROP TABLE t1, t2 CASCADE
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (y INT);
 ALTER TABLE t2 ADD COLUMN x INT;
@@ -1312,7 +1343,7 @@ statement ok
 DROP TABLE t1, t2 CASCADE
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE t1 (x INT PRIMARY KEY);
 INSERT INTO t1 VALUES (1);
 CREATE TABLE t2 (y INT);
@@ -1343,7 +1374,7 @@ CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (y INT)
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE t2 ADD COLUMN x INT;
 CREATE INDEX ON t2 (x);
 ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x);
@@ -1370,7 +1401,7 @@ CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (x INT)
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE INDEX ON t2 (x);
 ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x);
 COMMIT
@@ -1553,16 +1584,19 @@ statement error column "g" does not exist
 ALTER TABLE unique_without_index ADD CONSTRAINT bad_partial_unique UNIQUE WITHOUT INDEX (f) WHERE g > 0
 
 # The unique constraint prevents new duplicate values.
+skipif config local-read-committed 110873
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "my_unique_f"\nDETAIL: Key \(f\)=\(1\) already exists\.
 INSERT INTO unique_without_index (f) VALUES (1), (1)
 
 # There is no unique constraint on e, yet, so this insert succeeds.
+skipif config local-read-committed 110873
 statement ok
 INSERT INTO unique_without_index (e, f) VALUES (1, 1), (1, 2)
 
 # But trying to add a unique constraint now fails.
 # Note that we omit the constraint name in the expected error message because if the declarative schema changer is used,
 # the constraint name, at the time of validation failure, is still a place-holder name.
+skipif config local-read-committed 110873
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX (e)
 
@@ -1572,15 +1606,19 @@ ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e2 UNIQUE WITHOUT INDEX (e) NOT VALID
 
 # Trying to validate one of the constraints will fail.
+skipif config local-read-committed 110873
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # But after we delete a row, validation should succeed.
 statement ok
 DELETE FROM unique_without_index WHERE e = 1 AND f = 1;
+
+statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # All these constraints are already valid, so validation should succeed.
+skipif config local-read-committed 110873
 statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_b;
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_a_b;
@@ -1639,6 +1677,8 @@ ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1
 # But after we delete a row, validation should succeed.
 statement ok
 DELETE FROM unique_without_index_partial WHERE a = 1 AND b = 3 AND c = -3;
+
+statement ok
 ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1;
 
 # Creating a new validated constraint should also succeed.
@@ -1775,7 +1815,7 @@ DELETE FROM t54629 WHERE c = 1;
 subtest regression_45985
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE t45985 (a INT);
 ALTER TABLE t45985 ADD COLUMN b INT;
 COMMIT;
@@ -1797,7 +1837,7 @@ statement ok
 CREATE TABLE t_col_drop (a INT);
 
 statement error pgcode 0A000 constraint "a_auto_not_null" in the middle of being added, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE t_col_drop ALTER COLUMN a SET NOT NULL;
 ALTER TABLE t_col_drop DROP COLUMN a;
 
@@ -1808,7 +1848,7 @@ statement ok
 DROP TABLE t_col_drop
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE t_col_drop (a INT);
 ALTER TABLE t_col_drop ALTER COLUMN a SET NOT NULL;
 ALTER TABLE t_col_drop DROP COLUMN a;
@@ -1857,7 +1897,7 @@ statement ok
 CREATE TABLE t60786(i INT PRIMARY KEY);
 
 statement error pgcode 0A000 constraint "fk" in the middle of being added, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE child_60786(i INT PRIMARY KEY);
 ALTER TABLE t60786 ADD CONSTRAINT fk FOREIGN KEY (i) REFERENCES child_60786(i) NOT VALID;
 ALTER TABLE t60786 DROP CONSTRAINT fk CASCADE
@@ -1866,7 +1906,7 @@ statement ok
 ROLLBACK
 
 statement error pgcode 0A000 constraint "ck" in the middle of being added, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE t60786 ADD CONSTRAINT ck CHECK(i > 0) NOT VALID;
 ALTER TABLE t60786 DROP CONSTRAINT ck CASCADE
 
@@ -1874,7 +1914,7 @@ statement ok
 ROLLBACK
 
 statement error pgcode 0A000 constraint "uq" in the middle of being added, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE t60786 ADD CONSTRAINT uq UNIQUE WITHOUT INDEX(i) NOT VALID;
 ALTER TABLE t60786 DROP CONSTRAINT uq CASCADE
 
@@ -1915,6 +1955,8 @@ subtest if_table_exists_already
 statement ok
 CREATE TABLE new_table()
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 CREATE TABLE IF NOT EXISTS new_table();
 ----
@@ -2252,7 +2294,7 @@ statement ok
 SET use_declarative_schema_changer = 'off';
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE tb AS SELECT 123::INT AS k FROM generate_series(1, 10);
 SET tracing = on,kv;
 ALTER TABLE tb ADD COLUMN v STRING NOT NULL DEFAULT ('abc'::STRING);
@@ -2277,7 +2319,7 @@ statement ok
 SET CLUSTER SETTING bulkio.column_backfill.update_chunk_size_threshold_bytes = 1;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE tb AS SELECT 123::INT AS k FROM generate_series(1, 10);
 SET tracing = on,kv;
 ALTER TABLE tb ADD COLUMN v STRING NOT NULL DEFAULT ('abc'::STRING);
@@ -2317,6 +2359,8 @@ ALTER TABLE storage_param_table SET (fillfactor=true)
 statement error unimplemented: storage parameter "toast_tuple_target"
 ALTER TABLE storage_param_table SET (toast_tuple_target=100)
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 ALTER TABLE storage_param_table SET (fillfactor=99.9, autovacuum_enabled = off)
 ----
@@ -2342,21 +2386,21 @@ ALTER TABLE storage_param_table RESET (fillfactor, toast_tuple_target)
 subtest drop-and-add-constraint-primary-index
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 create table const_tbl (a int, b int, constraint "bob" primary key (a, b));
 alter table const_tbl drop constraint "bob";
 alter table const_tbl add constraint "bob" primary key (a, b); -- this statement
 COMMIT;
 
 statement error relation \"const_tbl\" \(\d+\): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction.*
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 alter table const_tbl drop constraint "bob";
 alter table const_tbl add constraint "bob" primary key (a, b); -- this statement
 alter table const_tbl drop constraint "bob";
 COMMIT;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 alter table const_tbl drop constraint "bob";
 -- Note: Primary key must be restored first before any other command will
 -- be allowed.
@@ -2372,7 +2416,7 @@ statement ok
 alter table const_tbl add constraint "steve" CHECK (a > 100);
 
 statement error  pq: duplicate constraint name: "steve"
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 alter table const_tbl drop constraint "steve";
 alter table const_tbl add constraint "steve" CHECK (a > 100);
 COMMIT;
@@ -2471,7 +2515,7 @@ CREATE TABLE pk_fk_src(id int8 primary key, legacy_id int8 not null);
 CREATE TABLE pk_fk_ref(a_id int8 references pk_fk_src (id));
 
 statement error "pk_fk_src_pkey" is referenced by foreign key from table "pk_fk_ref"
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE pk_fk_src DROP CONSTRAINT "pk_fk_src_pkey";
 ALTER TABLE pk_fk_src ADD CONSTRAINT "pk_fk_src_pkey" PRIMARY KEY (legacy_id);
 COMMIT;
@@ -2480,7 +2524,7 @@ statement ok
 ROLLBACK;
 
 statement error "pk_fk_src_pkey" is referenced by foreign key from table "pk_fk_ref"
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE pk_fk_src DROP CONSTRAINT "pk_fk_src_pkey";
 ALTER TABLE pk_fk_src ADD CONSTRAINT "pk_fk_src_pkey_new" PRIMARY KEY (legacy_id);
 COMMIT;
@@ -2679,6 +2723,11 @@ statement error pgcode 23502 (null value in column "j" violates not-null constra
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL:::INT) STORED NOT NULL;
 
 # Note that the UNIQUE here leads to a secondary index being built which will fail.
+skipif config local-legacy-schema-changer
+statement error pgcode 23502 validation of column "j" NOT NULL failed on row: i=1, j=NULL
+ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL UNIQUE;
+
+onlyif config local-legacy-schema-changer
 statement error pgcode 23502 null value in column "j" violates not-null constraint
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL UNIQUE;
 
@@ -3180,9 +3229,6 @@ t_96728     t_96728_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)               
 subtest alter_table_with_multiple_commands_99035
 
 statement ok
-SET CLUSTER SETTING sql.schema.force_declarative_statements = "+ALTER TABLE";
-
-statement ok
 DROP TABLE IF EXISTS t_99035;
 CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
 INSERT INTO t_99035 VALUES (0,0);
@@ -3336,9 +3382,6 @@ CREATE TABLE public.t_99035 (
   CONSTRAINT check_j CHECK (j >= 0:::INT8)
 )
 
-statement ok
-RESET CLUSTER SETTING sql.schema.force_declarative_statements;
-
 subtest end
 
 # This subtest disallows using builtin function `cluster_logical_timestamp()`
@@ -3367,6 +3410,8 @@ subtest 99281
 
 statement ok
 SET experimental_enable_unique_without_index_constraints = true;
+
+statement ok
 CREATE TABLE t_99281 (i INT PRIMARY KEY, j INT NOT NULL, k INT NOT NULL, FAMILY "primary" (i,j,k));
 INSERT INTO t_99281 VALUES (0,0,0), (1,0,1);
 
@@ -3397,7 +3442,7 @@ ALTER TABLE t_99281 ADD COLUMN p INT DEFAULT unique_rowid(), ADD FOREIGN KEY (j)
 # The following statement is not supported using the legacy schema changer.
 skipif config local-legacy-schema-changer
 skipif config local-mixed-23.1
-statement error pq: foreign key violation: "t_99281" row j=0, i=[0-1] has no match in "t_99281_other"
+statement error pq: foreign key violation: "t_99281" row j=0, k=[0-1] has no match in "t_99281_other"
 ALTER TABLE t_99281 ALTER PRIMARY KEY USING COLUMNS (k), ADD FOREIGN KEY (j) REFERENCES t_99281_other;
 
 query TT
@@ -3495,9 +3540,313 @@ ALTER TABLE t_108974_v DROP COLUMN k;
 subtest end
 
 # Regression test for https://github.com/cockroachdb/cockroach/issues/110629.
+subtest 110629
+
 # Subqueries are not allowed in storage parameters.
 statement ok
 CREATE TABLE t_110629 (a INT PRIMARY KEY);
 
 statement error subqueries are not allowed in table storage parameters
 ALTER TABLE t SET ( 'string' = EXISTS ( TABLE error ) );
+
+subtest end
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/118246
+subtest 118246
+
+statement ok
+CREATE TABLE t_118246 (i INT PRIMARY KEY);
+INSERT INTO t_118246 VALUES (0);
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true;
+
+statement ok
+ALTER TABLE t_118246 ADD COLUMN j INT, ADD UNIQUE WITHOUT INDEX (j);
+
+statement ok
+ALTER TABLE t_118246 ADD COLUMN k INT DEFAULT 30, ADD UNIQUE WITHOUT INDEX (k);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_118246]
+----
+CREATE TABLE public.t_118246 (
+  i INT8 NOT NULL,
+  j INT8 NULL,
+  k INT8 NULL DEFAULT 30:::INT8,
+  CONSTRAINT t_118246_pkey PRIMARY KEY (i ASC),
+  CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j),
+  CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k)
+)
+
+subtest end
+
+
+# When the new primary key does not have the same columns as the original primary
+# key schema changes recreating secondary indexes could fail incorrectly during validation,
+# if the secondary had some references to the old primary index key (for example
+# partial expressions). This was because an scan of the new secondary index would
+# not return the old primary key, which query execution was expecting.
+subtest 118626
+
+statement ok
+CREATE TABLE public.t_118626(n int primary key, b int NOT NULL, c int NOT NULL);
+INSERT INTO public.t_118626 VALUES(1, 2, 3);
+
+statement ok
+CREATE UNIQUE INDEX ON public.t_118626(c) WHERE n>= 1;
+
+statement ok
+ALTER TABLE public.t_118626 ALTER PRIMARY KEY USING COLUMNS(b);
+
+# Regression test to make sure that we can drop and re-add a CHECK constraint
+# with the same name in one statement.
+subtest 120017
+
+statement ok
+CREATE TABLE t_120017 (
+  a INT PRIMARY KEY,
+  b TEXT,
+  c INT NOT NULL,
+  CHECK (b IN ('x', 'y'))
+)
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_120017
+DROP CONSTRAINT check_b,
+ADD CONSTRAINT check_b CHECK (b IN ('x', 'y', 'z'))
+
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor) #> '{table,mutations}'
+FROM system.descriptor
+WHERE id = 't_120017'::regclass::oid
+----
+NULL
+
+statement ok
+ALTER TABLE t_120017
+DROP CONSTRAINT "t_120017_pkey",
+ADD CONSTRAINT "t_120017_pkey" PRIMARY KEY (a, c)
+
+subtest end
+
+subtest identity_column
+
+statement ok
+CREATE TABLE t_add_generated (
+  a int NOT NULL,
+  b int NOT NULL,
+  c int,
+  d STRING NOT NULL,
+  e INT DEFAULT 1,
+  FAMILY (a,b,c,d,e)
+)
+
+statement ok
+ALTER TABLE t_add_generated ALTER COLUMN a ADD GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_add_generated]
+----
+CREATE TABLE public.t_add_generated (
+  a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+  b INT8 NOT NULL,
+  c INT8 NULL,
+  d STRING NOT NULL,
+  e INT8 NULL DEFAULT 1:::INT8,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_add_generated_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_a_b_c_d_e_rowid (a, b, c, d, e, rowid)
+)
+
+statement ok
+ALTER TABLE t_add_generated ALTER COLUMN b ADD GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_add_generated]
+----
+CREATE TABLE public.t_add_generated (
+  a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+  b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3),
+  c INT8 NULL,
+  d STRING NOT NULL,
+  e INT8 NULL DEFAULT 1:::INT8,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_add_generated_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_a_b_c_d_e_rowid (a, b, c, d, e, rowid)
+)
+
+query error pq: column "c" of relation "t_add_generated" must be declared NOT NULL before identity can be added
+ALTER TABLE t_add_generated ALTER COLUMN c ADD GENERATED ALWAYS AS IDENTITY;
+
+query error pq: column "e" of relation "t_add_generated" already has a default value
+ALTER TABLE t_add_generated ALTER COLUMN e ADD GENERATED ALWAYS AS IDENTITY;
+
+query error pq: column "a" of relation "t_add_generated" is already an identity column
+ALTER TABLE t_add_generated ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;
+
+query error pq: column "d" of relation "t_add_generated" type must be an integer type
+ALTER TABLE t_add_generated ALTER COLUMN d ADD GENERATED ALWAYS AS IDENTITY;
+
+statement ok
+INSERT INTO t_add_generated (d) VALUES ('11'), ('12'), ('13');
+
+statement ok
+INSERT INTO t_add_generated (a,d) VALUES (21,'21'), (22,'22'), (23,'23');
+
+statement error pq: cannot insert into column "b"\nDETAIL: Column "b" is an identity column defined as GENERATED ALWAYS
+INSERT INTO t_add_generated (b,d) VALUES (31,'31'), (32,'32'), (33,'33');
+
+query IIITI
+SELECT * FROM t_add_generated ORDER BY a
+----
+2   2   NULL  11  1
+5   5   NULL  12  1
+8   8   NULL  13  1
+21  11  NULL  21  1
+22  14  NULL  22  1
+23  17  NULL  23  1
+
+statement ok
+CREATE TABLE t_set_generated (
+  a int GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3),
+  b int GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+  c int,
+  FAMILY (a,b,c)
+);
+
+statement ok
+ALTER TABLE t_set_generated ALTER COLUMN a SET GENERATED BY DEFAULT;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_set_generated]
+----
+CREATE TABLE public.t_set_generated (
+  a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+  b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+  c INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_set_generated_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
+)
+
+statement ok
+ALTER TABLE t_set_generated ALTER COLUMN b SET GENERATED ALWAYS;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_set_generated]
+----
+CREATE TABLE public.t_set_generated (
+  a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+  b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3),
+  c INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_set_generated_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
+)
+
+statement error pq: column "c" of relation "t_set_generated" is not an identity column
+ALTER TABLE t_set_generated ALTER COLUMN c SET GENERATED BY DEFAULT;
+
+statement error pq: column "c" of relation "t_set_generated" is not an identity column
+ALTER TABLE t_set_generated ALTER COLUMN c SET GENERATED ALWAYS;
+
+statement ok
+INSERT INTO t_set_generated DEFAULT VALUES;
+
+statement ok
+INSERT INTO t_set_generated DEFAULT VALUES;
+
+statement ok
+INSERT INTO t_set_generated (a) VALUES (3);
+
+statement error pq: cannot insert into column "b"\nDETAIL: Column "b" is an identity column defined as GENERATED ALWAYS
+INSERT INTO t_set_generated (b) VALUES (4);
+
+query III
+SELECT * FROM t_set_generated ORDER BY a
+----
+2  2  NULL
+3  8  NULL
+5  5  NULL
+
+subtest end
+
+
+statement ok
+CREATE TABLE t_alter_identity (id SERIAL PRIMARY KEY, a int GENERATED ALWAYS AS IDENTITY, b int GENERATED ALWAYS AS IDENTITY, z int);
+
+statement error pq: INCREMENT must not be zero
+ALTER TABLE t_alter_identity ALTER COLUMN b SET INCREMENT 0;
+
+query error pq: START value \(11\) cannot be greater than MAXVALUE \(10\)
+ALTER TABLE t_alter_identity ALTER COLUMN b SET MAXVALUE 10 SET START WITH 11;
+
+query error pq: START value \(5\) cannot be less than MINVALUE \(10\)
+ALTER TABLE t_alter_identity ALTER COLUMN b SET MINVALUE 10 SET START WITH 5;
+
+query error pq: column "z" of relation "t_alter_identity" is not an identity column
+ALTER TABLE t_alter_identity ALTER COLUMN z SET START WITH 5;
+
+# Verify sequence options are implemented on the identity
+
+statement ok
+INSERT INTO t_alter_identity DEFAULT VALUES;
+
+statement ok
+ALTER TABLE t_alter_identity ALTER COLUMN b SET START WITH 5;
+
+statement ok
+ALTER TABLE t_alter_identity ALTER COLUMN b SET INCREMENT 4;
+
+statement ok
+ALTER TABLE t_alter_identity ALTER COLUMN b RESTART;
+
+statement ok
+INSERT INTO t_alter_identity DEFAULT VALUES;
+
+statement ok
+INSERT INTO t_alter_identity DEFAULT VALUES;
+
+statement ok
+ALTER TABLE t_alter_identity ALTER COLUMN b SET MAXVALUE 40 RESTART WITH 20 SET CACHE 5 SET INCREMENT BY 2
+
+statement ok
+INSERT INTO t_alter_identity DEFAULT VALUES;
+
+statement ok
+INSERT INTO t_alter_identity DEFAULT VALUES;
+
+query I rowsort
+SELECT b from t_alter_identity ORDER BY b;
+----
+1
+5
+9
+18
+20
+
+statement ok
+CREATE TABLE t_identity_drop (a int GENERATED ALWAYS AS IDENTITY (START WITH 10), b int GENERATED BY DEFAULT AS IDENTITY);
+
+statement error pgcode 428C9 pq: cannot insert into column "a"\nDETAIL: Column "a" is an identity column defined as GENERATED ALWAYS
+INSERT INTO t_identity_drop (a) VALUES (3);
+
+statement ok
+ALTER TABLE t_identity_drop ALTER COLUMN a DROP IDENTITY;
+
+statement error pgcode 55000 pq: column "a" of relation "t_identity_drop" is not an identity column
+ALTER TABLE t_identity_drop ALTER COLUMN a DROP IDENTITY;
+
+statement notice NOTICE: column "a" of relation "t_identity_drop" is not an identity column, skipping
+ALTER TABLE t_identity_drop ALTER COLUMN a DROP IDENTITY IF EXISTS;
+
+statement ok
+INSERT INTO t_identity_drop (a) VALUES (3);
+
+statement ok
+CREATE TABLE t_identity_drop_dependency(id INT PRIMARY KEY DEFAULT nextval('public.t_identity_drop_b_seq'));
+
+statement error pgcode 2BP01 pq: cannot drop table t_identity_drop because other objects depend on it
+ALTER TABLE t_identity_drop ALTER COLUMN b DROP IDENTITY;

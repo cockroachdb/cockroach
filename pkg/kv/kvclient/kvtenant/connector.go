@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -668,15 +669,25 @@ func (c *connector) TenantRanges(
 func (c *connector) NewIterator(
 	ctx context.Context, span roachpb.Span,
 ) (rangedesc.Iterator, error) {
+	rangeDescriptors, err := c.getRangeDescs(ctx, span, 0)
+	return rangedesc.NewSliceIterator(rangeDescriptors), err
+}
+
+func (c *connector) getRangeDescs(
+	ctx context.Context, span roachpb.Span, pageSize int,
+) ([]roachpb.RangeDescriptor, error) {
 	var rangeDescriptors []roachpb.RangeDescriptor
+
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	for ctx.Err() == nil {
 		rangeDescriptors = rangeDescriptors[:0] // clear out.
 		client, err := c.getClient(ctx)
 		if err != nil {
 			continue
 		}
-		stream, err := client.GetRangeDescriptors(ctx, &kvpb.GetRangeDescriptorsRequest{
-			Span: span,
+		stream, err := client.GetRangeDescriptors(streamCtx, &kvpb.GetRangeDescriptorsRequest{
+			Span: span, BatchSize: int64(pageSize),
 		})
 		if err != nil {
 			// TODO(arul): We probably don't want to treat all errors here as "soft".
@@ -692,10 +703,7 @@ func (c *connector) NewIterator(
 			e, err := stream.Recv()
 			if err != nil {
 				if err == io.EOF {
-					return &rangeDescIterator{
-						rangeDescs: rangeDescriptors,
-						curIdx:     0,
-					}, nil
+					return rangeDescriptors, nil
 				}
 				log.Warningf(ctx, "error consuming GetRangeDescriptors RPC: %v", err)
 				if grpcutil.IsAuthError(err) {
@@ -707,9 +715,23 @@ func (c *connector) NewIterator(
 				break
 			}
 			rangeDescriptors = append(rangeDescriptors, e.RangeDescriptors...)
+			if pageSize != 0 && len(rangeDescriptors) >= pageSize {
+				if err := stream.CloseSend(); err != nil {
+					return nil, err
+				}
+				cancel()
+				return rangeDescriptors, nil
+			}
 		}
 	}
 	return nil, errors.Wrap(ctx.Err(), "new iterator")
+}
+
+// NewLazyIterator implements the IteratorFactory interface.
+func (i *connector) NewLazyIterator(
+	ctx context.Context, span roachpb.Span, pageSize int,
+) (rangedesc.LazyIterator, error) {
+	return rangedesc.NewPaginatedIter(ctx, span, pageSize, i.getRangeDescs)
 }
 
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.
@@ -895,6 +917,11 @@ func (c *connector) DownloadSpan(
 
 // WithTxn implements the spanconfig.KVAccessor interface.
 func (c *connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
+	panic("not applicable")
+}
+
+// WithISQLTxn is part of the spanconfig.KVAccessor interface.
+func (c *connector) WithISQLTxn(context.Context, isql.Txn) spanconfig.KVAccessor {
 	panic("not applicable")
 }
 

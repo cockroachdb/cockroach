@@ -251,6 +251,7 @@ query T kvtrace
 INSERT INTO composite VALUES (1, '1.00'::JSONB), (2, '1'::JSONB), (3, '2'::JSONB),
  (4, '3.0'::JSONB), (5, '"a"'::JSONB)
 ----
+Scan /Table/20/1/10{8-9}
 CPut /Table/108/1/1/0 -> /TUPLE/
 InitPut /Table/108/2/"H*\x02\x00\x00\x89\x88" -> /BYTES/0x2f0f0c200000002000000403348964
 CPut /Table/108/1/2/0 -> /TUPLE/

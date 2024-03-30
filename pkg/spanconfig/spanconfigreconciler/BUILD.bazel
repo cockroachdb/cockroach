@@ -32,8 +32,4 @@ go_test(
     name = "spanconfigreconciler_test",
     srcs = ["reconciler_test.go"],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
 )

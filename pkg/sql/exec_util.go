@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -83,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -91,6 +91,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -124,7 +125,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 )
+
+func init() {
+	builtins.ExecuteQueryViaJobExecContext = func(
+		evalCtx *eval.Context,
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		override sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) (eval.InternalRows, error) {
+		ie := evalCtx.JobExecContext.(JobExecContext).ExecCfg().InternalDB.Executor()
+		return ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
+	}
+}
 
 // ClusterOrganization is the organization name.
 var ClusterOrganization = settings.RegisterStringSetting(
@@ -224,7 +241,7 @@ var SecondaryTenantSplitAtEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"sql.split_at.allow_for_secondary_tenant.enabled",
 	"enable the use of ALTER TABLE/INDEX ... SPLIT AT in virtual clusters",
-	false,
+	true,
 	settings.WithName("sql.virtual_cluster.feature_access.manual_range_split.enabled"),
 )
 
@@ -235,7 +252,7 @@ var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"sql.scatter.allow_for_secondary_tenant.enabled",
 	"enable the use of ALTER TABLE/INDEX ... SCATTER in virtual clusters",
-	false,
+	true,
 	settings.WithName("sql.virtual_cluster.feature_access.manual_range_scatter.enabled"),
 )
 
@@ -270,18 +287,6 @@ var TraceStmtThreshold = settings.RegisterDurationSetting(
 		"this setting applies to individual statements within a transaction and "+
 		"is therefore finer-grained than sql.trace.txn.enable_threshold",
 	0,
-	settings.WithPublic)
-
-// traceSessionEventLogEnabled can be used to enable the event log
-// that is normally kept for every SQL connection. The event log has a
-// non-trivial performance impact and also reveals SQL statements
-// which may be a privacy concern.
-var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.trace.session_eventlog.enabled",
-	"set to true to enable session tracing; "+
-		"note that enabling this may have a negative performance impact",
-	false,
 	settings.WithPublic)
 
 // ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
@@ -608,11 +613,12 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 	"default handling of SERIAL in table definitions",
 	"rowid",
 	map[int64]string{
-		int64(sessiondatapb.SerialUsesRowID):              "rowid",
-		int64(sessiondatapb.SerialUsesUnorderedRowID):     "unordered_rowid",
-		int64(sessiondatapb.SerialUsesVirtualSequences):   "virtual_sequence",
-		int64(sessiondatapb.SerialUsesSQLSequences):       "sql_sequence",
-		int64(sessiondatapb.SerialUsesCachedSQLSequences): "sql_sequence_cached",
+		int64(sessiondatapb.SerialUsesRowID):                  "rowid",
+		int64(sessiondatapb.SerialUsesUnorderedRowID):         "unordered_rowid",
+		int64(sessiondatapb.SerialUsesVirtualSequences):       "virtual_sequence",
+		int64(sessiondatapb.SerialUsesSQLSequences):           "sql_sequence",
+		int64(sessiondatapb.SerialUsesCachedSQLSequences):     "sql_sequence_cached",
+		int64(sessiondatapb.SerialUsesCachedNodeSQLSequences): "sql_sequence_cached_node",
 	},
 	settings.WithPublic)
 
@@ -733,25 +739,6 @@ var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there i
 
 const sqlTxnName string = "sql txn"
 const metricsSampleInterval = 10 * time.Second
-
-// enableDropVirtualCluster (or rather, its inverted boolean value) defines
-// the default value for the session var "disable_drop_virtual_cluster".
-//
-// Note:
-//   - We use a cluster setting here instead of a default role option
-//     because we need this to be settable also for the 'admin' role.
-//   - The cluster setting is named "enable" because boolean cluster
-//     settings are all ".enabled" -- we do not have ".disabled"
-//     settings anywhere.
-//   - The session var is named "disable_" because we want the Go
-//     default value (false) to mean that tenant deletion is enabled.
-//     This is needed for backward-compatibility with Cockroach Cloud.
-var enableDropVirtualCluster = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"sql.drop_virtual_cluster.enabled",
-	"default value (inverted) for the disable_virtual_cluster session setting",
-	true,
-)
 
 // Fully-qualified names for metrics.
 var (
@@ -981,6 +968,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaTxnUpgradedFromWeakIsolation = metric.Metadata{
+		Name:        "sql.txn.upgraded_iso_level.count",
+		Help:        "Number of times a weak isolation level was automatically upgraded to a stronger one",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaSelectExecuted = metric.Metadata{
 		Name:        "sql.select.count",
 		Help:        "Number of SQL SELECT statements successfully executed",
@@ -1095,22 +1088,36 @@ var (
 		Measurement: "Discarded SQL Stats",
 		Unit:        metric.Unit_COUNT,
 	}
-	MetaSQLStatsFlushStarted = metric.Metadata{
-		Name:        "sql.stats.flush.count",
-		Help:        "Number of times SQL Stats are flushed to persistent storage",
-		Measurement: "SQL Stats Flush",
+	MetaSQLStatsFlushesSuccessful = metric.Metadata{
+		Name:        "sql.stats.flushes.successful",
+		Help:        "Number of times SQL Stats are flushed successfully to persistent storage",
+		Measurement: "successful flushes",
 		Unit:        metric.Unit_COUNT,
 	}
-	MetaSQLStatsFlushFailure = metric.Metadata{
-		Name:        "sql.stats.flush.error",
-		Help:        "Number of errors encountered when flushing SQL Stats",
-		Measurement: "SQL Stats Flush",
+	MetaSQLStatsFlushFingerprintCount = metric.Metadata{
+		Name:        "sql.stats.flush.fingerprint.count",
+		Help:        "The number of unique statement and transaction fingerprints included in the SQL Stats flush",
+		Measurement: "statement & transaction fingerprints",
 		Unit:        metric.Unit_COUNT,
 	}
-	MetaSQLStatsFlushDuration = metric.Metadata{
-		Name:        "sql.stats.flush.duration",
-		Help:        "Time took to in nanoseconds to complete SQL Stats flush",
-		Measurement: "SQL Stats Flush",
+	MetaSQLStatsFlushDoneSignalsIgnored = metric.Metadata{
+		Name: "sql.stats.flush.done_signals.ignored",
+		Help: "Number of times the SQL Stats activity update job ignored the signal sent to it indicating " +
+			"a flush has completed",
+		Measurement: "flush done signals ignored",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	MetaSQLStatsFlushesFailed = metric.Metadata{
+		Name:        "sql.stats.flushes.failed",
+		Help:        "Number of attempted SQL Stats flushes that failed with errors",
+		Measurement: "failed flushes",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSQLStatsFlushLatency = metric.Metadata{
+		Name:        "sql.stats.flush.latency",
+		Help:        "The latency of SQL Stats flushes to persistent storage. Includes failed flush attempts",
+		Measurement: "nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	MetaSQLStatsRemovedRows = metric.Metadata{
@@ -1182,10 +1189,11 @@ type NodeInfo struct {
 	PGURL func(*url.Userinfo) (*pgurl.URL, error)
 }
 
-// nodeStatusGenerator is a limited portion of the status.MetricsRecorder
+// limitedMetricsRecorder is a limited portion of the status.MetricsRecorder
 // struct, to avoid having to import all of status in sql.
-type nodeStatusGenerator interface {
+type limitedMetricsRecorder interface {
 	GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus
+	AppRegistry() *metric.Registry
 }
 
 // SystemTenantOnly wraps an object in the ExecutorConfig that is only
@@ -1254,7 +1262,7 @@ type ExecutorConfig struct {
 	// available when not running as a system tenant.
 	SQLStatusServer    serverpb.SQLStatusServer
 	TenantStatusServer serverpb.TenantStatusServer
-	MetricsRecorder    nodeStatusGenerator
+	MetricsRecorder    limitedMetricsRecorder
 	SessionRegistry    *SessionRegistry
 	ClosedSessionCache *ClosedSessionCache
 	SQLLiveness        sqlliveness.Provider
@@ -1301,6 +1309,9 @@ type ExecutorConfig struct {
 
 	// Role membership cache.
 	RoleMemberCache *MembershipCache
+
+	// Node-level sequence cache
+	SequenceCacheNode *sessiondatapb.SequenceCacheNode
 
 	// SessionInitCache cache; contains information used during authentication
 	// and per-role default settings.
@@ -1444,10 +1455,6 @@ type ExecutorConfig struct {
 
 	TenantCapabilitiesReader SystemTenantOnly[tenantcapabilities.Reader]
 
-	// AutoConfigProvider informs the auto config runner job of new
-	// tasks to run.
-	AutoConfigProvider acprovider.Provider
-
 	// VirtualClusterName contains the name of the virtual cluster
 	// (tenant).
 	VirtualClusterName roachpb.TenantName
@@ -1529,7 +1536,7 @@ type ExecutorTestingKnobs struct {
 
 	// AfterExecute is like StatementFilter, but it runs in the same goroutine of the
 	// statement.
-	AfterExecute func(ctx context.Context, stmt string, err error)
+	AfterExecute func(ctx context.Context, stmt string, isInternal bool, err error)
 
 	// AfterExecCmd is called after successful execution of any command.
 	AfterExecCmd func(ctx context.Context, cmd Command, buf *StmtBuf)
@@ -1605,7 +1612,7 @@ type ExecutorTestingKnobs struct {
 	// return, possibly nil, a callback that will be called every time
 	// DistSQLReceiver.Push or DistSQLReceiver.PushBatch is called. Possibly
 	// updated arguments are returned.
-	DistSQLReceiverPushCallbackFactory func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata)
+	DistSQLReceiverPushCallbackFactory func(ctx context.Context, query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata)
 
 	// OnTxnRetry, if set, will be called if there is a transaction retry.
 	OnTxnRetry func(autoRetryReason error, evalCtx *eval.Context)
@@ -1639,10 +1646,16 @@ type ExecutorTestingKnobs struct {
 	// descriptor IDs at the cost of decreased parallelism.
 	UseTransactionalDescIDGenerator bool
 
-	// BeforeCopyFromInsert, if set, will be called during a COPY FROM insert statement.
-	BeforeCopyFromInsert func(txn *kv.Txn) error
+	// CopyFromInsertBeforeBatch, if set, will be called during a COPY FROM
+	// insert statement before each COPY batch.
+	CopyFromInsertBeforeBatch func(txn *kv.Txn) error
 
-	// CopyFromInsertRetry, if set, will be called when a COPY FROM insert statement is retried.
+	// CopyFromInsertAfterBatch, if set, will be called during a COPY FROM
+	// insert statement after each COPY batch.
+	CopyFromInsertAfterBatch func() error
+
+	// CopyFromInsertRetry, if set, will be called when a COPY FROM insert
+	// statement is retried.
 	CopyFromInsertRetry func() error
 
 	// ForceSQLLivenessSession will force the use of a sqlliveness session for
@@ -1760,6 +1773,12 @@ type BackupRestoreTestingKnobs struct {
 	RunBeforeRestoreFlow func() error
 
 	RunAfterRestoreFlow func() error
+
+	BackupDistSQLRetryPolicy *retry.Options
+
+	RunBeforeBackupFlow func() error
+
+	RunAfterBackupFlow func() error
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
@@ -1985,7 +2004,7 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 
 // checkResultType verifies that a table result can be returned to the
 // client.
-func checkResultType(typ *types.T) error {
+func checkResultType(typ *types.T, fmtCode pgwirebase.FormatCode) error {
 	// Compare all types that can rely on == equality.
 	switch typ.Family() {
 	case types.UnknownFamily:
@@ -2018,15 +2037,15 @@ func checkResultType(typ *types.T) error {
 	case types.EnumFamily:
 	case types.VoidFamily:
 	case types.ArrayFamily:
-		if typ.ArrayContents().Family() == types.ArrayFamily {
-			// Technically we could probably return arrays of arrays to a
-			// client (the encoding exists) but we don't want to give
-			// mixed signals -- that nested arrays appear to be supported
-			// in this case, and not in other cases (eg. CREATE). So we
-			// reject them in every case instead.
+		if fmtCode == pgwirebase.FormatBinary && typ.ArrayContents().Family() == types.ArrayFamily {
 			return unimplemented.NewWithIssueDetail(32552,
-				"result", "arrays cannot have arrays as element type")
+				"result", "unsupported binary serialization of multidimensional arrays",
+			)
 		}
+		// Note that we support multidimensional arrays in some cases (e.g.
+		// array_agg with arrays as inputs) but not in others (e.g. CREATE).
+		// Here we allow them in all cases and rely on each unsupported place to
+		// have the check.
 	case types.AnyFamily:
 		// Placeholder case.
 		return errors.Errorf("could not determine data type of %s", typ)
@@ -2975,7 +2994,12 @@ type sessionDataMutatorCallbacks struct {
 	paramStatusUpdater paramStatusUpdater
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
 	// It can be nil, in which case nothing triggers on execution.
-	setCurTxnReadOnly func(val bool)
+	setCurTxnReadOnly func(readOnly bool) error
+	// upgradedIsolationLevel is called whenever the transaction isolation
+	// session variable is configured and the isolation level is automatically
+	// upgraded to a stronger one. It's also used when the isolation level is
+	// upgraded in BEGIN or SET TRANSACTION statements.
+	upgradedIsolationLevel func(ctx context.Context, upgradedFrom tree.IsolationLevel, requiresNotice bool)
 	// onTempSchemaCreation is called when the temporary schema is set
 	// on the search path (the first and only time).
 	// It can be nil, in which case nothing triggers on execution.
@@ -3260,10 +3284,6 @@ func (m *sessionDataMutator) SetSafeUpdates(val bool) {
 	m.data.SafeUpdates = val
 }
 
-func (m *sessionDataMutator) SetDisableDropVirtualCluster(val bool) {
-	m.data.DisableDropVirtualCluster = val
-}
-
 func (m *sessionDataMutator) SetCheckFunctionBodies(val bool) {
 	m.data.CheckFunctionBodies = val
 }
@@ -3278,6 +3298,10 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 
 func (m *sessionDataMutator) SetStrictDDLAtomicity(val bool) {
 	m.data.StrictDDLAtomicity = val
+}
+
+func (m *sessionDataMutator) SetAutoCommitBeforeDDL(val bool) {
+	m.data.AutoCommitBeforeDDL = val
 }
 
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
@@ -3295,16 +3319,16 @@ func (m *sessionDataMutator) SetCustomOption(name, val string) {
 	m.data.CustomOptions[name] = val
 }
 
-func (m *sessionDataMutator) SetReadOnly(val bool) {
+func (m *sessionDataMutator) SetReadOnly(val bool) error {
 	// The read-only state is special; it's set as a session variable (SET
 	// transaction_read_only=<>), but it represents per-txn state, not
 	// per-session. There's no field for it in the SessionData struct. Instead, we
-	// call into the connEx, which modifies its TxnState.
-	// NOTE(andrei): I couldn't find good documentation on transaction_read_only,
-	// but I've tested its behavior in Postgres 11.
+	// call into the connEx, which modifies its TxnState. This is similar to
+	// transaction_isolation.
 	if m.setCurTxnReadOnly != nil {
-		m.setCurTxnReadOnly(val)
+		return m.setCurTxnReadOnly(val)
 	}
+	return nil
 }
 
 func (m *sessionDataMutator) SetStmtTimeout(timeout time.Duration) {
@@ -3401,6 +3425,10 @@ func (m *sessionDataMutator) SetCopyQualityOfService(val sessiondatapb.QoSLevel)
 
 func (m *sessionDataMutator) SetCopyWritePipeliningEnabled(val bool) {
 	m.data.CopyWritePipeliningEnabled = val
+}
+
+func (m *sessionDataMutator) SetCopyNumRetriesPerBatch(val int32) {
+	m.data.CopyNumRetriesPerBatch = val
 }
 
 func (m *sessionDataMutator) SetOptSplitScanLimit(val int32) {
@@ -3708,6 +3736,18 @@ func (m *sessionDataMutator) SetDistSQLPlanGatewayBias(val int64) {
 	m.data.DistsqlPlanGatewayBias = val
 }
 
+func (m *sessionDataMutator) SetCloseCursorsAtCommit(val bool) {
+	m.data.CloseCursorsAtCommit = val
+}
+
+func (m *sessionDataMutator) SetPLpgSQLUseStrictInto(val bool) {
+	m.data.PLpgSQLUseStrictInto = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseVirtualComputedColumnStats(val bool) {
+	m.data.OptimizerUseVirtualComputedColumnStats = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
@@ -3792,22 +3832,29 @@ func HashForReporting(secret, appName string) string {
 // formatStatementHideConstants formats the statement using
 // tree.FmtHideConstants. It does *not* anonymize the statement, since
 // the result will still contain names and identifiers.
-func formatStatementHideConstants(ast tree.Statement) string {
+func formatStatementHideConstants(ast tree.Statement, optFlags ...tree.FmtFlags) string {
 	if ast == nil {
 		return ""
 	}
-	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
+	fmtFlags := tree.FmtHideConstants
+	for _, f := range optFlags {
+		fmtFlags |= f
+	}
+	return tree.AsStringWithFlags(ast, fmtFlags)
 }
 
 // formatStatementSummary formats the statement using tree.FmtSummary
 // and tree.FmtHideConstants. This returns a summarized version of the
 // query. It does *not* anonymize the statement, since the result will
 // still contain names and identifiers.
-func formatStatementSummary(ast tree.Statement) string {
+func formatStatementSummary(ast tree.Statement, optFlags ...tree.FmtFlags) string {
 	if ast == nil {
 		return ""
 	}
 	fmtFlags := tree.FmtSummary | tree.FmtHideConstants
+	for _, f := range optFlags {
+		fmtFlags |= f
+	}
 	return tree.AsStringWithFlags(ast, fmtFlags)
 }
 

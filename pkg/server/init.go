@@ -139,6 +139,7 @@ type initState struct {
 	initializedEngines   []storage.Engine
 	uninitializedEngines []storage.Engine
 	initialSettingsKVs   []roachpb.KeyValue
+	initType             serverpb.InitType
 }
 
 // bootstrapped is a shorthand to check if there exists at least one initialized
@@ -336,7 +337,7 @@ var errInternalBootstrapError = errors.New("unable to bootstrap due to internal 
 // nodes. In that case, they end up with more than one cluster, and nodes
 // panicking or refusing to connect to each other.
 func (s *initServer) Bootstrap(
-	ctx context.Context, _ *serverpb.BootstrapRequest,
+	ctx context.Context, r *serverpb.BootstrapRequest,
 ) (*serverpb.BootstrapResponse, error) {
 	// Bootstrap() only responds once. Everyone else gets an error, either
 	// ErrClusterInitialized (in the success case) or errInternalBootstrapError.
@@ -358,6 +359,7 @@ func (s *initServer) Bootstrap(
 		s.mu.rejectErr = errInternalBootstrapError
 		return nil, s.mu.rejectErr
 	}
+	state.initType = r.InitType
 
 	// We've successfully bootstrapped (we've initialized at least one engine).
 	// We mark ourselves as bootstrapped to prevent future bootstrap attempts.

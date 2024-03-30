@@ -1080,7 +1080,6 @@ func resolveOptionsForRestoreJobDescription(
 		Detached:                         opts.Detached,
 		SkipLocalitiesCheck:              opts.SkipLocalitiesCheck,
 		DebugPauseOn:                     opts.DebugPauseOn,
-		IncludeAllSecondaryTenants:       opts.IncludeAllSecondaryTenants,
 		AsTenant:                         opts.AsTenant,
 		ForceTenantID:                    opts.ForceTenantID,
 		SchemaOnly:                       opts.SchemaOnly,
@@ -1181,9 +1180,6 @@ func restoreTypeCheck(
 			tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
 			tree.Exprs(restoreStmt.Options.IncrementalStorage),
 		),
-		exprutil.Bools{
-			restoreStmt.Options.IncludeAllSecondaryTenants,
-		},
 		exprutil.Strings{
 			restoreStmt.Subdir,
 			restoreStmt.Options.EncryptionPassphrase,
@@ -1350,22 +1346,8 @@ func restorePlanHook(
 		}
 	}
 
-	var restoreAllTenants bool
-	if restoreStmt.Options.IncludeAllSecondaryTenants != nil {
-		if restoreStmt.DescriptorCoverage != tree.AllDescriptors {
-			return nil, nil, nil, false, errors.New("the include_all_virtual_clusters option is only supported for full cluster restores")
-		}
-		var err error
-		restoreAllTenants, err = exprEval.Bool(ctx, restoreStmt.Options.IncludeAllSecondaryTenants)
-		if err != nil {
-			return nil, nil, nil, false, err
-		}
-	}
-
-	if restoreStmt.Options.ExperimentalOnline && !restoreStmt.Targets.TenantID.IsSet() {
-		// TODO(ssd): Disable this once it is less annoying to
-		// disable it in tests.
-		log.Warningf(ctx, "running non-tenant online RESTORE; this is dangerous and will only work if you know exactly what you are doing")
+	if restoreStmt.Options.ExperimentalOnline && restoreStmt.Options.VerifyData {
+		return nil, nil, nil, false, errors.New("cannot run online restore with verify_backup_table_data")
 	}
 
 	var newTenantID *roachpb.TenantID
@@ -1454,7 +1436,7 @@ func restorePlanHook(
 		// locality aware.
 
 		return doRestorePlan(
-			ctx, restoreStmt, &exprEval, p, from, incStorage, pw, kms, restoreAllTenants, intoDB,
+			ctx, restoreStmt, &exprEval, p, from, incStorage, pw, kms, intoDB,
 			newDBName, newTenantID, newTenantName, endTime, resultsCh, subdir, execLocality,
 		)
 	}
@@ -1694,7 +1676,6 @@ func doRestorePlan(
 	incFrom []string,
 	passphrase string,
 	kms []string,
-	restoreAllTenants bool,
 	intoDB string,
 	newDBName string,
 	newTenantID *roachpb.TenantID,
@@ -1852,7 +1833,6 @@ func doRestorePlan(
 			backupdest.DeprecatedResolveBackupManifestsExplicitIncrementals(ctx, &mem, mkStore, from,
 				endTime, encryption, &kmsEnv, p.User())
 	}
-
 	if err != nil {
 		return err
 	}
@@ -1878,6 +1858,10 @@ func doRestorePlan(
 		if err := checkManifestsForOnlineCompat(ctx, mainBackupManifests); err != nil {
 			return err
 		}
+		currentClusterVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version
+		if currentClusterVersion.Less(clusterversion.V24_1.Version()) {
+			return errors.Newf("cluster must fully upgrade to version %s to run online restore", clusterversion.V24_1.String())
+		}
 	}
 
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
@@ -1902,7 +1886,7 @@ func doRestorePlan(
 	}
 
 	sqlDescs, restoreDBs, descsByTablePattern, tenants, err := selectTargets(
-		ctx, p, mainBackupManifests, layerToIterFactory, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime, restoreAllTenants,
+		ctx, p, mainBackupManifests, layerToIterFactory, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime,
 	)
 	if err != nil {
 		return errors.Wrap(err,
@@ -2077,7 +2061,7 @@ func doRestorePlan(
 	}
 
 	if restoreStmt.Options.ExperimentalOnline {
-		if err := checkRewritesAreNoops(descriptorRewrites); err != nil {
+		if err := checkBackupElidedPrefixForOnlineCompat(ctx, mainBackupManifests, descriptorRewrites); err != nil {
 			return err
 		}
 	}
@@ -2126,19 +2110,19 @@ func doRestorePlan(
 		overrideDBName = newDBName
 	}
 	if err := rewrite.TableDescs(tables, descriptorRewrites, overrideDBName); err != nil {
-		return err
+		return errors.Wrapf(err, "table descriptor rewrite failed")
 	}
 	if err := rewrite.DatabaseDescs(databases, descriptorRewrites, map[descpb.ID]struct{}{}); err != nil {
-		return err
+		return errors.Wrapf(err, "database descriptor rewrite failed")
 	}
 	if err := rewrite.SchemaDescs(schemas, descriptorRewrites); err != nil {
-		return err
+		return errors.Wrapf(err, "schema descriptor rewrite failed")
 	}
 	if err := rewrite.TypeDescs(types, descriptorRewrites); err != nil {
-		return err
+		return errors.Wrapf(err, "type descriptor rewrite failed")
 	}
 	if err := rewrite.FunctionDescs(functions, descriptorRewrites, overrideDBName); err != nil {
-		return err
+		return errors.Wrapf(err, "function descriptor rewrite failed")
 	}
 
 	encodedTables := make([]*descpb.TableDescriptor, len(tables))
@@ -2500,7 +2484,7 @@ func planDatabaseModifiersForRestore(
 			nil,
 			descpb.ZoneConfigExtensions{},
 		)
-		if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
+		if err := multiregion.ValidateRegionConfig(regionConfig, db.ID == keys.SystemDatabaseID); err != nil {
 			return nil, nil, err
 		}
 		if err := db.SetInitialMultiRegionConfig(&regionConfig); err != nil {

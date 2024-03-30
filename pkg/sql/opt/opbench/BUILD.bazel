@@ -22,10 +22,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":opbench"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils/opttester",

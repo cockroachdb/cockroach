@@ -121,6 +121,11 @@ func DeleteRange(
 			"GCRangeHint must only be used together with UseRangeTombstone")
 	}
 
+	if args.Predicates.ImportEpoch > 0 && !args.Predicates.StartTime.IsEmpty() {
+		return result.Result{}, errors.AssertionFailedf(
+			"DeleteRangePredicate should not have both non-zero ImportEpoch and non-empty StartTime")
+	}
+
 	// Use MVCC range tombstone if requested.
 	if args.UseRangeTombstone {
 		if cArgs.Header.Txn != nil {
@@ -176,6 +181,7 @@ func DeleteRange(
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+		targetLockConflictBytes := storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
 		// If no predicate parameters are passed, use the fast path. If we're
 		// deleting the entire Raft range, use an even faster path that avoids a
@@ -190,7 +196,7 @@ func DeleteRange(
 			}
 			if err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
 				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
-				args.IdempotentTombstone, maxLockConflicts, statsCovered); err != nil {
+				args.IdempotentTombstone, maxLockConflicts, targetLockConflictBytes, statsCovered); err != nil {
 				return result.Result{}, err
 			}
 			var res result.Result
@@ -220,7 +226,7 @@ func DeleteRange(
 		resumeSpan, err := storage.MVCCPredicateDeleteRange(ctx, readWriter, cArgs.Stats,
 			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
 			args.Predicates, h.MaxSpanRequestKeys, maxDeleteRangeBatchBytes,
-			defaultRangeTombstoneThreshold, maxLockConflicts)
+			defaultRangeTombstoneThreshold, maxLockConflicts, targetLockConflictBytes)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -257,6 +263,7 @@ func DeleteRange(
 		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
 		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
 		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		Category:                       storage.BatchEvalReadCategory,
 	}
 

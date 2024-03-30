@@ -23,10 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/errors"
 )
 
-// Helper is the struct passed to user-functions providing helper
-// functions that mixed-version tests can use.
+// Helper is the struct passed to `stepFunc`s (user-provided or
+// implemented by the framework) that provides helper functions that
+// mixed-version tests can use.
 type Helper struct {
 	Context *Context
 
@@ -55,7 +57,7 @@ func (h *Helper) RandomDB(prng *rand.Rand, nodes option.NodeListOption) (int, *g
 // function.
 func (h *Helper) Query(rng *rand.Rand, query string, args ...interface{}) (*gosql.Rows, error) {
 	node, db := h.RandomDB(rng, h.runner.crdbNodes)
-	h.stepLogger.Printf("running SQL statement:\n%s\nArgs: %v\nNode: %d", query, args, node)
+	h.logSQL(node, query, args...)
 	return db.QueryContext(h.ctx, query, args...)
 }
 
@@ -64,7 +66,7 @@ func (h *Helper) Query(rng *rand.Rand, query string, args ...interface{}) (*gosq
 // of the step that calls this function.
 func (h *Helper) QueryRow(rng *rand.Rand, query string, args ...interface{}) *gosql.Row {
 	node, db := h.RandomDB(rng, h.runner.crdbNodes)
-	h.stepLogger.Printf("running SQL statement:\n%s\nArgs: %v\nNode: %d", query, args, node)
+	h.logSQL(node, query, args...)
 	return db.QueryRowContext(h.ctx, query, args...)
 }
 
@@ -84,7 +86,7 @@ func (h *Helper) ExecWithGateway(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...interface{},
 ) error {
 	node, db := h.RandomDB(rng, nodes)
-	h.stepLogger.Printf("running SQL statement:\n%s\nArgs: %v\nNode: %d", query, args, node)
+	h.logSQL(node, query, args...)
 	_, err := db.ExecContext(h.ctx, query, args...)
 	return err
 }
@@ -110,8 +112,8 @@ func (h *Helper) Background(
 				return err
 			}
 
-			desc := fmt.Sprintf("error in background function %s: %s", name, err)
-			return h.runner.testFailure(desc, bgLogger, nil)
+			err := errors.Wrapf(err, "error in background function %s", name)
+			return h.runner.testFailure(err, bgLogger, nil)
 		}
 
 		return nil
@@ -196,4 +198,18 @@ func (h *Helper) loggerFor(name string) (*logger.Logger, error) {
 	fileName = path.Join(logPrefix, fileName)
 
 	return prefixedLogger(h.runner.logger, fileName)
+}
+
+// logSQL standardizes the logging when a SQL statement or query is
+// run using one of the Helper methods. It includes the node used as
+// gateway, along with the version currently running on it, for ease
+// of debugging.
+func (h *Helper) logSQL(node int, stmt string, args ...interface{}) {
+	intro := "running SQL"
+	stmtMsg := fmt.Sprintf("Statement: %s", stmt)
+	nodeMsg := fmt.Sprintf("Node:      %d (%s)", node, h.Context.NodeVersion(node))
+	argsMsg := fmt.Sprintf("Arguments: %v", args)
+
+	msg := strings.Join([]string{intro, stmtMsg, nodeMsg, argsMsg}, "\n")
+	h.stepLogger.Printf("%s", msg)
 }

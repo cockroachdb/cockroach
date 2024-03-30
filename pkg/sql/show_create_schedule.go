@@ -51,7 +51,7 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 		datums, columns, err := params.p.InternalSQLTxn().QueryRowExWithCols(
 			params.ctx,
 			"load-schedules",
-			params.p.Txn(), sessiondata.RootUserSessionDataOverride,
+			params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = $1", env.ScheduledJobsTableName()),
 			tree.NewDInt(tree.DInt(sjID)))
 		if err != nil {
@@ -63,7 +63,7 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 		datums, columns, err := params.p.InternalSQLTxn().QueryBufferedExWithCols(
 			params.ctx,
 			"load-schedules",
-			params.p.Txn(), sessiondata.RootUserSessionDataOverride,
+			params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf("SELECT * FROM %s", env.ScheduledJobsTableName()))
 		if err != nil {
 			return nil, err

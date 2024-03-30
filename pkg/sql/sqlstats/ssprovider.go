@@ -76,14 +76,13 @@ type ApplicationStats interface {
 
 	// MergeApplicationStatementStats merges the other application's statement
 	// statistics into the current ApplicationStats. It returns how many number
-	// of statistics were being discarded due to memory constraint. If the
-	// transformer is non-nil, then it is applied to other's statement statistics
-	// before other's statement statistics are merged into the current
-	// ApplicationStats.
+	// of statistics were being discarded due to memory constraint. The
+	// TransactionFingerprintID of all other's statement statistics keys is
+	// updated to the provided one.
 	MergeApplicationStatementStats(
 		ctx context.Context,
 		other ApplicationStats,
-		transformer func(statistics *appstatspb.CollectedStatementStatistics),
+		transactionFingerprintID appstatspb.TransactionFingerprintID,
 	) uint64
 
 	// MergeApplicationTransactionStats merges the other application's transaction
@@ -201,6 +200,7 @@ type RecordedStmtStats struct {
 	StatementID          clusterunique.ID
 	TransactionID        uuid.UUID
 	AutoRetryCount       int
+	Failed               bool
 	AutoRetryReason      error
 	RowsAffected         int
 	IdleLatencySec       float64

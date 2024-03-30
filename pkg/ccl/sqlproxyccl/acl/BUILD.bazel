@@ -37,10 +37,6 @@ go_test(
         "watcher_test.go",
     ],
     embed = [":acl"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",

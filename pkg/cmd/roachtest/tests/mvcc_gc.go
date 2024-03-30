@@ -91,7 +91,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	s := install.MakeClusterSettings()
 	s.Env = append(s.Env, "COCKROACH_SCAN_INTERVAL=30s")
 	// Disable an automatic scheduled backup as it would mess with the gc ttl this test relies on.
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), s)
+	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), s)
 
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
@@ -119,19 +119,15 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// rebalancing is better than increasing wait time further.
 	setClusterSetting("kv.allocator.load_based_lease_rebalancing.enabled", false)
 
-	if err := WaitFor3XReplication(ctx, t, conn); err != nil {
+	if err := WaitFor3XReplication(ctx, t, t.L(), conn); err != nil {
 		t.Fatalf("failed to up-replicate cluster: %s", err)
 	}
 
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
-	if err != nil {
-		t.Fatal(err)
-	}
 	m := c.NewMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
 		cmd := roachtestutil.NewCommand("./cockroach workload init kv").
 			Flag("cycle-length", 20000).
-			Arg("%s", pgurl).
+			Arg("{pgurl:1}").
 			String()
 		c.Run(ctx, option.WithNodes(c.Node(1)), cmd)
 
@@ -642,11 +638,11 @@ func sendBatchRequest(
 	}
 	cmd := roachtestutil.NewCommand("./cockroach debug send-kv-batch").
 		Arg(requestFileName).
-		Option("insecure").
+		Flag("certs-dir", install.CockroachNodeCertsDir).
 		Flag("host", fmt.Sprintf("localhost:{pgport:%d}", node)).
 		String()
 	res, err := c.RunWithDetailsSingleNode(
-		ctx, t.L(), c.Node(node), debugEnv+cmd)
+		ctx, t.L(), option.WithNodes(c.Node(node)), debugEnv+cmd)
 	if err != nil {
 		return kvpb.BatchResponse{}, err
 	}

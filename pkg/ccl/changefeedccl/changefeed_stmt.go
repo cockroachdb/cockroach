@@ -984,6 +984,7 @@ func changefeedJobDescription(
 		changefeedbase.SinkParamCACert,
 		changefeedbase.SinkParamClientCert,
 		changefeedbase.SinkParamConfluentAPISecret,
+		changefeedbase.SinkParamAzureAccessKey,
 	})
 	if err != nil {
 		return "", err
@@ -1212,10 +1213,10 @@ func (b *changefeedResumer) handleChangefeedError(
 		const errorFmt = "job failed (%v) but is being paused because of %s=%s"
 		errorMessage := fmt.Sprintf(errorFmt, changefeedErr,
 			changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
-		return b.job.NoTxn().PauseRequestedWithFunc(ctx, func(ctx context.Context,
-			planHookState interface{}, txn isql.Txn, progress *jobspb.Progress) error {
+		return b.job.NoTxn().PauseRequestedWithFunc(ctx, func(ctx context.Context, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			// directly update running status to avoid the running/reverted job status check
-			progress.RunningStatus = errorMessage
+			md.Progress.RunningStatus = errorMessage
+			ju.UpdateProgress(md.Progress)
 			log.Warningf(ctx, errorFmt, changefeedErr, changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
 			return nil
 		}, errorMessage)

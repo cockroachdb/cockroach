@@ -91,6 +91,7 @@ type copyOptions struct {
 	delimiter byte
 	format    tree.CopyFormat
 	null      string
+	encoding  string
 }
 
 // TODO(#sql-sessions): copy all pre-condition checks from the PG code
@@ -182,6 +183,17 @@ func processCopyOptions(
 			pgcode.FeatureNotSupported,
 			"DESTINATION can only be specified when table is external storage table",
 		)
+	}
+
+	if opts.Encoding != nil {
+		e, err := exprEval.String(ctx, opts.Encoding)
+		if err != nil {
+			return c, err
+		}
+		if strings.ToUpper(e) != "UTF8" {
+			return c, pgerror.New(pgcode.FeatureNotSupported, "only 'utf8' ENCODING is supported")
+		}
+		c.encoding = "utf8"
 	}
 
 	return c, nil
@@ -477,12 +489,12 @@ func (c *copyMachine) numInsertedRows() int {
 func (c *copyMachine) initMonitoring(ctx context.Context, parentMon *mon.BytesMonitor) {
 	// Create a monitor for the COPY command so it can be tracked separate from transaction or session.
 	memMetrics := &MemoryMetrics{}
-	const noteworthyCopyMemoryUsageBytes = 10 << 20
-	c.copyMon = mon.NewMonitor("copy",
-		mon.MemoryResource,
-		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
-		0, /* increment */
-		noteworthyCopyMemoryUsageBytes, c.p.ExecCfg().Settings)
+	c.copyMon = mon.NewMonitor(mon.Options{
+		Name:     "copy",
+		CurCount: memMetrics.CurBytesCount,
+		MaxHist:  memMetrics.MaxBytesHist,
+		Settings: c.p.ExecCfg().Settings,
+	})
 	c.copyMon.StartNoReserved(ctx, parentMon)
 	c.bufMemAcc = c.copyMon.MakeBoundAccount()
 	c.rowsMemAcc = c.copyMon.MakeBoundAccount()
@@ -1013,32 +1025,41 @@ func (p *planner) preparePlannerForCopy(
 	}
 	p.autoCommit = autoCommit && !p.execCfg.TestingKnobs.DisableAutoCommitDuringExec
 
-	return func(ctx context.Context, prevErr error) (err error) {
-		// Ensure that we commit the transaction if atomic copy is off. If it's on,
-		// the conn executor will commit the transaction.
+	return func(ctx context.Context, prevErr error) error {
+		// Ensure that we commit the transaction if atomic copy is off. If it's
+		// on, the conn executor will commit the transaction.
 		if implicitTxn && !p.SessionData().CopyFromAtomicEnabled {
 			if prevErr == nil {
-				// Ensure that the txn is committed if the copyMachine is in charge of
-				// committing its transactions and the execution didn't already commit it
-				// (through the planner.autoCommit optimization).
+				// Ensure that the txn is committed if the copyMachine is in
+				// charge of committing its transactions and the execution
+				// didn't already commit it (through the planner.autoCommit
+				// optimization).
 				if !txnOpt.txn.IsCommitted() {
-					err = txnOpt.txn.Commit(ctx)
-					if err != nil {
+					if err := txnOpt.txn.Commit(ctx); err != nil {
 						if rollbackErr := txnOpt.txn.Rollback(ctx); rollbackErr != nil {
-							log.Eventf(ctx, "rollback failed: %s", rollbackErr)
+							// Since we failed to roll back the txn, we don't
+							// know whether retrying this batch wouldn't corrupt
+							// the data, so we return this non-retriable error.
+							return errors.Wrap(rollbackErr, "non-atomic COPY couldn't roll back its txn")
 						}
-						return err
+						// The rollback succeeded, so we can simply attempt to
+						// retry this batch, after having prepared a fresh txn
+						// below.
+						prevErr = err
 					}
 				}
 			} else if rollbackErr := txnOpt.txn.Rollback(ctx); rollbackErr != nil {
-				log.Eventf(ctx, "rollback failed: %s", rollbackErr)
+				// Since we failed to roll back the txn, we don't know whether
+				// retrying this batch wouldn't corrupt the data, so we return
+				// this non-retriable error.
+				return errors.Wrap(rollbackErr, "non-atomic COPY couldn't roll back its txn")
 			}
 
 			// Start the implicit txn for the next batch.
 			nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID()
 			txnOpt.txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, p.SessionData().CopyTxnQualityOfService)
 			if !p.SessionData().CopyWritePipeliningEnabled {
-				if err = txnOpt.txn.DisablePipelining(); err != nil {
+				if err := txnOpt.txn.DisablePipelining(); err != nil {
 					return err
 				}
 			}
@@ -1049,23 +1070,55 @@ func (p *planner) preparePlannerForCopy(
 	}
 }
 
+// doneWithRows resets the buffered data (either the columnar batch or the row
+// container) for reuse. It also updates insertedRows accordingly.
+func (c *copyMachine) doneWithRows(ctx context.Context) error {
+	c.insertedRows += c.currentBatchSize()
+	if c.vectorized {
+		var realloc bool
+		if err := colexecerror.CatchVectorizedRuntimeError(func() {
+			c.batch, realloc = c.accHelper.ResetMaybeReallocate(c.typs, c.batch, 0 /* tuplesToBeSet*/)
+		}); err != nil {
+			return err
+		}
+		if realloc {
+			for i := range c.typs {
+				c.valueHandlers[i] = coldataext.MakeVecHandler(c.batch.ColVec(i))
+			}
+		} else {
+			for _, vh := range c.valueHandlers {
+				vh.Reset()
+			}
+		}
+		return nil
+	}
+	return c.rows.UnsafeReset(ctx)
+}
+
 // insertRows inserts rows, retrying if necessary.
 func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 	var err error
 
 	rOpts := base.DefaultRetryOptions()
-	rOpts.MaxRetries = 5
+	rOpts.MaxRetries = int(c.p.SessionData().CopyNumRetriesPerBatch)
+	if rOpts.MaxRetries < 1 {
+		// MaxRetries == 0 means infinite number of attempts, and although
+		// CopyNumRetriesPerBatch should always be a positive number, let's be
+		// careful here.
+		rOpts.MaxRetries = 1
+	}
 	r := retry.StartWithCtx(ctx, rOpts)
 	for r.Next() {
 		if err = c.insertRowsInternal(ctx, finalBatch); err == nil {
-			return nil
+			// We're done with this batch of rows, so reset the buffered data
+			// for the next batch.
+			return c.doneWithRows(ctx)
 		} else {
-			// It is currently only safe to retry if we are not in atomic copy mode &
-			// we are in an implicit transaction.
+			// It is currently only safe to retry if we are not in atomic copy
+			// mode & we are in an implicit transaction.
 			// NOTE: we cannot re-use the connExecutor retry scheme here as COPY
-			// consumes directly from the read buffer, and the data would no longer
-			// be available during the retry.
-			// NOTE: in theory we can also retry if c.insertRows == 0.
+			// consumes directly from the read buffer, and the data would no
+			// longer be available during the retry.
 			if c.implicitTxn && !c.p.SessionData().CopyFromAtomicEnabled && c.p.SessionData().CopyFromRetriesEnabled && errIsRetriable(err) {
 				log.SqlExec.Infof(ctx, "%s failed on attempt %d and is retrying, error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
 				if c.p.ExecCfg().TestingKnobs.CopyFromInsertRetry != nil {
@@ -1083,18 +1136,27 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 
 // insertRowsInternal transforms the buffered rows into an insertNode and executes it.
 func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (retErr error) {
+	numRows := c.currentBatchSize()
+	if numRows == 0 {
+		return nil
+	}
 	cleanup := c.p.preparePlannerForCopy(ctx, &c.txnOpt, finalBatch, c.implicitTxn)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
-	if c.p.ExecCfg().TestingKnobs.BeforeCopyFromInsert != nil {
-		if err := c.p.ExecCfg().TestingKnobs.BeforeCopyFromInsert(c.txnOpt.txn); err != nil {
+	if c.p.ExecCfg().TestingKnobs.CopyFromInsertBeforeBatch != nil {
+		if err := c.p.ExecCfg().TestingKnobs.CopyFromInsertBeforeBatch(c.txnOpt.txn); err != nil {
 			return err
 		}
 	}
-	numRows := c.currentBatchSize()
-	if numRows == 0 {
-		return nil
+	if c.p.ExecCfg().TestingKnobs.CopyFromInsertAfterBatch != nil {
+		defer func() {
+			if retErr == nil {
+				if err := c.p.ExecCfg().TestingKnobs.CopyFromInsertAfterBatch(); err != nil {
+					retErr = err
+				}
+			}
+		}()
 	}
 	// TODO(cucaroach): Investigate caching memo/plan/etc so that we don't
 	// rebuild everything for every batch.
@@ -1151,29 +1213,6 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 	if rows := res.RowsAffected(); rows != numRows {
 		return errors.AssertionFailedf("COPY didn't insert all buffered rows and yet no error was reported. "+
 			"Inserted %d out of %d rows.", rows, numRows)
-	}
-	c.insertedRows += numRows
-	// We're done reset for next batch.
-	if c.vectorized {
-		var realloc bool
-		if err := colexecerror.CatchVectorizedRuntimeError(func() {
-			c.batch, realloc = c.accHelper.ResetMaybeReallocate(c.typs, c.batch, 0 /* tuplesToBeSet*/)
-		}); err != nil {
-			return err
-		}
-		if realloc {
-			for i := range c.typs {
-				c.valueHandlers[i] = coldataext.MakeVecHandler(c.batch.ColVec(i))
-			}
-		} else {
-			for _, vh := range c.valueHandlers {
-				vh.Reset()
-			}
-		}
-	} else {
-		if err := c.rows.UnsafeReset(ctx); err != nil {
-			return err
-		}
 	}
 	return nil
 }

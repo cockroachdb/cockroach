@@ -58,7 +58,7 @@ func TestPersistedSQLStatsReadDisk(t *testing.T) {
 	defer testCluster.Stopper().Stop(ctx)
 	sqlConn, sqlStats, expectedStmtsNoConst := insertData(t, testCluster)
 
-	sqlStats.Flush(ctx)
+	sqlStats.Flush(ctx, testCluster.ApplicationLayer(0).AppStopper())
 	verifyDiskStmtFingerprints(t, sqlConn, expectedStmtsNoConst)
 	verifyStoredStmtFingerprints(t, expectedStmtsNoConst, sqlStats)
 }
@@ -73,7 +73,7 @@ func TestPersistedSQLStatsReadHybrid(t *testing.T) {
 	defer testCluster.Stopper().Stop(ctx)
 
 	sqlConn, sqlStats, expectedStmtsNoConst := insertData(t, testCluster)
-	sqlStats.Flush(ctx)
+	sqlStats.Flush(ctx, testCluster.ApplicationLayer(0).AppStopper())
 	// We execute each test queries one more time without flushing the stats.
 	// This means that we should see the exact same result as previous subtest
 	// except the execution count field will be incremented. We should not
@@ -184,6 +184,8 @@ func createCluster(t *testing.T) (serverutils.TestClusterInterface, context.Cont
 func TestSQLStatsWithMultipleIdxRec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
 
 	fakeTime := stubTime{
 		aggInterval: time.Hour,

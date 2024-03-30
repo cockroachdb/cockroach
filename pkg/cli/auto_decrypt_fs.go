@@ -16,6 +16,9 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
@@ -30,11 +33,11 @@ var _ vfs.FS = (*autoDecryptFS)(nil)
 
 type encryptedDir struct {
 	once       sync.Once
-	fs         vfs.FS
+	env        *fs.Env
 	resolveErr error
 }
 
-type resolveEncryptedDirFn func(dir string) (vfs.FS, error)
+type resolveEncryptedDirFn func(dir string) (*fs.Env, error)
 
 // Init sets up the given paths as encrypted and provides a callback that can
 // resolve an encrypted directory path into an FS.
@@ -52,6 +55,13 @@ func (afs *autoDecryptFS) Init(encryptedDirs []string, resolveFn resolveEncrypte
 		}
 		afs.encryptedDirs[dir] = &encryptedDir{}
 	}
+}
+
+func (afs *autoDecryptFS) Close() error {
+	for _, eDir := range afs.encryptedDirs {
+		eDir.env.Close()
+	}
+	return nil
 }
 
 func (afs *autoDecryptFS) Create(name string) (vfs.File, error) {
@@ -244,7 +254,7 @@ func (afs *autoDecryptFS) GetDiskUsage(path string) (vfs.DiskUsage, error) {
 //
 // Assumes that path is absolute and clean (i.e. filepath.Abs was run on it);
 // the returned FS also assumes that any paths used are absolute and clean. This
-// is needed when using encryptedFS, since the PebbleFileRegistry used in that
+// is needed when using encryptedFS, since the FileRegistry used in that
 // context attempts to convert function input paths to relative paths using the
 // DBDir. Both the DBDir and function input paths in a CockroachDB node are
 // absolute paths, but when using the Pebble tool, the function input paths are
@@ -254,12 +264,21 @@ func (afs *autoDecryptFS) GetDiskUsage(path string) (vfs.DiskUsage, error) {
 // path parameter are quite varied: ranging from "pebble db" to "pebble lsm", so
 // it is simplest to intercept the function input paths here.
 func (afs *autoDecryptFS) maybeSwitchFS(path string) (vfs.FS, error) {
+	if e, err := afs.getEnv(path); err != nil {
+		return nil, err
+	} else if e != nil {
+		return e, nil
+	}
+	return vfs.Default, nil
+}
+
+func (afs *autoDecryptFS) getEnv(path string) (*fs.Env, error) {
 	for {
 		if e := afs.encryptedDirs[path]; e != nil {
 			e.once.Do(func() {
-				e.fs, e.resolveErr = afs.resolveFn(path)
+				e.env, e.resolveErr = afs.resolveFn(path)
 			})
-			return e.fs, e.resolveErr
+			return e.env, e.resolveErr
 		}
 		parent := filepath.Dir(path)
 		if path == parent {
@@ -267,5 +286,35 @@ func (afs *autoDecryptFS) maybeSwitchFS(path string) (vfs.FS, error) {
 		}
 		path = parent
 	}
-	return vfs.Default, nil
+	return nil, nil
+}
+
+// pebbleOpenOptionLockDir implements pebble/tool.OpenOption, updating the
+// *pebble.Options with a *pebble.Lock for the relevant directory. When
+// initializing an fs.Env for a data directory, CockroachDB must manually lock
+// the directory in order to protect additional CockroachDB internal state (eg,
+// encryption-at-rest). pebble.Open will also try to acquire the directory lock
+// if the caller hasn't passed an existing lock through the *pebble.Options.
+// This OpenOption will acquire the relevant lock (by opening the Env, if it
+// isn't already open) and pass it into the *pebble.Options.
+type pebbleOpenOptionLockDir struct {
+	*autoDecryptFS
+}
+
+// Assert that pebbleOpenOptionLockDir implements tool.OpenOption.
+var _ tool.OpenOption = pebbleOpenOptionLockDir{}
+
+// Apply implements tool.OpenOption.
+func (o pebbleOpenOptionLockDir) Apply(dirname string, opts *pebble.Options) {
+	absolutePath, err := filepath.Abs(dirname)
+	if err != nil {
+		panic(err)
+	}
+	e, err := o.getEnv(absolutePath)
+	if err != nil {
+		panic(err)
+	}
+	if e != nil {
+		opts.Lock = e.DirectoryLock
+	}
 }

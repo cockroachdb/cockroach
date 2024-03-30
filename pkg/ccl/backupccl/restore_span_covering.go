@@ -235,10 +235,9 @@ func (f spanCoveringFilter) close() {
 // trimmed/removed based on the lowWaterMark before the covering for them is
 // generated. These spans are generated one at a time and then sent to spanCh.
 //
-// Note that because of https://github.com/cockroachdb/cockroach/issues/101963,
-// the spans of files are end key _inclusive_. Because the current definition
-// of spans are all end key _exclusive_, we work around this by assuming that
-// the end key of each file span is actually the next key of the end key.
+// Spans are considered for inclusion using the fileSpanComparator. Note that
+// because of https://github.com/cockroachdb/cockroach/issues/101963, most
+// backups use a comparator that treats a file's end key as _inclusive_.
 //
 // Consider a chain of backups with files f1, f2… which cover spans as follows:
 //
@@ -279,6 +278,7 @@ func generateAndSendImportSpans(
 	layerToBackupManifestFileIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 	backupLocalityMap map[int]storeByLocalityKV,
 	filter spanCoveringFilter,
+	fsc fileSpanComparator,
 	spanCh chan execinfrapb.RestoreSpanEntry,
 ) error {
 
@@ -286,38 +286,46 @@ func generateAndSendImportSpans(
 	if err != nil {
 		return err
 	}
+	defer startKeyIt.Close()
 
 	var key roachpb.Key
 
 	fileIterByLayer := make([]bulk.Iterator[*backuppb.BackupManifest_File], 0, len(backups))
+	defer func() {
+		for _, i := range fileIterByLayer {
+			i.Close()
+		}
+	}()
 	for layer := range backups {
 		iter, err := layerToBackupManifestFileIterFactory[layer].NewFileIter(ctx)
 		if err != nil {
 			return err
 		}
-
 		fileIterByLayer = append(fileIterByLayer, iter)
 	}
 
 	// lastCovSpanSize is the size of files added to the right-most span of
 	// the cover so far.
 	var lastCovSpanSize int64
+	var lastCovSpanCount int
 	var lastCovSpan roachpb.Span
 	var covFilesByLayer [][]*backuppb.BackupManifest_File
 	var firstInSpan bool
 
 	flush := func(ctx context.Context) error {
 		entry := execinfrapb.RestoreSpanEntry{
-			Span: lastCovSpan,
+			Span:         lastCovSpan,
+			ElidedPrefix: backups[0].ElidedPrefix,
 		}
 		for layer := range covFilesByLayer {
 			for _, f := range covFilesByLayer[layer] {
 				fileSpec := execinfrapb.RestoreFileSpec{
-					Path:                  f.Path,
-					Dir:                   backups[layer].Dir,
-					BackupFileEntrySpan:   f.Span,
-					BackupFileEntryCounts: f.EntryCounts,
-					BackingFileSize:       f.BackingFileSize,
+					Path:                    f.Path,
+					Dir:                     backups[layer].Dir,
+					BackupFileEntrySpan:     f.Span,
+					BackupFileEntryCounts:   f.EntryCounts,
+					BackingFileSize:         f.BackingFileSize,
+					ApproximatePhysicalSize: f.ApproximatePhysicalSize,
 				}
 				if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
 					fileSpec.Dir = dir
@@ -378,14 +386,14 @@ func generateAndSendImportSpans(
 					coverSpan.EndKey = span.EndKey
 				}
 
-				newFilesByLayer, err := getNewIntersectingFilesByLayer(coverSpan, layersCoveredLater, fileIterByLayer)
+				newFilesByLayer, err := getNewIntersectingFilesByLayer(coverSpan, layersCoveredLater, fileIterByLayer, fsc)
 				if err != nil {
 					return err
 				}
 
 				var filesByLayer [][]*backuppb.BackupManifest_File
-				var covSize int64
-				var newCovFilesSize int64
+				var covSize, newCovFilesSize int64
+				var covCount, newCovFilesCount int
 
 				for layer := range newFilesByLayer {
 					for _, file := range newFilesByLayer[layer] {
@@ -395,6 +403,7 @@ func generateAndSendImportSpans(
 						}
 						newCovFilesSize += sz
 					}
+					newCovFilesCount += len(newFilesByLayer[layer])
 					filesByLayer = append(filesByLayer, newFilesByLayer[layer])
 				}
 
@@ -405,8 +414,9 @@ func generateAndSendImportSpans(
 							sz = 16 << 20
 						}
 
-						if inclusiveOverlap(coverSpan, file.Span) {
+						if fsc.overlaps(coverSpan, file.Span) {
 							covSize += sz
+							covCount++
 							filesByLayer[layer] = append(filesByLayer[layer], file)
 						}
 					}
@@ -416,8 +426,17 @@ func generateAndSendImportSpans(
 					covFilesByLayer = newFilesByLayer
 					lastCovSpan = coverSpan
 					lastCovSpanSize = newCovFilesSize
+					lastCovSpanCount = newCovFilesCount
 				} else {
-					if (newCovFilesSize == 0 || lastCovSpanSize+newCovFilesSize <= filter.targetSize) && !firstInSpan {
+					// We have room to add to the last span if doing so would remain below
+					// both the target byte size and 200 total files. We limit the number
+					// of files since we default to running multiple concurrent workers so
+					// we want to bound sum total open files across all of them to <= 1k.
+					// We bound the span byte size to improve work distribution and make
+					// the progress more granular.
+					fits := lastCovSpanSize+newCovFilesSize <= filter.targetSize && lastCovSpanCount+newCovFilesCount <= 200
+
+					if (newCovFilesCount == 0 || fits) && !firstInSpan {
 						// If there are no new files that cover this span or if we can add the
 						// files in the new span's cover to the last span's cover and still stay
 						// below targetSize, then we should merge the two spans.
@@ -426,6 +445,7 @@ func generateAndSendImportSpans(
 						}
 						lastCovSpan.EndKey = coverSpan.EndKey
 						lastCovSpanSize = lastCovSpanSize + newCovFilesSize
+						lastCovSpanCount = lastCovSpanCount + newCovFilesCount
 					} else {
 						if err := flush(ctx); err != nil {
 							return err
@@ -433,6 +453,7 @@ func generateAndSendImportSpans(
 						lastCovSpan = coverSpan
 						covFilesByLayer = filesByLayer
 						lastCovSpanSize = covSize
+						lastCovSpanCount = covCount
 					}
 				}
 				firstInSpan = false
@@ -482,6 +503,12 @@ func newFileSpanStartKeyIterator(
 	}
 	it.reset()
 	return it, nil
+}
+
+func (i *fileSpanStartKeyIterator) Close() {
+	for _, iter := range i.allIters {
+		iter.Close()
+	}
 }
 
 func (i *fileSpanStartKeyIterator) next() {
@@ -608,6 +635,7 @@ func getNewIntersectingFilesByLayer(
 	span roachpb.Span,
 	layersCoveredLater map[int]bool,
 	fileIters []bulk.Iterator[*backuppb.BackupManifest_File],
+	fsc fileSpanComparator,
 ) ([][]*backuppb.BackupManifest_File, error) {
 	var files [][]*backuppb.BackupManifest_File
 
@@ -629,7 +657,7 @@ func getNewIntersectingFilesByLayer(
 				// inclusive. Because roachpb.Span and its associated operations
 				// are end key exclusive, we work around this by replacing the
 				// end key with its next value in order to include the end key.
-				if inclusiveOverlap(span, f.Span) {
+				if fsc.overlaps(span, f.Span) {
 					layerFiles = append(layerFiles, f)
 				}
 
@@ -644,8 +672,28 @@ func getNewIntersectingFilesByLayer(
 	return files, nil
 }
 
-// inclusiveOverlap returns true if sp, which is end key exclusive, overlaps
-// isp, which is end key inclusive.
-func inclusiveOverlap(sp roachpb.Span, isp roachpb.Span) bool {
-	return sp.Overlaps(isp) || sp.ContainsKey(isp.EndKey)
+type fileSpanComparator interface {
+	overlaps(targetSpan, fileSpan roachpb.Span) bool
+	isExclusive() bool
 }
+
+// inclusiveEndKeyComparator assumes that file spans have inclusive
+// end keys.
+type inclusiveEndKeyComparator struct{}
+
+func (inclusiveEndKeyComparator) overlaps(targetSpan, inclusiveEndKeyFileSpan roachpb.Span) bool {
+	// TODO(ssd): Could ContainsKey here be replaced with targetSpan.Key.Equal(inclusiveEndKeyFileSpan.EndKey)?
+	return targetSpan.Overlaps(inclusiveEndKeyFileSpan) || targetSpan.ContainsKey(inclusiveEndKeyFileSpan.EndKey)
+}
+
+func (inclusiveEndKeyComparator) isExclusive() bool { return false }
+
+// exclusiveEndKeyComparator assumes that file spans have exclusive
+// end keys.
+type exclusiveEndKeyComparator struct{}
+
+func (exclusiveEndKeyComparator) overlaps(targetSpan, inclusiveEndKeyFileSpan roachpb.Span) bool {
+	return targetSpan.Overlaps(inclusiveEndKeyFileSpan)
+}
+
+func (exclusiveEndKeyComparator) isExclusive() bool { return true }

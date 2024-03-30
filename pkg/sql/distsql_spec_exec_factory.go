@@ -73,9 +73,9 @@ func newDistSQLSpecExecFactory(
 		planningMode:         planningMode,
 		gatewaySQLInstanceID: p.extendedEvalCtx.DistSQLPlanner.gatewaySQLInstanceID,
 	}
-	distribute := DistributionType(DistributionTypeNone)
+	distribute := DistributionType(LocalDistribution)
 	if e.planningMode != distSQLLocalOnlyPlanning {
-		distribute = DistributionTypeSystemTenantOnly
+		distribute = FullDistribution
 	}
 	evalCtx := p.ExtendedEvalContext()
 	e.planCtx = e.dsp.NewPlanningCtx(ctx, evalCtx, e.planner, e.planner.txn, distribute)
@@ -286,7 +286,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 			spans:             spans,
 			reverse:           params.Reverse,
 			parallelize:       params.Parallelize,
-			estimatedRowCount: uint64(params.EstimatedRowCount),
+			estimatedRowCount: params.EstimatedRowCount,
 			reqOrdering:       ReqOrdering(reqOrdering),
 		},
 	)
@@ -314,7 +314,7 @@ func (e *distSQLSpecExecFactory) checkExprsAndMaybeMergeLastStage(
 		recommendation = cannotDistribute
 	}
 	for _, expr := range exprs {
-		if err := checkExpr(expr); err != nil {
+		if err := checkExprForDistSQL(expr); err != nil {
 			recommendation = cannotDistribute
 			if physPlan != nil {
 				// The filter expression cannot be distributed, so we need to
@@ -481,9 +481,11 @@ func populateAggFuncSpec(
 	if len(constArgs) > 0 {
 		spec.Arguments = make([]execinfrapb.Expression, len(constArgs))
 		argumentsColumnTypes = make([]*types.T, len(constArgs))
+		var ef physicalplan.ExprFactory
+		ef.Init(ctx, planCtx, nil /* indexVarMap */)
 		for k, argument := range constArgs {
 			var err error
-			spec.Arguments[k], err = physicalplan.MakeExpression(ctx, argument, planCtx, nil)
+			spec.Arguments[k], err = ef.Make(argument)
 			if err != nil {
 				return nil, err
 			}
@@ -500,6 +502,7 @@ func (e *distSQLSpecExecFactory) constructAggregators(
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
 	isScalar bool,
+	estimatedRowCount uint64,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
 	// planAggregators() itself decides whether to distribute the aggregation.
@@ -546,6 +549,7 @@ func (e *distSQLSpecExecFactory) constructAggregators(
 			groupColOrdering:     groupColOrdering,
 			inputMergeOrdering:   physPlan.MergeOrdering,
 			reqOrdering:          ReqOrdering(reqOrdering),
+			estimatedRowCount:    estimatedRowCount,
 		},
 	); err != nil {
 		return nil, err
@@ -561,6 +565,7 @@ func (e *distSQLSpecExecFactory) ConstructGroupBy(
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
 	groupingOrderType exec.GroupingOrderType,
+	estimatedRowCount uint64,
 ) (exec.Node, error) {
 	return e.constructAggregators(
 		input,
@@ -569,6 +574,7 @@ func (e *distSQLSpecExecFactory) ConstructGroupBy(
 		aggregations,
 		reqOrdering,
 		false, /* isScalar */
+		estimatedRowCount,
 	)
 }
 
@@ -582,6 +588,7 @@ func (e *distSQLSpecExecFactory) ConstructScalarGroupBy(
 		aggregations,
 		exec.OutputOrdering{}, /* reqOrdering */
 		true,                  /* isScalar */
+		1,                     /* estimatedRowCount */
 	)
 }
 
@@ -868,6 +875,7 @@ func (e *distSQLSpecExecFactory) ConstructPlan(
 	cascades []exec.Cascade,
 	checks []exec.Node,
 	rootRowCount int64,
+	flags exec.PlanFlags,
 ) (exec.Plan, error) {
 	if len(subqueries) != 0 {
 		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: subqueries")
@@ -883,7 +891,7 @@ func (e *distSQLSpecExecFactory) ConstructPlan(
 	} else {
 		p.physPlan.onClose = e.planCtx.getCleanupFunc()
 	}
-	return constructPlan(e.planner, root, subqueries, cascades, checks, rootRowCount)
+	return constructPlan(e.planner, root, subqueries, cascades, checks, rootRowCount, flags)
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplainOpt(
@@ -1056,7 +1064,11 @@ func (e *distSQLSpecExecFactory) ConstructCreateView(
 }
 
 func (e *distSQLSpecExecFactory) ConstructCreateFunction(
-	schema cat.Schema, cf *tree.CreateRoutine, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
+	schema cat.Schema,
+	cf *tree.CreateRoutine,
+	deps opt.SchemaDeps,
+	typeDeps opt.SchemaTypeDeps,
+	functionDeps opt.SchemaFunctionDeps,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create function")
 }

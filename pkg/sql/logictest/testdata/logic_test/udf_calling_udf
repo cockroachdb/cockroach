@@ -1,0 +1,169 @@
+# LogicTest: !local-mixed-23.1
+
+statement ok
+CREATE FUNCTION lower_hello() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
+
+statement ok
+CREATE FUNCTION upper_hello() RETURNS STRING LANGUAGE SQL AS $$ SELECT upper(lower_hello()) $$;
+
+statement ok
+CREATE FUNCTION nested_udf_for_from() RETURNS STRING LANGUAGE SQL AS $$ SELECT * FROM upper_hello()$$;
+
+statement ok
+CREATE FUNCTION concat_hello() RETURNS STRING LANGUAGE SQL AS $$ SELECT upper(lower_hello()) || upper_hello() || lower_hello() $$;
+
+query TTTT
+SELECT upper_hello(), nested_udf_for_from(), lower_hello(), concat_hello()
+----
+HELLO  HELLO  hello  HELLOHELLOhello
+
+# Validate we can have UDF's both in the select and from clauses.
+statement ok
+CREATE FUNCTION udfCall(i int) RETURNS INT LANGUAGE SQL AS 'SELECT 100+i';
+CREATE FUNCTION udfCallNest(i int, j int) RETURNS INT LANGUAGE SQL AS 'SELECT udfCall(i) + j';
+CREATE FUNCTION udfCallNest_2(i int, j int) RETURNS INT LANGUAGE SQL AS 'SELECT udfCall(i) + udfCall(j) + udfCallNest(i, j)';
+CREATE FUNCTION udfCallNest_3(i int, j int) RETURNS INT  LANGUAGE SQL AS 'SELECT  udfCall(j) + udfCallNest(i, j) + udfCallNest_2(i, j) + 1 FROM udfCallNest_2(i, j)';
+
+query I
+SELECT * FROM udfCallNest_3(1, 2)
+----
+512
+
+# Get the dependency graph from pg_depend between functions.
+query TT rowsort
+SELECT
+	src_p.proname as from, dst_p.proname as to
+FROM
+	pg_depend AS d, pg_proc AS src_p, pg_proc AS dst_p
+WHERE
+	d.classid = 'pg_catalog.pg_proc'::REGCLASS::INT8
+	AND d.refclassid = 'pg_catalog.pg_proc'::REGCLASS::INT8
+	AND d.objid = src_p.oid
+	AND d.refobjid = dst_p.oid;
+----
+udfcallnest          udfcall
+udfcallnest_2        udfcall
+udfcallnest_2        udfcallnest
+udfcallnest_3        udfcall
+udfcallnest_3        udfcallnest_2
+udfcallnest_3        udfcallnest
+upper_hello          lower_hello
+concat_hello         lower_hello
+concat_hello         upper_hello
+nested_udf_for_from  upper_hello
+
+# Validate recursion doesn't work today.
+statement error pgcode 42883 unknown function: recursion_check\(\)
+CREATE FUNCTION recursion_check() RETURNS STRING  LANGUAGE SQL AS $$ SELECT recursion_check() $$;
+
+# Validate that function renaming is blocked.
+statement error pgcode 0A000 cannot rename function \"lower_hello\" because other functions \(\[test.public.upper_hello, test.public.concat_hello\]\) still depend on it
+ALTER FUNCTION lower_hello rename to lower_hello_new
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
+  SELECT 1;
+$$
+
+statement ok
+CREATE FUNCTION g() RETURNS INT LANGUAGE SQL AS $$
+  SELECT f();
+$$
+
+# Mutual recursion is not currently allowed.
+statement error pgcode 42P13 cannot add dependency from descriptor \d+ to function g \(\d+\) because there will be a dependency cycle
+CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
+  SELECT g();
+$$
+
+statement ok
+DROP FUNCTION g();
+DROP FUNCTION f();
+
+statement ok
+CREATE TABLE ab (
+  a INT PRIMARY KEY,
+  b INT
+)
+
+statement ok
+CREATE FUNCTION ins_ab(new_a INT, new_b INT) RETURNS INT LANGUAGE SQL AS $$
+  INSERT INTO ab VALUES (new_a, new_b) RETURNING a;
+$$
+
+statement ok
+CREATE FUNCTION ins(new_a INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT ins_ab(new_a, new_a * 10);
+  SELECT b FROM ab WHERE a = new_a;
+$$
+
+query I rowsort
+SELECT ins(i) FROM generate_series(1, 3) g(i)
+----
+10
+20
+30
+
+query II
+SELECT ins(5), ins(6) FROM (VALUES (1)) v(i) WHERE i < ins(4)
+----
+50  60
+
+query II rowsort
+SELECT * FROM ab
+----
+1  10
+2  20
+3  30
+4  40
+5  50
+6  60
+
+statement error pgcode 23505 duplicate key value violates unique constraint \"ab_pkey\"
+SELECT ins(4)
+
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop table ab because other objects depend on it
+DROP TABLE ab
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 pq: cannot drop relation \"ab\" because function \"ins_ab\" depends on it\nHINT: consider dropping \"ins_ab\" first.
+DROP TABLE ab
+
+statement error pgcode 2BP01 cannot drop function \"ins_ab\" because other objects \(\[test.public.ins\]\) still depend on it
+DROP FUNCTION ins_ab
+
+statement ok
+DROP FUNCTION ins;
+DROP FUNCTION ins_ab;
+DROP TABLE ab;
+
+statement ok
+CREATE FUNCTION identity1(n INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT n;
+$$
+
+statement ok
+CREATE FUNCTION identity2(n INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT identity1(n);
+$$
+
+query I
+SELECT identity2(11)
+----
+11
+
+statement ok
+DROP FUNCTION identity2;
+DROP FUNCTION identity1;
+
+statement ok
+CREATE FUNCTION self_cycle(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+# Note that postgres allows creating a function that results in an infinite
+# cycle with itself - it hits the stack depth limit when invoked.
+statement error pgcode 42P13 cannot add dependency from descriptor .* to function self_cycle .* because there will be a dependency cycle
+CREATE OR REPLACE FUNCTION self_cycle(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT self_cycle(a, b); $$;
+
+statement ok
+DROP FUNCTION self_cycle;

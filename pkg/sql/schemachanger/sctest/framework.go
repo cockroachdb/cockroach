@@ -115,11 +115,11 @@ func (s *stageKey) AsInt() int {
 // String implements fmt.Stringer
 func (s *stageKey) String() string {
 	if s.minOrdinal == s.maxOrdinal {
-		return fmt.Sprintf("(phase = %s stageOrdinal=%d)",
-			s.phase, s.minOrdinal)
+		return fmt.Sprintf("(phase = %s stageOrdinal=%d rollback=%t)",
+			s.phase, s.minOrdinal, s.rollback)
 	}
-	return fmt.Sprintf("(phase = %s stageMinOrdinal=%d stageMaxOrdinal=%d),",
-		s.phase, s.minOrdinal, s.maxOrdinal)
+	return fmt.Sprintf("(phase = %s stageMinOrdinal=%d stageMaxOrdinal=%d rollback=%t),",
+		s.phase, s.minOrdinal, s.maxOrdinal, s.rollback)
 }
 
 // IsEmpty detects if a stage key is empty.
@@ -152,7 +152,7 @@ func makeStageExecStmtMap() *stageExecStmtMap {
 func (m *stageExecStmtMap) getExecStmts(targetKey stageKey) []*stageExecStmt {
 	var stmts []*stageExecStmt
 	if targetKey.minOrdinal != targetKey.maxOrdinal {
-		panic(fmt.Sprintf("only a single ordinal key can be looked up %v ", targetKey))
+		panic(fmt.Sprintf("only a single ordinal key can be looked up %s ", &targetKey))
 	}
 	for _, key := range m.entries {
 		if key.stageKey.phase == targetKey.phase &&
@@ -485,9 +485,9 @@ func (e *stageExecStmt) Exec(
 			if e.expectedOutput != actualOutput {
 				if !rewrite {
 					t.Fatalf(
-						"query '%s' ($stageKey=%d,$successfulStageCount=%d): expected:\n%v\ngot:\n%v\n",
+						"query '%s' ($stageKey=%s,$successfulStageCount=%d): expected:\n%v\ngot:\n%v\n",
 						stmt,
-						stageVariables.stage.AsInt()*1000,
+						stageVariables.stage.String(),
 						stageVariables.successfulStageCount,
 						e.expectedOutput,
 						actualOutput,
@@ -733,15 +733,29 @@ func cumulativeTestForEachPostCommitStage(
 // minus any COMMENT ON statements because these aren't consistently backed up.
 const fetchDescriptorStateQuery = `
 SELECT
-	split_part(create_statement, ';', 1) AS create_statement
+	CASE
+		WHEN needs_split THEN split_part(create_statement, ';', 1)
+		ELSE create_statement
+	END AS create_statement
 FROM
 	( 
-		SELECT descriptor_id, create_statement FROM crdb_internal.create_schema_statements
-		UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_statements
-		UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_type_statements
-    UNION ALL SELECT function_id as descriptor_id, create_statement FROM crdb_internal.create_function_statements
+		SELECT descriptor_id, create_statement, false AS needs_split FROM crdb_internal.create_schema_statements
+		UNION ALL SELECT descriptor_id, create_statement, true AS needs_split FROM crdb_internal.create_statements
+		UNION ALL SELECT descriptor_id, create_statement, false AS needs_split FROM crdb_internal.create_type_statements
+    UNION ALL SELECT function_id as descriptor_id, create_statement, false AS needs_split FROM crdb_internal.create_function_statements
 	)
-WHERE descriptor_id IN (SELECT id FROM system.namespace)
+WHERE descriptor_id IN (
+	SELECT id FROM system.namespace
+	UNION
+	SELECT (json_array_elements((json_each).@2->'signatures')->'id')::INT8 AS id
+	FROM (
+		SELECT
+			json_each(crdb_internal.pb_to_json('desc', descriptor)->'schema'->'functions')
+		FROM system.descriptor
+		JOIN system.namespace ns ON ns.id = descriptor.id
+		WHERE crdb_internal.pb_to_json('desc', descriptor) ? 'schema'
+	)
+)
 ORDER BY
 	create_statement;`
 

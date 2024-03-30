@@ -648,11 +648,6 @@ func TestSchemaChangeComparator_fk(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/fk"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_fk_read_committed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/fk_read_committed"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
 func TestSchemaChangeComparator_float(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/float"
@@ -796,11 +791,6 @@ func TestSchemaChangeComparator_hash_join_dist(t *testing.T) {
 func TestSchemaChangeComparator_hash_sharded_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/hash_sharded_index"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_hash_sharded_index_read_committed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/hash_sharded_index_read_committed"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_hidden_columns(t *testing.T) {
@@ -1053,9 +1043,9 @@ func TestSchemaChangeComparator_mixed_version_schedule_details(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_schedule_details"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_mixed_version_system_privileges_user_id(t *testing.T) {
+func TestSchemaChangeComparator_mixed_version_sequence_per_node_cache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_system_privileges_user_id"
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_sequence_per_node_cache"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_mixed_version_udf_execute_privileges(t *testing.T) {
@@ -1278,9 +1268,24 @@ func TestSchemaChangeComparator_privileges_table(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/privileges_table"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_proc_invokes_proc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/proc_invokes_proc"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_procedure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/procedure"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
+func TestSchemaChangeComparator_procedure_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/procedure_deps"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
+func TestSchemaChangeComparator_procedure_params(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/procedure_params"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_procedure_privileges(t *testing.T) {
@@ -1306,11 +1311,6 @@ func TestSchemaChangeComparator_rand_ident(t *testing.T) {
 func TestSchemaChangeComparator_ranges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/ranges"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_read_committed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/read_committed"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_reassign_owned_by(t *testing.T) {
@@ -1481,11 +1481,6 @@ func TestSchemaChangeComparator_select_for_share(t *testing.T) {
 func TestSchemaChangeComparator_select_for_update(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/select_for_update"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_select_for_update_read_committed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/select_for_update_read_committed"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_select_index(t *testing.T) {
@@ -1898,9 +1893,19 @@ func TestSchemaChangeComparator_udf(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_udf_calling_udf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_calling_udf"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_udf_delete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_delete"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
+func TestSchemaChangeComparator_udf_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_deps"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_udf_fk(t *testing.T) {
@@ -1938,6 +1943,11 @@ func TestSchemaChangeComparator_udf_options(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_options"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_udf_params(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_params"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_udf_prepare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_prepare"
@@ -1951,6 +1961,11 @@ func TestSchemaChangeComparator_udf_privileges(t *testing.T) {
 func TestSchemaChangeComparator_udf_privileges_mutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_privileges_mutations"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
+func TestSchemaChangeComparator_udf_procedure_mix(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_procedure_mix"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_udf_record(t *testing.T) {
@@ -2013,11 +2028,6 @@ func TestSchemaChangeComparator_unique(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/unique"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_unique_read_committed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/unique_read_committed"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
 func TestSchemaChangeComparator_update(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/update"
@@ -2026,6 +2036,16 @@ func TestSchemaChangeComparator_update(t *testing.T) {
 func TestSchemaChangeComparator_update_from(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/update_from"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
+func TestSchemaChangeComparator_upgrade_skip_version(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/upgrade_skip_version"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
+func TestSchemaChangeComparator_upgrade_system_table_changes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/upgrade_system_table_changes"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_upsert(t *testing.T) {

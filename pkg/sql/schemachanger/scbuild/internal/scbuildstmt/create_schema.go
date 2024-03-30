@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,13 +48,21 @@ func CreateSchema(b BuildCtx, n *tree.CreateSchema) {
 	})
 	_, _, dbElem := scpb.FindDatabase(dbElts)
 
-	// 2. Users cannot create schemas within the system database.
+	// 2. Disallow CREATEs for system tenant.
+	if err := shouldRestrictAccessToSystemInterface(b,
+		"DDL execution",   /* operation */
+		"running the DDL", /* alternate action */
+	); err != nil {
+		panic(err)
+	}
+
+	// 3. Users cannot create schemas within the system database.
 	if dbElem.DatabaseID == keys.SystemDatabaseID {
 		panic(pgerror.New(pgcode.InvalidObjectDefinition, "cannot create schemas in "+
 			"the system database"))
 	}
 
-	// 3. If schema name is already used, panic unless IF NOT EXISTS is set.
+	// 4. If schema name is already used, panic unless IF NOT EXISTS is set.
 	if schemaExists(b, n.Schema) {
 		if n.IfNotExists {
 			return
@@ -63,21 +70,29 @@ func CreateSchema(b BuildCtx, n *tree.CreateSchema) {
 		panic(sqlerrors.NewSchemaAlreadyExistsError(schemaName))
 	}
 
-	// 4. Check validity of the schema name.
+	// 5. Check validity of the schema name.
 	if err := schemadesc.IsSchemaNameValid(schemaName); err != nil {
 		panic(err)
 	}
 
-	// 5. Owner of the schema is either current user or an existing user specified
+	// 6. Owner of the schema is either current user or an existing user specified
 	// via AUTHORIZATION clause.
 	owner := b.CurrentUser()
 	if !n.AuthRole.Undefined() {
-		// TODO (xiang): Support "CREATE SCHEMA AUTHORIZATION <owner>".
-		panic(scerrors.NotImplementedErrorf(n, "create schema specifying owner with "+
-			"AUTHORIZATION is not implemented yet"))
+		authRole, err := decodeusername.FromRoleSpec(
+			b.SessionData(), username.PurposeValidation, n.AuthRole,
+		)
+		if err != nil {
+			panic(err)
+		}
+		// Block CREATE SCHEMA AUTHORIZATION "foo" when "foo" isn't an existing user.
+		if err = b.CheckRoleExists(b, authRole); err != nil {
+			panic(sqlerrors.NewUndefinedUserError(authRole))
+		}
+		owner = authRole
 	}
 
-	// 6. Finally, create and add constituent elements to builder state.
+	// 7. Finally, create and add constituent elements to builder state.
 	schemaID := b.GenerateUniqueDescID()
 	schemaElem := &scpb.Schema{
 		SchemaID:    schemaID,

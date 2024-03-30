@@ -89,7 +89,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -98,6 +98,7 @@ const (
 	backgroundLabel   = "start background hooks"
 	mixedVersionLabel = "run mixed-version hooks"
 	afterTestLabel    = "run after test hooks"
+	genericLabel      = "run following steps" // used by mutators to group steps
 
 	// runWhileMigratingProbability is the probability that a
 	// mixed-version hook will run after all nodes in the cluster have
@@ -126,18 +127,21 @@ const (
 )
 
 var (
-	// possibleDelaysMs lists the possible delays to be added to
-	// concurrent steps
-	possibleDelaysMs = []int{
-		0, 50, 100, 200, 500,
+	// possibleDelays lists the possible delays to be added to
+	// concurrent steps.
+	possibleDelays = []time.Duration{
+		0,
+		100 * time.Millisecond,
+		500 * time.Millisecond,
+		5 * time.Second,
+		30 * time.Second,
+		3 * time.Minute,
 	}
 
 	// defaultClusterSettings is the set of cluster settings always
 	// passed to `clusterupgrade.StartWithSettings` when (re)starting
 	// nodes in a cluster.
-	defaultClusterSettings = []install.ClusterSettingOption{
-		install.SecureOption(true),
-	}
+	defaultClusterSettings = []install.ClusterSettingOption{}
 
 	// minSupportedARM64Version is the minimum version for which there
 	// is a published ARM64 build. If we are running a mixedversion test
@@ -148,25 +152,43 @@ var (
 	defaultTestOptions = testOptions{
 		// We use fixtures more often than not as they are more likely to
 		// detect bugs, especially in migrations.
-		useFixturesProbability: 0.7,
-		upgradeTimeout:         clusterupgrade.DefaultUpgradeTimeout,
-		minUpgrades:            1,
-		maxUpgrades:            3,
-		predecessorFunc:        randomPredecessorHistory,
+		useFixturesProbability:         0.7,
+		upgradeTimeout:                 clusterupgrade.DefaultUpgradeTimeout,
+		minUpgrades:                    1,
+		maxUpgrades:                    4,
+		minimumSupportedVersion:        OldestSupportedVersion,
+		predecessorFunc:                randomPredecessorHistory,
+		overriddenMutatorProbabilities: make(map[string]float64),
+	}
+
+	// OldestSupportedVersion is the oldest cockroachdb version
+	// officially supported. If we are performing upgrades from versions
+	// older than this, we don't run user-provided hooks to avoid
+	// creating flakes in unsupported versions or rediscovering
+	// already-fixed bugs. This variable should be updated periodically
+	// as releases reach end of life.
+	OldestSupportedVersion = clusterupgrade.MustParseVersion("v22.2.0")
+
+	// Catch divergences between `stepFunc` and `Run`'s signature in
+	// `singleStepProtocol` at compile time.
+	_ = func() stepFunc {
+		var step singleStepProtocol
+		return step.Run
 	}
 )
 
 type (
-	// userFunc is the signature for user-provided functions that run at
-	// various points in the test (synchronously or in the background).
-	// These functions run on the test runner node itself; i.e., any
-	// commands they wish to execute on the cluster need to go through
-	// the `cluster` methods as usual (cluster.RunE, cluster.PutE,
-	// etc). In addition, these functions should prefer returning an
+	// stepFunc is the signature of functions that run in each
+	// individual step in the test (user-provided or implemented by the
+	// framework). These functions run at various points in the test
+	// (synchronously or in the background) on the test runner node
+	// itself; i.e., any commands they wish to execute on the cluster
+	// need to go through the `cluster` methods as usual (cluster.RunE,
+	// cluster.PutE, etc). These functions should prefer returning an
 	// error over calling `t.Fatal` directly. The error is handled by
 	// the mixedversion framework and better error messages are produced
 	// as a result.
-	userFunc      func(context.Context, *logger.Logger, *rand.Rand, *Helper) error
+	stepFunc      func(context.Context, *logger.Logger, *rand.Rand, *Helper) error
 	predicateFunc func(Context) bool
 
 	// versionUpgradeHook is a hook that can be called at any time
@@ -178,7 +200,7 @@ type (
 	versionUpgradeHook struct {
 		name      string
 		predicate predicateFunc
-		fn        userFunc
+		fn        stepFunc
 	}
 
 	// testStep is an opaque reference to one step of a mixed-version
@@ -190,9 +212,6 @@ type (
 	// singleStepProtocol is the set of functions that single step
 	// implementations need to provide.
 	singleStepProtocol interface {
-		// ID returns a unique ID associated with the step, making it easy
-		// to reference test output with the exact step it relates to
-		ID() int
 		// Description is a string representation of the step, intended
 		// for human-consumption. Displayed when pretty-printing the test
 		// plan.
@@ -205,8 +224,9 @@ type (
 		// for it to finish before moving on. When a background step
 		// fails, the entire test fails.
 		Background() shouldStop
-		// Run implements the actual functionality of the step.
-		Run(context.Context, *logger.Logger, cluster.Cluster, *Helper) error
+		// Run implements the actual functionality of the step. This
+		// signature should remain in sync with `stepFunc`.
+		Run(context.Context, *logger.Logger, *rand.Rand, *Helper) error
 	}
 
 	// singleStep represents steps that implement the pieces on top of
@@ -214,6 +234,8 @@ type (
 	// composed by other steps and hence can be directly executed.
 	singleStep struct {
 		context Context            // the context the step runs in
+		rng     *rand.Rand         // the RNG to be used when running this step
+		ID      int                // unique ID associated with the step
 		impl    singleStepProtocol // the concrete implementation of the step
 	}
 
@@ -226,20 +248,20 @@ type (
 		background            hooks
 		mixedVersion          hooks
 		afterUpgradeFinalized hooks
-
-		prng      *rand.Rand
-		crdbNodes option.NodeListOption
+		crdbNodes             option.NodeListOption
 	}
 
 	// testOptions contains some options that can be changed by the user
 	// that expose some control over the generated test plan and behaviour.
 	testOptions struct {
-		useFixturesProbability float64
-		upgradeTimeout         time.Duration
-		minUpgrades            int
-		maxUpgrades            int
-		predecessorFunc        predecessorFunc
-		settings               []install.ClusterSettingOption
+		useFixturesProbability         float64
+		upgradeTimeout                 time.Duration
+		minUpgrades                    int
+		maxUpgrades                    int
+		minimumSupportedVersion        *clusterupgrade.Version
+		predecessorFunc                predecessorFunc
+		settings                       []install.ClusterSettingOption
+		overriddenMutatorProbabilities map[string]float64
 	}
 
 	CustomOption func(*testOptions)
@@ -277,9 +299,11 @@ type (
 		// may choose to always use the latest predecessor as well.
 		predecessorFunc predecessorFunc
 
-		// test-only field, allowing tests to simulate cluster
-		// architectures without passing a cluster.Cluster implementation.
-		_arch *vm.CPUArch
+		// the following are test-only fields, allowing tests to simulate
+		// cluster properties without passing a cluster.Cluster
+		// implementation.
+		_arch    *vm.CPUArch
+		_isLocal *bool
 	}
 
 	shouldStop chan struct{}
@@ -340,6 +364,18 @@ func NumUpgrades(n int) CustomOption {
 	}
 }
 
+// MinimumSupportedVersion allows tests to specify that the
+// mixed-version hooks passed to the test are meant to be run only
+// after the cluster is running at least the version `v` passed. For
+// example, if `v` is v23.1.0, mixed-version hooks will only be
+// scheduled when upgrading from a version in the 23.1 releases series
+// or above.
+func MinimumSupportedVersion(v string) CustomOption {
+	return func(opts *testOptions) {
+		opts.minimumSupportedVersion = clusterupgrade.MustParseVersion(v)
+	}
+}
+
 // ClusterSettingOption adds a cluster setting option, in addition to the
 // default set of options.
 func ClusterSettingOption(opt ...install.ClusterSettingOption) CustomOption {
@@ -360,6 +396,23 @@ func ClusterSettingOption(opt ...install.ClusterSettingOption) CustomOption {
 // in case the test is more susceptible to fail due to known bugs.
 func AlwaysUseLatestPredecessors(opts *testOptions) {
 	opts.predecessorFunc = latestPredecessorHistory
+}
+
+// WithMutatorProbability allows tests to override the default
+// probability that a mutator will be applied to a test plan.
+func WithMutatorProbability(name string, probability float64) CustomOption {
+	return func(opts *testOptions) {
+		opts.overriddenMutatorProbabilities[name] = probability
+	}
+}
+
+// DisableMutators disables all mutators with the names passed.
+func DisableMutators(names ...string) CustomOption {
+	return func(opts *testOptions) {
+		for _, name := range names {
+			WithMutatorProbability(name, 0)(opts)
+		}
+	}
 }
 
 // NewTest creates a Test struct that users can use to create and run
@@ -396,7 +449,7 @@ func NewTest(
 		rt:              t,
 		prng:            prng,
 		seed:            seed,
-		hooks:           &testHooks{prng: prng, crdbNodes: crdbNodes},
+		hooks:           &testHooks{crdbNodes: crdbNodes},
 		predecessorFunc: opts.predecessorFunc,
 	}
 
@@ -420,7 +473,7 @@ func (t *Test) RNG() *rand.Rand {
 // will be tested in arbitrary mixed-version states. If multiple
 // InMixedVersion hooks are passed, they will be executed
 // concurrently.
-func (t *Test) InMixedVersion(desc string, fn userFunc) {
+func (t *Test) InMixedVersion(desc string, fn stepFunc) {
 	var prevUpgradeStage UpgradeStage
 	var numUpgradedNodes int
 	predicate := func(testContext Context) bool {
@@ -450,7 +503,7 @@ func (t *Test) InMixedVersion(desc string, fn userFunc) {
 // certain previous version, potentially from existing fixtures). If
 // multiple OnStartup hooks are passed, they will be executed
 // concurrently.
-func (t *Test) OnStartup(desc string, fn userFunc) {
+func (t *Test) OnStartup(desc string, fn stepFunc) {
 	// Since the callbacks here are only referenced in the setup steps
 	// of the planner, there is no need to have a predicate function
 	// gating them.
@@ -461,20 +514,20 @@ func (t *Test) OnStartup(desc string, fn userFunc) {
 // mixed-version test has brought the cluster to the latest version,
 // and allowed the upgrade to finalize successfully. If multiple such
 // hooks are passed, they will be executed concurrently.
-func (t *Test) AfterUpgradeFinalized(desc string, fn userFunc) {
+func (t *Test) AfterUpgradeFinalized(desc string, fn stepFunc) {
 	t.hooks.AddAfterUpgradeFinalized(versionUpgradeHook{name: desc, fn: fn})
 }
 
 // BackgroundFunc runs the function passed as argument in the
 // background during the test. Background functions are kicked off
 // once the cluster has been initialized (i.e., after all startup
-// steps have finished). If the `userFunc` returns an error, it will
+// steps have finished). If the `stepFunc` returns an error, it will
 // cause the test to fail. These functions can run indefinitely but
 // should respect the context passed to them, which will be canceled
 // when the test terminates (successfully or not). Returns a function
 // that can be called to terminate the step, which will cancel the
-// context passed to `userFunc`.
-func (t *Test) BackgroundFunc(desc string, fn userFunc) StopFunc {
+// context passed to `stepFunc`.
+func (t *Test) BackgroundFunc(desc string, fn stepFunc) StopFunc {
 	t.hooks.AddBackground(versionUpgradeHook{name: desc, fn: fn})
 
 	ch := make(shouldStop)
@@ -558,6 +611,7 @@ func (t *Test) plan() (*TestPlan, error) {
 		currentContext: newInitialContext(initialRelease, t.crdbNodes),
 		options:        t.options,
 		rt:             t.rt,
+		isLocal:        t.isLocal(),
 		crdbNodes:      t.crdbNodes,
 		hooks:          t.hooks,
 		prng:           t.prng,
@@ -575,7 +629,15 @@ func (t *Test) clusterArch() vm.CPUArch {
 	return t.cluster.Architecture()
 }
 
-func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) userFunc {
+func (t *Test) isLocal() bool {
+	if t._isLocal != nil {
+		return *t._isLocal
+	}
+
+	return t.cluster.IsLocal()
+}
+
+func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) stepFunc {
 	return func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
 		l.Printf("running command `%s` on nodes %v", cmd, nodes)
 		return t.cluster.RunE(ctx, option.WithNodes(nodes), cmd)
@@ -658,206 +720,6 @@ func parseVersions(vs []string) []*clusterupgrade.Version {
 	return result
 }
 
-// installFixturesStep is the step that copies the fixtures from
-// `pkg/cmd/roachtest/fixtures` for a specific version into the nodes'
-// store dir.
-type installFixturesStep struct {
-	id        int
-	version   *clusterupgrade.Version
-	crdbNodes option.NodeListOption
-}
-
-func (s installFixturesStep) ID() int                { return s.id }
-func (s installFixturesStep) Background() shouldStop { return nil }
-
-func (s installFixturesStep) Description() string {
-	return fmt.Sprintf("install fixtures for version %q", s.version.String())
-}
-
-func (s installFixturesStep) Run(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
-) error {
-	return clusterupgrade.InstallFixtures(ctx, l, c, s.crdbNodes, s.version)
-}
-
-// startStep is the step that starts the cluster from a specific
-// `version`.
-type startStep struct {
-	id        int
-	rt        test.Test
-	version   *clusterupgrade.Version
-	crdbNodes option.NodeListOption
-	settings  []install.ClusterSettingOption
-}
-
-func (s startStep) ID() int                { return s.id }
-func (s startStep) Background() shouldStop { return nil }
-
-func (s startStep) Description() string {
-	return fmt.Sprintf("start cluster at version %q", s.version)
-}
-
-// Run uploads the binary associated with the given version and starts
-// the cockroach binary on the nodes.
-func (s startStep) Run(ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper) error {
-	binaryPath, err := clusterupgrade.UploadCockroach(ctx, s.rt, l, c, s.crdbNodes, s.version)
-	if err != nil {
-		return err
-	}
-
-	startOpts := option.DefaultStartOptsNoBackups()
-	clusterSettings := append(
-		append([]install.ClusterSettingOption{}, s.settings...),
-		install.BinaryOption(binaryPath),
-	)
-	return clusterupgrade.StartWithSettings(ctx, l, c, s.crdbNodes, startOpts, clusterSettings...)
-}
-
-// waitForStableClusterVersionStep implements the process of waiting
-// for the `version` cluster setting being the same on all nodes of
-// the cluster and equal to the binary version of the first node in
-// the `nodes` field.
-type waitForStableClusterVersionStep struct {
-	id      int
-	nodes   option.NodeListOption
-	timeout time.Duration
-}
-
-func (s waitForStableClusterVersionStep) ID() int                { return s.id }
-func (s waitForStableClusterVersionStep) Background() shouldStop { return nil }
-
-func (s waitForStableClusterVersionStep) Description() string {
-	return fmt.Sprintf(
-		"wait for nodes %v to all have the same cluster version (same as binary version of node %d)",
-		s.nodes, s.nodes[0],
-	)
-}
-
-func (s waitForStableClusterVersionStep) Run(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
-) error {
-	return clusterupgrade.WaitForClusterUpgrade(ctx, l, s.nodes, h.Connect, s.timeout)
-}
-
-// preserveDowngradeOptionStep sets the `preserve_downgrade_option`
-// cluster setting to the binary version running in `node`.
-type preserveDowngradeOptionStep struct {
-	id        int
-	crdbNodes option.NodeListOption
-	prng      *rand.Rand
-}
-
-func (s preserveDowngradeOptionStep) ID() int                { return s.id }
-func (s preserveDowngradeOptionStep) Background() shouldStop { return nil }
-
-func (s preserveDowngradeOptionStep) Description() string {
-	return "prevent auto-upgrades by setting `preserve_downgrade_option`"
-}
-
-func (s preserveDowngradeOptionStep) Run(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
-) error {
-	node, db := h.RandomDB(s.prng, s.crdbNodes)
-	l.Printf("checking binary version (via node %d)", node)
-	bv, err := clusterupgrade.BinaryVersion(db)
-	if err != nil {
-		return err
-	}
-
-	node, db = h.RandomDB(s.prng, s.crdbNodes)
-	downgradeOption := bv.String()
-	l.Printf("setting `preserve_downgrade_option` to %s (via node %d)", downgradeOption, node)
-	_, err = db.ExecContext(ctx, "SET CLUSTER SETTING cluster.preserve_downgrade_option = $1", downgradeOption)
-	return err
-}
-
-// restartWithNewBinaryStep restarts a certain `node` with a new
-// cockroach binary. Any existing `cockroach` process will be stopped,
-// then the new binary will be uploaded and the `cockroach` process
-// will restart using the new binary.
-type restartWithNewBinaryStep struct {
-	id       int
-	version  *clusterupgrade.Version
-	rt       test.Test
-	node     int
-	settings []install.ClusterSettingOption
-}
-
-func (s restartWithNewBinaryStep) ID() int                { return s.id }
-func (s restartWithNewBinaryStep) Background() shouldStop { return nil }
-
-func (s restartWithNewBinaryStep) Description() string {
-	return fmt.Sprintf("restart node %d with binary version %s", s.node, s.version.String())
-}
-
-func (s restartWithNewBinaryStep) Run(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
-) error {
-	h.ExpectDeath()
-	return clusterupgrade.RestartNodesWithNewBinary(
-		ctx,
-		s.rt,
-		l,
-		c,
-		c.Node(s.node),
-		// Disable regular backups in mixed-version tests, as some tests
-		// check for running jobs and the scheduled backup may make
-		// things non-deterministic. In the future, we should change the
-		// default and add an API for tests to opt-out of the default
-		// scheduled backup if necessary.
-		option.DefaultStartOptsNoBackups(),
-		s.version,
-		s.settings...,
-	)
-}
-
-// finalizeUpgradeStep resets the `preserve_downgrade_option` cluster
-// setting, allowing the upgrade migrations to run and the cluster
-// version to eventually reach the binary version on the nodes.
-type finalizeUpgradeStep struct {
-	id        int
-	crdbNodes option.NodeListOption
-	prng      *rand.Rand
-}
-
-func (s finalizeUpgradeStep) ID() int                { return s.id }
-func (s finalizeUpgradeStep) Background() shouldStop { return nil }
-
-func (s finalizeUpgradeStep) Description() string {
-	return "finalize upgrade by resetting `preserve_downgrade_option`"
-}
-
-func (s finalizeUpgradeStep) Run(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
-) error {
-	node, db := h.RandomDB(s.prng, s.crdbNodes)
-	l.Printf("resetting preserve_downgrade_option (via node %d)", node)
-	_, err := db.ExecContext(ctx, "RESET CLUSTER SETTING cluster.preserve_downgrade_option")
-	return err
-}
-
-// runHookStep is a step used to run a user-provided hook (i.e.,
-// callbacks passed to `OnStartup`, `InMixedVersion`, or `AfterTest`).
-type runHookStep struct {
-	id       int
-	prng     *rand.Rand
-	hook     versionUpgradeHook
-	stopChan shouldStop
-}
-
-func (s runHookStep) ID() int                { return s.id }
-func (s runHookStep) Background() shouldStop { return s.stopChan }
-
-func (s runHookStep) Description() string {
-	return fmt.Sprintf("run %q", s.hook.name)
-}
-
-func (s runHookStep) Run(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
-) error {
-	return s.hook.fn(ctx, l, s.prng, h)
-}
-
 // sequentialRunStep is a "meta-step" that indicates that a sequence
 // of steps are to be executed sequentially. The default test runner
 // already runs steps sequentially. This meta-step exists primarily as
@@ -889,16 +751,21 @@ type delayedStep struct {
 // before each step starts, see notes on `delayedStep`.
 type concurrentRunStep struct {
 	label        string
+	rng          *rand.Rand
 	delayedSteps []testStep
 }
 
-func newConcurrentRunStep(label string, steps []testStep, rng *rand.Rand) concurrentRunStep {
+func newConcurrentRunStep(
+	label string, steps []testStep, rng *rand.Rand, isLocal bool,
+) concurrentRunStep {
 	delayedSteps := make([]testStep, 0, len(steps))
 	for _, step := range steps {
-		delayedSteps = append(delayedSteps, delayedStep{delay: randomDelay(rng), step: step})
+		delayedSteps = append(delayedSteps, delayedStep{
+			delay: randomConcurrencyDelay(rng, isLocal), step: step,
+		})
 	}
 
-	return concurrentRunStep{label: label, delayedSteps: delayedSteps}
+	return concurrentRunStep{label: label, delayedSteps: delayedSteps, rng: rng}
 }
 
 func (s concurrentRunStep) Description() string {
@@ -908,8 +775,8 @@ func (s concurrentRunStep) Description() string {
 // newSingleStep creates a `singleStep` struct for the implementation
 // passed, making sure to copy the context so that any modifications
 // made to it do not affect this step's view of the context.
-func newSingleStep(context *Context, impl singleStepProtocol) singleStep {
-	return singleStep{context: context.clone(), impl: impl}
+func newSingleStep(context *Context, impl singleStepProtocol, rng *rand.Rand) *singleStep {
+	return &singleStep{context: context.clone(), impl: impl, rng: rng}
 }
 
 // prefixedLogger returns a logger instance off of the given `l`
@@ -939,7 +806,7 @@ func (h hooks) Filter(testContext Context) hooks {
 // steps that are not meant to be run in the background, or contain
 // one stop channel (`shouldStop`) for each hook.
 func (h hooks) AsSteps(
-	label string, idGen func() int, prng *rand.Rand, testContext *Context, stopChans []shouldStop,
+	label string, prng *rand.Rand, testContext *Context, stopChans []shouldStop, isLocal bool,
 ) []testStep {
 	steps := make([]testStep, 0, len(h))
 	stopChanFor := func(j int) shouldStop {
@@ -950,20 +817,17 @@ func (h hooks) AsSteps(
 	}
 
 	for j, hook := range h {
-		hookPrng := rngFromRNG(prng)
 		steps = append(steps, newSingleStep(testContext, runHookStep{
-			id:       idGen(),
-			prng:     hookPrng,
 			hook:     hook,
 			stopChan: stopChanFor(j),
-		}))
+		}, rngFromRNG(prng)))
 	}
 
 	if len(steps) <= 1 {
 		return steps
 	}
 
-	return []testStep{newConcurrentRunStep(label, steps, prng)}
+	return []testStep{newConcurrentRunStep(label, steps, prng, isLocal)}
 }
 
 func (th *testHooks) AddStartup(hook versionUpgradeHook) {
@@ -982,30 +846,45 @@ func (th *testHooks) AddAfterUpgradeFinalized(hook versionUpgradeHook) {
 	th.afterUpgradeFinalized = append(th.afterUpgradeFinalized, hook)
 }
 
-func (th *testHooks) StartupSteps(idGen func() int, testContext *Context) []testStep {
-	return th.startup.AsSteps(startupLabel, idGen, th.prng, testContext, nil)
+func (th *testHooks) StartupSteps(testContext *Context, rng *rand.Rand, isLocal bool) []testStep {
+	return th.startup.AsSteps(startupLabel, rng, testContext, nil, isLocal)
 }
 
 func (th *testHooks) BackgroundSteps(
-	idGen func() int, testContext *Context, stopChans []shouldStop,
+	testContext *Context, stopChans []shouldStop, rng *rand.Rand, isLocal bool,
 ) []testStep {
 	testContext.Stage = BackgroundStage
-	return th.background.AsSteps(backgroundLabel, idGen, th.prng, testContext, stopChans)
+	return th.background.AsSteps(backgroundLabel, rng, testContext, stopChans, isLocal)
 }
 
-func (th *testHooks) MixedVersionSteps(testContext *Context, idGen func() int) []testStep {
+func (th *testHooks) MixedVersionSteps(
+	testContext *Context, rng *rand.Rand, isLocal bool,
+) []testStep {
 	return th.mixedVersion.
 		Filter(*testContext).
-		AsSteps(mixedVersionLabel, idGen, th.prng, testContext, nil)
+		AsSteps(mixedVersionLabel, rng, testContext, nil, isLocal)
 }
 
-func (th *testHooks) AfterUpgradeFinalizedSteps(idGen func() int, testContext *Context) []testStep {
-	return th.afterUpgradeFinalized.AsSteps(afterTestLabel, idGen, th.prng, testContext, nil)
+func (th *testHooks) AfterUpgradeFinalizedSteps(
+	testContext *Context, rng *rand.Rand, isLocal bool,
+) []testStep {
+	return th.afterUpgradeFinalized.AsSteps(afterTestLabel, rng, testContext, nil, isLocal)
 }
 
-func randomDelay(rng *rand.Rand) time.Duration {
-	idx := rng.Intn(len(possibleDelaysMs))
-	return time.Duration(possibleDelaysMs[idx]) * time.Millisecond
+// pickRandomDelay chooses a random duration from the list passed,
+// reducing it in local runs, as some tests run as part of CI and we
+// don't want to spend too much time waiting in that context.
+func pickRandomDelay(rng *rand.Rand, isLocal bool, durations []time.Duration) time.Duration {
+	dur := durations[rng.Intn(len(durations))]
+	if isLocal {
+		dur = dur / 10
+	}
+
+	return dur
+}
+
+func randomConcurrencyDelay(rng *rand.Rand, isLocal bool) time.Duration {
+	return pickRandomDelay(rng, isLocal, possibleDelays)
 }
 
 func rngFromRNG(rng *rand.Rand) *rand.Rand {
@@ -1025,6 +904,22 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 		err := fmt.Errorf(
 			"invalid test options: maxUpgrades (%d) must be greater than minUpgrades (%d)",
 			test.options.maxUpgrades, test.options.minUpgrades,
+		)
+		fatalFunc(errors.Wrap(err, "mixedversion.NewTest"))
+	}
+
+	currentVersion := clusterupgrade.CurrentVersion()
+	msv := test.options.minimumSupportedVersion
+	// The minimum supported version should be from an older major
+	// version or, if from the same major version, from an older minor
+	// version.
+	validVersion := msv.Major() < currentVersion.Major() ||
+		(msv.Major() == currentVersion.Major() && msv.Minor() < currentVersion.Minor())
+
+	if !validVersion {
+		err := fmt.Errorf(
+			"invalid test options: minimum supported version (%s) should be from an older release series than current version (%s)",
+			msv.Version.String(), currentVersion.Version.String(),
 		)
 		fatalFunc(errors.Wrap(err, "mixedversion.NewTest"))
 	}

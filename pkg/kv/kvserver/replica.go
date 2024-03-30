@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -35,6 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -56,9 +60,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
-	"go.etcd.io/raft/v3/tracker"
 )
 
 const (
@@ -323,6 +324,11 @@ type Replica struct {
 		stateMachine replicaStateMachine
 		// decoder is used to decode committed raft entries.
 		decoder replicaDecoder
+
+		// bytesAccount accounts bytes used by various Raft components, like entries
+		// to be applied. Currently, it only tracks bytes used by committed entries
+		// being applied to the state machine.
+		bytesAccount logstore.BytesAccount
 	}
 
 	// localMsgs contains a collection of raftpb.Message that target the local
@@ -544,7 +550,19 @@ type Replica struct {
 		minValidObservedTimestamp hlc.ClockTimestamp
 
 		// The span config for this replica.
+		//
+		// NB: Span configuration is applied asyncronously. After a span
+		// configuration change but before the replica has been split
+		// based on the new span configuration, the span stored here may
+		// not represent the span configuration for the entire replica.
+		//
+		// Use of this span configuration that may affect correct
+		// responses should be guarded by a check to confSpan below.
 		conf roachpb.SpanConfig
+		// The bounds of the span configuration. This may not match the
+		// replica's bounds in the case where a span configuration was
+		// recently updated.
+		confSpan roachpb.Span
 		// spanConfigExplicitlySet tracks whether a span config was explicitly set
 		// on this replica (as opposed to it having initialized with the default
 		// span config).
@@ -900,6 +918,10 @@ type Replica struct {
 	// loadBasedSplitter keeps information about load-based splitting.
 	loadBasedSplitter split.Decider
 
+	// allocatorToken is acquired when planning and executing replica or lease
+	// changes for a range on the leaseholder.
+	allocatorToken *plan.AllocatorToken
+
 	// unreachablesMu contains a set of remote ReplicaIDs that are to be reported
 	// as unreachable on the next raft tick.
 	unreachablesMu struct {
@@ -976,7 +998,7 @@ func (r *Replica) GetMaxBytes(_ context.Context) int64 {
 // to the span config was "significant". For significant changes, the caller
 // should queue up the span to all the relevant queues since they may not decide
 // to process this replica.
-func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) bool {
+func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	oldConf := r.mu.conf
@@ -1004,7 +1026,9 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) bool {
 	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SetSpanConfigInterceptor != nil {
 		conf = knobs.SetSpanConfigInterceptor(r.descRLocked(), conf)
 	}
-	r.mu.conf, r.mu.spanConfigExplicitlySet = conf, true
+	r.mu.conf = conf
+	r.mu.spanConfigExplicitlySet = true
+	r.mu.confSpan = sp
 	return oldConf.HasConfigurationChange(conf)
 }
 
@@ -1023,6 +1047,9 @@ func (r *Replica) MaybeQueue(ctx context.Context, now hlc.ClockTimestamp) {
 			h.MaybeAdd(ctx, r, now)
 		})
 	}
+	r.store.leaseQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, r, now)
+	})
 	// The replicate queue has a relatively more expensive queue check
 	// (shouldQueue), because it scales with the number of stores, and
 	// performs more checks.
@@ -1031,6 +1058,19 @@ func (r *Replica) MaybeQueue(ctx context.Context, now hlc.ClockTimestamp) {
 			h.MaybeAdd(ctx, r, now)
 		})
 	}
+}
+
+// HasExternalBytes returns true if the replica has a non-zero number
+// of external bytes in its underlying store. External bytes are bytes
+// in a pebble.ExternalFile. Such files can be added by AddSSTable.
+func (r *Replica) HasExternalBytes() (bool, error) {
+	desc := r.Desc()
+	sp := desc.KeySpan().AsRawSpanWithNoLocals()
+	_, _, externalBytes, err := r.store.StateEngine().ApproximateDiskBytes(sp.Key, sp.EndKey)
+	if err != nil {
+		return false, err
+	}
+	return externalBytes > 0, nil
 }
 
 // IsScratchRange returns true if this is range is a scratch range (i.e.
@@ -1190,14 +1230,41 @@ func (r *Replica) GetGCHint() roachpb.GCHint {
 
 // ExcludeDataFromBackup returns whether the replica is to be excluded from a
 // backup.
-func (r *Replica) ExcludeDataFromBackup(_ context.Context) bool {
+func (r *Replica) ExcludeDataFromBackup(ctx context.Context, sp roachpb.Span) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.conf.ExcludeDataFromBackup
+	return r.entireSpanExcludedFromBackupRLocked(ctx, sp)
 }
 
-func (r *Replica) excludeReplicaFromBackupRLocked() bool {
-	return r.mu.conf.ExcludeDataFromBackup
+func (r *Replica) excludeReplicaFromBackupRLocked(ctx context.Context, rspan roachpb.RSpan) bool {
+	// We ignore the error here to avoid failing requests that
+	// don't need to fail.
+	excluded, _ := r.entireSpanExcludedFromBackupRLocked(ctx, rspan.AsRawSpanWithNoLocals())
+	return excluded
+}
+
+// entireSpanExcludedFromBackupRLocked returns true if this replica
+// has ExcludeDataFromBackup set in its span configuration and that
+// span configuration covers the entire given span.
+func (r *Replica) entireSpanExcludedFromBackupRLocked(
+	ctx context.Context, sp roachpb.Span,
+) (bool, error) {
+	if r.mu.conf.ExcludeDataFromBackup {
+		// If ExcludeDataFromBackup is set, we also want to ensure that
+		// we only elide data if the span configuration we currently
+		// have actually contains the requested span.
+		if r.mu.confSpan.Equal(roachpb.Span{}) {
+			return false, errors.Newf("replica's span configuration bounds not set")
+		}
+		if !r.mu.confSpan.Contains(sp) {
+			log.Warningf(ctx, "ExcludeDataFromBackup set but span %q not containd by span config bounds %q",
+				sp,
+				r.mu.confSpan)
+
+			return false, nil
+		}
+	}
+	return r.mu.conf.ExcludeDataFromBackup, nil
 }
 
 // Version returns the replica version.
@@ -1812,7 +1879,7 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	// TODO(aayush): The above description intentionally omits some details, as
 	// they are going to be changed as part of
 	// https://github.com/cockroachdb/cockroach/issues/55293.
-	return r.checkTSAboveGCThresholdRLocked(ba.EarliestActiveTimestamp(), st, ba.IsAdmin())
+	return r.checkTSAboveGCThresholdRLocked(ctx, ba.EarliestActiveTimestamp(), st, ba.IsAdmin(), rSpan)
 }
 
 // checkExecutionCanProceedRWOrAdmin returns an error if a batch request going
@@ -1894,7 +1961,7 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	} else if !r.isRangefeedEnabledRLocked() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return errors.Errorf("[r%d] rangefeeds require the kv.rangefeed.enabled setting. See %s",
 			r.RangeID, docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
-	} else if err := r.checkTSAboveGCThresholdRLocked(ts, status, false /* isAdmin */); err != nil {
+	} else if err := r.checkTSAboveGCThresholdRLocked(ctx, ts, status, false /* isAdmin */, rSpan); err != nil {
 		return err
 	}
 	return nil
@@ -1914,7 +1981,11 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified by
 // its read timestamp) wants to read below the range's GC threshold.
 func (r *Replica) checkTSAboveGCThresholdRLocked(
-	ts hlc.Timestamp, st kvserverpb.LeaseStatus, isAdmin bool,
+	ctx context.Context,
+	ts hlc.Timestamp,
+	st kvserverpb.LeaseStatus,
+	isAdmin bool,
+	rspan roachpb.RSpan,
 ) error {
 	threshold := r.getImpliedGCThresholdRLocked(st, isAdmin)
 	if threshold.Less(ts) {
@@ -1923,7 +1994,7 @@ func (r *Replica) checkTSAboveGCThresholdRLocked(
 	return &kvpb.BatchTimestampBeforeGCError{
 		Timestamp:              ts,
 		Threshold:              threshold,
-		DataExcludedFromBackup: r.excludeReplicaFromBackupRLocked(),
+		DataExcludedFromBackup: r.excludeReplicaFromBackupRLocked(ctx, rspan),
 	}
 }
 
@@ -2463,4 +2534,9 @@ func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err er
 	defer r.mu.RUnlock()
 	ts, err = r.readProtectedTimestampsRLocked(ctx)
 	return err
+}
+
+// GetMutexForTesting returns the replica's mutex, for use in tests.
+func (r *Replica) GetMutexForTesting() *ReplicaMutex {
+	return &r.mu.ReplicaMutex
 }

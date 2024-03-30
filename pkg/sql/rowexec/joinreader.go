@@ -617,7 +617,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 	strategyMemAcc := jr.MemMonitor.MakeBoundAccount()
 	spanGeneratorMemAcc := jr.MemMonitor.MakeBoundAccount()
 	var generator joinReaderSpanGenerator
-	if jr.lookupExpr.Expr == nil {
+	if jr.lookupExpr.Expr() == nil {
 		defGen := &defaultSpanGenerator{}
 		if err := defGen.init(
 			flowCtx.EvalCtx,
@@ -652,7 +652,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		// If jr.remoteLookupExpr is set, this is a locality optimized lookup join
 		// and we need to use localityOptimizedSpanGenerator.
 		var err error
-		if jr.remoteLookupExpr.Expr == nil {
+		if jr.remoteLookupExpr.Expr() == nil {
 			multiSpanGen := &multiSpanGenerator{}
 			if jr.spansCanOverlap, err = multiSpanGen.init(
 				flowCtx.EvalCtx,
@@ -660,7 +660,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 				&jr.fetchSpec,
 				jr.splitFamilyIDs,
 				len(jr.input.OutputTypes()),
-				&jr.lookupExpr,
+				jr.lookupExpr.Expr(),
 				fetchedOrdToIndexKeyOrd,
 				&spanGeneratorMemAcc,
 			); err != nil {
@@ -676,8 +676,8 @@ func (jr *joinReader) initJoinReaderStrategy(
 				&jr.fetchSpec,
 				jr.splitFamilyIDs,
 				len(jr.input.OutputTypes()),
-				&jr.lookupExpr,
-				&jr.remoteLookupExpr,
+				jr.lookupExpr.Expr(),
+				jr.remoteLookupExpr.Expr(),
 				fetchedOrdToIndexKeyOrd,
 				&spanGeneratorMemAcc,
 				&remoteSpanGenMemAcc,
@@ -1104,7 +1104,7 @@ func (jr *joinReader) fetchLookupRow() (joinReaderState, *execinfrapb.ProducerMe
 	// remote spans, check whether all input rows in the batch had local matches.
 	// If not all rows matched, generate remote spans and start a scan to search
 	// the remote nodes for the current batch.
-	if jr.remoteLookupExpr.Expr != nil && !jr.strategy.generatedRemoteSpans() &&
+	if jr.remoteLookupExpr.Expr() != nil && !jr.strategy.generatedRemoteSpans() &&
 		jr.curBatchRowsRead != jr.curBatchInputRowCount {
 		spans, spanIDs, err := jr.strategy.generateRemoteSpans()
 		if err != nil {
@@ -1245,7 +1245,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			KVPairsRead:         optional.MakeUint(uint64(jr.fetcher.GetKVPairsRead())),
 			TuplesRead:          fis.NumTuples,
 			KVTime:              fis.WaitTime,
-			ContentionTime:      optional.MakeTimeValue(jr.contentionEventsListener.CumulativeContentionTime),
+			ContentionTime:      optional.MakeTimeValue(jr.contentionEventsListener.GetContentionTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(jr.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
 			UsedStreamer:        jr.usesStreamer,
@@ -1264,8 +1264,9 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			ret.Exec.MaxAllocatedDisk.Add(jr.streamerInfo.diskMonitor.MaximumBytes())
 		}
 	}
-	ret.Exec.ConsumedRU = optional.MakeUint(jr.tenantConsumptionListener.ConsumedRU)
-	execstats.PopulateKVMVCCStats(&ret.KV, &jr.scanStatsListener.ScanStats)
+	ret.Exec.ConsumedRU = optional.MakeUint(jr.tenantConsumptionListener.GetConsumedRU())
+	scanStats := jr.scanStatsListener.GetScanStats()
+	execstats.PopulateKVMVCCStats(&ret.KV, &scanStats)
 	return ret
 }
 

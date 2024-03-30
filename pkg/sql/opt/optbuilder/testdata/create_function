@@ -28,7 +28,7 @@ build
 CREATE FUNCTION f(a workday) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
 ----
 create-function
- ├── CREATE FUNCTION f(IN a workday)
+ ├── CREATE FUNCTION f(a workday)
  │   	RETURNS INT8
  │   	LANGUAGE SQL
  │   	AS $$SELECT 1;$$
@@ -73,7 +73,7 @@ build
 CREATE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM ab $$
 ----
 create-function
- ├── CREATE FUNCTION f(IN a INT8)
+ ├── CREATE FUNCTION f(a INT8)
  │   	RETURNS INT8
  │   	LANGUAGE SQL
  │   	AS $$SELECT a FROM t.public.ab;$$

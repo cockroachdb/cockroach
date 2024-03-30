@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
@@ -117,35 +118,37 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	// Replace the NewEncryptedEnvFunc global for the duration of this
 	// test. We'll use it to initialize a test caesar cipher
 	// encryption-at-rest implementation.
-	oldNewEncryptedEnvFunc := NewEncryptedEnvFunc
-	defer func() { NewEncryptedEnvFunc = oldNewEncryptedEnvFunc }()
-	NewEncryptedEnvFunc = fauxNewEncryptedEnvFunc
+	oldNewEncryptedEnvFunc := fs.NewEncryptedEnvFunc
+	defer func() { fs.NewEncryptedEnvFunc = oldNewEncryptedEnvFunc }()
+	fs.NewEncryptedEnvFunc = fauxNewEncryptedEnvFunc
 
+	ctx := context.Background()
 	st := cluster.MakeClusterSettings()
-	fs := vfs.NewMem()
-	p, err := Open(
-		context.Background(),
-		Location{dir: "", fs: fs},
-		st,
-		EncryptionAtRest(nil))
+	baseFS := vfs.NewMem()
+	env, err := fs.InitEnv(ctx, baseFS, "", fs.EnvConfig{
+		EncryptionOptions: []byte("foo"),
+	})
+	require.NoError(t, err)
+
+	p, err := Open(ctx, env, st)
 	require.NoError(t, err)
 	defer p.Close()
 	require.NoError(t, p.SetMinVersion(st.Version.LatestVersion()))
 
 	// Reading the file directly through the unencrypted MemFS should
 	// succeed and yield the correct version.
-	v, ok, err := getMinVersion(fs, "")
+	v, ok, err := getMinVersion(env.UnencryptedFS, "")
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, st.Version.LatestVersion(), v)
 }
 
 func fauxNewEncryptedEnvFunc(
-	fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
-) (*EncryptionEnv, error) {
-	return &EncryptionEnv{
+	unencryptedFS vfs.FS, fr *fs.FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+) (*fs.EncryptionEnv, error) {
+	return &fs.EncryptionEnv{
 		Closer: nopCloser{},
-		FS:     fauxEncryptedFS{FS: fs},
+		FS:     fauxEncryptedFS{FS: unencryptedFS},
 	}, nil
 }
 

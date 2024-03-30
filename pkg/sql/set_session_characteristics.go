@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -23,21 +24,43 @@ import (
 func (p *planner) SetSessionCharacteristics(
 	ctx context.Context, n *tree.SetSessionCharacteristics,
 ) (planNode, error) {
+	originalLevel := n.Modes.Isolation
+	upgradedLevel := false
+	upgradedDueToLicense := false
+	allowReadCommitted := allowReadCommittedIsolation.Get(&p.execCfg.Settings.SV)
+	allowSnapshot := allowSnapshotIsolation.Get(&p.execCfg.Settings.SV)
+	hasLicense := base.CCLDistributionAndEnterpriseEnabled(p.ExecCfg().Settings)
 	if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
 		// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
 		switch n.Modes.Isolation {
 		case tree.UnspecifiedIsolation:
 		// Nothing to do.
-		case tree.ReadUncommittedIsolation, tree.ReadCommittedIsolation:
+		case tree.ReadUncommittedIsolation:
+			upgradedLevel = true
+			fallthrough
+		case tree.ReadCommittedIsolation:
 			level := tree.SerializableIsolation
-			if allowReadCommittedIsolation.Get(&p.execCfg.Settings.SV) {
+			if allowReadCommitted && hasLicense {
 				level = tree.ReadCommittedIsolation
+			} else {
+				upgradedLevel = true
+				if allowReadCommitted && !hasLicense {
+					upgradedDueToLicense = true
+				}
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
-		case tree.RepeatableReadIsolation, tree.SnapshotIsolation:
+		case tree.RepeatableReadIsolation:
+			upgradedLevel = true
+			fallthrough
+		case tree.SnapshotIsolation:
 			level := tree.SerializableIsolation
-			if allowSnapshotIsolation.Get(&p.execCfg.Settings.SV) {
+			if allowSnapshot && hasLicense {
 				level = tree.SnapshotIsolation
+			} else {
+				upgradedLevel = true
+				if allowSnapshot && !hasLicense {
+					upgradedDueToLicense = true
+				}
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
 		default:
@@ -92,6 +115,10 @@ func (p *planner) SetSessionCharacteristics(
 	default:
 		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 			"unsupported default deferrable mode: %s", n.Modes.Deferrable)
+	}
+
+	if f := p.sessionDataMutatorIterator.upgradedIsolationLevel; upgradedLevel && f != nil {
+		f(ctx, originalLevel, upgradedDueToLicense)
 	}
 
 	return newZeroNode(nil /* columns */), nil

@@ -47,9 +47,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// additionalTimeoutUnderStress is the additional timeout to use for the http
+// additionalTimeoutUnderDuress is the additional timeout to use for the http
 // client if under stress.
-const additionalTimeoutUnderStress = 30 * time.Second
+const additionalTimeoutUnderDuress = 30 * time.Second
 
 func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -57,8 +57,8 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 
 	// Increase the timeout for the http client if under stress.
 	additionalTimeout := 0 * time.Second
-	if skip.Stress() {
-		additionalTimeout = additionalTimeoutUnderStress
+	if skip.Duress() {
+		additionalTimeout = additionalTimeoutUnderDuress
 	}
 
 	var params base.TestServerArgs
@@ -86,7 +86,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, count: 1, numRows: 0},
 		{
 			query:         `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, __more__)`,
 			count:         1,
 			numRows:       1,
 		},
@@ -222,7 +222,7 @@ func TestStatusAPITransactions(t *testing.T) {
 		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, count: 1, numRows: 0},
 		{
 			query:         `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
+			fingerprinted: `INSERT INTO posts VALUES (_, __more__)`,
 			count:         1,
 			numRows:       1,
 		},
@@ -393,8 +393,8 @@ func TestStatusAPIStatements(t *testing.T) {
 
 	// Increase the timeout for the http client if under stress.
 	additionalTimeout := 0 * time.Second
-	if skip.Stress() {
-		additionalTimeout = additionalTimeoutUnderStress
+	if skip.Duress() {
+		additionalTimeout = additionalTimeoutUnderDuress
 	}
 
 	// Aug 30 2021 19:50:00 GMT+0000
@@ -425,7 +425,7 @@ func TestStatusAPIStatements(t *testing.T) {
 		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
 		{
 			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, __more__)`,
 		},
 		{stmt: `SELECT * FROM posts`},
 	}
@@ -450,7 +450,7 @@ func TestStatusAPIStatements(t *testing.T) {
 		// See if the statements returned are what we executed.
 		var statementsInResponse []string
 		for _, respStatement := range resp.Statements {
-			if respStatement.Key.KeyData.Failed {
+			if respStatement.Stats.FailureCount > 0 {
 				// We ignore failed statements here as the INSERT statement can fail and
 				// be automatically retried, confusing the test success check.
 				continue
@@ -520,8 +520,8 @@ func TestStatusAPICombinedStatementsTotalLatency(t *testing.T) {
 	skip.UnderRace(t, "test is too slow to run under race")
 	// Increase the timeout for the http client if under stress.
 	additionalTimeout := 0 * time.Second
-	if skip.Stress() {
-		additionalTimeout = additionalTimeoutUnderStress
+	if skip.Duress() {
+		additionalTimeout = additionalTimeoutUnderDuress
 	}
 
 	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
@@ -676,8 +676,8 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 
 	// Increase the timeout for the http client if under stress.
 	additionalTimeout := 0 * time.Second
-	if skip.Stress() {
-		additionalTimeout = additionalTimeoutUnderStress
+	if skip.Duress() {
+		additionalTimeout = additionalTimeoutUnderDuress
 	}
 	skip.UnderStressRace(t, "test is too slow to run under stressrace")
 
@@ -699,7 +699,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	defer testCluster.Stopper().Stop(context.Background())
 
 	endpoint := fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs)
-	findJobQuery := "SELECT status FROM [SHOW JOBS] WHERE statement = 'CREATE INDEX idx_age ON football.public.players (age) STORING (name)';"
+	findJobQuery := "SELECT status FROM crdb_internal.jobs WHERE statement = 'CREATE INDEX idx_age ON football.public.players (age) STORING (name)';"
 	testAppName := "TestCombinedStatementsWithFullScans"
 
 	firstServerProto := testCluster.Server(0).ApplicationLayer()
@@ -730,7 +730,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 		{stmt: `CREATE DATABASE football`, respQuery: `CREATE DATABASE football`, fullScan: false, distSQL: false, failed: false, count: 1},
 		{stmt: `SET database = football`, respQuery: `SET database = football`, fullScan: false, distSQL: false, failed: false, count: 1},
 		{stmt: `CREATE TABLE players (id INT PRIMARY KEY, name TEXT, position TEXT, age INT,goals INT)`, respQuery: `CREATE TABLE players (id INT8 PRIMARY KEY, name STRING, "position" STRING, age INT8, goals INT8)`, fullScan: false, distSQL: false, failed: false, count: 1},
-		{stmt: `INSERT INTO players (id, name, position, age, goals) VALUES (1, 'Lionel Messi', 'Forward', 34, 672), (2, 'Cristiano Ronaldo', 'Forward', 36, 674)`, respQuery: `INSERT INTO players(id, name, "position", age, goals) VALUES (_, '_', __more1_10__), (__more1_10__)`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `INSERT INTO players (id, name, position, age, goals) VALUES (1, 'Lionel Messi', 'Forward', 34, 672), (2, 'Cristiano Ronaldo', 'Forward', 36, 674)`, respQuery: `INSERT INTO players(id, name, "position", age, goals) VALUES (_, __more__), (__more__)`, fullScan: false, distSQL: false, failed: false, count: 1},
 		{stmt: `SELECT avg(goals) FROM players`, respQuery: `SELECT avg(goals) FROM players`, fullScan: true, distSQL: true, failed: false, count: 1},
 		{stmt: `SELECT name FROM players WHERE age >= 32`, respQuery: `SELECT name FROM players WHERE age >= _`, fullScan: true, distSQL: true, failed: false, count: 1},
 	}
@@ -753,7 +753,6 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 		count    int
 		fullScan bool
 		distSQL  bool
-		failed   bool
 	}
 
 	// expectedStatementStatsMap maps the query response format to the associated
@@ -769,7 +768,6 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 			expectedStatementStatsMap[stmt.respQuery] = ExpectedStatementData{
 				fullScan: stmt.fullScan,
 				distSQL:  stmt.distSQL,
-				failed:   stmt.failed,
 				count:    stmt.count,
 			}
 		}
@@ -798,7 +796,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 			// statements that were that were successfully executed by the test app
 			// to avoid counting such failures. If a statement that we expect to be
 			// successful is not found in the response, the test will fail later.
-			if respStatement.Key.KeyData.App == testAppName && !respStatement.Key.KeyData.Failed {
+			if respStatement.Key.KeyData.App == testAppName && respStatement.Stats.FailureCount == 0 {
 				actualResponseStatsMap[respStatement.Key.KeyData.Query] = respStatement
 			}
 		}
@@ -810,13 +808,11 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 			actualCount := respStatement.Stats.FirstAttemptCount
 			actualFullScan := respStatement.Key.KeyData.FullScan
 			actualDistSQL := respStatement.Key.KeyData.DistSQL
-			actualFailed := respStatement.Key.KeyData.Failed
 
 			stmtJSONString := responseToJSON(respStatement)
 
 			require.Equal(t, expectedData.fullScan, actualFullScan, "failed for respStatement: %v", stmtJSONString)
 			require.Equal(t, expectedData.distSQL, actualDistSQL, "failed for respStatement: %v", stmtJSONString)
-			require.Equal(t, expectedData.failed, actualFailed, "failed for respStatement: %v", stmtJSONString)
 			require.Equal(t, expectedData.count, int(actualCount), "failed for respStatement: %v", stmtJSONString)
 		}
 	}
@@ -886,7 +882,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
 		{
 			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, __more__)`,
 		},
 		{stmt: `SELECT * FROM posts`},
 	}
@@ -912,7 +908,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		var statementsInResponse []string
 		expectedTxnFingerprints := map[appstatspb.TransactionFingerprintID]struct{}{}
 		for _, respStatement := range resp.Statements {
-			if respStatement.Key.KeyData.Failed {
+			if respStatement.Stats.FailureCount > 0 {
 				// We ignore failed statements here as the INSERT statement can fail and
 				// be automatically retried, confusing the test success check.
 				continue
@@ -1065,9 +1061,8 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 		thirdServerSQL.Exec(t, stmt)
 	}
 
-	query := `INSERT INTO posts VALUES (_, '_')`
-	fingerprintID := appstatspb.ConstructStatementFingerprintID(query,
-		false, true, `roachblog`)
+	query := `INSERT INTO posts VALUES (_, __more__)`
+	fingerprintID := appstatspb.ConstructStatementFingerprintID(query, true, `roachblog`)
 	path := fmt.Sprintf(`stmtdetails/%v`, fingerprintID)
 
 	var resp serverpb.StatementDetailsResponse
@@ -1260,8 +1255,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	}
 
 	selectQuery := "SELECT _, _, _, _"
-	fingerprintID = appstatspb.ConstructStatementFingerprintID(selectQuery, false,
-		true, "defaultdb")
+	fingerprintID = appstatspb.ConstructStatementFingerprintID(selectQuery, true, "defaultdb")
 
 	testPath(
 		fmt.Sprintf(`stmtdetails/%v`, fingerprintID),
@@ -1300,7 +1294,7 @@ func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
 		"SELECT crdb_internal.reset_index_usage_stats()",
 	)
 
-	require.Contains(t, err.Error(), "requires admin privilege")
+	require.Contains(t, err.Error(), "user non_admin_user does not have REPAIRCLUSTER system privilege")
 }
 
 // TestCombinedStatementUsesCorrectSourceTable tests that requests read from
@@ -1583,7 +1577,6 @@ func generateStatement() appstatspb.CollectedStatementStatistics {
 			Database:                 "test_database",
 			DistSQL:                  true,
 			FullScan:                 true,
-			Failed:                   false,
 			ImplicitTxn:              true,
 			PlanHash:                 uint64(200),
 			Query:                    "SELECT * FROM foo",
@@ -1729,7 +1722,6 @@ func insertStatementIntoSystemStmtStatsTable(
 	metadata := struct {
 		Database     string `json:"db"`
 		DistSQL      bool   `json:"distsql"`
-		Failed       bool   `json:"failed"`
 		FullScan     bool   `json:"fullScan"`
 		ImplicitTxn  bool   `json:"implicitTxn"`
 		Query        string `json:"query"`
@@ -1739,7 +1731,6 @@ func insertStatementIntoSystemStmtStatsTable(
 	}{
 		Database:     statement.Key.Database,
 		DistSQL:      statement.Key.DistSQL,
-		Failed:       statement.Key.Failed,
 		FullScan:     statement.Key.FullScan,
 		ImplicitTxn:  statement.Key.ImplicitTxn,
 		Query:        statement.Key.Query,

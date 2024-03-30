@@ -96,13 +96,6 @@ var (
 	}
 
 	v231CV = "23.1"
-	v222CV = "22.2"
-
-	// minActivelySupportedVersion is the minimum cluster version that
-	// should be active for this test to perform any backups or
-	// restores. We are only interested in releases where we are still
-	// actively fixing bugs in patch releases.
-	minActivelySupportedVersion = v222CV
 
 	// systemTablesInFullClusterBackup includes all system tables that
 	// are included as part of a full cluster backup. It should include
@@ -850,13 +843,13 @@ func (sc *systemTableContents) loadShowResults(
 
 	query := fmt.Sprintf("SELECT * FROM [%s]%s", showStmt, aostFor(timestamp))
 	showCmd := roachtestutil.NewCommand("%s sql", test.DefaultCockroachPath).
-		Flag("certs-dir", "certs").
+		Flag("certs-dir", install.CockroachNodeCertsDir).
 		Flag("e", fmt.Sprintf("%q", query)).
 		Flag("port", fmt.Sprintf("{pgport:%d}", sc.roachNode)).
 		String()
 
 	node := sc.cluster.Node(sc.roachNode)
-	result, err := sc.cluster.RunWithDetailsSingleNode(ctx, l, node, showCmd)
+	result, err := sc.cluster.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), showCmd)
 	if err != nil {
 		return fmt.Errorf("error running command (%s): %w", showCmd, err)
 	}
@@ -1430,7 +1423,7 @@ func (u *CommonTestUtils) setMaxRangeSizeAndDependentSettings(
 	}
 	// Ensure ranges have been properly replicated.
 	_, dbConn := u.RandomDB(rng, u.roachNodes)
-	return WaitFor3XReplication(ctx, t, dbConn)
+	return WaitFor3XReplication(ctx, t, t.L(), dbConn)
 }
 
 // setClusterSettings may set up to numCustomSettings cluster settings
@@ -1463,30 +1456,6 @@ func (u *CommonTestUtils) setClusterSettings(
 	}
 
 	return nil
-}
-
-// skipBackups returns `true` when the cluster is running at a version
-// older than the minimum actively supported version. In this case, we
-// don't want to verify the correctness of backups or restores since
-// the releases are already past their non-security support
-// window. Crucially, this also stops this test from hitting bugs
-// already fixed in later releases.
-func (mvb *mixedVersionBackup) skipBackups(
-	l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
-) (bool, error) {
-	supported, err := h.ClusterVersionAtLeast(rng, minActivelySupportedVersion)
-	if err != nil {
-		return false, err
-	}
-
-	if !supported {
-		l.Printf(
-			"skipping step because cluster version is behind minimum actively supported version %s",
-			minActivelySupportedVersion,
-		)
-	}
-
-	return !supported, nil
 }
 
 func (mvb *mixedVersionBackup) setShortJobIntervals(
@@ -1526,6 +1495,45 @@ func (mvb *mixedVersionBackup) setClusterSettings(
 	return u.setClusterSettings(ctx, l, rng)
 }
 
+// waitForDBs waits until every database in the `dbs` field
+// exists. Useful in case a mixed-version hook is called concurrently
+// with the process of actually creating the tables (e.g., workload
+// initialization).
+func (mvb *mixedVersionBackup) waitForDBs(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+) error {
+	retryOptions := retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     1 * time.Minute,
+		Multiplier:     1.5,
+		MaxRetries:     20,
+	}
+
+	for _, dbName := range mvb.dbs {
+		r := retry.StartWithCtx(ctx, retryOptions)
+		var err error
+		for r.Next() {
+			q := "SELECT 1 FROM [SHOW DATABASES] WHERE database_name = $1"
+			var n int
+			if err = h.QueryRow(rng, q, dbName).Scan(&n); err == nil {
+				break
+			}
+
+			l.Printf("waiting for DB %s (err: %v)", dbName, err)
+		}
+
+		if err != nil {
+			return fmt.Errorf("failed to wait for DB %s (last error: %w)", dbName, err)
+		}
+	}
+
+	// After every database exists, wait for a small amount of time to
+	// make sure *some* data exists (the workloads could be inserting
+	// data concurrently).
+	time.Sleep(1 * time.Minute)
+	return nil
+}
+
 // maybeTakePreviousVersionBackup creates a backup collection (full +
 // incremental), and is supposed to be called before any nodes are
 // upgraded. This ensures that we are able to restore this backup
@@ -1534,30 +1542,15 @@ func (mvb *mixedVersionBackup) setClusterSettings(
 func (mvb *mixedVersionBackup) maybeTakePreviousVersionBackup(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
-	// Wait here for a few minutes to allow the workloads (which are
-	// initializing concurrently with this step) to store some data in
-	// the cluster by the time the backup is taken. The actual wait time
-	// chosen is somewhat arbitrary: it's less time than workloads
-	// typically need to finish initializing (especially tpcc), so the
-	// backup is taken while data is still being inserted. The actual
-	// time is irrelevant as far as correctness is concerned: we should
-	// be able to restore this backup after upgrading regardless of the
-	// amount of data backed up.
-	wait := 3 * time.Minute
-	l.Printf("waiting for %s", wait)
-	time.Sleep(wait)
-
-	if err := mvb.initBackupRestoreTestDriver(ctx, l, rng); err != nil {
+	// Wait here to allow the workloads (which are initializing
+	// concurrently with this step) to store some data in the cluster by
+	// the time the backup is taken.
+	if err := mvb.waitForDBs(ctx, l, rng, h); err != nil {
 		return err
 	}
 
-	shouldSkip, err := mvb.skipBackups(l, rng, h)
-	if err != nil {
-		return fmt.Errorf("error checking if we should skip backups: %w", err)
-	}
-
-	if shouldSkip {
-		return nil
+	if err := mvb.initBackupRestoreTestDriver(ctx, l, rng); err != nil {
+		return err
 	}
 
 	previousVersion := h.Context.FromVersion
@@ -1991,7 +1984,7 @@ func (u *CommonTestUtils) sentinelFilePath(
 	ctx context.Context, l *logger.Logger, node int,
 ) (string, error) {
 	result, err := u.cluster.RunWithDetailsSingleNode(
-		ctx, l, u.cluster.Node(node), "echo -n {store-dir}",
+		ctx, l, option.WithNodes(u.cluster.Node(node)), "echo -n {store-dir}",
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve store directory from node %d: %w", node, err)
@@ -2087,27 +2080,6 @@ func (u *CommonTestUtils) enableJobAdoption(
 func (mvb *mixedVersionBackup) planAndRunBackups(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
-	shouldSkip, err := mvb.skipBackups(l, rng, h)
-	if err != nil {
-		return fmt.Errorf("error checking if we should skip backups: %w", err)
-	}
-
-	if shouldSkip {
-		// If this function is called while an unsupported version is
-		// running, we sleep for a few minutes to let the workloads run in
-		// this older version.
-		possibleWaitMinutes := []int{0, 10, 30}
-		waitDur := time.Duration(possibleWaitMinutes[rng.Intn(len(possibleWaitMinutes))]) * time.Minute
-
-		l.Printf("doing nothing for %s to let workloads run in this version", waitDur)
-		select {
-		case <-time.After(waitDur):
-		case <-ctx.Done():
-		}
-
-		return nil
-	}
-
 	onPrevious := labeledNodes{
 		Nodes: h.Context.NodesInPreviousVersion(), Version: sanitizeVersionForBackup(h.Context.FromVersion),
 	}
@@ -2323,13 +2295,13 @@ func (u *CommonTestUtils) resetCluster(
 ) error {
 	l.Printf("resetting cluster using version %q", version.String())
 	expectDeathsFn(len(u.roachNodes))
-	if err := u.cluster.WipeE(ctx, l, true /* preserveCerts */, u.roachNodes); err != nil {
+	if err := u.cluster.WipeE(ctx, l, u.roachNodes); err != nil {
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
 
 	cockroachPath := clusterupgrade.CockroachPathForVersion(u.t, version)
 	return clusterupgrade.StartWithSettings(
-		ctx, l, u.cluster, u.roachNodes, option.DefaultStartOptsNoBackups(),
+		ctx, l, u.cluster, u.roachNodes, option.NewStartOpts(option.NoBackupSchedule),
 		install.BinaryOption(cockroachPath), install.SecureOption(true),
 	)
 }
@@ -2499,6 +2471,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(5),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		RequiresLicense:   true,
+		NativeLibs:        registry.LibGEOS,
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -2590,8 +2563,14 @@ func tpccWorkloadCmd(
 func bankWorkloadCmd(
 	l *logger.Logger, testRNG *rand.Rand, roachNodes option.NodeListOption, mock bool,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
-	bankPayload := bankPossiblePayloadBytes[testRNG.Intn(len(bankPossiblePayloadBytes))]
 	bankRows := bankPossibleRows[testRNG.Intn(len(bankPossibleRows))]
+	possiblePayloads := bankPossiblePayloadBytes
+	// force smaller row counts to use smaller payloads too to avoid making lots
+	// of large revisions of a handful of keys.
+	if bankRows < 1000 {
+		possiblePayloads = []int{16, 64}
+	}
+	bankPayload := possiblePayloads[testRNG.Intn(len(possiblePayloads))]
 
 	if mock {
 		bankPayload = 9

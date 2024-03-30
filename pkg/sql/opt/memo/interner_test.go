@@ -329,6 +329,12 @@ func TestInterner(t *testing.T) {
 			{val1: tupTyp3, val2: tupTyp4, equal: false},
 		}},
 
+		{hashFn: in.hasher.HashExpr, eqFn: in.hasher.IsExprEqual, variations: []testVariation{
+			{val1: tup1, val2: tup1, equal: true},
+			{val1: tup1, val2: tup2, equal: false},
+			{val1: tup2, val2: tup3, equal: false},
+		}},
+
 		{hashFn: in.hasher.HashTypedExpr, eqFn: in.hasher.IsTypedExprEqual, variations: []testVariation{
 			{val1: tup1, val2: tup1, equal: true},
 			{val1: tup1, val2: tup2, equal: false},
@@ -396,7 +402,7 @@ func TestInterner(t *testing.T) {
 		{hashFn: in.hasher.HashScanFlags, eqFn: in.hasher.IsScanFlagsEqual, variations: []testVariation{
 			// Use unnamed fields so that compilation fails if a new field is
 			// added to ScanFlags.
-			{val1: ScanFlags{false, false, false, false, false, 0, 0, false, intsets.Fast{}}, val2: ScanFlags{}, equal: true},
+			{val1: ScanFlags{false, false, false, false, false, false, false, 0, 0, intsets.Fast{}}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{NoIndexJoin: false}, val2: ScanFlags{NoIndexJoin: true}, equal: false},
 			{val1: ScanFlags{NoIndexJoin: true}, val2: ScanFlags{NoIndexJoin: true}, equal: true},
@@ -409,6 +415,10 @@ func TestInterner(t *testing.T) {
 			{val1: ScanFlags{NoIndexJoin: true, Index: 1}, val2: ScanFlags{NoIndexJoin: true, Index: 1}, equal: true},
 			{val1: ScanFlags{NoIndexJoin: true, Index: 1}, val2: ScanFlags{NoIndexJoin: true, Index: 2}, equal: false},
 			{val1: ScanFlags{NoIndexJoin: true, Index: 1}, val2: ScanFlags{NoIndexJoin: false, Index: 1}, equal: false},
+			{val1: ScanFlags{NoFullScan: true}, val2: ScanFlags{NoFullScan: false}, equal: false},
+			{val1: ScanFlags{NoFullScan: true}, val2: ScanFlags{NoFullScan: true}, equal: true},
+			{val1: ScanFlags{ForceInvertedIndex: true}, val2: ScanFlags{ForceInvertedIndex: false}, equal: false},
+			{val1: ScanFlags{ForceInvertedIndex: true}, val2: ScanFlags{ForceInvertedIndex: true}, equal: true},
 			{
 				val1:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 1},
 				val2:  ScanFlags{NoIndexJoin: false, ForceIndex: true, Direction: tree.Ascending, Index: 1},
@@ -433,6 +443,54 @@ func TestInterner(t *testing.T) {
 				val1:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 1},
 				val2:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 1},
 				equal: true,
+			},
+		}},
+
+		{hashFn: in.hasher.HashTransactionModes, eqFn: in.hasher.IsTransactionModesEqual, variations: []testVariation{
+			{
+				val1:  tree.TransactionModes{},
+				val2:  tree.TransactionModes{},
+				equal: true,
+			},
+			{
+				val1:  tree.TransactionModes{Isolation: tree.ReadCommittedIsolation},
+				val2:  tree.TransactionModes{Isolation: tree.ReadCommittedIsolation},
+				equal: true,
+			},
+			{
+				val1:  tree.TransactionModes{Isolation: tree.ReadCommittedIsolation},
+				val2:  tree.TransactionModes{Isolation: tree.SerializableIsolation},
+				equal: false,
+			},
+			{
+				val1:  tree.TransactionModes{UserPriority: tree.Low},
+				val2:  tree.TransactionModes{UserPriority: tree.Low},
+				equal: true,
+			},
+			{
+				val1:  tree.TransactionModes{UserPriority: tree.Low},
+				val2:  tree.TransactionModes{UserPriority: tree.High},
+				equal: false,
+			},
+			{
+				val1:  tree.TransactionModes{ReadWriteMode: tree.ReadOnly},
+				val2:  tree.TransactionModes{ReadWriteMode: tree.ReadOnly},
+				equal: true,
+			},
+			{
+				val1:  tree.TransactionModes{ReadWriteMode: tree.ReadOnly},
+				val2:  tree.TransactionModes{ReadWriteMode: tree.ReadWrite},
+				equal: false,
+			},
+			{
+				val1:  tree.TransactionModes{AsOf: tree.AsOfClause{Expr: tz1}},
+				val2:  tree.TransactionModes{AsOf: tree.AsOfClause{Expr: tz1}},
+				equal: true,
+			},
+			{
+				val1:  tree.TransactionModes{AsOf: tree.AsOfClause{Expr: tz1}},
+				val2:  tree.TransactionModes{AsOf: tree.AsOfClause{Expr: tz2}},
+				equal: false,
 			},
 		}},
 
@@ -991,7 +1049,7 @@ func BenchmarkEncodeDatum(b *testing.B) {
 	r := rand.New(rand.NewSource(0))
 	datums := make([]tree.Datum, 10000)
 	for i := range datums {
-		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandEncodableType(r), 0, /* nullChance */
+		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandType(r), 0, /* nullChance */
 			false /* favorCommonData */, false /* targetColumnIsUnique */)
 	}
 	b.ResetTimer()
@@ -1006,7 +1064,7 @@ func BenchmarkIsDatumEqual(b *testing.B) {
 	r := rand.New(rand.NewSource(0))
 	datums := make([]tree.Datum, 1000)
 	for i := range datums {
-		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandEncodableType(r), 0, /* nullChance */
+		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandType(r), 0, /* nullChance */
 			false /* favorCommonData */, false /* targetColumnIsUnique */)
 	}
 	b.ResetTimer()

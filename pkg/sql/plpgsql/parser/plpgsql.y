@@ -317,12 +317,11 @@ func (u *plpgsqlSymUnion) sqlStatement() tree.Statement {
 %type <tree.ResolvableTypeReference>	decl_datatype
 %type <str>		decl_collate
 
-%type <str>	expr_until_semi expr_until_paren stmt_until_semi
+%type <str>	expr_until_semi expr_until_paren stmt_until_semi return_expr
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
 %type <plpgsqltree.Expr>	opt_exitcond
 
 %type <forvariable>	for_variable
-%type <plpgsqltree.Expr>	return_variable
 %type <*tree.NumVal>	foreach_slice
 %type <plpgsqltree.Statement>	for_control
 
@@ -365,7 +364,7 @@ func (u *plpgsqlSymUnion) sqlStatement() tree.Statement {
 
 %type <tree.CursorScrollOption>	opt_scrollable
 
-%type <*tree.NumVal>	opt_transaction_chain
+%type <bool>	opt_transaction_chain
 
 %type <str>	unreserved_keyword
 %%
@@ -662,7 +661,9 @@ proc_stmt:pl_block ';'
     $$.val = $1.statement()
   }
 | stmt_while
-  { }
+  {
+    $$.val = $1.statement()
+  }
 | stmt_for
   { }
 | stmt_foreach_a
@@ -720,11 +721,17 @@ proc_stmt:pl_block ';'
     $$.val = $1.statement()
   }
 | stmt_null
-  { }
+  {
+    $$.val = $1.statement()
+  }
 | stmt_commit
-  { }
+  {
+    $$.val = $1.statement()
+  }
 | stmt_rollback
-  { }
+  {
+    $$.val = $1.statement()
+  }
 ;
 
 stmt_perform: PERFORM stmt_until_semi ';'
@@ -1054,11 +1061,17 @@ stmt_continue: CONTINUE opt_label opt_exitcond
   }
 ;
 
-stmt_return: RETURN return_variable ';'
+stmt_return: RETURN return_expr ';'
   {
-    $$.val = &plpgsqltree.Return{
-      Expr: $2.expr(),
+    var expr plpgsqltree.Expr
+    if $2 != "" {
+      var err error
+      expr, err = plpgsqllex.(*lexer).ParseExpr($2)
+      if err != nil {
+        return setErr(plpgsqllex, err)
+      }
     }
+    $$.val = &plpgsqltree.Return{Expr: expr}
   }
 | RETURN_NEXT NEXT
   {
@@ -1070,6 +1083,15 @@ stmt_return: RETURN return_variable ';'
  }
 ;
 
+return_expr:
+  {
+    sqlStr, err := plpgsqllex.(*lexer).ReadReturnExpr()
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$ = sqlStr
+  }
+;
 
 query_options:
   {
@@ -1084,17 +1106,6 @@ query_options:
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-  }
-;
-
-
-return_variable: expr_until_semi
-  {
-    expr, err := plpgsqllex.(*lexer).ParseExpr($1)
-    if err != nil {
-      return setErr(plpgsqllex, err)
-    }
-    $$.val = expr
   }
 ;
 
@@ -1350,29 +1361,35 @@ stmt_close: CLOSE IDENT ';'
 
 stmt_null: NULL ';'
   {
-  $$.val = &plpgsqltree.Null{};
+    $$.val = &plpgsqltree.Null{};
   }
 ;
 
 stmt_commit: COMMIT opt_transaction_chain ';'
   {
-    return unimplemented(plpgsqllex, "commit")
+    $$.val = &plpgsqltree.TransactionControl{Chain: $2.bool()}
   }
 ;
 
 stmt_rollback: ROLLBACK opt_transaction_chain ';'
   {
-    return unimplemented(plpgsqllex, "rollback")
+    $$.val = &plpgsqltree.TransactionControl{Chain: $2.bool(), Rollback: true}
   }
 ;
 
 opt_transaction_chain:
 AND CHAIN
-  { }
+  {
+    $$.val = true
+  }
 | AND NO CHAIN
-  { }
+  {
+    $$.val = false
+  }
 | /* EMPTY */
-  { }
+  {
+    $$.val = false
+  }
 
 exception_sect: /* EMPTY */
   {

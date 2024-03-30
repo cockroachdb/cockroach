@@ -74,7 +74,6 @@ go_library(
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/privilege",
         "//pkg/sql/protoreflect",
-        "//pkg/sql/roleoption",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",
@@ -175,10 +174,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":builtins"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/kv",

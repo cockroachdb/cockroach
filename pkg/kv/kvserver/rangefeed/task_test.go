@@ -316,7 +316,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 			roachpb.MakeLock(&txn1.TxnMeta, roachpb.Key("p"), lock.Exclusive),
 		}
 		for _, l := range testLocks {
-			err := storage.MVCCAcquireLock(ctx, engine, &txn1, l.Strength, l.Key, nil, 0)
+			err := storage.MVCCAcquireLock(ctx, engine, &txn1, l.Strength, l.Key, nil, 0, 0)
 			require.NoError(t, err)
 		}
 		return engine
@@ -339,9 +339,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 	defer engine.Close()
 
 	// Mock processor. We just needs its eventC.
-	s := newTestScheduler(1)
-	p := ScheduledProcessor{
-		scheduler: s.NewClientScheduler(),
+	p := LegacyProcessor{
 		Config: Config{
 			Span: span,
 		},
@@ -360,22 +358,26 @@ func TestInitResolvedTSScan(t *testing.T) {
 }
 
 type testTxnPusher struct {
-	pushTxnsFn       func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
+	pushTxnsFn       func(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, bool, error)
 	resolveIntentsFn func(ctx context.Context, intents []roachpb.LockUpdate) error
 }
 
 func (tp *testTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
-) ([]*roachpb.Transaction, error) {
-	return tp.pushTxnsFn(txns, ts)
+) ([]*roachpb.Transaction, bool, error) {
+	return tp.pushTxnsFn(ctx, txns, ts)
 }
 
 func (tp *testTxnPusher) ResolveIntents(ctx context.Context, intents []roachpb.LockUpdate) error {
 	return tp.resolveIntentsFn(ctx, intents)
 }
 
+func (tp *testTxnPusher) Barrier(ctx context.Context) error {
+	return nil
+}
+
 func (tp *testTxnPusher) mockPushTxns(
-	fn func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error),
+	fn func(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, bool, error),
 ) {
 	tp.pushTxnsFn = fn
 }
@@ -432,7 +434,9 @@ func TestTxnPushAttempt(t *testing.T) {
 
 	// Run a txnPushAttempt.
 	var tp testTxnPusher
-	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, error) {
+	tp.mockPushTxns(func(
+		ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
+	) ([]*roachpb.Transaction, bool, error) {
 		require.Equal(t, 4, len(txns))
 		require.Equal(t, txn1Meta, txns[0])
 		require.Equal(t, txn2Meta, txns[1])
@@ -443,7 +447,7 @@ func TestTxnPushAttempt(t *testing.T) {
 		// Return all four protos. The PENDING txn is pushed.
 		txn1ProtoPushed := txn1Proto.Clone()
 		txn1ProtoPushed.WriteTimestamp = ts
-		return []*roachpb.Transaction{txn1ProtoPushed, txn2Proto, txn3Proto, txn4Proto}, nil
+		return []*roachpb.Transaction{txn1ProtoPushed, txn2Proto, txn3Proto, txn4Proto}, false, nil
 	})
 	tp.mockResolveIntentsFn(func(ctx context.Context, intents []roachpb.LockUpdate) error {
 		require.Len(t, intents, 7)
@@ -478,17 +482,13 @@ func TestTxnPushAttempt(t *testing.T) {
 
 	// Mock processor. We configure its key span to exclude one of txn2's lock
 	// spans and a portion of three of txn4's lock spans.
-	s := newTestScheduler(1)
-	p := ScheduledProcessor{
-		scheduler: s.NewClientScheduler(),
-		eventC:    make(chan *event, 100),
-	}
+	p := LegacyProcessor{eventC: make(chan *event, 100)}
 	p.Span = roachpb.RSpan{Key: roachpb.RKey("b"), EndKey: roachpb.RKey("m")}
 	p.TxnPusher = &tp
 
 	txns := []enginepb.TxnMeta{txn1Meta, txn2Meta, txn3Meta, txn4Meta}
 	doneC := make(chan struct{})
-	pushAttempt := newTxnPushAttempt(p.Span, p.TxnPusher, &p, txns, hlc.Timestamp{WallTime: 15},
+	pushAttempt := newTxnPushAttempt(p.Settings, p.Span, p.TxnPusher, &p, txns, hlc.Timestamp{WallTime: 15},
 		func() {
 			close(doneC)
 		})

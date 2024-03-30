@@ -205,6 +205,10 @@ const (
 	CrdbInternalRepairableCatalogCorruptionsViewID
 	CrdbInternalKVProtectedTS
 	CrdbInternalKVSessionBasedLeases
+	CrdbInternalClusterReplicationResolvedViewID
+	CrdbInternalPCRStreamsTableID
+	CrdbInternalPCRStreamSpansTableID
+	CrdbInternalPCRStreamCheckpointsTableID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

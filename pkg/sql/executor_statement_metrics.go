@@ -75,10 +75,12 @@ type StatsMetrics struct {
 
 	DiscardedStatsCount *metric.Counter
 
-	SQLStatsFlushStarted  *metric.Counter
-	SQLStatsFlushFailure  *metric.Counter
-	SQLStatsFlushDuration metric.IHistogram
-	SQLStatsRemovedRows   *metric.Counter
+	SQLStatsFlushesSuccessful       *metric.Counter
+	SQLStatsFlushDoneSignalsIgnored *metric.Counter
+	SQLStatsFlushFingerprintCount   *metric.Counter
+	SQLStatsFlushesFailed           *metric.Counter
+	SQLStatsFlushLatency            metric.IHistogram
+	SQLStatsRemovedRows             *metric.Counter
 
 	SQLTxnStatsCollectionOverhead metric.IHistogram
 }
@@ -167,7 +169,6 @@ func (ex *connExecutor) recordStatementSummary(
 		Vec:          flags.IsSet(planFlagVectorized),
 		ImplicitTxn:  flags.IsSet(planFlagImplicitTxn),
 		FullScan:     fullScan,
-		Failed:       stmtErr != nil,
 		Database:     planner.SessionData().Database,
 		PlanHash:     planner.instrumentation.planGist.Hash(),
 	}
@@ -191,6 +192,7 @@ func (ex *connExecutor) recordStatementSummary(
 		SessionID:            ex.planner.extendedEvalCtx.SessionID,
 		StatementID:          stmt.QueryID,
 		AutoRetryCount:       automaticRetryCount,
+		Failed:               stmtErr != nil,
 		AutoRetryReason:      ex.state.mu.autoRetryReason,
 		RowsAffected:         rowsAffected,
 		IdleLatencySec:       idleLatSec,

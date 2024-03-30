@@ -15,9 +15,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -31,37 +31,27 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg
 		cfg     colcontainer.DiskQueueCfg
 		cleanup []func()
 		path    string
-		loc     storage.Location
+		fsEnv   *fs.Env
 	)
 
 	if inMem {
-		loc = storage.InMemory()
+		fsEnv = storage.InMemory()
 		path = inMemDirName
 	} else {
 		var cleanupFunc func()
 		path, cleanupFunc = testutils.TempDir(t)
-		loc = storage.Filesystem(path)
+		fsEnv = fs.MustInitPhysicalTestingEnv(path)
 		cleanup = append(cleanup, cleanupFunc)
 	}
 
-	ngn, err := storage.Open(
-		context.Background(),
-		loc,
-		cluster.MakeClusterSettings(),
-		storage.ForTesting,
-		storage.CacheSize(0))
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	if inMem {
-		if err := ngn.MkdirAll(inMemDirName, os.ModePerm); err != nil {
+		if err := fsEnv.MkdirAll(inMemDirName, os.ModePerm); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	cleanup = append(cleanup, ngn.Close)
-	cfg.FS = ngn
+	cleanup = append(cleanup, fsEnv.Close)
+	cfg.FS = fsEnv
 	cfg.GetPather = colcontainer.GetPatherFunc(func(context.Context) string { return path })
 	if err := cfg.EnsureDefaults(); err != nil {
 		t.Fatal(err)

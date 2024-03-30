@@ -61,6 +61,16 @@ exp,benchmark
 23,Grant/grant_all_on_3_tables
 19,GrantRole/grant_1_role
 25,GrantRole/grant_2_roles
+6,Jobs/cancel_job
+8,Jobs/crdb_internal.system_jobs
+8,Jobs/pause_job
+6,Jobs/resume_job
+8,Jobs/jobs_page_default
+8,Jobs/jobs_page_latest_50
+8,Jobs/jobs_page_type_filtered
+8,Jobs/jobs_page_type_filtered_no_matches
+3,Jobs/show_job
+8,Jobs/show_jobs
 3,ORMQueries/activerecord_type_introspection_query
 0,ORMQueries/asyncpg_types
 0,ORMQueries/column_descriptions_json_agg
@@ -114,5 +124,5 @@ exp,benchmark
 3,UDFResolution/select_from_udf
 1,VirtualTableQueries/select_crdb_internal.invalid_objects_with_1_fk
 1,VirtualTableQueries/select_crdb_internal.tables_with_1_fk
-9,VirtualTableQueries/virtual_table_cache_with_point_lookups
+5,VirtualTableQueries/virtual_table_cache_with_point_lookups
 15,VirtualTableQueries/virtual_table_cache_with_schema_change

@@ -93,6 +93,34 @@ SELECT get_body_str('f_rewrite');
 statement ok
 DROP FUNCTION f_rewrite();
 
+statement ok
+CREATE FUNCTION f_rewrite(OUT weekday) AS
+$$
+  SELECT 'thursday'::weekday;
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"SELECT b'\\xa0':::@100107;"
+
+statement ok
+DROP FUNCTION f_rewrite();
+
+statement ok
+CREATE FUNCTION f_rewrite(INOUT weekday) AS
+$$
+  SELECT 'thursday'::weekday;
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"SELECT b'\\xa0':::@100107;"
+
+statement ok
+DROP FUNCTION f_rewrite;
+
 subtest end
 
 subtest rewrite_proc
@@ -124,5 +152,54 @@ SELECT get_body_str('p_rewrite');
 
 statement ok
 DROP PROCEDURE p_rewrite();
+
+statement ok
+CREATE PROCEDURE p_rewrite(OUT weekday) AS
+$$
+  SELECT 'thursday'::weekday;
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('p_rewrite');
+----
+"SELECT b'\\xa0':::@100107;"
+
+statement ok
+DROP PROCEDURE p_rewrite();
+
+statement ok
+CREATE PROCEDURE p_rewrite(INOUT weekday) AS
+$$
+  SELECT 'thursday'::weekday;
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('p_rewrite');
+----
+"SELECT b'\\xa0':::@100107;"
+
+statement ok
+DROP PROCEDURE p_rewrite;
+
+subtest end
+
+subtest rewrite_udf_calling_duf
+
+statement ok
+CREATE FUNCTION nested_func() RETURNS INT AS $$
+  SELECT 1;
+$$ LANGUAGE SQL
+
+statement ok
+CREATE PROCEDURE p_rewrite() AS $$
+  SELECT nested_func();
+  SELECT * FROM nested_func();
+$$ LANGUAGE SQL
+
+# TODO(fqazi): Renaming function calls will break today until #120351 is completed.
+query T
+SELECT get_body_str('p_rewrite');
+----
+"SELECT public.nested_func();\nSELECT nested_func FROM ROWS FROM (public.nested_func());"
 
 subtest end

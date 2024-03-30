@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -74,12 +73,8 @@ func registerAutoUpgrade(r registry.Registry) {
 
 		decommissionAndStop := func(node int) error {
 			t.WorkerStatus("decommission")
-			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(node))
-			if err != nil {
-				return err
-			}
 			if err := c.RunE(ctx, option.WithNodes(c.Node(node)),
-				fmt.Sprintf("./cockroach node decommission %d --insecure --url=%s", node, pgurl)); err != nil {
+				fmt.Sprintf("./cockroach node decommission %d --certs-dir=%s --port={pgport%s}", node, install.CockroachNodeCertsDir, c.Node(node))); err != nil {
 				return err
 			}
 			t.WorkerStatus("stop")
@@ -252,7 +247,7 @@ func registerAutoUpgrade(r registry.Registry) {
 
 		// Wipe n3 to exclude it from the dead node check the roachtest harness
 		// will perform after the test.
-		c.Wipe(ctx, false /* preserveCerts */, c.Node(nodeDecommissioned))
+		c.Wipe(ctx, c.Node(nodeDecommissioned))
 	}
 
 	r.Add(registry.TestSpec{

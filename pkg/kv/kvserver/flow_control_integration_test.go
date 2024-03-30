@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -792,7 +793,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -1483,7 +1484,7 @@ func TestFlowControlRaftMembershipRemoveSelf(t *testing.T) {
 					// 	I230507 19:47:03.143463 31 kv/kvserver_test/flow_control_integration_test.go:2065  [-] 349  -- (Replacing current raft leader on n1 in raft group with new n4 replica.)
 					//	I230507 19:47:03.153105 5430 kv/kvserver/replica_raftstorage.go:514  [T1,n4,s4,r64/4:/{Table/Max-Max}] 352  applied INITIAL snapshot b8cdcb09 from (n1,s1):1 at applied index 23 (total=1ms data=1.0 MiB ingestion=6@1ms)
 					//	I230507 19:47:03.167504 629 kv/kvserver/kvflowcontrol/kvflowhandle/kvflowhandle.go:249  [T1,n1,s1,r64/1:/{Table/Max-Max},raft] 353  connected to stream: t1/s4
-					//	W230507 19:47:03.186303 4268 go.etcd.io/raft/v3/raft.go:924  [T1,n4,s4,r64/4:/{Table/Max-Max}] 354  4 cannot campaign at term 6 since there are still 1 pending configuration changes to apply
+					//	W230507 19:47:03.186303 4268 github.com/cockroachdb/cockroach/pkg/raft/raft.go:924  [T1,n4,s4,r64/4:/{Table/Max-Max}] 354  4 cannot campaign at term 6 since there are still 1 pending configuration changes to apply
 					//	...
 					//	W230507 19:47:18.194829 5507 kv/kvserver/spanlatch/manager.go:559  [T1,n4,s4,r64/4:/{Table/Max-Max}] 378  have been waiting 15s to acquire read latch /Local/Range/Table/Max/RangeDescriptor@0,0, held by write latch /Local/Range/Table/Max/RangeDescriptor@0,0
 					//	W230507 19:47:19.082183 5891 kv/kvserver/spanlatch/manager.go:559  [T1,n4,s4,r64/4:/{Table/Max-Max}] 379  have been waiting 15s to acquire read latch /Local/Range/Table/Max/RangeDescriptor@0,0, held by write latch /Local/Range/Table/Max/RangeDescriptor@0,0

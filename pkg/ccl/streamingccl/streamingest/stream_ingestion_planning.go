@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -36,10 +35,15 @@ import (
 // replicated data will be retained.
 const defaultRetentionTTLSeconds = int32(4 * 60 * 60)
 
+// CannotSetExpirationWindowErr get returned if the user attempts to specify the
+// EXPIRATION WINDOW option to create a replication stream, as this job setting
+// should only be set from the producer cluster.
+var CannotSetExpirationWindowErr = errors.New("cannot specify EXPIRATION WINDOW option while starting a physical replication stream")
+
 func streamIngestionJobDescription(
 	p sql.PlanHookState, sourceAddr string, streamIngestion *tree.CreateTenantFromReplication,
 ) (string, error) {
-	redactedSourceAddr, err := redactSourceURI(sourceAddr)
+	redactedSourceAddr, err := streamclient.RedactSourceURI(sourceAddr)
 	if err != nil {
 		return "", err
 	}
@@ -53,10 +57,6 @@ func streamIngestionJobDescription(
 	}
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(redactedCreateStmt, ann), nil
-}
-
-func redactSourceURI(addr string) (string, error) {
-	return cloud.SanitizeExternalStorageURI(addr, streamclient.RedactableURLParameters)
 }
 
 func ingestionTypeCheck(
@@ -92,10 +92,6 @@ func ingestionPlanHook(
 	ingestionStmt, ok := stmt.(*tree.CreateTenantFromReplication)
 	if !ok {
 		return nil, nil, nil, false, nil
-	}
-
-	if !streamingccl.CrossClusterReplicationEnabled.Get(&p.ExecCfg().Settings.SV) {
-		return nil, nil, nil, false, physicalReplicationDisabledErr
 	}
 
 	if !p.ExecCfg().Codec.ForSystemTenant() {
@@ -137,6 +133,9 @@ func ingestionPlanHook(
 	retentionTTLSeconds := defaultRetentionTTLSeconds
 	if ret, ok := options.GetRetention(); ok {
 		retentionTTLSeconds = ret
+	}
+	if _, ok := options.GetExpirationWindow(); ok {
+		return nil, nil, nil, false, CannotSetExpirationWindowErr
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
@@ -192,7 +191,7 @@ func ingestionPlanHook(
 		destinationTenantID, err = sql.CreateTenantRecord(
 			ctx, p.ExecCfg().Codec, p.ExecCfg().Settings,
 			p.InternalSQLTxn(),
-			p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, p.Txn()),
+			p.ExecCfg().SpanConfigKVAccessor.WithISQLTxn(ctx, p.InternalSQLTxn()),
 			tenantInfo, initialTenantZoneConfig,
 			ingestionStmt.IfNotExists,
 			p.ExecCfg().TenantTestingKnobs,
@@ -291,6 +290,7 @@ func createReplicationJob(
 		Username:    p.User(),
 		Progress: jobspb.StreamIngestionProgress{
 			ReplicatedTime:        resumeTimestamp,
+			InitialSplitComplete:  revertFirst,
 			InitialRevertRequired: revertFirst,
 		},
 		Details: streamIngestionDetails,

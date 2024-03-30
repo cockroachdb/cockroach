@@ -14,13 +14,13 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/raftpb"
 )
 
 func TestRaftReceiveQueue(t *testing.T) {
@@ -41,10 +40,11 @@ func TestRaftReceiveQueue(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	g := metric.NewGauge(metric.Metadata{})
-	m := mon.NewUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource, g,
-		nil, math.MaxInt64, st,
-	)
+	m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
+		Name:     "test",
+		CurCount: g,
+		Settings: st,
+	})
 	qs := raftReceiveQueues{mon: m}
 
 	const r1 = roachpb.RangeID(1)

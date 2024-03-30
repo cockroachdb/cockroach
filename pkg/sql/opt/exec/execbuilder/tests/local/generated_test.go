@@ -139,6 +139,13 @@ func TestExecBuild_check_constraints(
 	runExecBuildLogicTest(t, "check_constraints")
 }
 
+func TestExecBuild_collated_strings(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "collated_strings")
+}
+
 func TestExecBuild_ddl(
 	t *testing.T,
 ) {
@@ -172,6 +179,13 @@ func TestExecBuild_enums(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "enums")
+}
+
+func TestExecBuild_execute_internally_builtin(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "execute_internally_builtin")
 }
 
 func TestExecBuild_explain(
@@ -228,13 +242,6 @@ func TestExecBuild_fk(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "fk")
-}
-
-func TestExecBuild_fk_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "fk_read_committed")
 }
 
 func TestExecBuild_forecast(
@@ -510,13 +517,6 @@ func TestExecBuild_select_for_update(
 	runExecBuildLogicTest(t, "select_for_update")
 }
 
-func TestExecBuild_select_for_update_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "select_for_update_read_committed")
-}
-
 func TestExecBuild_select_index(
 	t *testing.T,
 ) {
@@ -578,6 +578,20 @@ func TestExecBuild_srfs(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "srfs")
+}
+
+func TestExecBuild_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "stats")
+}
+
+func TestExecBuild_straight_join(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "straight_join")
 }
 
 func TestExecBuild_subquery(
@@ -650,13 +664,6 @@ func TestExecBuild_unique(
 	runExecBuildLogicTest(t, "unique")
 }
 
-func TestExecBuild_unique_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "unique_read_committed")
-}
-
 func TestExecBuild_update(
 	t *testing.T,
 ) {
@@ -671,25 +678,11 @@ func TestExecBuild_update_from(
 	runExecBuildLogicTest(t, "update_from")
 }
 
-func TestExecBuild_update_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "update_read_committed")
-}
-
 func TestExecBuild_upsert(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "upsert")
-}
-
-func TestExecBuild_upsert_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "upsert_read_committed")
 }
 
 func TestExecBuild_values(

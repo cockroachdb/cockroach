@@ -36,7 +36,7 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(2),
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
-		Owner:             registry.OwnerMultiTenant,
+		Owner:             registry.OwnerDisasterRecovery,
 		NonReleaseBlocker: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runMultiTenantUpgrade(ctx, t, c, t.BuildVersion())
@@ -79,7 +79,7 @@ func runMultiTenantUpgrade(
 	// Update this map with every new release.
 	versionToMinSupportedVersion := map[string]string{
 		"23.2": "23.1",
-		"24.1": "23.1",
+		"24.1": "23.2",
 	}
 	curBinaryMajorAndMinorVersion := getMajorAndMinorVersionOnly(v)
 	currentBinaryMinSupportedVersion, ok := versionToMinSupportedVersion[curBinaryMajorAndMinorVersion]
@@ -94,7 +94,7 @@ func runMultiTenantUpgrade(
 
 	kvNodes := c.Node(1)
 
-	settings := install.MakeClusterSettings(install.BinaryOption(predecessorBinary), install.SecureOption(true))
+	settings := install.MakeClusterSettings(install.BinaryOption(predecessorBinary))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, kvNodes)
 
 	const tenant11aHTTPPort, tenant11aSQLPort = 8011, 20011
@@ -113,13 +113,13 @@ func runMultiTenantUpgrade(
 	// Create two instances of tenant 11 so that we can test with two pods
 	// running during migration.
 	const tenantNode = 2
-	tenant11a := createTenantNode(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11aHTTPPort, tenant11aSQLPort)
+	tenant11a := deprecatedCreateTenantNode(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11aHTTPPort, tenant11aSQLPort)
 	tenant11a.start(ctx, t, c, predecessorBinary)
 	defer tenant11a.stop(ctx, t, c)
 
-	// Since the certs are created with the createTenantNode call above, we
+	// Since the certs are created with the deprecatedCreateTenantNode call above, we
 	// call the "no certs" version of create tenant here.
-	tenant11b := createTenantNodeNoCerts(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11bHTTPPort, tenant11bSQLPort)
+	tenant11b := deprecatedCreateTenantNodeNoCerts(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11bHTTPPort, tenant11bSQLPort)
 	tenant11b.start(ctx, t, c, predecessorBinary)
 	defer tenant11b.stop(ctx, t, c)
 
@@ -164,7 +164,7 @@ func runMultiTenantUpgrade(
 	settings.Binary = currentBinary
 	// TODO (msbutler): investigate why the scheduled backup command fails due to a `Is the Server
 	// running?` error.
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, kvNodes)
+	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, kvNodes)
 	time.Sleep(time.Second)
 
 	t.Status("checking the pre-upgrade sql server still works after the system tenant binary upgrade")
@@ -174,7 +174,7 @@ func runMultiTenantUpgrade(
 			withResults([][]string{{"1", "bar"}}))
 
 	t.Status("starting tenant 12 server with older binary")
-	tenant12 := createTenantNode(ctx, t, c, kvNodes, tenant12ID, tenantNode, tenant12HTTPPort, tenant12SQLPort)
+	tenant12 := deprecatedCreateTenantNode(ctx, t, c, kvNodes, tenant12ID, tenantNode, tenant12HTTPPort, tenant12SQLPort)
 	tenant12.start(ctx, t, c, predecessorBinary)
 	defer tenant12.stop(ctx, t, c)
 
@@ -196,7 +196,7 @@ func runMultiTenantUpgrade(
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1::INT)`, tenant13ID)
 
 	t.Status("starting tenant 13 server with new binary")
-	tenant13 := createTenantNode(ctx, t, c, kvNodes, tenant13ID, tenantNode, tenant13HTTPPort, tenant13SQLPort)
+	tenant13 := deprecatedCreateTenantNode(ctx, t, c, kvNodes, tenant13ID, tenantNode, tenant13HTTPPort, tenant13SQLPort)
 	tenant13.start(ctx, t, c, currentBinary)
 	defer tenant13.stop(ctx, t, c)
 
@@ -356,7 +356,7 @@ func runMultiTenantUpgrade(
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1::INT)`, tenant14ID)
 
 	t.Status("verifying that the tenant 14 server works and has the proper version")
-	tenant14 := createTenantNode(ctx, t, c, kvNodes, tenant14ID, tenantNode, tenant14HTTPPort, tenant14SQLPort)
+	tenant14 := deprecatedCreateTenantNode(ctx, t, c, kvNodes, tenant14ID, tenantNode, tenant14HTTPPort, tenant14SQLPort)
 	tenant14.start(ctx, t, c, currentBinary)
 	defer tenant14.stop(ctx, t, c)
 	verifySQL(t, tenant14.pgURL,
@@ -368,8 +368,8 @@ func runMultiTenantUpgrade(
 			withResults([][]string{{"true"}}))
 
 	t.Status("restarting the tenant 14 server to check it works after a restart")
-	tenant13.stop(ctx, t, c)
-	tenant13.start(ctx, t, c, currentBinary)
+	tenant14.stop(ctx, t, c)
+	tenant14.start(ctx, t, c, currentBinary)
 
 	t.Status("verifying the post-upgrade tenant works and has the proper version")
 	verifySQL(t, tenant14.pgURL,
@@ -377,6 +377,19 @@ func runMultiTenantUpgrade(
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]").
 			withResults([][]string{{"true"}}))
+
+	t.Status("restarting the tenant 14 server to check it works with preserve downgrade option as an override")
+	runner.Exec(
+		t,
+		`ALTER TENANT [14] SET CLUSTER SETTING cluster.preserve_downgrade_option = crdb_internal.node_executable_version()`)
+	tenant14.stop(ctx, t, c)
+	tenant14.start(ctx, t, c, currentBinary)
+
+	t.Status("restarting the tenant 13 server to check it works with preserve downgrade option in the tenant")
+	verifySQL(t, tenant13.pgURL,
+		mkStmt("SET CLUSTER SETTING cluster.preserve_downgrade_option = crdb_internal.node_executable_version()"))
+	tenant13.stop(ctx, t, c)
+	tenant13.start(ctx, t, c, currentBinary)
 }
 
 type sqlVerificationStmt struct {

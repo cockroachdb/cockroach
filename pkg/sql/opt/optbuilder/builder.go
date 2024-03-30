@@ -94,11 +94,14 @@ type Builder struct {
 	factory *norm.Factory
 	stmt    tree.Statement
 
-	ctx        context.Context
-	semaCtx    *tree.SemaContext
-	evalCtx    *eval.Context
-	catalog    cat.Catalog
-	scopeAlloc []scope
+	ctx context.Context
+	// verboseTracing is set if expensive logging is enabled on ctx. If false,
+	// then some work can be omitted.
+	verboseTracing bool
+	semaCtx        *tree.SemaContext
+	evalCtx        *eval.Context
+	catalog        cat.Catalog
+	scopeAlloc     []scope
 
 	// stmtTree tracks the hierarchy of statements to ensure that multiple
 	// modifications to the same table cannot corrupt indexes (see #70731).
@@ -141,11 +144,11 @@ type Builder struct {
 
 	// insideUDF is true when the current expressions are being built within a
 	// UDF.
-	// TODO(mgartner): Once other UDFs can be referenced from within a UDF, a
-	// boolean will not be sufficient to track whether or not we are in a UDF.
-	// We'll need to track the depth of the UDFs we are building expressions
-	// within.
 	insideUDF bool
+
+	// insideSQLRoutine is true when the current expressions are being built
+	// within a SQL UDF or a SQL procedure.
+	insideSQLRoutine bool
 
 	// insideDataSource is true when we are processing a data source.
 	insideDataSource bool
@@ -159,8 +162,9 @@ type Builder struct {
 	// inner view/function).
 	trackSchemaDeps bool
 
-	schemaDeps     opt.SchemaDeps
-	schemaTypeDeps opt.SchemaTypeDeps
+	schemaDeps         opt.SchemaDeps
+	schemaFunctionDeps opt.SchemaFunctionDeps
+	schemaTypeDeps     opt.SchemaTypeDeps
 
 	// If set, the data source names in the AST are rewritten to the fully
 	// qualified version (after resolution). Used to construct the strings for
@@ -189,12 +193,13 @@ func New(
 	stmt tree.Statement,
 ) *Builder {
 	return &Builder{
-		factory: factory,
-		stmt:    stmt,
-		ctx:     ctx,
-		semaCtx: semaCtx,
-		evalCtx: evalCtx,
-		catalog: catalog,
+		factory:        factory,
+		stmt:           stmt,
+		ctx:            ctx,
+		verboseTracing: log.ExpensiveLogEnabled(ctx, 2),
+		semaCtx:        semaCtx,
+		evalCtx:        evalCtx,
+		catalog:        catalog,
 	}
 }
 
@@ -335,6 +340,11 @@ func (b *Builder) buildStmt(
 			activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
 			if !activeVersion.IsActive(clusterversion.V23_2) {
 				panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition is not supported until version 23.2", stmt.StatementTag()))
+			}
+		case *tree.Call:
+			activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
+			if !activeVersion.IsActive(clusterversion.V24_1) {
+				panic(unimplemented.Newf("stored procedures", "%s usage inside a routine definition is not supported until version 24.1", stmt.StatementTag()))
 			}
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
@@ -493,7 +503,7 @@ func (b *Builder) trackReferencedColumnForViews(col *scopeColumn) {
 
 func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 	if b.trackSchemaDeps {
-		if texpr.ResolvedType() == types.RegClass {
+		if texpr != nil && texpr.ResolvedType().Identical(types.RegClass) {
 			// We do not add a dependency if the RegClass Expr contains variables,
 			// we cannot resolve the variables in this context. This matches Postgres
 			// behavior.
@@ -527,7 +537,7 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 
 func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
 	if b.trackSchemaDeps {
-		if texpr.ResolvedType().UserDefined() {
+		if texpr != nil && texpr.ResolvedType().UserDefined() {
 			typedesc.GetTypeDescriptorClosure(texpr.ResolvedType()).ForEach(func(id descpb.ID) {
 				b.schemaTypeDeps.Add(int(id))
 			})

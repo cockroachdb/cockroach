@@ -31,6 +31,7 @@ go_library(
         "//pkg/util/bufalloc",
         "//pkg/util/cancelchecker",
         "//pkg/util/encoding",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/mon",
@@ -52,10 +53,6 @@ go_test(
         "row_container_test.go",
     ],
     embed = [":rowcontainer"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/kv/kvclient/kvstreamer",

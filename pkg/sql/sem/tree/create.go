@@ -1701,7 +1701,7 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			ctx.WriteString(option.AsIntegerType.SQLString())
 		case SeqOptCycle, SeqOptNoCycle:
 			ctx.WriteString(option.Name)
-		case SeqOptCache:
+		case SeqOptCache, SeqOptCacheNode:
 			ctx.WriteString(option.Name)
 			ctx.WriteByte(' ')
 			// TODO(knz): replace all this with ctx.FormatNode if/when
@@ -1803,6 +1803,7 @@ const (
 	SeqOptNoCycle   = "NO CYCLE"
 	SeqOptOwnedBy   = "OWNED BY"
 	SeqOptCache     = "CACHE"
+	SeqOptCacheNode = "PER NODE CACHE"
 	SeqOptIncrement = "INCREMENT"
 	SeqOptMinValue  = "MINVALUE"
 	SeqOptMaxValue  = "MAXVALUE"
@@ -2233,9 +2234,10 @@ type CreateTenantFromReplication struct {
 	Like *LikeTenantSpec
 }
 
-// TenantReplicationOptions  options for the CREATE VIRTUAL CLUSTER FROM REPLICATION command.
+// TenantReplicationOptions  options for the CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
 type TenantReplicationOptions struct {
-	Retention Expr
+	Retention        Expr
+	ExpirationWindow Expr
 }
 
 var _ NodeFormatter = &TenantReplicationOptions{}
@@ -2294,6 +2296,18 @@ func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
 			ctx.WriteByte(')')
 		}
 	}
+	if o.ExpirationWindow != nil {
+		maybeAddSep()
+		ctx.WriteString("EXPIRATION WINDOW = ")
+		_, canOmitParentheses := o.ExpirationWindow.(alreadyDelimitedAsSyntacticDExpr)
+		if !canOmitParentheses {
+			ctx.WriteByte('(')
+		}
+		ctx.FormatNode(o.ExpirationWindow)
+		if !canOmitParentheses {
+			ctx.WriteByte(')')
+		}
+	}
 }
 
 // CombineWith merges other TenantReplicationOptions into this struct.
@@ -2307,13 +2321,27 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 		o.Retention = other.Retention
 	}
 
+	if o.ExpirationWindow != nil {
+		if other.ExpirationWindow != nil {
+			return errors.New("EXPIRATION WINDOW option specified multiple times")
+		}
+	} else {
+		o.ExpirationWindow = other.ExpirationWindow
+	}
+
 	return nil
 }
 
 // IsDefault returns true if this backup options struct has default value.
 func (o TenantReplicationOptions) IsDefault() bool {
 	options := TenantReplicationOptions{}
-	return o.Retention == options.Retention
+	return o.Retention == options.Retention &&
+		o.ExpirationWindow == options.ExpirationWindow
+}
+
+func (o TenantReplicationOptions) ExpirationWindowSet() bool {
+	options := TenantReplicationOptions{}
+	return o.ExpirationWindow != options.ExpirationWindow
 }
 
 type SuperRegion struct {

@@ -106,6 +106,7 @@ Del /Table/106/1/4/0
 query T kvtrace
 INSERT INTO e VALUES(0, ARRAY[7,0,0,1,NULL,10,0,1,7,NULL])
 ----
+Scan /Table/20/1/10{7-8}
 CPut /Table/107/1/0/0 -> /TUPLE/
 InitPut /Table/107/2/NULL/0/0 -> /BYTES/
 InitPut /Table/107/2/0/0/0 -> /BYTES/
@@ -199,6 +200,7 @@ vectorized: true
 query T kvtrace
 INSERT INTO f VALUES(0, ARRAY[7,0,0,1.000,10,0,1,7,1.0,1.00])
 ----
+Scan /Table/20/1/10{8-9}
 CPut /Table/108/1/0/0 -> /TUPLE/
 InitPut /Table/108/2/0/0/0 -> /BYTES/
 InitPut /Table/108/2/1/0/0 -> /BYTES/
@@ -226,6 +228,9 @@ Scan /Table/108/1/0/0
 Put /Table/108/1/0/0 -> /TUPLE/
 Del /Table/108/2/1/0/0
 InitPut /Table/108/2/15/0/0 -> /BYTES/
+
+statement error pgcode XXUUU could not produce a query plan conforming to the FORCE_INVERTED_INDEX hint
+SELECT * from d@{FORCE_INVERTED_INDEX}
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
@@ -3231,6 +3236,7 @@ CREATE INVERTED INDEX ON t(y)
 query T kvtrace
 INSERT INTO t VALUES (1.00, ARRAY[1,2])
 ----
+Scan /Table/20/1/109{-/PrefixEnd}
 CPut /Table/109/1/1/0 -> /TUPLE/1:1:Decimal/1.00/
 InitPut /Table/109/2/1/1/0 -> /BYTES/0x1503348964
 InitPut /Table/109/2/2/1/0 -> /BYTES/0x1503348964
@@ -3419,7 +3425,7 @@ WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
 ----
 semi-join (lookup geo_table)
  ├── columns: k:1 geom:2
- ├── key columns: [11] = [5]
+ ├── key columns: [12] = [5]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
@@ -3430,14 +3436,14 @@ semi-join (lookup geo_table)
  ├── distribution: test
  ├── prune: (1)
  ├── inner-join (inverted geo_table@geom_index)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
- │    ├── first join in paired joiner; continuation column: continuation:16
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:12 continuation:17
+ │    ├── first join in paired joiner; continuation column: continuation:17
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(11)=999.957, null(11)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:13)
+ │    ├── stats: [rows=10000, distinct(12)=999.957, null(12)=0]
  │    ├── cost: 41812.84
- │    ├── key: (1,11)
- │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── key: (1,12)
+ │    ├── fd: (1)-->(2), (12)-->(17)
  │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
@@ -3459,7 +3465,7 @@ WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
 ----
 anti-join (lookup geo_table)
  ├── columns: k:1 geom:2
- ├── key columns: [11] = [5]
+ ├── key columns: [12] = [5]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
@@ -3470,14 +3476,14 @@ anti-join (lookup geo_table)
  ├── distribution: test
  ├── prune: (1)
  ├── left-join (inverted geo_table@geom_index)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
- │    ├── first join in paired joiner; continuation column: continuation:16
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:12 continuation:17
+ │    ├── first join in paired joiner; continuation column: continuation:17
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(11)=999.957, null(11)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:13)
+ │    ├── stats: [rows=10000, distinct(12)=999.957, null(12)=0]
  │    ├── cost: 41812.84
- │    ├── key: (1,11)
- │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── key: (1,12)
+ │    ├── fd: (1)-->(2), (12)-->(17)
  │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
@@ -3509,6 +3515,7 @@ CREATE TABLE m (
 query T kvtrace
 SELECT k FROM m@i1 WHERE a = 10 AND j @> '{"a": "b"}'
 ----
+Scan /Table/20/1/11{2-3}
 Scan /Table/112/2/10/"a"/"b"{-/PrefixEnd}
 
 # Combine multiple constraint spans with the inverted constraint.
@@ -3530,3 +3537,37 @@ query T kvtrace
 SELECT k FROM m@i2 WHERE a IN (10, 20) AND b IN (15, 25) AND j @> '{"a": "b"}'
 ----
 Scan /Table/112/3/10/15/"a"/"b"{-/PrefixEnd}, /Table/112/3/10/25/"a"/"b"{-/PrefixEnd}, /Table/112/3/20/15/"a"/"b"{-/PrefixEnd}, /Table/112/3/20/25/"a"/"b"{-/PrefixEnd}
+
+# Regression test for incorrectly simplifying inverted expressions (#117979).
+statement ok
+CREATE TABLE t117979 (id INT PRIMARY KEY, links text[], INVERTED INDEX idx_links(links));
+
+query T
+EXPLAIN (OPT, VERBOSE)
+SELECT *
+FROM t117979@{FORCE_INDEX=idx_links} as t
+WHERE
+    ARRAY['str1'] <@ t.links
+    AND (
+        ARRAY ['str1'] && t.links
+        OR (ARRAY ['str2'] && t.links AND ARRAY ['str3'] && t.links)
+    );
+----
+index-join t117979
+ ├── columns: id:1 links:2
+ ├── immutable
+ ├── stats: [rows=111.1111]
+ ├── cost: 810.262222
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── distribution: test
+ ├── prune: (1)
+ └── scan t117979@idx_links [as=t]
+      ├── columns: id:1
+      ├── inverted constraint: /5/1
+      │    └── spans: ["\x12str1\x00\x01", "\x12str1\x00\x01"]
+      ├── flags: force-index=idx_links
+      ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0]
+      ├── cost: 135.797778
+      ├── key: (1)
+      └── distribution: test

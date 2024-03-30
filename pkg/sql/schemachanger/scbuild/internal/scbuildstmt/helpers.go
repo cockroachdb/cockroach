@@ -876,20 +876,6 @@ func fallBackIfSubZoneConfigExists(b BuildCtx, n tree.NodeFormatter, id catid.De
 	}
 }
 
-// fallBackIfVirtualColumnWithNotNullConstraint throws an unimplemented error
-// if the to-be-added column `d` is a virtual column with not null constraint.
-// This is a quick, temporary fix for the following troubled stmt in the
-// declarative schema changer:
-// `ALTER TABLE t ADD COLUMN j INT AS (NULL::INT) VIRTUAL NOT NULL;` succeeded
-// but expectedly failed in the legacy schema changer.
-func fallBackIfVirtualColumnWithNotNullConstraint(t *tree.AlterTableAddColumn) {
-	d := t.ColumnDef
-	if d.IsVirtual() && d.Nullable.Nullability == tree.NotNull {
-		panic(scerrors.NotImplementedErrorf(t,
-			"virtual column with NOT NULL constraint is not supported"))
-	}
-}
-
 // ExtractColumnIDsInExpr extracts column IDs used in expr. It's similar to
 // schemaexpr.ExtractColumnIDs but this function can also extract columns
 // added in the same transaction (e.g. for `ADD COLUMN j INT CHECK (j > 0);`,
@@ -1223,6 +1209,10 @@ func updateElementsToDependOnNewFromOld(
 				e.IndexIDForValidation = new
 			}
 		case *scpb.ColumnNotNull:
+			if e.IndexIDForValidation == old {
+				e.IndexIDForValidation = new
+			}
+		case *scpb.UniqueWithoutIndexConstraint:
 			if e.IndexIDForValidation == old {
 				e.IndexIDForValidation = new
 			}

@@ -275,6 +275,32 @@ lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 error: (*kvpb.LockConflictError:) conflicting locks on "k1"
 
+# Non-transactional requests are able to check for conflicts (but they can't
+# acquire locks).
+run ok
+check_for_acquire_lock notxn k=k1 str=shared
+----
+
+run error
+check_for_acquire_lock notxn k=k2 str=shared
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k2"
+
+run error
+check_for_acquire_lock notxn k=k2 str=exclusive
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k2", "k2"
+
+run error
+check_for_acquire_lock notxn k=k3 str=exclusive
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+run error
+check_for_acquire_lock notxn k=k3 str=shared
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
 # Intents are treated similarly to Exclusive locks.
 
 run stats ok
@@ -534,7 +560,7 @@ data: "k4"/10.000000000,0 -> /BYTES/v4_prime
 error: (*kvpb.LockConflictError:) conflicting locks on "k3"
 
 run error
-del_range_pred k=k3 k=k4
+del_range_pred k=k3 k=k4 ts=5
 ----
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1

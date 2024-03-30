@@ -249,15 +249,10 @@ func newCFetcherWrapper(
 	// since it's only used by the cFetcher to track the size of its batch, and
 	// the cFetcherWrapper is responsible for performing the correct accounting
 	// against the memory account provided by the caller.
-	detachedFetcherMon := mon.NewMonitor(
-		"cfetcher-wrapper-detached-monitor",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,            /* settings */
-	)
+	detachedFetcherMon := mon.NewMonitor(mon.Options{
+		Name:     "cfetcher-wrapper-detached-monitor",
+		Settings: st,
+	})
 	detachedFetcherMon.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	detachedFetcherAcc := detachedFetcherMon.MakeBoundAccount()
 

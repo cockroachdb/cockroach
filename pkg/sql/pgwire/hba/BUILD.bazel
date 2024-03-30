@@ -26,10 +26,6 @@ go_test(
     srcs = ["hba_test.go"],
     data = glob(["testdata/**"]),
     embed = [":hba"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/settings/rulebasedscanner",
         "//pkg/testutils/datapathutils",

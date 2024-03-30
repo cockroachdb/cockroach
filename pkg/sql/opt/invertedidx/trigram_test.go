@@ -95,7 +95,7 @@ func TestTryFilterTrigram(t *testing.T) {
 		// Equality queries.
 		{filters: "s = 'lkjsdlkj'", ok: true, unique: false},
 		{filters: "s = 'lkj'", ok: true, unique: true},
-		{filters: "s = 'lkj' OR s LIKE 'blah'", ok: true, unique: false},
+		{filters: "s = 'lkj' OR s LIKE 'blah'", ok: true, unique: true},
 	}
 
 	for _, tc := range testCases {

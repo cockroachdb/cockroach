@@ -32,9 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
 	"github.com/jordanlewis/gcassert"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 )
@@ -46,11 +48,14 @@ var rawGcassertPaths string
 
 func init() {
 	if bazel.BuiltWithBazel() {
-		gobin, err := bazel.Runfile("bin/go")
-		if err != nil {
+		goSdk := os.Getenv("GO_SDK")
+		if goSdk == "" {
+			panic("expected GO_SDK")
+		}
+		if err := os.Setenv("PATH", fmt.Sprintf("%s%c%s", filepath.Join(goSdk, "bin"), os.PathListSeparator, os.Getenv("PATH"))); err != nil {
 			panic(err)
 		}
-		if err := os.Setenv("PATH", fmt.Sprintf("%s%c%s", filepath.Dir(gobin), os.PathListSeparator, os.Getenv("PATH"))); err != nil {
+		if err := os.Setenv("GOROOT", goSdk); err != nil {
 			panic(err)
 		}
 	}
@@ -78,11 +83,8 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 	var b bytes.Buffer
 	cmd.Stdout = &b
 	cmd.Stderr = &b
-	switch err := cmd.Run(); err.(type) {
-	case nil:
-	case *exec.ExitError:
-		// Non-zero exit is expected.
-	default:
+	err := cmd.Run()
+	if err != nil && !errors.HasType(err, (*exec.ExitError)(nil)) {
 		t.Fatal(err)
 	}
 	filters = append([]stream.Filter{
@@ -123,7 +125,14 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 // should be marked with t.Parallel().
 func TestLint(t *testing.T) {
 	var crdbDir, pkgDir string
-	{
+	if bazel.BuiltWithBazel() {
+		var set bool
+		crdbDir, set = envutil.EnvString("COCKROACH_WORKSPACE", 0)
+		if !set || crdbDir == "" {
+			t.Fatal("must supply COCKROACH_WORKSPACE variable (./dev lint does this for you automatically)")
+		}
+		pkgDir = filepath.Join(crdbDir, "pkg")
+	} else {
 		cwd, err := os.Getwd()
 		if err != nil {
 			t.Fatal(err)
@@ -138,11 +147,25 @@ func TestLint(t *testing.T) {
 	pkgVar, pkgSpecified := os.LookupEnv("PKG")
 
 	var nogoConfig map[string]any
-	nogoJson, err := os.ReadFile(filepath.Join(crdbDir, "build", "bazelutil", "nogo_config.json"))
-	if err != nil {
-		t.Fatal(err)
+	var nogoJSON []byte
+	if bazel.BuiltWithBazel() {
+		nogoJSONPath, err := bazel.Runfile("build/bazelutil/nogo_config.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		nogoJSON, err = os.ReadFile(nogoJSONPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		var err error
+		nogoJSON, err = os.ReadFile(filepath.Join(crdbDir, "build", "bazelutil", "nogo_config.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := json.Unmarshal(nogoJson, &nogoConfig); err != nil {
+
+	if err := json.Unmarshal(nogoJSON, &nogoConfig); err != nil {
 		t.Error(err)
 	}
 
@@ -175,7 +198,7 @@ func TestLint(t *testing.T) {
 
 		cmd, stderr, filter, err := dirCmd(crdbDir,
 			"git", "grep", "-nE", fmt.Sprintf(`[^_a-zA-Z](%s)\(`, strings.Join(names, "|")),
-			"--", "pkg")
+			"--", "pkg", ":!pkg/cmd/roachtest/testdata/regression.diffs")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -267,6 +290,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`opentelemetry-proto/.*.proto$`),
 			// These files are copied from bazel upstream with its own license.
 			stream.GrepNot(`build/bazel/bes/.*.proto$`),
+			// These files are copied from raft upstream with its own license.
+			stream.GrepNot(`^raft/.*`),
 			// Generated files for plpgsql.
 			stream.GrepNot(`sql/plpgsql/parser/plpgsqllexbase/.*.go`),
 		), func(filename string) {
@@ -310,6 +335,88 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// TestRaftCopyrightHeaders checks that all the source files in pkg/raft have
+	// the original copyright headers from etcd-io/raft, and the modified files
+	// have Cockroach attribution.
+	t.Run("TestRaftCopyrightHeaders", func(t *testing.T) {
+		t.Parallel()
+		if pkgSpecified {
+			skip.IgnoreLint(t, "PKG specified")
+		}
+
+		apacheHeader := regexp.MustCompile(`// Copyright 20\d\d The etcd Authors
+//
+// Licensed under the Apache License, Version 2.0 \(the "License"\);
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+`)
+		cockroachCopyright := regexp.MustCompile(
+			`// This code has been modified from its original form by Cockroach Labs, Inc.
+// All modifications are Copyright 20\d\d Cockroach Labs, Inc.`)
+
+		raftDir := filepath.Join(pkgDir, "raft")
+		// These extensions identify source files that should have copyright headers.
+		// TODO(pav-kv): add "*.proto". Currently raft.proto has no header.
+		extensions := []string{"*.go"}
+
+		// The commit that imported etcd-io/raft into pkg/raft.
+		const baseSHA = "cd6f4f263bd42688096064825dfa668bde2d3720"
+		// modified will contain the set of all files in pkg/raft that were modified
+		// since importing etcd-io/raft into it.
+		modified := func() map[string]struct{} {
+			// List the source files that have been modified.
+			cmd, stderr, filter, err := dirCmd(raftDir, "git", append([]string{
+				"diff", baseSHA, "--name-status", "--diff-filter=M", "--"}, extensions...)...)
+			require.NoError(t, err)
+			require.NoError(t, cmd.Start())
+			// The command outputs lines of the form "M\t<filename>".
+			paths := make(map[string]struct{})
+			require.NoError(t, stream.ForEach(stream.Sequence(filter), func(row string) {
+				parts := strings.Split(row, "\t")
+				require.Len(t, parts, 2)
+				paths[parts[1]] = struct{}{}
+			}))
+			if err := cmd.Wait(); err != nil {
+				require.Empty(t, stderr.String(), "err=%s", err)
+			}
+			return paths
+		}()
+
+		cmd, stderr, filter, err := dirCmd(raftDir, "git",
+			append([]string{"ls-files", "--full-name"}, extensions...)...)
+		require.NoError(t, err)
+		require.NoError(t, cmd.Start())
+		require.NoError(t, stream.ForEach(stream.Sequence(filter,
+			stream.GrepNot(`\.pb\.go`),
+			stream.GrepNot(`_string\.go`),
+		), func(filename string) {
+			file, err := os.Open(filepath.Join(crdbDir, filename))
+			require.NoError(t, err)
+			defer file.Close()
+			data := make([]byte, 1024)
+			n, err := file.Read(data)
+			require.NoError(t, err)
+			data = data[0:n]
+			assert.NotNilf(t, apacheHeader.Find(data),
+				"did not find expected Apache license header in %s", filename)
+			if _, ok := modified[filename]; ok {
+				assert.NotNilf(t, cockroachCopyright.Find(data),
+					"did not find expected Cockroach copyright header in %s", filename)
+			}
+		}))
+		if err := cmd.Wait(); err != nil {
+			require.Empty(t, stderr.String(), "err=%s", err)
+		}
+	})
+
 	t.Run("TestMissingLeakTest", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkgDir, "util/leaktest/check-leaktest.sh")
@@ -344,6 +451,7 @@ func TestLint(t *testing.T) {
 			`context.TODO\(\)`,
 			"--",
 			"*_test.go",
+			":!raft/*.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -396,6 +504,16 @@ func TestLint(t *testing.T) {
 			skip.IgnoreLint(t, "PKG specified")
 		}
 
+		// If run outside of Bazel, we assume this binary must be in the PATH.
+		optfmt := "optfmt"
+		if bazel.BuiltWithBazel() {
+			var err error
+			optfmt, err = bazel.Runfile("pkg/sql/opt/optgen/cmd/optfmt/optfmt_/optfmt")
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.opt", ":!*/testdata/*")
 		if err != nil {
 			t.Fatal(err)
@@ -412,7 +530,7 @@ func TestLint(t *testing.T) {
 				stream.Map(func(s string) string {
 					return filepath.Join(pkgDir, s)
 				}),
-				stream.Xargs("optfmt", "-l"),
+				stream.Xargs(optfmt, "-l"),
 			), func(s string) {
 				fmt.Fprintln(&buf, s)
 			}); err != nil {
@@ -508,7 +626,7 @@ func TestLint(t *testing.T) {
 					":!util/grpcutil",                        // GRPC_GO_* variables
 					":!roachprod",                            // roachprod requires AWS environment variables
 					":!cli/env.go",                           // The CLI needs the PGHOST variable.
-					":!cli/start.go",                         // The CLI needs the GOMEMLIMIT variable.
+					":!cli/start.go",                         // The CLI needs the GOMEMLIMIT and GOGC variables.
 					":!internal/codeowners/codeowners.go",    // For BAZEL_TEST.
 					":!internal/team/team.go",                // For BAZEL_TEST.
 					":!util/log/test_log_scope.go",           // For TEST_UNDECLARED_OUTPUT_DIR, REMOTE_EXEC
@@ -516,6 +634,7 @@ func TestLint(t *testing.T) {
 					":!testutils/backup.go",                  // For BACKUP_TESTING_BUCKET
 					":!compose/compose_test.go",              // For PATH.
 					":!testutils/skip/skip.go",               // For REMOTE_EXEC.
+					":!build/engflow/engflow.go",             // For GITHUB_ACTIONS_BRANCH, etc.
 				},
 			},
 		} {
@@ -563,6 +682,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!*/doc.go",
+			":!raft/*.go",
 			":!util/syncutil/mutex_sync.go",
 			":!util/syncutil/mutex_sync_race.go",
 			":!testutils/lint/passes/deferunlockcheck/testdata/src/github.com/cockroachdb/cockroach/pkg/util/syncutil/mutex_sync.go",
@@ -791,7 +911,10 @@ func TestLint(t *testing.T) {
 	t.Run("TestTodoStyle", func(t *testing.T) {
 		t.Parallel()
 		// TODO(tamird): enforce presence of name.
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `\sTODO\([^)]+\)[^:]`, "--", "*.go")
+		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `\sTODO\([^)]+\)[^:]`, "--",
+			"*.go",
+			":!raft/*.go",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1229,6 +1352,7 @@ func TestLint(t *testing.T) {
 			":!sql/*.pb.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
+			":!raft/*.go",
 			":!rpc/codec.go",
 			":!rpc/codec_test.go",
 			":!settings/settings_test.go",
@@ -1249,7 +1373,7 @@ func TestLint(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`(json|jsonpb|yaml|protoutil|xml|\.Field|ewkb|wkb|wkt)\.Marshal\(`),
+			stream.GrepNot(`(json|jsonpb|yaml|protoutil|xml|\.Field|ewkb|wkb|wkt|asn1)\.Marshal\(`),
 		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'protoutil.Marshal' instead", s)
 		}); err != nil {
@@ -1275,6 +1399,7 @@ func TestLint(t *testing.T) {
 			"*.go",
 			":!*.pb.go",
 			":!clusterversion/setting.go",
+			":!raft/*.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!util/encoding/encoding.go",
@@ -1294,7 +1419,7 @@ func TestLint(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`(json|jsonpb|yaml|xml|protoutil|toml|Codec|ewkb|wkb|wkt)\.Unmarshal\(`),
+			stream.GrepNot(`(json|jsonpb|yaml|xml|protoutil|toml|Codec|ewkb|wkb|wkt|asn1)\.Unmarshal\(`),
 		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'protoutil.Unmarshal' instead", s)
 		}); err != nil {
@@ -1320,6 +1445,7 @@ func TestLint(t *testing.T) {
 			`proto\.Equal`,
 			"--",
 			"*.go",
+			":!raft/*.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1414,6 +1540,7 @@ func TestLint(t *testing.T) {
 			":!cmd",
 			":!cli/exit",
 			":!bench/cmd",
+			":!raft/*.go",
 			":!sql/opt/optgen",
 			":!sql/colexec/execgen",
 			":!kv/kvpb/gen/main.go",
@@ -1541,8 +1668,18 @@ func TestLint(t *testing.T) {
 		if pkgSpecified {
 			skip.IgnoreLint(t, "PKG specified")
 		}
+		// If run outside of Bazel, we assume this binary must be in the PATH.
+		crlfmt := "crlfmt"
+		if bazel.BuiltWithBazel() {
+			var err error
+			crlfmt, err = bazel.Runfile("external/com_github_cockroachdb_crlfmt/crlfmt_/crlfmt")
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		ignore := `zcgo*|\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$|(_)?generated(_test)?\.go$|^sql/pgrepl/pgreplparser/pgrepl\.go$|^sql/plpgsql/parser/plpgsql\.go$`
-		cmd, stderr, filter, err := dirCmd(pkgDir, "crlfmt", "-fast", "-ignore", ignore, "-tab", "2", ".")
+		cmd, stderr, filter, err := dirCmd(pkgDir, crlfmt, "-fast", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2142,15 +2279,13 @@ func TestLint(t *testing.T) {
 	t.Run("TestGCAssert", func(t *testing.T) {
 		skip.UnderShort(t)
 
-		t.Parallel()
-
 		var gcassertPaths []string
 		for _, path := range strings.Split(rawGcassertPaths, "\n") {
 			path = strings.TrimSpace(path)
 			if path == "" {
 				continue
 			}
-			gcassertPaths = append(gcassertPaths, fmt.Sprintf("../../%s", path))
+			gcassertPaths = append(gcassertPaths, filepath.Join(crdbDir, "pkg", path))
 		}
 
 		// Ensure that all packages that have '//gcassert' or '// gcassert'
@@ -2184,7 +2319,7 @@ func TestLint(t *testing.T) {
 				// and we want to extract the package path.
 				filePath := s[:strings.Index(s, ":")]                  // up to the line number
 				pkgPath := filePath[:strings.LastIndex(filePath, "/")] // up to the file name
-				gcassertPath := "../../" + pkgPath
+				gcassertPath := filepath.Join(crdbDir, "pkg", pkgPath)
 				for i := range gcassertPaths {
 					if gcassertPath == gcassertPaths[i] {
 						return
@@ -2203,10 +2338,10 @@ func TestLint(t *testing.T) {
 		})
 
 		var buf strings.Builder
-		if err := gcassert.GCAssert(&buf, gcassertPaths...); err != nil {
-			t.Fatal(err)
-		}
 		output := buf.String()
+		if err := gcassert.GCAssertCwd(&buf, crdbDir, gcassertPaths...); err != nil {
+			t.Fatalf("failed gcassert (%+v):\n%s", err, buf.String())
+		}
 		if len(output) > 0 {
 			t.Fatalf("failed gcassert:\n%s", output)
 		}
@@ -2508,7 +2643,41 @@ func TestLint(t *testing.T) {
 		co, err := codeowners.DefaultLoadCodeOwners()
 		require.NoError(t, err)
 		const verbose = false
-		repoRoot := filepath.Join("../../../")
-		codeowners.LintEverythingIsOwned(t, verbose, co, repoRoot, "pkg")
+		codeowners.LintEverythingIsOwned(t, verbose, co, crdbDir, "pkg")
+	})
+
+	t.Run("cookie construction is forbidden", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`\.Cookie\{`,
+			"--",
+			":!*_test.go",
+			":!*authserver/cookie.go",
+			":!*roachtest*",
+			":!*testserver*",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use constructors in `authserver/cookie.go` instead", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
 	})
 }

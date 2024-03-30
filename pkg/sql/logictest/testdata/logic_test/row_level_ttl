@@ -56,11 +56,15 @@ subtest end
 
 subtest ttl_automatic_column_notice
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 CREATE TABLE tbl_ttl_automatic_column (id INT PRIMARY KEY) WITH (ttl_automatic_column = 'on')
 ----
 NOTICE: ttl_automatic_column is no longer used. Setting ttl_expire_after automatically creates a TTL column. Resetting ttl_expire_after removes the automatically created column.
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 ALTER TABLE tbl_ttl_automatic_column RESET (ttl_automatic_column)
 ----
@@ -70,11 +74,15 @@ subtest end
 
 subtest ttl_range_concurrency_notice
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 CREATE TABLE tbl_ttl_range_concurrency (id INT PRIMARY KEY) WITH (ttl_range_concurrency = 2)
 ----
 NOTICE: ttl_range_concurrency is no longer configurable.
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 ALTER TABLE tbl_ttl_range_concurrency RESET (ttl_range_concurrency)
 ----
@@ -132,10 +140,10 @@ SELECT 'crdb_internal_functions_tbl'::regclass::oid
 
 user testuser
 
-statement error insufficient privilege
+statement error user testuser does not have REPAIRCLUSTER system privilege
 SELECT crdb_internal.repair_ttl_table_scheduled_job($crdb_internal_functions_tbl_oid)
 
-statement error insufficient privilege
+statement error user testuser does not have REPAIRCLUSTER system privilege
 SELECT crdb_internal.validate_ttl_scheduled_jobs()
 
 user root
@@ -225,7 +233,8 @@ CREATE TABLE tbl_reloptions (
   ttl_delete_rate_limit = 40,
   ttl_pause = true,
   ttl_row_stats_poll_interval = '1 minute',
-  ttl_label_metrics = true
+  ttl_label_metrics = true,
+  ttl_disable_changefeed_replication = true
 )
 
 query T rowsort
@@ -240,6 +249,7 @@ ttl_delete_rate_limit=40
 ttl_pause=true
 ttl_row_stats_poll_interval='1m0s'
 ttl_label_metrics=true
+ttl_disable_changefeed_replication=true
 
 subtest end
 
@@ -278,7 +288,7 @@ statement error cannot modify TTL settings while another schema change on the ta
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl), RESET (ttl_expire_after)
 
 statement error cannot modify TTL settings while another schema change on the table is being processed
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl);
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change SET (ttl_select_batch_size = 200)
 
@@ -286,7 +296,7 @@ statement ok
 ROLLBACK
 
 statement error cannot perform other schema changes in the same transaction as a TTL mutation
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl);
 CREATE INDEX tbl_idx ON tbl_existing_ttl_concurrent_schema_change (id)
 
@@ -306,7 +316,7 @@ statement error cannot modify TTL settings while another schema change on the ta
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes'), SET (ttl_select_batch_size = 200)
 
 statement error cannot modify TTL settings while another schema change on the table is being processed
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 ALTER TABLE tbl_add_ttl_concurrent_schema_change RESET (ttl_select_batch_size)
 
@@ -314,7 +324,7 @@ statement ok
 ROLLBACK
 
 statement error cannot modify TTL settings while another schema change on the table is being processed
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id);
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 
@@ -322,7 +332,7 @@ statement ok
 ROLLBACK
 
 statement error cannot perform other schema changes in the same transaction as a TTL mutation
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id)
 
@@ -543,6 +553,8 @@ WHERE label IN ('row-level-ttl: $label_suffix', 'row-level-ttl: $label_suffix2')
 
 statement ok
 USE test;
+
+statement ok
 DROP DATABASE drop_me CASCADE
 
 query I
@@ -765,7 +777,8 @@ CREATE TABLE tbl_set_ttl_params (
   ttl_delete_rate_limit = 40,
   ttl_pause = true,
   ttl_row_stats_poll_interval = '1 minute',
-  ttl_label_metrics = true
+  ttl_label_metrics = true,
+  ttl_disable_changefeed_replication = true
 )
 
 query T
@@ -775,7 +788,7 @@ CREATE TABLE public.tbl_set_ttl_params (
   id INT8 NOT NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
   CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 10, ttl_delete_batch_size = 20, ttl_select_rate_limit = 30, ttl_delete_rate_limit = 40, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 10, ttl_delete_batch_size = 20, ttl_select_rate_limit = 30, ttl_delete_rate_limit = 40, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true, ttl_disable_changefeed_replication = true)
 
 statement ok
 ALTER TABLE tbl_set_ttl_params SET (ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_select_rate_limit = 130, ttl_delete_rate_limit = 140, ttl_row_stats_poll_interval = '2m0s')
@@ -787,7 +800,7 @@ CREATE TABLE public.tbl_set_ttl_params (
   id INT8 NOT NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
   CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_select_rate_limit = 130, ttl_delete_rate_limit = 140, ttl_pause = true, ttl_row_stats_poll_interval = '2m0s', ttl_label_metrics = true)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_select_rate_limit = 130, ttl_delete_rate_limit = 140, ttl_pause = true, ttl_row_stats_poll_interval = '2m0s', ttl_label_metrics = true, ttl_disable_changefeed_replication = true)
 
 statement ok
 ALTER TABLE tbl_set_ttl_params RESET (
@@ -796,7 +809,9 @@ ALTER TABLE tbl_set_ttl_params RESET (
   ttl_select_rate_limit,
   ttl_delete_rate_limit,
   ttl_pause,
-  ttl_row_stats_poll_interval
+  ttl_row_stats_poll_interval,
+  ttl_label_metrics,
+  ttl_disable_changefeed_replication
 )
 
 query T
@@ -806,7 +821,7 @@ CREATE TABLE public.tbl_set_ttl_params (
   id INT8 NOT NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
   CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_label_metrics = true)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
 subtest end
 

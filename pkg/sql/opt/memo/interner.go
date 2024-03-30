@@ -427,6 +427,10 @@ func (h *hasher) HashType(val *types.T) {
 	}
 }
 
+func (h *hasher) HashExpr(val tree.Expr) {
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+}
+
 func (h *hasher) HashTypedExpr(val tree.TypedExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
@@ -516,6 +520,7 @@ func (h *hasher) HashScanFlags(val ScanFlags) {
 	h.HashBool(val.NoZigzagJoin)
 	h.HashBool(val.NoFullScan)
 	h.HashBool(val.ForceIndex)
+	h.HashBool(val.ForceInvertedIndex)
 	h.HashBool(val.ForceZigzag)
 	h.HashInt(int(val.Direction))
 	h.HashUint64(uint64(val.Index))
@@ -588,6 +593,15 @@ func (h *hasher) HashUniqueOrdinals(val cat.UniqueOrdinals) {
 		hash ^= internHash(ord)
 		hash *= prime64
 	}
+	h.hash = hash
+}
+
+func (h *hasher) HashSchemaFunctionDeps(val opt.SchemaFunctionDeps) {
+	hash := h.hash
+	val.ForEach(func(i int) {
+		hash ^= internHash(i)
+		hash *= prime64
+	})
 	h.hash = hash
 }
 
@@ -777,6 +791,20 @@ func (h *hasher) HashUDFDefinition(val *UDFDefinition) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
+func (h *hasher) HashStoredProcTxnOp(val tree.StoredProcTxnOp) {
+	h.HashUint64(uint64(val))
+}
+
+func (h *hasher) HashTransactionModes(val tree.TransactionModes) {
+	h.HashUint64(uint64(val.Isolation))
+	h.HashUint64(uint64(val.UserPriority))
+	h.HashUint64(uint64(val.ReadWriteMode))
+	if val.AsOf.Expr != nil {
+		h.HashExpr(val.AsOf.Expr)
+	}
+	h.HashUint64(uint64(val.Deferrable))
+}
+
 // ----------------------------------------------------------------------
 //
 // Equality functions
@@ -913,6 +941,10 @@ func (h *hasher) areDatumsWithTypeEqual(ldatums, rdatums tree.Datums, ltyp, rtyp
 	return true
 }
 
+func (h *hasher) IsExprEqual(l, r tree.Expr) bool {
+	return l == r
+}
+
 func (h *hasher) IsTypedExprEqual(l, r tree.TypedExpr) bool {
 	return l == r
 }
@@ -1040,6 +1072,10 @@ func (h *hasher) IsUniqueOrdinalsEqual(l, r cat.UniqueOrdinals) bool {
 		}
 	}
 	return true
+}
+
+func (h *hasher) IsSchemaFunctionDepsEqual(l, r opt.SchemaFunctionDeps) bool {
+	return l.Equals(r)
 }
 
 func (h *hasher) IsSchemaDepsEqual(l, r opt.SchemaDeps) bool {
@@ -1309,6 +1345,16 @@ func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 		return false
 	}
 	return h.IsColListEqual(l.Params, r.Params) && l.IsRecursive == r.IsRecursive
+}
+
+func (h *hasher) IsStoredProcTxnOpEqual(l, r tree.StoredProcTxnOp) bool {
+	return l == r
+}
+
+func (h *hasher) IsTransactionModesEqual(l, r tree.TransactionModes) bool {
+	return l.Isolation == r.Isolation && l.UserPriority == r.UserPriority &&
+		l.ReadWriteMode == r.ReadWriteMode && l.AsOf.Expr == r.AsOf.Expr &&
+		l.Deferrable == r.Deferrable
 }
 
 // encodeDatum turns the given datum into an encoded string of bytes. If two

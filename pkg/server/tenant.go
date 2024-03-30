@@ -427,7 +427,7 @@ func newTenantServer(
 		p, cleanup := sql.NewInternalPlanner(
 			opName,
 			txn,
-			username.RootUserName(),
+			username.NodeUserName(),
 			&sql.MemoryMetrics{},
 			sqlServer.execCfg,
 			sql.NewInternalSessionData(ctx, sqlServer.execCfg.Settings, opName),
@@ -756,6 +756,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			s.runtime,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
+			s.cfg.TestingKnobs,
 		); err != nil {
 			return err
 		}
@@ -966,6 +967,7 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 			s.pgPreServer,
 			s.serveConn,
 			s.pgL,
+			s.ClusterSettings(),
 			&s.sqlServer.cfg.SocketFile,
 		); err != nil {
 			return err
@@ -1225,7 +1227,7 @@ func makeTenantSQLServerArgs(
 		ds,
 	)
 
-	dbCtx := kv.DefaultDBContext(stopper)
+	dbCtx := kv.DefaultDBContext(st, stopper)
 	dbCtx.NodeID = deps.instanceIDContainer
 	db := kv.NewDBWithContext(baseCfg.AmbientCtx, tcsFactory, clock, dbCtx)
 

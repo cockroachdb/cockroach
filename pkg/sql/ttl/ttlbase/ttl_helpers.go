@@ -74,7 +74,9 @@ var (
 	changefeedReplicationDisabled = settings.RegisterBoolSetting(
 		settings.ApplicationLevel,
 		"sql.ttl.changefeed_replication.disabled",
-		"if true, deletes issued by TTL will not be replicated via changefeeds",
+		"if true, deletes issued by TTL will not be replicated via changefeeds "+
+			"(this setting will be ignored by changefeeds that have the ignore_disable_changefeed_replication option set; "+
+			"such changefeeds will continue to replicate all TTL deletes)",
 		false,
 		settings.WithPublic,
 	)
@@ -153,7 +155,12 @@ func CheckJobEnabled(settingsValues *settings.Values) error {
 
 // GetChangefeedReplicationDisabled returns whether changefeed replication
 // should be disabled for this job based on the relevant cluster setting.
-func GetChangefeedReplicationDisabled(settingsValues *settings.Values) bool {
+func GetChangefeedReplicationDisabled(
+	settingsValues *settings.Values, ttl *catpb.RowLevelTTL,
+) bool {
+	if ttl.DisableChangefeedReplication {
+		return true
+	}
 	return changefeedReplicationDisabled.Get(settingsValues)
 }
 

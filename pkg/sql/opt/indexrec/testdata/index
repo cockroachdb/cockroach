@@ -1225,11 +1225,11 @@ sort (segmented)
            │         └── coalesce [subquery]
            │              ├── subquery
            │              │    └── project
-           │              │         ├── columns: column21:21!null
+           │              │         ├── columns: column22:22!null
            │              │         ├── cardinality: [0 - 1]
            │              │         ├── cost: 21.3435466
            │              │         ├── key: ()
-           │              │         ├── fd: ()-->(21)
+           │              │         ├── fd: ()-->(22)
            │              │         ├── limit
            │              │         │    ├── columns: t3.k:14!null t3.f:16!null
            │              │         │    ├── cardinality: [0 - 1]
@@ -1249,7 +1249,7 @@ sort (segmented)
            │              │         │    │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
            │              │         │    └── 1
            │              │         └── projections
-           │              │              └── true [as=column21:21]
+           │              │              └── true [as=column22:22]
            │              └── false
            ├── select
            │    ├── columns: t2.k:8 t2.i:9
@@ -1263,11 +1263,11 @@ sort (segmented)
            │         └── coalesce [subquery]
            │              ├── subquery
            │              │    └── project
-           │              │         ├── columns: column21:21!null
+           │              │         ├── columns: column22:22!null
            │              │         ├── cardinality: [0 - 1]
            │              │         ├── cost: 21.3435466
            │              │         ├── key: ()
-           │              │         ├── fd: ()-->(21)
+           │              │         ├── fd: ()-->(22)
            │              │         ├── limit
            │              │         │    ├── columns: t3.k:14!null t3.f:16!null
            │              │         │    ├── cardinality: [0 - 1]
@@ -1287,7 +1287,7 @@ sort (segmented)
            │              │         │    │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
            │              │         │    └── 1
            │              │         └── projections
-           │              │              └── true [as=column21:21]
+           │              │              └── true [as=column22:22]
            │              └── false
            └── filters (true)
 

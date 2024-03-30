@@ -434,16 +434,30 @@ func (md *Metadata) CheckDependencies(
 				if err != nil {
 					return false, maybeSwallowMetadataResolveErr(err)
 				}
+				routineObj := tree.RoutineObj{
+					FuncName: name.ToRoutineName(),
+					Params:   make(tree.RoutineParams, overload.Types.Length()),
+				}
+				for i := 0; i < len(routineObj.Params); i++ {
+					routineObj.Params[i] = tree.RoutineParam{
+						Type: overload.Types.GetAt(i),
+						// Since we're not in the DROP context, it's sufficient
+						// to specify only the input parameters.
+						Class: tree.RoutineParamIn,
+					}
+				}
 				// NOTE: We match for all types of routines here, including
 				// procedures so that if a function has been dropped and a
 				// procedure is created with the same signature, we do not get a
 				// "<func> is not a function" error here. Instead, we'll return
 				// false and attempt to rebuild the statement.
 				toCheck, err := definition.MatchOverload(
-					overload.Types.Types(),
-					name.Schema(),
+					ctx,
+					optCatalog,
+					&routineObj,
 					&evalCtx.SessionData().SearchPath,
 					tree.UDFRoutine|tree.BuiltinRoutine|tree.ProcedureRoutine,
+					false, /* inDropContext */
 				)
 				if err != nil || toCheck.Oid != overload.Oid || toCheck.Version != overload.Version {
 					return false, err
@@ -779,6 +793,11 @@ func (md *Metadata) NumColumns() int {
 	return len(md.cols)
 }
 
+// MaxColumn returns the maximum column ID tracked by this Metadata instance.
+func (md *Metadata) MaxColumn() ColumnID {
+	return ColumnID(len(md.cols))
+}
+
 // ColumnMeta looks up the metadata for the column associated with the given
 // column id. The same column can be added multiple times to the query metadata
 // and associated with multiple column ids.
@@ -797,7 +816,7 @@ func (md *Metadata) ColumnMeta(colID ColumnID) *ColumnMeta {
 //     name: "tabName.columnAlias". If alwaysQualify is true, then the column
 //     alias is always prefixed with the table alias.
 func (md *Metadata) QualifiedAlias(
-	colID ColumnID, fullyQualify, alwaysQualify bool, catalog cat.Catalog,
+	ctx context.Context, colID ColumnID, fullyQualify, alwaysQualify bool, catalog cat.Catalog,
 ) string {
 	cm := md.ColumnMeta(colID)
 	if cm.Table == 0 {
@@ -839,7 +858,7 @@ func (md *Metadata) QualifiedAlias(
 
 	var sb strings.Builder
 	if fullyQualify {
-		tn, err := catalog.FullyQualifiedName(context.TODO(), md.TableMeta(cm.Table).Table)
+		tn, err := catalog.FullyQualifiedName(ctx, md.TableMeta(cm.Table).Table)
 		if err != nil {
 			panic(err)
 		}
@@ -935,18 +954,18 @@ func (md *Metadata) AllViews() []cat.View {
 	return md.views
 }
 
-// getAllReferencedTables returns all the tables referenced by the metadata.
-// This includes all tables that are directly stored in the metadata in
-// md.tables, as well as recursive references from foreign keys. The tables are
-// returned in sorted order so that later tables reference earlier tables. This
-// allows tables to be re-created in order (e.g., for statement-bundle recreate)
-// using the output from SHOW CREATE TABLE without any errors due to missing
-// tables.
+// getAllReferenceTables returns all the tables referenced by the metadata. This
+// includes all tables that are directly stored in the metadata in md.tables, as
+// well as recursive references from foreign keys (both referenced and
+// referencing). The tables are returned in sorted order so that later tables
+// reference earlier tables. This allows tables to be re-created in order (e.g.,
+// for statement-bundle recreate) using the output from SHOW CREATE TABLE
+// without any errors due to missing tables.
 // TODO(rytaft): if there is a cycle in the foreign key references,
 // statement-bundle recreate will still hit errors. To handle this case, we
 // would need to first create the tables without the foreign keys, then add the
 // foreign keys later.
-func (md *Metadata) getAllReferencedTables(
+func (md *Metadata) getAllReferenceTables(
 	ctx context.Context, catalog cat.Catalog,
 ) []cat.DataSource {
 	var tableSet intsets.Fast
@@ -967,8 +986,33 @@ func (md *Metadata) getAllReferencedTables(
 					// This is a best-effort attempt to get all the tables, so don't error.
 					continue
 				}
+				// We want to include all tables that we reference before adding
+				// ourselves.
 				addForeignKeyReferencedTables(refTab)
 				tableList = append(tableList, ds)
+			}
+		}
+	}
+	var addForeignKeyReferencingTables func(tab cat.Table)
+	addForeignKeyReferencingTables = func(tab cat.Table) {
+		for i := 0; i < tab.InboundForeignKeyCount(); i++ {
+			tabID := tab.InboundForeignKey(i).OriginTableID()
+			if !tableSet.Contains(int(tabID)) {
+				tableSet.Add(int(tabID))
+				ds, _, err := catalog.ResolveDataSourceByID(ctx, cat.Flags{}, tabID)
+				if err != nil {
+					// This is a best-effort attempt to get all the tables, so don't error.
+					continue
+				}
+				refTab, ok := ds.(cat.Table)
+				if !ok {
+					// This is a best-effort attempt to get all the tables, so don't error.
+					continue
+				}
+				// We want to include ourselves before all tables that reference
+				// us.
+				tableList = append(tableList, ds)
+				addForeignKeyReferencingTables(refTab)
 			}
 		}
 	}
@@ -977,8 +1021,12 @@ func (md *Metadata) getAllReferencedTables(
 		tabID := tabMeta.Table.ID()
 		if !tableSet.Contains(int(tabID)) {
 			tableSet.Add(int(tabID))
+			// The order of addition here is important: namely, we want to add
+			// all tables that we reference first, then ourselves, and only then
+			// tables that reference us.
 			addForeignKeyReferencedTables(tabMeta.Table)
 			tableList = append(tableList, tabMeta.Table)
+			addForeignKeyReferencingTables(tabMeta.Table)
 		}
 	}
 	return tableList
@@ -987,8 +1035,8 @@ func (md *Metadata) getAllReferencedTables(
 // AllDataSourceNames returns the fully qualified names of all datasources
 // referenced by the metadata. This includes all tables, sequences, and views
 // that are directly stored in the metadata, as well as tables that are
-// recursively referenced from foreign keys. If includeVirtualTables is false,
-// then virtual tables are not returned.
+// recursively referenced from foreign keys (both referenced and referencing).
+// If includeVirtualTables is false, then virtual tables are not returned.
 func (md *Metadata) AllDataSourceNames(
 	ctx context.Context,
 	catalog cat.Catalog,
@@ -1015,7 +1063,7 @@ func (md *Metadata) AllDataSourceNames(
 		return result, nil
 	}
 	var err error
-	refTables := md.getAllReferencedTables(ctx, catalog)
+	refTables := md.getAllReferenceTables(ctx, catalog)
 	if !includeVirtualTables {
 		// Update refTables in-place to remove all virtual tables.
 		i := 0

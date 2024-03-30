@@ -12,6 +12,7 @@ package spanconfigkvsubscriber
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -122,7 +123,7 @@ type KVSubscriber struct {
 	knobs    *spanconfig.TestingKnobs
 	settings *cluster.Settings
 
-	rfc *rangefeedcache.Watcher
+	rfc *rangefeedcache.Watcher[*BufferEvent]
 
 	mu struct { // serializes between Start and external threads
 		syncutil.RWMutex
@@ -262,7 +263,7 @@ func (s *KVSubscriber) Start(ctx context.Context, stopper *stop.Stopper) error {
 					}
 				})
 
-			timer := timeutil.NewTimer()
+			var timer timeutil.Timer
 			defer timer.Stop()
 
 			for {
@@ -272,7 +273,6 @@ func (s *KVSubscriber) Start(ctx context.Context, stopper *stop.Stopper) error {
 				} else {
 					// Disable the mechanism.
 					timer.Stop()
-					timer = timeutil.NewTimer()
 				}
 				select {
 				case <-timer.C:
@@ -357,7 +357,7 @@ func (s *KVSubscriber) ComputeSplitKey(
 // GetSpanConfigForKey is part of the spanconfig.KVSubscriber interface.
 func (s *KVSubscriber) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, error) {
+) (roachpb.SpanConfig, roachpb.Span, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -400,7 +400,7 @@ func (s *KVSubscriber) GetProtectionTimestamps(
 	return protectionTimestamps, s.mu.lastUpdated, nil
 }
 
-func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update) {
+func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update[*BufferEvent]) {
 	switch u.Type {
 	case rangefeedcache.CompleteUpdate:
 		s.handleCompleteUpdate(ctx, u.Timestamp, u.Events)
@@ -410,11 +410,11 @@ func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update
 }
 
 func (s *KVSubscriber) handleCompleteUpdate(
-	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
+	ctx context.Context, ts hlc.Timestamp, events []*BufferEvent,
 ) {
 	freshStore := spanconfigstore.New(s.fallback, s.settings, s.boundsReader, s.knobs)
 	for _, ev := range events {
-		freshStore.Apply(ctx, false /* dryrun */, ev.(*BufferEvent).Update)
+		freshStore.Apply(ctx, false /* dryrun */, ev.Update)
 	}
 	handlers := func() []handler {
 		s.mu.Lock()
@@ -437,16 +437,38 @@ func (s *KVSubscriber) setLastUpdatedLocked(ts hlc.Timestamp) {
 }
 
 func (s *KVSubscriber) handlePartialUpdate(
-	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
+	ctx context.Context, ts hlc.Timestamp, events []*BufferEvent,
 ) {
+	// The events we've received from the rangefeed buffer are sorted in
+	// increasing timestamp order. However, any updates with the same timestamp
+	// may be ordered arbitrarily. That's okay if they don't overlap. However, if
+	// they do overlap, the assumption is that an overlapping delete should be
+	// ordered before an addition it overlaps with -- not doing would cause the
+	// addition to get clobbered by the deletion, which will result in the store
+	// having missing span configurations. As such, we re-sort the list of events
+	// before applying it to our store, using Deletion() as a tie-breaker when
+	// timestamps are equal.
+	sort.Slice(events, func(i, j int) bool {
+		switch events[i].Timestamp().Compare(events[j].Timestamp()) {
+		case -1: // ts(i) < ts(j)
+			return true
+		case 1: // ts(i) > ts(j)
+			return false
+		case 0: // ts(i) == ts(j); deletions sort before additions
+			return events[i].Deletion() // no need to worry about the sort being stable
+		default:
+			panic("unexpected")
+		}
+	})
 	handlers := func() []handler {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		for _, ev := range events {
-			// TODO(irfansharif): We can apply a batch of updates atomically
-			// now that the StoreWriter interface supports it; it'll let us
-			// avoid this mutex.
-			s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*BufferEvent).Update)
+			// NB: Even though the StoreWriter can apply a batch of updates
+			// atomically, the updates need to be non-overlapping. That's not the case
+			// here because we can have deletion events followed by additions for
+			// overlapping spans.
+			s.mu.internal.Apply(ctx, false /* dryrun */, ev.Update)
 		}
 		s.setLastUpdatedLocked(ts)
 		return s.mu.handlers
@@ -455,7 +477,7 @@ func (s *KVSubscriber) handlePartialUpdate(
 	for i := range handlers {
 		handler := &handlers[i] // mutated by invoke
 		for _, ev := range events {
-			target := ev.(*BufferEvent).Update.GetTarget()
+			target := ev.Update.GetTarget()
 			handler.invoke(ctx, target.KeyspaceTargeted())
 		}
 	}

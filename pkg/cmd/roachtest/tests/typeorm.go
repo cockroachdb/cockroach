@@ -44,7 +44,7 @@ func registerTypeORM(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), install.MakeClusterSettings(), c.All())
 
 		cockroachVersion, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -176,9 +176,11 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 			t.Fatal(err)
 		}
 
-		t.Status("running TypeORM test suite - approx 12 mins")
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
-			`cd /mnt/data1/typeorm/ && npm test`,
+		// We have to pass in the root cert with NODE_EXTRA_CA_CERTS because the JSON
+		// config only accepts the actual certificate contents and not a path.
+		t.Status("running TypeORM test suite - approx 2 mins")
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
+			`cd /mnt/data1/typeorm/ && NODE_EXTRA_CA_CERTS=$HOME/certs/ca.crt npm test`,
 		)
 		rawResults := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResults)
@@ -226,7 +228,7 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 // This full config is required, but notice that all the non-cockroach databases
 // are set to skip.  Some of the unit tests look for a specific config, like
 // sqlite and will fail if it is not present.
-const typeORMConfigJSON = `
+var typeORMConfigJSON = fmt.Sprintf(`
 [
   {
     "skip": true,
@@ -295,9 +297,15 @@ const typeORMConfigJSON = `
     "type": "cockroachdb",
     "host": "localhost",
     "port": {pgport:1},
-    "username": "root",
-    "password": "",
-    "database": "defaultdb"
+    "username": "%s",
+    "password": "%s",
+    "database": "defaultdb",
+    "ssl": true,
+      "extra": {
+        "ssl": {
+          "rejectUnauthorized": true
+        }
+     }
   },
   {
     "skip": true,
@@ -309,4 +317,4 @@ const typeORMConfigJSON = `
     "useNewUrlParser": true
   }
 ]
-`
+`, install.DefaultUser, install.DefaultPassword)

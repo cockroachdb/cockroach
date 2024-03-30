@@ -367,11 +367,8 @@ message LocalOnlySessionData {
   // Execution of these deallocated prepared statements will fail until they are
   // prepared again.
   int64 prepared_statements_cache_size = 97;
-  // StreamerEnabled controls whether the Streamer API can be used.
-  bool streamer_enabled = 98;
-  // DisableDropVirtualCluster causes errors when the client
-  // attempts to drop virtual clusters or tenant records.
-  bool disable_drop_virtual_cluster = 99;
+  reserved 98;
+  reserved 99;
   // MultipleActivePortalEnabled determines if the pgwire portal execution
   // for certain queries can be paused. If true, portals with read-only SELECT
   // query without sub/post queries can be executed in interleaving manner, but
@@ -476,6 +473,27 @@ message LocalOnlySessionData {
   // query plans with merge joins. When false, the optimizer does not attempt
   // to plan merge joins.
   bool optimizer_merge_joins_enabled = 119;
+  // CopyNumRetriesPerBatch determines the number of times a single batch of
+  // rows can be retried for non-atomic COPY.
+  int32 copy_num_retries_per_batch = 120;
+  // AutoCommitBeforeDDL will cause any DDL statement received during a
+  // multi-statement transaction to make the transaction auto-commit before
+  // executing the DDL statement. After the auto-commit, any other statements
+  // that are in the transaction block will instead be executed in their own
+  // implicit transaction.
+  bool autocommit_before_ddl = 121 [(gogoproto.customname) = "AutoCommitBeforeDDL"];
+  // CloseCursorsAtCommit determines whether cursors remain open after their
+  // parent transaction closes. This is useful for oracle compatibility.
+  bool close_cursors_at_commit = 122;
+  // PLpgSQLUseStrictInto causes PL/pgSQL "SELECT ... INTO" and "RETURNING INTO"
+  // syntax to always behave as if they were specified with the STRICT option,
+  // which throws a runtime error when the SQL statement doesn't return exactly
+  // one row. This is useful for oracle compatibility.
+  bool plpgsql_use_strict_into = 123 [(gogoproto.customname) = "PLpgSQLUseStrictInto"];
+  // OptimizerUseVirtualComputedColumnStats indicates whether we should use
+  // statistics on virtual computed columns for cardinality estimation in the
+  // optimizer.
+  bool optimizer_use_virtual_computed_column_stats = 124;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

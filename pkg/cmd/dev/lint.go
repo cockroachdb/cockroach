@@ -13,7 +13,7 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -53,8 +53,42 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 		}
 	}
 
-	lintEnv := os.Environ()
-
+	var args []string
+	args = append(args, "test", "//pkg/testutils/lint:lint_test")
+	if numCPUs != 0 {
+		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+	}
+	args = append(args, additionalBazelArgs...)
+	args = append(args, "--test_arg", "-test.v")
+	if short {
+		args = append(args, "--test_arg", "-test.short")
+	}
+	if timeout > 0 {
+		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
+	}
+	if filter != "" {
+		args = append(args, fmt.Sprintf("--test_filter=Lint/%s", filter))
+	}
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+	args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
+	home, err := d.os.HomeDir()
+	if err != nil {
+		return err
+	}
+	args = append(args,
+		fmt.Sprintf("--test_env=HOME=%s", home),
+		fmt.Sprintf("--sandbox_writable_path=%s", home))
+	args = append(args, "--test_output", "streamed")
+	// We need the location of the Go SDK for staticcheck and gcassert.
+	out, err := d.exec.CommandContextSilent(ctx, "bazel", "run", "@go_sdk//:bin/go", "--run_under=//build/bazelutil/whereis")
+	if err != nil {
+		return fmt.Errorf("could not find location of Go SDK (%w)", err)
+	}
+	goBin := strings.TrimSpace(string(out))
+	args = append(args, fmt.Sprintf("--test_env=GO_SDK=%s", filepath.Dir(filepath.Dir(goBin))))
 	if !short {
 		// First, generate code to make sure GCAssert and any other
 		// tests that depend on generated code still work.
@@ -67,48 +101,36 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 			return fmt.Errorf("`cc` is not installed; needed for `TestGCAssert` (%w)", err)
 		}
 		cc = strings.TrimSpace(cc)
-		d.log.Printf("export CC=%s", cc)
-		d.log.Printf("export CXX=%s", cc)
-		envWithCc := []string{"CC=" + cc, "CXX=" + cc}
-		lintEnv = append(envWithCc, lintEnv...)
+		args = append(args,
+			fmt.Sprintf("--test_env=CC=%s", cc),
+			fmt.Sprintf("--test_env=CXX=%s", cc))
 	}
 
-	var args []string
-	// NOTE the --config=test here. It's very important we compile the test binary with the
-	// appropriate stuff (gotags, etc.)
-	args = append(args, "run", "--config=test", "//build/bazelutil:lint")
-	if numCPUs != 0 {
-		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
-	}
-	args = append(args, additionalBazelArgs...)
-	args = append(args, "--", "-test.v")
-	if short {
-		args = append(args, "-test.short")
-	}
-	if timeout > 0 {
-		args = append(args, "-test.timeout", timeout.String())
-	}
-	if filter != "" {
-		args = append(args, "-test.run", fmt.Sprintf("Lint/%s", filter))
-	}
 	logCommand("bazel", args...)
 	if len(pkgs) > 1 {
 		return fmt.Errorf("can only lint a single package (found %s)", strings.Join(pkgs, ", "))
 	}
+	var pkg string
 	if len(pkgs) == 1 {
-		pkg := strings.TrimRight(pkgs[0], "/")
+		pkg = strings.TrimRight(pkgs[0], "/")
 		if !strings.HasPrefix(pkg, "./") {
 			pkg = "./" + pkg
 		}
-		envvar := fmt.Sprintf("PKG=%s", pkg)
-		d.log.Printf("export %s", envvar)
-		lintEnv = append(lintEnv, envvar)
+		args = append(args, fmt.Sprintf("--test_env=PKG=%s", pkg))
 	}
-	err := d.exec.CommandContextWithEnv(ctx, lintEnv, "bazel", args...)
+	err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	if err != nil {
 		return err
 	}
-	if !short && filter == "" {
+	if pkg != "" && filter == "" {
+		toLint := strings.TrimPrefix(pkg, "./")
+		args := []string{"build", toLint, "--//build/toolchains:nogo_flag"}
+		if numCPUs != 0 {
+			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+		}
+		logCommand("bazel", args...)
+		return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	} else if !short && filter == "" {
 		args := []string{
 			"build",
 			"//pkg/cmd/cockroach-short",
@@ -123,8 +145,10 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 		}
 		logCommand("bazel", args...)
 		return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
-	} else if !short {
-		log.Printf("Skipping building cockroach-short with nogo due to provided test filter")
+	} else if filter != "" {
+		log.Printf("Skipping running extra lint checks with `nogo` due to provided test filter")
+	} else if short {
+		log.Printf("Skipping running extra lint checks with `nogo` due to --short")
 	}
 	return nil
 }

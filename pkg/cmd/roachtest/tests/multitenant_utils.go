@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/stretchr/testify/require"
@@ -50,6 +51,7 @@ type tenantNode struct {
 	binary string // the binary last passed to start()
 	errCh  chan error
 	node   int
+	region string
 }
 
 type createTenantOptions struct {
@@ -58,8 +60,17 @@ type createTenantOptions struct {
 
 	// Set this to add additional environment variables to the tenant.
 	envVars []string
+
+	// Set this to specify the region for the tenant.
+	region string
 }
 type createTenantOpt func(*createTenantOptions)
+
+func createTenantRegion(region string) createTenantOpt {
+	return func(c *createTenantOptions) {
+		c.region = region
+	}
+}
 
 func createTenantNodeInternal(
 	ctx context.Context,
@@ -88,6 +99,7 @@ func createTenantNodeInternal(
 		node:       node,
 		sqlPort:    sqlPort,
 		envVars:    append(config.DefaultEnvVars(), createOptions.envVars...),
+		region:     createOptions.region,
 	}
 	if certs {
 		tn.createTenantCert(ctx, t, c, createOptions.certNodes)
@@ -95,7 +107,8 @@ func createTenantNodeInternal(
 	return tn
 }
 
-func createTenantNode(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedCreateTenantNode(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
@@ -106,7 +119,8 @@ func createTenantNode(
 	return createTenantNodeInternal(ctx, t, c, kvnodes, tenantID, node, httpPort, sqlPort, true /* certs */, opts...)
 }
 
-func createTenantNodeNoCerts(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedCreateTenantNodeNoCerts(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
@@ -137,8 +151,8 @@ func (tn *tenantNode) createTenantCert(
 	names = append(names, "localhost", "127.0.0.1")
 
 	cmd := fmt.Sprintf(
-		"./cockroach cert create-tenant-client --certs-dir=certs --ca-key=certs/ca.key %d %s --overwrite",
-		tn.tenantID, strings.Join(names, " "))
+		"./cockroach cert create-tenant-client --certs-dir=%s --ca-key=%s/ca.key %d %s --overwrite",
+		install.CockroachNodeCertsDir, install.CockroachNodeCertsDir, tn.tenantID, strings.Join(names, " "))
 	c.Run(ctx, option.WithNodes(c.Node(tn.node)), cmd)
 }
 
@@ -162,13 +176,6 @@ func (tn *tenantNode) storeDir() string {
 	return fmt.Sprintf("cockroach-data-mt-%d-%d", tn.tenantID, tn.instanceID)
 }
 
-// In secure mode the url we get from roachprod contains ssl parameters with
-// local file paths. secureURL returns a url with those changed to
-// roachprod/workload friendly local paths, ie "certs".
-func (tn *tenantNode) secureURL() string {
-	return tn.relativeSecureURL
-}
-
 func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster, binary string) {
 	require.True(t, c.IsSecure())
 
@@ -176,18 +183,23 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	extraArgs := []string{
 		"--log=\"file-defaults: {dir: '" + tn.logDir() + "', exit-on-error: false}\"",
 		"--store=" + tn.storeDir()}
+	if len(tn.region) > 0 {
+		extraArgs = append(extraArgs, "--locality="+tn.region)
+	}
 
 	internalIPs, err := c.InternalIP(ctx, t.L(), c.Node(tn.node))
 	randomSeed := rand.Int63()
 	c.SetRandomSeed(randomSeed)
 	require.NoError(t, err)
-	tn.errCh = startTenantServer(
+	tn.errCh = deprecatedStartTenantServer(
 		ctx, c, c.Node(tn.node), internalIPs[0], binary, tn.kvAddrs, tn.tenantID,
 		tn.httpPort, tn.sqlPort, tn.envVars, randomSeed,
 		extraArgs...,
 	)
 
-	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), "" /* tenant */, 0 /* sqlInstance */)
+	// The old multitenant API does not create a default admin user for virtual clusters, so root
+	// authentication is used instead.
+	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), roachprod.PGURLOptions{Auth: install.AuthRootCert})
 	require.NoError(t, err)
 	u, err := url.Parse(externalUrls[0])
 	require.NoError(t, err)
@@ -200,9 +212,14 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	// pgURL has full paths to local certs embedded, i.e.
 	// /tmp/roachtest-certs3630333874/certs, on the cluster we want just certs
 	// (i.e. to run workload on the tenant).
-	secureUrls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(tn.node)), "certs", roachprod.PGURLOptions{
+	//
+	// The old multitenant API does not create a default admin user for virtual clusters, so root
+	// authentication is used instead.
+	secureUrls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(tn.node)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
 		External: false,
-		Secure:   true})
+		Secure:   true,
+		Auth:     install.AuthRootCert,
+	})
 	require.NoError(t, err)
 	u, err = url.Parse(strings.Trim(secureUrls[0], "'"))
 	require.NoError(t, err)
@@ -236,7 +253,8 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	t.L().Printf("sql server for tenant %d (instance %d) now running", tn.tenantID, tn.instanceID)
 }
 
-func startTenantServer(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedStartTenantServer(
 	tenantCtx context.Context,
 	c cluster.Cluster,
 	node option.NodeListOption,
@@ -251,7 +269,7 @@ func startTenantServer(
 	extraFlags ...string,
 ) chan error {
 	args := []string{
-		"--certs-dir", "certs",
+		"--certs-dir", install.CockroachNodeCertsDir,
 		"--tenant-id=" + strconv.Itoa(tenantID),
 		"--http-addr", ifLocal(c, "127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(httpPort),
 		"--kv-addrs", strings.Join(kvAddrs, ","),
@@ -274,21 +292,23 @@ func startTenantServer(
 	return errCh
 }
 
-// createTenantAdminRole creates a role that can be used to log into a secure cluster's db console.
-func createTenantAdminRole(t test.Test, tenantName string, tenantSQL *sqlutils.SQLRunner) {
-	username := "secure"
-	password := "roach"
-	tenantSQL.Exec(t, fmt.Sprintf(`CREATE ROLE %s WITH LOGIN PASSWORD '%s'`, username, password))
-	tenantSQL.Exec(t, fmt.Sprintf(`GRANT ADMIN TO %s`, username))
+// deprecatedCreateTenantAdminRole creates a role that can be used to log into a secure cluster's db console.
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedCreateTenantAdminRole(
+	t test.Test, tenantName string, tenantSQL *sqlutils.SQLRunner,
+) {
+	tenantSQL.Exec(t, fmt.Sprintf(`CREATE ROLE IF NOT EXISTS %s WITH LOGIN PASSWORD '%s'`, install.DefaultUser, install.DefaultPassword))
+	tenantSQL.Exec(t, fmt.Sprintf(`GRANT ADMIN TO %s`, install.DefaultUser))
 	t.L().Printf(`Log into %s db console with username "%s" and password "%s"`,
-		tenantName, username, password)
+		tenantName, install.DefaultUser, install.DefaultPassword)
 }
 
 const appTenantName = "app"
 
-// createInMemoryTenant runs through the necessary steps to create an in-memory
+// deprecatedCreateInMemoryTenant runs through the necessary steps to create an in-memory
 // tenant without resource limits and full dbconsole viewing privileges.
-func createInMemoryTenant(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedCreateInMemoryTenant(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
@@ -296,15 +316,16 @@ func createInMemoryTenant(
 	nodes option.NodeListOption,
 	secure bool,
 ) {
-	db := createInMemoryTenantWithConn(ctx, t, c, tenantName, nodes, secure)
+	db := deprecatedCreateInMemoryTenantWithConn(ctx, t, c, tenantName, nodes, secure)
 	db.Close()
 }
 
-// createInMemoryTenantWithConn runs through the necessary steps to create an
+// deprecatedCreateInMemoryTenantWithConn runs through the necessary steps to create an
 // in-memory tenant without resource limits and full dbconsole viewing
 // privileges. As a convenience, it also returns a connection to the tenant (on
 // a random node in the cluster).
-func createInMemoryTenantWithConn(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedCreateInMemoryTenantWithConn(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
@@ -317,19 +338,20 @@ func createInMemoryTenantWithConn(
 	sysSQL := sqlutils.MakeSQLRunner(sysDB)
 	sysSQL.Exec(t, "CREATE TENANT $1", tenantName)
 
-	tenantConn := startInMemoryTenant(ctx, t, c, tenantName, nodes)
+	tenantConn := deprecatedStartInMemoryTenant(ctx, t, c, tenantName, nodes)
 	tenantSQL := sqlutils.MakeSQLRunner(tenantConn)
 	if secure {
-		createTenantAdminRole(t, tenantName, tenantSQL)
+		deprecatedCreateTenantAdminRole(t, tenantName, tenantSQL)
 	}
 	return tenantConn
 }
 
-// startInMemoryTenant starts an in memory tenant that has already been created.
+// deprecatedStartInMemoryTenant starts an in memory tenant that has already been created.
 // This function also removes tenant rate limiters and sets a few cluster
 // settings on the tenant.  As a convenience, it also returns a connection to
 // the tenant (on a random node in the cluster).
-func startInMemoryTenant(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedStartInMemoryTenant(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
@@ -341,8 +363,6 @@ func startInMemoryTenant(
 	sysSQL := sqlutils.MakeSQLRunner(sysDB)
 	sysSQL.Exec(t, "ALTER TENANT $1 START SERVICE SHARED", tenantName)
 	sysSQL.Exec(t, `ALTER TENANT $1 GRANT CAPABILITY can_view_node_info=true, can_admin_split=true,can_view_tsdb_metrics=true`, tenantName)
-	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled=true`, tenantName)
-	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled=true`, tenantName)
 	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled=true`, tenantName)
 	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled=true`, tenantName)
 	// The following two statements can be removed once this code only ever
@@ -359,7 +379,9 @@ func startInMemoryTenant(
 	var tenantConn *gosql.DB
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName))
+		// The old multitenant API does not create a default admin user for virtual clusters, so root
+		// authentication is used instead.
+		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.VirtualClusterName(tenantName), option.AuthMode(install.AuthRootCert))
 		if err != nil {
 			return err
 		}

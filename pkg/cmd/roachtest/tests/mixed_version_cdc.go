@@ -19,16 +19,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -371,11 +371,11 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 	}
 
 	var ff cdcFeatureFlags
-	schedulerSupported, err := cmvt.rangefeedSchedulerSupported(r, h)
+	rangefeedSchedulerSupported, err := cmvt.rangefeedSchedulerSupported(r, h)
 	if err != nil {
 		return err
 	}
-	if !schedulerSupported {
+	if !rangefeedSchedulerSupported {
 		ff.RangeFeedScheduler.v = &featureUnset
 	}
 
@@ -425,34 +425,13 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 }
 
 func (cmvt *cdcMixedVersionTester) muxRangeFeedSupported(
-	r *rand.Rand, h *mixedversion.Helper,
+	h *mixedversion.Helper,
 ) (bool, option.NodeListOption, error) {
-	// The mux setting was added in 22.2 and deleted in 24.1, so we need to first
-	// determine if the cluster version is in the range [22.2, 24.1).
-	cv, err := h.ClusterVersion(r)
-	if err != nil {
-		return false, nil, err
-	}
-	if !cv.AtLeast(roachpb.MustParseVersion(v222CV)) ||
-		cv.AtLeast(roachpb.MustParseVersion(v241CV)) {
-		return false, nil, nil
-	}
-
-	// Since the setting was deleted in 24.1, there may be nodes running binaries
-	// that no longer know about the setting.
-
-	// If we are upgrading to a version < 24.1, the setting is known to all nodes.
-	if h.Context.ToVersion.Major() < 24 {
-		return true, h.Context.CockroachNodes, nil
-	}
-
-	// If we are upgrading to 24.1, the setting is only known to pre-24.1 nodes.
-	if h.Context.ToVersion.Major() == 24 && h.Context.ToVersion.Minor() == 1 && h.Context.MixedBinary() {
-		return true, h.Context.NodesInPreviousVersion(), nil
-	}
-
-	// Otherwise, the setting is unknown to all nodes.
-	return false, nil, nil
+	// changefeed.mux_rangefeed.enabled was added in 22.2 and deleted in 24.1.
+	return canMixedVersionUseDeletedClusterSetting(h,
+		clusterupgrade.MustParseVersion("v22.2.0"),
+		clusterupgrade.MustParseVersion("v24.1.0-alpha.00000000"),
+	)
 }
 
 const v232CV = "23.2"
@@ -461,19 +440,62 @@ const v241CV = "24.1"
 func (cmvt *cdcMixedVersionTester) rangefeedSchedulerSupported(
 	r *rand.Rand, h *mixedversion.Helper,
 ) (bool, error) {
-	cv, err := h.ClusterVersion(r)
-	if err != nil {
-		return false, err
-	}
-	// kv.rangefeed.scheduler.enabled only exists in 23.2. In 24.1, it is enabled
-	// unconditionally.
-	return cv.Major == 23 && cv.Minor == 2 && cv.Internal == 0, nil
+	// kv.rangefeed.scheduler.enabled only exists since 23.2.
+	return h.ClusterVersionAtLeast(r, v232CV)
 }
 
 func (cmvt *cdcMixedVersionTester) distributionStrategySupported(
 	r *rand.Rand, h *mixedversion.Helper,
 ) (bool, error) {
-	return h.ClusterVersionAtLeast(r, v232CV)
+	return h.ClusterVersionAtLeast(r, v241CV)
+}
+
+// canMixedVersionUseDeletedClusterSetting returns whether a mixed-version
+// cluster can use a deleted cluster setting. If it returns true, it will
+// also return the subset of nodes that understand the setting.
+func canMixedVersionUseDeletedClusterSetting(
+	h *mixedversion.Helper,
+	addedVersion *clusterupgrade.Version,
+	deletedVersion *clusterupgrade.Version,
+) (bool, option.NodeListOption, error) {
+	fromVersion := h.Context.FromVersion
+	toVersion := h.Context.ToVersion
+
+	// Cluster setting was deleted at or before the from version so no nodes
+	// know about the setting.
+	if fromVersion.AtLeast(deletedVersion) {
+		return false, nil, nil
+	}
+
+	// Cluster setting was deleted later than the from version but at or before
+	// the to version, so if the from version is at least the added version,
+	// all the nodes on that version will know about the setting.
+	if toVersion.AtLeast(deletedVersion) {
+		if fromVersion.AtLeast(addedVersion) {
+			fromVersionNodes := h.Context.NodesInPreviousVersion()
+			if len(fromVersionNodes) > 0 {
+				return true, fromVersionNodes, nil
+			}
+		}
+		return false, nil, nil
+	}
+
+	// Cluster setting was deleted later than to version, so any nodes that are
+	// at least the added version will know about the setting.
+
+	if fromVersion.AtLeast(addedVersion) {
+		return true, h.Context.CockroachNodes, nil
+	}
+
+	if toVersion.AtLeast(addedVersion) {
+		toVersionNodes := h.Context.NodesInNextVersion()
+		if len(toVersionNodes) > 0 {
+			return true, toVersionNodes, nil
+		}
+		return false, nil, nil
+	}
+
+	return false, nil, nil
 }
 
 func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -499,7 +521,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// MuxRangefeed in various forms is available starting from v22.2.
 	setMuxRangeFeedEnabled := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-		supported, gatewayNodes, err := tester.muxRangeFeedSupported(r, h)
+		supported, gatewayNodes, err := tester.muxRangeFeedSupported(h)
 		if err != nil {
 			return err
 		}
@@ -517,6 +539,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if err != nil {
 			return err
 		}
+		l.Printf("kv.rangefeed.scheduler.enabled=%t", supported)
 		if supported {
 			coin := r.Int()%2 == 0
 			l.PrintfCtx(ctx, "Setting kv.rangefeed.scheduler.enabled=%t", coin)

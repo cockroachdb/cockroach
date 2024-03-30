@@ -170,7 +170,7 @@ statement ok
 CREATE SCHEMA myschema2
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER SCHEMA myschema2 RENAME TO another_schema
@@ -228,8 +228,10 @@ SELECT * FROM system.descriptor WHERE id = $schema_id
 
 # We can't resolve a schema dropped in the same transaction.
 statement ok
-CREATE SCHEMA dropped;
-BEGIN
+CREATE SCHEMA dropped
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 DROP SCHEMA dropped
@@ -571,6 +573,9 @@ CREATE USER user1;
 statement ok
 CREATE SCHEMA AUTHORIZATION user1
 
+statement error pq: role/user "typo" does not exist
+CREATE SCHEMA AUTHORIZATION typo
+
 statement error pq: schema "user1" already exists
 CREATE SCHEMA AUTHORIZATION user1
 
@@ -902,7 +907,7 @@ statement ok
 DROP SCHEMA sc
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE SCHEMA sc;
 COMMIT
 
@@ -965,6 +970,8 @@ SELECT * FROM d1.xy;
 
 statement ok
 USE test;
+
+statement ok
 DROP DATABASE d1 CASCADE;
 
 # Changing the current database should invalidate an unqualified table
@@ -987,6 +994,8 @@ SELECT * FROM xy;
 
 statement ok
 USE test;
+
+statement ok
 DROP DATABASE d;
 DROP TABLE xy;
 
@@ -1042,6 +1051,8 @@ HELLO
 
 statement ok
 USE test;
+
+statement ok
 DROP DATABASE d1 CASCADE;
 
 # Changing the current database should invalidate an unqualified UDT reference.
@@ -1062,6 +1073,8 @@ SELECT 'HELLO'::t;
 
 statement ok
 USE test;
+
+statement ok
 DROP DATABASE d;
 DROP TYPE t;
 
@@ -1116,6 +1129,8 @@ SELECT d1.public.fn(1);
 
 statement ok
 USE test;
+
+statement ok
 DROP DATABASE d1 CASCADE;
 
 # Changing the current database should invalidate an unqualified UDF reference.
@@ -1136,6 +1151,8 @@ SELECT fn(1);
 
 statement ok
 USE test;
+
+statement ok
 DROP DATABASE d;
 DROP FUNCTION fn;
 
@@ -1268,6 +1285,8 @@ user root
 
 statement ok
 RESET search_path;
+
+statement ok
 CREATE DATABASE testdb1;
 USE testdb1;
 CREATE TABLE ab (a INT PRIMARY KEY, b INT);
@@ -1317,6 +1336,8 @@ user root
 
 statement ok
 USE test;
+
+statement ok
 REVOKE ALL ON testdb2.xy FROM testuser2;
 REVOKE ALL ON testdb2.ab FROM testuser2;
 DROP USER testuser2;

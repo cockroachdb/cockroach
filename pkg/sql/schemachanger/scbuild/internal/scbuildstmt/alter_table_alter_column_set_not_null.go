@@ -27,14 +27,7 @@ func alterTableSetNotNull(
 		return
 	}
 	// Block alters on system columns.
-	scpb.ForEachColumn(
-		b.QueryByID(tbl.TableID),
-		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.Column) {
-			if e.ColumnID == columnID {
-				// Block drops on system columns.
-				panicIfSystemColumn(e, t.Column.String())
-			}
-		})
+	panicIfSystemColumn(mustRetrieveColumnElem(b, tbl.TableID, columnID), t.Column.String())
 	b.Add(&scpb.ColumnNotNull{
 		TableID:  tbl.TableID,
 		ColumnID: columnID,

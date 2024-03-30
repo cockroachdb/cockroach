@@ -165,6 +165,10 @@ type Flags struct {
 	// DisableRules is a set of rules that are not allowed to run.
 	DisableRules RuleSet
 
+	// DisableCheckExpr indicates that a test should skip the assertions in
+	// memo/check_expr.go.
+	DisableCheckExpr bool
+
 	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
 	// of a specific rule.
 	ExploreTraceRule opt.RuleName
@@ -309,6 +313,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().OptimizerUseImprovedJoinElimination = true
 	ot.evalCtx.SessionData().OptimizerUseProvidedOrderingFix = true
 	ot.evalCtx.SessionData().OptimizerMergeJoinsEnabled = true
+	ot.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = true
 
 	return ot
 }
@@ -370,9 +375,17 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //     Outputs the lowest cost tree for each step in optimization using the
 //     standard unified diff format. Used for debugging the optimizer.
 //
+//   - normsteps [flags]
+//
+//     Similar to optsteps, but only runs normalization rules.
+//
 //   - optstepsweb [flags]
 //
 //     Similar to optsteps, but outputs a URL which displays the results.
+//
+//   - normstepsweb [flags]
+//
+//     Similar to optstepsweb, but only runs normalization rules.
 //
 //   - exploretrace [flags]
 //
@@ -478,6 +491,8 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //   - disable: disables optimizer rules by name. Examples:
 //     opt disable=ConstrainScan
 //     norm disable=(NegateOr,NegateAnd)
+//
+//   - disable-check-expr: skips the assertions in memo/check_expr.go.
 //
 //   - rule: used with exploretrace; the value is the name of a rule. When
 //     specified, the exploretrace output is filtered to only show expression
@@ -725,14 +740,28 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		return tp.String()
 
 	case "optsteps":
-		result, err := ot.OptSteps()
+		result, err := ot.OptSteps(true /* explore */)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
+
+	case "normsteps":
+		result, err := ot.OptSteps(false /* explore */)
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
 		return result
 
 	case "optstepsweb":
-		result, err := ot.OptStepsWeb()
+		result, err := ot.OptStepsWeb(true /* explore */)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
+
+	case "normstepsweb":
+		result, err := ot.OptStepsWeb(false /* explore */)
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
@@ -987,6 +1016,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			}
 			f.DisableRules.Add(int(r))
 		}
+
+	case "disable-check-expr":
+		f.DisableCheckExpr = true
 
 	case "rule":
 		if len(arg.Vals) != 1 {
@@ -1492,7 +1524,13 @@ func (ot *OptTester) RuleStats() (string, error) {
 // a better plan has been found, and weaker "----" header delimiters when not.
 // In both cases, the output shows the expressions that were changed or added by
 // the rule, even if the total expression tree cost worsened.
-func (ot *OptTester) OptSteps() (string, error) {
+func (ot *OptTester) OptSteps(explore bool) (string, error) {
+	// OptSteps creates expressions that are partially normalized, which may
+	// violate the assertions upheld by Memo.CheckExpr, so we disable those
+	// assertions. This is safe because OptSteps is used for development and
+	// debugging, and not in tests for verifying correctness.
+	ot.Flags.DisableCheckExpr = true
+
 	var prevBest, prev, next string
 	ot.builder.Reset()
 
@@ -1510,6 +1548,14 @@ func (ot *OptTester) OptSteps() (string, error) {
 		// iteration.
 		if os.Done() {
 			break
+		}
+
+		if !explore {
+			rule := os.LastRuleName()
+			if rule.IsExplore() {
+				// Stop at the first exploration rule.
+				break
+			}
 		}
 
 		if prev == "" {
@@ -1543,15 +1589,24 @@ func (ot *OptTester) OptSteps() (string, error) {
 // OptStepsWeb is similar to Optsteps but it uses a special web page for
 // formatting the output. The result will be an URL which contains the encoded
 // data.
-func (ot *OptTester) OptStepsWeb() (string, error) {
+func (ot *OptTester) OptStepsWeb(explore bool) (string, error) {
+	// OptStepsWeb creates expressions that are partially normalized, which may
+	// violate the assertions upheld by Memo.CheckExpr, so we disable those
+	// assertions. This is safe because OptStepsWeb is used for development and
+	// debugging, and not in tests for verifying correctness.
+	ot.Flags.DisableCheckExpr = true
+
 	normDiffStr, err := ot.optStepsNormDiff()
 	if err != nil {
 		return "", err
 	}
 
-	exploreDiffStr, err := ot.optStepsExploreDiff()
-	if err != nil {
-		return "", err
+	var exploreDiffStr string
+	if explore {
+		exploreDiffStr, err = ot.optStepsExploreDiff()
+		if err != nil {
+			return "", err
+		}
 	}
 	url, err := ot.encodeOptstepsURL(normDiffStr, exploreDiffStr)
 	if err != nil {
@@ -2268,9 +2323,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	if err != nil {
 		return err
 	}
-	if err := ot.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
-		return err
-	}
+	ot.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */)
 	ot.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	ot.semaCtx.TypeResolver = ot.catalog
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt.AST)
@@ -2291,6 +2344,9 @@ func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 			ot.appliedRules.Add(int(ruleName))
 		}
 	})
+	if ot.Flags.DisableCheckExpr {
+		o.Memo().DisableCheckExpr()
+	}
 	return &o
 }
 

@@ -30,10 +30,6 @@ go_test(
     size = "small",
     srcs = ["bytes_usage_test.go"],
     embed = [":mon"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/settings/cluster",
         "//pkg/util/leaktest",

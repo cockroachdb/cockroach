@@ -63,7 +63,6 @@ go_library(
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/sql/privilege",
-        "//pkg/sql/roleoption",
         "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/cast",
         "//pkg/sql/sem/catid",
@@ -119,10 +118,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":eval"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvpb",

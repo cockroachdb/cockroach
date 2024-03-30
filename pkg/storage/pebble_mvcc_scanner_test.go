@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -81,7 +80,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	reader := eng.NewReadOnly(StandardDurability)
+	reader := eng.NewReader(StandardDurability)
 	defer reader.Close()
 	iter, err := reader.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
 	require.NoError(t, err)
@@ -149,7 +148,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[3], Timestamp: hlc.Timestamp{WallTime: 1}},
 		MVCCValue{Value: roachpb.MakeValueFromBytes(largeValue)}))
 
-	reader := eng.NewReadOnly(StandardDurability)
+	reader := eng.NewReader(StandardDurability)
 	defer reader.Close()
 	iter, err := reader.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("e")})
 	require.NoError(t, err)
@@ -185,7 +184,11 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 func scannerWithAccount(
 	ctx context.Context, st *cluster.Settings, scanner *pebbleMVCCScanner, limitBytes int64,
 ) (cleanup func()) {
-	m := mon.NewMonitor("test", mon.MemoryResource, nil, nil, 1, math.MaxInt64, st)
+	m := mon.NewMonitor(mon.Options{
+		Name:      "test",
+		Increment: 1,
+		Settings:  st,
+	})
 	m.Start(ctx, nil, mon.NewStandaloneBudget(limitBytes))
 	ba := m.MakeBoundAccount()
 	scanner.memAccount = &ba

@@ -25,10 +25,6 @@ go_test(
         "constant_eval_test.go",
         "normalize_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":normalize",
         "//pkg/settings/cluster",

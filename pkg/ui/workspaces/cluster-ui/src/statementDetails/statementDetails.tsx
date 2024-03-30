@@ -23,7 +23,7 @@ import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
-import { BarGraphTimeSeries } from "../graphs/bargraph";
+import { BarGraphTimeSeries, XScale } from "../graphs/bargraph";
 import { AxisUnits } from "../graphs";
 import { AlignedData, Options } from "uplot";
 
@@ -570,7 +570,6 @@ export class StatementDetails extends React.Component<
       app_names,
       databases,
       fingerprint_id,
-      failed_count,
       full_scan_count,
       vec_count,
       total_count,
@@ -596,6 +595,7 @@ export class StatementDetails extends React.Component<
     );
 
     const statementSampled = stats.exec_stats.count > Long.fromNumber(0);
+    const failureCount = stats.failure_count;
     const unavailableTooltip = !statementSampled && (
       <div>
         This metric is part of the statement execution and therefore will not be
@@ -702,6 +702,11 @@ export class StatementDetails extends React.Component<
     }
 
     const duration = (v: number) => Duration(v * 1e9);
+    const [chartsStart, chartsEnd] = toRoundedDateRange(this.props.timeScale);
+    const xScale = {
+      graphTsStartMillis: chartsStart.valueOf(),
+      graphTsEndMillis: chartsEnd.valueOf(),
+    } as XScale;
 
     return (
       <>
@@ -763,8 +768,8 @@ export class StatementDetails extends React.Component<
             <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
                 <SummaryCardItem
-                  label="Failed?"
-                  value={RenderCount(failed_count, total_count)}
+                  label="Failure Count"
+                  value={Count(failureCount.toNumber())}
                 />
                 <SummaryCardItem
                   label="Full scan?"
@@ -868,6 +873,7 @@ export class StatementDetails extends React.Component<
                 alignedData={executionAndPlanningTimeseries}
                 uPlotOptions={executionAndPlanningOps}
                 yAxisUnits={AxisUnits.Duration}
+                xScale={xScale}
               />
             </Col>
             <Col className="gutter-row" span={12}>
@@ -876,6 +882,7 @@ export class StatementDetails extends React.Component<
                 alignedData={rowsProcessedTimeseries}
                 uPlotOptions={rowsProcessedOps}
                 yAxisUnits={AxisUnits.Count}
+                xScale={xScale}
               />
             </Col>
           </Row>
@@ -886,6 +893,7 @@ export class StatementDetails extends React.Component<
                 alignedData={execRetriesTimeseries}
                 uPlotOptions={execRetriesOps}
                 yAxisUnits={AxisUnits.Count}
+                xScale={xScale}
               />
             </Col>
             <Col className="gutter-row" span={12}>
@@ -894,6 +902,7 @@ export class StatementDetails extends React.Component<
                 alignedData={execCountTimeseries}
                 uPlotOptions={execCountOps}
                 yAxisUnits={AxisUnits.Count}
+                xScale={xScale}
               />
             </Col>
           </Row>
@@ -905,6 +914,7 @@ export class StatementDetails extends React.Component<
                 uPlotOptions={contentionOps}
                 tooltip={unavailableTooltip}
                 yAxisUnits={AxisUnits.Duration}
+                xScale={xScale}
               />
             </Col>
             <Col className="gutter-row" span={12}>
@@ -914,6 +924,7 @@ export class StatementDetails extends React.Component<
                 uPlotOptions={cpuOps}
                 tooltip={unavailableTooltip}
                 yAxisUnits={AxisUnits.Duration}
+                xScale={xScale}
               />
             </Col>
           </Row>
@@ -939,6 +950,7 @@ export class StatementDetails extends React.Component<
                 alignedData={clientWaitTimeseries}
                 uPlotOptions={clientWaitOps}
                 yAxisUnits={AxisUnits.Duration}
+                xScale={xScale}
               />
             </Col>
           </Row>

@@ -65,3 +65,33 @@ SHOW CREATE FUNCTION f
 ----
 FUNCTION f() -> int [volatile, called-on-null-input=false]
  └── SELECT 1
+
+exec-ddl
+CREATE FUNCTION f_3_in_2_out(IN param1 INT, IN param2 INT, IN param3 INT, OUT param1 INT, OUT param2 INT) LANGUAGE SQL AS 'SELECT (1, 1)'
+----
+
+exec-ddl
+SHOW CREATE FUNCTION f_3_in_2_out
+----
+FUNCTION f_3_in_2_out(param1: int, param2: int, param3: int) -> tuple{int AS param1, int AS param2} [volatile]
+ └── SELECT (1, 1)
+
+exec-ddl
+CREATE FUNCTION f_out_int(OUT param INT) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+----
+
+exec-ddl
+SHOW CREATE FUNCTION f_out_int
+----
+FUNCTION f_out_int() -> int [volatile]
+ └── SELECT 1
+
+exec-ddl
+CREATE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) RETURNS RECORD LANGUAGE SQL AS 'SELECT (1, 2, 3)'
+----
+
+exec-ddl
+SHOW CREATE FUNCTION f_default_names
+----
+FUNCTION f_default_names(: int) -> tuple{int AS column1, int AS param2, int AS column3} [volatile]
+ └── SELECT (1, 2, 3)

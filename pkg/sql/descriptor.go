@@ -193,7 +193,6 @@ func (p *planner) createDatabase(
 
 	}
 
-	// TODO(jeffswenson): delete once region_livess is implemented (#107966)
 	if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
 		return nil, false, err
 	}
@@ -342,7 +341,7 @@ var SecondaryTenantsMultiRegionAbstractionsEnabled = settings.RegisterBoolSettin
 	settings.SystemVisible,
 	"sql.multi_region.allow_abstractions_for_secondary_tenants.enabled", // internal key, name defined above
 	"allow the use of multi-region abstractions and syntax in virtual clusters",
-	false,
+	true,
 	settings.WithName(SecondaryTenantsMultiRegionAbstractionsEnabledSettingName),
 )
 

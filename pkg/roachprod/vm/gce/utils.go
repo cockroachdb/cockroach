@@ -20,6 +20,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
@@ -71,7 +72,23 @@ for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
   zpool list -v -P | grep ${d} > /dev/null
   if [ $? -ne 0 ]; then
 {{ else }}
-for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-disk-[1-9]); do
+# if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
+# then the disks will be selected for RAID'ing. If there are both Local SSDs and Persistent disks,
+# RAID'ing in this case can cause performance differences. So, to avoid this, local SSDs are ignored.
+# Scenarios: 
+#   (local SSD = 0, Persistent Disk - 1) - no RAID'ing and Persistent Disk mounted
+#   (local SSD = 1, Persistent Disk - 0) - no RAID'ing and local SSD mounted
+#   (local SSD >= 1, Persistent Disk = 1) - no RAID'ing and Persistent Disk mounted
+#   (local SSD > 1, Persistent Disk = 0) - local SSDs selected for RAID'ing
+#   (local SSD >= 0, Persistent Disk > 1) - network disks selected for RAID'ing
+disk_list=()
+if [ "$(ls /dev/disk/by-id/google-persistent-disk-[1-9]|wc -l)" -eq "0" ]; then
+	disk_list=$(ls /dev/disk/by-id/google-local-*)
+else
+  echo "Only persistent disks are selected."
+	disk_list=$(ls /dev/disk/by-id/google-persistent-disk-[1-9])
+fi
+for d in ${disk_list}; do
   if ! mount | grep ${d}; then
 {{ end }}
     disks+=("${d}")
@@ -142,11 +159,7 @@ sudo sh -c 'echo "MaxStartups 64:30:128" >> /etc/ssh/sshd_config'
 # Crank up the logging for issues such as:
 # https://github.com/cockroachdb/cockroach/issues/36929
 sudo sed -i'' 's/LogLevel.*$/LogLevel DEBUG3/' /etc/ssh/sshd_config
-# N.B. RSA SHA1 is no longer supported in the latest versions of OpenSSH. Existing tooling, e.g.,
-# jepsen still relies on it for authentication. If we are on Ubuntu 22.04 or newer, we need to enable it.
-{{ if .EnableRSAForSSH }}
 sudo sh -c 'echo "PubkeyAcceptedAlgorithms +ssh-rsa" >> /etc/ssh/sshd_config'
-{{ end }}
 sudo service sshd restart
 # increase the default maximum number of open file descriptors for
 # root and non-root users. Load generators running a lot of concurrent
@@ -238,6 +251,9 @@ sysctl --system  # reload sysctl settings
 sudo ua enable fips --assume-yes
 {{ end }}
 
+sudo -u {{ .SharedUser }} bash -c "mkdir ~/.ssh && chmod 700 ~/.ssh"
+sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
@@ -248,16 +264,20 @@ sudo touch /mnt/data1/.roachprod-initialized
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
 func writeStartupScript(
-	extraMountOpts string, fileSystem string, useMultiple bool, enableFIPS bool, enableRSAForSSH bool,
+	extraMountOpts string, fileSystem string, useMultiple bool, enableFIPS bool,
 ) (string, error) {
 	type tmplParams struct {
 		ExtraMountOpts   string
 		UseMultipleDisks bool
 		Zfs              bool
 		EnableFIPS       bool
-		// TODO(DarrylWong): In the future, when all tests are run on Ubuntu 22.04, we can remove this check and default true.
-		// See: https://github.com/cockroachdb/cockroach/issues/112112
-		EnableRSAForSSH bool
+		SharedUser       string
+		PublicKey        string
+	}
+
+	publicKey, err := config.SSHPublicKey()
+	if err != nil {
+		return "", err
 	}
 
 	args := tmplParams{
@@ -265,7 +285,8 @@ func writeStartupScript(
 		UseMultipleDisks: useMultiple,
 		Zfs:              fileSystem == vm.Zfs,
 		EnableFIPS:       enableFIPS,
-		EnableRSAForSSH:  enableRSAForSSH,
+		SharedUser:       config.SharedUser,
+		PublicKey:        publicKey,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")

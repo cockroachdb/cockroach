@@ -708,7 +708,12 @@ func validateMultiRegion(
 		regionNames = append(regionNames, name)
 		return nil
 	})
-	if dbDesc.GetRegionConfig().SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+
+	// The system database can be configured to be SURVIVE REGION without enough
+	// regions. This would just mean that it will behave as SURVIVE ZONE until
+	// enough regions are added by the user.
+	if dbDesc.GetRegionConfig().SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE &&
+		dbDesc.GetID() != keys.SystemDatabaseID {
 		if len(regionNames) < 3 {
 			vea.Report(
 				errors.AssertionFailedf(
@@ -754,12 +759,12 @@ func (desc *immutable) AsTypesT() *types.T {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		return types.MakeEnum(catid.TypeIDToOID(desc.GetID()), catid.TypeIDToOID(desc.ArrayTypeID))
 	case descpb.TypeDescriptor_ALIAS:
-		return desc.Alias
+		return desc.Alias.CopyForHydrate()
 	case descpb.TypeDescriptor_COMPOSITE:
 		contents := make([]*types.T, len(desc.Composite.Elements))
 		labels := make([]string, len(desc.Composite.Elements))
 		for i, e := range desc.Composite.Elements {
-			contents[i] = e.ElementType
+			contents[i] = e.ElementType.CopyForHydrate()
 			labels[i] = e.ElementLabel
 		}
 		return types.NewCompositeType(

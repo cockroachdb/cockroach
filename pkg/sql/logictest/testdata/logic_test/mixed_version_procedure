@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-upgrade-to-master
+# LogicTest: cockroach-go-testserver-23.1
 
 # Verify that all nodes are running the previous version.
 
@@ -33,19 +33,20 @@ CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
 
 # Upgrade all nodes.
 
-# TODO(#112621): Unskip these tests. It is currently skipped because the cluster
-# does not reliably complete the upgrade in CI.
-# upgrade 1
-#
-# upgrade 2
-#
-# # Makes sure the upgrade job has finished, and the cluster version gate is
-# # passed.
-# query B retry
-# SELECT crdb_internal.is_at_least_version('23.2')
-# ----
-# true
-#
-# # Creating a procedure should now be possible.
-# statement ok
-# CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
+upgrade 1
+
+upgrade 2
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# Makes sure the upgrade job has finished, and the cluster version gate is
+# passed.
+query B
+SELECT crdb_internal.is_at_least_version('23.2')
+----
+true
+
+# Creating a procedure should now be possible.
+statement ok
+CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'

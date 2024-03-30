@@ -76,7 +76,7 @@ func slurpSSTablesLatestKey(
 			LowerBound: keys.LocalMax,
 			UpperBound: keys.MaxKey,
 		}
-		sst, err := storage.NewSSTIterator([][]sstable.ReadableFile{{file}}, iterOpts, false /* forwardOnly */)
+		sst, err := storage.NewSSTIterator([][]sstable.ReadableFile{{file}}, iterOpts)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -271,9 +271,12 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 					cloud.NilMetrics,
 					opts...)
 			},
-			Settings:          s.ClusterSettings(),
-			Codec:             s.Codec(),
-			BackupMonitor:     mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, 0, s.ClusterSettings()),
+			Settings: s.ClusterSettings(),
+			Codec:    s.Codec(),
+			BackupMonitor: mon.NewUnlimitedMonitor(ctx, mon.Options{
+				Name:     "test",
+				Settings: s.ClusterSettings(),
+			}),
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
 		},
 		EvalCtx: &eval.Context{

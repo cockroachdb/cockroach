@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -76,7 +75,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		run(db, fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
 
 		// Wait for initial up-replication.
-		err := WaitForReplication(ctx, t, db, replicationFactor, atLeastReplicationFactor)
+		err := WaitForReplication(ctx, t, t.L(), db, replicationFactor, atLeastReplicationFactor)
 		require.NoError(t, err)
 
 		// Ensure that leases are sent away from pinned node to avoid situation
@@ -119,13 +118,9 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		m.Go(func(ctx context.Context) error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
-				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
-				if err != nil {
-					t.Fatal(err)
-				}
 				return c.RunE(ctx,
 					option.WithNodes(c.Node(id)),
-					fmt.Sprintf("./cockroach node drain %d --insecure --drain-wait=%s --url=%s", id, duration.String(), pgurl),
+					fmt.Sprintf("./cockroach node drain %d --drain-wait=%s --certs-dir=%s --port={pgport:%d}", id, duration.String(), install.CockroachNodeCertsDir, id),
 				)
 			}
 			return drain(id)

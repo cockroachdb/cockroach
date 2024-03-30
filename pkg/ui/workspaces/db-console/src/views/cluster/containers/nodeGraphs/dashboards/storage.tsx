@@ -70,6 +70,40 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="WAL Fsync Latency"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={`The latency for fsyncs to the storage engine's write-ahead log.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Duration} label="latency">
+        {_.map(nodeIDs, nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.store.storage.wal.fsync.latency-p99.9"
+              title={"p99.9 " + getNodeNameById(nid)}
+              sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            />
+            <Metric
+              key={nid}
+              name="cr.store.storage.wal.fsync.latency-p99.99"
+              title={"p99.99 " + getNodeNameById(nid)}
+              sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            />
+            <Metric
+              key={nid}
+              name="cr.store.storage.wal.fsync.latency-max"
+              title={"p100 " + getNodeNameById(nid)}
+              sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Log Commit Latency: 99th Percentile"
       sources={storeSources}
       isKvGraph={true}

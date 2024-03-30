@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -216,7 +215,7 @@ type Planner interface {
 	// GetTypeFromValidSQLSyntax parses a column type when the input
 	// string uses the parseable SQL representation of a type name, e.g.
 	// `INT(13)`, `mytype`, `"mytype"`, `pg_catalog.int4` or `"public".mytype`.
-	GetTypeFromValidSQLSyntax(sql string) (*types.T, error)
+	GetTypeFromValidSQLSyntax(ctx context.Context, sql string) (*types.T, error)
 
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *tree.Subquery) (tree.Datum, error)
@@ -232,6 +231,13 @@ type Planner interface {
 	RoutineExprGenerator(
 		ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 	) ValueGenerator
+
+	// EvalTxnControlExpr produces the side effects of a COMMIT or ROLLBACK
+	// statement within a PL/pgSQL stored procedure. See the sql.planner
+	// implementation for details.
+	EvalTxnControlExpr(
+		ctx context.Context, expr *tree.TxnControlExpr, args tree.Datums,
+	) (tree.Datum, error)
 
 	// GenerateTestObjects is used to generate a large number of
 	// objets quickly.
@@ -429,6 +435,14 @@ type Planner interface {
 	// AutoCommit indicates whether the Planner has flagged the current statement
 	// as eligible for transaction auto-commit.
 	AutoCommit() bool
+
+	// StartHistoryRetentionJob creates a cluster-level protected timestamp
+	// and a job that owns it.
+	StartHistoryRetentionJob(ctx context.Context, desc string, protectTS hlc.Timestamp, expiration time.Duration) (jobspb.JobID, error)
+
+	// ExtendHistoryRetentionJob extends the lifetime of a a cluster-level
+	// protected timestamp.
+	ExtendHistoryRetention(ctx context.Context, id jobspb.JobID) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -502,13 +516,6 @@ type SessionAccessor interface {
 	// given global privilege, or the equivalent role option if one exists.
 	HasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) (bool, error)
 
-	// HasAdminRole returns true iff the current session user has the admin role.
-	HasAdminRole(ctx context.Context) (bool, error)
-
-	// HasRoleOption returns nil iff the current session user has the specified
-	// role option.
-	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
-
 	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
 	CheckPrivilege(ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind) error
 
@@ -548,9 +555,13 @@ type ClientNoticeSender interface {
 // for its own evaluation to a parent routine. This is used to defer execution
 // for tail-call optimization. It can only be used during local execution.
 type DeferredRoutineSender interface {
+	// CanOptimizeTailCall determines whether a nested routine in tail-call
+	// position can be executed in its parent's context.
+	CanOptimizeTailCall(nestedRoutine *tree.RoutineExpr) bool
+
 	// SendDeferredRoutine sends a local nested routine and its arguments to its
 	// parent routine.
-	SendDeferredRoutine(expr *tree.RoutineExpr, args tree.Datums)
+	SendDeferredRoutine(nestedRoutine *tree.RoutineExpr, args tree.Datums)
 }
 
 // PrivilegedAccessor gives access to certain queries that would otherwise
@@ -591,7 +602,7 @@ type RegionOperator interface {
 
 	// ResetMultiRegionZoneConfigsForTable resets the given table's zone
 	// configuration to its multi-region default.
-	ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error
+	ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64, forceZoneSurvival bool) error
 
 	// ResetMultiRegionZoneConfigsForDatabase resets the given database's zone
 	// configuration to its multi-region default.

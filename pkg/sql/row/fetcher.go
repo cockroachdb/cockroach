@@ -473,7 +473,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			fetcherArgs.admission.requestHeader = args.Txn.AdmissionHeader()
 			fetcherArgs.admission.responseQ = args.Txn.DB().SQLKVResponseAdmissionQ
 			fetcherArgs.admission.pacerFactory = args.Txn.DB().AdmissionPacerFactory
-			fetcherArgs.admission.settingsValues = args.Txn.DB().SettingsValues
+			fetcherArgs.admission.settingsValues = args.Txn.DB().SettingsValues()
 		}
 		rf.kvFetcher = newKVFetcher(newTxnKVFetcherInternal(fetcherArgs))
 	}
@@ -826,13 +826,17 @@ func (rf *Fetcher) processKV(
 ) (prettyKey string, prettyValue string, err error) {
 	table := &rf.table
 
-	if rf.args.TraceKV {
-		prettyKey = fmt.Sprintf(
+	mkPrettyKey := func() string {
+		return fmt.Sprintf(
 			"/%s/%s%s",
 			table.spec.TableName,
 			table.spec.IndexName,
 			rf.prettyKeyDatums(table.spec.KeyAndSuffixColumns, table.keyVals),
 		)
+	}
+
+	if rf.args.TraceKV {
+		prettyKey = mkPrettyKey()
 	}
 
 	// Either this is the first key of the fetch or the first key of a new
@@ -930,7 +934,11 @@ func (rf *Fetcher) processKV(
 					if kv.Value.GetTag() == roachpb.ValueType_UNKNOWN {
 						// Tombstone for a secondary column family, nothing needs to be done.
 					} else {
-						return "", "", errors.Errorf("single entry value with no default column id")
+						if prettyKey == "" {
+							prettyKey = mkPrettyKey()
+						}
+						return "", "",
+							errors.Errorf("single entry value with no default column id for key %s", prettyKey)
 					}
 				} else {
 					prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, defaultColumnID, kv, prettyKey)

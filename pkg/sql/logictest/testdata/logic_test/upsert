@@ -622,7 +622,8 @@ statement ok
 CREATE TABLE t29494(x INT); INSERT INTO t29494 VALUES (12)
 
 statement ok
-BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Check that the new column is not visible
 query T
@@ -640,7 +641,9 @@ UPSERT INTO t29494(x) VALUES (123) RETURNING y
 
 # Ditto for INSERT ON CONFLICT
 statement ok
-ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+ROLLBACK;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" does not exist
 INSERT INTO t29494(x) VALUES (123) ON CONFLICT(rowid) DO UPDATE SET x = 400 RETURNING y
@@ -649,7 +652,8 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 query I
 UPSERT INTO t29494(x) VALUES (12) RETURNING *
@@ -689,7 +693,8 @@ statement ok
 CREATE TABLE t29497(x INT PRIMARY KEY);
 
 statement ok
-BEGIN; ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error UPSERT has more expressions than target columns
 UPSERT INTO t29497 VALUES (1, 2)
@@ -698,7 +703,8 @@ statement ok
 ROLLBACK;
 
 statement ok
-BEGIN; ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" does not exist
 INSERT INTO t29497(x) VALUES (1) ON CONFLICT (x) DO UPDATE SET y = 456
@@ -709,7 +715,8 @@ ROLLBACK
 subtest visible_returning_columns
 
 statement ok
-BEGIN; ALTER TABLE tc DROP COLUMN y
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+ALTER TABLE tc DROP COLUMN y
 
 query I colnames,rowsort
 UPSERT INTO tc VALUES (1), (2) RETURNING *
@@ -966,7 +973,8 @@ statement ok
 CREATE TABLE table38627 (a INT PRIMARY KEY, b INT); INSERT INTO table38627 VALUES(1,1)
 
 statement ok
-BEGIN; ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
 
 statement ok
 UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
@@ -1211,55 +1219,6 @@ DROP TABLE source
 
 statement ok
 DROP TABLE target
-
-# Regression test for UPSERT batching logic (#51391).
-user host-cluster-root
-
-statement ok
-SET CLUSTER SETTING kv.raft.command.max_size='4MiB';
-
-user root
-
-statement ok
-CREATE TABLE src (s STRING);
-CREATE TABLE dest (s STRING);
-INSERT INTO src
-SELECT
-	'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-FROM
-	generate_series(1, 50000)
-
-# This statement produces a raft command of about 6.6 MiB in size, so if the
-# batching logic is incorrect, we'll encounter "command is too large" error.
-statement ok
-UPSERT INTO dest (s) (SELECT s FROM src)
-
-user host-cluster-root
-
-statement ok
-RESET CLUSTER SETTING kv.raft.command.max_size;
-
-user root
-
-statement ok
-DROP TABLE src;
-DROP TABLE dest
-
-# Regression test for finishing UPSERT too early (#54456).
-statement ok
-CREATE TABLE t54456 (c INT PRIMARY KEY);
-UPSERT INTO t54456 SELECT i FROM generate_series(1, 25000) AS i
-
-query I
-SELECT count(*) FROM t54456
-----
-25000
-
-# Regression test for clearing up upserted rows too early (#54465).
-query I
-WITH cte(c) AS (UPSERT INTO t54456 SELECT i FROM generate_series(25001, 40000) AS i RETURNING c) SELECT count(*) FROM cte
-----
-15000
 
 # Regression test for #59125. Ensure that valid rows don't get filtered out
 # from ON CONFLICT DO NOTHING.

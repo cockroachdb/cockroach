@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -103,11 +104,15 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 		case <-flushDoneSignal:
 			// A flush was done. Set the timer and wait for it to complete.
 			if sqlStatsActivityFlushEnabled.Get(&settings.SV) {
+				startTime := timeutil.Now().UnixNano()
 				updater := newSqlActivityUpdater(settings, execCtx.ExecCfg().InternalDB, nil)
 				if err := updater.TransferStatsToActivity(ctx); err != nil {
 					log.Warningf(ctx, "error running sql activity updater job: %v", err)
-					metrics.NumErrors.Inc(1)
+					metrics.NumFailedUpdates.Inc(1)
+				} else {
+					metrics.NumSuccessfulUpdates.Inc(1)
 				}
+				metrics.UpdateLatency.RecordValue(timeutil.Now().UnixNano() - startTime)
 			}
 		case <-ctx.Done():
 			return nil
@@ -120,19 +125,40 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 // ActivityUpdaterMetrics must be public for metrics to get
 // registered
 type ActivityUpdaterMetrics struct {
-	NumErrors *metric.Counter
+	NumFailedUpdates     *metric.Counter
+	NumSuccessfulUpdates *metric.Counter
+	UpdateLatency        metric.IHistogram
 }
 
 func (m ActivityUpdaterMetrics) MetricStruct() {}
 
 func newActivityUpdaterMetrics() metric.Struct {
 	return ActivityUpdaterMetrics{
-		NumErrors: metric.NewCounter(metric.Metadata{
-			Name:        "jobs.metrics.task_failed",
-			Help:        "Number of metrics sql activity updater tasks that failed",
-			Measurement: "errors",
+		NumFailedUpdates: metric.NewCounter(metric.Metadata{
+			Name:        "sql.stats.activity.updates.failed",
+			Help:        "Number of update attempts made by the SQL activity updater job that failed with errors",
+			Measurement: "failed updates",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
+		}),
+		NumSuccessfulUpdates: metric.NewCounter(metric.Metadata{
+			Name:        "sql.stats.activity.updates.successful",
+			Help:        "Number of successful updates made by the SQL activity updater job",
+			Measurement: "successful updates",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  io_prometheus_client.MetricType_COUNTER,
+		}),
+		UpdateLatency: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metric.Metadata{
+				Name:        "sql.stats.activity.update.latency",
+				Help:        "The latency of updates made by the SQL activity updater job. Includes failed update attempts",
+				Measurement: "Nanoseconds",
+				Unit:        metric.Unit_NANOSECONDS,
+				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
+			},
+			Duration:     base.DefaultHistogramWindowInterval(),
+			BucketConfig: metric.LongRunning60mLatencyBuckets,
+			Mode:         metric.HistogramModePrometheus,
 		}),
 	}
 }
@@ -182,16 +208,34 @@ type sqlActivityUpdater struct {
 	db           isql.DB
 }
 
+// TransferStatsToActivity call upsert stats function to current and prior hour.
 func (u *sqlActivityUpdater) TransferStatsToActivity(ctx context.Context) error {
+	// To improve performance we don't recalculate the entire top activity table everytime.
+	// Only update the latest hour and the one prior.
+	// We still need to recalculate the prior hour because the flush could happen during the switch of hours, and
+	// we could miss some executions completed on the prior hour.
+	aggTs := u.computeAggregatedTs(&u.st.SV)
+
+	err := u.upsertStatsForAggregatedTs(ctx, aggTs)
+	if err != nil {
+		return err
+	}
+	return u.upsertStatsForAggregatedTs(ctx, aggTs.Add(-time.Hour))
+}
+
+// upsertStatsForAggregatedTs calculates the top sql stats and update the activity table accordingly.
+func (u *sqlActivityUpdater) upsertStatsForAggregatedTs(
+	ctx context.Context, aggTs time.Time,
+) error {
 	// Get the config and pass it around to avoid any issue of it changing
 	// in the middle of the execution.
 	maxRowPersistedRows := sqlStatsActivityMaxPersistedRows.Get(&u.st.SV)
 	topLimit := sqlStatsActivityTopCount.Get(&u.st.SV)
-	aggTs := u.computeAggregatedTs(&u.st.SV)
 
 	// The counts are using AS OF SYSTEM TIME so the values may be slightly
 	// off. This is acceptable to increase the performance.
-	stmtRowCount, txnRowCount, totalEstimatedStmtClusterExecSeconds, totalEstimatedTxnClusterExecSeconds, err := u.getAostRowCountAndTotalClusterExecSeconds(ctx, aggTs)
+	stmtRowCount, txnRowCount, totalEstimatedStmtClusterExecSeconds, totalEstimatedTxnClusterExecSeconds,
+		err := u.getAostRowCountAndTotalClusterExecSeconds(ctx, aggTs)
 	if err != nil {
 		return err
 	}

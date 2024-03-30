@@ -34,7 +34,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		disableStreamer bool,
 	) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 
 		conn := c.Conn(ctx, t.L(), 1)
 		if disableStreamer {
@@ -45,7 +45,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 		if err := loadTPCHDataset(
 			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx, c.Range(1, numNodes-1)),
-			c.Range(1, numNodes-1), true /* disableMergeQueue */, false, /* secure */
+			c.Range(1, numNodes-1), true, /* disableMergeQueue */
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -53,7 +53,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 	restartCluster := func(ctx context.Context, c cluster.Cluster, t test.Test) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, numNodes-1))
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 	}
 
 	// checkConcurrency returns an error if at least one node of the cluster
@@ -73,7 +73,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 			t.Fatal(err)
 		}
 		scatterTables(t, conn, tpchTables)
-		err := WaitFor3XReplication(ctx, t, conn)
+		err := WaitFor3XReplication(ctx, t, t.L(), conn)
 		require.NoError(t, err)
 
 		// Populate the range cache on each node.

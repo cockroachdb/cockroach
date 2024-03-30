@@ -94,8 +94,11 @@ SELECT p(1)
 
 # The error message for a non-existent procedure should mention "procedure" not
 # "function".
-statement error pgcode 42883 procedure no_exist does not exist\nHINT: No procedure matches the given name and argument types. You might need to add explicit type casts.
+statement error pgcode 42883 procedure no_exist does not exist\nHINT: No procedure matches the given name.
 CALL no_exist()
+
+statement error pgcode 42883 procedure p\(int, string\) does not exist\nHINT: No procedure matches the given name and argument types. You might need to add explicit type casts.
+CALL p(1, 'foo')
 
 # The error message for a non-existent function within a procedure call should
 # still mention "function".
@@ -112,17 +115,8 @@ CALL p(foo())
 statement error pgcode 42723 function "p" already exists with same argument types
 CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
 
-# TODO(mgartner): The error should state "procedure definition" too.
-statement error pgcode 0A000 unimplemented: CALL usage inside a function definition
-CREATE OR REPLACE PROCEDURE p2() LANGUAGE SQL AS $$
-  CALL p();
-$$
-
-statement error pgcode 42883 unknown function: p\(\)
+statement error pgcode 42809 p\(\) is a procedure
 CREATE FUNCTION err(i INT) RETURNS VOID LANGUAGE SQL AS 'SELECT p()'
-
-statement error pgcode 0A000 unimplemented: CALL usage inside a function definition
-CREATE FUNCTION err(i INT) RETURNS VOID LANGUAGE SQL AS 'CALL p()'
 
 statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
 CREATE TABLE err (i INT DEFAULT p())
@@ -383,7 +377,7 @@ statement ok
 CALL p(ALL 1);
 
 # Calling a built-in function with ALL should not cause an internal error.
-statement error pgcode 42809 family\(val: inet\) is not a procedure
+statement error pgcode 42809 family\(unknown\) is not a procedure
 CALL family(ALL NULL);
 
 subtest end
@@ -412,3 +406,32 @@ statement error pgcode 42P13 null input attribute not allowed in procedure defin
 CREATE PROCEDURE pv() AS 'SELECT 1' STRICT LANGUAGE SQL;
 
 subtest end
+
+statement error pgcode 42809 sum is not a procedure
+CALL sum(1);
+
+statement error pgcode 42809 first_value\(int\) is not a procedure
+CALL first_value(1);
+
+statement error pgcode 42809 addgeometrycolumn is not a procedure
+CALL addgeometrycolumn(null, null, null, null, null);
+
+let $funcOID
+SELECT oid FROM pg_proc WHERE proname = 'count_rows';
+
+statement error pgcode 42809 count_rows is not a procedure
+CALL [ FUNCTION $funcOID ] ();
+
+statement ok
+CREATE PROCEDURE p_inner(OUT param INTEGER) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+skipif config local-mixed-23.2
+statement error pgcode 0A000 calling procedures with output arguments is not supported in SQL functions
+CREATE FUNCTION f() RETURNS INT AS $$ CALL p_inner(NULL); $$ LANGUAGE SQL;
+
+skipif config local-mixed-23.2
+statement error pgcode 0A000 calling procedures with output arguments is not supported in SQL functions
+CREATE PROCEDURE p_outer(OUT param INTEGER) AS $$ CALL p_inner(NULL); $$ LANGUAGE SQL;
+
+statement ok
+DROP PROCEDURE p_inner;

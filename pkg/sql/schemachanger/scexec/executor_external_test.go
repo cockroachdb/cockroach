@@ -361,14 +361,15 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
 		var cs scpb.CurrentState
+		var logSchemaChangesFn scbuild.LogSchemaChangerEventsFn
 		require.NoError(t, ti.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) (err error) {
 			sctestutils.WithBuilderDependenciesFromTestServer(ti.s, ti.nodeID, func(buildDeps scbuild.Dependencies) {
 				parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 				require.NoError(t, err)
 				require.Len(t, parsed, 1)
-				cs, err = scbuild.Build(ctx, buildDeps, scpb.CurrentState{}, parsed[0].AST.(*tree.AlterTable), nil /* memAcc */)
+				cs, logSchemaChangesFn, err = scbuild.Build(ctx, buildDeps, scpb.CurrentState{}, parsed[0].AST.(*tree.AlterTable), nil /* memAcc */)
 				require.NoError(t, err)
-
+				require.NoError(t, logSchemaChangesFn(ctx))
 				{
 					sc := sctestutils.MakePlan(t, cs, scop.PreCommitPhase, nil /* memAcc */)
 					for _, s := range sc.StagesForCurrentPhase() {

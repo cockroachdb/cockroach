@@ -803,19 +803,11 @@ func NewPlaceholder(name string) (*Placeholder, error) {
 
 // Format implements the NodeFormatter interface.
 func (node *Placeholder) Format(ctx *FmtCtx) {
-	if ctx.HasFlags(FmtHideConstants) {
-		if ctx.placeholderFormat != nil {
-			ctx.placeholderFormat(ctx, node)
-			return
-		}
-		ctx.Printf("$%d", node.Idx+1)
-	} else {
-		if ctx.placeholderFormat != nil {
-			ctx.placeholderFormat(ctx, node)
-			return
-		}
-		ctx.Printf("$%d", node.Idx+1)
+	if ctx.placeholderFormat != nil {
+		ctx.placeholderFormat(ctx, node)
+		return
 	}
+	ctx.Printf("$%d", node.Idx+1)
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1779,6 +1771,7 @@ func (node *NumVal) String() string           { return AsString(node) }
 func (node *OrExpr) String() string           { return AsString(node) }
 func (node *ParenExpr) String() string        { return AsString(node) }
 func (node *RangeCond) String() string        { return AsString(node) }
+func (node *TxnControlExpr) String() string   { return AsString(node) }
 func (node *StrVal) String() string           { return AsString(node) }
 func (node *Subquery) String() string         { return AsString(node) }
 func (node *RoutineExpr) String() string      { return AsString(node) }

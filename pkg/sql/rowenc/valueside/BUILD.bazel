@@ -21,7 +21,9 @@ go_library(
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/buildutil",
         "//pkg/util/encoding",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/timeutil/pgdate",
@@ -39,10 +41,6 @@ go_test(
         "valueside_test.go",
     ],
     embed = [":valueside"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/roachpb",
         "//pkg/settings/cluster",

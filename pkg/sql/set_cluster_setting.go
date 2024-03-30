@@ -22,8 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
@@ -277,7 +275,7 @@ func (p *planner) getAndValidateTypedClusterSetting(
 				requiredType = types.Interval
 				// Ensure that the expression contains a unit (i.e can't be a float)
 				_, err := p.analyzeExpr(
-					ctx, expr, nil, dummyHelper, types.Float, false, "SET CLUSTER SETTING "+string(name),
+					ctx, expr, dummyHelper, types.Float, false, "SET CLUSTER SETTING "+string(name),
 				)
 				// An interval with a unit (valid) will return an
 				// "InvalidTextRepresentation" error when trying to parse it as a float.
@@ -293,7 +291,7 @@ func (p *planner) getAndValidateTypedClusterSetting(
 			}
 
 			typed, err := p.analyzeExpr(
-				ctx, expr, nil, dummyHelper, requiredType, true, "SET CLUSTER SETTING "+string(name))
+				ctx, expr, dummyHelper, requiredType, true, "SET CLUSTER SETTING "+string(name))
 			if err != nil {
 				hasHint, hint := setting.ErrorHint()
 				if hasHint {
@@ -358,17 +356,6 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	// Report tracked cluster settings via telemetry.
 	// TODO(justin): implement a more general mechanism for tracking these.
 	switch n.name {
-	case multitenant.DefaultClusterSelectSettingName:
-		if multitenant.VerifyTenantService.Get(&n.st.SV) && expectedEncodedValue != "" {
-			tr, err := GetTenantRecordByName(params.ctx, n.st, params.p.InternalSQLTxn(), roachpb.TenantName(expectedEncodedValue))
-			if err != nil {
-				return errors.Wrapf(err, "failed to lookup tenant %q", expectedEncodedValue)
-			}
-			if tr.ServiceMode != mtinfopb.ServiceModeShared {
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"shared service not enabled for tenant %q", expectedEncodedValue)
-			}
-		}
 	case catpb.AutoStatsEnabledSettingName:
 		switch expectedEncodedValue {
 		case "true":
@@ -484,7 +471,7 @@ func writeDefaultSettingValue(
 	expectedEncodedValue = setting.EncodedDefault()
 	_, err = db.Executor().ExecEx(
 		ctx, "reset-setting", nil,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		"DELETE FROM system.settings WHERE name = $1", setting.InternalKey(),
 	)
 	return reportedValue, expectedEncodedValue, err
@@ -530,7 +517,7 @@ func writeNonDefaultSettingValue(
 
 		if _, err = db.Executor().ExecEx(
 			ctx, "update-setting", nil,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
 			setting.InternalKey(), encoded, setting.Typ(),
 		); err != nil {
@@ -559,7 +546,7 @@ func setVersionSetting(
 	// value change is valid.
 	datums, err := db.Executor().QueryRowEx(
 		ctx, "retrieve-prev-setting", nil,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		"SELECT value FROM system.settings WHERE name = $1", setting.InternalKey(),
 	)
 	if err != nil {

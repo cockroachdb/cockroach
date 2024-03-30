@@ -73,8 +73,7 @@ function newDatabaseDetailsResponse(): DatabaseDetailsResponse {
     },
     stats: {
       replicaData: {
-        replicas: [],
-        regions: [],
+        storeIDs: [],
       },
       indexStats: { num_index_recommendations: 0 },
     },
@@ -176,7 +175,7 @@ const getDatabaseTablesQuery: DatabaseDetailsQuery<DatabaseTablesRow> = {
       sql: Format(
         `SELECT table_schema, table_name
          FROM %1.information_schema.tables
-         WHERE table_type != 'SYSTEM VIEW'
+         WHERE table_type NOT IN ('SYSTEM VIEW', 'VIEW')
          ORDER BY table_name`,
         [new Identifier(dbName)],
       ),
@@ -216,7 +215,7 @@ const getDatabaseTablesQuery: DatabaseDetailsQuery<DatabaseTablesRow> = {
         sql: Format(
           `SELECT table_schema, table_name
          FROM %1.information_schema.tables
-         WHERE table_type != 'SYSTEM VIEW'
+         WHERE table_type NOT IN ('SYSTEM VIEW', 'VIEW')
          ORDER BY table_name offset %2`,
           [new Identifier(dbName), dbDetail.tablesResp.tables.length],
         ),
@@ -309,7 +308,10 @@ const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
 
 // Database Stats
 type DatabaseDetailsStats = {
-  replicaData: SqlApiQueryResponse<DatabaseReplicasRegionsRow>;
+  replicaData: {
+    storeIDs: number[];
+    error?: Error;
+  };
   indexStats: SqlApiQueryResponse<DatabaseIndexUsageStatsResponse>;
 };
 
@@ -354,44 +356,31 @@ function formatSpanStatsExecutionResult(
 }
 
 type DatabaseReplicasRegionsRow = {
-  replicas: number[];
-  regions: string[];
+  store_ids: number[];
 };
 
 const getDatabaseReplicasAndRegions: DatabaseDetailsQuery<DatabaseReplicasRegionsRow> =
   {
     createStmt: dbName => {
+      // This query is meant to retrieve the per-database set of store ids.
       return {
         sql: Format(
-          `WITH replicasAndRegionsPerDbRange AS (
-            SELECT
-              r.replicas,
-              ARRAY(SELECT DISTINCT split_part(split_part(unnest(replica_localities), ',', 1), '=', 2)) AS regions
-            FROM crdb_internal.tables AS t
-                   JOIN %1.crdb_internal.table_spans AS s ON s.descriptor_id = t.table_id
-                   JOIN crdb_internal.ranges_no_leases AS r ON s.start_key < r.end_key AND s.end_key > r.start_key
-            WHERE t.database_name = $1
-          )
-           SELECT
-             array_agg(DISTINCT replica_val) AS replicas,
-             array_agg(DISTINCT region_val) AS regions
-           FROM replicasAndRegionsPerDbRange, unnest(replicas) AS replica_val, unnest(regions) AS region_val`,
+          `
+            SELECT array_agg(DISTINCT unnested_store_ids) AS store_ids
+            FROM [SHOW RANGES FROM DATABASE %1], unnest(replicas) AS unnested_store_ids
+`,
           [new Identifier(dbName)],
         ),
-        arguments: [dbName],
       };
     },
     addToDatabaseDetail: (
       txn_result: SqlTxnResult<DatabaseReplicasRegionsRow>,
       resp: DatabaseDetailsResponse,
     ) => {
-      if (!txnResultIsEmpty(txn_result)) {
-        resp.stats.replicaData.regions = txn_result.rows[0].regions;
-        resp.stats.replicaData.replicas = txn_result.rows[0].replicas;
-      }
       if (txn_result.error) {
         resp.stats.replicaData.error = txn_result.error;
       }
+      resp.stats.replicaData.storeIDs = txn_result?.rows[0]?.store_ids ?? [];
     },
     handleMaxSizeError: (_dbName, _response, _dbDetail) => {
       return Promise.resolve(false);

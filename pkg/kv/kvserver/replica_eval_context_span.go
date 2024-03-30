@@ -178,8 +178,10 @@ func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 
 // ExcludeDataFromBackup returns whether the replica is to be excluded from a
 // backup.
-func (rec SpanSetReplicaEvalContext) ExcludeDataFromBackup(ctx context.Context) bool {
-	return rec.i.ExcludeDataFromBackup(ctx)
+func (rec SpanSetReplicaEvalContext) ExcludeDataFromBackup(
+	ctx context.Context, sp roachpb.Span,
+) (bool, error) {
+	return rec.i.ExcludeDataFromBackup(ctx, sp)
 }
 
 // String implements Stringer.
@@ -202,9 +204,6 @@ func (rec SpanSetReplicaEvalContext) GetLastReplicaGCTimestamp(
 
 // GetLease returns the Replica's current and next lease (if any).
 func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, roachpb.Lease) {
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
-		roachpb.Span{Key: keys.RangeLeaseKey(rec.GetRangeID())},
-	)
 	return rec.i.GetLease()
 }
 

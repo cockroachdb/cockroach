@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -782,38 +784,6 @@ func maxInflightBytesFrom(maxInflightMsgs int, maxSizePerMsg uint64) uint64 {
 	return math.MaxUint64
 }
 
-// StorageConfig contains storage configs for all storage engine.
-type StorageConfig struct {
-	Attrs roachpb.Attributes
-	// Dir is the data directory for the Pebble instance.
-	Dir string
-	// If true, creating the instance fails if the target directory does not hold
-	// an initialized instance.
-	//
-	// Makes no sense for in-memory instances.
-	MustExist bool
-	// MaxSize is used for calculating free space and making rebalancing
-	// decisions. Zero indicates that there is no maximum size.
-	MaxSize int64
-	// BallastSize is the amount reserved by a ballast file for manual
-	// out-of-disk recovery.
-	BallastSize int64
-	// Settings instance for cluster-wide knobs. Must not be nil.
-	Settings *cluster.Settings
-	// UseFileRegistry is true if the file registry is needed (eg: encryption-at-rest).
-	// This may force the store version to versionFileRegistry if currently lower.
-	UseFileRegistry bool
-	// EncryptionOptions is a serialized protobuf set by Go CCL code and passed
-	// through to C CCL code to set up encryption-at-rest.  Must be set if and
-	// only if encryption is enabled, otherwise left empty.
-	EncryptionOptions []byte
-}
-
-// IsEncrypted returns whether the StorageConfig has encryption enabled.
-func (sc StorageConfig) IsEncrypted() bool {
-	return len(sc.EncryptionOptions) > 0
-}
-
 const (
 	// DefaultTempStorageMaxSizeBytes is the default maximum budget
 	// for temp storage.
@@ -843,6 +813,163 @@ type TempStorageConfig struct {
 	// Settings stores the cluster.Settings this TempStoreConfig will use. Must
 	// not be nil.
 	Settings *cluster.Settings
+}
+
+// WALFailoverMode specifies the mode of WAL failover.
+type WALFailoverMode int8
+
+const (
+	// WALFailoverDefault leaves the WAL failover configuration unspecified. Today
+	// this is interpreted as FailoverDisabled but future releases may default to
+	// another mode.
+	WALFailoverDefault WALFailoverMode = iota
+	// WALFailoverDisabled leaves WAL failover disabled. Commits to the storage
+	// engine observe the latency of a store's primary WAL directly.
+	WALFailoverDisabled
+	// WALFailoverAmongStores enables WAL failover among multiple stores within a
+	// node. This setting has no effect if the node has a single store. When a
+	// storage engine observes high latency writing to its WAL, it may
+	// transparently failover to an arbitrary, predetermined other store's data
+	// directory. If successful in syncing log entries to the other store's
+	// volume, the batch commit latency is insulated from the effects of momentary
+	// disk stalls.
+	WALFailoverAmongStores
+	// WALFailoverExplicitPath enables WAL failover for a single-store node to an
+	// explicitly specified path.
+	WALFailoverExplicitPath
+)
+
+// String implements fmt.Stringer.
+func (m *WALFailoverMode) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements the refact.SafeFormatter interface.
+func (m *WALFailoverMode) SafeFormat(p redact.SafePrinter, _ rune) {
+	switch *m {
+	case WALFailoverDefault:
+		// Empty
+	case WALFailoverDisabled:
+		p.SafeString("disabled")
+	case WALFailoverAmongStores:
+		p.SafeString("among-stores")
+	case WALFailoverExplicitPath:
+		p.SafeString("path")
+	default:
+		p.Printf("<unknown WALFailoverMode %d>", int8(*m))
+	}
+}
+
+// WALFailoverConfig configures a node's stores behavior under high write
+// latency to their write-ahead logs.
+type WALFailoverConfig struct {
+	Mode WALFailoverMode
+	// Path is the non-store path to which WALs should be written when failing
+	// over. It must be nonempty if and only if Mode == WALFailoverExplicitPath.
+	Path ExternalPath
+	// PrevPath is the previously used non-store path. It may be set with Mode ==
+	// WALFailoverExplicitPath (when changing the secondary path) or
+	// WALFailoverDisabled (when disabling WAL failover after it was previously
+	// enabled with WALFailoverExplicitPath). It must be empty for other modes.
+	// If Mode is WALFailoverDisabled and previously WAL failover was enabled
+	// using WALFailoverAmongStores, then PrevPath must not be set.
+	PrevPath ExternalPath
+}
+
+// ExternalPath represents a non-store path and associated encryption-at-rest
+// configuration.
+type ExternalPath struct {
+	Path string
+	// EncryptionOptions is a serialized protobuf set by Go CCL code describing
+	// the encryption-at-rest configuration. If encryption-at-rest has ever been
+	// enabled on the store, this field must be set.
+	EncryptionOptions []byte
+}
+
+// IsSet returns whether or not the external path was provided.
+func (e ExternalPath) IsSet() bool { return e.Path != "" }
+
+// Type implements the pflag.Value interface.
+func (c *WALFailoverConfig) Type() string { return "string" }
+
+// String implements fmt.Stringer.
+func (c *WALFailoverConfig) String() string {
+	return redact.StringWithoutMarkers(c)
+}
+
+// SafeFormat implements the refact.SafeFormatter interface.
+func (c *WALFailoverConfig) SafeFormat(p redact.SafePrinter, _ rune) {
+	switch c.Mode {
+	case WALFailoverDefault:
+		// Empty
+	case WALFailoverDisabled:
+		p.SafeString("disabled")
+		if c.PrevPath.IsSet() {
+			p.SafeString(",prev_path=")
+			p.SafeString(redact.SafeString(c.PrevPath.Path))
+		}
+	case WALFailoverAmongStores:
+		p.SafeString("among-stores")
+	case WALFailoverExplicitPath:
+		p.SafeString("path=")
+		p.SafeString(redact.SafeString(c.Path.Path))
+		if c.PrevPath.IsSet() {
+			p.SafeString(",prev_path=")
+			p.SafeString(redact.SafeString(c.PrevPath.Path))
+		}
+	default:
+		p.Printf("<unknown WALFailoverMode %d>", int8(c.Mode))
+	}
+}
+
+// Set implements the pflag.Value interface.
+func (c *WALFailoverConfig) Set(s string) error {
+	switch {
+	case strings.HasPrefix(s, "disabled"):
+		c.Mode = WALFailoverDisabled
+		var ok bool
+		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(strings.TrimPrefix(s, "disabled"))
+		if !ok || c.Path.IsSet() {
+			return errors.Newf("invalid disabled --wal-failover setting: %s "+
+				"expect disabled[,prev_path=<prev_path>]", s)
+		}
+	case s == "among-stores":
+		c.Mode = WALFailoverAmongStores
+	case strings.HasPrefix(s, "path="):
+		c.Mode = WALFailoverExplicitPath
+		var ok bool
+		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(s)
+		if !ok || !c.Path.IsSet() {
+			return errors.Newf("invalid path --wal-failover setting: %s "+
+				"expect path=<path>[,prev_path=<prev_path>]", s)
+		}
+	default:
+		return errors.Newf("invalid --wal-failover setting: %s "+
+			"(possible values: disabled, among-stores, path=<path>)", s)
+	}
+	return nil
+}
+
+func parseWALFailoverPathFields(s string) (path, prevPath string, ok bool) {
+	if s == "" {
+		return "", "", true
+	}
+	if s2 := strings.TrimPrefix(s, "path="); len(s2) < len(s) {
+		s = s2
+		if i := strings.IndexByte(s, ','); i == -1 {
+			return s, "", true
+		} else {
+			path = s[:i]
+			s = s[i:]
+		}
+	}
+
+	// Any remainder must be a prev_path= field.
+	if !strings.HasPrefix(s, ",prev_path=") {
+		return "", "", false
+	}
+	prevPath = strings.TrimPrefix(s, ",prev_path=")
+	return path, prevPath, true
 }
 
 // ExternalIODirConfig describes various configuration options pertaining
@@ -906,15 +1033,12 @@ func newTempStorageConfig(
 	} else {
 		monitorName = "temp disk storage"
 	}
-	monitor := mon.NewMonitor(
-		monitorName,
-		mon.DiskResource,
-		nil,             /* curCount */
-		nil,             /* maxHist */
-		1024*1024,       /* increment */
-		maxSizeBytes/10, /* noteworthy */
-		st,
-	)
+	monitor := mon.NewMonitor(mon.Options{
+		Name:      monitorName,
+		Res:       mon.DiskResource,
+		Increment: 1024 * 1024,
+		Settings:  st,
+	})
 	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
 		InMemory: inMemory,

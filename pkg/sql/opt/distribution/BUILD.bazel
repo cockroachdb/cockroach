@@ -20,10 +20,6 @@ go_test(
     name = "distribution_test",
     srcs = ["distribution_test.go"],
     embed = [":distribution"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/opt/memo",

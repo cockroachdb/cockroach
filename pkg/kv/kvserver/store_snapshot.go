@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -41,9 +42,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage"
+	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3/raftpb"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
@@ -69,17 +70,6 @@ const (
 	// See server.KVConfig for more info.
 	DefaultSnapshotApplyLimit = 1
 )
-
-// TODO(baptist): Remove in v24.1, no longer read in v23.2.
-func init() {
-	_ = settings.RegisterBoolSetting(
-		settings.SystemOnly,
-		"kv.snapshot_prioritization.enabled",
-		"deprecated no longer used",
-		true,
-		settings.Retired,
-	)
-}
 
 // snapshotMetrics contains metrics on the number and size of snapshots in
 // progress or in the snapshot queue.
@@ -505,7 +495,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeySpans(header.State.Desc)
 
-	doExcise := header.SharedReplicate || (storage.UseExciseForSnapshots.Get(&s.ClusterSettings().SV) &&
+	doExcise := header.SharedReplicate || header.ExternalReplicate || (storage.UseExciseForSnapshots.Get(&s.ClusterSettings().SV) &&
 		s.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2_EnablePebbleFormatVirtualSSTables))
 	if header.SharedReplicate && !s.cfg.SharedStorageEnabled {
 		return noSnap, sendSnapshotError(ctx, s, stream, errors.New("cannot accept shared sstables"))
@@ -523,7 +513,11 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			return noSnap, errors.AssertionFailedf("last span in multiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
 		}
 	}
-	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, keyRanges, kvSS.sstChunkSize, doExcise)
+
+	// TODO(aaditya): Remove once we support flushableIngests for shared and
+	// external files in the engine.
+	skipRangeDelForLastSpan := doExcise && (header.SharedReplicate || header.ExternalReplicate)
+	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, keyRanges, kvSS.sstChunkSize, skipRangeDelForLastSpan)
 	if err != nil {
 		return noSnap, err
 	}
@@ -532,6 +526,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	log.Event(ctx, "waiting for snapshot batches to begin")
 
 	var sharedSSTs []pebble.SharedSSTMeta
+	var externalSSTs []pebble.ExternalFile
 
 	for {
 		timingTag.start("recv")
@@ -547,6 +542,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		if req.TransitionFromSharedToRegularReplicate {
 			doExcise = false
 			sharedSSTs = nil
+			externalSSTs = nil
 			if err := msstw.addRangeDelForLastSpan(); err != nil {
 				return noSnap, errors.Wrap(err, "adding tombstone for last span")
 			}
@@ -655,6 +651,24 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				})
 			}
 		}
+		if len(req.ExternalTables) > 0 && doExcise {
+			for i := range req.ExternalTables {
+				sst := req.ExternalTables[i]
+				externalSSTs = append(externalSSTs, pebble.ExternalFile{
+					Locator:           remote.Locator(sst.Locator),
+					ObjName:           sst.ObjectName,
+					StartKey:          sst.StartKey,
+					EndKey:            sst.EndKey,
+					EndKeyIsInclusive: sst.EndKeyIsInclusive,
+					HasPointKey:       sst.HasPointKey,
+					HasRangeKey:       sst.HasRangeKey,
+					SyntheticPrefix:   sst.SyntheticPrefix,
+					SyntheticSuffix:   sst.SyntheticSuffix,
+					Level:             uint8(sst.Level),
+					Size:              sst.Size_,
+				})
+			}
+		}
 		if req.Final {
 			// We finished receiving all batches and log entries. It's possible that
 			// we did not receive any key-value pairs for some of the key spans, but
@@ -681,23 +695,25 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 
 			inSnap := IncomingSnapshot{
-				SnapUUID:          snapUUID,
-				SSTStorageScratch: kvSS.scratch,
-				FromReplica:       header.RaftMessageRequest.FromReplica,
-				Desc:              header.State.Desc,
-				DataSize:          dataSize,
-				SSTSize:           sstSize,
-				SharedSize:        sharedSize,
-				raftAppliedIndex:  header.State.RaftAppliedIndex,
-				msgAppRespCh:      make(chan raftpb.Message, 1),
-				sharedSSTs:        sharedSSTs,
-				doExcise:          doExcise,
-				clearedSpans:      keyRanges,
+				SnapUUID:                    snapUUID,
+				SSTStorageScratch:           kvSS.scratch,
+				FromReplica:                 header.RaftMessageRequest.FromReplica,
+				Desc:                        header.State.Desc,
+				DataSize:                    dataSize,
+				SSTSize:                     sstSize,
+				SharedSize:                  sharedSize,
+				raftAppliedIndex:            header.State.RaftAppliedIndex,
+				msgAppRespCh:                make(chan raftpb.Message, 1),
+				sharedSSTs:                  sharedSSTs,
+				externalSSTs:                externalSSTs,
+				doExcise:                    doExcise,
+				includesRangeDelForLastSpan: !skipRangeDelForLastSpan,
+				clearedSpans:                keyRanges,
 			}
 
 			timingTag.stop("totalTime")
 
-			kvSS.status = redact.Sprintf("local ssts: %d, shared ssts: %d", len(kvSS.scratch.SSTs()), len(sharedSSTs))
+			kvSS.status = redact.Sprintf("local ssts: %d, shared ssts: %d, external ssts: %d", len(kvSS.scratch.SSTs()), len(sharedSSTs), len(externalSSTs))
 			return inSnap, nil
 		}
 	}
@@ -715,7 +731,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// not reflect the log entries sent (which are never sent in newer versions of
 	// CRDB, as of VersionUnreplicatedTruncatedState).
 	var bytesSent int64
-	var kvs, rangeKVs, sharedSSTs int
+	var kvs, rangeKVs, sharedSSTCount, externalSSTCount int
 
 	// These stopwatches allow us to time the various components of Send().
 	// - totalTimeStopwatch measures the total time spent within this function.
@@ -741,7 +757,8 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// Iterate over all keys (point keys and range keys) and stream out batches of
 	// key-values.
 	var b storage.WriteBatch
-	var ssts []kvserverpb.SnapshotRequest_SharedTable
+	var sharedSSTs []kvserverpb.SnapshotRequest_SharedTable
+	var externalSSTs []kvserverpb.SnapshotRequest_ExternalTable
 	var transitionFromSharedToRegularReplicate bool
 	defer func() {
 		if b != nil {
@@ -750,7 +767,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	}()
 
 	flushBatch := func() error {
-		if err := kvSS.sendBatch(ctx, stream, b, ssts, transitionFromSharedToRegularReplicate, timingTag); err != nil {
+		if err := kvSS.sendBatch(ctx, stream, b, sharedSSTs, externalSSTs, transitionFromSharedToRegularReplicate, timingTag); err != nil {
 			return err
 		}
 		bLen := int64(b.Len())
@@ -758,7 +775,8 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		recordBytesSent(bLen)
 		b.Close()
 		b = nil
-		ssts = ssts[:0]
+		sharedSSTs = sharedSSTs[:0]
+		externalSSTs = externalSSTs[:0]
 		transitionFromSharedToRegularReplicate = false
 		return nil
 	}
@@ -774,8 +792,9 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// non-system range, take advantage of shared storage to minimize the amount
 	// of data we're iterating on and sending over the network.
 	sharedReplicate := header.SharedReplicate && rditer.IterateReplicaKeySpansShared != nil
+	externalReplicate := header.ExternalReplicate && rditer.IterateReplicaKeySpansShared != nil
 	replicatedFilter := rditer.ReplicatedSpansAll
-	if sharedReplicate {
+	if sharedReplicate || externalReplicate {
 		replicatedFilter = rditer.ReplicatedSpansExcludeUser
 	}
 
@@ -840,7 +859,56 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	}
 
 	var valBuf []byte
-	if sharedReplicate {
+	if sharedReplicate || externalReplicate {
+		var sharedVisitor func(sst *pebble.SharedSSTMeta) error
+		if sharedReplicate {
+			sharedVisitor = func(sst *pebble.SharedSSTMeta) error {
+				sharedSSTCount++
+				snap.sharedBackings = append(snap.sharedBackings, sst.Backing)
+				backing, err := sst.Backing.Get()
+				if err != nil {
+					return err
+				}
+				ikeyToPb := func(ik pebble.InternalKey) *kvserverpb.SnapshotRequest_SharedTable_InternalKey {
+					return &kvserverpb.SnapshotRequest_SharedTable_InternalKey{
+						UserKey: ik.UserKey,
+						Trailer: ik.Trailer,
+					}
+				}
+				sharedSSTs = append(sharedSSTs, kvserverpb.SnapshotRequest_SharedTable{
+					Backing:          backing,
+					Smallest:         ikeyToPb(sst.Smallest),
+					Largest:          ikeyToPb(sst.Largest),
+					SmallestRangeKey: ikeyToPb(sst.SmallestRangeKey),
+					LargestRangeKey:  ikeyToPb(sst.LargestRangeKey),
+					SmallestPointKey: ikeyToPb(sst.SmallestPointKey),
+					LargestPointKey:  ikeyToPb(sst.LargestPointKey),
+					Level:            int32(sst.Level),
+					Size_:            sst.Size,
+				})
+				return nil
+			}
+		}
+		var externalVisitor func(sst *pebble.ExternalFile) error
+		if externalReplicate {
+			externalVisitor = func(sst *pebble.ExternalFile) error {
+				externalSSTCount++
+				externalSSTs = append(externalSSTs, kvserverpb.SnapshotRequest_ExternalTable{
+					Locator:           []byte(sst.Locator),
+					ObjectName:        sst.ObjName,
+					Size_:             sst.Size,
+					StartKey:          sst.StartKey,
+					EndKey:            sst.EndKey,
+					EndKeyIsInclusive: sst.EndKeyIsInclusive,
+					HasPointKey:       sst.HasPointKey,
+					HasRangeKey:       sst.HasRangeKey,
+					SyntheticPrefix:   sst.SyntheticPrefix,
+					SyntheticSuffix:   sst.SyntheticSuffix,
+					Level:             int32(sst.Level),
+				})
+				return nil
+			}
+		}
 		err := rditer.IterateReplicaKeySpansShared(ctx, snap.State.Desc, kvSS.st, kvSS.clusterID, snap.EngineSnap, func(key *pebble.InternalKey, value pebble.LazyValue, _ pebble.IteratorLevel) error {
 			kvs++
 			if b == nil {
@@ -884,32 +952,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				}
 			}
 			return maybeFlushBatch()
-		}, func(sst *pebble.SharedSSTMeta) error {
-			sharedSSTs++
-			snap.sharedBackings = append(snap.sharedBackings, sst.Backing)
-			backing, err := sst.Backing.Get()
-			if err != nil {
-				return err
-			}
-			ikeyToPb := func(ik pebble.InternalKey) *kvserverpb.SnapshotRequest_SharedTable_InternalKey {
-				return &kvserverpb.SnapshotRequest_SharedTable_InternalKey{
-					UserKey: ik.UserKey,
-					Trailer: ik.Trailer,
-				}
-			}
-			ssts = append(ssts, kvserverpb.SnapshotRequest_SharedTable{
-				Backing:          backing,
-				Smallest:         ikeyToPb(sst.Smallest),
-				Largest:          ikeyToPb(sst.Largest),
-				SmallestRangeKey: ikeyToPb(sst.SmallestRangeKey),
-				LargestRangeKey:  ikeyToPb(sst.LargestRangeKey),
-				SmallestPointKey: ikeyToPb(sst.SmallestPointKey),
-				LargestPointKey:  ikeyToPb(sst.LargestPointKey),
-				Level:            int32(sst.Level),
-				Size_:            sst.Size,
-			})
-			return nil
-		})
+		}, sharedVisitor, externalVisitor)
 		if err != nil && errors.Is(err, pebble.ErrInvalidSkipSharedIteration) {
 			transitionFromSharedToRegularReplicate = true
 			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
@@ -928,7 +971,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	timingTag.stop("totalTime")
 	log.Eventf(ctx, "finished sending snapshot batches, sent a total of %d bytes", bytesSent)
 
-	kvSS.status = redact.Sprintf("kvs=%d rangeKVs=%d sharedSSTs=%d", kvs, rangeKVs, sharedSSTs)
+	kvSS.status = redact.Sprintf("kvs=%d rangeKVs=%d sharedSSTs=%d, externalSSTs=%d", kvs, rangeKVs, sharedSSTCount, externalSSTCount)
 	return bytesSent, nil
 }
 
@@ -936,7 +979,8 @@ func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 	ctx context.Context,
 	stream outgoingSnapshotStream,
 	batch storage.WriteBatch,
-	ssts []kvserverpb.SnapshotRequest_SharedTable,
+	sharedSSTs []kvserverpb.SnapshotRequest_SharedTable,
+	externalSSTs []kvserverpb.SnapshotRequest_ExternalTable,
 	transitionToRegularReplicate bool,
 	timerTag *snapshotTimingTag,
 ) error {
@@ -949,7 +993,8 @@ func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 	timerTag.start("send")
 	res := stream.Send(&kvserverpb.SnapshotRequest{
 		KVBatch:                                batch.Repr(),
-		SharedTables:                           ssts,
+		SharedTables:                           sharedSSTs,
+		ExternalTables:                         externalSSTs,
 		TransitionFromSharedToRegularReplicate: transitionToRegularReplicate,
 	})
 	timerTag.stop("send")
@@ -1401,14 +1446,11 @@ func (s *Store) receiveSnapshot(
 		if header.SenderQueueName == kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE {
 			s.metrics.RangeSnapshotRecoveryRcvdBytes.Inc(inc)
 		} else if header.SenderQueueName == kvserverpb.SnapshotRequest_OTHER {
-			// OTHER snapshots are sent by Replica.ChangeReplicas but are not used for
-			// recovery, but do have various uses (user, pre-merge, store rebalancer).
-			// They are all bucketed under the Rebalance bucket.
 			s.metrics.RangeSnapshotRebalancingRcvdBytes.Inc(inc)
 		} else {
-			// SnapshotRequest_REPLICATE_QUEUE sends both recovery and rebalance
-			// snapshots. Split based on whether the priority is set. Priority 0 means
-			// it is used for rebalance.
+			// TODO(baptist): This logic is pretty messy. Consider refactoring all the
+			// snapshot related metrics.
+			// Replicate queue does both types, so split based on priority.
 			// See AllocatorAction.Priority
 			if header.SenderQueuePriority > 0 {
 				s.metrics.RangeSnapshotRecoveryRcvdBytes.Inc(inc)
@@ -1498,17 +1540,6 @@ var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	settings.ByteSizeWithMinimum(minSnapshotRate),
 	settings.WithPublic,
 )
-
-// TODO(baptist): Remove in v24.1, no longer read in v23.2.
-func init() {
-	_ = settings.RegisterByteSizeSetting(
-		settings.SystemOnly,
-		"kv.snapshot_recovery.max_rate",
-		"use kv.snapshot_rebalance.max_rate instead",
-		32<<20, // 32mb/s
-		settings.Retired,
-	)
-}
 
 // snapshotSenderBatchSize is the size that key-value batches are allowed to
 // grow to during Range snapshots before being sent to the receiver. This limit

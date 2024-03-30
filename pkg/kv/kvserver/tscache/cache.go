@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -66,6 +67,10 @@ type Cache interface {
 	// intervals from any transactions in the cache, the low water timestamp is
 	// returned for the read timestamps.
 	GetMax(ctx context.Context, start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
+
+	// Serialize returns a serialized representation of the Cache over the
+	// interval spanning from start to end.
+	Serialize(ctx context.Context, start, end roachpb.Key) rspb.Segment
 
 	// Metrics returns the Cache's metrics struct.
 	Metrics() Metrics

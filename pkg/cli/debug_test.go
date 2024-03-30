@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -37,7 +38,7 @@ func createStore(t *testing.T, path string) {
 	t.Helper()
 	db, err := storage.Open(
 		context.Background(),
-		storage.Filesystem(path),
+		fs.MustInitPhysicalTestingEnv(path),
 		cluster.MakeClusterSettings(),
 		storage.CacheSize(server.DefaultCacheSize))
 	if err != nil {
@@ -59,24 +60,20 @@ func TestOpenReadOnlyStore(t *testing.T) {
 	createStore(t, storePath)
 
 	for _, test := range []struct {
-		readOnly bool
-		expErr   string
+		rw     fs.RWMode
+		expErr string
 	}{
 		{
-			readOnly: false,
-			expErr:   "",
+			rw:     fs.ReadWrite,
+			expErr: "",
 		},
 		{
-			readOnly: true,
-			expErr:   `Not supported operation in read only mode|pebble: read-only`,
+			rw:     fs.ReadOnly,
+			expErr: `Not supported operation in read only mode|pebble: read-only`,
 		},
 	} {
-		t.Run(fmt.Sprintf("readOnly=%t", test.readOnly), func(t *testing.T) {
-			var opts []storage.ConfigOption
-			if test.readOnly {
-				opts = append(opts, storage.ReadOnly)
-			}
-			db, err := OpenEngine(storePath, stopper, opts...)
+		t.Run(fmt.Sprintf("readOnly=%t", test.rw == fs.ReadOnly), func(t *testing.T) {
+			db, err := OpenEngine(storePath, stopper, test.rw)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -57,10 +57,6 @@ go_test(
         "lock_waiter_test.go",
         "locking_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":lock",
         "//pkg/kv/kvserver/concurrency/isolation",

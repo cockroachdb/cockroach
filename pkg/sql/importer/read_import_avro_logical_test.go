@@ -70,7 +70,7 @@ type avroLogicalInfo struct {
 }
 
 func logicalEncoder(datum tree.Datum, avroType string) (ans interface{}, err error) {
-	if datum.ResolvedType() == types.Unknown {
+	if datum.ResolvedType().Family() == types.UnknownFamily {
 		return nil, nil
 	}
 	switch datum.ResolvedType().Family() {
@@ -281,7 +281,7 @@ func TestImportAvroLogicalTypes(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	success := false
 	for i := 1; i <= 5; i++ {
-		numRowsInserted, err := randgen.PopulateTableWithRandData(rng, db, origTableName, 30)
+		numRowsInserted, err := randgen.PopulateTableWithRandData(rng, db, origTableName, 30, nil)
 		require.NoError(t, err)
 		if numRowsInserted > 5 {
 			success = true
@@ -296,7 +296,7 @@ func TestImportAvroLogicalTypes(t *testing.T) {
 		"",
 		nil,
 		sessiondata.InternalExecutorOverride{
-			User:     username.RootUserName(),
+			User:     username.NodeUserName(),
 			Database: "log"},
 		fmt.Sprintf("SELECT * FROM %s", origTableName))
 	require.NoError(t, err, "failed to pull datums from table")

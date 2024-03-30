@@ -11,9 +11,5 @@ go_test(
     name = "trigram_test",
     srcs = ["trigram_test.go"],
     embed = [":trigram"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = ["@com_github_stretchr_testify//assert"],
 )

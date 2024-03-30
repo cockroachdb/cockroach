@@ -18,10 +18,6 @@ go_test(
         "tpcc_bench_test.go",
     ],
     embed = [":tpcc"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/kv/kvserver/logstore",

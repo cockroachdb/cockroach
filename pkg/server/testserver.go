@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -149,13 +148,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.Settings == nil {
 		st = cluster.MakeClusterSettings()
 	}
-
-	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
-	// Remove in v23.2.
-	deprecatedshowranges.ShowRangesDeprecatedBehaviorSetting.Override(
-		context.TODO(), &st.SV,
-		// In unit tests, we exercise the new behavior.
-		false)
 
 	st.ExternalIODir = params.ExternalIODir
 	tr := params.Tracer
@@ -265,9 +257,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	if params.SnapshotSendLimit != 0 {
 		cfg.SnapshotSendLimit = params.SnapshotSendLimit
-	}
-	if params.AutoConfigProvider != nil {
-		cfg.AutoConfigProvider = params.AutoConfigProvider
 	}
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
@@ -1644,13 +1633,6 @@ func (ts *testServer) StartTenant(
 	if st == nil {
 		st = cluster.MakeTestingClusterSettings()
 	}
-
-	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
-	// Remove in v23.2.
-	deprecatedshowranges.ShowRangesDeprecatedBehaviorSetting.Override(
-		context.TODO(), &st.SV,
-		// In unit tests, we exercise the new behavior.
-		false)
 
 	st.ExternalIODir = params.ExternalIODir
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)

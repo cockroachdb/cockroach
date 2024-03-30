@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1119,6 +1120,17 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 				t.Errorf("Invalid lock spans: %+v; expected %+v", et.LockSpans, expectedLockSpans)
 			}
 			br.Txn.Status = roachpb.COMMITTED
+		} else {
+			// Pre-EndTxn requests.
+			require.Len(t, ba.Requests, 1)
+			if sArgs, ok := ba.GetArg(kvpb.Scan); ok {
+				require.Equal(t, lock.Shared, sArgs.(*kvpb.ScanRequest).KeyLockingStrength)
+				br.Responses[0].GetScan().Rows = []roachpb.KeyValue{{Key: roachpb.Key("a")}}
+			}
+			if drArgs, ok := ba.GetArg(kvpb.DeleteRange); ok {
+				require.True(t, drArgs.(*kvpb.DeleteRangeRequest).ReturnKeys)
+				br.Responses[0].GetDeleteRange().Keys = []roachpb.Key{roachpb.Key("u"), roachpb.Key("w")}
+			}
 		}
 		return br, nil
 	}
@@ -1138,7 +1150,8 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	db := kv.NewDB(ambient, factory, clock, stopper)
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
-	// Acquire locks on a-b, c, m, u-w before the final batch.
+	// Acquire locks on a, c, m, u, x before the final batch.
+	// NOTE: ScanForShare finds and locks "a" (see senderFn).
 	_, pErr := txn.ScanForShare(
 		ctx, roachpb.Key("a"), roachpb.Key("b"), 0, kvpb.GuaranteedDurability,
 	)
@@ -1149,31 +1162,34 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
+	// NOTE: GetForUpdate does not find a key to lock.
 	_, pErr = txn.GetForUpdate(ctx, roachpb.Key("m"), kvpb.GuaranteedDurability)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	_, pErr = txn.DelRange(ctx, roachpb.Key("u"), roachpb.Key("w"), false /* returnKeys */)
+	// NOTE: DelRange finds and locks "u" and "w" (see senderFn).
+	_, pErr = txn.DelRange(ctx, roachpb.Key("u"), roachpb.Key("x"), false /* returnKeys */)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	// The final batch overwrites key c, reads key n, and overlaps part of the a-b and u-w ranges.
+	// The final batch overwrites key c, reads key n, and overlaps w with the v-z range.
 	b := txn.NewBatch()
 	b.Put(roachpb.Key("b"), []byte("value"))
-	b.Put(roachpb.Key("c"), []byte("value"))
-	b.Put(roachpb.Key("d"), []byte("value"))
+	b.DelRange(roachpb.Key("c"), roachpb.Key("e"), true /* returnKeys */)
+	b.Put(roachpb.Key("f"), []byte("value"))
 	b.GetForUpdate(roachpb.Key("n"), kvpb.GuaranteedDurability)
 	b.ReverseScanForShare(roachpb.Key("v"), roachpb.Key("z"), kvpb.GuaranteedDurability)
 
-	// The expected locks are a-b, c, m, n, and u-z.
+	// The expected locks are a, b, c-e, f, n, u, and v-z.
 	expectedLockSpans = []roachpb.Span{
-		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b").Next()},
-		{Key: roachpb.Key("c"), EndKey: nil},
-		{Key: roachpb.Key("d"), EndKey: nil},
-		{Key: roachpb.Key("m"), EndKey: nil},
+		{Key: roachpb.Key("a"), EndKey: nil},
+		{Key: roachpb.Key("b"), EndKey: nil},
+		{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")},
+		{Key: roachpb.Key("f"), EndKey: nil},
 		{Key: roachpb.Key("n"), EndKey: nil},
-		{Key: roachpb.Key("u"), EndKey: roachpb.Key("z")},
+		{Key: roachpb.Key("u"), EndKey: nil},
+		{Key: roachpb.Key("v"), EndKey: roachpb.Key("z")},
 	}
 
 	pErr = txn.CommitInBatch(ctx, b)
@@ -1986,6 +2002,15 @@ func TestCommitMutatingTransaction(t *testing.T) {
 		if !bytes.Equal(ba.Txn.Key, roachpb.Key("a")) {
 			t.Errorf("expected transaction key to be \"a\"; got %s", ba.Txn.Key)
 		}
+
+		if _, ok := ba.GetArg(kvpb.DeleteRange); ok {
+			// Simulate deleting a single key for DeleteRange requests. Unlike other
+			// point writes, pipelined DeleteRange writes are tracked by looking at
+			// the batch response.
+			resp := br.Responses[0].GetInner()
+			resp.(*kvpb.DeleteRangeResponse).Keys = []roachpb.Key{roachpb.Key("a")}
+		}
+
 		if et, ok := ba.GetArg(kvpb.EndTxn); ok {
 			if !et.(*kvpb.EndTxnRequest).Commit {
 				t.Errorf("expected commit to be true")
@@ -2009,61 +2034,178 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	testArgs := []struct {
 		f         func(ctx context.Context, txn *kv.Txn) error
 		expMethod kvpb.Method
-		// pointWrite is set if the method is a "point write", which means that it
-		// will be pipelined and we should expect a QueryIntent request at commit
-		// time.
-		pointWrite bool
+		// All retryable functions below involve writing to exactly one key. The
+		// write will be pipelined if it's not in the same batch as the
+		// EndTxnRequest, in which case we expect a single QueryIntent request to be
+		// added when trying to commit the transaction.
+		expQueryIntent bool
 	}{
 		{
-			f:          func(ctx context.Context, txn *kv.Txn) error { return txn.Put(ctx, "a", "b") },
-			expMethod:  kvpb.Put,
-			pointWrite: true,
+			f:              func(ctx context.Context, txn *kv.Txn) error { return txn.Put(ctx, "a", "b") },
+			expMethod:      kvpb.Put,
+			expQueryIntent: true,
 		},
 		{
-			f:          func(ctx context.Context, txn *kv.Txn) error { return txn.CPut(ctx, "a", "b", nil) },
-			expMethod:  kvpb.ConditionalPut,
-			pointWrite: true,
+			f: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.Put("a", "b")
+				return txn.CommitInBatch(ctx, b)
+			},
+			expMethod: kvpb.Put,
+		},
+		{
+			f:              func(ctx context.Context, txn *kv.Txn) error { return txn.CPut(ctx, "a", "b", nil) },
+			expMethod:      kvpb.ConditionalPut,
+			expQueryIntent: true,
+		},
+		{
+			f: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.CPut("a", "b", nil)
+				return txn.CommitInBatch(ctx, b)
+			},
+			expMethod: kvpb.ConditionalPut,
 		},
 		{
 			f: func(ctx context.Context, txn *kv.Txn) error {
 				_, err := txn.Inc(ctx, "a", 1)
 				return err
 			},
-			expMethod:  kvpb.Increment,
-			pointWrite: true,
+			expMethod:      kvpb.Increment,
+			expQueryIntent: true,
+		},
+		{
+			f: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.Inc("a", 1)
+				return txn.CommitInBatch(ctx, b)
+			},
+			expMethod: kvpb.Increment,
 		},
 		{
 			f: func(ctx context.Context, txn *kv.Txn) error {
 				_, err := txn.Del(ctx, "a")
 				return err
 			},
-			expMethod:  kvpb.Delete,
-			pointWrite: true,
+			expMethod:      kvpb.Delete,
+			expQueryIntent: true,
+		},
+		{
+			f: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.Del("a")
+				return txn.CommitInBatch(ctx, b)
+			},
+			expMethod: kvpb.Delete,
 		},
 		{
 			f: func(ctx context.Context, txn *kv.Txn) error {
 				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
-			expMethod:  kvpb.DeleteRange,
-			pointWrite: false,
+			expMethod:      kvpb.DeleteRange,
+			expQueryIntent: true,
+		},
+		{
+			f: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.DelRange("a", "b", false /* returnKeys */)
+				return txn.CommitInBatch(ctx, b)
+			},
+			expMethod:      kvpb.DeleteRange,
+			expQueryIntent: false,
 		},
 	}
-	for i, test := range testArgs {
+	for _, test := range testArgs {
 		t.Run(test.expMethod.String(), func(t *testing.T) {
 			calls = nil
 			db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
-			if err := db.Txn(ctx, test.f); err != nil {
-				t.Fatalf("%d: unexpected error on commit: %s", i, err)
-			}
+			require.NoError(t, db.Txn(ctx, test.f))
 			expectedCalls := []kvpb.Method{test.expMethod}
-			if test.pointWrite {
+			if test.expQueryIntent {
 				expectedCalls = append(expectedCalls, kvpb.QueryIntent)
 			}
 			expectedCalls = append(expectedCalls, kvpb.EndTxn)
-			if !reflect.DeepEqual(expectedCalls, calls) {
-				t.Fatalf("%d: expected %s, got %s", i, expectedCalls, calls)
+			require.Equal(t, expectedCalls, calls)
+		})
+	}
+}
+
+// TestCommitNoopDeleteRangeTransaction ensures that committing a no-op
+// DeleteRange transaction works correctly. In particular, the EndTxn request is
+// elided, if possible.
+func TestCommitNoopDeleteRangeTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(nil)
+	ambient := log.MakeTestingAmbientCtxWithNewTracer()
+	sender := &mockSender{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	var calls []kvpb.Method
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		br := ba.CreateReply()
+		br.Txn = ba.Txn.Clone()
+
+		calls = append(calls, ba.Methods()...)
+		if !bytes.Equal(ba.Txn.Key, roachpb.Key("a")) {
+			t.Errorf("expected transaction key to be \"a\"; got %s", ba.Txn.Key)
+		}
+		if et, ok := ba.GetArg(kvpb.EndTxn); ok {
+			if !et.(*kvpb.EndTxnRequest).Commit {
+				t.Errorf("expected commit to be true")
 			}
+			br.Txn.Status = roachpb.COMMITTED
+		}
+
+		// Don't return any keys in the DeleteRange response, which simulates what a
+		// no-op DeleteRange looks like from the client's perspective.
+		return br, nil
+	})
+
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
+			AmbientCtx: ambient,
+			Clock:      clock,
+			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
+		},
+		sender,
+	)
+
+	testCases := []struct {
+		f           func(ctx context.Context, txn *kv.Txn) error
+		elideEndTxn bool
+	}{
+		{
+			f: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.DelRange(ctx, "a", "d", true /* returnKeys */)
+				return err
+			},
+			elideEndTxn: true,
+		},
+		{
+			f: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.DelRange("a", "b", true /* returnKeys */)
+				return txn.CommitInBatch(ctx, b)
+			},
+			elideEndTxn: false,
+		},
+	}
+
+	for i, test := range testCases {
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			calls = nil
+			db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
+			require.NoError(t, db.Txn(ctx, test.f))
+			expectedCalls := []kvpb.Method{kvpb.DeleteRange}
+			if !test.elideEndTxn {
+				expectedCalls = append(expectedCalls, kvpb.EndTxn)
+			}
+			require.Equal(t, expectedCalls, calls)
 		})
 	}
 }

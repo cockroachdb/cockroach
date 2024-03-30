@@ -18,13 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/tracker"
 )
 
 func (r *Replica) maybeAcquireProposalQuota(
@@ -62,7 +61,7 @@ func (r *Replica) maybeAcquireProposalQuota(
 
 	// Trace if we're running low on available proposal quota; it might explain
 	// why we're taking so long.
-	if log.HasSpanOrEvent(ctx) {
+	if log.HasSpan(ctx) {
 		if q := quotaPool.ApproximateQuota(); q < quotaPool.Capacity()/10 {
 			log.Eventf(ctx, "quota running low, currently available ~%d", q)
 		}
@@ -89,6 +88,7 @@ var logSlowRaftProposalQuotaAcquisition = quotapool.OnSlowAcquisition(
 func (r *Replica) updateProposalQuotaRaftMuLocked(
 	ctx context.Context, lastLeaderID roachpb.ReplicaID,
 ) {
+	now := r.Clock().PhysicalTime()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -119,7 +119,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 				logSlowRaftProposalQuotaAcquisition,
 			)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
-			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Descriptors(), timeutil.Now())
+			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Descriptors(), now)
 			r.mu.replicaFlowControlIntegration.onBecameLeader(ctx)
 			r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 		} else if r.mu.proposalQuota != nil {
@@ -143,9 +143,8 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	}
 
 	// We're still the leader.
-
 	// Find the minimum index that active followers have acknowledged.
-	now := timeutil.Now()
+
 	// commitIndex is used to determine whether a newly added replica has fully
 	// caught up.
 	commitIndex := kvpb.RaftIndex(status.Commit)

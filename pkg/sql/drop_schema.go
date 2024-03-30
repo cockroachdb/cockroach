@@ -51,11 +51,6 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		return nil, err
 	}
 
-	isAdmin, err := p.HasAdminRole(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	d := newDropCascadeState()
 
 	// Collect all schemas to be deleted.
@@ -93,7 +88,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 			if err != nil {
 				return nil, err
 			}
-			if !(isAdmin || hasOwnership) {
+			if !hasOwnership {
 				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 					"must be owner of schema %s", tree.Name(sc.GetName()))
 			}
@@ -117,7 +112,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 
 	}
 
-	if err := d.resolveCollectedObjects(ctx, p); err != nil {
+	if err := d.resolveCollectedObjects(ctx, false /*dropDatabase*/, p); err != nil {
 		return nil, err
 	}
 

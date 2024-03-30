@@ -19,24 +19,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
 const zipfMax uint64 = 100000
-
-func makeStorageConfig(path string) base.StorageConfig {
-	return base.StorageConfig{
-		Dir:      path,
-		Settings: cluster.MakeTestingClusterSettings(),
-	}
-}
 
 func rngIntRange(rng *rand.Rand, min int64, max int64) int64 {
 	return min + rng.Int63n(max-min)
@@ -47,21 +40,24 @@ type engineConfig struct {
 	opts *pebble.Options
 }
 
-func (e *engineConfig) create(path string, fs vfs.FS) (storage.Engine, error) {
-	pebbleConfig := storage.PebbleConfig{
-		StorageConfig: makeStorageConfig(path),
-		Opts:          e.opts,
+func (e *engineConfig) create(path string, baseFS vfs.FS) (storage.Engine, error) {
+	env, err := fs.InitEnv(context.Background(), baseFS, path, fs.EnvConfig{})
+	if err != nil {
+		return nil, err
 	}
-	if pebbleConfig.Opts == nil {
-		pebbleConfig.Opts = storage.DefaultPebbleOptions()
-	}
-	if fs != nil {
-		pebbleConfig.Opts.FS = fs
-	}
-	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
-	defer pebbleConfig.Opts.Cache.Unref()
 
-	return storage.NewPebble(context.Background(), pebbleConfig)
+	var configOpts []storage.ConfigOption
+	configOpts = append(configOpts, storage.CacheSize(1<<20))
+	e.opts.EnsureDefaults()
+	if e.opts != nil {
+		configOpts = append(configOpts, storage.PebbleOptions(e.opts.String(), parseHooks))
+	}
+	eng, err := storage.Open(context.Background(), env, cluster.MakeTestingClusterSettings(), configOpts...)
+	if err != nil {
+		env.Close()
+		return nil, err
+	}
+	return eng, nil
 }
 
 var _ fmt.Stringer = &engineConfig{}

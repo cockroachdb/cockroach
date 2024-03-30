@@ -11,12 +11,10 @@
 package tree
 
 import (
-	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -85,7 +83,7 @@ type CreateRoutine struct {
 	Replace     bool
 	Name        RoutineName
 	Params      RoutineParams
-	ReturnType  RoutineReturnType
+	ReturnType  *RoutineReturnType
 	Options     RoutineOptions
 	RoutineBody *RoutineBody
 	// BodyStatements is not assigned during initial parsing of user input. It's
@@ -114,7 +112,7 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(node.Params)
 	ctx.WriteString(")\n\t")
-	if !node.IsProcedure {
+	if !node.IsProcedure && node.ReturnType != nil {
 		ctx.WriteString("RETURNS ")
 		if node.ReturnType.SetOf {
 			ctx.WriteString("SETOF ")
@@ -359,18 +357,18 @@ type RoutineParam struct {
 // Format implements the NodeFormatter interface.
 func (node *RoutineParam) Format(ctx *FmtCtx) {
 	switch node.Class {
+	case RoutineParamDefault:
 	case RoutineParamIn:
-		ctx.WriteString("IN")
+		ctx.WriteString("IN ")
 	case RoutineParamOut:
-		ctx.WriteString("OUT")
+		ctx.WriteString("OUT ")
 	case RoutineParamInOut:
-		ctx.WriteString("INOUT")
+		ctx.WriteString("INOUT ")
 	case RoutineParamVariadic:
-		ctx.WriteString("VARIADIC")
+		ctx.WriteString("VARIADIC ")
 	default:
 		panic(pgerror.New(pgcode.InvalidParameterValue, "unknown routine option"))
 	}
-	ctx.WriteString(" ")
 	if node.Name != "" {
 		ctx.FormatNode(&node.Name)
 		ctx.WriteString(" ")
@@ -386,8 +384,11 @@ func (node *RoutineParam) Format(ctx *FmtCtx) {
 type RoutineParamClass int
 
 const (
+	// RoutineParamDefault indicates that RoutineParamClass was unspecified
+	// (in almost all cases it is equivalent to RoutineParamIn).
+	RoutineParamDefault RoutineParamClass = iota
 	// RoutineParamIn args can only be used as input.
-	RoutineParamIn RoutineParamClass = iota
+	RoutineParamIn
 	// RoutineParamOut args can only be used as output.
 	RoutineParamOut
 	// RoutineParamInOut args can be used as both input and output.
@@ -395,6 +396,40 @@ const (
 	// RoutineParamVariadic args are variadic.
 	RoutineParamVariadic
 )
+
+// IsInParamClass returns true if the given parameter class specifies an input
+// parameter (i.e. either unspecified, IN or, INOUT).
+func IsInParamClass(class RoutineParamClass) bool {
+	switch class {
+	case RoutineParamDefault, RoutineParamIn, RoutineParamInOut:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsOutParamClass returns true if the given parameter class specifies an output
+// parameter (i.e. either OUT or INOUT).
+func IsOutParamClass(class RoutineParamClass) bool {
+	switch class {
+	case RoutineParamOut, RoutineParamInOut:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsInParam returns true if the parameter is an input parameter (i.e. either IN
+// or INOUT).
+func (node *RoutineParam) IsInParam() bool {
+	return IsInParamClass(node.Class)
+}
+
+// IsOutParam returns true if the parameter is an output parameter (i.e. either
+// OUT or INOUT).
+func (node *RoutineParam) IsOutParam() bool {
+	return IsOutParamClass(node.Class)
+}
 
 // RoutineReturnType represent the return type of UDF.
 type RoutineReturnType struct {
@@ -455,27 +490,6 @@ func (node *RoutineObj) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Params)
 		ctx.WriteString(")")
 	}
-}
-
-// ParamTypes returns a slice of parameter types of the routine.
-func (node RoutineObj) ParamTypes(
-	ctx context.Context, res TypeReferenceResolver,
-) ([]*types.T, error) {
-	// TODO(#100405): handle INOUT, OUT and VARIADIC argument classes when we
-	// support them. This is because only IN and INOUT arg types need to be
-	// considered to match a overload.
-	var argTypes []*types.T
-	if node.Params != nil {
-		argTypes = make([]*types.T, len(node.Params))
-		for i, arg := range node.Params {
-			typ, err := ResolveType(ctx, arg.Type, res)
-			if err != nil {
-				return nil, err
-			}
-			argTypes[i] = typ
-		}
-	}
-	return argTypes, nil
 }
 
 // AlterFunctionOptions represents a ALTER FUNCTION...action statement.

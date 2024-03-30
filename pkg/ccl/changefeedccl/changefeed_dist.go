@@ -10,12 +10,15 @@ package changefeedccl
 
 import (
 	"context"
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,8 +38,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -240,6 +246,9 @@ func startDistChangefeed(
 	if err != nil {
 		return err
 	}
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.Infof(ctx, "tracked spans: %s", trackedSpans)
+	}
 	localState.trackedSpans = trackedSpans
 
 	// Changefeed flows handle transactional consistency themselves.
@@ -350,6 +359,12 @@ var RangeDistributionStrategy = settings.RegisterEnumSetting(
 	},
 	settings.WithPublic)
 
+var useBulkOracle = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.random_replica_selection.enabled",
+	"randomize the selection of which replica backs up each range",
+	true)
+
 func makePlan(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
@@ -364,10 +379,10 @@ func makePlan(
 		maybeCfKnobs, haveKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 		var blankTxn *kv.Txn
 
-		distMode := sql.DistributionTypeAlways
+		distMode := sql.FullDistribution
 		if details.SinkURI == `` {
 			// Sinkless feeds get one ChangeAggregator on this node.
-			distMode = sql.DistributionTypeNone
+			distMode = sql.LocalDistribution
 		}
 
 		var locFilter roachpb.Locality
@@ -378,23 +393,35 @@ func makePlan(
 		}
 
 		rangeDistribution := RangeDistributionStrategy.Get(sv)
+		evalCtx := execCtx.ExtendedEvalContext()
 		oracle := replicaoracle.NewOracle(replicaOracleChoice, dsp.ReplicaOracleConfig(locFilter))
+		if useBulkOracle.Get(&evalCtx.Settings.SV) {
+			log.Infof(ctx, "using bulk oracle for DistSQL planning")
+			oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), locFilter, kvfollowerreadsccl.StreakConfig{})
+		}
 		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
 			blankTxn, sql.DistributionType(distMode), oracle, locFilter)
 		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans)
 		if err != nil {
 			return nil, nil, err
 		}
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
+		}
 		switch {
-		case distMode == sql.DistributionTypeNone || rangeDistribution == int64(defaultDistribution):
+		case distMode == sql.LocalDistribution || rangeDistribution == int64(defaultDistribution):
 		case rangeDistribution == int64(balancedSimpleDistribution):
+			log.Infof(ctx, "rebalancing ranges using balanced simple distribution")
 			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
-
+			ri := kvcoord.MakeRangeIterator(distSender)
 			spanPartitions, err = rebalanceSpanPartitions(
-				ctx, &distResolver{distSender}, rebalanceThreshold.Get(sv), spanPartitions)
+				ctx, &ri, rebalanceThreshold.Get(sv), spanPartitions)
 			if err != nil {
 				return nil, nil, err
+			}
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.Infof(ctx, "spans after balanced simple distribution rebalancing: %v", spanPartitions)
 			}
 		default:
 			return nil, nil, errors.AssertionFailedf("unsupported dist strategy %d and dist mode %d",
@@ -426,6 +453,9 @@ func makePlan(
 
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.Infof(ctx, "watched spans for node %d: %v", sp.SQLInstanceID, sp)
+			}
 			watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
 			for watchIdx, nodeSpan := range sp.Spans {
 				initialResolved := initialHighWater
@@ -533,6 +563,7 @@ func (w *changefeedResultWriter) Err() error {
 	return w.err
 }
 
+// TODO(#120427): improve this to be more useful.
 var rebalanceThreshold = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"changefeed.balance_range_distribution.sensitivity",
@@ -541,80 +572,178 @@ var rebalanceThreshold = settings.RegisterFloatSetting(
 	settings.PositiveFloat,
 )
 
-type rangeResolver interface {
-	getRangesForSpans(ctx context.Context, spans []roachpb.Span) ([]roachpb.Span, error)
+type rangeIterator interface {
+	Desc() *roachpb.RangeDescriptor
+	NeedAnother(rs roachpb.RSpan) bool
+	Valid() bool
+	Error() error
+	Next(ctx context.Context)
+	Seek(ctx context.Context, key roachpb.RKey, scanDir kvcoord.ScanDirection)
 }
 
-type distResolver struct {
-	*kvcoord.DistSender
+// rebalancingPartition is a container used to store a partition undergoing
+// rebalancing.
+type rebalancingPartition struct {
+	// These fields store the current number of ranges and spans in this partition.
+	// They are initialized corresponding to the sql.SpanPartition partition below
+	// and mutated during rebalancing.
+	numRanges int
+	group     roachpb.SpanGroup
+
+	// The original span partition corresponding to this bucket and its
+	// index in the original []sql.SpanPartition.
+	part sql.SpanPartition
+	pIdx int
 }
 
-func (r *distResolver) getRangesForSpans(
-	ctx context.Context, spans []roachpb.Span,
-) ([]roachpb.Span, error) {
-	spans, _, err := r.DistSender.AllRangeSpans(ctx, spans)
-	return spans, err
-}
+// Setting expensiveReblanceChecksEnabled = true will cause re-balancing to
+// panic if the output list of partitions does not cover the same keys as the
+// input list of partitions.
+var expensiveReblanceChecksEnabled = buildutil.CrdbTestBuild || envutil.EnvOrDefaultBool(
+	"COCKROACH_CHANGEFEED_TESTING_REBALANCING_CHECKS", false)
 
 func rebalanceSpanPartitions(
-	ctx context.Context, r rangeResolver, sensitivity float64, p []sql.SpanPartition,
+	ctx context.Context, ri rangeIterator, sensitivity float64, partitions []sql.SpanPartition,
 ) ([]sql.SpanPartition, error) {
-	if len(p) <= 1 {
-		return p, nil
+	if len(partitions) <= 1 {
+		return partitions, nil
 	}
 
-	// Explode set of spans into set of ranges.
-	// TODO(yevgeniy): This might not be great if the tables are huge.
-	numRanges := 0
-	for i := range p {
-		spans, err := r.getRangesForSpans(ctx, p[i].Spans)
-		if err != nil {
-			return nil, err
+	// Create partition builder structs for the partitions array above.
+	var builders = make([]rebalancingPartition, len(partitions))
+	var totalRanges int
+	for i, p := range partitions {
+		builders[i].part = p
+		builders[i].pIdx = i
+		nRanges, ok := p.NumRanges()
+		// We cannot rebalance if we're missing range information.
+		if !ok {
+			log.Warning(ctx, "skipping rebalance due to missing range info")
+			return partitions, nil
 		}
-		p[i].Spans = spans
-		numRanges += len(spans)
+		builders[i].numRanges = nRanges
+		totalRanges += nRanges
+		builders[i].group.Add(p.Spans...)
 	}
 
 	// Sort descending based on the number of ranges.
-	sort.Slice(p, func(i, j int) bool {
-		return len(p[i].Spans) > len(p[j].Spans)
+	sort.Slice(builders, func(i, j int) bool {
+		return builders[i].numRanges > builders[j].numRanges
 	})
 
-	targetRanges := int((1 + sensitivity) * float64(numRanges) / float64(len(p)))
+	targetRanges := int(math.Ceil((1 + sensitivity) * float64(totalRanges) / float64(len(partitions))))
+	to := len(builders) - 1
+	from := 0
 
-	for i, j := 0, len(p)-1; i < j && len(p[i].Spans) > targetRanges && len(p[j].Spans) < targetRanges; {
-		from, to := i, j
+	// In each iteration of the outer loop, check if `from` has too many ranges.
+	// If so, move them to other partitions which need more ranges
+	// starting from `to` and moving down. Otherwise, increment `from` and check
+	// again.
+	for ; from < to && builders[from].numRanges > targetRanges; from++ {
+		// numToMove is the number of ranges which need to be moved out of `from`
+		// to other partitions.
+		numToMove := builders[from].numRanges - targetRanges
+		count := 0
+		needMore := func() bool {
+			return count < numToMove
+		}
+		// Iterate over all the spans in `from`.
+		for spanIdx := 0; from < to && needMore() && spanIdx < len(builders[from].part.Spans); spanIdx++ {
+			sp := builders[from].part.Spans[spanIdx]
+			rSpan, err := keys.SpanAddr(sp)
+			if err != nil {
+				return nil, err
+			}
+			// Iterate over the ranges in the current span.
+			for ri.Seek(ctx, rSpan.Key, kvcoord.Ascending); from < to && needMore(); ri.Next(ctx) {
+				// Error check.
+				if !ri.Valid() {
+					return nil, ri.Error()
+				}
 
-		// Figure out how many ranges we can move.
-		numToMove := len(p[from].Spans) - targetRanges
-		canMove := targetRanges - len(p[to].Spans)
-		if numToMove <= canMove {
-			i++
-		}
-		if canMove <= numToMove {
-			numToMove = canMove
-			j--
-		}
-		if numToMove == 0 {
-			break
-		}
+				// Move one range from `from` to `to`.
+				count += 1
+				builders[from].numRanges -= 1
+				builders[to].numRanges += 1
+				// If the range boundaries are outside the original span, trim
+				// the range.
+				startKey := ri.Desc().StartKey
+				if startKey.Compare(rSpan.Key) == -1 {
+					startKey = rSpan.Key
+				}
+				endKey := ri.Desc().EndKey
+				if endKey.Compare(rSpan.EndKey) == 1 {
+					endKey = rSpan.EndKey
+				}
+				diff := roachpb.Span{
+					Key: startKey.AsRawKey(), EndKey: endKey.AsRawKey(),
+				}
+				builders[from].group.Sub(diff)
+				builders[to].group.Add(diff)
 
-		// Move numToMove spans from 'from' to 'to'.
-		idx := len(p[from].Spans) - numToMove
-		p[to].Spans = append(p[to].Spans, p[from].Spans[idx:]...)
-		p[from].Spans = p[from].Spans[:idx]
+				// Since we moved a range, `to` may have enough ranges.
+				// Decrement `to` until we find a new partition which needs more
+				// ranges.
+				for from < to && builders[to].numRanges >= targetRanges {
+					to--
+				}
+				// No more ranges in this span.
+				if !ri.NeedAnother(rSpan) {
+					break
+				}
+			}
+		}
 	}
 
-	// Collapse ranges into nice set of contiguous spans.
-	for i := range p {
-		var g roachpb.SpanGroup
-		g.Add(p[i].Spans...)
-		p[i].Spans = g.Slice()
+	// Overwrite the original partitions slice with the balanced partitions.
+	for _, b := range builders {
+		partitions[b.pIdx] = sql.MakeSpanPartitionWithRangeCount(
+			b.part.SQLInstanceID, b.group.Slice(), b.numRanges)
 	}
 
-	// Finally, re-sort based on the node id.
-	sort.Slice(p, func(i, j int) bool {
-		return p[i].SQLInstanceID < p[j].SQLInstanceID
-	})
-	return p, nil
+	if err := verifyPartitionsIfExpensiveChecksEnabled(builders, partitions, targetRanges); err != nil {
+		return nil, err
+	}
+
+	return partitions, nil
+}
+
+// verifyPartitionsIfExpensiveChecksEnabled panics if the output partitions
+// cover a different set of keys than the input partitions.
+func verifyPartitionsIfExpensiveChecksEnabled(
+	builderWithInputSpans []rebalancingPartition,
+	outputPartitions []sql.SpanPartition,
+	targetRanges int,
+) error {
+	if !expensiveReblanceChecksEnabled {
+		return nil
+	}
+	var originalSpansG roachpb.SpanGroup
+	var originalSpansArr []roachpb.Span
+	var newSpansG roachpb.SpanGroup
+	var newSpansArr []roachpb.Span
+	for _, b := range builderWithInputSpans {
+		originalSpansG.Add(b.part.Spans...)
+		originalSpansArr = append(originalSpansArr, b.part.Spans...)
+	}
+	for _, p := range outputPartitions {
+		if numRanges, ok := p.NumRanges(); !ok {
+			return changefeedbase.WithTerminalError(
+				errors.Newf("partition missing number of ranges info, partition: %v, partitions: %v", p, outputPartitions))
+		} else if numRanges > targetRanges {
+			return changefeedbase.WithTerminalError(
+				errors.Newf("found partition with too many ranges, target: %d, partition: %v, partitions: %v",
+					targetRanges, p, outputPartitions))
+		}
+
+		newSpansG.Add(p.Spans...)
+		newSpansArr = append(newSpansArr, p.Spans...)
+	}
+	// If the original spans enclose the new spans and the new spans enclose the original spans,
+	// then the two groups must cover exactly the same keys.
+	if !originalSpansG.Encloses(newSpansArr...) || !newSpansG.Encloses(originalSpansArr...) {
+		return changefeedbase.WithTerminalError(errors.Newf("incorrect rebalance. input spans: %v, output spans: %v",
+			originalSpansArr, newSpansArr))
+	}
+	return nil
 }

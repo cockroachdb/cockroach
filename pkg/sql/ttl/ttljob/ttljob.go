@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -50,7 +51,17 @@ type rowLevelTTLResumer struct {
 var _ jobs.Resumer = (*rowLevelTTLResumer)(nil)
 
 // Resume implements the jobs.Resumer interface.
-func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) error {
+func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (retErr error) {
+	defer func() {
+		if retErr == nil {
+			return
+		} else if joberror.IsPermanentBulkJobError(retErr) {
+			retErr = jobs.MarkAsPermanentJobError(retErr)
+		} else {
+			retErr = jobs.MarkAsRetryJobError(retErr)
+		}
+	}()
+
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	execCfg := jobExecCtx.ExecCfg()
 	db := execCfg.DB
@@ -194,7 +205,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		deleteBatchSize := ttlbase.GetDeleteBatchSize(settingsValues, rowLevelTTL)
 		selectRateLimit := ttlbase.GetSelectRateLimit(settingsValues, rowLevelTTL)
 		deleteRateLimit := ttlbase.GetDeleteRateLimit(settingsValues, rowLevelTTL)
-		disableChangefeedReplication := ttlbase.GetChangefeedReplicationDisabled(settingsValues)
+		disableChangefeedReplication := ttlbase.GetChangefeedReplicationDisabled(settingsValues, rowLevelTTL)
 		newTTLSpec := func(spans []roachpb.Span) *execinfrapb.TTLSpec {
 			return &execinfrapb.TTLSpec{
 				JobID:                        jobID,

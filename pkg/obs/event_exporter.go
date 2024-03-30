@@ -220,12 +220,6 @@ func NewEventsExporter(
 				Version: "1.0",
 			},
 		},
-		obspb.StatementInsightsStatsEvent: {
-			instrumentationScope: otel_pb.InstrumentationScope{
-				Name:    string(obspb.StatementInsightsStatsEvent),
-				Version: "1.0",
-			},
-		},
 	}
 	s.buf.mu.memAccount = memMonitor.MakeBoundAccount()
 	return s
@@ -305,7 +299,7 @@ func (s *EventsExporter) Start(ctx context.Context, stopper *stop.Stopper) error
 		defer func() {
 			_ = s.conn.Close() // nolint:grpcconnclose
 		}()
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		defer timer.Stop()
 		if s.flushInterval != 0 {
 			timer.Reset(s.flushInterval)

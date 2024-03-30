@@ -94,6 +94,9 @@ type KeyRewriter struct {
 	prefixes prefixRewriter
 	tenants  prefixRewriter
 	descs    map[descpb.ID]catalog.TableDescriptor
+	// alloc is used to amortize the cost of many small allocations for keys which
+	// change length during rewriting, preventing doing so in-place.
+	alloc []byte
 }
 
 // MakeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
@@ -179,14 +182,15 @@ func makeKeyRewriter(
 	sort.Slice(prefixes.rewrites, func(i, j int) bool {
 		return bytes.Compare(prefixes.rewrites[i].OldPrefix, prefixes.rewrites[j].OldPrefix) < 0
 	})
-	fromSystemTenant := false
-	// Only system tenant can restore a tenant from replication stream
+
+	fromSystemTenant := isFromSystemTenant(tenants)
 	if restoreTenantFromStream {
+		// Only the system tenant can restore a tenant from replication stream
 		fromSystemTenant = true
 	}
+	// Only system tenant can restore a tenant from replication stream
 	for i := range tenants {
 		if tenants[i] == isBackupFromSystemTenantRekey {
-			fromSystemTenant = true
 			continue
 		}
 		from, to := keys.MakeSQLCodec(tenants[i].OldID).TenantPrefix(), keys.MakeSQLCodec(tenants[i].NewID).TenantPrefix()
@@ -272,7 +276,25 @@ func (kr *KeyRewriter) RewriteKey(
 		copy(keyTenantPrefix, newTenantPrefix)
 		rekeyed = append(keyTenantPrefix, rekeyed...)
 	} else {
-		rekeyed = append(newTenantPrefix, rekeyed...)
+		// Prefix length changed so we cannot rewrite it in-place; instead allocate
+		// the new key off the allocation slab, refilling it if needed first.
+		l := len(newTenantPrefix) + len(rekeyed)
+		if len(kr.alloc) < l {
+			// If individual keys are huge, allocate only 16 at a time, so that they
+			// can be freed sooner (aliasing) and one key doesn't massively over-alloc
+			// by a factor of 256. Otherwise allocate 256 worth so we don't need to
+			// do this again for awhile.
+			if l > 1<<20 {
+				kr.alloc = make([]byte, l*16)
+			} else {
+				kr.alloc = make([]byte, l*256)
+			}
+		}
+		tmp := kr.alloc[:l:l]
+		kr.alloc = kr.alloc[l:]
+		copy(tmp, newTenantPrefix)
+		copy(tmp[len(newTenantPrefix):], rekeyed)
+		rekeyed = tmp
 	}
 
 	return rekeyed, ok, err

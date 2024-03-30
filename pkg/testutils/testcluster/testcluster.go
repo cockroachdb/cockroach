@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -54,7 +55,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3"
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
@@ -294,9 +294,7 @@ func NewTestCluster(
 				args.DefaultTestTenant, defaultTestTenantOptions)
 		}
 	}
-	tc.defaultTestTenantOptions = serverutils.ShouldStartDefaultTestTenant(
-		t, defaultTestTenantOptions, nodes > 1, /* multiNodeCluster */
-	)
+	tc.defaultTestTenantOptions = serverutils.ShouldStartDefaultTestTenant(t, defaultTestTenantOptions)
 
 	var firstListener net.Listener
 	for i := 0; i < nodes; i++ {
@@ -583,6 +581,7 @@ func (tc *TestCluster) AddServer(
 		if stk := serverArgs.Knobs.Store; stk != nil {
 			stkCopy = *stk.(*kvserver.StoreTestingKnobs)
 		}
+		stkCopy.DisableLeaseQueue = true
 		stkCopy.DisableSplitQueue = true
 		stkCopy.DisableMergeQueue = true
 		stkCopy.DisableReplicateQueue = true
@@ -1140,18 +1139,21 @@ func (tc *TestCluster) MaybeWaitForLeaseUpgrade(
 // is upgraded to an epoch-based one.
 func (tc *TestCluster) WaitForLeaseUpgrade(
 	ctx context.Context, t serverutils.TestFataler, desc roachpb.RangeDescriptor,
-) {
+) roachpb.Lease {
 	require.False(t, kvserver.ExpirationLeasesOnly.Get(&tc.Server(0).ClusterSettings().SV),
 		"cluster configured to only use expiration leases")
+	var l roachpb.Lease
 	testutils.SucceedsSoon(t, func() error {
 		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
 		require.NoError(t, err)
-		if li.Current().Type() != roachpb.LeaseEpoch {
+		l = li.Current()
+		if l.Type() != roachpb.LeaseEpoch {
 			return errors.Errorf("lease still an expiration based lease")
 		}
-		require.Equal(t, int64(1), li.Current().Epoch)
+		require.Equal(t, int64(1), l.Epoch)
 		return nil
 	})
+	return l
 }
 
 // RemoveLeaseHolderOrFatal is a convenience version of TransferRangeLease and RemoveVoter
@@ -1276,15 +1278,7 @@ func (tc *TestCluster) FindRangeLease(
 	return l.CurrentOrProspective(), now, err
 }
 
-// FindRangeLeaseEx returns information about a range's lease. As opposed to
-// FindRangeLeaseHolder, it doesn't check the validity of the lease; instead it
-// returns a timestamp from a node's clock.
-//
-// If hint is not nil, the respective node will be queried. If that node doesn't
-// have a replica able to serve a LeaseInfoRequest, an error will be returned.
-// If hint is nil, the first node is queried. In either case, if the returned
-// lease is not valid, it's possible that the returned lease information is
-// stale - i.e. there might be a newer lease unbeknownst to the queried node.
+// FindRangeLeaseEx is part of TestClusterInterface.
 func (tc *TestCluster) FindRangeLeaseEx(
 	ctx context.Context, rangeDesc roachpb.RangeDescriptor, hint *roachpb.ReplicationTarget,
 ) (_ roachpb.LeaseInfo, now hlc.ClockTimestamp, _ error) {
@@ -1606,7 +1600,17 @@ func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
 func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 	for _, s := range tc.Servers {
 		_ = s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			store.SetReplicateQueueActive(active)
+			store.TestingSetReplicateQueueActive(active)
+			return nil
+		})
+	}
+}
+
+// ToggleSplitQueues implements TestClusterInterface.
+func (tc *TestCluster) ToggleSplitQueues(active bool) {
+	for _, s := range tc.Servers {
+		_ = s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+			store.TestingSetSplitQueueActive(active)
 			return nil
 		})
 	}

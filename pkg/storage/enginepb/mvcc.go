@@ -202,6 +202,64 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.AbortSpanBytes -= oms.AbortSpanBytes
 }
 
+// Scale scales all statistics by the given factor.
+func (ms *MVCCStats) Scale(factor float32) {
+	ms.LockAge = int64(float32(ms.LockAge) * factor)
+	ms.GCBytesAge = int64(float32(ms.GCBytesAge) * factor)
+	ms.LiveBytes = int64(float32(ms.LiveBytes) * factor)
+	ms.KeyBytes = int64(float32(ms.KeyBytes) * factor)
+	ms.ValBytes = int64(float32(ms.ValBytes) * factor)
+	ms.IntentBytes = int64(float32(ms.IntentBytes) * factor)
+	ms.LiveCount = int64(float32(ms.LiveCount) * factor)
+	ms.KeyCount = int64(float32(ms.KeyCount) * factor)
+	ms.ValCount = int64(float32(ms.ValCount) * factor)
+	ms.IntentCount = int64(float32(ms.IntentCount) * factor)
+	ms.LockBytes = int64(float32(ms.LockBytes) * factor)
+	ms.LockCount = int64(float32(ms.LockCount) * factor)
+	ms.RangeKeyCount = int64(float32(ms.RangeKeyCount) * factor)
+	ms.RangeKeyBytes = int64(float32(ms.RangeKeyBytes) * factor)
+	ms.RangeValCount = int64(float32(ms.RangeValCount) * factor)
+	ms.RangeValBytes = int64(float32(ms.RangeValBytes) * factor)
+	ms.SysBytes = int64(float32(ms.SysBytes) * factor)
+	ms.SysCount = int64(float32(ms.SysCount) * factor)
+	ms.AbortSpanBytes = int64(float32(ms.AbortSpanBytes) * factor)
+}
+
+// HasUserDataCloseTo compares the fields corresponding to user data and returns
+// whether their absolute difference is within a certain limit. Separate limits
+// are passed in for stats measures in count and bytes.
+func (ms *MVCCStats) HasUserDataCloseTo(
+	oms MVCCStats, maxCountDiff int64, maxBytesDiff int64,
+) bool {
+	abs := func(x int64) int64 {
+		if x < 0 {
+			return -x
+		}
+		return x
+	}
+	countWithinLimit := func(v1 int64, v2 int64) bool {
+		return abs(v1-v2) <= maxCountDiff
+	}
+	bytesWithinLimit := func(v1 int64, v2 int64) bool {
+		return abs(v1-v2) <= maxBytesDiff
+	}
+
+	return countWithinLimit(ms.KeyCount, oms.KeyCount) &&
+		bytesWithinLimit(ms.KeyBytes, oms.KeyBytes) &&
+		countWithinLimit(ms.ValCount, oms.ValCount) &&
+		bytesWithinLimit(ms.ValBytes, oms.ValBytes) &&
+		countWithinLimit(ms.LiveCount, oms.LiveCount) &&
+		bytesWithinLimit(ms.LiveBytes, oms.LiveBytes) &&
+		countWithinLimit(ms.IntentCount, oms.IntentCount) &&
+		bytesWithinLimit(ms.IntentBytes, oms.IntentBytes) &&
+		countWithinLimit(ms.LockCount, oms.LockCount) &&
+		bytesWithinLimit(ms.LockBytes, oms.LockBytes) &&
+		countWithinLimit(ms.RangeKeyCount, oms.RangeKeyCount) &&
+		bytesWithinLimit(ms.RangeKeyBytes, oms.RangeKeyBytes) &&
+		countWithinLimit(ms.RangeValCount, oms.RangeValCount) &&
+		bytesWithinLimit(ms.RangeValBytes, oms.RangeValBytes)
+}
+
 // IsInline returns true if the value is inlined in the metadata.
 func (meta MVCCMetadata) IsInline() bool {
 	return meta.RawBytes != nil

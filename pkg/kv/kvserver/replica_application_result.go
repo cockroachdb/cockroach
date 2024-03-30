@@ -18,13 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/raft/v3"
 )
 
 // replica_application_*.go files provide concrete implementations of
@@ -49,6 +49,7 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// they don't trigger an assertion at the end of the application process
 	// (which checks that all fields were handled).
 	r.IsLeaseRequest = false
+	r.IsLeaseRequestWithExpirationToEpochEquivalent = false
 	r.WriteTimestamp = hlc.Timestamp{}
 	r.PrevLeaseProposal = nil
 	// The state fields cleared here were already applied to the in-memory view of
@@ -262,6 +263,17 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	// in that case, it would seem prudent not to take advantage of that. In other
 	// words, the line below this comment should be conditional on `pErr == nil`.
 	cmd.response.EndTxns = cmd.proposal.Local.DetachEndTxns(pErr != nil)
+
+	// Populate BarrierResponse if requested.
+	if pErr == nil && cmd.proposal.Local.DetachPopulateBarrierResponse() {
+		if resp := cmd.response.Reply.Responses[0].GetBarrier(); resp != nil {
+			resp.LeaseAppliedIndex = cmd.LeaseIndex
+			resp.RangeDesc = *r.Desc()
+		} else {
+			log.Fatalf(ctx, "PopulateBarrierResponse for %T", cmd.response.Reply.Responses[0].GetInner())
+		}
+	}
+
 	if pErr == nil {
 		cmd.localResult = cmd.proposal.Local
 	} else if cmd.localResult != nil {
@@ -407,13 +419,14 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
-		err := kvpb.NewNotLeaseHolderError(
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		return kvpb.NewNotLeaseHolderError(
 			*r.mu.state.Lease,
 			r.store.StoreID(),
 			r.mu.state.Desc,
 			"reproposal failed due to closed timestamp",
 		)
-		return err
 	}
 	// Some tests check for this log message in the trace.
 	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")

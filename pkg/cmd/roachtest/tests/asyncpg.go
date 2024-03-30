@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -20,14 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
-const asyncpgRunTestCmd = `
-source venv/bin/activate && 
-cd /mnt/data1/asyncpg && 
-PGPORT={pgport:1} PGHOST=localhost PGUSER=root PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
-`
+var asyncpgRunTestCmd = fmt.Sprintf(`
+source venv/bin/activate &&
+cd /mnt/data1/asyncpg &&
+PGPORT={pgport:1} PGHOST=localhost PGUSER=%s PGPASSWORD=%s PGSSLROOTCERT=$HOME/%s/ca.crt PGSSLMODE=require PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
+`, install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir)
 
 var asyncpgReleaseTagRegex = regexp.MustCompile(`^(?P<major>v\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 
@@ -47,15 +47,7 @@ func registerAsyncpg(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 
-		// This test assumes that multiple_active_portals_enabled is false, but through
-		// metamorphic constants, it is possible for them to be enabled. We disable
-		// metamorphic testing to avoid this. Note the asyncpg test suite drops the
-		// database so we can't set the session variable like we do in pgjdbc.
-		// TODO(DarrylWong): Use a metamorphic constants exclusion list instead.
-		// See: https://github.com/cockroachdb/cockroach/issues/113164
-		settings := install.MakeClusterSettings()
-		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true")
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), settings, c.All())
+		c.Start(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -91,7 +83,8 @@ func registerAsyncpg(r registry.Registry) {
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get", `sudo apt-get update`,
+			ctx, t, c, node, "update apt-get",
+			`sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +95,22 @@ func registerAsyncpg(r registry.Registry) {
 			c,
 			node,
 			"install python and pip",
-			`sudo apt-get -qq install python3.7 python3-pip libpq-dev python-dev python3-virtualenv`,
+			`sudo apt-get -qq install python3.10 python3-pip libpq-dev python3.10-dev python3-virtualenv python3.10-distutils python3-apt python3-setuptools python-setuptools`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, t, c, node, "set python3.10 as default", `
+    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+    		sudo update-alternatives --config python3`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, t, c, node, "install pip",
+			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.10`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -133,7 +141,7 @@ func registerAsyncpg(r registry.Registry) {
 
 		t.Status("Running asyncpg tests ")
 		result, err := c.RunWithDetailsSingleNode(
-			ctx, t.L(), node, asyncpgRunTestCmd)
+			ctx, t.L(), option.WithNodes(node), asyncpgRunTestCmd)
 		if err != nil {
 			t.L().Printf("error during asyncpg run (may be ok): %v\n", err)
 		}
@@ -155,12 +163,9 @@ func registerAsyncpg(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:  "asyncpg",
-		Owner: registry.OwnerSQLFoundations,
-		// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
-		// See https://github.com/cockroachdb/cockroach/issues/112108.
-		// Once this issue is fixed we should remove this Ubuntu Version override.
-		Cluster:          r.MakeClusterSpec(1, spec.CPU(16), spec.UbuntuVersion(vm.FocalFossa)),
+		Name:             "asyncpg",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1, spec.CPU(16)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Leases:           registry.MetamorphicLeases,

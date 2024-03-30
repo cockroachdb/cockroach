@@ -12,10 +12,6 @@ go_test(
     name = "ctxlog_test",
     srcs = ["context_test.go"],
     embed = [":ctxlog"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

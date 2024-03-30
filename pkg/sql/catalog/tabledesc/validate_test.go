@@ -138,6 +138,8 @@ var validationMap = []struct {
 			"HistogramBuckets":              {status: thisFieldReferencesNoObjects},
 			"HistogramSamples":              {status: thisFieldReferencesNoObjects},
 			"SchemaLocked":                  {status: thisFieldReferencesNoObjects},
+			"ImportEpoch":                   {status: thisFieldReferencesNoObjects},
+			"ImportType":                    {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -319,6 +321,7 @@ var validationMap = []struct {
 			"DependsOn":                     {status: iSolemnlySwearThisFieldIsValidated},
 			"DependsOnTypes":                {status: iSolemnlySwearThisFieldIsValidated},
 			"DependedOnBy":                  {status: iSolemnlySwearThisFieldIsValidated},
+			"DependsOnFunctions":            {status: iSolemnlySwearThisFieldIsValidated},
 			"State":                         {status: thisFieldReferencesNoObjects},
 			"OfflineReason":                 {status: thisFieldReferencesNoObjects},
 			"ModificationTime":              {status: thisFieldReferencesNoObjects},

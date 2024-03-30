@@ -23,7 +23,7 @@ CREATE PROCEDURE public.p_test_drop()
   AS $$
   SELECT 1;
 $$
-CREATE PROCEDURE public.p_test_drop(IN INT8)
+CREATE PROCEDURE public.p_test_drop(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;
@@ -32,7 +32,7 @@ $$
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
 ----
-CREATE PROCEDURE sc1.p_test_drop(IN INT8)
+CREATE PROCEDURE sc1.p_test_drop(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;
@@ -52,7 +52,7 @@ DROP PROCEDURE p_not_existing
 
 # Dropping a procedure twice should fail.
 statement error pgcode 42883 pq: procedure p_test_drop\(\) does not exist
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 DROP PROCEDURE p_test_drop();
 DROP PROCEDURE p_test_drop();
 COMMIT;
@@ -75,14 +75,13 @@ DROP FUNCTION IF EXISTS p_test_drop()
 statement ok
 DROP PROCEDURE IF EXISTS p_test_drop()
 
-# TODO(mgartner): This error message could be improved.
-statement error pgcode 42883 unknown signature: p_test_drop\(\)
+statement error pgcode 42883 procedure p_test_drop\(\) does not exist
 CALL p_test_drop()
 
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p_test_drop]
 ----
-CREATE PROCEDURE public.p_test_drop(IN INT8)
+CREATE PROCEDURE public.p_test_drop(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;
@@ -91,7 +90,7 @@ $$
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
 ----
-CREATE PROCEDURE sc1.p_test_drop(IN INT8)
+CREATE PROCEDURE sc1.p_test_drop(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;
@@ -111,7 +110,7 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p_test_drop]
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
 ----
-CREATE PROCEDURE sc1.p_test_drop(IN INT8)
+CREATE PROCEDURE sc1.p_test_drop(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;

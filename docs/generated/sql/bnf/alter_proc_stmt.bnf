@@ -1,4 +1,0 @@
-alter_proc_stmt ::=
-	alter_proc_rename_stmt
-	| alter_proc_owner_stmt
-	| alter_proc_set_schema_stmt

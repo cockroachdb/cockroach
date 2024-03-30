@@ -23,10 +23,6 @@ go_test(
     size = "small",
     srcs = ["oracle_test.go"],
     embed = [":replicaoracle"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/gossip",
         "//pkg/roachpb",

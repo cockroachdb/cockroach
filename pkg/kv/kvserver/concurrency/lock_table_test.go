@@ -471,7 +471,7 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				foundLock := roachpb.MakeLock(txnMeta, roachpb.Key(key), lock.Intent)
-				seq := int(1)
+				seq := 1
 				if d.HasArg("lease-seq") {
 					d.ScanArgs(t, "lease-seq", &seq)
 				}
@@ -516,7 +516,7 @@ func TestLockTableBasic(t *testing.T) {
 				var key string
 				d.ScanArgs(t, "k", &key)
 				strength := ScanLockStrength(t, d)
-				ok, txn, err := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength)
+				ok, txn, err := g.IsKeyLockedByConflictingTxn(context.Background(), roachpb.Key(key), strength)
 				if err != nil {
 					return err.Error()
 				}
@@ -572,8 +572,6 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				var typeStr string
 				switch state.kind {
-				case waitForDistinguished:
-					typeStr = "waitForDistinguished"
 				case waitFor:
 					typeStr = "waitFor"
 				case waitElsewhere:
@@ -1109,7 +1107,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 		var g lockTableGuard
 		defer func() {
 			if lg != nil {
-				e.lm.Release(lg)
+				e.lm.Release(ctx, lg)
 				lg = nil
 			}
 			if g != nil {
@@ -1135,7 +1133,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			if !g.ShouldWait() {
 				break
 			}
-			e.lm.Release(lg)
+			e.lm.Release(ctx, lg)
 			lg = nil
 			var lastID uuid.UUID
 		L:
@@ -1162,7 +1160,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 					if item.request.Txn == nil {
 						return errors.Errorf("non-transactional request cannot waitSelf")
 					}
-				case waitForDistinguished, waitFor, waitElsewhere:
+				case waitFor, waitElsewhere:
 					if item.request.Txn != nil {
 						var aborted bool
 						aborted, err = e.waitingFor(item.request.Txn.ID, lastID, state.txn.ID)
@@ -1709,6 +1707,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	var g lockTableGuard
 	var err error
 	firstIter := true
+	ctx := context.Background()
 	for {
 		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error, item.BaFmt); err != nil {
 			doneCh <- err
@@ -1728,7 +1727,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 			atomic.AddUint64(env.numRequestsWaited, 1)
 			firstIter = false
 		}
-		env.lm.Release(lg)
+		env.lm.Release(ctx, lg)
 		for {
 			<-g.NewStateChan()
 			state, err := g.CurState()
@@ -1751,7 +1750,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		}
 	}
 	env.lt.Dequeue(g)
-	env.lm.Release(lg)
+	env.lm.Release(ctx, lg)
 	if len(item.locksToAcquire) == 0 {
 		doneCh <- nil
 		return
@@ -1772,7 +1771,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 			return
 		}
 	}
-	env.lm.Release(lg)
+	env.lm.Release(ctx, lg)
 	doneCh <- nil
 }
 

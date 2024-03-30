@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -212,6 +213,11 @@ func (sc *webhookSinkClient) FlushResolvedPayload(
 // Flush implements the SinkClient interface
 func (sc *webhookSinkClient) Flush(ctx context.Context, batch SinkPayload) error {
 	req := batch.(*http.Request)
+	b, err := req.GetBody()
+	if err != nil {
+		return err
+	}
+	req.Body = b
 	res, err := sc.client.Do(req)
 	if err != nil {
 		return err
@@ -349,6 +355,7 @@ func makeWebhookSink(
 	pacerFactory func() *admission.Pacer,
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
+	settings *cluster.Settings,
 ) (Sink, error) {
 	batchCfg, retryOpts, err := getSinkConfigFromJson(opts.JSONConfig, sinkJSONConfig{})
 	if err != nil {
@@ -371,5 +378,6 @@ func makeWebhookSink(
 		pacerFactory,
 		source,
 		mb(requiresResourceAccounting),
+		settings,
 	), nil
 }

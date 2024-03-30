@@ -178,7 +178,7 @@ configurations generated using seed 2643318057788968173
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
-	stores(15)=[s1n1=(replicas(65)),s2n2=(replicas(64)),s3n3=(replicas(66)),s4n4=(replicas(63)),s5n5=(replicas(63)),s6n6=(replicas(63)),s7n7=(replicas(63)),s8n8=(replicas(62)),s9n9=(replicas(64)),s10n10=(replicas(64)),s11n11=(replicas(62)),s12n12=(replicas(63)),s13n13=(replicas(63)),s14n14=(replicas(64)),s15n15=(replicas(64))]
+	stores(15)=[s1n1=(replicas(64)),s2n2=(replicas(51)),s3n3=(replicas(12)),s4n4=(replicas(25)),s5n5=(replicas(115)),s6n6=(replicas(90)),s7n7=(replicas(114)),s8n8=(replicas(25)),s9n9=(replicas(26)),s10n10=(replicas(64)),s11n11=(replicas(0)),s12n12=(replicas(114)),s13n13=(replicas(103)),s14n14=(replicas(51)),s15n15=(replicas(90))]
 topology:
 US
   US_1
@@ -190,17 +190,35 @@ US
 no events were scheduled
 sample2: failed assertion
   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=9 violating=0 lease-violating=0 lease-less-preferred=0
+  actual unavailable=0 under=0, over=27 violating=0 lease-violating=0 lease-less-preferred=0
 over replicated:
-  r120:000001{8921-9080} [(n8,s8):2, (n15,s15):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r133:000002{0988-1147} [(n3,s3):2, (n5,s5):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r138:0000021{783-942} [(n3,s3):2, (n12,s12):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r156:0000024{645-804} [(n3,s3):2, (n2,s2):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r243:0000038{478-637} [(n3,s3):2, (n12,s12):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r322:0000051{039-198} [(n1,s1):2, (n3,s3):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r567:00000{89994-90153} [(n3,s3):2, (n5,s5):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r605:0000096{036-195} [(n3,s3):3, (n8,s8):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r875:000013{8966-9125} [(n3,s3):3, (n2,s2):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r63:00000{09858-10017} [(n1,s1):4, (n9,s9):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r77:0000012{084-243} [(n4,s4):2, (n9,s9):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r174:0000027{507-666} [(n6,s6):4, (n9,s9):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r192:0000030{369-528} [(n6,s6):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r237:0000037{524-683} [(n5,s5):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r255:0000040{386-545} [(n8,s8):2, (n9,s9):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r348:0000055{173-332} [(n1,s1):1, (n9,s9):2] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r370:0000058{671-830} [(n5,s5):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r378:00000{59943-60102} [(n8,s8):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r387:0000061{374-533} [(n12,s12):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r419:0000066{462-621} [(n1,s1):6, (n9,s9):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r483:0000076{638-797} [(n2,s2):4, (n9,s9):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r513:0000081{408-567} [(n6,s6):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r599:0000095{082-241} [(n11,s11):2, (n9,s9):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r621:0000098{580-739} [(n14,s14):2, (n9,s9):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r637:0000101{124-283} [(n13,s13):4, (n9,s9):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r644:0000102{237-396} [(n2,s2):2, (n9,s9):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r645:0000102{396-555} [(n3,s3):2, (n9,s9):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r681:0000108{120-279} [(n12,s12):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r693:0000110{028-187} [(n14,s14):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r712:0000113{049-208} [(n11,s11):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r732:0000116{229-388} [(n5,s5):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r740:0000117{501-660} [(n12,s12):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r763:0000121{158-317} [(n10,s10):4, (n9,s9):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r796:0000126{405-564} [(n10,s10):4, (n9,s9):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r805:0000127{836-995} [(n5,s5):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r928:0000147{393-552} [(n12,s12):2, (n9,s9):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
 ----------------------------------
 sample3: start running
 configurations generated using seed 6972490225919430754
@@ -209,5 +227,47 @@ configurations generated using seed 6972490225919430754
 	randomized ranges with placement_type=random, ranges=479, key_space=199954, replication_factor=1, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
-sample3: pass
+initial state at 2022-03-21 11:00:00:
+	stores(15)=[s1n1=(replicas(27)),s2n2=(replicas(1)),s3n3=(replicas(40)),s4n4=(replicas(13)),s5n5=(replicas(26)),s6n6=(replicas(13)),s7n7=(replicas(60)),s8n8=(replicas(60)),s9n9=(replicas(53)),s10n10=(replicas(14)),s11n11=(replicas(59)),s12n12=(replicas(6)),s13n13=(replicas(13)),s14n14=(replicas(40)),s15n15=(replicas(54))]
+topology:
+US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+no events were scheduled
+sample3: failed assertion
+  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=28 violating=0 lease-violating=0 lease-less-preferred=0
+over replicated:
+  r17:000000{6672-7089} [(n10,s10):4, (n5,s5):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r39:000001{5846-6263} [(n8,s8):6, (n1,s1):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r88:0000036{279-696} [(n6,s6):6, (n14,s14):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r93:0000038{364-781} [(n14,s14):5, (n8,s8):6] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r115:0000047{538-955} [(n8,s8):7, (n10,s10):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r128:000005{2959-3376} [(n6,s6):4, (n1,s1):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r137:000005{6712-7129} [(n1,s1):7, (n3,s3):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r139:0000057{546-963} [(n6,s6):3, (n8,s8):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r197:000008{1732-2149} [(n14,s14):5, (n10,s10):6] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r198:0000082{149-566} [(n6,s6):2, (n14,s14):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r201:0000083{400-817} [(n10,s10):4, (n1,s1):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r207:000008{5902-6319} [(n6,s6):4, (n14,s14):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r211:0000087{570-987} [(n10,s10):3, (n4,s4):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r214:000008{8821-9238} [(n1,s1):5, (n10,s10):6] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r219:000009{0906-1323} [(n8,s8):4, (n1,s1):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r230:0000095{493-910} [(n8,s8):4, (n10,s10):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r244:0000101{331-748} [(n10,s10):2, (n1,s1):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r253:0000105{084-501} [(n10,s10):2, (n1,s1):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r267:000011{0922-1339} [(n14,s14):5, (n10,s10):6] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r349:0000145{116-533} [(n10,s10):3, (n9,s9):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r353:000014{6784-7201} [(n10,s10):5, (n1,s1):6] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r403:000016{7634-8051} [(n14,s14):4, (n8,s8):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r421:0000175{140-557} [(n12,s12):4, (n10,s10):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r425:000017{6808-7225} [(n14,s14):4, (n1,s1):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r431:0000179{310-727} [(n12,s12):5, (n8,s8):6] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r433:0000180{144-561} [(n10,s10):4, (n1,s1):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r455:0000189{318-735} [(n6,s6):3, (n10,s10):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r477:0000198{492-909} [(n1,s1):4, (n7,s7):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
 ----------------------------------

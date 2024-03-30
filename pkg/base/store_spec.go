@@ -43,10 +43,10 @@ import (
 // hard coded to 640MiB.
 const MinimumStoreSize = 10 * 64 << 20
 
-// GetAbsoluteStorePath takes a (possibly relative) and returns the absolute path.
+// GetAbsoluteFSPath takes a (possibly relative) and returns the absolute path.
 // Returns an error if the path begins with '~' or Abs fails.
 // 'fieldName' is used in error strings.
-func GetAbsoluteStorePath(fieldName string, p string) (string, error) {
+func GetAbsoluteFSPath(fieldName string, p string) (string, error) {
 	if p[0] == '~' {
 		return "", fmt.Errorf("%s cannot start with '~': %s", fieldName, p)
 	}
@@ -162,83 +162,42 @@ func (ss *SizeSpec) Set(value string) error {
 }
 
 // ProvisionedRateSpec is an optional part of the StoreSpec.
-//
-// TODO(sumeer): We should map the file path specified in the store spec to
-// the disk name. df can be used to map paths to names like /dev/nvme1n1 and
-// /dev/sdb (these examples are from AWS EBS and GCP PD respectively) and the
-// corresponding names produced by disk_counters.go are nvme1n1 and sdb
-// respectively. We need to find or write a platform independent library --
-// see the discussion on
-// https://github.com/cockroachdb/cockroach/pull/86063#pullrequestreview-1074487018.
-// With that change, the ProvisionedRateSpec would only be needed to override
-// the cluster setting when there are heterogenous bandwidth limits in a
-// cluster (there would be no more DiskName field).
 type ProvisionedRateSpec struct {
-	// DiskName is the name of the disk observed by the code in disk_counters.go
-	// when retrieving stats for this store.
-	DiskName string
-	// ProvisionedBandwidth is the bandwidth provisioned for this store in
-	// bytes/s.
+	// ProvisionedBandwidth is the bandwidth provisioned for this store in bytes/s.
 	ProvisionedBandwidth int64
 }
 
 func newStoreProvisionedRateSpec(
 	field redact.SafeString, value string,
 ) (ProvisionedRateSpec, error) {
-	var spec ProvisionedRateSpec
-	used := make(map[string]struct{})
-	for _, split := range strings.Split(value, ":") {
-		if len(split) == 0 {
-			continue
-		}
-		subSplits := strings.Split(split, "=")
-		if len(subSplits) != 2 {
-			return ProvisionedRateSpec{}, errors.Errorf("%s field has invalid value %s", field, value)
-		}
-		subField := subSplits[0]
-		subValue := subSplits[1]
-		if _, ok := used[subField]; ok {
-			return ProvisionedRateSpec{}, errors.Errorf("%s field has duplicate sub-field %s",
-				field, subField)
-		}
-		used[subField] = struct{}{}
-		if len(subField) == 0 {
-			continue
-		}
-		if len(subValue) == 0 {
-			return ProvisionedRateSpec{},
-				errors.Errorf("%s field has no value specified for sub-field %s", field, subField)
-		}
-		switch subField {
-		case "disk-name":
-			spec.DiskName = subValue
-		case "bandwidth":
-			if len(subValue) <= 2 || subValue[len(subValue)-2:] != "/s" {
-				return ProvisionedRateSpec{},
-					errors.Errorf("%s field does not have bandwidth sub-field %s ending in /s",
-						field, subValue)
-			}
-			subValue = subValue[:len(subValue)-2]
-			var err error
-			spec.ProvisionedBandwidth, err = humanizeutil.ParseBytes(subValue)
-			if err != nil {
-				return ProvisionedRateSpec{},
-					errors.Wrapf(err, "could not parse bandwidth in field %s", field)
-			}
-			if spec.ProvisionedBandwidth == 0 {
-				return ProvisionedRateSpec{},
-					errors.Errorf("%s field is trying to set bandwidth to 0", field)
-			}
-		default:
-			return ProvisionedRateSpec{}, errors.Errorf("%s field has unknown sub-field %s",
-				field, subField)
-		}
+	split := strings.Split(value, "=")
+	if len(split) != 2 {
+		return ProvisionedRateSpec{}, errors.Errorf("%s field has invalid value %s", field, value)
 	}
-	if len(spec.DiskName) == 0 {
+	subField := split[0]
+	subValue := split[1]
+	if subField != "bandwidth" {
+		return ProvisionedRateSpec{}, errors.Errorf("%s field does not have bandwidth sub-field", field)
+	}
+	if len(subValue) == 0 {
+		return ProvisionedRateSpec{}, errors.Errorf("%s field has no value specified for bandwidth", field)
+	}
+	if len(subValue) <= 2 || subValue[len(subValue)-2:] != "/s" {
 		return ProvisionedRateSpec{},
-			errors.Errorf("%s field did not specify disk-name", field)
+			errors.Errorf("%s field does not have bandwidth sub-field %s ending in /s",
+				field, subValue)
 	}
-	return spec, nil
+	bandwidthString := subValue[:len(subValue)-2]
+	bandwidth, err := humanizeutil.ParseBytes(bandwidthString)
+	if err != nil {
+		return ProvisionedRateSpec{},
+			errors.Wrapf(err, "could not parse bandwidth in field %s", field)
+	}
+	if bandwidth == 0 {
+		return ProvisionedRateSpec{},
+			errors.Errorf("%s field is trying to set bandwidth to 0", field)
+	}
+	return ProvisionedRateSpec{ProvisionedBandwidth: bandwidth}, nil
 }
 
 // StoreSpec contains the details that can be specified in the cli pertaining
@@ -254,9 +213,6 @@ type StoreSpec struct {
 	// storage engine has been closed. This only applies to in-memory storage
 	// engine.
 	StickyVFSID string
-	// UseFileRegistry is true if the "file registry" store version is desired.
-	// This is set by CCL code when encryption-at-rest is in use.
-	UseFileRegistry bool
 	// RocksDBOptions contains RocksDB specific options using a semicolon
 	// separated key-value syntax ("key1=value1; key2=value2").
 	RocksDBOptions string
@@ -314,15 +270,9 @@ func (ss StoreSpec) String() string {
 		fmt.Fprint(&buffer, optsStr)
 		fmt.Fprint(&buffer, ",")
 	}
-	if len(ss.ProvisionedRateSpec.DiskName) > 0 {
-		fmt.Fprintf(&buffer, "provisioned-rate=disk-name=%s",
-			ss.ProvisionedRateSpec.DiskName)
-		if ss.ProvisionedRateSpec.ProvisionedBandwidth > 0 {
-			fmt.Fprintf(&buffer, ":bandwidth=%s/s,",
-				humanizeutil.IBytes(ss.ProvisionedRateSpec.ProvisionedBandwidth))
-		} else {
-			fmt.Fprintf(&buffer, ",")
-		}
+	if ss.ProvisionedRateSpec.ProvisionedBandwidth > 0 {
+		fmt.Fprintf(&buffer, "provisioned-rate=bandwidth=%s/s,",
+			humanizeutil.IBytes(ss.ProvisionedRateSpec.ProvisionedBandwidth))
 	}
 	// Trim the extra comma from the end if it exists.
 	if l := buffer.Len(); l > 0 {
@@ -353,8 +303,8 @@ var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-
 // NewStoreSpec parses the string passed into a --store flag and returns a
 // StoreSpec if it is correctly parsed.
 // There are five possible fields that can be passed in, comma separated:
-//   - path=xxx The directory in which to the rocks db instance should be
-//     located, required unless using a in memory storage.
+//   - path=xxx The directory in which the rocks db instance should be
+//     located, required unless using an in memory storage.
 //   - type=mem This specifies that the store is an in memory storage instead of
 //     an on disk one. mem is currently the only other type available.
 //   - size=xxx The optional maximum size of the storage. This can be in one of a
@@ -366,10 +316,9 @@ var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-
 //   - 20%             -> 20% of the available space
 //   - 0.2             -> 20% of the available space
 //   - attrs=xxx:yyy:zzz A colon separated list of optional attributes.
-//   - provisioned-rate=disk-name=<disk-name>[:bandwidth=<bandwidth-bytes/s>] The
-//     provisioned-rate can be used for admission control for operations on the
-//     store. The bandwidth is optional, and if unspecified, a cluster setting
-//     (kvadmission.store.provisioned_bandwidth) will be used.
+//   - provisioned-rate=bandwidth=<bandwidth-bytes/s> The provisioned-rate can be
+//     used for admission control for operations on the store and if unspecified,
+//     a cluster setting (kvadmission.store.provisioned_bandwidth) will be used.
 //
 // Note that commas are forbidden within any field name or value.
 func NewStoreSpec(value string) (StoreSpec, error) {

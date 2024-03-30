@@ -269,7 +269,6 @@ func New(
 	registry *metric.Registry,
 	locality roachpb.Locality,
 ) *Gossip {
-	ambient.SetEventLog("gossip", "gossip")
 	g := &Gossip{
 		server:            newServer(ambient, clusterID, nodeID, stopper, registry),
 		Connected:         make(chan struct{}),
@@ -285,8 +284,6 @@ func New(
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		locality:          locality,
 	}
-
-	stopper.AddCloser(stop.CloserFn(g.server.AmbientContext.FinishEventLog))
 
 	registry.AddMetric(g.outgoing.gauge)
 
@@ -1232,8 +1229,7 @@ func (g *Gossip) bootstrap(rpcContext *rpc.Context) {
 func (g *Gossip) manage(rpcContext *rpc.Context) {
 	ctx := g.AnnotateCtx(context.Background())
 	_ = g.server.stopper.RunAsyncTask(ctx, "gossip-manage", func(ctx context.Context) {
-		cullTimer := timeutil.NewTimer()
-		stallTimer := timeutil.NewTimer()
+		var cullTimer, stallTimer timeutil.Timer
 		defer cullTimer.Stop()
 		defer stallTimer.Stop()
 

@@ -26,6 +26,7 @@ CREATE FUNCTION sc2.f2() RETURNS INT LANGUAGE PLpgSQL AS $$
     x INT;
   BEGIN
     SELECT a INTO x FROM sc2.tbl2 LIMIT 1;
+    SELECT sc1.f1('Good'::sc1.enum1);
     RETURN x;
   END
 $$;
@@ -70,7 +71,7 @@ db1 sc2 f2 function false
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -90,7 +91,7 @@ $$
 query-sql
 SELECT sc1.f1('Good'::sc1.enum1)
 ----
-2
+3
 
 exec-sql
 DROP DATABASE db1
@@ -111,7 +112,7 @@ USE db1_new
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(IN a db1_new.sc1.enum1)
+CREATE FUNCTION sc1.f1(a db1_new.sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -133,7 +134,7 @@ $$
 query-sql
 SELECT sc1.f1('Good'::db1_new.sc1.enum1)
 ----
-2
+3
 
 # Make sure function still queries from correct table.
 query-sql
@@ -149,6 +150,12 @@ exec-sql
 DROP SEQUENCE sc1.sq1
 ----
 pq: cannot drop sequence sq1 because other objects depend on it
+
+# Validate function dependencies are re-written.
+exec-sql
+DROP FUNCTION sc1.f1
+----
+pq: cannot drop function "f1" because other objects ([db1_new.sc2.f2]) still depend on it
 
 exec-sql
 DROP TABLE sc1.tbl1
@@ -170,7 +177,7 @@ HINT: consider dropping "f1" first.
 exec-sql
 DROP TYPE sc1.enum1
 ----
-pq: cannot drop type "enum1" because other objects ([db1_new.sc1.f1]) still depend on it
+pq: cannot drop type "enum1" because other objects ([db1_new.sc1.f1 db1_new.sc2.f2]) still depend on it
 
 # Test backing up and restoring a full cluster with user defined function.
 new-cluster name=s1
@@ -198,6 +205,7 @@ CREATE SCHEMA sc2;
 CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
 CREATE FUNCTION sc2.f2() RETURNS INT LANGUAGE PLpgSQL AS $$
   BEGIN
+    SELECT sc1.f1('Good'::sc1.enum1);
     RETURN (SELECT a FROM sc2.tbl2 LIMIT 1);
   END
 $$;
@@ -247,7 +255,7 @@ db1 sc2 f2 function true
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -268,7 +276,7 @@ $$
 query-sql
 SELECT sc1.f1('Good'::sc1.enum1)
 ----
-2
+3
 
 # Start a new cluster with the same IO dir.
 new-cluster name=s2 share-io-dir=s1
@@ -290,7 +298,7 @@ USE db1
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -313,7 +321,7 @@ $$
 query-sql
 SELECT sc1.f1('Good'::sc1.enum1)
 ----
-2
+3
 
 # Make sure function still queries from correct table.
 query-sql
@@ -329,6 +337,12 @@ exec-sql
 DROP SEQUENCE sc1.sq1
 ----
 pq: cannot drop sequence sq1 because other objects depend on it
+
+# Validate function dependencies are re-written.
+exec-sql
+DROP FUNCTION sc1.f1
+----
+pq: cannot drop function "f1" because other objects ([db1.sc2.f2]) still depend on it
 
 exec-sql
 DROP TABLE sc1.tbl1
@@ -350,7 +364,7 @@ HINT: consider dropping "f1" first.
 exec-sql
 DROP TYPE sc1.enum1
 ----
-pq: cannot drop type "enum1" because other objects ([db1.sc1.f1]) still depend on it
+pq: cannot drop type "enum1" because other objects ([db1.sc1.f1 db1.sc2.f2]) still depend on it
 
 # Make sure that backup and restore individual tables from schema with UDF does
 # not crash.
@@ -365,7 +379,7 @@ CREATE FUNCTION sc1.f() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN 1; END $
 ----
 
 # Make sure the original schema has function signatures
-query-sql
+let $defaultdb_sc1_db
 WITH db_id AS (
   SELECT id FROM system.namespace WHERE name = 'defaultdb'
 ),
@@ -377,7 +391,6 @@ schema_id AS (
 )
 SELECT id FROM schema_id;
 ----
-109
 
 query-sql
 WITH to_json AS (
@@ -390,7 +403,7 @@ WITH to_json AS (
       ) AS d
     FROM
       system.descriptor
-    WHERE id = 109
+    WHERE id = $defaultdb_sc1_db
 )
 SELECT d->'schema'->>'functions'::string FROM to_json;
 ----
@@ -408,7 +421,7 @@ exec-sql
 USE db1;
 ----
 
-query-sql
+let $db1_sc1_id
 WITH db_id AS (
   SELECT id FROM system.namespace WHERE name = 'db1'
 ),
@@ -420,7 +433,6 @@ schema_id AS (
 )
 SELECT id FROM schema_id;
 ----
-112
 
 query-sql
 WITH to_json AS (
@@ -433,7 +445,7 @@ WITH to_json AS (
       ) AS d
     FROM
       system.descriptor
-    WHERE id = 112
+    WHERE id = $db1_sc1_id
 )
 SELECT d->'schema'->>'functions'::string FROM to_json;
 ----

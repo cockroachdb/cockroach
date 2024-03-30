@@ -944,25 +944,17 @@ var _ invertedexpr.DatumsToInvertedExpr = &geoDatumsToInvertedExpr{}
 var _ eval.IndexedVarContainer = &geoDatumsToInvertedExpr{}
 
 // IndexedVarEval is part of the eval.IndexedVarContainer interface.
-func (g *geoDatumsToInvertedExpr) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
+func (g *geoDatumsToInvertedExpr) IndexedVarEval(idx int) (tree.Datum, error) {
 	err := g.row[idx].EnsureDecoded(g.colTypes[idx], &g.alloc)
 	if err != nil {
 		return nil, err
 	}
-	return g.row[idx].Datum.Eval(ctx, e)
+	return g.row[idx].Datum, nil
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (g *geoDatumsToInvertedExpr) IndexedVarResolvedType(idx int) *types.T {
 	return g.colTypes[idx]
-}
-
-// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
-func (g *geoDatumsToInvertedExpr) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("$%d", idx))
-	return &n
 }
 
 // NewGeoDatumsToInvertedExpr returns a new geoDatumsToInvertedExpr.

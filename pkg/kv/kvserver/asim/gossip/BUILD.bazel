@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
     ],
@@ -26,10 +27,6 @@ go_test(
         "gossip_test.go",
     ],
     embed = [":gossip"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/asim/config",

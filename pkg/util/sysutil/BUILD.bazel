@@ -9,6 +9,10 @@ go_library(
         "large_file.go",
         "large_file_linux.go",
         "large_file_nonlinux.go",
+        "socket.go",
+        "socket_darwin.go",
+        "socket_linux.go",
+        "socket_stub.go",
         "sysutil.go",
         "sysutil_unix.go",
         "sysutil_windows.go",
@@ -71,10 +75,6 @@ go_test(
         "sysutil_unix_test.go",
     ],
     embed = [":sysutil"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

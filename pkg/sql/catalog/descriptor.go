@@ -759,6 +759,10 @@ type TableDescriptor interface {
 	// IsSchemaLocked returns true if we don't allow performing schema changes
 	// on this table descriptor.
 	IsSchemaLocked() bool
+	// IsPrimaryKeySwapMutation returns true if the mutation is a primary key
+	// swap mutation or a secondary index used by the declarative schema changer
+	// for a primary index swap.
+	IsPrimaryKeySwapMutation(m *descpb.DescriptorMutation) bool
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.
@@ -784,7 +788,8 @@ type TypeDescriptor interface {
 	IsCompatibleWith(other TypeDescriptor) error
 	// AsTypesT returns a reference to a types.T corresponding to this type
 	// descriptor. No guarantees are provided as to whether this object is a
-	// singleton or not, or whether it's hydrated or not.
+	// singleton or not, or whether it's hydrated or not. The returned type can be
+	// hydrated by the caller.
 	AsTypesT() *types.T
 	// GetKind returns the kind of this type.
 	GetKind() descpb.TypeDescriptor_Kind
@@ -960,6 +965,10 @@ type FunctionDescriptor interface {
 
 	// GetDependsOnTypes returns a list of IDs of the types this function depends on.
 	GetDependsOnTypes() []descpb.ID
+
+	// GetDependsOnFunctions returns a list of IDs of functions this function depends
+	// on.
+	GetDependsOnFunctions() []descpb.ID
 
 	// GetDependedOnBy returns a list of back-references of this function.
 	GetDependedOnBy() []descpb.FunctionDescriptor_Reference

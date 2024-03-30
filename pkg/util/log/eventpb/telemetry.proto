@@ -327,7 +327,7 @@ message SampledExecStats {
   int64 cpu_sql_nanos = 6 [(gogoproto.customname) = "CPUSQLNanos", (gogoproto.jsontag) = "CPUSQLNanos,includeempty"];
 
   // Internal storage iteration statistics.
-  MVCCIteratorStats mvcc_iterator_stats = 7 [(gogoproto.customname) = "MVCCIteratorStats", (gogoproto.jsontag) = ",omitempty"];
+  MVCCIteratorStats mvcc_iterator_stats = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "MVCCIteratorStats"];
 }
 
 // Internal storage iteration statistics for a single execution.
@@ -457,27 +457,32 @@ message SampledTransaction {
   int64 num_rows = 18 [(gogoproto.jsontag) = ",includeempty"];
 
   // RetryLatNanos is the amount of time spent retrying the transaction.
- int64 retry_lat_nanos  = 19 [(gogoproto.jsontag) = ",omitempty"];
+  int64 retry_lat_nanos  = 19 [(gogoproto.jsontag) = ",omitempty"];
 
- // CommitLatNanos is the amount of time spent committing the transaction after all statement operations.
- int64 commit_lat_nanos = 20 [(gogoproto.jsontag) = ",includeempty"];
+  // CommitLatNanos is the amount of time spent committing the transaction after all statement operations.
+  int64 commit_lat_nanos = 20 [(gogoproto.jsontag) = ",includeempty"];
 
- // IdleLatNanos is the amount of time spent waiting for the client to send statements
+  // IdleLatNanos is the amount of time spent waiting for the client to send statements
   // while the transaction is open.
- int64 idle_lat_nanos = 21 [(gogoproto.jsontag) = ",includeempty"];
+  int64 idle_lat_nanos = 21 [(gogoproto.jsontag) = ",includeempty"];
 
- // BytesRead is the number of bytes read from disk.
- int64 bytes_read = 22 [(gogoproto.jsontag) = ",includeempty"];
+  // BytesRead is the number of bytes read from disk.
+  int64 bytes_read = 22 [(gogoproto.jsontag) = ",includeempty"];
 
- // RowsRead is the number of rows read from disk.
- int64 rows_read = 23 [(gogoproto.jsontag) = ",includeempty"];
+  // RowsRead is the number of rows read from disk.
+  int64 rows_read = 23 [(gogoproto.jsontag) = ",includeempty"];
 
- // RowsWritten is the number of rows written to disk.
- int64 rows_written = 24 [(gogoproto.jsontag) = ",includeempty"];
+  // RowsWritten is the number of rows written to disk.
+  int64 rows_written = 24 [(gogoproto.jsontag) = ",includeempty"];
 
- // SampledExecStats is a nested field containing execution statistics.
- // This field will be omitted if the stats were not sampled.
- SampledExecStats sampled_exec_stats = 25 [(gogoproto.jsontag) = ",omitempty"];
+  // SampledExecStats is a nested field containing execution statistics.
+  // This field will be omitted if the stats were not sampled.
+  SampledExecStats sampled_exec_stats = 25 [(gogoproto.jsontag) = ",omitempty"];
+
+  // SkippedTransactions is the number of transactions that were skipped as part of sampling prior to
+  // this one. We only count skipped transactions when telemetry logging is enabled and the sampling
+  // mode is set to "transaction".
+  int64 skipped_transactions = 26 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // CapturedIndexUsageStats

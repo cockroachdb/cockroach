@@ -101,10 +101,10 @@ func logfDepthInternal(
 	entry := makeUnstructuredEntry(
 		ctx, sev, ch,
 		depth+1, true /* redactable */, format, args...)
-	if sp, el, ok := getSpanOrEventLog(ctx); ok {
+	if sp := getSpan(ctx); sp != nil {
 		// Prevent `entry` from moving to the heap if this branch isn't taken.
 		heapEntry := entry
-		eventInternal(sp, el, sev >= severity.ERROR, &heapEntry)
+		eventInternal(sp, sev >= severity.ERROR, &heapEntry)
 	}
 	logger.outputLogEntry(entry)
 }

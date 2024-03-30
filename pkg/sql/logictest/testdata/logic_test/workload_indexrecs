@@ -2,6 +2,8 @@
 # DO NOT DO THIS IN PRODUCTION.
 statement ok
 INSERT INTO system.users VALUES  ('node', NULL, true, 3);
+
+statement ok
 GRANT NODE TO root;
 
 statement ok

@@ -1,3 +1,7 @@
+# LogicTest: !local-read-committed
+# This test assumes that SERIALIZABLE isolation is being used. See
+# select_for_update_read_committed for READ COMMITTED testing.
+
 query I
 SELECT 1 FOR UPDATE
 ----
@@ -629,13 +633,12 @@ SELECT * FROM t94290 WHERE b = 2 FOR UPDATE;
 statement ok
 RESET statement_timeout;
 
-# Ensure when SKIP LOCKED is used in conjunction with replicated locks we return
-# appropriate errors.
+# Ensure FOR UPDATE SKIP LOCKED works correctly with replicated locks.
 
 statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t(a INT PRIMARY KEY);
-INSERT INTO t VALUES(1);
+INSERT INTO t VALUES(1), (2);
 GRANT ALL ON t TO testuser;
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser;
 
@@ -644,10 +647,8 @@ user testuser
 statement ok
 SET enable_durable_locking_for_serializable = true;
 
-statement ok
-BEGIN
-
 query I
+BEGIN;
 SELECT * FROM t WHERE a = 1 FOR UPDATE;
 ----
 1
@@ -661,8 +662,10 @@ SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, d
 database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  isolation_level  granted  contended
 
 skipif config local-mixed-23.1
-statement error usage of replicated locks in conjunction with skip locked wait policy is currently unsupported
+query I
 SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+2
 
 # Ensure the replicated lock isn't pulled into the in-memory lock table, even
 # after the skip locked statement has run.

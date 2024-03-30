@@ -289,6 +289,9 @@ func scopeColName(name tree.Name) scopeColumnName {
 // is not empty. If the given name is empty, the returned scopeColumnName
 // represents an anonymous function argument that cannot be referenced, and it
 // will be added to the metadata with the descriptive name "arg<ord>".
+// TODO(119502): unnamed parameters can be referenced via $i notation (for SQL
+// routines only IN / INOUT parameters can be referenced this way, for PLpgSQL
+// routines all parameters can).
 func funcParamColName(name tree.Name, ord int) scopeColumnName {
 	alias := string(name)
 	if alias == "" {

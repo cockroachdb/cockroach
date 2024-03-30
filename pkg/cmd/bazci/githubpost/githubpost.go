@@ -34,7 +34,7 @@ import (
 	"time"
 
 	buildutil "github.com/cockroachdb/cockroach/pkg/build/util"
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/errors"
@@ -104,7 +104,8 @@ func DefaultIssueFilerFromFormatter(
 			}
 			req.ExtraParams["stress"] = "true"
 		}
-		return issues.Post(ctx, log.Default(), fmter, req, opts)
+		_, err := issues.Post(ctx, log.Default(), fmter, req, opts)
+		return err
 	}
 
 }
@@ -704,8 +705,8 @@ func formatPebbleMetamorphicIssue(
 			s := f.testMessage[i+len(seedHeader):]
 			s = strings.TrimSpace(s)
 			s = strings.TrimSpace(s[:strings.Index(s, "\n")])
-			repro = fmt.Sprintf("go test -tags 'invariants' -exec 'stress -p 1' "+
-				`-timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed %s -ops "uniform:5000-10000"`, s)
+			repro = fmt.Sprintf(`go test -tags 'invariants' -exec 'stress -p 1' `+
+				`-timeout 0 -test.v -run '%s$' ./internal/metamorphic -seed %s -ops "uniform:5000-10000"`, f.testName, s)
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{

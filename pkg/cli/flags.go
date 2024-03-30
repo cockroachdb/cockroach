@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/configprofiles"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -389,10 +388,6 @@ func init() {
 		// attributes too? Would this be useful for e.g. SQL query
 		// planning?
 		cliflagcfg.StringFlag(f, &serverCfg.Attrs, cliflags.Attrs)
-		// Cluster initialization. We only do this for a regular start command;
-		// SQL-only servers get their initialization payload from their tenant
-		// configuration.
-		cliflagcfg.VarFlag(f, configprofiles.NewProfileSetter(&serverCfg.AutoConfigProvider), cliflags.ConfigProfile)
 	}
 
 	// Flags common to the start commands, the connect command, and the node join
@@ -477,6 +472,7 @@ func init() {
 
 		cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
 		cliflagcfg.VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
+		cliflagcfg.VarFlag(f, &serverCfg.WALFailover, cliflags.WALFailover)
 		cliflagcfg.StringFlag(f, &serverCfg.SharedStorage, cliflags.SharedStorage)
 		cliflagcfg.VarFlag(f, &serverCfg.SecondaryCache, cliflags.SecondaryCache)
 		cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
@@ -517,6 +513,7 @@ func init() {
 		cliflagcfg.VarFlag(f, &startCtx.sqlSizeValue, cliflags.SQLMem)
 		cliflagcfg.VarFlag(f, &startCtx.goMemLimitValue, cliflags.GoMemLimit)
 		cliflagcfg.VarFlag(f, &startCtx.tsdbSizeValue, cliflags.TSDBMem)
+		cliflagcfg.IntFlag(f, &startCtx.goGCPercent, cliflags.GoGCPercent)
 		// N.B. diskTempStorageSizeValue.Resolve() will be called after the
 		// stores flag has been parsed and the storage device that a
 		// percentage refers to becomes known.
@@ -532,6 +529,12 @@ func init() {
 		// a shared listener. See: https://github.com/cockroachdb/cockroach/issues/84585
 		cliflagcfg.VarFlag(f, addr.NewPortRangeSetter(&baseCfg.ApplicationInternalRPCPortMin, &baseCfg.ApplicationInternalRPCPortMax), cliflags.ApplicationInternalRPCPortRange)
 		_ = f.MarkHidden(cliflags.ApplicationInternalRPCPortRange.Name)
+	}
+
+	{
+		f := initCmd.Flags()
+		cliflagcfg.BoolFlag(f, &initCmdOptions.virtualized, cliflags.Virtualized)
+		cliflagcfg.BoolFlag(f, &initCmdOptions.virtualizedEmpty, cliflags.VirtualizedEmpty)
 	}
 
 	// Multi-tenancy start-sql command flags.
@@ -608,6 +611,7 @@ func init() {
 
 	clientCmds := []*cobra.Command{
 		debugJobTraceFromClusterCmd,
+		debugJobCleanupInfoRows,
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
@@ -728,6 +732,7 @@ func init() {
 		sqlShellCmd,
 		demoCmd,
 		debugJobTraceFromClusterCmd,
+		debugJobCleanupInfoRows,
 		doctorExamineClusterCmd,
 		doctorExamineFallbackClusterCmd,
 		doctorRecreateClusterCmd,
@@ -832,7 +837,6 @@ func init() {
 		cliflagcfg.IntFlag(f, &demoCtx.HTTPPort, cliflags.DemoHTTPPort)
 		cliflagcfg.StringFlag(f, &demoCtx.ListeningURLFile, cliflags.ListeningURLFile)
 		cliflagcfg.StringFlag(f, &demoCtx.pidFile, cliflags.PIDFile)
-		cliflagcfg.VarFlag(f, configprofiles.NewProfileSetter(&demoCtx.AutoConfigProvider), cliflags.ConfigProfile)
 	}
 
 	{
@@ -907,6 +911,7 @@ func init() {
 		f := debugRangeDataCmd.Flags()
 		cliflagcfg.BoolFlag(f, &debugCtx.replicated, cliflags.Replicated)
 		cliflagcfg.IntFlag(f, &debugCtx.maxResults, cliflags.Limit)
+		cliflagcfg.StringFlag(f, &serverCfg.SharedStorage, cliflags.SharedStorage)
 	}
 	{
 		f := debugGossipValuesCmd.Flags()
@@ -1250,19 +1255,34 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 	}
 	// Convert all the store paths to absolute paths. We want this to
 	// ensure canonical directories across invocations; and also to
-	// benefit from the check in GetAbsoluteStorePath() that the user
+	// benefit from the check in GetAbsoluteFSPath() that the user
 	// didn't mistakenly assume a heading '~' would get translated by
 	// CockroachDB. (The shell should be responsible for that.)
 	for i, ss := range serverCfg.Stores.Specs {
 		if ss.InMemory {
 			continue
 		}
-		absPath, err := base.GetAbsoluteStorePath("path", ss.Path)
+		absPath, err := base.GetAbsoluteFSPath("path", ss.Path)
 		if err != nil {
 			return err
 		}
 		ss.Path = absPath
 		serverCfg.Stores.Specs[i] = ss
+	}
+
+	if serverCfg.WALFailover.Path.IsSet() {
+		absPath, err := base.GetAbsoluteFSPath("wal-failover.path", serverCfg.WALFailover.Path.Path)
+		if err != nil {
+			return err
+		}
+		serverCfg.WALFailover.Path.Path = absPath
+	}
+	if serverCfg.WALFailover.PrevPath.IsSet() {
+		absPath, err := base.GetAbsoluteFSPath("wal-failover.prev_path", serverCfg.WALFailover.PrevPath.Path)
+		if err != nil {
+			return err
+		}
+		serverCfg.WALFailover.PrevPath.Path = absPath
 	}
 
 	// Configure the external I/O directory.
@@ -1279,7 +1299,7 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 	if startCtx.externalIODir != "" {
 		// Make the directory name absolute.
 		var err error
-		startCtx.externalIODir, err = base.GetAbsoluteStorePath(cliflags.ExternalIODir.Name, startCtx.externalIODir)
+		startCtx.externalIODir, err = base.GetAbsoluteFSPath(cliflags.ExternalIODir.Name, startCtx.externalIODir)
 		if err != nil {
 			return err
 		}

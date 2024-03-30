@@ -1,0 +1,48 @@
+send
+Query {"String": "CREATE TABLE temp(a INT)"}
+Query {"String": "CREATE PROCEDURE proc(a INOUT INT) AS 'BEGIN INSERT INTO temp VALUES(a); END;' LANGUAGE plpgsql"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE PROCEDURE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s0", "Query": "call proc($1)"}
+Bind {"DestinationPortal": "p0", "PreparedStatement": "s0", "Parameters": [{"text":"1"}]}
+Execute {"Portal": "p0"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"CALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT * FROM temp"}
+Query {"String": "DROP PROCEDURE proc"}
+Query {"String": "DROP TABLE temp"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"DROP PROCEDURE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

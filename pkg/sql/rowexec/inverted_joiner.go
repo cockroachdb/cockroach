@@ -278,7 +278,7 @@ func newInvertedJoiner(
 			return nil, err
 		}
 		ij.datumsToInvertedExpr, err = invertedidx.NewDatumsToInvertedExpr(
-			ctx, ij.EvalCtx, onExprColTypes, invertedExprHelper.Expr, ij.fetchSpec.GeoConfig,
+			ctx, ij.EvalCtx, onExprColTypes, invertedExprHelper.Expr(), ij.fetchSpec.GeoConfig,
 		)
 		if err != nil {
 			return nil, err
@@ -690,7 +690,7 @@ func (ij *invertedJoiner) emitRow() (
 func (ij *invertedJoiner) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
 	ij.combinedRow = append(ij.combinedRow[:0], lrow...)
 	ij.combinedRow = append(ij.combinedRow, rrow...)
-	if ij.onExprHelper.Expr != nil {
+	if ij.onExprHelper.Expr() != nil {
 		res, err := ij.onExprHelper.EvalFilter(ij.Ctx(), ij.combinedRow)
 		if !res || err != nil {
 			return nil, err
@@ -774,7 +774,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 			KVPairsRead:         optional.MakeUint(uint64(ij.fetcher.GetKVPairsRead())),
 			TuplesRead:          fis.NumTuples,
 			KVTime:              fis.WaitTime,
-			ContentionTime:      optional.MakeTimeValue(ij.contentionEventsListener.CumulativeContentionTime),
+			ContentionTime:      optional.MakeTimeValue(ij.contentionEventsListener.GetContentionTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(ij.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
 		},
@@ -784,8 +784,9 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: ij.OutputHelper.Stats(),
 	}
-	ret.Exec.ConsumedRU = optional.MakeUint(ij.tenantConsumptionListener.ConsumedRU)
-	execstats.PopulateKVMVCCStats(&ret.KV, &ij.scanStatsListener.ScanStats)
+	ret.Exec.ConsumedRU = optional.MakeUint(ij.tenantConsumptionListener.GetConsumedRU())
+	scanStats := ij.scanStatsListener.GetScanStats()
+	execstats.PopulateKVMVCCStats(&ret.KV, &scanStats)
 	return &ret
 }
 

@@ -15,7 +15,6 @@ go_library(
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
-        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/isql",

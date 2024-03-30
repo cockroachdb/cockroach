@@ -120,6 +120,7 @@ func (m *mockSubscription) Err() error {
 func (m *mockStreamClient) Subscribe(
 	ctx context.Context,
 	_ streampb.StreamID,
+	_ int32,
 	token streamclient.SubscriptionToken,
 	initialScanTime hlc.Timestamp,
 	_ hlc.Timestamp,
@@ -162,8 +163,8 @@ func (m *mockStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ bo
 // PriorReplicationDetails implements the streamclient.Client interface.
 func (m *mockStreamClient) PriorReplicationDetails(
 	_ context.Context, _ roachpb.TenantName,
-) (string, hlc.Timestamp, error) {
-	return "", hlc.Timestamp{}, nil
+) (string, string, hlc.Timestamp, error) {
+	return "", "", hlc.Timestamp{}, nil
 }
 
 // errorStreamClient always returns an error when consuming a partition.
@@ -175,6 +176,7 @@ var _ streamclient.Client = &errorStreamClient{}
 func (m *errorStreamClient) Subscribe(
 	_ context.Context,
 	_ streampb.StreamID,
+	_ int32,
 	_ streamclient.SubscriptionToken,
 	_ hlc.Timestamp,
 	_ hlc.Timestamp,
@@ -203,6 +205,9 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
+	st := cluster.MakeTestingClusterSettings()
+	quantize.Override(ctx, &st.SV, 0)
+
 	db := tc.Server(0).InternalDB().(descs.DB)
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
 
@@ -290,7 +295,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey,
-			mockClient, nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+			mockClient, nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st)
 		require.NoError(t, err)
 
 		emittedRows := readRows(out)
@@ -324,12 +329,13 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 
 		g := ctxgroup.WithContext(ctx)
-		sip, st, err := getStreamIngestionProcessor(ctx, t, registry, db,
+		sip, err := getStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, mockClient,
-			nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st)
 
 		require.NoError(t, err)
 		minimumFlushInterval.Override(ctx, &st.SV, 5*time.Millisecond)
+		quantize.Override(ctx, &st.SV, 0)
 		out := &execinfra.RowChannel{}
 		out.InitWithNumSenders(sip.OutputTypes(), 1)
 		out.Start(ctx)
@@ -367,12 +373,13 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 
 		g := ctxgroup.WithContext(ctx)
-		sip, st, err := getStreamIngestionProcessor(ctx, t, registry, db,
+		sip, err := getStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, mockClient,
-			nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st)
 		require.NoError(t, err)
 
 		minimumFlushInterval.Override(ctx, &st.SV, 50*time.Minute)
+		quantize.Override(ctx, &st.SV, 0)
 		maxKVBufferSize.Override(ctx, &st.SV, 1)
 		out := &execinfra.RowChannel{}
 		out.InitWithNumSenders(sip.OutputTypes(), 1)
@@ -416,13 +423,15 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 
 		g := ctxgroup.WithContext(ctx)
-		sip, st, err := getStreamIngestionProcessor(ctx, t, registry, db,
+		sip, err := getStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, mockClient,
-			nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st)
 		require.NoError(t, err)
 
 		minimumFlushInterval.Override(ctx, &st.SV, 50*time.Minute)
 		maxRangeKeyBufferSize.Override(ctx, &st.SV, 1)
+		quantize.Override(ctx, &st.SV, 0)
+
 		out := &execinfra.RowChannel{}
 		out.InitWithNumSenders(sip.OutputTypes(), 1)
 		out.Start(ctx)
@@ -472,7 +481,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, checkpoint, tenantRekey, mockClient,
-			nil /* cutoverProvider */, streamingTestingKnobs)
+			nil /* cutoverProvider */, streamingTestingKnobs, st)
 		require.NoError(t, err)
 
 		emittedRows := readRows(out)
@@ -499,7 +508,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, &errorStreamClient{},
-			nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st)
 		require.NoError(t, err)
 
 		// Expect no rows, and just the error.
@@ -680,6 +689,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 
+	quantize.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, 0)
 	ts := srv.SystemLayer()
 
 	registry := ts.JobRegistry().(*jobs.Registry)
@@ -725,9 +735,11 @@ func TestRandomClientGeneration(t *testing.T) {
 	randomStreamClient.RegisterInterception(cancelAfterCheckpoints)
 	randomStreamClient.RegisterInterception(validateFnWithValidator(t, streamValidator))
 
+	st := cluster.MakeTestingClusterSettings()
+	quantize.Override(ctx, &st.SV, 0)
 	out, err := runStreamIngestionProcessor(ctx, t, registry, ts.InternalDB().(descs.DB),
 		topo, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey,
-		randomStreamClient, noCutover{}, nil /* streamingTestingKnobs*/)
+		randomStreamClient, noCutover{}, nil /* streamingTestingKnobs*/, st)
 	require.NoError(t, err)
 
 	numResolvedEvents := 0
@@ -811,9 +823,10 @@ func runStreamIngestionProcessor(
 	mockClient streamclient.Client,
 	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
+	st *cluster.Settings,
 ) (*distsqlutils.RowBuffer, error) {
-	sip, _, err := getStreamIngestionProcessor(ctx, t, registry, db,
-		partitions, initialScanTimestamp, checkpoint, tenantRekey, mockClient, cutoverProvider, streamingTestingKnobs)
+	sip, err := getStreamIngestionProcessor(ctx, t, registry, db,
+		partitions, initialScanTimestamp, checkpoint, tenantRekey, mockClient, cutoverProvider, streamingTestingKnobs, st)
 	require.NoError(t, err)
 
 	out := &distsqlutils.RowBuffer{}
@@ -841,11 +854,11 @@ func getStreamIngestionProcessor(
 	mockClient streamclient.Client,
 	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
-) (*streamIngestionProcessor, *cluster.Settings, error) {
-	st := cluster.MakeTestingClusterSettings()
+	st *cluster.Settings,
+) (*streamIngestionProcessor, error) {
 	evalCtx := eval.MakeTestingEvalContext(st)
 	if mockClient == nil {
-		return nil, nil, errors.AssertionFailedf("non-nil streamclient required")
+		return nil, errors.AssertionFailedf("non-nil streamclient required")
 	}
 
 	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
@@ -859,6 +872,7 @@ func getStreamIngestionProcessor(
 			TestingKnobs:      execinfra.TestingKnobs{StreamingTestingKnobs: streamingTestingKnobs},
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
 		},
+		NodeID:      base.TestingIDContainer,
 		EvalCtx:     &evalCtx,
 		Mon:         evalCtx.TestingMon,
 		DiskMonitor: testDiskMonitor,
@@ -893,7 +907,7 @@ func getStreamIngestionProcessor(
 		sip.cutoverProvider = cutoverProvider
 	}
 
-	return sip, st, err
+	return sip, err
 }
 
 func resolvedSpansMinTS(resolvedSpans []jobspb.ResolvedSpan) hlc.Timestamp {

@@ -148,7 +148,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, pwRetrievalFn, err :=
+	exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, roleSubject, pwRetrievalFn, err :=
 		sql.GetUserSessionInitInfo(
 			ctx,
 			execCfg,
@@ -175,10 +175,13 @@ func (c *conn) handleAuthentication(
 		return connClose, c.sendError(ctx, pgerror.Newf(pgcode.InvalidAuthorizationSpecification, "%s does not have login privilege", dbUser))
 	}
 
-	// At this point, we know that the requested user exists and is
-	// allowed to log in. Now we can delegate to the selected AuthMethod
-	// implementation to complete the authentication.
-	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn); err != nil {
+	// At this point, we know that the requested user exists and is allowed to log
+	// in. Now we can delegate to the selected AuthMethod implementation to
+	// complete the authentication.
+	// TODO(souravcrl): Verify whether to use systemIdentity or dbUser here since
+	// systemIdentity refers to external system name, which is same as dbUser name
+	// incase ReplacementIdentity is not set.
+	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn, roleSubject); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
 		if pErr := (*security.PasswordUserAuthError)(nil); errors.As(err, &pErr) {
 			err = pgerror.WithCandidateCode(err, pgcode.InvalidPassword)

@@ -204,6 +204,10 @@ type SchemaFeatureChecker interface {
 	// CanCreateCrossDBSequenceOwnerRef returns if cross database sequence
 	// owner references are allowed.
 	CanCreateCrossDBSequenceOwnerRef() error
+
+	// CanCreateCrossDBSequenceRef returns if cross database sequence
+	// references are allowed.
+	CanCreateCrossDBSequenceRef() error
 }
 
 // PrivilegeChecker checks an element's privileges.
@@ -344,6 +348,14 @@ type ResolveParams struct {
 	// WithOffline, if set, instructs the catalog reader to include offline
 	// descriptors.
 	WithOffline bool
+
+	// ResolveTypes if set, instructs the catalog reader to resolve types
+	// and not just tables, sequences, and views.
+	ResolveTypes bool
+
+	// InDropContext, if set, indicates that overload resolution is being
+	// performed in the DROP routine context.
+	InDropContext bool
 }
 
 // NameResolver looks up elements in the catalog by name, and vice-versa.
@@ -382,7 +394,8 @@ type NameResolver interface {
 	// ResolveIndex retrieves an index by name and returns its elements.
 	ResolveIndex(relationID catid.DescID, indexName tree.Name, p ResolveParams) ElementResultSet
 
-	// ResolveUDF retrieves a user defined function and returns its elements.
+	// ResolveRoutine retrieves a user defined function or a stored procedure
+	// and returns its elements.
 	ResolveRoutine(routineObj *tree.RoutineObj, p ResolveParams, routineType tree.RoutineType) ElementResultSet
 
 	// ResolveIndexByName retrieves a table which contains the target
@@ -408,6 +421,9 @@ type ReferenceProvider interface {
 	// ForEachViewReference iterate through all referenced views and the reference
 	// details with the given function.
 	ForEachViewReference(f func(viewID descpb.ID, colIDs descpb.ColumnIDs) error) error
+	// ForEachFunctionReference iterates through all referenced functions for each
+	// function.
+	ForEachFunctionReference(f func(id descpb.ID) error) error
 	// ReferencedSequences returns all referenced sequence IDs
 	ReferencedSequences() catalog.DescriptorIDSet
 	// ReferencedTypes returns all referenced type IDs (not including implicit

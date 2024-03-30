@@ -21,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -56,8 +58,10 @@ func TestCreateSystemTable(t *testing.T) {
 				DefaultColumnID: 0,
 			},
 		},
-		NextFamilyID: 1,
+		NextFamilyID:     1,
+		NextConstraintID: 2,
 		PrimaryIndex: descpb.IndexDescriptor{
+			ConstraintID:   1,
 			Name:           tabledesc.LegacyPrimaryKeyIndexName,
 			ID:             1,
 			Unique:         true,
@@ -90,8 +94,9 @@ SELECT *
 			table.GetParentID(), table.GetParentSchemaID(), table.GetName())
 	}
 	require.Len(t, checkEntries(t), 0)
+	descDB := tc.Server(0).InternalDB().(descs.DB)
 	require.NoError(t, upgrades.CreateSystemTable(
-		ctx, tc.Server(0).DB(), tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table,
+		ctx, descDB, tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table, tree.LocalityLevelGlobal,
 	))
 	require.Len(t, checkEntries(t), 1)
 	sqlDB.CheckQueryResults(t,
@@ -100,7 +105,7 @@ SELECT *
 
 	// Make sure it's idempotent.
 	require.NoError(t, upgrades.CreateSystemTable(
-		ctx, tc.Server(0).DB(), tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table,
+		ctx, descDB, tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table, tree.LocalityLevelGlobal,
 	))
 	require.Len(t, checkEntries(t), 1)
 

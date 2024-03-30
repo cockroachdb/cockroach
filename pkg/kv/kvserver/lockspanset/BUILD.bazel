@@ -16,10 +16,6 @@ go_test(
     name = "lockspanset_test",
     srcs = ["lockspanset_test.go"],
     embed = [":lockspanset"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",

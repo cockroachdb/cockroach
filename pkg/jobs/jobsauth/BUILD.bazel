@@ -20,10 +20,6 @@ go_library(
 go_test(
     name = "jobsauth_test",
     srcs = ["authorization_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":jobsauth",
         "//pkg/ccl/changefeedccl",

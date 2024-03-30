@@ -298,14 +298,6 @@ func MakeObjectCommentsMetadataPrefix(
 	return encoding.EncodeUvarintAscending(k, uint64(descID))
 }
 
-// MakeSubObjectCommentsMetadataPrefix returns the key
-func MakeSubObjectCommentsMetadataPrefix(
-	codec keys.SQLCodec, cmtKey CommentType, descID descpb.ID, subID uint32,
-) roachpb.Key {
-	k := MakeObjectCommentsMetadataPrefix(codec, cmtKey, descID)
-	return encoding.EncodeUvarintAscending(k, uint64(subID))
-}
-
 // DecodeCommentMetadataID decodes a CommentKey from comments metadata key.
 func DecodeCommentMetadataID(codec keys.SQLCodec, key roachpb.Key) ([]byte, CommentKey, error) {
 	remaining, tableID, indexID, err := codec.DecodeIndexPrefix(key)

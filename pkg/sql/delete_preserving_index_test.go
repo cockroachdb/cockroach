@@ -12,7 +12,6 @@ package sql_test
 
 import (
 	"context"
-	"math"
 	"reflect"
 	"strings"
 	"sync"
@@ -627,7 +626,10 @@ func TestMergeProcessor(t *testing.T) {
 		settings := server.ClusterSettings()
 		execCfg := server.ExecutorConfig().(sql.ExecutorConfig)
 		evalCtx := eval.Context{Settings: settings, Codec: codec}
-		mm := mon.NewUnlimitedMonitor(ctx, "MemoryMonitor", mon.MemoryResource, nil, nil, math.MaxInt64, settings)
+		mm := mon.NewUnlimitedMonitor(ctx, mon.Options{
+			Name:     "MemoryMonitor",
+			Settings: settings,
+		})
 		flowCtx := execinfra.FlowCtx{
 			Cfg: &execinfra.ServerConfig{
 				DB:                execCfg.InternalDB,
@@ -703,7 +705,7 @@ func TestMergeProcessor(t *testing.T) {
 		sp := tableDesc.IndexSpan(codec, srcIndex.GetID())
 
 		output := fakeReceiver{}
-		im, err := backfill.NewIndexBackfillMerger(ctx, &flowCtx, 0 /* processorID */, execinfrapb.IndexBackfillMergerSpec{
+		im := backfill.NewIndexBackfillMerger(&flowCtx, 0 /* processorID */, execinfrapb.IndexBackfillMergerSpec{
 			Table:            tableDesc.TableDescriptor,
 			TemporaryIndexes: []descpb.IndexID{srcIndex.GetID()},
 			AddedIndexes:     []descpb.IndexID{dstIndex.GetID()},
@@ -711,9 +713,6 @@ func TestMergeProcessor(t *testing.T) {
 			SpanIdx:          []int32{0},
 			MergeTimestamp:   kvDB.Clock().Now(),
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
 
 		im.Run(ctx, &output)
 		if output.err != nil {

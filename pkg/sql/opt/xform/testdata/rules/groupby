@@ -475,7 +475,7 @@ memo (optimized, ~7KB, required=[presentation: min:7])
 memo
 SELECT min(b) FROM abc
 ----
-memo (optimized, ~7KB, required=[presentation: min:7])
+memo (optimized, ~8KB, required=[presentation: min:7])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: min:7]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -537,7 +537,7 @@ memo (optimized, ~7KB, required=[presentation: max:7])
 memo
 SELECT max(b) FROM abc
 ----
-memo (optimized, ~7KB, required=[presentation: max:7])
+memo (optimized, ~8KB, required=[presentation: max:7])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:7]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -650,7 +650,7 @@ scalar-group-by
 memo
 SELECT max(b) FROM abc
 ----
-memo (optimized, ~7KB, required=[presentation: max:7])
+memo (optimized, ~8KB, required=[presentation: max:7])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:7]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -1142,10 +1142,10 @@ WHERE a IN (
 GROUP BY a
 ----
 project
- ├── columns: a:1!null min:10!null
+ ├── columns: a:1!null min:11!null
  ├── cardinality: [0 - 1]
  ├── key: (1)
- ├── fd: (1)-->(10)
+ ├── fd: (1)-->(11)
  ├── inner-join (lookup t112131)
  │    ├── columns: a:1!null b:2!null min:9!null
  │    ├── key columns: [9] = [1]
@@ -1165,7 +1165,7 @@ project
  │    │              └── b:6
  │    └── filters (true)
  └── projections
-      └── b:2 [as=min:10, outer=(2)]
+      └── b:2 [as=min:11, outer=(2)]
 
 # Regression test for #112131. ReplaceMaxWithLimit should project constant
 # grouping columns.
@@ -1177,10 +1177,10 @@ WHERE a IN (
 GROUP BY a
 ----
 project
- ├── columns: a:1!null max:10!null
+ ├── columns: a:1!null max:11!null
  ├── cardinality: [0 - 1]
  ├── key: (1)
- ├── fd: (1)-->(10)
+ ├── fd: (1)-->(11)
  ├── inner-join (lookup t112131)
  │    ├── columns: a:1!null b:2!null max:9!null
  │    ├── key columns: [9] = [1]
@@ -1200,7 +1200,7 @@ project
  │    │              └── b:6
  │    └── filters (true)
  └── projections
-      └── b:2 [as=max:10, outer=(2)]
+      └── b:2 [as=max:11, outer=(2)]
 
 # --------------------------------------------------
 # ReplaceScalarMinMaxWithScalarSubqueries
@@ -1701,7 +1701,7 @@ scalar-group-by
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY w) GROUP BY u,v
 ----
-memo (optimized, ~9KB, required=[presentation: array_agg:7])
+memo (optimized, ~10KB, required=[presentation: array_agg:7])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:7]
  │         ├── best: (project G2 G3 array_agg)
@@ -1966,7 +1966,7 @@ memo (optimized, ~15KB, required=[presentation: sum:7])
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY w DESC) GROUP BY u,v
 ----
-memo (optimized, ~8KB, required=[presentation: array_agg:7])
+memo (optimized, ~9KB, required=[presentation: array_agg:7])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:7]
  │         ├── best: (project G2 G3 array_agg)
@@ -2422,7 +2422,7 @@ memo (optimized, ~27KB, required=[])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
-memo (optimized, ~27KB, required=[])
+memo (optimized, ~28KB, required=[])
  ├── G1: (upsert G2 G3 G4 xyz)
  │    └── []
  │         ├── best: (upsert G2 G3 G4 xyz)
@@ -2704,23 +2704,23 @@ project
       │    │    ├── limit hint: 3.00
       │    │    ├── union-all
       │    │    │    ├── columns: a:2!null rowid:7!null
-      │    │    │    ├── left columns: a:48 rowid:53
-      │    │    │    ├── right columns: a:57 rowid:62
+      │    │    │    ├── left columns: a:30 rowid:35
+      │    │    │    ├── right columns: a:39 rowid:44
       │    │    │    ├── ordering: +2
       │    │    │    ├── limit hint: 3.00
       │    │    │    ├── scan regional@partial_a,partial
-      │    │    │    │    ├── columns: a:48!null rowid:53!null
-      │    │    │    │    ├── constraint: /47/48: [/'east' - /'east']
-      │    │    │    │    ├── key: (53)
-      │    │    │    │    ├── fd: (53)-->(48), (48)-->(53)
-      │    │    │    │    ├── ordering: +48
+      │    │    │    │    ├── columns: a:30!null rowid:35!null
+      │    │    │    │    ├── constraint: /29/30: [/'east' - /'east']
+      │    │    │    │    ├── key: (35)
+      │    │    │    │    ├── fd: (35)-->(30), (30)-->(35)
+      │    │    │    │    ├── ordering: +30
       │    │    │    │    └── limit hint: 3.00
       │    │    │    └── scan regional@partial_a,partial
-      │    │    │         ├── columns: a:57!null rowid:62!null
-      │    │    │         ├── constraint: /56/57: [/'west' - /'west']
-      │    │    │         ├── key: (62)
-      │    │    │         ├── fd: (62)-->(57), (57)-->(62)
-      │    │    │         ├── ordering: +57
+      │    │    │         ├── columns: a:39!null rowid:44!null
+      │    │    │         ├── constraint: /38/39: [/'west' - /'west']
+      │    │    │         ├── key: (44)
+      │    │    │         ├── fd: (44)-->(39), (39)-->(44)
+      │    │    │         ├── ordering: +39
       │    │    │         └── limit hint: 3.00
       │    │    └── aggregations
       │    │         └── count-rows [as=count_rows:10]

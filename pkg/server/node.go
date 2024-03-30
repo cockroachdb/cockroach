@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -239,7 +240,7 @@ var (
 		settings.SystemOnly,
 		"server.secondary_tenants.redact_trace.enabled",
 		"if enabled, storage/KV trace results are redacted when returned to a virtual cluster",
-		true,
+		false,
 		settings.WithName("trace.redact_at_virtual_cluster_boundary.enabled"),
 	)
 
@@ -413,6 +414,7 @@ type Node struct {
 		encodedVersion string
 		updateCh       chan struct{}
 	}
+	proxySender kv.Sender
 }
 
 var _ kvpb.InternalServer = &Node{}
@@ -565,6 +567,7 @@ func NewNode(
 	tenantInfoWatcher *tenantcapabilitieswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
 	spanConfigReporter spanconfig.Reporter,
+	proxySender kv.Sender,
 ) *Node {
 	n := &Node{
 		storeCfg:              cfg,
@@ -582,6 +585,7 @@ func NewNode(
 		spanConfigReporter:    spanConfigReporter,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
+		proxySender:           proxySender,
 	}
 	n.versionUpdateMu.updateCh = make(chan struct{})
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
@@ -991,6 +995,7 @@ func (n *Node) gossipStores(ctx context.Context) {
 // maintained.
 func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.Duration) {
 	ctx := n.AnnotateCtx(context.Background())
+	n.stopper.AddCloser(stop.CloserFn(func() { n.stores.CloseDiskMonitors() }))
 	_ = stopper.RunAsyncTask(ctx, "compute-metrics", func(ctx context.Context) {
 		// Compute periodic stats at the same frequency as metrics are sampled.
 		ticker := time.NewTicker(interval)
@@ -1009,18 +1014,30 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 	})
 }
 
+// updateNodeRangeCount updates the internal counter of the total ranges across
+// all stores. This value is used to make a decision on whether the node should
+// use expiration leases (see Replica.shouldUseExpirationLeaseRLocked).
+func (n *Node) updateNodeRangeCount() {
+	var count int64
+	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+		count += store.Metrics().RangeCount.Value()
+		return nil
+	})
+	n.storeCfg.RangeCount.Store(count)
+}
+
 // computeMetricsPeriodically instructs each store to compute the value of
 // complicated metrics.
 func (n *Node) computeMetricsPeriodically(
 	ctx context.Context, storeToMetrics map[*kvserver.Store]*storage.MetricsForInterval, tick int,
 ) error {
-	return n.stores.VisitStores(func(store *kvserver.Store) error {
+	err := n.stores.VisitStores(func(store *kvserver.Store) error {
 		if newMetrics, err := store.ComputeMetricsPeriodically(ctx, storeToMetrics[store], tick); err != nil {
 			log.Warningf(ctx, "%s: unable to compute metrics: %s", store, err)
 		} else {
 			if storeToMetrics[store] == nil {
 				storeToMetrics[store] = &storage.MetricsForInterval{
-					FlushWriteThroughput: newMetrics.LogWriter.WriteThroughput,
+					FlushWriteThroughput: newMetrics.Flush.WriteThroughput,
 				}
 			} else {
 				storeToMetrics[store].FlushWriteThroughput = newMetrics.Flush.WriteThroughput
@@ -1031,6 +1048,8 @@ func (n *Node) computeMetricsPeriodically(
 		}
 		return nil
 	})
+	n.updateNodeRangeCount()
+	return err
 }
 
 // UpdateIOThreshold relays the supplied IOThreshold to the same method on the
@@ -1047,18 +1066,18 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // admission.StoreMetrics.
 type diskStatsMap struct {
 	provisionedRate   map[roachpb.StoreID]base.ProvisionedRateSpec
-	diskNameToStoreID map[string]roachpb.StoreID
+	diskPathToStoreID map[string]roachpb.StoreID
+	diskMonitors      map[string]disk.Monitor
 }
 
 func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
-	ctx context.Context,
 	clusterProvisionedBandwidth int64,
-	diskStatsFunc func(context.Context) ([]status.DiskStats, error),
+	diskStatsFunc func(map[string]disk.Monitor) (map[string]status.DiskStats, error),
 ) (stats map[roachpb.StoreID]admission.DiskStats, err error) {
 	if dsm.empty() {
 		return stats, nil
 	}
-	diskStats, err := diskStatsFunc(ctx)
+	diskStats, err := diskStatsFunc(dsm.diskMonitors)
 	if err != nil {
 		return stats, err
 	}
@@ -1070,11 +1089,11 @@ func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
 		}
 		stats[id] = s
 	}
-	for i := range diskStats {
-		if id, ok := dsm.diskNameToStoreID[diskStats[i].Name]; ok {
+	for path, diskStat := range diskStats {
+		if id, ok := dsm.diskPathToStoreID[path]; ok {
 			s := stats[id]
-			s.BytesRead = uint64(diskStats[i].ReadBytes)
-			s.BytesWritten = uint64(diskStats[i].WriteBytes)
+			s.BytesRead = uint64(diskStat.ReadBytes)
+			s.BytesWritten = uint64(diskStat.WriteBytes)
 			stats[id] = s
 		}
 	}
@@ -1085,28 +1104,49 @@ func (dsm *diskStatsMap) empty() bool {
 	return len(dsm.provisionedRate) == 0
 }
 
-func (dsm *diskStatsMap) initDiskStatsMap(specs []base.StoreSpec, engines []storage.Engine) error {
+func (dsm *diskStatsMap) initDiskStatsMap(
+	specs []base.StoreSpec, engines []storage.Engine, diskManager *disk.MonitorManager,
+) error {
 	*dsm = diskStatsMap{
 		provisionedRate:   make(map[roachpb.StoreID]base.ProvisionedRateSpec),
-		diskNameToStoreID: make(map[string]roachpb.StoreID),
+		diskPathToStoreID: make(map[string]roachpb.StoreID),
+		diskMonitors:      make(map[string]disk.Monitor),
 	}
 	for i := range engines {
+		if specs[i].Path == "" || specs[i].InMemory {
+			continue
+		}
 		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])
 		if err != nil {
 			return err
 		}
-		if len(specs[i].ProvisionedRateSpec.DiskName) > 0 {
-			dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
-			dsm.diskNameToStoreID[specs[i].ProvisionedRateSpec.DiskName] = id.StoreID
+		monitor, err := diskManager.Monitor(specs[i].Path)
+		if err != nil {
+			return err
 		}
+		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
+		dsm.diskPathToStoreID[specs[i].Path] = id.StoreID
+		dsm.diskMonitors[specs[i].Path] = *monitor
 	}
 	return nil
 }
 
+func (dsm *diskStatsMap) closeDiskMonitors() {
+	for _, monitor := range dsm.diskMonitors {
+		monitor.Close()
+	}
+}
+
 func (n *Node) registerEnginesForDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine,
+	specs []base.StoreSpec, engines []storage.Engine, diskManager *disk.MonitorManager,
 ) error {
-	return n.diskStatsMap.initDiskStatsMap(specs, engines)
+	if err := n.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {
+		return err
+	}
+	if err := n.stores.RegisterDiskMonitors(diskManager, n.diskStatsMap.diskPathToStoreID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
@@ -1114,7 +1154,7 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
 		&n.storeCfg.Settings.SV)
 	storeIDToDiskStats, err := n.diskStatsMap.tryPopulateAdmissionDiskStats(
-		context.Background(), clusterProvisionedBandwidth, status.GetDiskCounters)
+		clusterProvisionedBandwidth, status.GetMonitorCounters)
 	if err != nil {
 		log.Warningf(context.Background(), "%v",
 			errors.Wrapf(err, "unable to populate disk stats"))
@@ -1353,7 +1393,7 @@ func (n *Node) batchInternal(
 		}
 		reqSp.finish(br, redact)
 	}()
-	if log.HasSpanOrEvent(ctx) {
+	if log.HasSpan(ctx) {
 		log.Eventf(ctx, "node received request: %s", args.Summary())
 		defer log.Event(ctx, "node sending response")
 	}
@@ -1370,9 +1410,34 @@ func (n *Node) batchInternal(
 		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
 		writeBytes.Release()
 	}()
+
+	// If a proxy attempt is requested, we copy the request to prevent evaluation
+	// from modifying the request. There are places on the server that can modify
+	// the request, and we can't keep these modifications if we later proxy it.
+	// Note we only ShallowCopy, so care must be taken with internal changes.
+	// For reference some of the places are:
+	//  SetActiveTimestamp - sets the Header.Timestamp
+	//  maybeStripInFlightWrites - can modify internal EndTxn requests
+	//  tryBumpBatchTimestamp - can modify the txn.ReadTimestamp
+	// TODO(baptist): Other code copies the BatchRequest, in some cases
+	// unnecessarily, to prevent modifying the passed in request. We should clean
+	// up the contract of the Send method to allow modifying the request or more
+	// strictly enforce that the callee is not allowed to change it.
+	var originalRequest *kvpb.BatchRequest
+	if args.ProxyRangeInfo != nil {
+		originalRequest = args.ShallowCopy()
+	}
 	var pErr *kvpb.Error
 	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args)
 	if pErr != nil {
+		if originalRequest != nil {
+			if proxyResponse := n.maybeProxyRequest(ctx, originalRequest, pErr); proxyResponse != nil {
+				// If the proxy request succeeded then return its result instead of
+				// our error. If not, use our original error.
+				return proxyResponse, nil
+			}
+		}
+
 		br = &kvpb.BatchResponse{}
 		if pErr.Index != nil && keyvissettings.Enabled.Get(&n.storeCfg.Settings.SV) {
 			// Tell the SpanStatsCollector about the requests in this BatchRequest,
@@ -1424,6 +1489,58 @@ func (n *Node) batchInternal(
 	br.Error = pErr
 
 	return br, nil
+}
+
+// maybeProxyRequest is called after the server returned an error and it
+// attempts to proxy the request if it can. We attempt o proxy requests if two
+// primary conditions are met:
+// 1) The ProxyRangeInfo header is set on the request indicating the client
+// would like us to proxy this request if we can't evaluate it.
+// 2) Local evaluation has resulted in a NotLeaseHolderError which matches the
+// ProxyRangeInfo from the client.
+// If these conditions are met, attempt to send the request through our local
+// DistSender stack and use that result instead of our error.
+func (n *Node) maybeProxyRequest(
+	ctx context.Context, ba *kvpb.BatchRequest, pErr *kvpb.Error,
+) *kvpb.BatchResponse {
+	// NB: We don't handle StoreNotFound or RangeNotFound errors. If we want to
+	// support proxy requests through non-replicas we could proxy those errors
+	// as well.
+	var nlhe *kvpb.NotLeaseHolderError
+	if ok := errors.As(pErr.GetDetail(), &nlhe); !ok {
+		log.VEventf(ctx, 2, "non-proxyable errors %v", pErr)
+		return nil
+	}
+	// If because we think the client has
+	// stale information, see if our information would update the clients
+	// state. If so, rather than proxying this request, fail back to the
+	// client first.
+	leaseCompatible := nlhe.Lease != nil && ba.ProxyRangeInfo.Lease.Sequence >= nlhe.Lease.Sequence
+	descCompatible := ba.ProxyRangeInfo.Desc.Generation >= nlhe.RangeDesc.Generation
+	if !leaseCompatible || !descCompatible {
+		log.VEventf(
+			ctx,
+			2,
+			"out-of-date client information on proxy request %v != %v",
+			ba.ProxyRangeInfo,
+			pErr,
+		)
+		return nil
+	}
+
+	log.VEventf(ctx, 2, "proxy request for %v after local error %v", ba, pErr)
+	// TODO(baptist): Correctly set up the span / tracing.
+	br, pErr := n.proxySender.Send(ctx, ba)
+	if pErr == nil {
+		log.VEvent(ctx, 2, "proxy succeeded")
+		return br
+	}
+	// Wrap the error in a ProxyFailedError. It is unwrapped on the client side
+	// and handled there.
+	log.VEventf(ctx, 2, "proxy attempt resulted in error %v", pErr)
+	br = &kvpb.BatchResponse{}
+	br.Error = kvpb.NewError(kvpb.NewProxyFailedError(pErr.GoError()))
+	return br
 }
 
 // getLocalityComparison takes gatewayNodeID as input and returns the locality
@@ -2569,7 +2686,8 @@ func (n *Node) SpanConfigConformance(
 func (n *Node) GetRangeDescriptors(
 	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
-	iter, err := n.execCfg.RangeDescIteratorFactory.NewIterator(stream.Context(), args.Span)
+
+	iter, err := n.execCfg.RangeDescIteratorFactory.NewLazyIterator(stream.Context(), args.Span, int(args.BatchSize))
 	if err != nil {
 		return err
 	}
@@ -2577,9 +2695,19 @@ func (n *Node) GetRangeDescriptors(
 	var rangeDescriptors []roachpb.RangeDescriptor
 	for iter.Valid() {
 		rangeDescriptors = append(rangeDescriptors, iter.CurRangeDescriptor())
+		if args.BatchSize > 0 && len(rangeDescriptors) >= int(args.BatchSize) {
+			if err := stream.Send(&kvpb.GetRangeDescriptorsResponse{
+				RangeDescriptors: rangeDescriptors,
+			}); err != nil {
+				return err
+			}
+			rangeDescriptors = make([]roachpb.RangeDescriptor, 0, len(rangeDescriptors))
+		}
 		iter.Next()
 	}
-
+	if err := iter.Error(); err != nil {
+		return err
+	}
 	return stream.Send(&kvpb.GetRangeDescriptorsResponse{
 		RangeDescriptors: rangeDescriptors,
 	})

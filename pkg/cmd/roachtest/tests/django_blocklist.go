@@ -162,9 +162,12 @@ var enabledDjangoTests = []string{
 }
 
 // Maintain that this list is alphabetized.
-var djangoBlocklist = blocklist{}
+var djangoBlocklist = blocklist{
+	`schema.tests.SchemaTests.test_alter_text_field_to_date_field`:     "alter type requires USING",
+	`schema.tests.SchemaTests.test_alter_text_field_to_datetime_field`: "alter type requires USING",
+	`schema.tests.SchemaTests.test_alter_text_field_to_time_field`:     "alter type requires USING",
+}
 
 var djangoIgnoreList = blocklist{
-	"schema.tests.SchemaTests.test_add_auto_field":   "unneeded once django-cockroachdb 4.1.1 is released",
-	"schema.tests.SchemaTests.test_autofield_to_o2o": "unneeded once django-cockroachdb 4.1.1 is released",
+	`select_for_update.tests.SelectForUpdateTests.test_nowait_raises_error_on_block`: "flaky; see #120196",
 }

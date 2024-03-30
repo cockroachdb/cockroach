@@ -108,10 +108,8 @@ func incrementSequenceHelper(
 		}
 	}
 	if !hasRequiredPriviledge {
-
-		return 0, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"user %s does not have UPDATE or USAGE privilege on %s %s",
-			p.User(), descriptor.DescriptorType(), descriptor.GetName())
+		return 0, sqlerrors.NewInsufficientPrivilegeOnDescriptorError(p.User(), requiredPrivileges,
+			string(descriptor.DescriptorType()), descriptor.GetName())
 	}
 
 	var err error
@@ -217,7 +215,12 @@ func (p *planner) incrementSequenceUsingCache(
 			return 0, err
 		}
 	} else {
-		val, err = p.GetOrInitSequenceCache().NextValue(uint32(sequenceID), uint32(descriptor.GetVersion()), fetchNextValues)
+		// If cache size option is 1 (default -> not cached), and node cache size option is not 0 (not default -> node-cached), then use node-level cache
+		if seqOpts.CacheSize == 1 && seqOpts.NodeCacheSize != 0 {
+			val, err = p.GetSequenceCacheNode().NextValue(sequenceID, uint32(descriptor.GetVersion()), fetchNextValues)
+		} else {
+			val, err = p.GetOrInitSequenceCache().NextValue(uint32(sequenceID), uint32(descriptor.GetVersion()), fetchNextValues)
+		}
 		if err != nil {
 			return 0, err
 		}

@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -334,7 +334,7 @@ TestXXA - 1.00s
 					testName: "TestMeta",
 					title:    "internal/metamorphic: TestMeta failed",
 					message:  "panic: induced panic",
-					expRepro: `go test -tags 'invariants' -exec 'stress -p 1' -timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed 1600209371838097000 -ops "uniform:5000-10000"`,
+					expRepro: `go test -tags 'invariants' -exec 'stress -p 1' -timeout 0 -test.v -run 'TestMeta$' ./internal/metamorphic -seed 1600209371838097000 -ops "uniform:5000-10000"`,
 					labels:   []string{"metamorphic-failure", "C-test-failure", "release-blocker"},
 				},
 			},

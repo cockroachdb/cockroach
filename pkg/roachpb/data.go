@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keysbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -46,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3/raftpb"
 )
 
 const (
@@ -900,6 +900,29 @@ func (v Value) PrettyPrint() (ret string) {
 		return fmt.Sprintf("/<err: %s>", err)
 	}
 	return buf.String()
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (sp StoreProperties) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.SafeString(redact.SafeString(sp.Dir))
+	w.SafeString(":")
+	if sp.ReadOnly {
+		w.SafeString(" ro")
+	} else {
+		w.SafeString(" rw")
+	}
+	w.Printf(" encrypted=%t", sp.Encrypted)
+	if sp.WalFailoverPath != nil {
+		w.Printf(" wal_failover_path=%s", redact.SafeString(*sp.WalFailoverPath))
+	}
+	if sp.FileStoreProperties != nil {
+		w.SafeString(" fs:{")
+		w.Printf("bdev=%s", redact.SafeString(sp.FileStoreProperties.BlockDevice))
+		w.Printf(" fstype=%s", redact.SafeString(sp.FileStoreProperties.FsType))
+		w.Printf(" mountpoint=%s", redact.SafeString(sp.FileStoreProperties.MountPoint))
+		w.Printf(" mountopts=%s", redact.SafeString(sp.FileStoreProperties.MountOptions))
+		w.SafeString("}")
+	}
 }
 
 // Kind returns the kind of commit trigger as a string.
@@ -1875,10 +1898,19 @@ func (l Lease) Speculative() bool {
 // based leases, the start time of the lease is sufficient to
 // avoid using an older lease with same epoch.
 //
+// expToEpochEquiv indicates whether an expiration-based lease
+// can be considered equivalent to an epoch-based lease during
+// a promotion from expiration-based to epoch-based. It is used
+// for mixed-version compatibility.
+//
 // NB: Lease.Equivalent is NOT symmetric. For expiration-based
 // leases, a lease is equivalent to another with an equal or
-// later expiration, but not an earlier expiration.
-func (l Lease) Equivalent(newL Lease) bool {
+// later expiration, but not an earlier expiration. Similarly,
+// an expiration-based lease is equivalent to an epoch-based
+// lease with the same replica and start time (representing a
+// promotion from expiration-based to epoch-based), but the
+// reverse is not true.
+func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
 	l.ProposedTS, newL.ProposedTS = nil, nil
 	l.DeprecatedStartStasis, newL.DeprecatedStartStasis = nil, nil
@@ -1907,15 +1939,37 @@ func (l Lease) Equivalent(newL Lease) bool {
 			l.Epoch, newL.Epoch = 0, 0
 		}
 	case LeaseExpiration:
-		// See the comment above, though this field's nullability wasn't
-		// changed. We nil it out for completeness only.
-		l.Epoch, newL.Epoch = 0, 0
+		switch newL.Type() {
+		case LeaseEpoch:
+			// An expiration-based lease being promoted to an epoch-based lease. This
+			// transition occurs after a successful lease transfer if the setting
+			// kv.transfer_expiration_leases_first.enabled is enabled.
+			//
+			// Expiration-based leases carry a local expiration timestamp. Epoch-based
+			// leases store their expiration indirectly in NodeLiveness. We assume that
+			// this promotion is only proposed if the liveness expiration is later than
+			// previous expiration carried by the expiration-based lease. This is a
+			// case where Equivalent is not commutative, as the reverse transition
+			// (from epoch-based to expiration-based) requires a sequence increment.
+			//
+			// Ignore epoch and expiration. The remaining fields which are compared
+			// are Replica and Start.
+			if expToEpochEquiv {
+				l.Epoch, newL.Epoch = 0, 0
+				l.Expiration, newL.Expiration = nil, nil
+			}
 
-		// For expiration-based leases, extensions are considered equivalent.
-		// This is the one case where Equivalent is not commutative and, as
-		// such, requires special handling beneath Raft (see checkForcedErr).
-		if l.GetExpiration().LessEq(newL.GetExpiration()) {
-			l.Expiration, newL.Expiration = nil, nil
+		case LeaseExpiration:
+			// See the comment above, though this field's nullability wasn't
+			// changed. We nil it out for completeness only.
+			l.Epoch, newL.Epoch = 0, 0
+
+			// For expiration-based leases, extensions are considered equivalent.
+			// This is one case where Equivalent is not commutative and, as such,
+			// requires special handling beneath Raft (see checkForcedErr).
+			if l.GetExpiration().LessEq(newL.GetExpiration()) {
+				l.Expiration, newL.Expiration = nil, nil
+			}
 		}
 	}
 	return l == newL
@@ -1950,8 +2004,8 @@ func equivalentTimestamps(a, b *hlc.Timestamp) bool {
 
 // Equal implements the gogoproto Equal interface. This implementation is
 // forked from the gogoproto generated code to allow l.Expiration == nil and
-// l.Expiration == &hlc.Timestamp{} to compare equal. Ditto for
-// DeprecatedStartStasis.
+// l.Expiration == &hlc.Timestamp{} to compare equal. It also ignores
+// DeprecatedStartStasis entirely to allow for its removal in a later release.
 func (l *Lease) Equal(that interface{}) bool {
 	if that == nil {
 		return l == nil
@@ -1979,9 +2033,6 @@ func (l *Lease) Equal(that interface{}) bool {
 		return false
 	}
 	if !l.Replica.Equal(&that1.Replica) {
-		return false
-	}
-	if !equivalentTimestamps(l.DeprecatedStartStasis, that1.DeprecatedStartStasis) {
 		return false
 	}
 	if !l.ProposedTS.Equal(that1.ProposedTS) {

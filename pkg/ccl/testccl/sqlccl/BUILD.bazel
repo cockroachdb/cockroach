@@ -6,6 +6,7 @@ go_test(
         "explain_test.go",
         "gc_job_test.go",
         "main_test.go",
+        "read_committed_test.go",
         "run_control_test.go",
         "session_revival_test.go",
         "show_create_test.go",
@@ -16,10 +17,6 @@ go_test(
     data = [
         "//c-deps:libgeos",  # keep
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     shard_count = 16,
     tags = ["ccl_test"],
     deps = [
@@ -30,6 +27,9 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
@@ -44,7 +44,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/sessiondatapb",
-        "//pkg/sql/sqlliveness/slinstance",
+        "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/sqltestutils",
         "//pkg/sql/tests",
         "//pkg/testutils",
@@ -52,6 +52,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

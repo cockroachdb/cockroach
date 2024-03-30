@@ -588,3 +588,60 @@ node: <
 to-proto name=none
 ----
 <nil>
+
+# The following set of expressions (up to 'a-and-a-or-b-and-c') is a regression
+# test for incorrectly simplifying 'a AND (a OR (b AND c))' to 'a OR (b AND c)'
+# (#117979).
+
+new-span-leaf name=a tight=true unique=true span=a
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["a", "a"]
+ └── union spans: ["a", "a"]
+
+new-span-leaf name=c tight=true unique=true span=c
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["c", "c"]
+ └── union spans: ["c", "c"]
+
+and result=b-and-c left=b right=c
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["b", "d")
+ ├── union spans: empty
+ └── INTERSECTION
+      ├── span expression
+      │    ├── tight: true, unique: true
+      │    ├── to read: ["b", "b"]
+      │    └── union spans: ["b", "b"]
+      └── span expression
+           ├── tight: true, unique: true
+           ├── to read: ["c", "c"]
+           └── union spans: ["c", "c"]
+
+or result=a-or-b-and-c left=a right=b-and-c
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["a", "d")
+ ├── union spans: ["a", "a"]
+ └── INTERSECTION
+      ├── span expression
+      │    ├── tight: true, unique: true
+      │    ├── to read: ["b", "b"]
+      │    └── union spans: ["b", "b"]
+      └── span expression
+           ├── tight: true, unique: true
+           ├── to read: ["c", "c"]
+           └── union spans: ["c", "c"]
+
+and result=a-and-a-or-b-and-c left=a right=a-or-b-and-c
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["a", "a"]
+ └── union spans: ["a", "a"]

@@ -554,10 +554,10 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 		var cmd string
 		if c.IsLocal() {
 			// Not all shells like brace expansion, so we'll do it here
-			dirs := []string{"data", "logs"}
+			dirs := []string{"data*", "logs*"}
 			if !preserveCerts {
-				dirs = append(dirs, "certs*")
-				dirs = append(dirs, "tenant-certs*")
+				dirs = append(dirs, fmt.Sprintf("%s*", CockroachNodeCertsDir))
+				dirs = append(dirs, fmt.Sprintf("%s*", CockroachNodeTenantCertsDir))
 			}
 			for _, dir := range dirs {
 				cmd += fmt.Sprintf(`rm -fr %s/%s ;`, c.localVMDir(node), dir)
@@ -566,10 +566,13 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 			rmCmds := []string{
 				`sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \;`,
 				`sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data}`,
-				`sudo rm -fr logs`,
+				`sudo rm -fr logs* data*`,
 			}
 			if !preserveCerts {
-				rmCmds = append(rmCmds, "sudo rm -fr certs*", "sudo rm -fr tenant-certs*")
+				rmCmds = append(rmCmds,
+					fmt.Sprintf("sudo rm -fr %s*", CockroachNodeCertsDir),
+					fmt.Sprintf("sudo rm -fr %s*", CockroachNodeTenantCertsDir),
+				)
 			}
 
 			cmd = strings.Join(rmCmds, " && ")
@@ -655,6 +658,11 @@ type MonitorProcessDead struct {
 type MonitorError struct {
 	Err error
 }
+
+// MonitorNoCockroachProcessesError is the error returned when the
+// monitor is called on a node that is not running a `cockroach`
+// process by the time the monitor runs.
+var MonitorNoCockroachProcessesError = errors.New("no cockroach processes running")
 
 // NodeMonitorInfo is a message describing a cockroach process' status.
 type NodeMonitorInfo struct {
@@ -792,8 +800,7 @@ func (c *SyncedCluster) Monitor(
 			vcs := map[virtualClusterInfo]struct{}{}
 			vcLines := strings.TrimSuffix(result.CombinedOut, "\n")
 			if vcLines == "" {
-				err := errors.New("no cockroach processes running")
-				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
+				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{MonitorNoCockroachProcessesError}})
 				return
 			}
 			for _, label := range strings.Split(vcLines, "\n") {
@@ -955,6 +962,7 @@ wait
 				for {
 					line, _, err := r.ReadLine()
 					if err == io.EOF {
+						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
 						return
 					}
 					if err != nil {
@@ -1563,11 +1571,10 @@ fi
 	}
 
 	if len(c.AuthorizedKeys) > 0 {
-		// When clusters are created using cloud APIs they only have a subset of
-		// desired keys installed on a subset of users. This code distributes
-		// additional authorized_keys to both the current user (your username on
-		// gce and the shared user on aws) as well as to the shared user on both
-		// platforms.
+		// When clusters are created using cloud APIs they only have a
+		// subset of desired keys installed on a subset of users. This
+		// code distributes additional authorized_keys the current user
+		// (i.e., the shared user).
 		if err := c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay("adding additional authorized keys"),
 			func(ctx context.Context, node Node) (*RunResultDetails, error) {
 				const cmd = `
@@ -1579,20 +1586,11 @@ on_exit() {
     rm -f "${tmp1}" "${tmp2}"
 }
 trap on_exit EXIT
-if [[ -f ~/.ssh/authorized_keys ]]; then
-    cat ~/.ssh/authorized_keys > "${tmp1}"
-fi
+cat ~/.ssh/authorized_keys > "${tmp1}"
 echo "${keys_data}" >> "${tmp1}"
 sort -u < "${tmp1}" > "${tmp2}"
 install --mode 0600 "${tmp2}" ~/.ssh/authorized_keys
-if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
-    sudo install --mode 0600 \
-        --owner ` + config.SharedUser + `\
-        --group ` + config.SharedUser + `\
-        "${tmp2}" ~` + config.SharedUser + `/.ssh/authorized_keys
-fi
 `
-
 				runOpts := defaultCmdOpts("ssh-add-extra-keys")
 				runOpts.stdin = bytes.NewReader(c.AuthorizedKeys)
 				return c.runCmdOnSingleNode(ctx, l, node, cmd, runOpts)
@@ -1605,10 +1603,17 @@ fi
 }
 
 const (
-	certsTarName       = "certs.tar"
-	tenantCertsTarName = "tenant-certs.tar"
-	tenantCertFile     = "client-tenant.%d.crt"
+	// CockroachNodeCertsDir is the certs directory that lives
+	// on the cockroach node itself.
+	CockroachNodeCertsDir       = "certs"
+	CockroachNodeTenantCertsDir = "tenant-certs"
+	certsTarName                = "certs.tar"
+	tenantCertFile              = "client-tenant.%d.crt"
 )
+
+func tenantCertsTarName(virtualClusterID int) string {
+	return fmt.Sprintf("%s-%d.tar", CockroachNodeTenantCertsDir, virtualClusterID)
+}
 
 // DistributeCerts will generate and distribute certificates to all the nodes.
 func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) error {
@@ -1630,20 +1635,20 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 			}
 			cmd += fmt.Sprintf(`
-rm -fr certs
-mkdir -p certs
+rm -fr %[2]s
+mkdir -p %[2]s
 VERSION=$(%[1]s version --build-tag)
 VERSION=${VERSION::5}
 TENANT_SCOPE_OPT=""
 if [[ $VERSION = v22.2 ]]; then
        TENANT_SCOPE_OPT="--tenant-scope 1,2,3,4,11,12,13,14"
 fi
-%[1]s cert create-ca --certs-dir=certs --ca-key=certs/ca.key
-%[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
-%[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
-%[1]s cert create-node %[2]s --certs-dir=certs --ca-key=certs/ca.key
-tar cvf %[3]s certs
-`, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
+%[1]s cert create-ca --certs-dir=%[2]s --ca-key=%[2]s/ca.key
+%[1]s cert create-client root --certs-dir=%[2]s --ca-key=%[2]s/ca.key $TENANT_SCOPE_OPT
+%[1]s cert create-client %[3]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key $TENANT_SCOPE_OPT
+%[1]s cert create-node %[4]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key
+tar cvf %[5]s %[2]s
+`, cockroachNodeBinary(c, 1), CockroachNodeCertsDir, DefaultUser, strings.Join(nodeNames, " "), certsTarName)
 
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("init-certs"))
 		},
@@ -1681,11 +1686,14 @@ func (c *SyncedCluster) DistributeTenantCerts(
 		return err
 	}
 
-	if err := hostCluster.createTenantCertBundle(ctx, l, tenantCertsTarName, virtualClusterID, nodeNames); err != nil {
+	certsTar := tenantCertsTarName(virtualClusterID)
+	if err := hostCluster.createTenantCertBundle(
+		ctx, l, tenantCertsTarName(virtualClusterID), virtualClusterID, nodeNames,
+	); err != nil {
 		return err
 	}
 
-	tarfile, cleanup, err := hostCluster.getFileFromFirstNode(ctx, l, tenantCertsTarName)
+	tarfile, cleanup, err := hostCluster.getFileFromFirstNode(ctx, l, certsTar)
 	if err != nil {
 		return err
 	}
@@ -1714,25 +1722,26 @@ func (c *SyncedCluster) createTenantCertBundle(
 				cmd += fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 			}
 			cmd += fmt.Sprintf(`
-CERT_DIR=tenant-certs/certs
-CA_KEY=certs/ca.key
+CERT_DIR=%[1]s-%[5]d/certs
+CA_KEY=%[2]s/ca.key
 
 rm -fr $CERT_DIR
 mkdir -p $CERT_DIR
-cp certs/ca.crt $CERT_DIR
+cp %[2]s/ca.crt $CERT_DIR
 SHARED_ARGS="--certs-dir=$CERT_DIR --ca-key=$CA_KEY"
-VERSION=$(%[1]s version --build-tag)
+VERSION=$(%[3]s version --build-tag)
 VERSION=${VERSION::3}
 TENANT_SCOPE_OPT=""
 if [[ $VERSION = v22 ]]; then
-        TENANT_SCOPE_OPT="--tenant-scope %[3]d"
+        TENANT_SCOPE_OPT="--tenant-scope %[5]d"
 fi
-%[1]s cert create-node %[2]s $SHARED_ARGS
-%[1]s cert create-tenant-client %[3]d %[2]s $SHARED_ARGS
-%[1]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
-%[1]s cert create-client testuser $TENANT_SCOPE_OPT $SHARED_ARGS
-tar cvf %[4]s $CERT_DIR
+%[3]s cert create-node %[4]s $SHARED_ARGS
+%[3]s cert create-tenant-client %[5]d %[4]s $SHARED_ARGS
+%[3]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
+tar cvf %[6]s $CERT_DIR
 `,
+				CockroachNodeTenantCertsDir,
+				CockroachNodeCertsDir,
 				cockroachNodeBinary(c, node),
 				strings.Join(nodeNames, " "),
 				virtualClusterID,
@@ -1793,7 +1802,7 @@ func (c *SyncedCluster) checkForTenantCertificates(
 	if c.IsLocal() {
 		dir = c.localVMDir(1)
 	}
-	if !c.fileExistsOnFirstNode(ctx, l, filepath.Join(dir, tenantCertsTarName)) {
+	if !c.fileExistsOnFirstNode(ctx, l, filepath.Join(dir, tenantCertsTarName(virtualClusterID))) {
 		return false
 	}
 	return c.fileExistsOnFirstNode(ctx, l, filepath.Join(c.CertsDir(1), fmt.Sprintf(tenantCertFile, virtualClusterID)))
@@ -2577,7 +2586,7 @@ func (c *SyncedCluster) pgurls(
 		if err != nil {
 			return nil, err
 		}
-		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode)
+		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, AuthUserCert)
 	}
 	return m, nil
 }
@@ -2766,7 +2775,7 @@ type ParallelResult struct {
 // By default, this will fail fast, unless explicitly specified otherwise in the
 // RunOptions, if a command error occurs on any node, and return a slice
 // containing all results up to that point, along with a boolean indicating that
-// at least one error occurred. If `WithFailSlow(true)` is passed in, then the
+// at least one error occurred. If `WithFailSlow()` is passed in, then the
 // function will wait for all invocations to complete before returning.
 //
 // ParallelE only returns an error for roachprod itself, not any command errors run
@@ -2789,13 +2798,7 @@ func (c *SyncedCluster) ParallelE(
 	options RunOptions,
 	fn func(ctx context.Context, n Node) (*RunResultDetails, error),
 ) ([]*RunResultDetails, bool, error) {
-	// Defaults for RunOptions if not specified.
-	if options.RetryOptions == nil {
-		options.RetryOptions = DefaultRetryOpt
-	}
-	if options.ShouldRetryFn == nil {
-		options.ShouldRetryFn = DefaultShouldRetryFn
-	}
+	// Function specific default for FailOption if not specified.
 	if options.FailOption == FailDefault {
 		options.FailOption = FailFast
 	}
@@ -2926,8 +2929,8 @@ func (c *SyncedCluster) ParallelE(
 // to maintain parity with auto-init behavior of `roachprod start` (when
 // --skip-init) is not specified.
 func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) error {
-	if res, err := c.initializeCluster(ctx, l, node); err != nil || (res != nil && res.Err != nil) {
-		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to initialize cluster.")
+	if err := c.initializeCluster(ctx, l, node); err != nil {
+		return errors.WithDetail(err, "install.Init() failed: unable to initialize cluster.")
 	}
 
 	if err := c.setClusterSettings(ctx, l, node, ""); err != nil {
@@ -2935,6 +2938,21 @@ func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) e
 	}
 
 	return nil
+}
+
+// allPublicAddrs returns a string that can be used when starting cockroach to
+// indicate the location of all nodes in the cluster.
+func (c *SyncedCluster) allPublicAddrs(ctx context.Context) (string, error) {
+	var addrs []string
+	for _, node := range c.Nodes {
+		port, err := c.NodePort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
+		if err != nil {
+			return "", err
+		}
+		addrs = append(addrs, fmt.Sprintf("%s:%d", c.Host(node), port))
+	}
+
+	return strings.Join(addrs, ","), nil
 }
 
 // GenFilenameFromArgs given a list of cmd args, returns an alphahumeric string up to

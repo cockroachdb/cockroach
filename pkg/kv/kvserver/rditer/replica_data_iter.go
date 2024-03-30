@@ -137,6 +137,25 @@ func MakeReplicatedKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 	return ss
 }
 
+// MakeReplicatedKeySpansUserOnly returns all key spans corresponding to user
+// keys.
+func MakeReplicatedKeySpansUserOnly(d *roachpb.RangeDescriptor) []roachpb.Span {
+	return Select(d.RangeID, SelectOpts{
+		ReplicatedBySpan:      d.RSpan(),
+		ReplicatedSpansFilter: ReplicatedSpansUserOnly,
+	})
+}
+
+// MakeReplicatedKeySpansExcludingUser returns all key spans corresponding to
+// non-user keys.
+func MakeReplicatedKeySpansExcludingUser(d *roachpb.RangeDescriptor) []roachpb.Span {
+	return Select(d.RangeID, SelectOpts{
+		ReplicatedBySpan:      d.RSpan(),
+		ReplicatedByRangeID:   true,
+		ReplicatedSpansFilter: ReplicatedSpansExcludeUser,
+	})
+}
+
 // makeReplicatedKeySpansExceptLockTable returns all key spans that are fully Raft
 // replicated for the given Range, except for the lock table spans. These are
 // returned in the following sorted order:
@@ -446,6 +465,7 @@ var IterateReplicaKeySpansShared func(
 	visitRangeDel func(start, end []byte, seqNum uint64) error,
 	visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error
 
 // IterateOptions instructs how points and ranges should be presented to visitor

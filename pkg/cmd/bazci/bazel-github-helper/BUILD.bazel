@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "bazel-github-helper_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/bazci/bazel-github-helper",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/build/engflow",
+        "//pkg/build/util",
+        "//pkg/cmd/bazci/githubpost",
+    ],
+)
+
+go_binary(
+    name = "bazel-github-helper",
+    embed = [":bazel-github-helper_lib"],
+    visibility = ["//visibility:public"],
+)

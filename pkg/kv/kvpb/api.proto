@@ -19,6 +19,7 @@ import "roachpb/data.proto";
 import "kv/kvpb/errors.proto";
 import "roachpb/metadata.proto";
 import "roachpb/span_config.proto";
+import "rpc/rpcpb/rpc.proto";
 import "settings/encoding.proto";
 import "sql/catalog/fetchpb/index_fetch.proto";
 import "storage/enginepb/mvcc.proto";
@@ -497,6 +498,10 @@ message DeleteRangeRequest {
 //
 // To pass DeleteRangePredicates, the client must also pass UseRangeTombstone.
 message DeleteRangePredicates {
+  // ImportEpoch specifies that all keys with a non-zero
+  // MVCCValueHeader.ImportEpoch == ImportEmpoch should be deleted.
+  uint32 import_epoch = 1;
+
   // StartTime specifies an exclusive lower bound to surface keys
   // for deletion. If specified, DeleteRange will only issue tombstones to keys
   // within the span [startKey, endKey) that also have MVCC versions with
@@ -1317,6 +1322,15 @@ message PushTxnResponse {
   // TODO(tschottdorf): Maybe this can be a TxnMeta instead; probably requires
   // factoring out the new Priority.
   Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+  // ambiguous_abort is true if pushee_txn has status ABORTED, but the
+  // transaction may in fact have been committed and GCed already. Concretely,
+  // this means that the transaction record does not exist, but it may have
+  // existed in the past (according to the timestamp cache), and we can't know
+  // whether it committed or aborted so we pessimistically assume it aborted.
+  //
+  // NB: this field was added in a patch release, and is not guaranteed to be
+  // populated prior to 24.1.
+  bool ambiguous_abort = 3;
 }
 
 // A RecoverTxnRequest is arguments to the RecoverTxn() method. It is sent
@@ -1422,6 +1436,19 @@ message QueryIntentRequest {
   // If true, return an IntentMissingError if no matching intent (neither a
   // "partial match" nor a "full match") is found.
   bool error_if_missing = 3;
+
+  // The strength with which the lock being queried was acquired at. To ensure
+  // the supplied protection was provided, we check whether the lock was held
+  // with the supplied lock strength or something stronger at the sequence
+  // number.
+  kv.kvserver.concurrency.lock.Strength strength = 4;
+
+  // The list of sequence numbers that have been ignored by the transaction that
+  // acquired the lock. Any locks found at sequence numbers which are considered
+  // ignored will be treated as "not found"; that's because they can be removed
+  // at any time.
+  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 5
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 }
 
 // A QueryIntentResponse is the return value from the QueryIntent() method.
@@ -1821,7 +1848,14 @@ message ExportRequest {
 
   FingerprintOptions fingerprint_options = 15 [(gogoproto.nullable) = false];
 
-  // Next ID: 16
+  // IncludeMVCCValueHeader controls whether the MVCCValueHeader is
+  // included in exported bytes. Callers should only set this when all
+  // readers of the returned SST are prepared to parse full a
+  // MVCCValue. Even when set, only fields appropriate for export are
+  // included. See storage.EncodeMVCCValueForExport for details.
+  bool include_mvcc_value_header = 16 [(gogoproto.customname) = "IncludeMVCCValueHeader"];
+
+  // Next ID: 17
 }
 
 message FingerprintOptions {
@@ -2106,39 +2140,6 @@ message AddSSTableRequest {
   // is likely non-empty. See AddSSTableResponse.FollowingLikelyNonEmptySpanStart.
   bool return_following_likely_non_empty_span_start = 9;
 
-  // RemoteFile indicates that the span indicated by the request start and end
-  // key of the file specified should be added. Data cannot be set if RemoteFile
-  // is non-empty, and many other request parameters such as collision/shadow
-  // checking, write-at-request-timestamp, or ingest-as-writes are unsupported.
-  //
-  // TODO(dt, msbutler, bilal): This is unsupported.
-  // TODO(dt, msbutler, bilal): support sst_timestamp_to_request_timestamp.
-  // TODO(msbutler): rename to ExternalFile.
-  message  RemoteFile {
-    string locator = 1;
-    string path = 2;
-    uint64 backing_file_size = 3;
-  }
-  RemoteFile remote_file = 10 [(gogoproto.nullable) = false];
-
-  // AddSSTableRequest_PrefixReplacement is used to represent a prefix to be
-  // replaced and the prefix with which to replace it.
-  message PrefixReplacement {
-    bytes from = 1;
-    bytes to = 2;
-  }
-
-  // PrefixReplacement is used to that keys in the sst with the prefix specified
-  // in "from" should instead appear to have that prefix replaced by "to", when
-  // during iteration, seeking, or other reads. For example, an SST containing
-  // keys a1, a2, and a3 when added with PrefixReplacement={From: a, To:x} would
-  // produce the same results for subsequent operations as adding an SST with
-  // the keys x1, x2, x3 instead. The implementaiton may however elect to defer
-  // these replacements until the file is read.
-  //
-  // TODO(dt,msbutler,bilal): This is unsupported.
-  PrefixReplacement prefix_replacement = 11 [(gogoproto.nullable) = false];
-
   // IgnoreKeysAboveTimestamp is used when ingesting an SSTable that contains
   // keys, including mvcc revisions of keys, captured over a time range, to
   // indicate that readers of that sstable should read it "as of" a the fixed
@@ -2146,6 +2147,8 @@ message AddSSTableRequest {
   //
   // TODO(dt,msbutler,bilal): This is unsupported.
   util.hlc.Timestamp ignore_keys_above_timestamp = 12 [(gogoproto.nullable) = false];
+
+  reserved 10, 11;
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
@@ -2173,6 +2176,36 @@ message AddSSTableResponse {
   // picked using cheaper, inconsistentent reads so it should be used only for
   // estimations of how ingested data and spans may overlap.
   bytes following_likely_non_empty_span_start = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+}
+
+// LinkExternalSSTableRequest contains arguments to the LinkExternalSSTable
+// method, which links an External SST file into the Pebble log-structured
+// merge-tree. The External SST must point to a backup file which contains
+// versioned values with non-zero MVCC timestamps (no intents or inline values).
+// It cannot be used in a transaction, cannot be split across ranges, and must
+// be alone in a batch.
+message LinkExternalSSTableRequest {
+    RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  message  ExternalFile {
+    string locator = 1;
+    string path = 2;
+    uint64 backing_file_size = 3;
+    uint64 approximate_physical_size = 4;
+    bytes synthetic_prefix = 5;
+    bool use_synthetic_suffix = 6;
+
+    // MVCCStats are estimated MVCCStats for the contents of this Extrenal SSTable
+    // and is used as-is during evaluation of the command to update the range
+    // MVCCStats, instead of computing the stats for the SSTable by iterating it.
+    storage.enginepb.MVCCStats mvcc_stats = 7 [(gogoproto.customname) = "MVCCStats"];
+  }
+  ExternalFile external_file = 4 [(gogoproto.nullable) = false];
+}
+
+// LinkExternalSSTableResponse is the response to a LinkExternalSSTable() operation.
+message LinkExternalSSTableResponse {
+    ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no
@@ -2423,11 +2456,28 @@ message QueryResolvedTimestampResponse {
     (gogoproto.nullable) = false, (gogoproto.customname) = "ResolvedTS"];
 }
 
-// BarrierRequest is the request for a Barrier operation. This goes through Raft
-// and has the purpose of waiting until all conflicting in-flight operations on
-// this range have completed, without blocking any new operations.
+// BarrierRequest is the request for a Barrier operation. This guarantees that
+// all past and ongoing writes to a key span have completed and applied on the
+// leaseholder. It does this by waiting for all conflicting write latches and
+// then submitting a noop write through Raft, waiting for it to apply. Later
+// writes are not affected -- in particular, it does not actually take out a
+// latch, so writers don't have to wait for it to complete and can write below
+// the barrier.
 message BarrierRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // WithLeaseAppliedIndex will return the LeaseAppliedIndex of the barrier
+  // command in the response, allowing the caller to wait for the barrier to
+  // apply on an arbitrary replica. It also returns the range descriptor, so the
+  // caller can detect any unexpected range changes.
+  //
+  // When enabled, the barrier request can no longer span multiple ranges, and
+  // will instead return RangeKeyMismatchError. The caller must be prepared to
+  // handle this.
+  //
+  // NB: This field was added in a patch release. Nodes prior to 24.1 are not
+  // guaranteed to support it, returning a zero LeaseAppliedIndex instead.
+  bool with_lease_applied_index = 2;
 }
 
 // BarrierResponse is the response for a Barrier operation.
@@ -2437,6 +2487,14 @@ message BarrierResponse {
   // Timestamp at which this Barrier was evaluated. Can be used to guarantee
   // future operations happen on the same or newer leaseholders.
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+
+  // LeaseAppliedIndex at which this Barrier was applied. Only returned when
+  // requested via WithLeaseAppliedIndex.
+  uint64 lease_applied_index = 3 [(gogoproto.casttype) = "LeaseAppliedIndex"];
+
+  // RangeDesc at the time the barrier was applied. Only returned when requested
+  // via WithLeaseAppliedIndex.
+  RangeDescriptor range_desc = 4 [(gogoproto.nullable) = false];
 }
 
 // A RequestUnion contains exactly one of the requests.
@@ -2494,6 +2552,7 @@ message RequestUnion {
     BarrierRequest barrier = 53;
     ProbeRequest probe = 54;
     IsSpanEmptyRequest is_span_empty = 56;
+    LinkExternalSSTableRequest link_external_sstable = 57;
   }
   reserved 8, 15, 23, 25, 27, 31, 34, 52;
 }
@@ -2549,6 +2608,7 @@ message ResponseUnion {
     BarrierResponse barrier = 53;
     ProbeResponse probe = 54;
     IsSpanEmptyResponse is_span_empty = 56;
+    LinkExternalSSTableResponse link_external_sstable = 57;
   }
   reserved 8, 15, 23, 25, 27, 28, 31, 34, 52;
 }
@@ -2883,9 +2943,40 @@ message Header {
   // and/or been explicitly committed by a RecoverTxn request. See #103817.
   bool ambiguous_replay_protection = 32;
 
+  // ConnectionClass specifies the preferred RPC connection class to use for
+  // sending or retransmitting this BatchRequest.
+  //
+  // This is only a hint. Senders of this request may override this preference.
+  // For example, requests to some critical system ranges can be "upgraded" to
+  // the SYSTEM class.
+  //
+  // If the enum value is unknown (for instance, may happen when the cluster is
+  // in a mixed-version state after a new value got added), DEFAULT is assumed.
+  cockroach.rpc.ConnectionClass connection_class = 33;
+
+  // ProxyRangeInfo, if set, indicates the RangeInfo information a client had
+  // when it sent this request. This information is passed to an intermediate
+  // proxy node which can then forward the request to the final destination.
+  // If this field is set, then the node which receives the BatchRequest should
+  // first try and evaluate the request locally. If local evaluation fails with
+  // a NotLeaseHolderError, it should act on behalf of the original client and
+  // forward the original request, with this field cleared, to the leaseholder
+  // as determined by the ProxyRangeInfo header.
+  //
+  // If the kv.dist_sender.proxy.enabled parameter is set to false, the client
+  // will never set this header and proxying will be disabled.
+  //
+  // NB: This field is only used in 24.1+ systems. A mixed mode system with at
+  // least one node not on 24.1 will exhibit the following behavior.
+  // * A client older than 24.1 will never set this field.
+  // * A proxy node older than 24.1 will ignore this field being set and return an
+  // error after local evaluation like it does in older systems.
+  // * A destination node older than 24.1 will not see this field.
+  RangeInfo proxy_range_info = 34;
+
   reserved 7, 10, 12, 14, 20;
 
-  // Next ID: 33
+  // Next ID: 35
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded
@@ -3552,6 +3643,9 @@ service Internal {
 message GetRangeDescriptorsRequest {
   // Span over which to request range descriptors.
   Span span = 1 [(gogoproto.nullable) = false];
+  // BatchSize if set non-zero streams batches incrementally (which may not be
+  // consistent).
+  int64 batch_size = 2;
 }
 
 // GetRangeDescriptorsResponse lists out the requested range descriptors.

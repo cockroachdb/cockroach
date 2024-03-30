@@ -12,6 +12,7 @@
 package sqlerrors
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -157,6 +159,11 @@ func NewInvalidWildcardError(name string) error {
 		"%q does not match any valid database or schema", name)
 }
 
+// NewUndefinedObjectError creates an error that represents a missing object.
+func NewUndefinedObjectError(name tree.NodeFormatter) error {
+	return pgerror.Newf(pgcode.UndefinedObject, "object %q does not exist", tree.ErrString(name))
+}
+
 // NewUndefinedTypeError creates an error that represents a missing type.
 func NewUndefinedTypeError(name tree.NodeFormatter) error {
 	return pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", tree.ErrString(name))
@@ -191,13 +198,6 @@ func NewSchemaAlreadyExistsError(name string) error {
 func NewUnsupportedUnvalidatedConstraintError(constraintType catconstants.ConstraintType) error {
 	return pgerror.Newf(pgcode.FeatureNotSupported,
 		"%v constraints cannot be marked NOT VALID", constraintType)
-}
-
-// WrapErrorWhileConstructingObjectAlreadyExistsErr is used to wrap an error
-// when an error occurs while trying to get the colliding object for an
-// ObjectAlreadyExistsErr.
-func WrapErrorWhileConstructingObjectAlreadyExistsErr(err error) error {
-	return pgerror.WithCandidateCode(errors.Wrap(err, "object already exists"), pgcode.DuplicateObject)
 }
 
 // MakeObjectAlreadyExistsError creates an error for a namespace collision
@@ -368,6 +368,23 @@ func NewInvalidVolatilityError(err error) error {
 func NewCannotModifyVirtualSchemaError(schema string) error {
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"%s is a virtual schema and cannot be modified", tree.ErrNameString(schema))
+}
+
+// NewInsufficientPrivilegeOnDescriptorError creates an InsufficientPrivilege
+// error saying the `user` does not have any of the privilege in `orPrivs` on
+// the descriptor.
+func NewInsufficientPrivilegeOnDescriptorError(
+	user username.SQLUsername, orPrivs []privilege.Kind, descType string, descName string,
+) error {
+	orPrivsInStr := make([]string, 0, len(orPrivs))
+	for _, priv := range orPrivs {
+		orPrivsInStr = append(orPrivsInStr, string(priv.DisplayName()))
+	}
+	sort.Strings(orPrivsInStr)
+	privsStr := strings.Join(orPrivsInStr, " or ")
+	return pgerror.Newf(pgcode.InsufficientPrivilege,
+		"user %s does not have %s privilege on %s %s",
+		user, privsStr, descType, descName)
 }
 
 // QueryTimeoutError is an error representing a query timeout.

@@ -58,6 +58,11 @@ func (es StoreEncryptionSpec) String() string {
 		es.Path, es.KeyPath, es.OldKeyPath, es.RotationPeriod)
 }
 
+// PathMatches returns true if this StoreEncryptionSpec matches the given store path.
+func (es StoreEncryptionSpec) PathMatches(path string) bool {
+	return es.Path == path || es.Path == "*"
+}
+
 // NewStoreEncryptionSpec parses the string passed in and returns a new
 // StoreEncryptionSpec if parsing succeeds.
 // TODO(mberhault): we should share the parsing code with the StoreSpec.
@@ -91,17 +96,21 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 
 		switch field {
 		case pathField:
-			var err error
-			es.Path, err = base.GetAbsoluteStorePath(pathField, value)
-			if err != nil {
-				return StoreEncryptionSpec{}, err
+			if value == "*" {
+				es.Path = value
+			} else {
+				var err error
+				es.Path, err = base.GetAbsoluteFSPath(pathField, value)
+				if err != nil {
+					return StoreEncryptionSpec{}, err
+				}
 			}
 		case "key":
 			if value == plaintextFieldValue {
 				es.KeyPath = plaintextFieldValue
 			} else {
 				var err error
-				es.KeyPath, err = base.GetAbsoluteStorePath("key", value)
+				es.KeyPath, err = base.GetAbsoluteFSPath("key", value)
 				if err != nil {
 					return StoreEncryptionSpec{}, err
 				}
@@ -111,7 +120,7 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 				es.OldKeyPath = plaintextFieldValue
 			} else {
 				var err error
-				es.OldKeyPath, err = base.GetAbsoluteStorePath("old-key", value)
+				es.OldKeyPath, err = base.GetAbsoluteFSPath("old-key", value)
 				if err != nil {
 					return StoreEncryptionSpec{}, err
 				}
@@ -141,17 +150,17 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 	return es, nil
 }
 
-// StoreEncryptionSpecList contains a slice of StoreEncryptionSpecs that implements pflag's value
+// EncryptionSpecList contains a slice of StoreEncryptionSpecs that implements pflag's value
 // interface.
-type StoreEncryptionSpecList struct {
+type EncryptionSpecList struct {
 	Specs []StoreEncryptionSpec
 }
 
-var _ pflag.Value = &StoreEncryptionSpecList{}
+var _ pflag.Value = &EncryptionSpecList{}
 
 // String returns a string representation of all the StoreEncryptionSpecs. This is part
 // of pflag's value interface.
-func (encl StoreEncryptionSpecList) String() string {
+func (encl EncryptionSpecList) String() string {
 	var buffer bytes.Buffer
 	for _, ss := range encl.Specs {
 		fmt.Fprintf(&buffer, "--%s=%s ", cliflagsccl.EnterpriseEncryption.Name, ss)
@@ -165,13 +174,13 @@ func (encl StoreEncryptionSpecList) String() string {
 
 // Type returns the underlying type in string form. This is part of pflag's
 // value interface.
-func (encl *StoreEncryptionSpecList) Type() string {
-	return "StoreEncryptionSpec"
+func (encl *EncryptionSpecList) Type() string {
+	return "EncryptionSpec"
 }
 
 // Set adds a new value to the StoreEncryptionSpecValue. It is the important part of
 // pflag's value interface.
-func (encl *StoreEncryptionSpecList) Set(value string) error {
+func (encl *EncryptionSpecList) Set(value string) error {
 	spec, err := NewStoreEncryptionSpec(value)
 	if err != nil {
 		return err
@@ -184,28 +193,27 @@ func (encl *StoreEncryptionSpecList) Set(value string) error {
 	return nil
 }
 
-// PopulateStoreSpecWithEncryption iterates through the StoreEncryptionSpecList and looks
-// for matching paths in the StoreSpecList.
-// Any unmatched StoreEncryptionSpec causes an error.
-// Matching stores have a few encryption-related fields set.
-func PopulateStoreSpecWithEncryption(
-	storeSpecs base.StoreSpecList, encryptionSpecs StoreEncryptionSpecList,
+// PopulateWithEncryptionOpts iterates through the EncryptionSpecList and looks
+// for matching paths in the StoreSpecList and WAL failover config. Any
+// unmatched EncryptionSpec causes an error.
+func PopulateWithEncryptionOpts(
+	storeSpecs base.StoreSpecList,
+	walFailoverConfig *base.WALFailoverConfig,
+	encryptionSpecs EncryptionSpecList,
 ) error {
 	for _, es := range encryptionSpecs.Specs {
 		var found bool
 		for i := range storeSpecs.Specs {
-			if storeSpecs.Specs[i].Path != es.Path {
+			if !es.PathMatches(storeSpecs.Specs[i].Path) {
 				continue
 			}
 
 			// Found a matching path.
-			if storeSpecs.Specs[i].UseFileRegistry {
+			if len(storeSpecs.Specs[i].EncryptionOptions) > 0 {
 				return fmt.Errorf("store with path %s already has an encryption setting",
 					storeSpecs.Specs[i].Path)
 			}
 
-			// Tell the store we absolutely need the file registry.
-			storeSpecs.Specs[i].UseFileRegistry = true
 			opts, err := es.ToEncryptionOptions()
 			if err != nil {
 				return err
@@ -214,8 +222,29 @@ func PopulateStoreSpecWithEncryption(
 			found = true
 			break
 		}
+
+		for _, externalPath := range [2]*base.ExternalPath{&walFailoverConfig.Path, &walFailoverConfig.PrevPath} {
+			if !externalPath.IsSet() || !es.PathMatches(externalPath.Path) {
+				continue
+			}
+			// NB: The external paths WALFailoverConfig.Path and
+			// WALFailoverConfig.PrevPath are only ever set in single-store
+			// configurations. In multi-store with among-stores failover mode, these
+			// will be empty (so we won't encounter the same path twice).
+			if len(externalPath.EncryptionOptions) > 0 {
+				return fmt.Errorf("WAL failover path %s already has an encryption setting",
+					externalPath.Path)
+			}
+			opts, err := es.ToEncryptionOptions()
+			if err != nil {
+				return err
+			}
+			externalPath.EncryptionOptions = opts
+			found = true
+		}
+
 		if !found {
-			return fmt.Errorf("no store with path %s found for encryption setting: %v", es.Path, es)
+			return fmt.Errorf("no usage of path %s found for encryption setting: %v", es.Path, es)
 		}
 	}
 	return nil
@@ -223,21 +252,16 @@ func PopulateStoreSpecWithEncryption(
 
 // EncryptionOptionsForStore takes a store directory and returns its EncryptionOptions
 // if a matching entry if found in the StoreEncryptionSpecList.
-// The caller should appropriately set UseFileRegistry on a non-nil result.
-func EncryptionOptionsForStore(
-	dir string, encryptionSpecs StoreEncryptionSpecList,
-) ([]byte, error) {
+func EncryptionOptionsForStore(dir string, encryptionSpecs EncryptionSpecList) ([]byte, error) {
 	// We need an absolute path, but the input may have come in relative.
 	path, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not find absolute path for %s ", dir)
 	}
-
 	for _, es := range encryptionSpecs.Specs {
-		if es.Path == path {
+		if es.PathMatches(path) {
 			return es.ToEncryptionOptions()
 		}
 	}
-
 	return nil, nil
 }

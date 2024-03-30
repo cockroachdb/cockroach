@@ -37,7 +37,7 @@ func registerLibPQ(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -103,8 +103,10 @@ func registerLibPQ(r registry.Registry) {
 		testListRegex := "^(Test|Example)"
 		result, err := c.RunWithDetailsSingleNode(
 			ctx, t.L(),
-			node,
-			fmt.Sprintf(`cd %s && PGPORT={pgport:1} PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -list "%s"`, libPQPath, testListRegex),
+			option.WithNodes(node),
+			fmt.Sprintf(
+				`cd %s && PGPORT={pgport:1} PGUSER=%s PGPASSWORD=%s PGSSLMODE=require PGDATABASE=postgres go test -list "%s"`,
+				libPQPath, install.DefaultUser, install.DefaultPassword, testListRegex),
 		)
 		require.NoError(t, err)
 
@@ -131,8 +133,8 @@ func registerLibPQ(r registry.Registry) {
 		_ = c.RunE(
 			ctx,
 			option.WithNodes(node),
-			fmt.Sprintf("cd %s && PGPORT={pgport:1} PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -run %s -v 2>&1 | %s/bin/go-junit-report > %s",
-				libPQPath, allowedTestsRegExp, goPath, resultsPath),
+			fmt.Sprintf("cd %s && PGPORT={pgport:1} PGUSER=%s PGPASSWORD=%s PGSSLMODE=require PGDATABASE=postgres go test -run %s -v 2>&1 | %s/bin/go-junit-report > %s",
+				libPQPath, install.DefaultUser, install.DefaultPassword, allowedTestsRegExp, goPath, resultsPath),
 		)
 
 		parseAndSummarizeJavaORMTestsResults(

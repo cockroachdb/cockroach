@@ -1,0 +1,125 @@
+# LogicTest: cockroach-go-testserver-23.2
+
+# Verify that all nodes are running the previous version.
+
+query T nodeidx=0
+SELECT crdb_internal.node_executable_version()
+----
+23.2
+
+query T nodeidx=1
+SELECT crdb_internal.node_executable_version()
+----
+23.2
+
+query T nodeidx=2
+SELECT crdb_internal.node_executable_version()
+----
+23.2
+
+statement error pq: at or near "per": syntax error
+CREATE SEQUENCE cache_test PER NODE CACHE 10
+
+statement error pq: at or near "per": syntax error
+ALTER SEQUENCE cache_test PER NODE CACHE 10
+
+# Upgrade one node to 24.1
+
+upgrade 0
+
+# Verify that node index 0 is now running 24.1 binary.
+
+query T nodeidx=0
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+----
+24.1
+
+statement error pgcode 0A000 node-level cache not supported before V24.1
+CREATE SEQUENCE cache_test PER NODE CACHE 10
+
+statement ok
+CREATE SEQUENCE alter_cache_test
+
+statement error pgcode 0A000 node-level cache not supported before V24.1
+ALTER SEQUENCE alter_cache_test PER NODE CACHE 10
+
+upgrade 1
+
+upgrade 2
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version();
+
+query T nodeidx=1
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+----
+24.1
+
+query T nodeidx=2
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+----
+24.1
+
+# Since clusterversion.V24_1 is currently a placeholder and points to the latest Key,
+# this query will fail once latest or V24_1 is updated. Will have to change this query
+# to match that new internal version.
+query B retry
+SELECT crdb_internal.is_at_least_version('23.2-18')
+----
+true
+
+statement error pq: PER NODE CACHE \(0\) must be greater than zero
+CREATE SEQUENCE cache_test PER NODE CACHE 0
+
+statement ok nodeidx=0
+CREATE SEQUENCE cache_test PER NODE CACHE 10
+
+statement ok nodeidx=1
+ALTER SEQUENCE cache_test PER NODE CACHE 20
+
+# Verify that the sequence gets incremented to the default cache
+# size of 256 for node-level sequence caching
+subtest serial_cached_node_sequence
+
+statement ok nodeidx=0
+SET serial_normalization = sql_sequence_cached_node
+
+statement ok nodeidx=0
+CREATE TABLE serial (
+  cached SERIAL
+);
+
+statement ok nodeidx=0
+INSERT INTO serial (cached) VALUES (DEFAULT);
+
+query I nodeidx=0
+SELECT cached from serial;
+----
+1
+
+query T nodeidx=0
+SELECT pg_get_serial_sequence('serial', 'cached')
+----
+public.serial_cached_seq
+
+query I nodeidx=0
+SELECT last_value from public.serial_cached_seq;
+----
+256
+
+statement ok nodeidx=1
+INSERT INTO serial (cached) VALUES (DEFAULT);
+
+query I nodeidx=0
+SELECT cached from serial ORDER BY cached;
+----
+1
+2
+
+query I nodeidx=0
+SELECT last_value from public.serial_cached_seq;
+----
+256
+
+statement ok nodeidx=0
+DROP TABLE serial;

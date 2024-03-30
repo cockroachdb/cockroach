@@ -5,3 +5,4 @@ packages:
   - "./workspaces/cluster-ui"
   - "./workspaces/db-console"
   - "./workspaces/e2e-tests"
+  - "./workspaces/crdb-api-client"

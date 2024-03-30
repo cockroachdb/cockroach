@@ -98,6 +98,16 @@ func (og *operationGenerator) schemaExists(
 	)`, schemaName)
 }
 
+func (og *operationGenerator) fnExists(
+	ctx context.Context, tx pgx.Tx, fnName string, argTypes string,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `SELECT EXISTS (
+	SELECT proname
+		FROM pg_proc 
+   WHERE proname = $1 AND pg_get_function_identity_arguments(oid) ILIKE $2
+	)`, fnName, argTypes)
+}
+
 func (og *operationGenerator) tableHasDependencies(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
 ) (bool, error) {
@@ -241,61 +251,18 @@ func (e *exprColumnCollector) VisitPre(expr tree.Expr) (recurse bool, newExpr tr
 }
 
 // valuesViolateUniqueConstraints determines if any unique constraints (including primary
-// constraints and constraint expressions) that  will be violated upon inserting
+// constraints and constraint expressions) that will be violated upon inserting
 // the specified rows into the specified table.
 func (og *operationGenerator) valuesViolateUniqueConstraints(
 	ctx context.Context,
 	tx pgx.Tx,
 	tableName *tree.TableName,
-	columns []string,
+	nonGeneratedColNames []string,
 	colInfo []column,
 	rows [][]string,
 ) (bool, codesWithConditions, error) {
 	var generatedCodes codesWithConditions
-	constraints, err := og.scanStringArrayRows(ctx, tx, `
-    WITH tab_json AS (
-                    SELECT crdb_internal.pb_to_json(
-                            'desc',
-                            descriptor
-                           )->'table' AS t
-                      FROM system.descriptor
-                     WHERE id = $1::REGCLASS
-                  ),
-         columns_json AS (
-                        SELECT json_array_elements(t->'columns') AS c FROM tab_json
-                      ),
-         columns AS (
-                    SELECT (c->>'id')::INT8 AS col_id,
-                           IF(
-                            (c->'inaccessible')::BOOL,
-                            c->>'computeExpr',
-                            c->>'name'
-                           ) AS expr
-                      FROM columns_json
-                 ),
-         indexes_json AS (
-                         SELECT json_array_elements(t->'indexes') AS idx
-                           FROM tab_json
-                         UNION ALL SELECT t->'primaryIndex' FROM tab_json
-                      ),
-         unique_indexes AS (
-                            SELECT idx->'name' AS name,
-                                   json_array_elements(
-                                    idx->'keyColumnIds'
-                                   )::STRING::INT8 AS col_id
-                              FROM indexes_json
-                             WHERE (idx->'unique')::BOOL
-                        ),
-         index_exprs AS (
-                        SELECT name, expr
-                          FROM unique_indexes AS idx
-                               INNER JOIN columns AS c ON idx.col_id = c.col_id
-                     )
-  SELECT ARRAY['(' || array_to_string(array_agg(expr), ', ') || ')'] AS final_expr
-    FROM index_exprs
-   WHERE expr != 'rowid'
-GROUP BY name;
-`, tableName.String())
+	constraints, err := getUniqueConstraintsForTable(ctx, tx, tableName.String())
 	if err != nil {
 		return false, nil, og.checkAndAdjustForUnknownSchemaErrors(err)
 	}
@@ -309,8 +276,8 @@ GROUP BY name;
 		hasGenerationError := false
 		// Put values to be inserted into a column name to value map to simplify lookups.
 		columnsToValues := map[string]string{}
-		for i := 0; i < len(columns); i++ {
-			columnsToValues[columns[i]] = row[i]
+		for i := 0; i < len(nonGeneratedColNames); i++ {
+			columnsToValues[nonGeneratedColNames[i]] = row[i]
 		}
 		newCols := make(map[string]string)
 		// Resolve any generated expressions, which have been validated earlier.
@@ -357,7 +324,7 @@ GROUP BY name;
 		}
 		// Next validate the uniqueness of both constraints and index expressions.
 		for constraintIdx, constraint := range constraints {
-			nonTupleConstraint := constraint[0]
+			nonTupleConstraint := constraint
 			if len(nonTupleConstraint) > 2 &&
 				nonTupleConstraint[0] == '(' &&
 				nonTupleConstraint[len(nonTupleConstraint)-1] == ')' {
@@ -370,12 +337,12 @@ GROUP BY name;
 
 			tupleSelectQuery := strings.Builder{}
 			tupleSelectQuery.WriteString("SELECT array[(")
-			tupleSelectQuery.WriteString(constraint[0])
+			tupleSelectQuery.WriteString(constraint)
 			tupleSelectQuery.WriteString(")::STRING] FROM (VALUES(")
 
 			query := strings.Builder{}
 			columns := strings.Builder{}
-			t, err := parser.ParseExpr(constraint[0])
+			t, err := parser.ParseExpr(constraint)
 			if err != nil {
 				return false, nil, err
 			}
@@ -384,10 +351,10 @@ GROUP BY name;
 			query.WriteString("SELECT COUNT (*) > 0 FROM (SELECT * FROM ")
 			query.WriteString(tableName.String())
 			query.WriteString(" WHERE ")
-			query.WriteString(constraint[0])
+			query.WriteString(constraint)
 			query.WriteString("= ( SELECT ")
 			query.WriteString(" ")
-			query.WriteString(constraint[0])
+			query.WriteString(constraint)
 			query.WriteString(" FROM (VALUES( ")
 			colIdx := 0
 			for col := range collector.columnsObserved {
@@ -422,7 +389,7 @@ GROUP BY name;
 				// No choice but to rollback, expression is malformed.
 				rollbackErr := evalTxn.Rollback(ctx)
 				if rollbackErr != nil {
-					return false, err
+					return false, errors.CombineErrors(err, rollbackErr)
 				}
 				var pgErr *pgconn.PgError
 				if !errors.As(err, &pgErr) {
@@ -449,23 +416,28 @@ GROUP BY name;
 					continue
 				}
 			}
-			// Skip if any null values exist in the expression
-			if hasNullValues {
-				continue
-			}
-			exists, err := og.scanBool(ctx, evalTxn, query.String())
-			if err != nil {
-				skipConstraint, err := handleEvalTxnError(err)
+			// If it has null values, we are going to skip later on,
+			// so skip this operation.
+			var exists bool
+			if !hasNullValues {
+				exists, err = og.scanBool(ctx, evalTxn, query.String())
 				if err != nil {
-					return false, generatedCodes, err
-				}
-				if skipConstraint {
-					continue
+					skipConstraint, err := handleEvalTxnError(err)
+					if err != nil {
+						return false, generatedCodes, err
+					}
+					if skipConstraint {
+						continue
+					}
 				}
 			}
 			err = evalTxn.Commit(ctx)
 			if err != nil {
 				return false, nil, err
+			}
+			// Proceed to the next constraint if it has NULL values.
+			if hasNullValues {
+				continue
 			}
 			if exists {
 				return true, nil, nil
@@ -561,16 +533,19 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 	ctx context.Context,
 	tx pgx.Tx,
 	tableName *tree.TableName,
-	columns []string,
+	nonGeneratedColNames []string,
 	colInfos []column,
 	row []string,
-) (bool, codesWithConditions, codesWithConditions, error) {
-	var expectedErrors codesWithConditions
-	var potentialErrors codesWithConditions
+) (
+	isInvalidInsert bool,
+	expectedErrCodes codesWithConditions,
+	potentialErrCodes codesWithConditions,
+	err error,
+) {
 	// Put values to be inserted into a column name to value map to simplify lookups.
 	columnsToValues := map[string]string{}
-	for i := 0; i < len(columns); i++ {
-		columnsToValues[columns[i]] = row[i]
+	for i := 0; i < len(nonGeneratedColNames); i++ {
+		columnsToValues[nonGeneratedColNames[i]] = row[i]
 	}
 	nullViolationAdded := false
 	validateExpression := func(expr string, typ string, isNullable bool, addGenerated bool) error {
@@ -644,32 +619,32 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if !errors.As(err, &pgErr) {
-				_ = evalTx.Rollback(ctx)
-				return err
+				rbkErr := evalTx.Rollback(ctx)
+				return errors.CombineErrors(err, rbkErr)
 			}
 			if !isValidGenerationError(pgErr.Code) {
 				return err
 			}
-			expectedErrors = expectedErrors.append(pgcode.MakeCode(pgErr.Code))
+			expectedErrCodes = expectedErrCodes.append(pgcode.MakeCode(pgErr.Code))
 		}
 		if isNull && !isNullable && !nullViolationAdded {
 			nullViolationAdded = true
-			expectedErrors = expectedErrors.append(pgcode.NotNullViolation)
+			expectedErrCodes = expectedErrCodes.append(pgcode.NotNullViolation)
 		}
 		// Re-run the another variant in case we have NULL values in arithmetic
 		// of expression, the evaluation order can differ depending on how variables
 		// get bound during the actual insert.
 		if err == nil && isNull {
-			if _, err := og.scanBool(ctx, evalTx, queryEvalOrderCheck.String()); err != nil {
+			if _, err = og.scanBool(ctx, evalTx, queryEvalOrderCheck.String()); err != nil {
 				var pgErr *pgconn.PgError
 				if !errors.As(err, &pgErr) {
-					_ = evalTx.Rollback(ctx)
-					return err
+					rbkErr := evalTx.Rollback(ctx)
+					return errors.CombineErrors(err, rbkErr)
 				}
 				// Note: Invalid errors are allowed, since this is a heuristic. We replaced
 				// random NULL values with zero.
 				if isValidGenerationError(pgErr.Code) {
-					potentialErrors = potentialErrors.append(pgcode.MakeCode(pgErr.Code))
+					potentialErrCodes = potentialErrCodes.append(pgcode.MakeCode(pgErr.Code))
 				}
 			}
 		}
@@ -688,70 +663,28 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 		if !colInfo.generated {
 			continue
 		}
-		err := validateExpression(colInfo.generatedExpression, colInfo.typ.SQLString(), colInfo.nullable, false)
+		err = validateExpression(colInfo.generatedExpression, colInfo.typ.SQLString(), colInfo.nullable, false)
 		if err != nil {
 			return false, nil, nil, err
 		}
 	}
 	// Any bad generated expression means we don't have to bother with indexes next,
 	// since we expect the insert to fail earlier.
-	if expectedErrors == nil {
+	if expectedErrCodes == nil {
 		// Validate unique constraint expressions that are backed by indexes.
-		constraints, err := og.scanStringArrayRows(ctx, tx, `
-WITH tab_json AS (
-                    SELECT crdb_internal.pb_to_json(
-                            'desc',
-                            descriptor
-                           )->'table' AS t
-                      FROM system.descriptor
-                     WHERE id = $1::REGCLASS
-                  ),
-         columns_json AS (
-                        SELECT json_array_elements(t->'columns') AS c FROM tab_json
-                      ),
-         columns AS (
-                    SELECT (c->>'id')::INT8 AS col_id,
-                           IF(
-                            (c->'inaccessible')::BOOL,
-                            c->>'computeExpr',
-                            c->>'name'
-                           ) AS expr
-                      FROM columns_json
-                 ),
-         indexes_json AS (
-                         SELECT json_array_elements(t->'indexes') AS idx
-                           FROM tab_json
-                         UNION ALL SELECT t->'primaryIndex' FROM tab_json
-                      ),
-         unique_indexes AS (
-                            SELECT idx->'name' AS name,
-                                   json_array_elements(
-                                    idx->'keyColumnIds'
-                                   )::STRING::INT8 AS col_id
-                              FROM indexes_json
-                        ),
-         index_exprs AS (
-                        SELECT name, expr
-                          FROM unique_indexes AS idx
-                               INNER JOIN columns AS c ON idx.col_id = c.col_id
-                     )
-  SELECT ARRAY['(' || array_to_string(array_agg(expr), ', ') || ')'] AS final_expr
-    FROM index_exprs
-   WHERE expr != 'rowid'
-GROUP BY name;
-		`, tableName.String())
+		constraints, err := getUniqueConstraintsForTable(ctx, tx, tableName.String())
 		if err != nil {
 			return false, nil, nil, og.checkAndAdjustForUnknownSchemaErrors(err)
 		}
 
 		for _, constraint := range constraints {
-			err := validateExpression(constraint[0], "STRING", true, true)
+			err = validateExpression(constraint, "STRING", true, true)
 			if err != nil {
 				return false, nil, nil, err
 			}
 		}
 	}
-	return len(expectedErrors) > 0, expectedErrors, potentialErrors, nil
+	return len(expectedErrCodes) > 0, expectedErrCodes, potentialErrCodes, nil
 }
 
 // generateColumn generates values for columns that are generated.
@@ -1086,13 +1019,15 @@ SELECT count(*) FROM %s
 		return true, nil
 	}
 
-	numJoinRows, err := og.scanInt(ctx, tx, fmt.Sprintf(`
+	q := fmt.Sprintf(`
 	  SELECT count(*)
 	    FROM %s as t1
 		  LEFT JOIN %s as t2
 				     ON t1.%s = t2.%s
 			WHERE t2.%s IS NOT NULL
-`, childTable.String(), parentTable.String(), childColumn.name, parentColumn.name, parentColumn.name))
+`, childTable.String(), parentTable.String(), tree.NameString(childColumn.name), tree.NameString(parentColumn.name), tree.NameString(parentColumn.name))
+
+	numJoinRows, err := og.scanInt(ctx, tx, q)
 	if err != nil {
 		return false, err
 	}
@@ -1124,21 +1059,25 @@ func (og *operationGenerator) checkAndAdjustForUnknownSchemaErrors(err error) er
 
 // violatesFkConstraints checks if the rows to be inserted will result in a foreign key violation.
 func (og *operationGenerator) violatesFkConstraints(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columns []string, rows [][]string,
+	ctx context.Context,
+	tx pgx.Tx,
+	tableName *tree.TableName,
+	nonGeneratedColNames []string,
+	rows [][]string,
 ) (bool, error) {
+	// TODO(annie): readd the join on active constraints once #120702 is resolved.
+	//
+	// N.B. We add random noise to column names that makes it hard to just directly call on these names. This is
+	// not the case with table/schema names; thus, only column names are quote_ident'ed to ensure that they get
+	// referenced properly.
 	fkConstraints, err := og.scanStringArrayRows(ctx, tx, fmt.Sprintf(`
-		SELECT array[parent.table_schema, parent.table_name, parent.column_name, child.column_name]
+		SELECT array[parent.table_schema, parent.table_name, quote_ident(parent.column_name), quote_ident(child.column_name)]
 		  FROM (
 		        SELECT conname, conkey, confkey, conrelid, confrelid
 		          FROM pg_constraint
 		         WHERE contype = 'f'
 		           AND conrelid = '%s'::REGCLASS::INT8
 		       ) AS con
-			JOIN ( SELECT CONSTRAINT_NAME from information_schema.table_constraints 
-				      WHERE table_schema ='%s' AND
-								    table_name='%s' AND
-										(crdb_internal.is_constraint_active('%s', constraint_name) = true)
-           ) AS tc ON conname = tc.CONSTRAINT_NAME
 		  JOIN (
 		        SELECT column_name, ordinal_position, column_default
 		          FROM information_schema.columns
@@ -1159,7 +1098,7 @@ func (og *operationGenerator) violatesFkConstraints(
 		                       AND con.confrelid = parent.oid
 		                      )
 		 WHERE child.column_name != 'rowid';
-`, tableName.String(), tableName.Schema(), tableName.Object(), tableName.String(), tableName.Schema(), tableName.Object()))
+`, tableName.String(), tableName.Schema(), tableName.Object()))
 	if err != nil {
 		return false, og.checkAndAdjustForUnknownSchemaErrors(err)
 	}
@@ -1167,9 +1106,11 @@ func (og *operationGenerator) violatesFkConstraints(
 	// Maps a column name to its index. This way, the value of a column in a row can be looked up
 	// using row[colToIndexMap["columnName"]] = "valueForColumn"
 	columnNameToIndexMap := map[string]int{}
-	for i, name := range columns {
+
+	for i, name := range nonGeneratedColNames {
 		columnNameToIndexMap[name] = i
 	}
+
 	for _, row := range rows {
 		for _, constraint := range fkConstraints {
 			parentTableSchema := constraint[0]
@@ -1184,7 +1125,7 @@ func (og *operationGenerator) violatesFkConstraints(
 			}
 
 			violation, err := og.violatesFkConstraintsHelper(
-				ctx, tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, tableName.String(), childColumnName, parentAndChildAreSame, row, rows,
+				ctx, tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, childColumnName, tableName, parentAndChildAreSame, row, rows,
 			)
 			if err != nil {
 				return false, err
@@ -1204,14 +1145,19 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	ctx context.Context,
 	tx pgx.Tx,
 	columnNameToIndexMap map[string]int,
-	parentTableSchema, parentTableName, parentColumn, childTableName, childColumn string,
+	parentTableSchema, parentTableName, parentColumn, childColumn string,
+	childTableName *tree.TableName,
 	parentAndChildAreSameTable bool,
-	row []string,
+	rowToInsert []string,
 	allRows [][]string,
 ) (bool, error) {
 
+	childIndex, ok := columnNameToIndexMap[childColumn]
+	if !ok {
+		return false, errors.Newf("child column %s does not exist in table %s", childColumn, childTableName)
+	}
+	childValue := rowToInsert[childIndex]
 	// If the value to insert in the child column is NULL and the column default is NULL, then it is not possible to have a fk violation.
-	childValue := row[columnNameToIndexMap[childColumn]]
 	if childValue == "NULL" {
 		return false, nil
 	}
@@ -1223,28 +1169,38 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 		if err != nil {
 			return false, err
 		}
-		// Put values to be inserted into a column name to value map to simplify lookups.
-		columnsToValues := map[string]string{}
-		for name, idx := range columnNameToIndexMap {
-			columnsToValues[name] = row[idx]
-		}
-		colIdx := 0
-		for idx, colInfo := range colsInfo {
+
+		var parentColInfo *column
+		for _, colInfo := range colsInfo {
 			if colInfo.name == parentColumn {
-				colIdx = idx
+				parentColInfo = &colInfo
 				break
 			}
 		}
+		if parentColInfo == nil {
+			return false, errors.Newf("column %s not found in columns for %s", parentColumn, childTableName)
+		}
+
 		for _, otherRow := range allRows {
-			parentValueInSameInsert := otherRow[columnNameToIndexMap[parentColumn]]
-			// If the parent column is generated, spend time to generate the value.
-			if colsInfo[colIdx].generated {
-				var err error
-				parentValueInSameInsert, err = og.generateColumn(ctx, tx, colsInfo[colIdx], columnsToValues)
+			var parentValueInSameInsert string
+			if parentColInfo.generated {
+				// If the parent column is a computed column, spend time to generate the value.
+				columnsToValues := map[string]string{}
+				for name, idx := range columnNameToIndexMap {
+					columnsToValues[name] = rowToInsert[idx]
+				}
+				parentValueInSameInsert, err = og.generateColumn(ctx, tx, colsInfo[parentColInfo.ordinal], columnsToValues)
 				if err != nil {
 					return false, err
 				}
+			} else {
+				parentIdx, ok := columnNameToIndexMap[parentColumn]
+				if !ok {
+					return false, errors.Newf("parent column %s does not exist in table %s", parentColumn, childTableName)
+				}
+				parentValueInSameInsert = otherRow[parentIdx]
 			}
+
 			// Skip over NULL values.
 			if parentValueInSameInsert == "NULL" {
 				continue
@@ -1258,11 +1214,12 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 		checkSharedParentChildRows = fmt.Sprintf("false = ANY (ARRAY [%s]) AND",
 			strings.Join(parentAndChildSameQueryColumns, ","))
 	}
-	return og.scanBool(ctx, tx, fmt.Sprintf(`
+	q := fmt.Sprintf(`
 	    SELECT %s count(*) = 0 from %s.%s
 	    WHERE %s = (%s)
 	`,
-		checkSharedParentChildRows, parentTableSchema, parentTableName, parentColumn, childValue))
+		checkSharedParentChildRows, parentTableSchema, parentTableName, parentColumn, childValue)
+	return og.scanBool(ctx, tx, q)
 }
 
 func (og *operationGenerator) columnIsInDroppingIndex(
@@ -1342,6 +1299,24 @@ SELECT EXISTS(
                   AND (mut->'constraint'->>'notNullColumn')::INT8 = id
        );
 `, tableName.String(), columnName)
+}
+
+func (og *operationGenerator) schemaContainsHasReferredFunctions(
+	ctx context.Context, tx pgx.Tx, schemaName string,
+) (bool, error) {
+	ctes := []CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+		{"pg_depends_from_diff_schema", `
+			SELECT refobjid FROM pg_depend as d, functions as src_function, functions as dst_function
+			WHERE src_function.schema_id <>  $1::REGNAMESPACE::INT8 AND dst_function.schema_id=$1::REGNAMESPACE::INT8 AND
+			d.refobjid=(src_function.id+100000) AND d.objid=(dst_function.id) AND
+			d.classid = 'pg_catalog.pg_proc'::REGCLASS::INT8 AND d.refclassid = 'pg_catalog.pg_proc'::REGCLASS::INT8`},
+	}
+
+	result, err := Collect(ctx, og, tx, pgx.RowToMap, With(ctes,
+		"SELECT * FROM pg_depends_from_diff_schema;"), schemaName)
+	return len(result) > 0, err
 }
 
 func (og *operationGenerator) schemaContainsTypesWithCrossSchemaReferences(
@@ -1683,4 +1658,74 @@ func (og *operationGenerator) databaseHasTablesWithPartitioning(
 		fmt.Sprintf(`SELECT count(*)> 0 FROM %s.crdb_internal.partitions`,
 			database),
 	)
+}
+
+// getUniqueConstraintsForTable returns the set of expressions associated with unique indexes
+// in the specified tableName.
+func getUniqueConstraintsForTable(
+	ctx context.Context, tx pgx.Tx, tableName string,
+) (constraints []string, err error) {
+	q := `
+WITH tab_json AS (
+                    SELECT crdb_internal.pb_to_json(
+                            'desc',
+                            descriptor
+                           )->'table' AS t
+                      FROM system.descriptor
+                     WHERE id = $1::REGCLASS
+                  ),
+         columns_json AS (
+                        SELECT json_array_elements(t->'columns') AS c FROM tab_json
+                      ),
+         columns AS (
+                    SELECT (c->>'id')::INT8 AS col_id,
+                           IF(
+                            (c->'inaccessible')::BOOL,
+                            c->>'computeExpr',
+                            quote_ident(c->>'name')
+                           ) AS expr
+                      FROM columns_json
+                 ),
+         indexes_json AS (
+                         SELECT json_array_elements(t->'indexes') AS idx
+                           FROM tab_json
+                         UNION ALL SELECT t->'primaryIndex' FROM tab_json
+                      ),
+         unique_indexes AS (
+                            SELECT idx->'name' AS name,
+                                   json_array_elements(
+                                    idx->'keyColumnIds'
+                                   )::STRING::INT8 AS col_id
+                              FROM indexes_json
+															WHERE (idx->'unique')::BOOL
+                        ),
+         index_exprs AS (
+                        SELECT name, expr
+                          FROM unique_indexes AS idx
+                               INNER JOIN columns AS c ON idx.col_id = c.col_id
+                     )
+      SELECT '(' || array_to_string(array_agg(expr), ', ') || ')' AS final_expr                    
+      FROM index_exprs                                                                                       
+      WHERE expr != 'rowid'                                                                          
+      GROUP BY name; 
+		`
+	rows, err := tx.Query(ctx, q, tableName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var constraint string
+		err = rows.Scan(&constraint)
+		if err != nil {
+			return nil, err
+		}
+		constraints = append(constraints, constraint)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return constraints, nil
 }

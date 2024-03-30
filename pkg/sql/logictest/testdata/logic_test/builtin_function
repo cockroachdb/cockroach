@@ -150,6 +150,31 @@ SELECT random() * 0.0
 ----
 0
 
+statement ok
+SELECT setseed(0.1)
+
+# The previous call to setseed() should affect the next query.
+query IR
+SELECT i, random() FROM ROWS FROM (generate_series(1, 5)) AS i ORDER by i
+----
+1  0.8090535001228529
+2  0.33363615433097443
+3  0.10208231032120892
+4  0.43716650508717286
+5  0.16686635296305902
+
+statement ok
+SELECT setseed(0.1)
+
+query IR
+SELECT i, random() FROM ROWS FROM (generate_series(1, 5)) AS i ORDER by i
+----
+1  0.8090535001228529
+2  0.33363615433097443
+3  0.10208231032120892
+4  0.43716650508717286
+5  0.16686635296305902
+
 # Concatenating 'empty' because the empty string doesn't work in these tests.
 query T
 SELECT concat() || 'empty'
@@ -3035,7 +3060,7 @@ subtest crdb_internal.trace_id
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error insufficient privilege
+query error user testuser does not have REPAIRCLUSTER system privilege
 SELECT * FROM crdb_internal.trace_id()
 
 user root
@@ -3050,7 +3075,7 @@ subtest crdb_internal.payloads_for_span
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error user testuser does not have VIEWCLUSTERMETADATA system privilege
+query error user testuser does not have REPAIRCLUSTER system privilege
 SELECT * FROM crdb_internal.payloads_for_span(0)
 
 user root
@@ -3066,7 +3091,7 @@ subtest crdb_internal.payloads_for_trace
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error user testuser does not have VIEWCLUSTERMETADATA system privilege
+query error user testuser does not have REPAIRCLUSTER system privilege
 SELECT * FROM crdb_internal.payloads_for_span(0)
 
 user root
@@ -3080,7 +3105,7 @@ span_id payload_type  payload_jsonb
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error insufficient privilege
+query error user testuser does not have REPAIRCLUSTER system privilege
 SELECT * FROM crdb_internal.set_trace_verbose(0, false)
 
 user root
@@ -4012,7 +4037,7 @@ statement error start key must be less than end key
 SELECT crdb_internal.check_consistency(true, crdb_internal.tenant_span()[2], crdb_internal.tenant_span()[2])
 
 query TT
-SELECT status, regexp_replace(detail, '[0-9]+', '', 'g')
+SELECT status, regexp_replace(detail, '[0-9-]+', '', 'g')
 FROM crdb_internal.check_consistency(true, crdb_internal.tenant_span()[1], crdb_internal.tenant_span()[2])
 ORDER BY range_id
 LIMIT 1
@@ -4031,24 +4056,30 @@ subtest end
 subtest merge_aggregated_stmts_metadata
 
 query T
-SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{ "db": [ "defaultdb", "movr" ], "distSQLCount": 1, "failedCount": 2, "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 33, "vecCount": 0 }'::JSON, '{ "db": ["tpcc"], "distSQLCount": 1, "failedCount": 2, "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 85, "vecCount": 2 }'::JSON ])
+SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{ "db": [ "defaultdb", "movr" ], "distSQLCount": 1, "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 33, "vecCount": 0 }'::JSON, '{ "db": ["tpcc"], "distSQLCount": 1, "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 85, "vecCount": 2 }'::JSON ])
 ----
-{"appNames": [], "db": ["defaultdb", "movr", "tpcc"], "distSQLCount": 2, "failedCount": 4, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 118, "vecCount": 2}
+{"appNames": [], "db": ["defaultdb", "movr", "tpcc"], "distSQLCount": 2, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 118, "vecCount": 2}
 
 query T
 SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[])
 ----
-{"appNames": [], "db": [], "distSQLCount": 0, "failedCount": 0, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 0, "vecCount": 0}
+{"appNames": [], "db": [], "distSQLCount": 0, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 0, "vecCount": 0}
 
 query T
-SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{ "db": [ "defaultdb", "tpcc" ], "distSQLCount": 1, "failedCount": 2, "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 33, "vecCount": 0 }'::JSON, '{ "db": ["tpcc"], "distSQLCount": 23, "failedCount": 0, "fullScanCount": 99, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 3, "vecCount": 2 }'::JSON, '{"hello": "world"}'::JSON ])
+SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{ "db": [ "defaultdb", "tpcc" ], "distSQLCount": 1, "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 33, "vecCount": 0 }'::JSON, '{ "db": ["tpcc"], "distSQLCount": 23, "fullScanCount": 99, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 3, "vecCount": 2 }'::JSON, '{"hello": "world"}'::JSON ])
 ----
-{"appNames": [], "db": ["defaultdb", "tpcc"], "distSQLCount": 47, "failedCount": 2, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 198, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 39, "vecCount": 4}
+{"appNames": [], "db": ["defaultdb", "tpcc"], "distSQLCount": 24, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 99, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 36, "vecCount": 2}
 
 query T
 SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{"aMalformedMetadaObj": 123}'::JSON, '{"key": "value"}'::JSON ])
 ----
-{"appNames": [], "db": [], "distSQLCount": 0, "failedCount": 0, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 0, "vecCount": 0}
+{"appNames": [], "db": [], "distSQLCount": 0, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 0, "vecCount": 0}
+
+# Merge 2 objects with partial data to check that no value is reused between iterations.
+query T
+SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{"distSQLCount": 111, "fullScanCount": 333 }'::JSON, '{"totalCount": 1, "vecCount": 2}'::JSON, '{"key": "value"}'::JSON ])
+----
+{"appNames": [], "db": [], "distSQLCount": 111, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 333, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 1, "vecCount": 2}
 
 subtest end
 

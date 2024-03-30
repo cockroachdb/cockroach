@@ -19,12 +19,12 @@ import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
+import "sql/catalog/catpb/catalog.proto";
 import "multitenant/mtinfopb/info.proto";
 import "sql/sessiondatapb/session_data.proto";
 import "util/hlc/timestamp.proto";
 import "clusterversion/cluster_version.proto";
 import "google/protobuf/timestamp.proto";
-import "server/autoconfig/autoconfigpb/autoconfig.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 
 enum EncryptionMode {
@@ -198,6 +198,26 @@ message StreamIngestionProgress {
   // Next Id: 10
 }
 
+message HistoryRetentionDetails {
+  // ID of the protected timestamp record this job is managing.
+  bytes protected_timestamp_record_id = 1 [
+    (gogoproto.customname) = "ProtectedTimestampRecordID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+
+  // ExpirationWindow specifies the length of time since the last
+  // heartbeat that the protected timestamp record is valid for.
+  int64 expiration_window = 4 [(gogoproto.casttype) = "time.Duration"];
+}
+
+message HistoryRetentionProgress {
+    google.protobuf.Timestamp last_heartbeat_time = 1 [
+      (gogoproto.nullable) = false,
+      (gogoproto.stdtime) = true
+    ];
+}
+
 message StreamReplicationDetails {
   // Key spans we are replicating
   repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
@@ -211,6 +231,10 @@ message StreamReplicationDetails {
 
   // TenantID is the ID of the source tenant being streamed.
   roachpb.TenantID tenant_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+
+  // ExpirationWindow specifies the length of time a producer job will stay
+  // alive without a heartbeat from the consumer job.
+  int64 expiration_window = 4 [(gogoproto.casttype) = "time.Duration"];
 }
 
 message StreamReplicationProgress {
@@ -502,7 +526,14 @@ message RestoreDetails {
   // version.
   bool unsafe_restore_incompatible_version = 34;
 
-  // NEXT ID: 34.
+  // PostDownloadTableAutoStatsSettings contains the backed up auto stats
+  // settings for online restored tables. These setting will be restored at the
+  // end of the download job.
+  map<uint32,cockroach.sql.catalog.catpb.AutoStatsSettings> post_download_table_auto_stats_settings = 35;
+
+  bool download_job = 36;
+
+  // NEXT ID: 37.
 }
 
 
@@ -1227,15 +1258,14 @@ message AutoConfigRunnerProgress {
 }
 
 message AutoConfigEnvRunnerDetails {
-  string env_id = 1 [(gogoproto.customname) = "EnvID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/server/autoconfig/autoconfigpb.EnvironmentID"];
+  reserved 1;
 }
 
 message AutoConfigEnvRunnerProgress {
 }
 
 message AutoConfigTaskDetails {
-  string env_id = 1 [(gogoproto.customname) = "EnvID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/server/autoconfig/autoconfigpb.EnvironmentID"];
-  cockroach.server.autoconfig.autoconfigpb.Task task = 2 [(gogoproto.nullable) = false];
+reserved 1, 2;
 }
 
 message AutoConfigTaskProgress {
@@ -1254,6 +1284,19 @@ message MVCCStatisticsJobDetails {
 message MVCCStatisticsJobProgress {
 
 }
+
+message ImportRollbackDetails {
+  // TableID is the descriptor ID of table that should be rolled back.
+  //
+  // TODO(ssd): We could consider having this job process multiple
+  // tables.
+  uint32 table_id = 1 [
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+}
+
+message ImportRollbackProgress {}
 
 message Payload {
   string description = 1;
@@ -1318,6 +1361,8 @@ message Payload {
     AutoConfigTaskDetails auto_config_task = 43;
     AutoUpdateSQLActivityDetails auto_update_sql_activities = 44;
     MVCCStatisticsJobDetails mvcc_statistics_details = 45;
+    ImportRollbackDetails import_rollback_details = 46;
+    HistoryRetentionDetails history_retention_details = 47;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1392,6 +1437,8 @@ message Progress {
     AutoConfigTaskProgress auto_config_task = 31;
     AutoUpdateSQLActivityProgress update_sql_activity = 32;
     MVCCStatisticsJobProgress mvcc_statistics_progress = 33;
+    ImportRollbackProgress import_rollback_progress = 34;
+    HistoryRetentionProgress HistoryRetentionProgress = 35;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1428,6 +1475,8 @@ enum Type {
   AUTO_CONFIG_TASK = 22 [(gogoproto.enumvalue_customname) = "TypeAutoConfigTask"];
   AUTO_UPDATE_SQL_ACTIVITY = 23 [(gogoproto.enumvalue_customname) = "TypeAutoUpdateSQLActivity"];
   MVCC_STATISTICS_UPDATE = 24 [(gogoproto.enumvalue_customname) = "TypeMVCCStatisticsUpdate"];
+  IMPORT_ROLLBACK = 25 [(gogoproto.enumvalue_customname) = "TypeImportRollback"];
+  HISTORY_RETENTION = 26 [(gogoproto.enumvalue_customname) = "TypeHistoryRetention"];
 }
 
 message Job {

@@ -13,10 +13,12 @@ package kvcoord
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"reflect"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -212,6 +214,10 @@ func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) 
 		}
 	}
 	return false
+}
+
+func (l *simpleTransportAdapter) Reset() {
+	l.nextReplicaIdx = 0
 }
 
 func (l *simpleTransportAdapter) Release() {}
@@ -621,6 +627,119 @@ func TestImmutableBatchArgs(t *testing.T) {
 	}
 }
 
+// TestErrorWithCancellationExit verifies that the DistSender never exits the
+// loop with a retriable error. These errors are not intended to escape the Send
+// and other code may not handle them correctly.
+func TestErrorWithCancellationExit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	retriableErr := kvpb.NewError(
+		&kvpb.NotLeaseHolderError{
+			Replica: testUserRangeDescriptor.InternalReplicas[0],
+		})
+	terminalErr := kvpb.NewErrorf("boom")
+
+	tests := []struct {
+		name           string
+		retriableError *kvpb.Error
+		terminalError  *kvpb.Error
+		// Note that errorFn has side effects when it is called in the test.
+		cancelFn    func(ctx context.CancelFunc, stopper *stop.Stopper)
+		expectedErr string
+	}{
+		{
+			name:        "no error",
+			expectedErr: "",
+		},
+		{
+			name:           "terminal error",
+			retriableError: retriableErr,
+			terminalError:  terminalErr,
+			expectedErr:    "boom",
+		},
+		{
+			name:           "cancel context",
+			retriableError: retriableErr,
+			cancelFn: func(cancel context.CancelFunc, _ *stop.Stopper) {
+				// Cancel the context the request was started with.
+				cancel()
+			},
+			expectedErr: "context canceled",
+		},
+		{
+			name:           "stop stopper",
+			retriableError: retriableErr,
+			cancelFn: func(_ context.CancelFunc, stopper *stop.Stopper) {
+				// Stop the stopper simulating a shutdown.
+				stopper.Stop(context.Background())
+			},
+			expectedErr: "node unavailable",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			retryCount := atomic.Int64{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+
+			clock := hlc.NewClockForTesting(nil)
+			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+			g := makeGossip(t, stopper, rpcContext)
+			var testFn simpleSendFn = func(_ context.Context, _ *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+				reply := &kvpb.BatchResponse{}
+
+				// Set a response so we don't get an out of bounds err in the non-error case.
+				var union kvpb.ResponseUnion
+				union.MustSetInner(&kvpb.PutResponse{})
+				reply.Responses = []kvpb.ResponseUnion{union}
+
+				// Count the number of times we are running.
+				count := retryCount.Add(1)
+
+				// Return a retriable error twice before running cancellation.
+				reply.Error = tc.retriableError
+				if count == 2 {
+					if tc.cancelFn != nil {
+						tc.cancelFn(cancel, stopper)
+					}
+				}
+
+				// Return retriable a few more times as cancellation may need to propagate.
+				if count > 5 {
+					reply.Error = tc.terminalError
+				}
+				return reply, nil
+			}
+
+			cfg := DistSenderConfig{
+				AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
+				Clock:      clock,
+				NodeDescs:  g,
+				Stopper:    stopper,
+				// Retry very quickly to make this test finish fast.
+				RPCRetryOptions: &retry.Options{
+					InitialBackoff: time.Millisecond,
+					MaxBackoff:     time.Millisecond,
+				},
+				TransportFactory:  adaptSimpleTransport(testFn),
+				RangeDescriptorDB: defaultMockRangeDescriptorDB,
+				Settings:          cluster.MakeTestingClusterSettings(),
+			}
+			ds := NewDistSender(cfg)
+			// Start a request that runs through distSender.
+			put := kvpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
+			_, pErr := kv.SendWrapped(ctx, ds, put)
+			if tc.expectedErr == "" {
+				require.Nil(t, pErr)
+			} else {
+				require.NotNil(t, pErr)
+				require.True(t, testutils.IsPError(pErr, tc.expectedErr))
+			}
+		})
+	}
+}
+
 // TestRetryOnNotLeaseHolderError verifies that the DistSender correctly updates
 // the leaseholder in the range cache and retries when receiving a
 // NotLeaseHolderError.
@@ -735,16 +854,14 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 				t.Fatalf("unexpected error: %v", pErr)
 			}
 			require.Equal(t, 2, attempts)
-			rng := ds.rangeCache.GetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
-			require.NotNil(t, rng)
+			rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
+			require.NoError(t, err)
 
 			if tc.expLeaseholder != nil {
-				lh := rng.Leaseholder()
-				require.NotNil(t, lh)
-				require.Equal(t, tc.expLeaseholder, lh)
+				lh := rng.Lease.Replica
+				require.Equal(t, *tc.expLeaseholder, lh)
 				if tc.expLease {
-					l := rng.Lease()
-					require.NotNil(t, l)
+					l := rng.Lease
 					require.Equal(t, *tc.expLeaseholder, l.Replica)
 					// The transport retry will use the replica descriptor from the
 					// initial range descriptor, not the one returned in the NLHE, i.e.
@@ -753,7 +870,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 					expRetryReplica.Type = 0
 					require.Equal(t, expRetryReplica, retryReplica)
 				} else {
-					require.Nil(t, rng.Lease())
+					require.True(t, rng.Lease.Empty())
 				}
 			}
 		})
@@ -933,6 +1050,8 @@ func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
 
 	// Lease starts on n1.
 	rangeDesc := testUserRangeDescriptor3Replicas
+	rangeDescUpdate := rangeDesc
+	rangeDescUpdate.Generation += 1
 	replicas := rangeDesc.InternalReplicas
 	lease := roachpb.Lease{
 		Replica:  replicas[0],
@@ -946,9 +1065,7 @@ func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
 		sentTo = append(sentTo, ba.Replica.NodeID)
 		br := ba.CreateReply()
 		if ba.Replica != replicas[2] {
-			br.Error = kvpb.NewError(&kvpb.NotLeaseHolderError{
-				Replica: ba.Replica,
-			})
+			br.Error = kvpb.NewError(kvpb.NewNotLeaseHolderError(roachpb.Lease{}, ba.Replica.StoreID, &rangeDescUpdate, "test NLHE"))
 		}
 		return br, nil
 	}
@@ -979,12 +1096,18 @@ func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
 		Lease: lease,
 	})
 
+	key := roachpb.Key("a")
 	// Send a request. It should try all three replicas once: the first two fail
 	// with NLHE, the third one succeeds. None of them should trigger backoffs.
-	_, pErr := kv.SendWrapped(ctx, ds, kvpb.NewGet(roachpb.Key("a")))
+	_, pErr := kv.SendWrapped(ctx, ds, kvpb.NewGet(key))
 	require.NoError(t, pErr.GoError())
 	require.Equal(t, []roachpb.NodeID{1, 2, 3}, sentTo)
 	require.Equal(t, int64(0), ds.Metrics().InLeaseTransferBackoffs.Count())
+	// Verify the range cache still has the previous lease and the new descriptor.
+	ri, err := ds.rangeCache.Lookup(ctx, roachpb.RKey(key))
+	require.NoError(t, err)
+	require.Equal(t, lease, ri.Lease)
+	require.Equal(t, rangeDescUpdate, ri.Desc)
 }
 
 // Test a scenario where a lease indicates a replica that, when contacted,
@@ -1230,12 +1353,11 @@ func TestDistSenderRetryOnTransportErrors(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	for _, spec := range []struct {
-		errorCode   codes.Code
-		shouldRetry bool
+		errorCode codes.Code
 	}{
-		{codes.FailedPrecondition, true},
-		{codes.PermissionDenied, false},
-		{codes.Unauthenticated, false},
+		{codes.FailedPrecondition},
+		{codes.PermissionDenied},
+		{codes.Unauthenticated},
 	} {
 		t.Run(fmt.Sprintf("retry_after_%v", spec.errorCode), func(t *testing.T) {
 			clock := hlc.NewClockForTesting(nil)
@@ -1301,20 +1423,15 @@ func TestDistSenderRetryOnTransportErrors(t *testing.T) {
 
 			get := kvpb.NewGet(roachpb.Key("a"))
 			_, pErr := kv.SendWrapped(ctx, ds, get)
-			if spec.shouldRetry {
-				require.True(t, secondReplicaTried, "Second replica was not retried")
-				require.Nil(t, pErr, "Call should not fail")
-			} else {
-				require.False(t, secondReplicaTried, "DistSender did not abort retry loop")
-				require.NotNil(t, pErr, "Call should fail")
-			}
+			require.True(t, secondReplicaTried, "Second replica was not retried")
+			require.Nil(t, pErr, "Call should not fail")
 		})
 	}
 }
 
-// This test verifies that when we have a cached leaseholder that is down
-// it is ejected from the cache.
-func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
+// TestDistSenderLeaseholderDown verifies that when we have a cached leaseholder
+// that is down it remains in the cache.
+func TestDistSenderLeaseholderDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1363,10 +1480,9 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 			contacted1 = true
 			return nil, errors.New("mock RPC error")
 		case 2:
-			// The client has cleared the lease in the cache after the failure of the
-			// first RPC.
+			// The client keeps the lease entry but moves onto the other replicas.
 			assert.Equal(t, desc.Generation, ba.ClientRangeInfo.DescriptorGeneration)
-			assert.Equal(t, roachpb.LeaseSequence(0), ba.ClientRangeInfo.LeaseSequence)
+			assert.Equal(t, lease1.Sequence, ba.ClientRangeInfo.LeaseSequence)
 			assert.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ba.ClientRangeInfo.ClosedTimestampPolicy)
 			contacted2 = true
 			br := ba.CreateReply()
@@ -1415,10 +1531,11 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 		t.Errorf("contacted n1: %t, contacted n2: %t", contacted1, contacted2)
 	}
 
-	rng := ds.rangeCache.GetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
-	require.Equal(t, desc, *rng.Desc())
-	require.Equal(t, roachpb.StoreID(2), rng.Lease().Replica.StoreID)
-	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, rng.ClosedTimestampPolicy())
+	rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
+	require.NoError(t, err)
+	require.Equal(t, desc, rng.Desc)
+	require.Equal(t, roachpb.StoreID(2), rng.Lease.Replica.StoreID)
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, rng.ClosedTimestampPolicy)
 }
 
 // TestRetryOnDescriptorLookupError verifies that the DistSender retries a descriptor
@@ -1679,11 +1796,11 @@ func TestEvictCacheOnError(t *testing.T) {
 			if _, pErr := kv.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), ctx.Err().Error()) {
 				t.Errorf("put encountered unexpected error: %s", pErr)
 			}
-			rng := ds.rangeCache.GetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
+			rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
 			if tc.shouldClearReplica {
-				require.Nil(t, rng)
+				require.Error(t, err)
 			} else if tc.shouldClearLeaseHolder {
-				require.True(t, rng.Lease().Empty())
+				require.True(t, rng.Lease.Empty())
 			}
 		})
 	}
@@ -2187,16 +2304,8 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 			// Check that the cache has the updated descriptor returned by the RPC.
 			for _, ri := range tc {
 				rk := ri.Desc.StartKey
-				entry := ds.rangeCache.GetCached(ctx, rk, false /* inverted */)
-				require.NotNil(t, entry)
-				require.Equal(t, &ri.Desc, entry.Desc())
-				if ri.Lease.Empty() {
-					require.Nil(t, entry.Leaseholder())
-					require.Nil(t, entry.Lease())
-				} else {
-					require.Equal(t, &ri.Lease, entry.Lease())
-				}
-				require.Equal(t, ri.ClosedTimestampPolicy, entry.ClosedTimestampPolicy())
+				entry, _ := ds.rangeCache.TestingGetCached(ctx, rk, false /* inverted */)
+				require.Equal(t, ri, entry)
 			}
 		})
 	}
@@ -2260,9 +2369,10 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 			if len(seen) == 1 {
 				// Pretend that this replica is the leaseholder in the cache to verify
 				// that the response evicts it.
-				rng := ds.rangeCache.GetCached(ctx, descriptor.StartKey, false /* inverse */)
+				rng, err := ds.rangeCache.TestingGetCached(ctx, descriptor.StartKey, false /* inverse */)
+				require.NoError(t, err)
 				ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
-					Desc:  *rng.Desc(),
+					Desc:  rng.Desc,
 					Lease: roachpb.Lease{Replica: ba.Replica},
 				})
 			}
@@ -2295,9 +2405,9 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rng := ds.rangeCache.GetCached(ctx, descriptor.StartKey, false /* inverted */)
-	require.NotNil(t, rng)
-	require.Equal(t, leaseholderStoreID, rng.Lease().Replica.StoreID)
+	rng, e := ds.rangeCache.TestingGetCached(ctx, descriptor.StartKey, false /* inverted */)
+	require.NoError(t, e)
+	require.Equal(t, leaseholderStoreID, rng.Lease.Replica.StoreID)
 }
 
 func TestMultiRangeGapReverse(t *testing.T) {
@@ -3970,10 +4080,10 @@ func TestCanSendToFollower(t *testing.T) {
 			// we've had where we were always updating the leaseholder on successful
 			// RPCs because we erroneously assumed that a success must come from the
 			// leaseholder.
-			rng := ds.rangeCache.GetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
-			require.NotNil(t, rng)
-			require.NotNil(t, rng.Lease())
-			require.Equal(t, roachpb.StoreID(2), rng.Lease().Replica.StoreID)
+			rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
+			require.NoError(t, err)
+			require.NotNil(t, rng.Lease)
+			require.Equal(t, roachpb.StoreID(2), rng.Lease.Replica.StoreID)
 		})
 	}
 }
@@ -4136,10 +4246,11 @@ func TestEvictMetaRange(t *testing.T) {
 		}
 
 		// Verify that there is one meta2 cached range.
-		cachedRange := ds.rangeCache.GetCached(ctx, keys.RangeMetaKey(roachpb.RKey("a")), false)
-		if !cachedRange.Desc().StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc().EndKey.Equal(testMetaEndKey) {
+		cachedRange, err := ds.rangeCache.TestingGetCached(ctx, keys.RangeMetaKey(roachpb.RKey("a")), false)
+		require.NoError(t, err)
+		if !cachedRange.Desc.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc.EndKey.Equal(testMetaEndKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				keys.Meta2Prefix, testMetaEndKey, cachedRange.Desc().StartKey, cachedRange.Desc().EndKey)
+				keys.Meta2Prefix, testMetaEndKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
 		}
 
 		// Simulate a split on the meta2 range and mark it as stale.
@@ -4151,15 +4262,17 @@ func TestEvictMetaRange(t *testing.T) {
 		}
 
 		// Verify that there are two meta2 cached ranges.
-		cachedRange = ds.rangeCache.GetCached(ctx, keys.RangeMetaKey(roachpb.RKey("a")), false)
-		if !cachedRange.Desc().StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc().EndKey.Equal(splitKey) {
+		cachedRange, err = ds.rangeCache.TestingGetCached(ctx, keys.RangeMetaKey(roachpb.RKey("a")), false)
+		require.NoError(t, err)
+		if !cachedRange.Desc.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc.EndKey.Equal(splitKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				keys.Meta2Prefix, splitKey, cachedRange.Desc().StartKey, cachedRange.Desc().EndKey)
+				keys.Meta2Prefix, splitKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
 		}
-		cachedRange = ds.rangeCache.GetCached(ctx, keys.RangeMetaKey(roachpb.RKey("b")), false)
-		if !cachedRange.Desc().StartKey.Equal(splitKey) || !cachedRange.Desc().EndKey.Equal(testMetaEndKey) {
+		cachedRange, err = ds.rangeCache.TestingGetCached(ctx, keys.RangeMetaKey(roachpb.RKey("b")), false)
+		require.NoError(t, err)
+		if !cachedRange.Desc.StartKey.Equal(splitKey) || !cachedRange.Desc.EndKey.Equal(testMetaEndKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				splitKey, testMetaEndKey, cachedRange.Desc().StartKey, cachedRange.Desc().EndKey)
+				splitKey, testMetaEndKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
 		}
 	})
 }
@@ -4174,35 +4287,47 @@ func TestConnectionClass(t *testing.T) {
 	defer stopper.Stop(ctx)
 	// Create a mock range descriptor DB that can resolve made up meta1, node
 	// liveness and user ranges.
+
+	replicas := []roachpb.ReplicaDescriptor{
+		{NodeID: 1, StoreID: 1},
+	}
 	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) (
 		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
 	) {
 		if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
 			return []roachpb.RangeDescriptor{{
-				RangeID:  1,
-				StartKey: roachpb.RKeyMin,
-				EndKey:   roachpb.RKey(keys.NodeLivenessPrefix),
-				InternalReplicas: []roachpb.ReplicaDescriptor{
-					{NodeID: 1, StoreID: 1},
-				},
+				RangeID:          1,
+				StartKey:         roachpb.RKeyMin,
+				EndKey:           roachpb.RKey(keys.NodeLivenessPrefix),
+				InternalReplicas: replicas,
 			}}, nil, nil
 		} else if bytes.HasPrefix(key, keys.NodeLivenessPrefix) {
 			return []roachpb.RangeDescriptor{{
-				RangeID:  2,
-				StartKey: roachpb.RKey(keys.NodeLivenessPrefix),
-				EndKey:   roachpb.RKey(keys.NodeLivenessKeyMax),
-				InternalReplicas: []roachpb.ReplicaDescriptor{
-					{NodeID: 1, StoreID: 1},
-				},
+				RangeID:          2,
+				StartKey:         roachpb.RKey(keys.NodeLivenessPrefix),
+				EndKey:           roachpb.RKey(keys.NodeLivenessKeyMax),
+				InternalReplicas: replicas,
+			}}, nil, nil
+		} else if bytes.Compare(key.AsRawKey(), keys.NodeLivenessKeyMax) >= 0 && bytes.Compare(key.AsRawKey(), keys.TimeseriesPrefix) < 0 {
+			return []roachpb.RangeDescriptor{{
+				RangeID:          3,
+				StartKey:         roachpb.RKey(keys.NodeLivenessKeyMax),
+				EndKey:           roachpb.RKey(keys.TimeseriesPrefix),
+				InternalReplicas: replicas,
+			}}, nil, nil
+		} else if bytes.HasPrefix(key, keys.TimeseriesPrefix) {
+			return []roachpb.RangeDescriptor{{
+				RangeID:          4,
+				StartKey:         roachpb.RKey(keys.TimeseriesPrefix),
+				EndKey:           roachpb.RKey(keys.TimeseriesKeyMax),
+				InternalReplicas: replicas,
 			}}, nil, nil
 		}
 		return []roachpb.RangeDescriptor{{
-			RangeID:  3,
-			StartKey: roachpb.RKey(keys.NodeLivenessKeyMax),
-			EndKey:   roachpb.RKeyMax,
-			InternalReplicas: []roachpb.ReplicaDescriptor{
-				{NodeID: 1, StoreID: 1},
-			},
+			RangeID:          5,
+			StartKey:         roachpb.RKey(keys.TimeseriesKeyMax),
+			EndKey:           roachpb.RKeyMax,
+			InternalReplicas: replicas,
 		}}, nil, nil
 	})
 
@@ -4234,28 +4359,32 @@ func TestConnectionClass(t *testing.T) {
 	}
 	ds := NewDistSender(cfg)
 
-	// Check the three important cases to ensure they are sent with the correct
-	// ConnectionClass.
-	for _, key := range []roachpb.Key{
-		keys.Meta1Prefix,
-		keys.NodeLivenessKey(1),
-		keys.SystemSQLCodec.TablePrefix(1234), // A non-system table
+	for _, pair := range []struct {
+		key       roachpb.Key
+		wantClass rpc.ConnectionClass
+	}{
+		{key: keys.Meta1Prefix, wantClass: rpc.SystemClass},
+		{key: keys.NodeLivenessKey(1), wantClass: rpc.SystemClass},
+		{key: keys.StatusNodePrefix, wantClass: rpc.SystemClass},
+		{key: keys.NodeStatusKey(15), wantClass: rpc.SystemClass},
+		{key: keys.NodeIDGenerator, wantClass: rpc.SystemClass},
+		{key: keys.TimeseriesPrefix, wantClass: rpc.DefaultClass},
+		{key: keys.SystemSpanConfigPrefix, wantClass: rpc.DefaultClass},
+		{key: keys.SystemSQLCodec.TablePrefix(1234), wantClass: rpc.DefaultClass},
 	} {
-		t.Run(key.String(), func(t *testing.T) {
+		t.Run(pair.key.String(), func(t *testing.T) {
 			ba := &kvpb.BatchRequest{}
 			ba.Add(&kvpb.GetRequest{
 				RequestHeader: kvpb.RequestHeader{
-					Key: key,
+					Key: pair.key,
 				},
 			})
 			_, pErr := ds.Send(context.Background(), ba)
 			require.Nil(t, pErr)
 
 			// Verify that the request carries the class we expect it to for its span.
-			span, err := keys.Range(ba.Requests)
-			require.NoError(t, err)
-			require.Equalf(t, rpc.ConnectionClassForKey(span.Key, rpc.DefaultClass), class,
-				"unexpected class for span key %v", span.Key)
+			require.Equalf(t, pair.wantClass, class,
+				"unexpected class for span key %v", pair.key)
 		})
 	}
 }
@@ -4415,6 +4544,11 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 	get.KeyLockingStrength = lock.Shared
 	get.KeyLockingDurability = lock.Unreplicated
 	ba.Add(get)
+	ba.Replica = roachpb.ReplicaDescriptor{
+		ReplicaID: 1,
+		NodeID:    2,
+		StoreID:   3,
+	}
 	br := &kvpb.BatchResponse{}
 	br.Error = kvpb.NewError(errors.New("boom"))
 	desc := &roachpb.RangeDescriptor{RangeID: 9, StartKey: roachpb.RKey("x"), EndKey: roachpb.RKey("z")}
@@ -4426,11 +4560,18 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 		act := s.RedactableString()
 		require.EqualValues(t, exp, act)
 	}
-
 	{
 		exp := `slow RPC finished after 8.16s (120 attempts)`
 		var s redact.StringBuilder
 		slowRangeRPCReturnWarningStr(&s, dur, attempts)
+		act := s.RedactableString()
+		require.EqualValues(t, exp, act)
+	}
+	{
+		exp := `have been waiting 8.16s (120 attempts) for RPC Get(Shared,Unreplicated) [‹"a"›] to` +
+			` replica (n2,s3):1; resp: ‹(err: boom)›`
+		var s redact.StringBuilder
+		slowReplicaRPCWarningStr(&s, ba, dur, attempts, nil /* err */, br)
 		act := s.RedactableString()
 		require.EqualValues(t, exp, act)
 	}
@@ -5149,9 +5290,8 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 						},
 					},
 				})
-				ent, err := rc.Lookup(ctx, roachpb.RKeyMin)
+				tok, err := rc.LookupWithEvictionToken(ctx, roachpb.RKeyMin, rangecache.EvictionToken{}, false)
 				require.NoError(t, err)
-				tok := rc.MakeEvictionToken(&ent)
 
 				numCalled := 0
 				transportFn := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
@@ -5207,16 +5347,16 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 				_, err = ds.sendToReplicas(ctx, ba, tok, false /* withCommit */)
 				require.IsType(t, &sendError{}, err)
 				require.Regexp(t, "NotLeaseHolderError", err)
-				cached := rc.GetCached(ctx, tc.initialDesc.StartKey, false /* inverted */)
-				require.NotNil(t, cached)
-				require.Equal(t, tc.updatedDesc, *cached.Desc())
+				cached, err := rc.TestingGetCached(ctx, tc.initialDesc.StartKey, false /* inverted */)
+				require.NoError(t, err)
+				require.Equal(t, tc.updatedDesc, cached.Desc)
 				require.Equal(t, tc.expReplicasTried, numCalled)
 				if tc.expLeaseholder == 0 {
 					// Check that the leaseholder is cleared out.
-					require.Nil(t, cached.Leaseholder())
+					require.True(t, cached.Lease.Empty())
 				} else {
-					require.NotNil(t, cached.Leaseholder())
-					require.Equal(t, tc.expLeaseholder, cached.Leaseholder().ReplicaID)
+					require.NotNil(t, cached.Lease)
+					require.Equal(t, tc.expLeaseholder, cached.Lease.Replica.ReplicaID)
 				}
 			})
 		})
@@ -5543,21 +5683,32 @@ func TestDistSenderDescEvictionAfterLeaseUpdate(t *testing.T) {
 
 	// We'll send a request that first gets a NLHE, and then a RangeNotFoundError. We
 	// then expect an updated descriptor to be used and return success.
+	// Initially the routing is (*1, 2,) - no LH
+	// 1) Send to n1 -> NLHE with LH=2 (updated - reset), transport -> (*2, 1,) - LH=2
+	// 2) Send to n2 -> not found, transport -> (2, *1,) - LH=2
+	// 3) Send to n1 -> NLHE with LH=2 (not updated - backoff), transport -> (1, *2,) - LH=2
+	// 4) Send to n2 -> not found, transport -> (1, 2, *) - LH=2
+	// Evict/Refresh transport is now (*3) - no LH
+	// 5) Send to n3 - success
 	call := 0
 	var transportFn = func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 		br := &kvpb.BatchResponse{}
 		switch call {
-		case 0:
+		case 0, 2:
 			expRepl := desc1.Replicas().Descriptors()[0]
 			require.Equal(t, expRepl, ba.Replica)
-			br.Error = kvpb.NewError(&kvpb.NotLeaseHolderError{
-				Lease: &roachpb.Lease{Replica: desc1.Replicas().Descriptors()[1]},
-			})
-		case 1:
+			br.Error = kvpb.NewError(
+				kvpb.NewNotLeaseHolderError(
+					roachpb.Lease{Replica: desc1.Replicas().Descriptors()[1]},
+					1,
+					&desc1,
+					"store not leaseholder",
+				))
+		case 1, 3:
 			expRep := desc1.Replicas().Descriptors()[1]
 			require.Equal(t, ba.Replica, expRep)
 			br.Error = kvpb.NewError(kvpb.NewRangeNotFoundError(ba.RangeID, ba.Replica.StoreID))
-		case 2:
+		case 4:
 			expRep := desc2.Replicas().Descriptors()[0]
 			require.Equal(t, ba.Replica, expRep)
 			br = ba.CreateReply()
@@ -5605,7 +5756,7 @@ func TestDistSenderDescEvictionAfterLeaseUpdate(t *testing.T) {
 
 	_, err := ds.Send(ctx, ba)
 	require.NoError(t, err.GoError())
-	require.Equal(t, call, 3)
+	require.Equal(t, call, 5)
 	require.Equal(t, rangeLookups, 2)
 }
 
@@ -5730,7 +5881,7 @@ func TestDistSenderCrossLocalityMetrics(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("%-v", tc.crossLocalityType), func(t *testing.T) {
-			metrics := makeDistSenderMetrics()
+			metrics := MakeDistSenderMetrics()
 			beforeMetrics, err := metrics.getDistSenderCounterMetrics(metricsNames)
 			if err != nil {
 				t.Error(err)
@@ -6207,4 +6358,204 @@ func (m *mockTenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
 
 func (m *mockTenantSideCostController) Metrics() metric.Struct {
 	return nil
+}
+
+// benchNodeStore mocks out the looking up for node descriptors. On a real
+// system this is done through gossip, but we don't want to include the time to
+// look these up in the test.
+type benchNodeStore struct {
+	nodes []*roachpb.NodeDescriptor
+}
+
+func (b benchNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	return b.nodes[id], nil
+}
+
+func (b benchNodeStore) GetNodeDescriptorCount() int {
+	panic("implement me")
+}
+
+func (b benchNodeStore) GetStoreDescriptor(id roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
+	panic("implement me")
+}
+
+var _ NodeDescStore = &benchNodeStore{}
+
+func toKey(i roachpb.RangeID) roachpb.Key {
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(i))
+	return buf
+}
+func fromKey(key roachpb.Key) roachpb.RangeID {
+	return roachpb.RangeID(binary.BigEndian.Uint32(key))
+}
+
+// benchDistSender runs one iteration of a normal dist sender request. The test
+// first creates the numRanges and the nodes and replicas for the given rf. It
+// then loops through all the ranges and issues a Get to each one. DistSender
+// should add minimal overhead per request, so requests run in 1-5 microseconds
+// per request.
+func benchDistSender(b *testing.B, rf int, numRange int, conc bool) {
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(nil)
+	stopper := stop.NewStopper()
+	st := cluster.MakeTestingClusterSettings()
+	defer stopper.Stop(ctx)
+
+	var replicas []roachpb.ReplicaDescriptor
+	for i := 1; i <= rf; i++ {
+		replicas = append(replicas, roachpb.ReplicaDescriptor{
+			NodeID:    roachpb.NodeID(i),
+			StoreID:   roachpb.StoreID(i),
+			ReplicaID: roachpb.ReplicaID(i),
+		})
+	}
+	var nodes []*roachpb.NodeDescriptor
+	// Append the unused 0 node so the node offset matches its index.
+	// The client runs from the rf+1 node to force sorting of replicas.
+	for i := 0; i <= rf+1; i++ {
+		nodes = append(nodes, &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)})
+	}
+
+	rng := rand.New(rand.NewSource(1))
+	var sortedReplicas [][]roachpb.ReplicaDescriptor
+	var descs []*roachpb.RangeDescriptor
+	for i := 0; i < numRange; i++ {
+		r := make([]roachpb.ReplicaDescriptor, len(replicas))
+		copy(r, replicas)
+		rng.Shuffle(len(r), func(i, j int) { r[i], r[j] = r[j], r[i] })
+		sortedReplicas = append(sortedReplicas, r)
+		rangeID := roachpb.RangeID(i)
+		key := roachpb.RKey(toKey(rangeID))
+		var desc = roachpb.RangeDescriptor{
+			RangeID:          rangeID,
+			Generation:       1,
+			StartKey:         key,
+			EndKey:           key.Next(),
+			InternalReplicas: sortedReplicas[rangeID],
+		}
+		descs = append(descs, &desc)
+	}
+
+	// Create a single range for each key.
+	rddb := MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+	) {
+		rangeID := fromKey(key.AsRawKey())
+		return []roachpb.RangeDescriptor{*descs[rangeID]}, nil, nil
+	})
+	// The transport factory will "pin" each lease to a different node.
+	transportFactory := adaptSimpleTransport(
+		func(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+			rangeID := args.RangeID
+			nodeID := args.Replica.NodeID
+			// Pick a random, but stable, node as the leaseholder.
+			leaseholderNodeID := roachpb.NodeID(int(rangeID)%rf + 1)
+
+			reply := args.CreateReply()
+			if leaseholderNodeID != nodeID {
+				key := toKey(rangeID)
+				rangeDesc, _, _ := rddb.RangeLookup(ctx, roachpb.RKey(key), kvpb.CONSISTENT, false)
+
+				var replicaDesc roachpb.ReplicaDescriptor
+				for _, r := range rangeDesc[0].InternalReplicas {
+					if r.NodeID == leaseholderNodeID {
+						replicaDesc = r
+					}
+				}
+				lease := &roachpb.Lease{
+					Sequence: 1,
+					Replica:  replicaDesc,
+				}
+
+				nlhe := kvpb.NotLeaseHolderError{
+					RangeID:   rangeID,
+					RangeDesc: rangeDesc[0],
+					Lease:     lease,
+				}
+				reply.Error = kvpb.NewError(&nlhe)
+			}
+			return reply, nil
+		})
+
+	// TODO(baptist): To make this more realistic the test could use a real
+	// liveness.Cache, RemoteClockMonitor and Locality. This requires injecting
+	// more setup framework.
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:             clock,
+		NodeDescs:         &benchNodeStore{nodes: nodes},
+		NodeIDGetter:      func() roachpb.NodeID { return roachpb.NodeID(rf + 1) },
+		Stopper:           stopper,
+		TransportFactory:  transportFactory,
+		RangeDescriptorDB: rddb,
+		HealthFunc: func(id roachpb.NodeID) bool {
+			return true
+		},
+		LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+			// Return a different latency for each node. The ranges are each
+			// sorted differently above so this will still require sorting.
+			return time.Duration(id), true
+		},
+		Settings: st,
+	}
+	ds := NewDistSender(cfg)
+
+	// Run through all the ranges once to pre-populate the cache. This allows the
+	// runs to be stable fairly quickly.
+	for i := 1; i < numRange; i++ {
+		rangeID := roachpb.RangeID(i % numRange)
+		get := kvpb.NewGet(toKey(rangeID))
+		if _, pErr := kv.SendWrapped(ctx, ds, get); pErr != nil {
+			b.Fatal(pErr)
+		}
+	}
+
+	numProcs := 1
+	if conc {
+		numProcs = runtime.GOMAXPROCS(0)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(numProcs)
+
+	b.ResetTimer()
+	// This loop will cycle through all the ranges and request a key from each
+	// of them. It optionally runs multiple goroutines concurrently to test any
+	// locking contention.
+	for i := 0; i < numProcs; i++ {
+		go func() {
+			defer wg.Done()
+			// Divide iterations by the number of threads to get accurate time
+			// per operation.
+			for i := 0; i < b.N/numProcs; i++ {
+				rangeID := roachpb.RangeID(i % numRange)
+				get := kvpb.NewGet(toKey(rangeID))
+				// NB: Calling require.Nil is measurably slower since it
+				// synchronizes across threads.
+				if _, pErr := kv.SendWrapped(ctx, ds, get); pErr != nil {
+					b.Error(pErr)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// BenchmarkDistSenderSunnyDay runs various combinations of number of ranges and
+// RF. The larger range count puts more pressure on the range cache lookup while
+// the large RF puts more pressure on the sorting.
+func BenchmarkDistSenderSunnyDay(b *testing.B) {
+	for _, rf := range []int{3, 5, 11} {
+		for _, numRange := range []int{1, 1000, 100000} {
+			// Run the test both with and without concurrent usage.
+			b.Run(fmt.Sprintf("rf-%d/count-%d-conc", rf, numRange), func(b *testing.B) {
+				benchDistSender(b, rf, numRange, true)
+			})
+			b.Run(fmt.Sprintf("rf-%d/count-%d", rf, numRange), func(b *testing.B) {
+				benchDistSender(b, rf, numRange, false)
+			})
+		}
+	}
 }

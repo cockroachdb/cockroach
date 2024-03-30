@@ -12,6 +12,7 @@ package randgen
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"math/rand"
 	"regexp"
@@ -23,11 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 var (
@@ -218,12 +217,6 @@ func statisticsMutator(
 				return
 			}
 			colType := tree.MustBeStaticallyKnownType(col.Type)
-			if colType.Family() == types.CollatedStringFamily {
-				// Collated strings are not roundtrippable during
-				// encoding/decoding, so we cannot always make a valid
-				// histogram.
-				return
-			}
 			h := randHistogram(rng, colType)
 			stat := colStats[col.Name]
 			if err := stat.SetHistogram(&h); err != nil {
@@ -300,6 +293,7 @@ func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
 	}
 	h := stats.HistogramData{
 		ColumnType: histogramColType,
+		Version:    stats.HistVersion,
 	}
 
 	// Generate random values for histogram bucket upper bounds.
@@ -310,7 +304,7 @@ func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
 			encs := encodeInvertedIndexHistogramUpperBounds(colType, upper)
 			encodedUpperBounds = append(encodedUpperBounds, encs...)
 		} else {
-			enc, err := keyside.Encode(nil, upper, encoding.Ascending)
+			enc, err := stats.EncodeUpperBound(stats.HistVersion, upper)
 			if err != nil {
 				panic(err)
 			}
@@ -366,9 +360,9 @@ func encodeInvertedIndexHistogramUpperBounds(colType *types.T, val tree.Datum) (
 	var err error
 	switch colType.Family() {
 	case types.GeometryFamily:
-		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, *geoindex.DefaultGeometryIndexConfig())
+		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(context.Background(), val, nil, *geoindex.DefaultGeometryIndexConfig())
 	case types.GeographyFamily:
-		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, *geoindex.DefaultGeographyIndexConfig())
+		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(context.Background(), val, nil, *geoindex.DefaultGeographyIndexConfig())
 	default:
 		keys, err = rowenc.EncodeInvertedIndexTableKeys(val, nil, descpb.LatestIndexDescriptorVersion)
 	}
@@ -379,9 +373,9 @@ func encodeInvertedIndexHistogramUpperBounds(colType *types.T, val tree.Datum) (
 
 	var da tree.DatumAlloc
 	for i := range keys {
-		// Each key much be a byte-encoded datum so that it can be
+		// Each upper-bound datum much be a byte-encoded datum so that it can be
 		// decoded in JSONStatistic.SetHistogram.
-		enc, err := keyside.Encode(nil, da.NewDBytes(tree.DBytes(keys[i])), encoding.Ascending)
+		enc, err := stats.EncodeUpperBound(stats.HistVersion, da.NewDBytes(tree.DBytes(keys[i])))
 		if err != nil {
 			panic(err)
 		}

@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -252,22 +253,99 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 	}, nil
 }
 
-// MatchOverload searches an overload which has exactly the same parameter
-// types. The overload from the most significant schema is returned. If
-// paramTypes==nil, an error is returned if the function name is not unique in
-// the most significant schema. If paramTypes is not nil, an error with
-// ErrRoutineUndefined cause is returned if not matched found. Overloads that
-// don't match the types in routineType are ignored.
+// MatchOverload searches an overload with the given signature. The overload
+// from the most significant schema is returned. If routineObj.Params==nil, an
+// error is returned if the function name is not unique in the most significant
+// schema. If routineObj.Params is not nil, an error with ErrRoutineUndefined
+// cause is returned if not matches found. Overloads that don't match the types
+// in routineType are ignored.
 func (fd *ResolvedFunctionDefinition) MatchOverload(
-	paramTypes []*types.T, explicitSchema string, searchPath SearchPath, routineType RoutineType,
+	ctx context.Context,
+	typeRes TypeReferenceResolver,
+	routineObj *RoutineObj,
+	searchPath SearchPath,
+	routineType RoutineType,
+	inDropContext bool,
 ) (QualifiedOverload, error) {
+	// includeAll indicates whether all parameters, regardless of the class,
+	// should be included into the signature.
+	getSignatureTypes := func(includeAll bool) (_ []*types.T, onlyDefaultParamClass bool, _ error) {
+		if routineObj.Params == nil {
+			return nil, false, nil
+		}
+		typs := make([]*types.T, 0, len(routineObj.Params))
+		onlyDefaultParamClass = true
+		for _, param := range routineObj.Params {
+			if IsInParamClass(param.Class) || includeAll {
+				typ, err := ResolveType(ctx, param.Type, typeRes)
+				if err != nil {
+					return nil, false, err
+				}
+				typs = append(typs, typ)
+			}
+			onlyDefaultParamClass = onlyDefaultParamClass && param.Class == RoutineParamDefault
+		}
+		return typs, onlyDefaultParamClass, nil
+	}
+	paramTypes, onlyDefaultParamClass, err := getSignatureTypes(false /* includeAll */)
+	if err != nil {
+		return QualifiedOverload{}, err
+	}
+	// allParamTypes, if set, contains types of all parameters (including OUT).
+	var allParamTypes []*types.T
+	if onlyDefaultParamClass && inDropContext {
+		allParamTypes, _, err = getSignatureTypes(true /* includeAll */)
+		if err != nil {
+			return QualifiedOverload{}, err
+		}
+	}
+	// firstMatchParamTypes, if set, contains the type schema of the very first
+	// match.
+	var firstMatchParamTypes []*types.T
 	matched := func(ol QualifiedOverload, schema string) bool {
-		if ol.Type == UDFRoutine || ol.Type == ProcedureRoutine {
+		if ol.Type == ProcedureRoutine {
+			if schema != ol.Schema || paramTypes == nil {
+				// Fast-path for the simple case when we have a schema mismatch
+				// or all signatures are accepted.
+				return schema == ol.Schema && paramTypes == nil
+			}
+			// First, apply regular postgres resolution approach of using only
+			// the input types.
+			if ol.params().MatchIdentical(paramTypes) {
+				return true
+			}
+			// Check whether SQL-compliant resolution matches this overload
+			// (only applicable in the DROP context when no parameters have the
+			// parameter class specified).
+			if !inDropContext || !onlyDefaultParamClass {
+				return false
+			}
+			_, outParamOrdinals, outParamTypes := ol.outParamInfo()
+			if ol.Types.Length()+len(outParamOrdinals) != len(allParamTypes) {
+				return false
+			}
+			allParams := make(ParamTypes, len(allParamTypes))
+			var outParamsSeen int
+			for i := 0; i < len(allParams); i++ {
+				if outParamsSeen < len(outParamOrdinals) && outParamOrdinals[outParamsSeen] == int32(i) {
+					allParams[i] = ParamType{Typ: outParamTypes.GetAt(outParamsSeen)}
+					outParamsSeen++
+				} else {
+					allParams[i] = ParamType{Typ: ol.Types.GetAt(i - outParamsSeen)}
+				}
+			}
+			match := allParams.MatchIdentical(allParamTypes)
+			if firstMatchParamTypes == nil && match {
+				firstMatchParamTypes = allParamTypes
+			}
+			return match
+		}
+		if ol.Type == UDFRoutine {
 			return schema == ol.Schema && (paramTypes == nil || ol.params().MatchIdentical(paramTypes))
 		}
 		return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))
 	}
-	typeNames := func() string {
+	typeNames := func(paramTypes []*types.T) string {
 		ns := make([]string, len(paramTypes))
 		for i, t := range paramTypes {
 			ns[i] = t.Name()
@@ -283,12 +361,15 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 			if matched(fd.Overloads[i], schema) {
 				found = true
 				ret = append(ret, fd.Overloads[i])
+				if firstMatchParamTypes == nil {
+					firstMatchParamTypes = paramTypes
+				}
 			}
 		}
 	}
 
-	if explicitSchema != "" {
-		findMatches(explicitSchema)
+	if routineObj.FuncName.Schema() != "" {
+		findMatches(routineObj.FuncName.Schema())
 	} else {
 		for i, n := 0, searchPath.NumElements(); i < n; i++ {
 			if findMatches(searchPath.GetSchema(i)); found {
@@ -300,10 +381,10 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	if len(ret) == 1 && ret[0].Type&routineType == 0 {
 		if routineType == ProcedureRoutine {
 			return QualifiedOverload{}, pgerror.Newf(
-				pgcode.WrongObjectType, "%s(%s) is not a procedure", fd.Name, typeNames())
+				pgcode.WrongObjectType, "%s(%s) is not a procedure", fd.Name, typeNames(firstMatchParamTypes))
 		} else {
 			return QualifiedOverload{}, pgerror.Newf(
-				pgcode.WrongObjectType, "%s(%s) is not a function", fd.Name, typeNames())
+				pgcode.WrongObjectType, "%s(%s) is not a function", fd.Name, typeNames(firstMatchParamTypes))
 		}
 	}
 
@@ -322,26 +403,18 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	// Truncate the slice.
 	ret = ret[:i]
 
-	if len(ret) == 0 {
-		if routineType == ProcedureRoutine {
-			return QualifiedOverload{}, errors.Mark(
-				pgerror.Newf(pgcode.UndefinedFunction, "procedure %s(%s) does not exist", fd.Name, typeNames()),
-				ErrRoutineUndefined,
-			)
-		} else {
-			return QualifiedOverload{}, errors.Mark(
-				pgerror.Newf(pgcode.UndefinedFunction, "function %s(%s) does not exist", fd.Name, typeNames()),
-				ErrRoutineUndefined,
-			)
-		}
+	kind := "function"
+	if routineType == ProcedureRoutine {
+		kind = "procedure"
 	}
-
+	if len(ret) == 0 {
+		return QualifiedOverload{}, errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "%s %s(%s) does not exist", kind, fd.Name, typeNames(paramTypes)),
+			ErrRoutineUndefined,
+		)
+	}
 	if len(ret) > 1 {
-		if routineType == ProcedureRoutine {
-			return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "procedure name %q is not unique", fd.Name)
-		} else {
-			return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "function name %q is not unique", fd.Name)
-		}
+		return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "%s name %q is not unique", kind, fd.Name)
 	}
 	return ret[0], nil
 }

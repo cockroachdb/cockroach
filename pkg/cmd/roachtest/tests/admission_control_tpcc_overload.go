@@ -50,7 +50,7 @@ type tpccOLAPSpec struct {
 
 func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes, workloadNode := setupTPCC(
-		ctx, t, c, tpccOptions{
+		ctx, t, t.L(), c, tpccOptions{
 			Warehouses: s.Warehouses, SetupType: usingImport,
 		})
 	// We make use of querybench below, only available through the `workload`
@@ -124,7 +124,7 @@ func verifyNodeLiveness(
 	if err := retry.WithMaxAttempts(ctx, retry.Options{
 		MaxBackoff: 500 * time.Millisecond,
 	}, 60, func() (err error) {
-		response, err = getMetrics(ctx, adminURLs[0], now.Add(-runDuration), now, []tsQuery{
+		response, err = getMetrics(ctx, c, t, adminURLs[0], now.Add(-runDuration), now, []tsQuery{
 			{
 				name:      "cr.node.liveness.heartbeatfailures",
 				queryType: total,
@@ -197,7 +197,10 @@ func registerTPCCSevereOverload(r registry.Registry) {
 			roachNodes := c.Range(1, c.Spec().NodeCount-1)
 			workloadNode := c.Spec().NodeCount
 
-			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), roachNodes)
+			c.Start(
+				ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule),
+				install.MakeClusterSettings(), roachNodes,
+			)
 
 			t.Status("initializing (~1h)")
 			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload fixtures import tpcc --checks=false --warehouses=10000 {pgurl:1}")

@@ -15,7 +15,7 @@ write *eventpb.CreateSequence to event log:
     statement: CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
     tag: CREATE SEQUENCE
     user: root
-## StatementPhase stage 1 of 1 with 23 MutationType ops
+## StatementPhase stage 1 of 1 with 24 MutationType ops
 initializing sequence 104 with starting value of 31
 add object namespace entry {100 101 sq1} -> 104
 upsert descriptor #104
@@ -29,21 +29,13 @@ upsert descriptor #104
   +      family: IntFamily
   +      oid: 20
   +      width: 64
-  +  - defaultExpr: unique_rowid()
-  +    hidden: true
-  +    id: 2
-  +    name: rowid
-  +    type:
-  +      family: IntFamily
-  +      oid: 20
-  +      width: 64
   +  createAsOfTime: {}
   +  formatVersion: 3
   +  id: 104
   +  modificationTime: {}
   +  mutations: []
   +  name: sq1
-  +  nextColumnId: 3
+  +  nextColumnId: 2
   +  nextConstraintId: 1
   +  nextIndexId: 2
   +  parentId: 100
@@ -87,6 +79,12 @@ upsert descriptor #104
   +    start: "32"
   +  unexposedParentSchemaId: 101
   +  version: "1"
+upsert descriptor #101
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
@@ -106,21 +104,13 @@ upsert descriptor #104
   +      family: IntFamily
   +      oid: 20
   +      width: 64
-  +  - defaultExpr: unique_rowid()
-  +    hidden: true
-  +    id: 2
-  +    name: rowid
-  +    type:
-  +      family: IntFamily
-  +      oid: 20
-  +      width: 64
   +  createAsOfTime: {}
   +  formatVersion: 3
   +  id: 104
   +  modificationTime: {}
   +  mutations: []
   +  name: sq1
-  +  nextColumnId: 3
+  +  nextColumnId: 2
   +  nextConstraintId: 1
   +  nextIndexId: 2
   +  parentId: 100
@@ -164,7 +154,12 @@ upsert descriptor #104
   +    start: "32"
   +  unexposedParentSchemaId: 101
   +  version: "1"
+upsert descriptor #101
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
 persist all catalog changes to storage
-adding table for stats refresh: 104
 # end PreCommitPhase
 commit transaction #1

@@ -55,4 +55,5 @@ var gopgIgnoreList = blocklist{
 	// These tests sometimes failed and we haven't diagnosed it
 	"pg | DB race | SelectOrInsert with OnConflict is race free":    "unknown",
 	"pg | DB race | SelectOrInsert without OnConflict is race free": "unknown",
+	`pg | ORM | relation with no results does not panic`:            "unknown",
 }

@@ -75,7 +75,7 @@ const (
 	// DefaultReplicaIOOverloadThreshold is used to avoid allocating to stores with an
 	// IO overload score greater than what's set. This is typically used in
 	// conjunction with IOOverloadMeanThreshold below.
-	DefaultReplicaIOOverloadThreshold = 0.4
+	DefaultReplicaIOOverloadThreshold = 0.3
 
 	// DefaultLeaseIOOverloadThreshold is used to block lease transfers to stores
 	// with an IO overload score greater than this threshold. This is typically
@@ -85,7 +85,7 @@ const (
 	// DefaultLeaseIOOverloadShedThreshold is used to shed leases from stores
 	// with an IO overload score greater than the this threshold. This is
 	// typically used in conjunction with IOOverloadMeanThreshold below.
-	DefaultLeaseIOOverloadShedThreshold = 0.9
+	DefaultLeaseIOOverloadShedThreshold = 0.4
 
 	// IOOverloadMeanThreshold is the percentage above the mean after which a
 	// store could be conisdered IO overload if also exceeding the absolute IO
@@ -182,7 +182,7 @@ var LeaseIOOverloadThreshold = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"kv.allocator.lease_io_overload_threshold",
 	"a store will not receive new leases when its IO overload score is above this "+
-		"value and `kv.allocator.io_overload_threshold_enforcement_leases` is "+
+		"value and `kv.allocator.io_overload_threshold` is "+
 		"`shed` or `block_transfer_to`",
 	DefaultLeaseIOOverloadThreshold,
 )
@@ -196,7 +196,7 @@ var LeaseIOOverloadShedThreshold = settings.RegisterFloatSetting(
 	"kv.allocator.lease_shed_io_overload_threshold",
 	"a store will shed its leases and receive no new leases when its "+
 		"IO overload score is above this value and "+
-		"`kv.allocator.io_overload_threshold_enforcement_leases` is `shed`",
+		"`kv.allocator.lease_io_overload_threshold_enforcement` is `shed`",
 	DefaultLeaseIOOverloadShedThreshold,
 )
 
@@ -213,7 +213,7 @@ var LeaseIOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
 		"`block_transfer_to` a store will receive no new leases but won't lose existing leases,"+
 		"`shed`: a store will receive no new leases and shed existing leases to "+
 		"non io-overloaded stores, this is a superset of block_transfer_to",
-	"block_transfer_to",
+	"shed",
 	map[int64]string{
 		int64(IOOverloadThresholdIgnore):         "ignore",
 		int64(IOOverloadThresholdBlockTransfers): "block_transfer_to",
@@ -1111,25 +1111,14 @@ func rankedCandidateListForAllocation(
 			!options.getIOOverloadOptions().allocateReplicaToCheck(
 				ctx,
 				s,
-				candidateStores.CandidateIOOverloadScores.Mean,
+				candidateStores,
 			) {
 			continue
 		}
 
-		constraintsOK, necessary := constraintsCheck(s)
-		if !constraintsOK {
-			if necessary {
-				log.KvDistribution.VEventf(
-					ctx,
-					3,
-					"cannot allocate necessary %s on s%d",
-					targetType,
-					s.StoreID,
-				)
-			}
-			continue
+		if constraintsOK, _ := constraintsCheck(s); constraintsOK {
+			validCandidateStores = append(validCandidateStores, s)
 		}
-		validCandidateStores = append(validCandidateStores, s)
 	}
 
 	// Create a new store list, which will update the average for each stat to
@@ -1772,7 +1761,7 @@ func rankedCandidateListForRebalancing(
 				s,
 				// We only wish to compare the IO overload to the
 				// comparable stores average and not the cluster.
-				comparable.candidateSL.CandidateIOOverloadScores.Mean,
+				comparable.candidateSL,
 			)
 			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
 			cand.convergesScore = options.rebalanceToConvergesScore(comparable, s)
@@ -2074,7 +2063,8 @@ func allocateConstraintsCheck(
 // that is not already overly satisfied by existing replicas (other than the
 // replacement), then it's necessary. If there are any necessary constraints
 // that are not satisfied by the candidate when the existing store did satisfy
-// that constraint, then the candidate is considered invalid entirely.
+// that constraint, then the candidate is considered invalid and unnecessary
+// entirely.
 func replaceConstraintsCheck(
 	store, existingStore roachpb.StoreDescriptor, analyzed constraint.AnalyzedConstraints,
 ) (valid bool, necessary bool) {
@@ -2089,23 +2079,22 @@ func replaceConstraintsCheck(
 		satisfiedByCandidateStore := constraint.CheckStoreConjunction(store, constraints.Constraints)
 		if satisfiedByCandidateStore {
 			valid = true
-		}
-
-		// If the constraint is not already satisfied, it's necessary.
-		// Additionally, if the constraint is only just satisfied by the existing
-		// store being replaced, since that store is going away, the constraint is
-		// also marked as necessary.
-		if len(matchingStores) < int(constraints.NumReplicas) ||
-			(len(matchingStores) == int(constraints.NumReplicas) &&
-				satisfiedByExistingStore) {
-			necessary = true
-		}
-
-		// Check if existing store matches a constraint that isn't overly satisfied.
-		// If so, then only replacing it with a satisfying store is valid to ensure
-		// that the constraint stays fully satisfied.
-		if necessary && satisfiedByExistingStore && !satisfiedByCandidateStore {
-			return false, necessary
+			// If the constraint is not already satisfied, it's necessary.
+			// Additionally, if the constraint is only just satisfied by the existing
+			// store being replaced, since that store is going away, the constraint is
+			// also marked as necessary.
+			if len(matchingStores) < int(constraints.NumReplicas) ||
+				(len(matchingStores) == int(constraints.NumReplicas) &&
+					satisfiedByExistingStore) {
+				necessary = true
+			}
+		} else if satisfiedByExistingStore {
+			// Check if existing store matches a constraint that isn't overly satisfied.
+			// If so, then only replacing it with a satisfying store is valid to ensure
+			// that the constraint stays fully satisfied.
+			if len(matchingStores) <= int(constraints.NumReplicas) {
+				return false, false
+			}
 		}
 	}
 
@@ -2392,6 +2381,11 @@ type IOOverloadOptions struct {
 	ReplicaEnforcementLevel IOOverloadEnforcementLevel
 	LeaseEnforcementLevel   IOOverloadEnforcementLevel
 
+	// TODO(kvoli): Remove this max protection check after 25.1. In mixed version
+	// clusters, the max IO score is not populated on pre v24.1 nodes. Use the
+	// instantaneous value.
+	UseIOThresholdMax bool
+
 	ReplicaIOOverloadThreshold   float64
 	LeaseIOOverloadThreshold     float64
 	LeaseIOOverloadShedThreshold float64
@@ -2422,13 +2416,32 @@ func ioOverloadCheck(
 	return true, ""
 }
 
+func (o IOOverloadOptions) storeScore(store roachpb.StoreDescriptor) float64 {
+	var score float64
+	if o.UseIOThresholdMax {
+		score, _ = store.Capacity.IOThresholdMax.Score()
+	} else {
+		score, _ = store.Capacity.IOThreshold.Score()
+	}
+
+	return score
+}
+
+func (o IOOverloadOptions) storeListAvgScore(storeList storepool.StoreList) float64 {
+	if o.UseIOThresholdMax {
+		return storeList.CandidateMaxIOOverloadScores.Mean
+	}
+	return storeList.CandidateIOOverloadScores.Mean
+}
+
 // allocateReplicaToCheck returns true if the store IO overload does not exceed
 // the cluster threshold and mean, or the enforcement level does not prevent
 // replica allocation to IO overloaded stores.
 func (o IOOverloadOptions) allocateReplicaToCheck(
-	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
+	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := o.storeScore(store)
+	avg := o.storeListAvgScore(storeList)
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.ReplicaIOOverloadThreshold, IOOverloadMeanThreshold,
@@ -2446,9 +2459,10 @@ func (o IOOverloadOptions) allocateReplicaToCheck(
 // exceed the cluster threshold and mean, or the enforcement level does not
 // prevent replica rebalancing to IO overloaded stores.
 func (o IOOverloadOptions) rebalanceReplicaToCheck(
-	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
+	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := o.storeScore(store)
+	avg := o.storeListAvgScore(storeList)
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.ReplicaIOOverloadThreshold, IOOverloadMeanThreshold,
@@ -2465,9 +2479,10 @@ func (o IOOverloadOptions) rebalanceReplicaToCheck(
 // the cluster threshold and mean, or the enforcement level does not prevent
 // lease transfers to IO overloaded stores.
 func (o IOOverloadOptions) transferLeaseToCheck(
-	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
+	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := o.storeScore(store)
+	avg := o.storeListAvgScore(storeList)
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.LeaseIOOverloadThreshold, IOOverloadMeanThreshold,
@@ -2481,13 +2496,14 @@ func (o IOOverloadOptions) transferLeaseToCheck(
 	return true
 }
 
-// transferLeaseToCheck returns true if the store IO overload does not exceed
-// the cluster threshold and mean, or the enforcement level does not prevent
-// existing stores from holidng leases whilst being IO overloaded.
-func (o IOOverloadOptions) existingLeaseCheck(
-	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
+// ExistingLeaseCheck returns true if the store IO overload does not exceed the
+// cluster threshold and mean, or the enforcement level does not prevent
+// existing stores from holding leases whilst being IO overloaded.
+func (o IOOverloadOptions) ExistingLeaseCheck(
+	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := o.storeScore(store)
+	avg := o.storeListAvgScore(storeList)
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.LeaseIOOverloadShedThreshold, IOOverloadMeanThreshold,

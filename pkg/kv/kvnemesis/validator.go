@@ -707,6 +707,20 @@ func (v *validator) processOp(op Operation) {
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`addSSTable`, t.Result)
 		}
+	case *BarrierOperation:
+		execTimestampStrictlyOptional = true
+		if op.Barrier.WithLeaseAppliedIndex &&
+			resultHasErrorType(t.Result, &kvpb.RangeKeyMismatchError{}) {
+			// Barriers requesting LAIs can't span ranges. The generator will
+			// optimistically try to fit the barrier inside one of the current ranges,
+			// but this may race with a split, so we ignore the error in this case and
+			// try again later.
+		} else {
+			// Fail or retry on other errors, depending on type.
+			v.checkNonAmbError(op, t.Result, exceptUnhandledRetry)
+		}
+		// We don't yet actually check the barrier guarantees here, i.e. that all
+		// concurrent writes are applied by the time it completes. Maybe later.
 	case *ScanOperation:
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
@@ -784,7 +798,6 @@ func (v *validator) processOp(op Operation) {
 		v.failIfError(
 			op, t.Result,
 			exceptRollback, exceptAmbiguous, exceptSharedLockPromotionError, exceptSkipLockedReplayError,
-			exceptSkipLockedUnsupportedError,
 		)
 
 		ops := t.Ops
@@ -1367,7 +1380,6 @@ func (v *validator) checkError(
 		exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
 		exceptSharedLockPromotionError,
 		exceptSkipLockedReplayError,
-		exceptSkipLockedUnsupportedError,
 	}
 	sl = append(sl, extraExceptions...)
 	return v.failIfError(op, r, sl...)

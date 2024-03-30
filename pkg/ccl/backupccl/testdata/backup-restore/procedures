@@ -59,7 +59,7 @@ db1 sc2 p2 function false
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a db1.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1.sc1.tbl1;
@@ -95,7 +95,7 @@ USE db1_new
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(IN a db1_new.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a db1_new.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1_new.sc1.tbl1;
@@ -224,7 +224,7 @@ db1 sc2 p2 function true
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a db1.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1.sc1.tbl1;
@@ -261,7 +261,7 @@ USE db1
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a db1.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1.sc1.tbl1;
@@ -325,7 +325,7 @@ CREATE PROCEDURE sc1.p() LANGUAGE SQL AS $$ SELECT 1 $$;
 ----
 
 # Make sure the original schema has procedure signatures
-query-sql
+let $defaultdb_sc1_db
 WITH db_id AS (
   SELECT id FROM system.namespace WHERE name = 'defaultdb'
 ),
@@ -337,7 +337,6 @@ schema_id AS (
 )
 SELECT id FROM schema_id;
 ----
-109
 
 query-sql
 WITH to_json AS (
@@ -350,7 +349,7 @@ WITH to_json AS (
       ) AS d
     FROM
       system.descriptor
-    WHERE id = 109
+    WHERE id = $defaultdb_sc1_db
 )
 SELECT d->'schema'->>'functions'::string FROM to_json;
 ----
@@ -368,7 +367,7 @@ exec-sql
 USE db1;
 ----
 
-query-sql
+let $db1_sc1_id
 WITH db_id AS (
   SELECT id FROM system.namespace WHERE name = 'db1'
 ),
@@ -380,7 +379,6 @@ schema_id AS (
 )
 SELECT id FROM schema_id;
 ----
-112
 
 query-sql
 WITH to_json AS (
@@ -393,7 +391,7 @@ WITH to_json AS (
       ) AS d
     FROM
       system.descriptor
-    WHERE id = 112
+    WHERE id = $db1_sc1_id
 )
 SELECT d->'schema'->>'functions'::string FROM to_json;
 ----

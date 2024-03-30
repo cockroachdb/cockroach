@@ -349,7 +349,6 @@ func (b *BatchEncoder) encodePK(ctx context.Context, ind catalog.Index) error {
 			}
 
 			col := fetchedCols[idx]
-			typ := col.GetType()
 			vec := vecs[idx]
 			nulls := vec.Nulls()
 			lastColIDs := b.lastColIDs
@@ -372,7 +371,7 @@ func (b *BatchEncoder) encodePK(ctx context.Context, ind catalog.Index) error {
 				colIDDelta := valueside.MakeColumnIDDelta(lastColIDs[row], colID)
 				lastColIDs[row] = colID
 				var err error
-				values[row], err = valuesideEncodeCol(values[row], typ, colIDDelta, vec, row+b.start)
+				values[row], err = valuesideEncodeCol(values[row], colIDDelta, vec, row+b.start)
 				if err != nil {
 					return err
 				}
@@ -426,7 +425,7 @@ func (b *BatchEncoder) encodeSecondaryIndex(ctx context.Context, ind catalog.Ind
 	kys := b.keys
 
 	// Encode key suffix columns and save the results in extraKeys.
-	_, err = encodeColumns(ind.IndexDesc().KeySuffixColumnIDs, nil /*directions*/, b.colMap, b.start, b.end, b.b.ColVecs(), b.extraKeys)
+	err = encodeColumns(ind.IndexDesc().KeySuffixColumnIDs, nil /*directions*/, b.colMap, b.start, b.end, b.b.ColVecs(), b.extraKeys)
 	if err != nil {
 		return err
 	}
@@ -436,7 +435,7 @@ func (b *BatchEncoder) encodeSecondaryIndex(ctx context.Context, ind catalog.Ind
 	if ind.GetType() == descpb.IndexDescriptor_INVERTED {
 		// Since the inverted indexes generate multiple keys per row just handle them
 		// separately.
-		return b.encodeInvertedSecondaryIndex(ind, kys, b.extraKeys)
+		return b.encodeInvertedSecondaryIndex(ctx, ind, kys, b.extraKeys)
 	} else {
 		keyAndSuffixCols := b.rh.TableDesc.IndexFetchSpecKeyAndSuffixColumns(ind)
 		keyCols := keyAndSuffixCols[:ind.NumKeyColumns()]
@@ -601,7 +600,7 @@ func (b *BatchEncoder) writeColumnValues(
 			}
 			colIDDelta := valueside.MakeColumnIDDelta(lastColIDs[row], col.ColID)
 			lastColIDs[row] = col.ColID
-			values[row], err = valuesideEncodeCol(values[row], vec.Type(), colIDDelta, vec, row+b.start)
+			values[row], err = valuesideEncodeCol(values[row], colIDDelta, vec, row+b.start)
 			if err != nil {
 				return err
 			}
@@ -619,32 +618,26 @@ func encodeColumns[T []byte | roachpb.Key](
 	start, end int,
 	vecs []coldata.Vec,
 	keys []T,
-) (*coldata.Nulls, error) {
-	var nulls coldata.Nulls
+) error {
 	var err error
 	for colIdx, id := range columnIDs {
 		var vec coldata.Vec
-		var typ *types.T
 		i, ok := colMap.Get(id)
 		if ok {
 			vec = vecs[i]
-			typ = vec.Type()
-			if vec.Nulls().MaybeHasNulls() {
-				nulls = nulls.Or(*vec.Nulls())
-			}
 		}
 		dir := encoding.Ascending
 		if directions != nil {
 			dir, err = directions.Get(colIdx)
 			if err != nil {
-				return nil, err
+				return err
 			}
 		}
-		if err := encodeKeys(keys, typ, dir, vec, start, end); err != nil {
-			return nil, err
+		if err = encodeKeys(keys, dir, vec, start, end); err != nil {
+			return err
 		}
 	}
-	return &nulls, nil
+	return nil
 }
 
 func (b *BatchEncoder) initFamily(familyIndex, familyID int) {

@@ -23,7 +23,6 @@ go_library(
         "//pkg/cli/cliflags",
         "//pkg/roachpb",
         "//pkg/security/username",
-        "//pkg/server/autoconfig/acprovider",
         "//pkg/settings/cluster",
         "//pkg/testutils/listenerutil",
         "//pkg/util",
@@ -60,10 +59,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":base"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/roachpb",
         "//pkg/security/securityassets",
@@ -74,6 +69,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_davecgh_go_spew//spew",
         "@com_github_stretchr_testify//require",

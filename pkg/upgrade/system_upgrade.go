@@ -150,28 +150,6 @@ func NewSystemUpgrade(
 	}
 }
 
-// NewPermanentSystemUpgrade constructs a SystemUpgrade that is marked as
-// "permanent": an upgrade that will run regardless of the cluster's bootstrap
-// version. Note however that the upgrade will still run at most once.
-func NewPermanentSystemUpgrade(
-	description string,
-	v roachpb.Version,
-	fn SystemUpgradeFunc,
-	v22_2StartupMigrationName string,
-	restore RestoreBehavior,
-) *SystemUpgrade {
-	return &SystemUpgrade{
-		upgrade: upgrade{
-			description:               description,
-			v:                         v,
-			permanent:                 true,
-			v22_2StartupMigrationName: v22_2StartupMigrationName,
-			restore:                   restore,
-		},
-		fn: fn,
-	}
-}
-
 // Run kickstarts the actual upgrade process for system-level upgrades.
 func (m *SystemUpgrade) Run(ctx context.Context, v roachpb.Version, d SystemDeps) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", v), nil)

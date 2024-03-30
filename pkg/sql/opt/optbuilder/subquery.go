@@ -85,8 +85,14 @@ func (s *subquery) Walk(v tree.Visitor) tree.Expr {
 
 // TypeCheck is part of the tree.Expr interface.
 func (s *subquery) TypeCheck(
-	_ context.Context, _ *tree.SemaContext, desired *types.T,
+	_ context.Context, semaCtx *tree.SemaContext, desired *types.T,
 ) (tree.TypedExpr, error) {
+	if semaCtx != nil && semaCtx.Properties.IsSet(tree.RejectSubqueries) {
+		// This is the same error as in tree.Subquery.TypeCheck.
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"subqueries are not allowed in %s", semaCtx.Properties.Context())
+	}
+
 	if s.typ != nil {
 		return s, nil
 	}
@@ -335,7 +341,12 @@ func (b *Builder) buildSingleRowSubquery(
 ) (out opt.ScalarExpr, outScope *scope) {
 	subqueryPrivate := memo.SubqueryPrivate{OriginalExpr: s.Subquery}
 	if s.Exists {
-		return b.factory.ConstructExists(s.node, &subqueryPrivate), inScope
+		col := b.factory.Metadata().AddColumn("exists", types.Bool)
+		ex := memo.ExistsPrivate{
+			LazyEvalProjectionCol: col,
+			SubqueryPrivate:       subqueryPrivate,
+		}
+		return b.factory.ConstructExists(s.node, &ex), inScope
 	}
 
 	var input memo.RelExpr

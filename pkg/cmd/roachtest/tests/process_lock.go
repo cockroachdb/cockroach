@@ -55,7 +55,7 @@ func registerProcessLock(r registry.Registry) {
 			conn := c.Conn(ctx, t.L(), 2)
 			defer conn.Close()
 			require.NoError(t, conn.PingContext(ctx))
-			require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+			require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
 			c.Run(ctx, option.WithNodes(c.Node(4)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
@@ -84,7 +84,7 @@ func registerProcessLock(r registry.Registry) {
 					// grepping for `./cockroach start` in ps's output, and
 					// grabbing the first field after stripping leading
 					// whitespace. Then, use this pid cat /proc/<pid>/cmdline.
-					result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(n),
+					result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(n)),
 						"cat /proc/`ps -eo pid,args | grep -E '([0-9]+) ./cockroach start' |  sed 's/^ *//' | cut -d ' ' -f 1`/cmdline")
 					if err != nil {
 						return err

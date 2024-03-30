@@ -22,10 +22,6 @@ go_test(
         "reducesql_test.go",
     ],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":reducesql",
         "//pkg/base",

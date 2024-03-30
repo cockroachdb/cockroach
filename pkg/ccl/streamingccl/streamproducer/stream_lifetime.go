@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -33,10 +34,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+// defaultExpirationWindowSeconds the default producer job expiration without a heartbeat is 1 day
+//
+// TODO(msbutler): for the post cutover dummy producer job, the default
+// expiration window will be 24 hours.
+const defaultExpirationWindow = time.Hour * 24
 
 // notAReplicationJobError returns an error that is returned anytime
 // the user passes a job ID not related to a replication stream job.
@@ -52,12 +60,12 @@ func jobIsNotRunningError(id jobspb.JobID, status jobs.Status, op string) error 
 	)
 }
 
-// startReplicationProducerJob initializes a replication stream producer job on
+// StartReplicationProducerJob initializes a replication stream producer job on
 // the source cluster that:
 //
 // 1. Tracks the liveness of the replication stream consumption.
 // 2. Updates the protected timestamp for spans being replicated.
-func startReplicationProducerJob(
+func StartReplicationProducerJob(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	txn isql.Txn,
@@ -106,10 +114,9 @@ func startReplicationProducerJob(
 	}
 
 	registry := execConfig.JobRegistry
-	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
 	ptsID := uuid.MakeV4()
 
-	jr := makeProducerJobRecord(registry, tenantRecord, timeout, evalCtx.SessionData().User(), ptsID)
+	jr := makeProducerJobRecord(registry, tenantRecord, defaultExpirationWindow, evalCtx.SessionData().User(), ptsID)
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
@@ -127,6 +134,9 @@ func startReplicationProducerJob(
 
 	if err := ptp.Protect(ctx, pts); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
+	}
+	if req.TenantID.Equal(roachpb.TenantID{}) && req.ClusterID.Equal(uuid.UUID{}) {
+		log.Infof(ctx, "started post cutover producer job %d", jr.JobID)
 	}
 
 	return streampb.ReplicationProducerSpec{
@@ -160,7 +170,7 @@ func convertProducerJobStatusToStreamStatus(
 // stream specified by 'streamID'.
 func updateReplicationStreamProgress(
 	ctx context.Context,
-	expiration time.Time,
+	updateBegin time.Time,
 	ptsProvider protectedts.Manager,
 	registry *jobs.Registry,
 	streamID streampb.StreamID,
@@ -172,9 +182,11 @@ func updateReplicationStreamProgress(
 		if err != nil {
 			return status, err
 		}
-		if _, ok := j.Details().(jobspb.StreamReplicationDetails); !ok {
+		details, ok := j.Details().(jobspb.StreamReplicationDetails)
+		if !ok {
 			return status, notAReplicationJobError(jobspb.JobID(streamID))
 		}
+		expiration := updateBegin.Add(details.ExpirationWindow)
 		if err := j.WithTxn(txn).Update(ctx, func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
@@ -240,16 +252,13 @@ func heartbeatReplicationStream(
 	frontier hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
-	expirationTime := timeutil.Now().Add(timeout)
 	if frontier == hlc.MaxTimestamp {
 		// NB: We used to allow this as a no-op update to get
 		// the status. That code was removed.
 		return streampb.StreamReplicationStatus{}, pgerror.Newf(pgcode.InvalidParameterValue, "MaxTimestamp no longer accepted as frontier")
 	}
-
-	return updateReplicationStreamProgress(ctx,
-		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry,
+	updateBegin := timeutil.Now()
+	return updateReplicationStreamProgress(ctx, updateBegin, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry,
 		streamID, frontier, txn)
 }
 
@@ -286,8 +295,16 @@ func buildReplicationStreamSpec(
 
 	// Partition the spans with SQLPlanner
 	dsp := jobExecCtx.DistSQLPlanner()
-	planCtx := dsp.NewPlanningCtx(ctx, jobExecCtx.ExtendedEvalContext(),
-		nil /* planner */, nil /* txn */, sql.DistributionTypeSystemTenantOnly)
+	noLoc := roachpb.Locality{}
+	oracle := kvfollowerreadsccl.NewBulkOracle(
+		dsp.ReplicaOracleConfig(evalCtx.Locality), noLoc, kvfollowerreadsccl.StreakConfig{
+			Min: 10, SmallPlanMin: 3, SmallPlanThreshold: 3, MaxSkew: 0.95,
+		},
+	)
+
+	planCtx := dsp.NewPlanningCtxWithOracle(
+		ctx, jobExecCtx.ExtendedEvalContext(), nil /* planner */, nil /* txn */, sql.FullDistribution, oracle, noLoc,
+	)
 
 	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, targetSpans)
 	if err != nil {

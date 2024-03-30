@@ -14,9 +14,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -44,17 +46,19 @@ import (
 type adapter struct {
 	cache        protectedts.Cache
 	kvSubscriber spanconfig.KVSubscriber
+	s            *cluster.Settings
 }
 
 var _ spanconfig.ProtectedTSReader = &adapter{}
 
 // NewAdapter returns an adapter that implements spanconfig.ProtectedTSReader.
 func NewAdapter(
-	cache protectedts.Cache, kvSubscriber spanconfig.KVSubscriber,
+	cache protectedts.Cache, kvSubscriber spanconfig.KVSubscriber, s *cluster.Settings,
 ) spanconfig.ProtectedTSReader {
 	return &adapter{
 		cache:        cache,
 		kvSubscriber: kvSubscriber,
+		s:            s,
 	}
 }
 
@@ -63,11 +67,19 @@ func NewAdapter(
 func (a *adapter) GetProtectionTimestamps(
 	ctx context.Context, sp roachpb.Span,
 ) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
-	cacheTimestamps, cacheFreshness, err := a.cache.GetProtectionTimestamps(ctx, sp)
+	// After the migration of old-style PTS records (#118772), we do not need to read
+	// any entries from the cache as they will be available via the kv subscriber.
+	// TODO(#119243): remove the cache entirely in 24.2.
+	subscriberTimestamps, subscriberFreshness, err := a.kvSubscriber.GetProtectionTimestamps(ctx, sp)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	subscriberTimestamps, subscriberFreshness, err := a.kvSubscriber.GetProtectionTimestamps(ctx, sp)
+
+	if a.s.Version.IsActive(ctx, clusterversion.V24_1) {
+		return subscriberTimestamps, subscriberFreshness, nil
+	}
+
+	cacheTimestamps, cacheFreshness, err := a.cache.GetProtectionTimestamps(ctx, sp)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}

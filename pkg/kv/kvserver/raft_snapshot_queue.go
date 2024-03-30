@@ -16,12 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/raft/v3/tracker"
 )
 
 const (
@@ -113,7 +113,6 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	if !ok {
 		return false, errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
-	snapType := kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE
 
 	if typ := repDesc.Type; typ == roachpb.LEARNER || typ == roachpb.NON_VOTER {
 		if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
@@ -129,24 +128,11 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 				repDesc,
 			)
 			log.VEventf(ctx, 2, "%v", err)
-			// TODO(dan): This is super brittle and non-obvious. In the common case,
-			// this check avoids duplicate work, but in rare cases, we send the
-			// learner snap at an index before the one raft wanted here. The raft
-			// leader should be able to use logs to get the rest of the way, but it
-			// doesn't try. In this case, skipping the raft snapshot would mean that
-			// we have to wait for the next scanner cycle of the raft snapshot queue
-			// to pick it up again. So, punt the responsibility back to raft by
-			// telling it that the snapshot failed. If the learner snap ends up being
-			// sufficient, this message will be ignored, but if we hit the case
-			// described above, this will cause raft to keep asking for a snap and at
-			// some point the snapshot lock above will be released and we'll fall
-			// through to the logic below.
-			repl.reportSnapshotStatus(ctx, repDesc.ReplicaID, err)
 			return false, nil
 		}
 	}
 
-	err := repl.sendSnapshotUsingDelegate(ctx, repDesc, snapType, kvserverpb.SnapshotRequest_RECOVERY, kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE, raftSnapshotPriority)
+	err := repl.sendSnapshotUsingDelegate(ctx, repDesc, kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE, raftSnapshotPriority)
 
 	// NB: if the snapshot fails because of an overlapping replica on the
 	// recipient which is also waiting for a snapshot, the "smart" thing is to

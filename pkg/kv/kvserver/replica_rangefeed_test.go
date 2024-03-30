@@ -21,17 +21,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	clientrf "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
@@ -42,8 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -574,6 +577,61 @@ func TestReplicaRangefeed(t *testing.T) {
 func waitErrorFuture(f *future.ErrorFuture) error {
 	resultErr, _ := future.Wait(context.Background(), f)
 	return resultErr
+}
+
+func TestScheduledProcessorKillSwitch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	kvserver.RangefeedSchedulerDisabled = true
+	defer func() { kvserver.RangefeedSchedulerDisabled = false }()
+
+	ctx := context.Background()
+	ts, err := serverutils.NewServer(base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	require.NoError(t, err, "failed to start test server")
+	require.NoError(t, ts.Start(ctx), "start server")
+	defer ts.Stopper().Stop(ctx)
+
+	db := ts.SystemLayer().SQLConn(t)
+	_, err = db.Exec("set cluster setting kv.rangefeed.enabled = t")
+	require.NoError(t, err, "can't enable rangefeeds")
+	_, err = db.Exec("set cluster setting kv.rangefeed.scheduler.enabled = t")
+	require.NoError(t, err, "can't enable rangefeed scheduler")
+
+	sr, err := ts.ScratchRange()
+	require.NoError(t, err, "can't create scratch range")
+	f := ts.RangeFeedFactory().(*clientrf.Factory)
+	rf, err := f.RangeFeed(ctx, "test-feed", []roachpb.Span{{Key: sr, EndKey: sr.PrefixEnd()}},
+		hlc.Timestamp{},
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {},
+	)
+	require.NoError(t, err, "failed to start rangefeed")
+	defer rf.Close()
+
+	rd, err := ts.LookupRange(sr)
+	require.NoError(t, err, "failed to get descriptor for scratch range")
+
+	stores := ts.GetStores().(*kvserver.Stores)
+	_ = stores.VisitStores(func(s *kvserver.Store) error {
+		repl, err := s.GetReplica(rd.RangeID)
+		require.NoError(t, err, "failed to find scratch range replica in store")
+		var proc rangefeed.Processor
+		// Note that we can't rely on checkpoint or event because client rangefeed
+		// call can return and emit first checkpoint and data before processor is
+		// actually attached to replica.
+		testutils.SucceedsSoon(t, func() error {
+			proc = kvserver.TestGetReplicaRangefeedProcessor(repl)
+			if proc == nil {
+				return errors.New("scratch range must have processor")
+			}
+			return nil
+		})
+		require.IsType(t, (*rangefeed.LegacyProcessor)(nil), proc,
+			"kill switch didn't prevent scheduled processor creation")
+		return nil
+	})
 }
 
 func TestReplicaRangefeedErrors(t *testing.T) {
@@ -1651,4 +1709,103 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 	// Now cancel it and wait for it to shut down.
 	rangeFeedCancel()
 
+}
+
+// TestRangefeedTxnPusherBarrierRangeKeyMismatch is a regression test for
+// https://github.com/cockroachdb/cockroach/issues/119333
+//
+// Specifically, it tests that a Barrier call that encounters a
+// RangeKeyMismatchError will eagerly attempt to refresh the DistSender range
+// cache. The DistSender does not do this itself for unsplittable requests, so
+// it might otherwise continually fail.
+func TestRangefeedTxnPusherBarrierRangeKeyMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t) // too slow, times out
+	skip.UnderDeadlock(t)
+
+	// Use a timeout, to prevent a hung test.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Start a cluster with 3 nodes.
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	defer cancel()
+
+	n1 := tc.Server(0)
+	n3 := tc.Server(2)
+	db1 := n1.ApplicationLayer().DB()
+	db3 := n3.ApplicationLayer().DB()
+
+	// Split off a range and upreplicate it, with leaseholder on n1. This is the
+	// range we'll run the barrier across.
+	prefix := append(n1.ApplicationLayer().Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := n1.StorageLayer().SplitRange(prefix)
+	require.NoError(t, err)
+	desc := tc.AddVotersOrFatal(t, prefix, tc.Targets(1, 2)...)
+	t.Logf("split off range %s", desc)
+
+	rspan := desc.RSpan()
+	span := rspan.AsRawSpanWithNoLocals()
+
+	// Split off three other ranges.
+	splitKeys := []roachpb.Key{
+		append(prefix.Clone(), roachpb.Key("/a")...),
+		append(prefix.Clone(), roachpb.Key("/b")...),
+		append(prefix.Clone(), roachpb.Key("/c")...),
+	}
+	for _, key := range splitKeys {
+		_, desc, err = n1.StorageLayer().SplitRange(key)
+		require.NoError(t, err)
+		t.Logf("split off range %s", desc)
+	}
+
+	// Scan the ranges on n3 to update the range caches, then run a barrier
+	// request which should fail with RangeKeyMismatchError.
+	_, err = db3.Scan(ctx, span.Key, span.EndKey, 0)
+	require.NoError(t, err)
+
+	_, _, err = db3.BarrierWithLAI(ctx, span.Key, span.EndKey)
+	require.Error(t, err)
+	require.IsType(t, &kvpb.RangeKeyMismatchError{}, err)
+	t.Logf("n3 barrier returned %s", err)
+
+	// Merge the ranges on n1.
+	for range splitKeys {
+		desc, err = n1.StorageLayer().MergeRanges(span.Key)
+		require.NoError(t, err)
+		t.Logf("merged range %s", desc)
+	}
+
+	// Barriers should now succeed on n1, which have an updated range cache, but
+	// fail on n3 which doesn't.
+	lai, _, err := db1.BarrierWithLAI(ctx, span.Key, span.EndKey)
+	require.NoError(t, err)
+	t.Logf("n1 barrier returned LAI %d", lai)
+
+	// NB: this could potentially flake if n3 somehow updates its range cache. If
+	// it does, we can remove this assertion, but it's nice to make sure we're
+	// actually testing what we think we're testing.
+	_, _, err = db3.BarrierWithLAI(ctx, span.Key, span.EndKey)
+	require.Error(t, err)
+	require.IsType(t, &kvpb.RangeKeyMismatchError{}, err)
+	t.Logf("n3 barrier returned %s", err)
+
+	// However, rangefeedTxnPusher.Barrier() will refresh the cache and
+	// successfully apply the barrier.
+	s3 := tc.GetFirstStoreFromServer(t, 2)
+	repl3 := s3.LookupReplica(roachpb.RKey(span.Key))
+	t.Logf("repl3 desc: %s", repl3.Desc())
+	txnPusher := kvserver.NewRangefeedTxnPusher(nil, repl3, rspan)
+	require.NoError(t, txnPusher.Barrier(ctx))
+	t.Logf("n3 txnPusher barrier succeeded")
 }

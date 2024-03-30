@@ -61,7 +61,7 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 	rowsDeleted, err := mu.txn.ExecEx(ctx,
 		"delete-db-role-setting",
 		mu.txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(
 			`DELETE FROM %s WHERE database_id = $1`,
 			sessioninit.DatabaseRoleSettingsTableName,
@@ -91,7 +91,7 @@ func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID jobspb.
 		ctx,
 		"delete-schedule",
 		mu.txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		"DELETE FROM system.scheduled_jobs WHERE schedule_id = $1",
 		scheduleID,
 	)
@@ -110,7 +110,7 @@ func (mu metadataUpdater) UpdateTTLScheduleLabel(
 		ctx,
 		"update-ttl-schedule-label",
 		mu.txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		"UPDATE system.scheduled_jobs SET schedule_name = $1 WHERE schedule_id = $2",
 		ttlbase.BuildScheduleLabel(tbl),
 		tbl.RowLevelTTL.ScheduleID,

@@ -60,9 +60,6 @@ func TestMain(m *testing.M) {
 }
 
 func runLogicTest(t *testing.T, file string) {
-	if file == "lookup_join_local" {
-		skip.UnderRace(t, "this file is too slow under race")
-	}
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }
@@ -345,13 +342,6 @@ func TestLogic_check_constraints(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "check_constraints")
-}
-
-func TestLogic_cluster_locks(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "cluster_locks")
 }
 
 func TestLogic_cluster_settings(
@@ -851,13 +841,6 @@ func TestLogic_fk(
 	runLogicTest(t, "fk")
 }
 
-func TestLogic_fk_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "fk_read_committed")
-}
-
 func TestLogic_float(
 	t *testing.T,
 ) {
@@ -1052,13 +1035,6 @@ func TestLogic_hash_sharded_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "hash_sharded_index")
-}
-
-func TestLogic_hash_sharded_index_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "hash_sharded_index_read_committed")
 }
 
 func TestLogic_hidden_columns(
@@ -1586,11 +1562,32 @@ func TestLogic_privileges_table(
 	runLogicTest(t, "privileges_table")
 }
 
+func TestLogic_proc_invokes_proc(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "proc_invokes_proc")
+}
+
 func TestLogic_procedure(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "procedure")
+}
+
+func TestLogic_procedure_deps(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_deps")
+}
+
+func TestLogic_procedure_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_params")
 }
 
 func TestLogic_procedure_privileges(
@@ -1619,13 +1616,6 @@ func TestLogic_rand_ident(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "rand_ident")
-}
-
-func TestLogic_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "read_committed")
 }
 
 func TestLogic_reassign_owned_by(
@@ -1864,13 +1854,6 @@ func TestLogic_select_for_update(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_for_update")
-}
-
-func TestLogic_select_for_update_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "select_for_update_read_committed")
 }
 
 func TestLogic_select_index(
@@ -2419,11 +2402,25 @@ func TestLogic_udf(
 	runLogicTest(t, "udf")
 }
 
+func TestLogic_udf_calling_udf(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_calling_udf")
+}
+
 func TestLogic_udf_delete(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_delete")
+}
+
+func TestLogic_udf_deps(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_deps")
 }
 
 func TestLogic_udf_fk(
@@ -2475,6 +2472,13 @@ func TestLogic_udf_options(
 	runLogicTest(t, "udf_options")
 }
 
+func TestLogic_udf_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_params")
+}
+
 func TestLogic_udf_prepare(
 	t *testing.T,
 ) {
@@ -2494,6 +2498,13 @@ func TestLogic_udf_privileges_mutations(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_privileges_mutations")
+}
+
+func TestLogic_udf_procedure_mix(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_procedure_mix")
 }
 
 func TestLogic_udf_record(
@@ -2578,13 +2589,6 @@ func TestLogic_unique(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "unique")
-}
-
-func TestLogic_unique_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "unique_read_committed")
 }
 
 func TestLogic_update(

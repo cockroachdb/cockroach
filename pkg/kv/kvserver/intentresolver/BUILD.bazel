@@ -14,7 +14,6 @@ go_library(
         "//pkg/internal/client/requestbatcher",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/batcheval/result",
         "//pkg/kv/kvserver/kvserverbase",
@@ -44,10 +43,6 @@ go_test(
         "main_test.go",
     ],
     embed = [":intentresolver"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/kv",

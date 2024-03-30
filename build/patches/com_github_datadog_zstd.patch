@@ -1,0 +1,12 @@
+diff -urN a/BUILD.bazel b/BUILD.bazel
+--- a/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ b/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
+@@ -98,7 +98,7 @@
+         "zstdmt_compress.h",
+     ],
+     cgo = True,
+-    copts = ["-DZSTD_LEGACY_SUPPORT=4 -DZSTD_MULTITHREAD=1"],
++    copts = ["-DZSTD_LEGACY_SUPPORT=4 -DZSTD_MULTITHREAD=1 -DZSTD_DISABLE_ASM=1"],
+     importpath = "github.com/DataDog/zstd",
+     visibility = ["//visibility:public"],
+ )

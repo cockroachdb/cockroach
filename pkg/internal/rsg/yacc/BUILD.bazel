@@ -18,10 +18,6 @@ go_test(
     srcs = ["parse_test.go"],
     data = ["//pkg/sql/parser:sql.y"],
     embed = [":yacc"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/build/bazel",
         "//pkg/util/log",

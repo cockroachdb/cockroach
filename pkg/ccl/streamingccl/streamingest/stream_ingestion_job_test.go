@@ -51,7 +51,6 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 
 	sysSQL := sqlutils.MakeSQLRunner(db)
 	sysSQL.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	sysSQL.Exec(t, `SET CLUSTER SETTING physical_replication.enabled = true`)
 
 	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srv.SystemLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
@@ -63,6 +62,10 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	t.Run("destination cannot be system tenant", func(t *testing.T) {
 		sysSQL.ExpectErr(t, `pq: neither the source tenant "source" nor the destination tenant "system" \(0\) can be the system tenant`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1", srcPgURL.String())
+	})
+	t.Run("cannot set expiration window on creat tenant from replication", func(t *testing.T) {
+		sysSQL.ExpectErr(t, `pq: cannot specify EXPIRATION WINDOW option while starting a physical replication stream`,
+			"CREATE TENANT system FROM REPLICATION OF source ON $1 WITH EXPIRATION WINDOW='42s'", srcPgURL.String())
 	})
 	t.Run("destination cannot exist without resume timestamp", func(t *testing.T) {
 		sysSQL.Exec(t, "CREATE TENANT foo")
@@ -125,7 +128,6 @@ func TestTenantStreamingFailback(t *testing.T) {
 	defer cleanupURLB()
 
 	for _, s := range []string{
-		"SET CLUSTER SETTING physical_replication.enabled = true",
 		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
 		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
@@ -264,6 +266,7 @@ func TestTenantStreamingFailback(t *testing.T) {
 
 	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g STOP SERVICE")
 	waitUntilTenantServerStopped(t, serverB.SystemLayer(), "g")
+	sqlB.ExpectErr(t, "cannot specify EXPIRATION WINDOW option while starting a physical replication stream", "ALTER VIRTUAL CLUSTER g START REPLICATION OF f ON $1 WITH EXPIRATION WINDOW = '1ms'", serverAURL.String())
 	t.Logf("starting replication f->g")
 	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g START REPLICATION OF f ON $1", serverAURL.String())
 	_, consumerGJobID = replicationtestutils.GetStreamJobIds(t, ctx, sqlB, roachpb.TenantName("g"))

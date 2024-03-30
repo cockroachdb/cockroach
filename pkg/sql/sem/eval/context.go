@@ -13,6 +13,7 @@ package eval
 import (
 	"context"
 	"math"
+	"math/rand"
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
@@ -288,6 +289,9 @@ type Context struct {
 
 	// ULIDEntropy is the entropy source for ULID generation.
 	ULIDEntropy ulid.MonotonicReader
+
+	// RNG is the random number generator use for the "random" built-in function.
+	RNG *rand.Rand
 }
 
 // JobsProfiler is the interface used to fetch job specific execution details
@@ -381,15 +385,10 @@ func (ec *Context) MustGetPlaceholderValue(p *tree.Placeholder) tree.Datum {
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext(st *cluster.Settings) Context {
-	monitor := mon.NewMonitor(
-		"test-monitor",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	monitor := mon.NewMonitor(mon.Options{
+		Name:     "test-monitor",
+		Settings: st,
+	})
 	return MakeTestingEvalContextWithMon(st, monitor)
 }
 
@@ -827,7 +826,9 @@ type StreamManagerFactory interface {
 type ReplicationStreamManager interface {
 	// StartReplicationStream starts a stream replication job for the specified
 	// tenant on the producer side.
-	StartReplicationStream(ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest) (streampb.ReplicationProducerSpec, error)
+	StartReplicationStream(
+		ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest,
+	) (streampb.ReplicationProducerSpec, error)
 
 	// SetupSpanConfigsStream creates and plans a replication stream to stream the span config updates for a specific tenant.
 	SetupSpanConfigsStream(ctx context.Context, tenantName roachpb.TenantName) (ValueGenerator, error)
@@ -864,6 +865,8 @@ type ReplicationStreamManager interface {
 		streamID streampb.StreamID,
 		successfulIngestion bool,
 	) error
+
+	DebugGetProducerStatuses(ctx context.Context) []*streampb.DebugProducerStatus
 }
 
 // StreamIngestManager represents a collection of APIs that streaming replication supports

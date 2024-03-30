@@ -74,11 +74,14 @@ define CreateFunctionPrivate {
     # Syntax is the CREATE FUNCTION AST node.
     Syntax CreateRoutine
 
-    # Deps contains the data source dependencies of the view.
+    # Deps contains the data source dependencies of the function.
     Deps SchemaDeps
 
-    # TypeDeps contains the type dependencies of the view.
+    # TypeDeps contains the type dependencies of the function.
     TypeDeps SchemaTypeDeps
+
+    # FuncDeps contains the function dependencies of the function.
+    FuncDeps SchemaFunctionDeps
 }
 
 # Explain returns information about the execution plan of the "input"
@@ -360,4 +363,11 @@ define AlterRangeRelocatePrivate {
 define Call {
     # Proc is the procedure being invoked. It is a UDFCallExpr.
     Proc ScalarExpr
+    _ CallPrivate
+}
+
+[Private]
+define CallPrivate {
+    # Columns stores the column IDs for the statement result columns.
+    Columns ColList
 }

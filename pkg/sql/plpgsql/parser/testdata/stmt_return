@@ -84,6 +84,60 @@ RETURN (1, 'string');
 END;
  -- identifiers removed
 
+parse
+DECLARE
+BEGIN
+  RETURN;
+END
+----
+DECLARE
+BEGIN
+RETURN;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+RETURN;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+RETURN;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+RETURN;
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+  RETURN   ;
+END
+----
+DECLARE
+BEGIN
+RETURN;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+RETURN;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+RETURN;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+RETURN;
+END;
+ -- identifiers removed
+
 error
 DECLARE
 BEGIN
@@ -165,19 +219,6 @@ We appreciate your feedback.
 error
 DECLARE
 BEGIN
-  RETURN;
-END
-----
-at or near "return": syntax error: missing expression
-DETAIL: source SQL:
-DECLARE
-BEGIN
-  RETURN;
-  ^
-
-error
-DECLARE
-BEGIN
   RETURN (NULL;
 END
 ----
@@ -222,12 +263,12 @@ BEGIN
   RETURN 1, 'string';
 END
 ----
-at or near "string": syntax error: query returned 2 columns
+at or near ";": syntax error: query returned 2 columns
 DETAIL: source SQL:
 DECLARE
 BEGIN
   RETURN 1, 'string';
-            ^
+                    ^
 
 error
 DECLARE
@@ -235,9 +276,9 @@ BEGIN
   RETURN 1, (2, 3, 4, 5);
 END
 ----
-at or near ")": syntax error: query returned 2 columns
+at or near ";": syntax error: query returned 2 columns
 DETAIL: source SQL:
 DECLARE
 BEGIN
   RETURN 1, (2, 3, 4, 5);
-                       ^
+                        ^

@@ -30,21 +30,22 @@ import (
 )
 
 type executorConfig struct {
-	cluster         string
-	binaries        string
-	compareBinaries string
-	excludeList     []string
-	outputDir       string
-	libDir          string
-	remoteDir       string
-	timeout         string
-	shellCommand    string
-	testArgs        []string
-	iterations      int
-	copyBinaries    bool
-	lenient         bool
-	affinity        bool
-	quiet           bool
+	cluster           string
+	binaries          string
+	compareBinaries   string
+	excludeList       []string
+	ignorePackageList []string
+	outputDir         string
+	libDir            string
+	remoteDir         string
+	timeout           string
+	shellCommand      string
+	testArgs          []string
+	iterations        int
+	copyBinaries      bool
+	lenient           bool
+	affinity          bool
+	quiet             bool
 }
 
 type executor struct {
@@ -73,9 +74,23 @@ type benchmarkExtractionResult struct {
 
 func newExecutor(config executorConfig) (*executor, error) {
 	// Gather package info from the primary binary.
-	packages, err := readArchivePackages(config.binaries)
+	archivePackages, err := readArchivePackages(config.binaries)
 	if err != nil {
 		return nil, err
+	}
+
+	// Exclude packages that should not to be probed. This is useful for excluding
+	// packages that have known issues and unable to list its benchmarks, or are
+	// not relevant to the current benchmarking effort.
+	ignorePackages := make(map[string]struct{})
+	for _, pkg := range config.ignorePackageList {
+		ignorePackages[pkg] = struct{}{}
+	}
+	packages := make([]string, 0, len(archivePackages))
+	for _, pkg := range archivePackages {
+		if _, ok := ignorePackages[pkg]; !ok {
+			packages = append(packages, pkg)
+		}
 	}
 
 	config.outputDir = strings.TrimRight(config.outputDir, "/")
@@ -340,7 +355,7 @@ func (e *executor) executeBenchmarks() error {
 		runCommand := fmt.Sprintf("./run.sh %s -test.benchmem -test.bench=^%s$ -test.run=^$ -test.v",
 			strings.Join(e.testArgs, " "), bench.name)
 		if e.timeout != "" {
-			runCommand = fmt.Sprintf("timeout %s %s", e.timeout, runCommand)
+			runCommand = fmt.Sprintf("timeout -k 30s %s %s", e.timeout, runCommand)
 		}
 		if e.shellCommand != "" {
 			runCommand = fmt.Sprintf("%s && %s", e.shellCommand, runCommand)
@@ -395,7 +410,7 @@ func (e *executor) executeBenchmarks() error {
 				fmt.Println()
 			}
 			tag := fmt.Sprintf("%d", logIndex)
-			if response.ExitStatus == 124 {
+			if response.ExitStatus == 124 || response.ExitStatus == 137 {
 				tag = fmt.Sprintf("%d-timeout", logIndex)
 			}
 			err = report.writeBenchmarkErrorLogs(response, tag)

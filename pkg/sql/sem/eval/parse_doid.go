@@ -125,22 +125,20 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			}
 		}
 
-		paramTypes, err := fn.ParamTypes(ctx, evalCtx.Planner)
-		if err != nil {
-			return nil, err
-		}
 		ol, err := fd.MatchOverload(
-			paramTypes,
-			fn.FuncName.Schema(),
+			ctx,
+			evalCtx.Planner,
+			&fn,
 			&evalCtx.SessionData().SearchPath,
 			tree.BuiltinRoutine|tree.UDFRoutine|tree.ProcedureRoutine,
+			false, /* inDropContext */
 		)
 		if err != nil {
 			return nil, err
 		}
 		return tree.NewDOidWithTypeAndName(ol.Oid, t, fd.Name), nil
 	case oid.T_regtype:
-		parsedTyp, err := evalCtx.Planner.GetTypeFromValidSQLSyntax(s)
+		parsedTyp, err := evalCtx.Planner.GetTypeFromValidSQLSyntax(ctx, s)
 		if err == nil {
 			return tree.NewDOidWithTypeAndName(
 				parsedTyp.Oid(), t, parsedTyp.SQLStandardName(),

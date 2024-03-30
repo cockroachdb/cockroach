@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -210,7 +211,16 @@ type txnPipeliner struct {
 	// In-flight writes are intent point writes that have not yet been proved
 	// to have succeeded. They will need to be proven before the transaction
 	// can commit.
+	// TODO(nvanbenschoten): once we start tracking locking read requests in
+	// this set, we should decide on whether to rename "in-flight writes" to
+	// something else. We could rename to "in-flight locks". Or we could keep
+	// "in-flight writes" but make it clear that these are lock writes of any
+	// strength, and not just intent writes.
 	ifWrites inFlightWriteSet
+	// The in-flight writes chain index is used to uniquely identify calls to
+	// chainToInFlightWrites, so that each call can limit itself to adding a
+	// single QueryIntent request to the batch per overlapping in-flight write.
+	ifWritesChainIndex int64
 	// The transaction's lock footprint contains spans where locks (replicated
 	// and unreplicated) have been acquired at some point by the transaction.
 	// The span set contains spans encompassing the keys from all intent writes
@@ -304,7 +314,11 @@ func (tp *txnPipeliner) SendLocked(
 	// go over budget despite the earlier pre-emptive check, then we stay over
 	// budget. Further requests will be rejected if they attempt to take more
 	// locks.
-	tp.updateLockTracking(ctx, ba, br, pErr, maxBytes, !rejectOverBudget /* condenseLocksIfOverBudget */)
+	if err := tp.updateLockTracking(
+		ctx, ba, br, pErr, maxBytes, !rejectOverBudget, /* condenseLocksIfOverBudget */
+	); err != nil {
+		return nil, kvpb.NewError(err)
+	}
 	if pErr != nil {
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
@@ -336,9 +350,11 @@ func (tp *txnPipeliner) maybeRejectOverBudget(ba *kvpb.BatchRequest, maxBytes in
 	}
 
 	var spans []roachpb.Span
-	ba.LockSpanIterate(nil /* br */, func(sp roachpb.Span, _ lock.Durability) {
+	if err := ba.LockSpanIterate(nil /* br */, func(sp roachpb.Span, _ lock.Durability) {
 		spans = append(spans, sp)
-	})
+	}); err != nil {
+		return errors.Wrap(err, "iterating lock spans")
+	}
 
 	// Compute how many bytes we can allocate for locks. We account for the
 	// inflight-writes conservatively, since these might turn into lock spans
@@ -459,18 +475,31 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *kvpb.Batch
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
 
-		// Determine whether the current request prevents us from performing async
-		// consensus on the batch.
-		if !kvpb.IsIntentWrite(req) || kvpb.IsRange(req) {
-			// Only allow batches consisting of solely transactional point
-			// writes to perform consensus asynchronously.
-			// TODO(nvanbenschoten): We could allow batches with reads and point
-			// writes to perform async consensus, but this would be a bit
-			// tricky. Any read would need to chain on to any write that came
-			// before it in the batch and overlaps. For now, it doesn't seem
-			// worth it.
+		if req.Method() == kvpb.DeleteRange {
+			// Special handling for DeleteRangeRequests.
+			deleteRangeReq := req.(*kvpb.DeleteRangeRequest)
+			// We'll need the list of keys deleted to verify whether replication
+			// succeeded or not. Override ReturnKeys.
+			//
+			// NB: This means we'll return keys to the client even if it explicitly
+			// set this to false. If this proves to be a problem in practice, we can
+			// always add some tracking here and strip the response. Alternatively, we
+			// can disable DeleteRange pipelining entirely for requests that set this
+			// field to false.
+			//
+			// TODO(arul): Get rid of this flag entirely and always treat it as true.
+			// Now that we're overriding ReturnKeys here, the number of cases where
+			// this will be false are very few -- it's only when DeleteRange is part
+			// of the same batch as an EndTxn request.
+			deleteRangeReq.ReturnKeys = true
+		}
+
+		if !kvpb.CanPipeline(req) {
+			// The current request cannot be pipelined, so it prevents us from
+			// performing async consensus on the batch.
 			return false
 		}
+
 		// Inhibit async consensus if the batch would push us over the maximum
 		// tracking memory budget. If we allowed async consensus on this batch, its
 		// writes would need to be tracked precisely. By inhibiting async consensus,
@@ -504,19 +533,25 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba *kvpb.BatchRequest) *kvpb.Batch
 		return ba
 	}
 
+	// We may need to add QueryIntent requests to the batch. These variables are
+	// used to implement a copy-on-write scheme.
 	forked := false
 	oldReqs := ba.Requests
-	// TODO(nvanbenschoten): go 1.11 includes an optimization to quickly clear
-	// out an entire map. That might make it cost effective to maintain a single
-	// chainedKeys map between calls to this function.
-	var chainedKeys map[string]struct{}
+
+	// We only want to add a single QueryIntent request to the BatchRequest per
+	// overlapping in-flight write. These counters allow us to accomplish this
+	// without a separate data structure.
+	tp.ifWritesChainIndex++
+	chainIndex := tp.ifWritesChainIndex
+	chainCount := 0
+
 	for i, ru := range oldReqs {
 		req := ru.GetInner()
 
 		// If we've chained onto all the in-flight writes (ifWrites.len() ==
-		// len(chainedKeys)), we don't need to pile on more QueryIntents. So, only
+		// chainCount), we don't need to pile on more QueryIntents. So, only
 		// do this work if that's not the case.
-		if tp.ifWrites.len() > len(chainedKeys) {
+		if tp.ifWrites.len() > chainCount {
 			// For each conflicting in-flight write, add a QueryIntent request
 			// to the batch to assert that it has succeeded and "chain" onto it.
 			writeIter := func(w *inFlightWrite) {
@@ -528,7 +563,7 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba *kvpb.BatchRequest) *kvpb.Batch
 					forked = true
 				}
 
-				if _, ok := chainedKeys[string(w.Key)]; !ok {
+				if w.chainIndex != chainIndex {
 					// The write has not already been chained onto by an earlier
 					// request in this batch. Add a QueryIntent request to the
 					// batch (before the conflicting request) to ensure that we
@@ -544,11 +579,12 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba *kvpb.BatchRequest) *kvpb.Batch
 					})
 
 					// Record that the key has been chained onto at least once
-					// in this batch so that we don't chain onto it again.
-					if chainedKeys == nil {
-						chainedKeys = make(map[string]struct{})
-					}
-					chainedKeys[string(w.Key)] = struct{}{}
+					// in this batch so that we don't chain onto it again. If
+					// we fail to prove the write exists for any reason, future
+					// requests will use a different chainIndex and will try to
+					// prove the write again.
+					w.chainIndex = chainIndex
+					chainCount++
 				}
 			}
 
@@ -608,8 +644,10 @@ func (tp *txnPipeliner) updateLockTracking(
 	pErr *kvpb.Error,
 	maxBytes int64,
 	condenseLocksIfOverBudget bool,
-) {
-	tp.updateLockTrackingInner(ctx, ba, br, pErr)
+) error {
+	if err := tp.updateLockTrackingInner(ctx, ba, br, pErr); err != nil {
+		return err
+	}
 
 	// Deal with compacting the lock spans.
 
@@ -618,7 +656,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	locksBudget := maxBytes - tp.ifWrites.byteSize()
 	// If we're below budget, there's nothing more to do.
 	if tp.lockFootprint.bytesSize() <= locksBudget {
-		return
+		return nil
 	}
 
 	// We're over budget. If condenseLocksIfOverBudget is set, we condense the
@@ -627,7 +665,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	// txn if we fail (see the estimateSize() call).
 
 	if !condenseLocksIfOverBudget {
-		return
+		return nil
 	}
 
 	// After adding new writes to the lock footprint, check whether we need to
@@ -644,11 +682,12 @@ func (tp *txnPipeliner) updateLockTracking(
 		tp.txnMetrics.TxnsWithCondensedIntents.Inc(1)
 		tp.txnMetrics.TxnsWithCondensedIntentsGauge.Inc(1)
 	}
+	return nil
 }
 
 func (tp *txnPipeliner) updateLockTrackingInner(
 	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, pErr *kvpb.Error,
-) {
+) error {
 	// If the request failed, add all lock acquisitions attempts directly to the
 	// lock footprint. This reduces the likelihood of dangling locks blocking
 	// concurrent requests for extended periods of time. See #3346.
@@ -670,8 +709,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			copy(baStripped.Requests, ba.Requests[:pErr.Index.Index])
 			copy(baStripped.Requests[pErr.Index.Index:], ba.Requests[pErr.Index.Index+1:])
 		}
-		baStripped.LockSpanIterate(nil, tp.trackLocks)
-		return
+		return baStripped.LockSpanIterate(nil, tp.trackLocks)
 	}
 
 	// Similarly, if the transaction is now finalized, we don't need to
@@ -682,7 +720,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			// If the transaction is now ABORTED, add all locks acquired by the
 			// batch directly to the lock footprint. We don't know which of
 			// these succeeded.
-			ba.LockSpanIterate(nil, tp.trackLocks)
+			return ba.LockSpanIterate(nil, tp.trackLocks)
 		case roachpb.COMMITTED:
 			// If the transaction is now COMMITTED, it must not have any more
 			// in-flight writes, so clear them. Technically we should move all
@@ -692,10 +730,10 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 				/* reuse - we're not going to use this Btree again, so there's no point in
 				   moving the nodes to a free list */
 				false)
+			return nil
 		default:
 			panic("unexpected")
 		}
-		return
 	}
 
 	for i, ru := range ba.Requests {
@@ -726,28 +764,27 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			}
 		} else if kvpb.IsLocking(req) {
 			// If the request intended to acquire locks, track its lock spans.
-			if ba.AsyncConsensus {
-				// Record any writes that were performed asynchronously. We'll
-				// need to prove that these succeeded sometime before we commit.
-				header := req.Header()
-				tp.ifWrites.insert(header.Key, header.Sequence)
-				// The request is not expected to be a ranged one, as we're only
-				// tracking one key in the ifWrites. Ranged requests do not admit
-				// ba.AsyncConsensus.
-				if kvpb.IsRange(req) {
-					log.Fatalf(ctx, "unexpected range request with AsyncConsensus: %s", req)
+			seq := req.Header().Sequence
+			trackLocks := func(span roachpb.Span, _ lock.Durability) {
+				if ba.AsyncConsensus {
+					// Record any writes that were performed asynchronously. We'll
+					// need to prove that these succeeded sometime before we commit.
+					if span.EndKey != nil {
+						log.Fatalf(ctx, "unexpected multi-key intent pipelined")
+					}
+					tp.ifWrites.insert(span.Key, seq)
+				} else {
+					// If the lock acquisitions weren't performed asynchronously
+					// then add them directly to our lock footprint.
+					tp.lockFootprint.insert(span)
 				}
-			} else {
-				// If the lock acquisitions weren't performed asynchronously
-				// then add them directly to our lock footprint. Locking read
-				// requests will always hit this path because they will never
-				// use async consensus.
-				if sp, ok := kvpb.ActualSpan(req, resp); ok {
-					tp.lockFootprint.insert(sp)
-				}
+			}
+			if err := kvpb.LockSpanIterate(req, resp, trackLocks); err != nil {
+				return errors.Wrap(err, "iterating lock spans")
 			}
 		}
 	}
+	return nil
 }
 
 func (tp *txnPipeliner) trackLocks(s roachpb.Span, _ lock.Durability) {
@@ -892,11 +929,35 @@ func (tp *txnPipeliner) hasAcquiredLocks() bool {
 // number.
 type inFlightWrite struct {
 	roachpb.SequencedWrite
+	// chainIndex is used to avoid chaining on to the same in-flight write
+	// multiple times in the same batch. Each index uniquely identifies a
+	// call to txnPipeliner.chainToInFlightWrites.
+	chainIndex int64
+}
+
+// makeInFlightWrite constructs an inFlightWrite.
+func makeInFlightWrite(key roachpb.Key, seq enginepb.TxnSeq) inFlightWrite {
+	return inFlightWrite{SequencedWrite: roachpb.SequencedWrite{Key: key, Sequence: seq}}
 }
 
 // Less implements the btree.Item interface.
-func (a *inFlightWrite) Less(b btree.Item) bool {
-	return a.Key.Compare(b.(*inFlightWrite).Key) < 0
+//
+// inFlightWrites are ordered by Key and then by Sequence. Two inFlightWrites
+// with the same Key but different Sequences are not considered equal and are
+// maintained separately in the inFlightWritesSet.
+func (a *inFlightWrite) Less(bItem btree.Item) bool {
+	b := bItem.(*inFlightWrite)
+	kCmp := a.Key.Compare(b.Key)
+	if kCmp != 0 {
+		// Different Keys.
+		return kCmp < 0
+	}
+	if a.Sequence != b.Sequence {
+		// Different Sequence.
+		return a.Sequence < b.Sequence
+	}
+	// Equal.
+	return false
 }
 
 // inFlightWriteSet is an ordered set of in-flight point writes. Given a set
@@ -913,60 +974,40 @@ type inFlightWriteSet struct {
 }
 
 // insert attempts to insert an in-flight write that has not been proven to have
-// succeeded into the in-flight write set. If the write with an equal or larger
-// sequence number already exists in the set, the method is a no-op.
+// succeeded into the in-flight write set.
 func (s *inFlightWriteSet) insert(key roachpb.Key, seq enginepb.TxnSeq) {
 	if s.t == nil {
 		// Lazily initialize btree.
 		s.t = btree.New(txnPipelinerBtreeDegree)
 	}
 
-	s.tmp1.Key = key
-	item := s.t.Get(&s.tmp1)
-	if item != nil {
-		otherW := item.(*inFlightWrite)
-		if seq > otherW.Sequence {
-			// Existing in-flight write has old information.
-			otherW.Sequence = seq
-		}
-		return
-	}
-
 	w := s.alloc.alloc(key, seq)
-	s.t.ReplaceOrInsert(w)
-	s.bytes += keySize(key)
+	delItem := s.t.ReplaceOrInsert(w)
+	if delItem != nil {
+		// An in-flight write with the same key and sequence already existed in the
+		// set. This is unexpected, but we handle it.
+		*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
+	} else {
+		s.bytes += keySize(key)
+	}
 }
 
 // remove attempts to remove an in-flight write from the in-flight write set.
-// The method will be a no-op if the write was already proved. Care is taken
-// not to accidentally remove a write to the same key but at a later epoch or
-// sequence number.
+// The method will be a no-op if the write was already proved.
 func (s *inFlightWriteSet) remove(key roachpb.Key, seq enginepb.TxnSeq) {
 	if s.len() == 0 {
 		// Set is empty.
 		return
 	}
 
-	s.tmp1.Key = key
-	item := s.t.Get(&s.tmp1)
-	if item == nil {
+	// Delete the write from the in-flight writes set.
+	s.tmp1 = makeInFlightWrite(key, seq)
+	delItem := s.t.Delete(&s.tmp1)
+	if delItem == nil {
 		// The write was already proven or the txn epoch was incremented.
 		return
 	}
-
-	w := item.(*inFlightWrite)
-	if seq < w.Sequence {
-		// The sequence might have changed, which means that a new write was
-		// sent to the same key. This write would have been forced to prove
-		// the existence of current write already.
-		return
-	}
-
-	// Delete the write from the in-flight writes set.
-	delItem := s.t.Delete(item)
-	if delItem != nil {
-		*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
-	}
+	*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
 	s.bytes -= keySize(key)
 
 	// Assert that the byte accounting is believable.
@@ -996,20 +1037,18 @@ func (s *inFlightWriteSet) ascendRange(start, end roachpb.Key, f func(w *inFligh
 		// Set is empty.
 		return
 	}
+	s.tmp1 = makeInFlightWrite(start, 0)
 	if end == nil {
 		// Point lookup.
-		s.tmp1.Key = start
-		if i := s.t.Get(&s.tmp1); i != nil {
-			f(i.(*inFlightWrite))
-		}
+		s.tmp2 = makeInFlightWrite(start, math.MaxInt32)
 	} else {
 		// Range lookup.
-		s.tmp1.Key, s.tmp2.Key = start, end
-		s.t.AscendRange(&s.tmp1, &s.tmp2, func(i btree.Item) bool {
-			f(i.(*inFlightWrite))
-			return true
-		})
+		s.tmp2 = makeInFlightWrite(end, 0)
 	}
+	s.t.AscendRange(&s.tmp1, &s.tmp2, func(i btree.Item) bool {
+		f(i.(*inFlightWrite))
+		return true
+	})
 }
 
 // len returns the number of the in-flight writes in the set.
@@ -1073,9 +1112,7 @@ func (a *inFlightWriteAlloc) alloc(key roachpb.Key, seq enginepb.TxnSeq) *inFlig
 
 	*a = (*a)[:len(*a)+1]
 	w := &(*a)[len(*a)-1]
-	*w = inFlightWrite{
-		SequencedWrite: roachpb.SequencedWrite{Key: key, Sequence: seq},
-	}
+	*w = makeInFlightWrite(key, seq)
 	return w
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -81,22 +82,75 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	}
 
 	// Resolve the parameter names and types.
-	paramTypes := make(tree.ParamTypes, len(c.Params))
+	signatureTypes := make(tree.ParamTypes, 0, len(c.Params))
+	var outParamOrdinals []int32
+	var outParams tree.ParamTypes
+	var outParamTypes []*types.T
+	var outParamNames []string
 	for i := range c.Params {
 		param := &c.Params[i]
 		typ, err := tree.ResolveType(context.Background(), param.Type, tc)
 		if err != nil {
 			panic(err)
 		}
-		paramTypes.SetAt(i, string(param.Name), typ)
+		if tree.IsInParamClass(param.Class) {
+			signatureTypes = append(signatureTypes, tree.ParamType{
+				Name: string(param.Name),
+				Typ:  typ,
+			})
+		}
+		if param.Class == tree.RoutineParamOut {
+			outParamOrdinals = append(outParamOrdinals, int32(i))
+			outParams = append(outParams, tree.ParamType{Typ: typ})
+		}
+		if param.IsOutParam() {
+			outParamTypes = append(outParamTypes, typ)
+			paramName := string(param.Name)
+			if paramName == "" {
+				paramName = fmt.Sprintf("column%d", len(outParamTypes))
+			}
+			outParamNames = append(outParamNames, paramName)
+		}
 	}
 
+	// Determine OUT parameter based return type.
+	var outParamType *types.T
+	if (c.IsProcedure && len(outParamTypes) > 0) || len(outParamTypes) > 1 {
+		outParamType = types.MakeLabeledTuple(outParamTypes, outParamNames)
+	} else if len(outParamTypes) == 1 {
+		outParamType = outParamTypes[0]
+	}
 	// Resolve the return type.
-	retType, err := tree.ResolveType(context.Background(), c.ReturnType.Type, tc)
-	if err != nil {
-		panic(err)
+	var retType *types.T
+	var err error
+	if c.ReturnType != nil {
+		retType, err = tree.ResolveType(context.Background(), c.ReturnType.Type, tc)
+		if err != nil {
+			panic(err)
+		}
 	}
-
+	if outParamType != nil {
+		if retType != nil && !retType.Equivalent(outParamType) {
+			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
+		}
+		// Override the return types so that we do return type validation and SHOW
+		// CREATE correctly.
+		retType = outParamType
+		c.ReturnType = &tree.RoutineReturnType{
+			Type: outParamType,
+		}
+	} else if retType == nil {
+		if c.IsProcedure {
+			// A procedure doesn't need a return type. Use a VOID return type to avoid
+			// errors in shared logic later.
+			retType = types.Void
+			c.ReturnType = &tree.RoutineReturnType{
+				Type: types.Void,
+			}
+		} else {
+			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "function result type must be specified"))
+		}
+	}
 	// Retrieve the function body, volatility, and calledOnNullInput.
 	body, v, calledOnNullInput, language := collectFuncOptions(c.Options)
 
@@ -111,15 +165,19 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	tc.currUDFOid++
 	overload := &tree.Overload{
 		Oid:               tc.currUDFOid,
-		Types:             paramTypes,
+		Types:             signatureTypes,
 		ReturnType:        tree.FixedReturnType(retType),
 		Body:              body,
 		Volatility:        v,
 		CalledOnNullInput: calledOnNullInput,
 		Language:          language,
 		Type:              routineType,
+		RoutineParams:     c.Params,
+		OutParamOrdinals:  outParamOrdinals,
+		OutParamTypes:     outParams,
 	}
-	if c.ReturnType.SetOf {
+	overload.ReturnsRecordType = types.IsRecordType(retType)
+	if c.ReturnType != nil && c.ReturnType.SetOf {
 		overload.Class = tree.GeneratorClass
 	}
 	prefixedOverload := tree.MakeQualifiedOverload("public", overload)
@@ -132,7 +190,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	tc.udfs[name] = def
 }
 
-// RevokedExecution revokes execution of the function with the given OID.
+// RevokeExecution revokes execution of the function with the given OID.
 func (tc *Catalog) RevokeExecution(oid oid.Oid) {
 	tc.revokedUDFOids.Add(int(oid))
 }

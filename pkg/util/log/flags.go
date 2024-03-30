@@ -54,6 +54,8 @@ var debugLog *loggerT
 // in support escalations.
 const redactionPolicyManagedEnvVar = "COCKROACH_REDACTION_POLICY_MANAGED"
 
+var RedactionPolicyManaged = envutil.EnvOrDefaultBool(redactionPolicyManagedEnvVar, false)
+
 func init() {
 	logflags.InitFlags(
 		&logging.showLogs,
@@ -145,7 +147,7 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	logging.allSinkInfos.clear()
 
 	// Indicate whether we're running in a managed environment. Impacts redaction policies.
-	logging.setManagedRedactionPolicy(envutil.EnvOrDefaultBool(redactionPolicyManagedEnvVar, false))
+	logging.setManagedRedactionPolicy(RedactionPolicyManaged)
 
 	// If capture of internal fd2 writes is enabled, set it up here.
 	if config.CaptureFd2.Enable {
@@ -165,7 +167,7 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 		bt, bf := true, false
 		mf := logconfig.ByteSize(math.MaxInt64)
 		f := logconfig.DefaultFileFormat
-		fm := logconfig.FilePermissions(0o644)
+		fm := logconfig.DefaultFilePerms
 		fakeConfig := logconfig.FileSinkConfig{
 			FileDefaults: logconfig.FileDefaults{
 				CommonSinkConfig: logconfig.CommonSinkConfig{

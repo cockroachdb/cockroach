@@ -29,7 +29,9 @@ echo "$NEW_DEPS_BZL_CONTENT" > DEPS.bzl
 # Use the Pebble SHA from the version in the modified go.mod file.
 # Note that we need to pluck the Git SHA from the go.sum-style version, i.e.
 # v0.0.0-20220214174839-6af77d5598c9SUM => 6af77d5598c9
-PEBBLE_SHA=$(grep 'github\.com/cockroachdb/pebble' go.mod | cut -d'-' -f3)
+# In some cases if there's no Git SHA because we're right at a tag (eg. v1.1.0),
+# we have the second cut to grab the entire tag name as the SHA.
+PEBBLE_SHA=$(grep 'github\.com/cockroachdb/pebble' go.mod | cut -d'-' -f3 | cut -d' ' -f2)
 
 bazel build --define gotags=bazel,invariants \
       @com_github_cockroachdb_pebble//internal/metamorphic:metamorphic_test

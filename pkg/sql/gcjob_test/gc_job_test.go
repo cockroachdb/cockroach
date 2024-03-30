@@ -234,9 +234,18 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 	// Check that the job started.
 	jobIDStr := strconv.Itoa(int(job.ID()))
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifyRunningSystemJob(
+		if err := jobutils.VerifyRunningSystemJob(
 			t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR,
-		)
+		); err != nil {
+			// Since the intervals are set very low, the GC TTL job may have already
+			// started. If so, the status will be "deleting data" since "waiting for
+			// GC TTL" will have completed already.
+			if testutils.IsError(err, "expected running status waiting for GC TTL, got deleting data") {
+				return nil
+			}
+			return err
+		}
+		return nil
 	})
 
 	if ttlTime != FUTURE {
@@ -471,7 +480,7 @@ func TestGCTenant(t *testing.T) {
 		_, err := sql.CreateTenantRecord(
 			ctx, execCfg.Codec, execCfg.Settings,
 			txn,
-			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
+			execCfg.SpanConfigKVAccessor.WithISQLTxn(ctx, txn),
 			&mtinfopb.TenantInfoWithUsage{
 				SQLInfo: mtinfopb.SQLInfo{ID: activeTenID},
 			},
@@ -486,7 +495,7 @@ func TestGCTenant(t *testing.T) {
 		_, err := sql.CreateTenantRecord(
 			ctx, execCfg.Codec, execCfg.Settings,
 			txn,
-			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
+			execCfg.SpanConfigKVAccessor.WithISQLTxn(ctx, txn),
 			&mtinfopb.TenantInfoWithUsage{
 				SQLInfo: mtinfopb.SQLInfo{
 					ID:        dropTenID,

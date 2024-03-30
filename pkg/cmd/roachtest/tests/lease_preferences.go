@@ -112,13 +112,13 @@ func registerLeasePreferences(r registry.Registry) {
 				replFactor:            5,
 				checkNodes:            []int{1, 3, 4, 5},
 				eventFn:               makeStopNodesEventFn(2 /* targets */),
-				waitForLessPreferred:  false,
-				postEventWaitDuration: 10 * time.Minute,
+				waitForLessPreferred:  true,
+				postEventWaitDuration: 5 * time.Minute,
 			})
 		},
 	})
 	r.Add(registry.TestSpec{
-		// NB: This test takes down 2(/2) nodes in the most preferred locality. Th
+		// NB: This test takes down 2(/2) nodes in the most preferred locality. The
 		// leases on the stopped node will be acquired by node's which are not in
 		// the most preferred locality. This test waits until all the leases are on
 		// the secondary preference.
@@ -139,7 +139,7 @@ func registerLeasePreferences(r registry.Registry) {
 				eventFn:               makeStopNodesEventFn(1, 2 /* targets */),
 				checkNodes:            []int{3, 4, 5},
 				waitForLessPreferred:  false,
-				postEventWaitDuration: 10 * time.Minute,
+				postEventWaitDuration: 5 * time.Minute,
 			})
 		},
 	})
@@ -161,8 +161,8 @@ func registerLeasePreferences(r registry.Registry) {
 				eventFn: makeTransferLeasesEventFn(
 					5 /* gateway */, 5 /* target */),
 				checkNodes:            []int{1, 2, 3, 4, 5},
-				waitForLessPreferred:  false,
-				postEventWaitDuration: 10 * time.Minute,
+				waitForLessPreferred:  true,
+				postEventWaitDuration: 5 * time.Minute,
 			})
 		},
 	})
@@ -201,7 +201,7 @@ func runLeasePreferences(
 				// ...
 				// dc=N: n2N-1 n2N
 				fmt.Sprintf("--locality=region=fake-region,zone=fake-zone,dc=%d", (node-1)/2+1),
-				"--vmodule=replica_proposal=2,replicate_queue=3,replicate=3")
+				"--vmodule=replica_proposal=2,lease_queue=3,lease=3")
 			c.Start(ctx, t.L(), opts, settings, c.Node(node))
 
 		}
@@ -218,19 +218,6 @@ func runLeasePreferences(
 
 	conn := c.Conn(ctx, t.L(), numNodes)
 	defer conn.Close()
-
-	setLeasePreferences := func(ctx context.Context, preferences string) {
-		_, err := conn.ExecContext(ctx, fmt.Sprintf(
-			`ALTER database kv CONFIGURE ZONE USING 
-        num_replicas = %d, 
-        num_voters = %d,
-        voter_constraints='[]',
-        lease_preferences='[%s]'
-      `,
-			spec.replFactor, spec.replFactor, spec.preferences,
-		))
-		require.NoError(t, err)
-	}
 
 	checkLeasePreferenceConformance := func(ctx context.Context) {
 		result, err := waitForLeasePreferences(
@@ -255,24 +242,27 @@ func runLeasePreferences(
 	// Wait for the existing ranges (not kv) to be up-replicated. That way,
 	// creating the splits and waiting for up-replication on kv will be much
 	// quicker.
-	require.NoError(t, WaitForReplication(ctx, t, conn, spec.replFactor, atLeastReplicationFactor))
+	require.NoError(t, WaitForReplication(ctx, t, t.L(), conn, spec.replFactor, atLeastReplicationFactor))
 	c.Run(ctx, option.WithNodes(c.Node(numNodes)), fmt.Sprintf(
 		`./cockroach workload init kv --scatter --splits %d {pgurl:%d}`,
 		spec.ranges, numNodes))
 	// Wait for under-replicated ranges before checking lease preference
 	// enforcement.
-	require.NoError(t, WaitForReplication(ctx, t, conn, spec.replFactor, atLeastReplicationFactor))
+	require.NoError(t, WaitForReplication(ctx, t, t.L(), conn, spec.replFactor, atLeastReplicationFactor))
 
 	// Set a lease preference for the liveness range, to be on n5. This test
 	// would occasionally fail due to the liveness heartbeat failures, when the
 	// liveness lease is on a stopped node. This is not ideal behavior, #108512.
 	configureZone(t, ctx, conn, "RANGE liveness", zoneConfig{
-		replicas:  spec.replFactor,
-		leaseNode: 5,
+		replicas:        spec.replFactor,
+		leasePreference: "[+node5]",
 	})
 
 	t.L().Printf("setting lease preferences: %s", spec.preferences)
-	setLeasePreferences(ctx, spec.preferences)
+	configureZone(t, ctx, conn, "DATABASE kv", zoneConfig{
+		replicas:        spec.replFactor,
+		leasePreference: spec.preferences,
+	})
 	t.L().Printf("waiting for initial lease preference conformance")
 	checkLeasePreferenceConformance(ctx)
 

@@ -128,7 +128,7 @@ func (l *lexer) MakeExecSqlStmt() (*plpgsqltree.Execute, error) {
 	}
 	// Push back the first token so that it's included in the SQL string.
 	l.PushBack(1)
-	startPos, endPos, _, err := l.readSQLConstruct(false /* isExpr */, ';')
+	startPos, endPos, _, err := l.readSQLConstruct(false /* isExpr */, false /* allowEmpty */, ';')
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func (l *lexer) MakeDynamicExecuteStmt() (*plpgsqltree.DynamicExecute, error) {
 }
 
 func (l *lexer) readSQLConstruct(
-	isExpr bool, terminator1 int, terminators ...int,
+	isExpr, allowEmpty bool, terminator1 int, terminators ...int,
 ) (startPos, endPos, terminatorMet int, err error) {
 	if l.parser.Lookahead() != -1 {
 		// Push back the lookahead token so that it can be included.
@@ -268,6 +268,11 @@ func (l *lexer) readSQLConstruct(
 	startPos = l.lastPos + 1
 	for l.lastPos < len(l.tokens) {
 		tok := l.Peek()
+		if tok.id == ERROR {
+			// This is a tokenizer (lexical) error: the scanner
+			// will have stored the error message in the string field.
+			return 0, 0, 0, errors.Newf("%s", tok.str)
+		}
 		if int(tok.id) == terminator1 && parenLevel == 0 {
 			terminatorMet = terminator1
 			break
@@ -297,7 +302,7 @@ func (l *lexer) readSQLConstruct(
 	if endPos > len(l.tokens) {
 		endPos = len(l.tokens)
 	}
-	if endPos <= startPos {
+	if endPos < startPos || (!allowEmpty && endPos == startPos) {
 		if isExpr {
 			return 0, 0, 0, errors.New("missing expression")
 		} else {
@@ -341,7 +346,7 @@ func (l *lexer) MakeFetchOrMoveStmt(isMove bool) (plpgsqltree.Statement, error) 
 		}
 		// Read past the INTO.
 		l.lastPos++
-		startPos, endPos, _, err := l.readSQLConstruct(true /* isExpr */, ';')
+		startPos, endPos, _, err := l.readSQLConstruct(true /* isExpr */, false /* allowEmpty */, ';')
 		if err != nil {
 			return nil, err
 		}
@@ -374,9 +379,20 @@ func (l *lexer) ReadSqlExpr(
 ) (sqlStr string, terminatorMet int, err error) {
 	var startPos, endPos int
 	startPos, endPos, terminatorMet, err = l.readSQLConstruct(
-		true /* isExpr */, terminator1, terminators...,
+		true /* isExpr */, false /* allowEmpty */, terminator1, terminators...,
 	)
 	return l.getStr(startPos, endPos), terminatorMet, err
+}
+
+// ReadReturnExpr handles reading the expression for a RETURN statement, which
+// can be nonexistent.
+func (l *lexer) ReadReturnExpr() (sqlStr string, err error) {
+	var startPos, endPos int
+	startPos, endPos, _, err = l.readSQLConstruct(true /* isExpr */, true /* allowEmpty */, ';')
+	if err != nil || startPos == endPos {
+		return "", err
+	}
+	return l.getStr(startPos, endPos), err
 }
 
 func (l *lexer) ReadSqlStatement(
@@ -384,7 +400,7 @@ func (l *lexer) ReadSqlStatement(
 ) (sqlStr string, terminatorMet int, err error) {
 	var startPos, endPos int
 	startPos, endPos, terminatorMet, err = l.readSQLConstruct(
-		false /* isExpr */, terminator1, terminators...,
+		false /* isExpr */, false /* allowEmpty */, terminator1, terminators...,
 	)
 	return l.getStr(startPos, endPos), terminatorMet, err
 }

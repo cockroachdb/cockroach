@@ -44,6 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	raft "github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -90,7 +92,6 @@ import (
 	"github.com/google/pprof/profile"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/prometheus/common/expfmt"
-	raft "go.etcd.io/raft/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -3622,6 +3623,81 @@ func (s *systemStatusServer) SpanStats(
 	return batchedSpanStats(ctx, req, s.getSpanStatsInternal, batchSize)
 }
 
+func (s *systemStatusServer) TenantServiceStatus(
+	ctx context.Context, req *serverpb.TenantServiceStatusRequest,
+) (*serverpb.TenantServiceStatusResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	resp := &serverpb.TenantServiceStatusResponse{
+		StatusByNodeID: make(map[roachpb.NodeID]mtinfopb.SQLInfo),
+		ErrorsByNodeID: make(map[roachpb.NodeID]string),
+	}
+	if len(req.NodeID) > 0 {
+		reqNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+
+		if local {
+			info, err := s.localTenantServiceStatus(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			resp.StatusByNodeID[reqNodeID] = info
+			return resp, nil
+		}
+		return nil, errors.AssertionFailedf("requesting service status on a specific node is not supported yet")
+	}
+
+	// Send TenantStatusService request to all stores on all nodes.
+	remoteRequest := serverpb.TenantServiceStatusRequest{NodeID: "local", TenantID: req.TenantID}
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.TenantServiceStatusResponse, error) {
+		return status.TenantServiceStatus(ctx, &remoteRequest)
+	}
+	responseFn := func(nodeID roachpb.NodeID, remoteResp *serverpb.TenantServiceStatusResponse) {
+		resp.StatusByNodeID[nodeID] = remoteResp.StatusByNodeID[nodeID]
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		resp.ErrorsByNodeID[nodeID] = err.Error()
+	}
+
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "tenant service status",
+		noTimeout,
+		s.dialNode,
+		nodeFn,
+		responseFn,
+		errorFn,
+	); err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	return resp, nil
+}
+
+func (s *systemStatusServer) localTenantServiceStatus(
+	ctx context.Context, req *serverpb.TenantServiceStatusRequest,
+) (mtinfopb.SQLInfo, error) {
+	ret := mtinfopb.SQLInfo{}
+	r, err := s.sqlServer.execCfg.TenantCapabilitiesReader.Get("tenant service status")
+	if err != nil {
+		return ret, err
+	}
+	tid, err := roachpb.MakeTenantID(req.TenantID)
+	if err != nil {
+		return ret, err
+	}
+	entry, _, found := r.GetInfo(tid)
+	if !found {
+		return ret, nil
+	}
+	ret.ID = entry.TenantID.ToUint64()
+	ret.Name = entry.Name
+	ret.DataState = entry.DataState
+	ret.ServiceMode = entry.ServiceMode
+	return ret, nil
+}
+
 // Diagnostics returns an anonymized diagnostics report.
 func (s *statusServer) Diagnostics(
 	ctx context.Context, req *serverpb.DiagnosticsRequest,
@@ -3672,25 +3748,26 @@ func (s *systemStatusServer) Stores(
 
 	resp := &serverpb.StoresResponse{}
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
-		storeDetails := serverpb.StoreDetails{
-			StoreID: store.Ident.StoreID,
-		}
-
-		envStats, err := store.TODOEngine().GetEnvStats()
+		eng := store.TODOEngine()
+		envStats, err := eng.GetEnvStats()
 		if err != nil {
 			return err
 		}
-
-		if len(envStats.EncryptionStatus) > 0 {
-			storeDetails.EncryptionStatus = envStats.EncryptionStatus
+		props := eng.Properties()
+		storeDetails := serverpb.StoreDetails{
+			StoreID:          store.Ident.StoreID,
+			NodeID:           nodeID,
+			EncryptionStatus: envStats.EncryptionStatus,
+			TotalFiles:       envStats.TotalFiles,
+			TotalBytes:       envStats.TotalBytes,
+			ActiveKeyFiles:   envStats.ActiveKeyFiles,
+			ActiveKeyBytes:   envStats.ActiveKeyBytes,
+			Dir:              props.Dir,
 		}
-		storeDetails.TotalFiles = envStats.TotalFiles
-		storeDetails.TotalBytes = envStats.TotalBytes
-		storeDetails.ActiveKeyFiles = envStats.ActiveKeyFiles
-		storeDetails.ActiveKeyBytes = envStats.ActiveKeyBytes
-
+		if props.WalFailoverPath != nil {
+			storeDetails.WalFailoverPath = *props.WalFailoverPath
+		}
 		resp.Stores = append(resp.Stores, storeDetails)
-
 		return nil
 	})
 	if err != nil {

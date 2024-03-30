@@ -17,8 +17,4 @@ go_test(
     size = "small",
     srcs = ["codes_test.go"],
     embed = [":exit"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
 )

@@ -30,6 +30,7 @@ import (
 )
 
 // Cache implements protectedts.Cache.
+// TODO(#119243): delete this in 24.2
 type Cache struct {
 	db       isql.DB
 	storage  protectedts.Manager
@@ -168,7 +169,7 @@ func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 		default:
 		}
 	})
-	timer := timeutil.NewTimer()
+	var timer timeutil.Timer
 	defer timer.Stop()
 	timer.Reset(0) // Read immediately upon startup
 	var lastReset time.Time

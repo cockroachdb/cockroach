@@ -3,10 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "migrations",
     srcs = ["migrations.go"],
-    embedsrcs = [
-        "sqlmigrations/0001_init.sql",
-        "sqlmigrations/0002_stmt_insights.sql",
-    ],
+    embedsrcs = ["sqlmigrations/0001_init.sql"],
     importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations",
     visibility = ["//visibility:public"],
     deps = [
@@ -22,10 +19,6 @@ go_test(
     name = "migrations_test",
     srcs = ["migrations_test.go"],
     embed = [":migrations"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",

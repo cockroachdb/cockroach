@@ -255,7 +255,8 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	plan := p.(*planComponents)
 	rowResultWriter := NewRowResultWriter(&a.run.rightRows)
 	if err := runPlanInsidePlan(
-		ctx, params, plan, rowResultWriter, nil, /* deferredRoutineSender */
+		ctx, params, plan, rowResultWriter,
+		nil /* deferredRoutineSender */, "", /* stmtForDistSQLDiagram */
 	); err != nil {
 		return err
 	}
@@ -271,6 +272,7 @@ func runPlanInsidePlan(
 	plan *planComponents,
 	resultWriter rowResultWriter,
 	deferredRoutineSender eval.DeferredRoutineSender,
+	stmtForDistSQLDiagram string,
 ) error {
 	defer plan.close(ctx)
 	execCfg := params.ExecCfg()
@@ -342,14 +344,15 @@ func runPlanInsidePlan(
 		ctx, plannerCopy.Descriptors().HasUncommittedTypes(),
 		plannerCopy.SessionData().DistSQLMode, plan.main,
 	)
-	distributeType := DistributionType(DistributionTypeNone)
+	distributeType := DistributionType(LocalDistribution)
 	if distributePlan.WillDistribute() {
-		distributeType = DistributionTypeAlways
+		distributeType = FullDistribution
 	}
 	evalCtx := evalCtxFactory()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
 	planCtx.stmtType = recv.stmtType
 	planCtx.mustUseLeafTxn = params.p.mustUseLeafTxn()
+	planCtx.stmtForDistSQLDiagram = stmtForDistSQLDiagram
 
 	// Wrap PlanAndRun in a function call so that we clean up immediately.
 	func() {

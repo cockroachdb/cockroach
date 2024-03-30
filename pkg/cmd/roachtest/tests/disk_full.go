@@ -49,7 +49,7 @@ func registerDiskFull(r registry.Registry) {
 			// a range on node 1, but node 1 will not restart until the query
 			// completes.
 			db := c.Conn(ctx, t.L(), 1)
-			err := WaitFor3XReplication(ctx, t, db)
+			err := WaitFor3XReplication(ctx, t, t.L(), db)
 			require.NoError(t, err)
 			_ = db.Close()
 
@@ -117,7 +117,7 @@ func registerDiskFull(r registry.Registry) {
 					// propagated from roachprod, obscures the Cockroach
 					// exit code. There should still be a record of it
 					// in the systemd logs.
-					result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(n), fmt.Sprintf(
+					result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(n)), fmt.Sprintf(
 						`systemctl status %s | grep 'Main PID' | grep -oE '\((.+)\)'`,
 						roachtestutil.SystemInterfaceSystemdUnitName(),
 					))

@@ -59,7 +59,7 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=Exclusive
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Exclusive
 
 guard-state r=req3
 ----
@@ -78,7 +78,6 @@ num=1
     active: true req: 2, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 2
 
 release txn=txn1 span=a
 ----
@@ -88,7 +87,6 @@ num=1
     active: false req: 2, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
 
 guard-state r=req2
 ----
@@ -96,7 +94,7 @@ new: state=doneWaiting
 
 guard-state r=req3
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=false guard-strength=Intent
+new: state=waitFor txn=txn2 key="a" held=false guard-strength=Intent
 
 guard-state r=req4
 ----
@@ -110,7 +108,6 @@ num=1
     active: false req: 2, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
 
 # Stays in waitSelf state if scans again.
 scan r=req4
@@ -133,11 +130,10 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
-   distinguished req: 3
 
 guard-state r=req3
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=Intent
+new: state=waitFor txn=txn2 key="a" held=true guard-strength=Intent
 
 guard-state r=req4
 ----

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/go-ldap/ldap/v3"
 )
 
 // GetUserSessionInitInfo determines if the given user exists and
@@ -83,6 +85,7 @@ func GetUserSessionInitInfo(
 	canUseReplicationMode bool,
 	isSuperuser bool,
 	defaultSettings []sessioninit.SettingsCacheEntry,
+	subject *ldap.DN,
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	err error,
 ) {
@@ -109,8 +112,9 @@ func GetUserSessionInitInfo(
 		}
 
 		// Root user cannot have password expiry and must have login.
-		// It also never has default settings applied to it.
-		return true, true, true, true, true, nil, rootFn, nil
+		// It also never has default settings applied to it, and it cannot
+		// have its SUBJECT configured.
+		return true, true, true, true, true, nil, nil, rootFn, nil
 	}
 
 	var authInfo sessioninit.AuthInfo
@@ -202,6 +206,7 @@ func GetUserSessionInitInfo(
 		canUseReplicationMode,
 		isSuperuser,
 		settingsEntries,
+		authInfo.Subject,
 		func(ctx context.Context) (expired bool, ret password.PasswordHash, err error) {
 			ret = authInfo.HashedPassword
 			if authInfo.ValidUntil != nil {
@@ -289,7 +294,7 @@ func retrieveAuthInfo(
 	ie := f.Executor()
 	values, err := ie.QueryRowEx(
 		ctx, "get-hashed-pwd", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		getHashedPassword, user)
 
 	if err != nil {
@@ -315,11 +320,11 @@ func retrieveAuthInfo(
 
 	// Use fully qualified table name to avoid looking up "".system.role_options.
 	const getLoginDependencies = `SELECT option, value FROM system.public.role_options ` +
-		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN', 'REPLICATION')`
+		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN', 'REPLICATION', 'SUBJECT')`
 
 	roleOptsIt, err := ie.QueryIteratorEx(
 		ctx, "get-login-dependencies", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		getLoginDependencies,
 		user,
 	)
@@ -360,6 +365,15 @@ func retrieveAuthInfo(
 					return aInfo, errors.Wrap(err,
 						"error trying to parse timestamp while retrieving password valid until value")
 				}
+			}
+		case "SUBJECT":
+			if row[1] != tree.DNull {
+				subjectStr := string(tree.MustBeDString(row[1]))
+				dn, err := distinguishedname.ParseDN(subjectStr)
+				if err != nil {
+					return aInfo, err
+				}
+				aInfo.Subject = dn
 			}
 		}
 	}
@@ -403,7 +417,7 @@ WHERE
 	ie := f.Executor()
 	defaultSettingsIt, err := ie.QueryIteratorEx(
 		ctx, "get-default-settings", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		getDefaultSettings,
 		user,
 		databaseID,
@@ -456,7 +470,7 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]boo
 	query := `SELECT username FROM system.users`
 	it, err := p.InternalSQLTxn().QueryIteratorEx(
 		ctx, "read-users", p.txn,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		query)
 	if err != nil {
 		return nil, err
@@ -493,7 +507,7 @@ func RoleExists(ctx context.Context, txn isql.Txn, role username.SQLUsername) (b
 	query := `SELECT username FROM system.users WHERE username = $1`
 	row, err := txn.QueryRowEx(
 		ctx, "read-users", txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		query, role,
 	)
 	if err != nil {

@@ -24,11 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -520,6 +520,10 @@ var startCtx struct {
 	goMemLimitValue          bytesOrPercentageValue
 	diskTempStorageSizeValue bytesOrPercentageValue
 	tsdbSizeValue            bytesOrPercentageValue
+
+	// goGCPercent is used to specify the runtime garbage collection target
+	// percentage. Also configurable with the GOGC environment variable.
+	goGCPercent int
 }
 
 // setStartContextDefaults set the default values in startCtx.  This
@@ -542,6 +546,7 @@ func setStartContextDefaults() {
 	startCtx.goMemLimitValue = makeBytesOrPercentageValue(&goMemLimit, memoryPercentResolver)
 	startCtx.diskTempStorageSizeValue = makeBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 	startCtx.tsdbSizeValue = makeBytesOrPercentageValue(&serverCfg.TimeSeriesServerConfig.QueryMemoryMax, memoryPercentResolver)
+	startCtx.goGCPercent = 0
 }
 
 // drainCtx captures the command-line parameters of the `node drain`
@@ -660,10 +665,9 @@ func setDemoContextDefaults() {
 	demoCtx.SQLPort, _ = strconv.Atoi(base.DefaultPort)
 	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 	demoCtx.WorkloadMaxQPS = 25
-	demoCtx.Multitenant = true
+	demoCtx.Multitenant = clusterversion.DevelopmentBranch
 	demoCtx.DisableServerController = false
 	demoCtx.DefaultEnableRangefeeds = true
-	demoCtx.AutoConfigProvider = acprovider.NoTaskProvider{}
 
 	demoCtx.pidFile = ""
 	demoCtx.disableEnterpriseFeatures = false
@@ -729,4 +733,14 @@ func setUserfileContextDefaults() {
 // parsing, you probably should not be using this.
 func GetServerCfgStores() base.StoreSpecList {
 	return serverCfg.Stores
+}
+
+// GetWALFailoverConfig provides direct public access to the WALFailoverConfig
+// inside serverCfg. This is used by CCL code to populate some fields.
+//
+// WARNING: consider very carefully whether you should be using this.
+// If you are not writing CCL code that performs command-line flag
+// parsing, you probably should not be using this.
+func GetWALFailoverConfig() *base.WALFailoverConfig {
+	return &serverCfg.WALFailover
 }

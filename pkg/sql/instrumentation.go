@@ -473,6 +473,7 @@ func (ih *instrumentationHelper) Setup(
 
 	// Don't collect it if Stats Collection is disabled. If it is disabled the
 	// stats are not stored, so it always returns false for previouslySampled.
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !collectTxnExecStats && (!previouslySampled && sqlstats.StmtStatsEnable.Get(&cfg.Settings.SV)) {
 		// We don't collect the execution stats for statements in this txn, but
 		// this is the first time we see this statement ever, so we'll collect
@@ -663,7 +664,7 @@ func (ih *instrumentationHelper) Finish(
 			}
 			bundle = buildStatementBundle(
 				bundleCtx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor),
-				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.Err(),
+				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.ErrAllowReleased(),
 				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV, ih.inFlightTraceCollector,
 			)
 			// Include all non-critical errors as warnings. Note that these
@@ -831,6 +832,9 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 			// for example, EXPORT statements. For now, only output RU estimates for
 			// vectorized plans.
 			ob.AddRUEstimate(queryStats.RUEstimate)
+		}
+		if queryStats.ClientTime != 0 {
+			ob.AddClientTime(queryStats.ClientTime)
 		}
 	}
 

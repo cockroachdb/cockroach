@@ -70,7 +70,7 @@ func validateCheckExpr(
 		ctx,
 		"validate check constraint",
 		txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		queryStr)
 	if err != nil {
 		return nil, formattedCkExpr, err

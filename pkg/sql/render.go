@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -39,11 +38,6 @@ type renderNode struct {
 	// potentially modified by index selection.
 	source planDataSource
 
-	// Helper for indexed vars. This holds the actual instances of
-	// IndexedVars replaced in Exprs. The indexed vars contain indices
-	// to the array of source columns.
-	ivarHelper tree.IndexedVarHelper
-
 	// Rendering expressions for rows and corresponding output columns.
 	render []tree.TypedExpr
 
@@ -58,23 +52,11 @@ type renderNode struct {
 	reqOrdering ReqOrdering
 }
 
-var _ eval.IndexedVarContainer = &renderNode{}
-
-// IndexedVarEval implements the eval.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	panic("renderNode can't be run in local mode")
-}
+var _ tree.IndexedVarContainer = &renderNode{}
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (r *renderNode) IndexedVarResolvedType(idx int) *types.T {
 	return r.source.columns[idx].Typ
-}
-
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return r.source.columns.Name(idx)
 }
 
 func (r *renderNode) startExec(runParams) error {

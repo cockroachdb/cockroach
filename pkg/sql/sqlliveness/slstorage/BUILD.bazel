@@ -22,6 +22,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/regionliveness",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sqlliveness",
         "//pkg/util/admission/admissionpb",
@@ -52,10 +53,6 @@ go_test(
         "slstorage_test.go",
     ],
     embed = [":slstorage"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

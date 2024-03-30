@@ -31,10 +31,6 @@ func Register(name string, props *tree.FunctionProperties, overloads []tree.Over
 	if _, exists := registry[name]; exists {
 		panic("duplicate builtin: " + name)
 	}
-	for i := range overloads {
-		var hook func()
-		overloads[i].OnTypeCheck = &hook
-	}
 	registry[name] = definition{
 		props:     props,
 		overloads: overloads,

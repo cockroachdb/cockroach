@@ -1078,6 +1078,8 @@ message TableDescriptor {
     // AS option value for CREATE SEQUENCE, which specifies the default
     // min and max values a sequence can take on.
     optional string as_integer_type = 8 [(gogoproto.nullable) = false];
+    // The number of values that a node can cache.
+    optional int64 node_cache_size = 9 [(gogoproto.nullable) = false];
   }
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.
@@ -1203,7 +1205,33 @@ message TableDescriptor {
   // SchemaLocked, if set, disallows schema change to this table.
   optional bool schema_locked = 58 [(gogoproto.nullable) = false, (gogoproto.customname) = "SchemaLocked"];
 
-  // Next ID: 59
+  // ImportEpoch is the count of IMPORT INTO jobs that have been attempted on
+  // this table. The ImportEpoch can include an in progress import, as the field
+  // gets incremented while preparing the table for ingestion.
+  optional uint32 import_epoch = 59 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportEpoch"];
+
+  // ImportType is the type of import that is running if
+  // ImportStartWallTime is set.
+  optional ImportType import_type = 60 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportType"];
+
+  // Next ID: 61
+}
+
+// ImportType indicates the type of IMPORT that is in progress for a
+// TableDescriptor.
+enum ImportType {
+  // IMPORT_WITH_START_TIME_ONLY indicates that this import set the
+  // ImportStartWallTime on the descriptor but did not set increment
+  // the ImportEpoch. Such imports cannot be rolled back without MVCC
+  // timestamp filtering.
+  //
+  // Note this is purposefuly 0 since in progress imports from before
+  // this field was added won't have this set.
+  IMPORT_WITH_START_TIME_ONLY = 0;
+  // IMPORT_WITH_IMPORT_EPOCH indicates that the running import did
+  // increment the import epoch. Such imports can be rolled back using
+  // an ImportEpoch deletion predicate.
+  IMPORT_WITH_IMPORT_EPOCH = 1;
 }
 
 // SurvivalGoal is the survival goal for a database.
@@ -1551,7 +1579,7 @@ message SchemaDescriptor {
     optional uint32 id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
-
+    // ArgTypes contains only input parameters.
     repeated sql.sem.types.T arg_types = 2;
 
     optional sql.sem.types.T return_type = 3;
@@ -1559,6 +1587,17 @@ message SchemaDescriptor {
     optional bool return_set = 4 [(gogoproto.nullable) = false];
 
     optional bool is_procedure = 5 [(gogoproto.nullable) = false];
+
+    // OutParamOrdinals contains all ordinals of OUT parameters among all
+    // parameters in the function definition. For example, if the function /
+    // procedure has a definition like
+    //   (IN p0, INOUT p1, OUT p2, INOUT p3, OUT p4),
+    // then OutParamOrdinals will contain [2, 4] (while ArgTypes will contain
+    // types of [p0, p1, p3]).
+    repeated int32 out_param_ordinals = 6;
+    // OutParamTypes contains types of all OUT parameters (it has 1-to-1 match
+    // with OutParamOrdinals).
+    repeated sql.sem.types.T out_param_types = 7;
   }
 
   // Function contains a group of UDFs with the same name.
@@ -1621,7 +1660,8 @@ message FunctionDescriptor {
   optional uint32 parent_schema_id = 4 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
 
-  // params represents the list of parameters of the UDF signature.
+  // params represents the list of parameters, regardless of the parameter
+  // class, of the UDF signature.
   repeated Parameter params = 5 [(gogoproto.nullable) = false];
 
   // return_type represents the return type of the UDF signature.
@@ -1667,7 +1707,11 @@ message FunctionDescriptor {
   // IsProcedure is true if the descriptor represents a procedure.
   optional bool is_procedure = 21 [(gogoproto.nullable) = false];
 
-  // Next field id is 22
+  // DependsOnFunctions are the user defined functions that this function
+  // depends on.
+  repeated uint32 depends_on_functions = 22  [(gogoproto.casttype) = "ID"];
+
+  // Next field id is 23
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,

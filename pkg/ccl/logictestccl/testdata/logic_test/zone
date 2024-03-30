@@ -633,6 +633,7 @@ RANGE liveness                                                                  
 RANGE meta                                                                         meta      NULL         NULL                          NULL           NULL
 RANGE system                                                                       system    NULL         NULL                          NULL           NULL
 TABLE "my database".public."my table"                                              NULL      my database  my table                      NULL           NULL
+TABLE system.public.lease                                                          NULL      system       lease                         NULL           NULL
 TABLE system.public.replication_constraint_stats                                   NULL      system       replication_constraint_stats  NULL           NULL
 TABLE system.public.replication_stats                                              NULL      system       replication_stats             NULL           NULL
 TABLE system.public.span_stats_tenant_boundaries                                   NULL      system       span_stats_tenant_boundaries  NULL           NULL
@@ -786,22 +787,22 @@ CREATE INDEX x ON auth.t (x) PARTITION BY LIST (x) (
 user testuser
 
 # User should have no CONFIGURE ZONE abilities by default.
-statement error user testuser does not have REPAIRCLUSTERMETADATA system privilege
+statement error user testuser does not have REPAIRCLUSTER system privilege
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 3
 
-statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on database auth
+statement error pq: user testuser does not have CREATE or ZONECONFIG privilege on database auth
 ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
 
-statement error user testuser does not have REPAIRCLUSTERMETADATA system privilege
+statement error user testuser does not have REPAIRCLUSTER system privilege
 ALTER TABLE system.jobs CONFIGURE ZONE USING num_replicas = 3
 
-statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on relation t
+statement error pq: user testuser does not have CREATE or ZONECONFIG privilege on relation t
 ALTER TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
 
-statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on relation t
+statement error pq: user testuser does not have CREATE or ZONECONFIG privilege on relation t
 ALTER PARTITION p OF TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
 
-statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on relation t
+statement error pq: user testuser does not have CREATE or ZONECONFIG privilege on relation t
 ALTER PARTITION p OF INDEX auth.t@x CONFIGURE ZONE USING num_replicas = 3
 
 # Granting CREATE on databases and tables should allow CONFIGURE ZONE on those
@@ -827,10 +828,10 @@ REVOKE CREATE ON TABLE auth.t FROM testuser;
 
 user testuser
 
-statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on database auth
+statement error pq: user testuser does not have CREATE or ZONECONFIG privilege on database auth
 ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
 
-statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on relation t
+statement error pq: user testuser does not have CREATE or ZONECONFIG privilege on relation t
 ALTER TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
 
 
@@ -860,7 +861,7 @@ statement ok
 ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
 
 # Existing tables should not inherit ZONECONFIG privilege
-statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on relation t
+statement error pq: user testuser does not have CREATE or ZONECONFIG privilege on relation t
 ALTER TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
 
 # New tables should inherit ZONECONFIG privilege

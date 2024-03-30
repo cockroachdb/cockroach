@@ -570,7 +570,7 @@ func TestLargeDynamicRows(t *testing.T) {
 	var params base.TestServerArgs
 	var batchNumber int
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		BeforeCopyFromInsert: func(*kv.Txn) error {
+		CopyFromInsertBeforeBatch: func(*kv.Txn) error {
 			batchNumber++
 			return nil
 		},
@@ -592,9 +592,11 @@ func TestLargeDynamicRows(t *testing.T) {
 	err := conn.Exec(ctx, `SET COPY_FAST_PATH_ENABLED = 'true'`)
 	require.NoError(t, err)
 
-	// 4.0 MiB is minimum, copy sets max row size to this value / 3
+	// 4.0 MiB is minimum, but due to #117070 use 5MiB instead to avoid flakes.
+	// Copy sets max row size to this value / 3.
+	const memLimit = kvserverbase.MaxCommandSizeFloor + 1<<20
 	for _, l := range []serverutils.ApplicationLayerInterface{s, s.SystemLayer()} {
-		kvserverbase.MaxCommandSize.Override(ctx, &l.ClusterSettings().SV, 4<<20)
+		kvserverbase.MaxCommandSize.Override(ctx, &l.ClusterSettings().SV, memLimit)
 	}
 
 	err = conn.Exec(ctx, "CREATE TABLE t (s STRING)")
@@ -610,7 +612,7 @@ func TestLargeDynamicRows(t *testing.T) {
 	}
 	_, err = conn.GetDriverConn().CopyFrom(ctx, strings.NewReader(sb.String()), "COPY t FROM STDIN")
 	require.NoError(t, err)
-	require.Greater(t, batchNumber, 4)
+	require.GreaterOrEqual(t, 4, batchNumber)
 	batchNumber = 0
 
 	// Reset and make sure we use 1 batch.

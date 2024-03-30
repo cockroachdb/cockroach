@@ -26,6 +26,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 type (
@@ -53,9 +55,7 @@ type (
 		stopFuncs []StopFunc
 	}
 
-	testFailure struct {
-		summarized     bool
-		description    string
+	testFailureDetails struct {
 		seed           int64
 		testContext    *Context
 		binaryVersions []roachpb.Version
@@ -103,6 +103,11 @@ type (
 			mu    syncutil.Mutex
 			cache []*gosql.DB
 		}
+
+		// the following are test-only fields, allowing tests to simulate
+		// cluster properties without passing a cluster.Cluster
+		// implementation.
+		_addAnnotation func() error
 	}
 )
 
@@ -165,7 +170,7 @@ func (tr *testRunner) run() (retErr error) {
 			return fmt.Errorf("background step `%s` returned error: %w", event.Name, event.Err)
 
 		case err := <-tr.monitor.Err():
-			return tr.testFailure(err.Error(), tr.logger, nil)
+			return tr.testFailure(err, tr.logger, nil)
 		}
 	}
 }
@@ -173,8 +178,8 @@ func (tr *testRunner) run() (retErr error) {
 // runStep contains the logic of running a single test step, called
 // recursively in the case of sequentialRunStep and concurrentRunStep.
 func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
-	if ss, ok := step.(singleStep); ok {
-		if ss.impl.ID() > tr.plan.startClusterID {
+	if ss, ok := step.(*singleStep); ok {
+		if ss.ID > tr.plan.startClusterID {
 			// update the runner's view of the cluster's binary and cluster
 			// versions before every non-initialization `singleStep` is
 			// executed
@@ -215,7 +220,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 		return tr.runStep(ctx, s.step)
 
 	default:
-		ss := s.(singleStep)
+		ss := s.(*singleStep)
 		stepLogger, err := tr.loggerFor(ss)
 		if err != nil {
 			return err
@@ -235,17 +240,24 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 // any) with useful information, and renaming the log file to indicate
 // failure. This logic is the same whether running a step in the
 // background or not.
-func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logger.Logger) error {
+func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logger.Logger) error {
 	tr.logStep("STARTING", ss, l)
 	tr.logVersions(l, ss.context)
 	start := timeutil.Now()
 	defer func() {
 		prefix := fmt.Sprintf("FINISHED [%s]", timeutil.Since(start))
 		tr.logStep(prefix, ss, l)
+		annotation := fmt.Sprintf("(%d): %s", ss.ID, ss.impl.Description())
+		err := tr.addGrafanaAnnotation(tr.ctx, tr.logger, grafana.AddAnnotationRequest{
+			Text: annotation, StartTime: start.UnixMilli(), EndTime: timeutil.Now().UnixMilli(),
+		})
+		if err != nil {
+			l.Printf("WARN: Adding Grafana annotation failed: %s", err)
+		}
 	}()
 
 	if err := panicAsError(l, func() error {
-		return ss.impl.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l, ss.context))
+		return ss.impl.Run(ctx, l, ss.rng, tr.newHelper(ctx, l, ss.context))
 	}); err != nil {
 		if isContextCanceled(ctx) {
 			l.Printf("step terminated (context canceled)")
@@ -264,7 +276,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logge
 	return nil
 }
 
-func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger, stopChan shouldStop) {
+func (tr *testRunner) startBackgroundStep(ss *singleStep, l *logger.Logger, stopChan shouldStop) {
 	stop := tr.background.Start(ss.impl.Description(), func(ctx context.Context) error {
 		return tr.runSingleStep(ctx, ss, l)
 	})
@@ -289,19 +301,21 @@ func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger, stopC
 // binary version on each node when the error occurred, and the
 // cluster version before and after the step (in case the failure
 // happened *while* the cluster version was updating).
-func (tr *testRunner) stepError(err error, step singleStep, l *logger.Logger) error {
-	desc := fmt.Sprintf("mixed-version test failure while running step %d (%s): %s",
-		step.impl.ID(), step.impl.Description(), err,
+func (tr *testRunner) stepError(err error, step *singleStep, l *logger.Logger) error {
+	stepErr := errors.Wrapf(
+		err,
+		"mixed-version test failure while running step %d (%s)",
+		step.ID, step.impl.Description(),
 	)
 
-	return tr.testFailure(desc, l, &step.context)
+	return tr.testFailure(stepErr, l, &step.context)
 }
 
-// testFailure generates a `testFailure` with the given
-// description. It logs the error to the logger passed, and renames
-// the underlying file to include the "FAILED" prefix to help in
-// debugging.
-func (tr *testRunner) testFailure(desc string, l *logger.Logger, testContext *Context) error {
+// testFailure generates a `testFailure` for failures that happened
+// due to the given error.  It logs the error to the logger passed,
+// and renames the underlying file to include the "FAILED" prefix to
+// help in debugging.
+func (tr *testRunner) testFailure(err error, l *logger.Logger, testContext *Context) error {
 	clusterVersionsBefore := tr.clusterVersions
 	var clusterVersionsAfter atomic.Value
 	if tr.connCacheInitialized() {
@@ -312,8 +326,7 @@ func (tr *testRunner) testFailure(desc string, l *logger.Logger, testContext *Co
 		}
 	}
 
-	tf := &testFailure{
-		description:           desc,
+	tf := &testFailureDetails{
 		seed:                  tr.seed,
 		testContext:           testContext,
 		binaryVersions:        loadAtomicVersions(tr.binaryVersions),
@@ -321,15 +334,19 @@ func (tr *testRunner) testFailure(desc string, l *logger.Logger, testContext *Co
 		clusterVersionsAfter:  loadAtomicVersions(clusterVersionsAfter),
 	}
 
+	// failureErr wraps the original error, adding mixed-version state
+	// information as error details.
+	failureErr := errors.WithDetailf(err, "%s", tf.Format())
+
 	// Print the test failure on the step's logger for convenience, and
 	// to reduce cross referencing of logs.
-	l.Printf("%v", tf)
+	l.Printf("%+v", failureErr)
 
 	if err := renameFailedLogger(l); err != nil {
 		tr.logger.Printf("could not rename failed step logger: %v", err)
 	}
 
-	return tf
+	return failureErr
 }
 
 // teardown groups together all tasks that happen once a test finishes.
@@ -367,9 +384,9 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 	tr.closeConnections()
 }
 
-func (tr *testRunner) logStep(prefix string, step singleStep, l *logger.Logger) {
+func (tr *testRunner) logStep(prefix string, step *singleStep, l *logger.Logger) {
 	dashes := strings.Repeat("-", 10)
-	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.impl.ID(), step.impl.Description())
+	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.ID, step.impl.Description())
 }
 
 // logVersions writes the current cached versions of the binary and
@@ -399,9 +416,9 @@ func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
 // will be available under `mixed-version-test/{ID}.log`, making it
 // easy to go from the IDs displayed in the test plan to the
 // corresponding output of that step.
-func (tr *testRunner) loggerFor(step singleStep) (*logger.Logger, error) {
+func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
 	name := invalidChars.ReplaceAllString(strings.ToLower(step.impl.Description()), "")
-	name = fmt.Sprintf("%d_%s", step.impl.ID(), name)
+	name = fmt.Sprintf("%d_%s", step.ID, name)
 
 	prefix := path.Join(logPrefix, name)
 	return prefixedLogger(tr.logger, prefix)
@@ -503,6 +520,16 @@ func (tr *testRunner) closeConnections() {
 			_ = db.Close()
 		}
 	}
+}
+
+func (tr *testRunner) addGrafanaAnnotation(
+	ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest,
+) error {
+	if tr._addAnnotation != nil {
+		return tr._addAnnotation() // test-only
+	}
+
+	return tr.cluster.AddGrafanaAnnotation(ctx, l, req)
 }
 
 func newCRDBMonitor(
@@ -612,30 +639,25 @@ func (br *backgroundRunner) CompletedEvents() <-chan backgroundEvent {
 	return br.events
 }
 
-func (tf *testFailure) Error() string {
-	if tf.summarized {
-		return tf.description
-	}
-	tf.summarized = true
-
+func (tfd *testFailureDetails) Format() string {
 	lines := []string{
-		tf.description,
-		fmt.Sprintf("test random seed: %d\n", tf.seed),
+		"test failed:",
+		fmt.Sprintf("test random seed: %d\n", tfd.seed),
 	}
 
-	tw := newTableWriter(len(tf.binaryVersions))
-	if tf.testContext != nil {
-		releasedVersions := make([]*clusterupgrade.Version, 0, len(tf.testContext.CockroachNodes))
-		for _, node := range tf.testContext.CockroachNodes {
-			releasedVersions = append(releasedVersions, tf.testContext.NodeVersion(node))
+	tw := newTableWriter(len(tfd.binaryVersions))
+	if tfd.testContext != nil {
+		releasedVersions := make([]*clusterupgrade.Version, 0, len(tfd.testContext.CockroachNodes))
+		for _, node := range tfd.testContext.CockroachNodes {
+			releasedVersions = append(releasedVersions, tfd.testContext.NodeVersion(node))
 		}
 		tw.AddRow("released versions", toString(releasedVersions)...)
 	}
 
-	tw.AddRow("logical binary versions", toString(tf.binaryVersions)...)
-	tw.AddRow("cluster versions before failure", toString(tf.clusterVersionsBefore)...)
+	tw.AddRow("logical binary versions", toString(tfd.binaryVersions)...)
+	tw.AddRow("cluster versions before failure", toString(tfd.clusterVersionsBefore)...)
 
-	if cv := tf.clusterVersionsAfter; cv != nil {
+	if cv := tfd.clusterVersionsAfter; cv != nil {
 		tw.AddRow("cluster versions after failure", toString(cv)...)
 	}
 

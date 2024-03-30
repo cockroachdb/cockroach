@@ -18,7 +18,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -127,51 +127,47 @@ mode in the current environment.
 	// Add the encryption flag to commands that need it.
 	// For the encryption-status command.
 	f := encryptionStatusCmd.Flags()
-	cliflagcfg.VarFlag(f, &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+	cliflagcfg.VarFlag(f, &encryptionSpecs, cliflagsccl.EnterpriseEncryption)
 	// And other flags.
 	f.BoolVar(&encryptionStatusOpts.activeStoreIDOnly, "active-store-key-id-only", false,
 		"print active store key ID and exit")
 	// For the encryption-decrypt command.
 	f = encryptionDecryptCmd.Flags()
-	cliflagcfg.VarFlag(f, &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+	cliflagcfg.VarFlag(f, &encryptionSpecs, cliflagsccl.EnterpriseEncryption)
 	// For the encryption-registry-list command.
 	f = encryptionRegistryList.Flags()
-	cliflagcfg.VarFlag(f, &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+	cliflagcfg.VarFlag(f, &encryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
 	// Add encryption flag to all OSS debug commands that want it.
 	for _, cmd := range cli.DebugCommandsRequiringEncryption {
-		// storeEncryptionSpecs is in start.go.
-		cliflagcfg.VarFlag(cmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+		// encryptionSpecs is in start.go.
+		cliflagcfg.VarFlag(cmd.Flags(), &encryptionSpecs, cliflagsccl.EnterpriseEncryption)
 	}
 
 	// init has already run in cli/debug.go since this package imports it, so
 	// DebugPebbleCmd already has all its subcommands. We could traverse those
 	// here. But we don't need to by using PersistentFlags.
 	cliflagcfg.VarFlag(cli.DebugPebbleCmd.PersistentFlags(),
-		&storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+		&encryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
-	cli.PopulateStorageConfigHook = fillEncryptionOptionsForStore
+	cli.PopulateEnvConfigHook = fillEncryptionOptionsForStore
 	cli.EncryptedStorePathsHook = func() []string {
 		var res []string
-		for _, spec := range storeEncryptionSpecs.Specs {
+		for _, spec := range encryptionSpecs.Specs {
 			res = append(res, spec.Path)
 		}
 		return res
 	}
 }
 
-// fillEncryptionOptionsForStore fills the StorageConfig fields
+// fillEncryptionOptionsForStore fills the EnvConfig fields
 // based on the --enterprise-encryption flag value.
-func fillEncryptionOptionsForStore(cfg *base.StorageConfig) error {
-	opts, err := baseccl.EncryptionOptionsForStore(cfg.Dir, storeEncryptionSpecs)
+func fillEncryptionOptionsForStore(dir string, cfg *fs.EnvConfig) error {
+	opts, err := baseccl.EncryptionOptionsForStore(dir, encryptionSpecs)
 	if err != nil {
 		return err
 	}
-
-	if opts != nil {
-		cfg.EncryptionOptions = opts
-		cfg.UseFileRegistry = true
-	}
+	cfg.EncryptionOptions = opts
 	return nil
 }
 
@@ -215,7 +211,7 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 
 	dir := args[0]
 
-	db, err := cli.OpenEngine(dir, stopper, storage.MustExist, storage.ReadOnly)
+	db, err := cli.OpenEngine(dir, stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}

@@ -31,11 +31,65 @@ import (
 // (currently maps to sql.planNode).
 type Node interface{}
 
-// Plan represents the plan for a query (currently maps to sql.planTop).
+// Plan represents the plan for a query (currently maps to sql.planComponents).
 // For simple queries, the plan is associated with a single Node tree.
 // For queries containing subqueries, the plan is associated with multiple Node
 // trees (see ConstructPlan).
 type Plan interface{}
+
+// PlanFlags tracks various properties of the built plan.
+type PlanFlags uint32
+
+const (
+	// PlanFlagIsDDL is set if the statement contains DDL.
+	PlanFlagIsDDL = (1 << iota)
+
+	// PlanFlagContainsFullTableScan is set if the statement contains an
+	// unconstrained primary index scan. This could be a full scan of any
+	// cardinality.
+	PlanFlagContainsFullTableScan
+
+	// PlanFlagContainsFullIndexScan is set if the statement contains an
+	// unconstrained non-partial secondary index scan. This could be a full scan
+	// of any cardinality.
+	PlanFlagContainsFullIndexScan
+
+	// PlanFlagContainsLargeFullTableScan is set if the statement contains an
+	// unconstrained primary index scan estimated to read more than
+	// large_full_scan_rows (or without available stats).
+	PlanFlagContainsLargeFullTableScan
+
+	// PlanFlagContainsLargeFullIndexScan is set if the statement contains an
+	// unconstrained non-partial secondary index scan estimated to read more than
+	// large_full_scan_rows (or without without available stats).
+	PlanFlagContainsLargeFullIndexScan
+
+	// PlanFlagContainsMutation is set if the whole plan contains any mutations.
+	PlanFlagContainsMutation
+
+	// PlanFlagContainsLocking is set if at least one node in the plan uses
+	// locking. (Examples of plans using locking include SELECT FOR UPDATE and
+	// SELECT FOR SHARE, UPDATE, UPSERT, and FK checks under read committed
+	// isolation.)
+	PlanFlagContainsLocking
+
+	// PlanFlagCheckContainsLocking is set if at least one node in at least one
+	// check plan uses locking. Typically this is set for plans with FK checks
+	// under read committed isolation.
+	PlanFlagCheckContainsLocking
+)
+
+func (pf PlanFlags) IsSet(flag PlanFlags) bool {
+	return (pf & flag) != 0
+}
+
+func (pf *PlanFlags) Set(flag PlanFlags) {
+	*pf |= flag
+}
+
+func (pf *PlanFlags) Unset(flag PlanFlags) {
+	*pf &^= flag
+}
 
 // ScanParams contains all the parameters for a table scan.
 type ScanParams struct {
@@ -66,7 +120,9 @@ type ScanParams struct {
 	// Row-level locking properties.
 	Locking opt.Locking
 
-	EstimatedRowCount float64
+	// EstimatedRowCount, if set, is the estimated number of rows that will be
+	// scanned, rounded up.
+	EstimatedRowCount uint64
 
 	// If true, we are performing a locality optimized search. In order for this
 	// to work correctly, the execution engine must create a local DistSQL plan
@@ -154,6 +210,10 @@ type AggInfo struct {
 	// Filter is the index of the column, if any, which should be used as the
 	// FILTER condition for the aggregate. If there is no filter, Filter is -1.
 	Filter NodeColumnOrdinal
+
+	// DistsqlBlocklist is set to true when this aggregate function cannot be
+	// evaluated in distributed fashion.
+	DistsqlBlocklist bool
 }
 
 // WindowInfo represents the information about a window function that must be

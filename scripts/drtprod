@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# drtprod is a wrapper for roachprod for use when managing the long-lived DRT
+# clusters that ensures consistent use of the correct project-assignment vars
+# and done some additional sanity check enforcement on some flags.
+
+export GCE_PROJECT=cockroach-drt
+export ROACHPROD_DNS="drt.crdb.io"
+
+if [ "$#" -lt 1 ]; then
+  echo
+  echo "drtprod runs roachprod commands against DRT clusters"
+  echo
+  echo "Usage: drtprod <command>"
+  echo
+  echo "Commands include:"
+  echo "  push-hosts: write the ips and pgurl files for a cluster to a node/cluster"
+  echo "  dns: update/create DNS entries in drt.crdb.io for a cluster"
+  echo "  create: a wrapper for the 'roachprod' with predefined specs for named clusters"
+  echo "  *: any other command is passed to roachprod, potentialy with flags addded"
+  echo
+  roachprod | sed -e 's/roachprod/drtprod/g'
+  exit 0
+fi
+
+case $1 in
+  "start")
+    if [[ "$*" != *"--restart"* ]]; then
+      # implied for long-lived DRT clusters; avoid on init w/ --restart=false.
+      shift
+      set -- start "--restart" "$@"
+    fi
+    if [[ "$*" != *"--secure"* ]]; then
+      shift
+      set -- start "--secure" "$@"
+    fi
+    if [[ "$*" != *"--sql-port 26257"* ]]; then
+      shift
+      set -- start "--sql-port" "26257" "$@"
+    fi
+    ;;
+  "sql")
+    if [[ "$*" != *"--secure"* ]]; then
+      shift
+      set -- sql --secure "$@"
+    fi
+    ;;
+  "dns")
+    if [ "$#" -lt 2 ]; then
+      echo "usage: drtprod $1 <cluster> [create]"
+      exit 1
+    fi 
+    # roachprod only manages DNS in ephemeral, so we just do this ourselves.
+    # These are very low-churn clusters so this is fine being manual and in a
+    # wrapper.
+    shift
+    cluster=$1
+    roachprod adminurl $cluster --ips |
+      awk '{printf "%04d\t%s\n", NR, $0}' | # prepend the padded node IDs.
+      sed -e 's,http://\(.*\):26258/,\1,g' | # remove the HTTP part.
+      while read node ip; do
+        host="${cluster}-${node}.drt.crdb.io."
+        gcloud dns --project=cockroach-shared record-sets ${2:-update} "${host}" --rrdatas="${ip}" \
+          --type="A" --zone="drt" --ttl=60
+      done
+    exit 0
+    ;;
+  "create")
+    if [ "$#" -lt 2 ]; then
+      echo "usage: drtprod create {drt-main,drt-ua1,drt-ua2}"
+      exit 1
+    fi
+    case "${2}" in
+      "drt-main")
+        roachprod create drt-main \
+          --clouds gce \
+          --gce-managed \
+          --gce-zones "us-east1-b,us-west1-b,europe-west2-b" \
+          --nodes 15 \
+          --gce-machine-type n2-standard-16 \
+          --gce-pd-volume-size 10000 --local-ssd=false \
+          --username drt \
+          --lifetime 8760h
+        # setup dns
+        $0 dns drt-main create
+        ;;
+      "drt-ua1")
+        roachprod create drt-ua1 \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="8" \
+          --gce-machine-type="n2-standard-8" \
+          --local-ssd="true"  \
+          --gce-local-ssd-count="16" \
+          --username="drt" \
+          --lifetime="8760h"
+        # setup dns
+        $0 dns drt-ua1 create
+        ;;
+      "drt-ua2")
+      set -x
+        roachprod create drt-ua2 \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="8" \
+          --gce-machine-type="n2-standard-8" \
+          --local-ssd="true"  \
+          --gce-local-ssd-count="16" \
+          --username="drt" \
+          --lifetime="8760h"
+        # setup dns
+        $0 dns drt-ua2 create
+        ;;
+      *)
+        echo
+        echo "ATN: If $2 is intended to be long-lived, please define it by name in drtprod instead."
+        echo
+        exec roachprod "$@"
+      ;;
+    esac
+    exit 0
+esac
+
+
+roachprod "$@"

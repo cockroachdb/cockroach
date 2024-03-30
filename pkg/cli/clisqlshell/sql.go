@@ -276,7 +276,7 @@ func (c *cliState) printCliHelp() {
 	fmt.Fprintf(c.iCtx.stdout, helpMessageFmt,
 		demoHelpStr,
 		docs.URL("sql-statements.html"),
-		docs.URL("use-the-built-in-sql-client.html"),
+		docs.URL("cockroach-sql.html"),
 	)
 	fmt.Fprintln(c.iCtx.stdout)
 }
@@ -1392,6 +1392,10 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	// to handle it as a statement, so save the history.
 	c.addHistory(c.lastInputLine)
 
+	if c.sqlCtx.DemoCluster != nil {
+		c.lastInputLine = c.sqlCtx.DemoCluster.ExpandShortDemoURLs(c.lastInputLine)
+	}
+
 	// As a convenience to the user, we strip the final semicolon, if
 	// any, in all cases.
 	line := strings.TrimRight(c.lastInputLine, "; ")
@@ -1978,6 +1982,10 @@ func (c *cliState) doPrepareStatementLine(
 	// Complete input. Remember it in the history.
 	if !c.inCopy() {
 		c.addHistory(c.concatLines)
+	}
+
+	if c.sqlCtx.DemoCluster != nil {
+		c.concatLines = c.sqlCtx.DemoCluster.ExpandShortDemoURLs(c.concatLines)
 	}
 
 	if !c.iCtx.checkSyntax {

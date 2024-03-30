@@ -112,8 +112,8 @@ CREATE INDEX id4
   {columnId: 4, computeExpr: {expr: 'mod(fnv32(md5(crdb_internal.datums_to_bytes(id, name))), 8:::INT8)', referencedColumnIds: [1, 2]}, elementCreationMetadata: {in231OrLater: true}, isVirtual: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
 - [[ColumnNotNull:{DescID: 104, ColumnID: 4, IndexID: 1}, PUBLIC], ABSENT]
   {columnId: 4, indexIdForValidation: 1, tableId: 104}
-- [[CheckConstraint:{DescID: 104, IndexID: 1, ConstraintID: 2}, PUBLIC], ABSENT]
-  {constraintId: 2, expr: '"crdb_internal_id_name_shard_8" IN (0,1,2,3,4,5,6,7)', fromHashShardedColumn: true, indexIdForValidation: 1, referencedColumnIds: [4], tableId: 104}
+- [[CheckConstraint:{DescID: 104, IndexID: 1, ConstraintID: 2, ReferencedColumnIDs: [4]}, PUBLIC], ABSENT]
+  {columnIds: [4], constraintId: 2, expr: '"crdb_internal_id_name_shard_8" IN (0,1,2,3,4,5,6,7)', fromHashShardedColumn: true, indexIdForValidation: 1, referencedColumnIds: [4], tableId: 104}
 - [[ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_id_name_shard_8, ConstraintID: 2}, PUBLIC], ABSENT]
   {constraintId: 2, name: check_crdb_internal_id_name_shard_8, tableId: 104}
 - [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}, PUBLIC], ABSENT]

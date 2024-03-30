@@ -15,6 +15,7 @@ go_library(
         "tracing.go",
         "type_resolver.go",
         "watch_dog.go",
+        "workload_result.go",
         ":gen-optype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/schemachange",
@@ -22,6 +23,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/parser",
@@ -44,6 +46,8 @@ go_library(
         "@com_github_jackc_pgx_v5//pgconn",
         "@com_github_jackc_pgx_v5//pgxpool",
         "@com_github_lib_pq//oid",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_golang//prometheus/promauto",
         "@com_github_spf13_pflag//:pflag",
         "@io_opentelemetry_go_otel//attribute",
         "@io_opentelemetry_go_otel//codes",
@@ -67,10 +71,6 @@ go_test(
     srcs = ["generate_test.go"],
     args = ["-test.timeout=295s"],
     embed = [":schemachange"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/sem/tree",

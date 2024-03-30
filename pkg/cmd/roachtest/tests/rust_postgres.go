@@ -33,9 +33,13 @@ func registerRustPostgres(r registry.Registry) {
 		t.Status("setting up cockroach")
 
 		// We hardcode port 5433 since that's the port rust-postgres expects.
-		startOpts := option.DefaultStartOptsInMemory()
+		startOpts := option.NewStartOpts(sqlClientsInMemoryDB)
 		startOpts.RoachprodOpts.SQLPort = 5433
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
+		// rust-postgres currently doesn't support changing the config through
+		// the environment, which means we can't pass it ssl connection details
+		// and must run the cluster in insecure mode.
+		// See: https://github.com/sfackler/rust-postgres/issues/654
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.All())
 		db := c.Conn(ctx, t.L(), 1)
 		_, err := db.Exec("create user postgres with createdb createlogin createrole cancelquery")
 		if err != nil {
@@ -130,7 +134,7 @@ func registerRustPostgres(r registry.Registry) {
 		result, err := c.RunWithDetailsSingleNode(
 			ctx,
 			t.L(),
-			node,
+			option.WithNodes(node),
 			`cd /mnt/data1/rust-postgres && /home/ubuntu/.cargo/bin/cargo test 2>&1 > rustpostgres.stdout --no-fail-fast`)
 		if err != nil {
 			t.L().Printf("error during rust postgres run (may be ok): %v\n", err)
@@ -138,7 +142,7 @@ func registerRustPostgres(r registry.Registry) {
 
 		t.L().Printf("Test stdout for rust-postgres")
 		result, err = c.RunWithDetailsSingleNode(
-			ctx, t.L(), node, "cd /mnt/data1/rust-postgres && cat rustpostgres.stdout",
+			ctx, t.L(), option.WithNodes(node), "cd /mnt/data1/rust-postgres && cat rustpostgres.stdout",
 		)
 		if err != nil {
 			t.Fatal(err)

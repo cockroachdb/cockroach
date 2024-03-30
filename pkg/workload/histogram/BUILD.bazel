@@ -18,10 +18,6 @@ go_test(
     name = "histogram_test",
     srcs = ["histogram_test.go"],
     embed = [":histogram"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/util/ctxgroup",
         "@com_github_prometheus_client_golang//prometheus",

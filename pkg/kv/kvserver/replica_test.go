@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -54,6 +53,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -81,9 +83,6 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
-	"go.etcd.io/raft/v3/tracker"
 )
 
 // allSpans is a SpanSet that covers *everything* for use in tests that don't
@@ -1830,7 +1829,7 @@ func TestOptimizePuts(t *testing.T) {
 	for i, c := range testCases {
 		if c.exEndKey != nil {
 			require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, tc.engine, nil,
-				c.exKey, c.exEndKey, hlc.MinTimestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
+				c.exKey, c.exEndKey, hlc.MinTimestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil))
 		} else if c.exKey != nil {
 			_, err := storage.MVCCPut(ctx, tc.engine, c.exKey,
 				hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), storage.MVCCWriteOptions{})
@@ -1942,9 +1941,6 @@ func TestAcquireLease(t *testing.T) {
 					t.Errorf("unexpected lease start: %s; expected %s", lease.Start, expStart)
 				}
 
-				if *lease.DeprecatedStartStasis != *lease.Expiration {
-					t.Errorf("%s already in stasis (or beyond): %+v", ts, lease)
-				}
 				if lease.Expiration.LessEq(ts) {
 					t.Errorf("%s already expired: %+v", ts, lease)
 				}
@@ -6731,7 +6727,7 @@ func TestReplicaCorruption(t *testing.T) {
 	}
 
 	// Should have laid down marker file to prevent startup.
-	_, err := tc.engine.Stat(base.PreventedStartupFile(tc.engine.GetAuxiliaryDir()))
+	_, err := tc.engine.Env().Stat(base.PreventedStartupFile(tc.engine.GetAuxiliaryDir()))
 	require.NoError(t, err)
 
 	// Should have triggered fatal error.
@@ -6772,7 +6768,6 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 			if _, err := tc.repl.ChangeReplicas(
 				context.Background(),
 				tc.repl.Desc(),
-				kvserverpb.SnapshotRequest_REBALANCE,
 				kvserverpb.ReasonRebalance,
 				"",
 				chgs,
@@ -11139,10 +11134,10 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
-	// Disable txn liveness pushes. See below for why.
+	// Disable txn liveness/deadlock pushes. See below for why.
 	st := tc.store.cfg.Settings
 	st.Manual.Store(true)
-	concurrency.LockTableLivenessPushDelay.Override(ctx, &st.SV, 24*time.Hour)
+	concurrency.LockTableDeadlockOrLivenessDetectionPushDelay.Override(ctx, &st.SV, 24*time.Hour)
 
 	// Write a value to a key A.
 	key := roachpb.Key("a")
@@ -11162,14 +11157,16 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	}
 
 	// Try to write to the key outside of this transaction. Should wait on the
-	// "for update" lock in a lock wait-queue in the concurrency manager until
-	// the lock is released. If we don't notify the lock-table when the first
-	// txn eventually commits, this will wait for much longer than it needs to.
-	// It will eventually push the first txn and notice that it has committed.
-	// However, we've disabled liveness pushes in this test, so the test will
-	// block forever without the lock-table notification. We didn't need to
-	// disable deadlock detection pushes because this is a non-transactional
-	// write, so it never performs them.
+	// "for update" lock in a lock wait-queue in the concurrency manager until the
+	// lock is released. If we don't notify the lock-table when the first txn
+	// eventually commits, this will wait for much longer than it needs to. It
+	// will eventually push the first txn and notice that it has committed.
+	// However, we've disabled liveness and deadlock pushes[*] in this test, so the
+	// test will block forever without the lock-table notification.
+	//
+	// [*] The operating push here being the liveness one, as non-transactional
+	// requests can't be part of deadlock cycles. However, both of these are
+	// controlled by a single cluster setting.
 	pErrC := make(chan *kvpb.Error, 1)
 	go func() {
 		otherWrite := incrementArgs(key, 1)
@@ -13531,7 +13528,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 	}
 }
 
-func TestReplicateQueueProcessOne(t *testing.T) {
+func TestAdminScatterDestroyedReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -13546,19 +13543,17 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 	tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
 	tc.repl.mu.Unlock()
 
-	conf, err := tc.repl.LoadSpanConfig(ctx)
-	require.NoError(t, err)
-	requeue, err := tc.store.replicateQueue.processOneChange(
-		ctx,
-		tc.repl,
-		tc.repl.Desc(),
-		conf,
-		func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool { return false },
-		false, /* scatter */
-		true,  /* dryRun */
-	)
-	require.Equal(t, errBoom, err)
-	require.False(t, requeue)
+	desc := tc.repl.Desc()
+	resp, err := tc.repl.adminScatter(ctx, kvpb.AdminScatterRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    roachpb.Key(desc.StartKey),
+			EndKey: roachpb.Key(desc.EndKey),
+		},
+	})
+	// The replica is destroyed so it can't be processed underneath the scatter
+	// call. Expect that no bytes are scattered as a result.
+	require.Equal(t, nil, err)
+	require.Equal(t, int64(0), resp.ReplicasScatteredBytes)
 }
 
 // TestContainsEstimatesClamp tests the massaging of ContainsEstimates

@@ -1056,6 +1056,204 @@ upsert xy
                      └── x:25 = r2:30 [outer=(25,30), constraints=(/25: (/NULL - ]; /30: (/NULL - ]), fd=(25)==(30), (30)==(25)]
 
 # --------------------------------------------------
+# EliminateGroupBy
+# --------------------------------------------------
+
+# Eliminate the GroupBy when the aggregate functions produce the same column as
+# their input column.
+exprnorm expect=EliminateGroupBy
+(GroupBy
+    (Scan [ (Table "a") (Cols "k,i,f,s") ])
+    [
+        (AggregationsItem (ConstAgg (Var "i")) (LookupColumn "i"))
+        (AggregationsItem (ConstNotNullAgg (Var "f")) (LookupColumn "f"))
+        (AggregationsItem (AnyNotNullAgg (Var "s")) (LookupColumn "s"))
+    ]
+    [ (GroupingCols "k") ]
+)
+----
+scan a
+ ├── columns: k:1!null i:2!null f:3 s:4!null
+ ├── key: (1)
+ └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
+
+# Eliminate the GroupBy when the aggregate functions produce a new column.
+exprnorm expect=EliminateGroupBy
+(GroupBy
+    (Scan [ (Table "a") (Cols "k,i,f,s") ])
+    [
+        (AggregationsItem (ConstAgg (Var "i")) (NewColumn "i_agg" "int"))
+        (AggregationsItem (ConstNotNullAgg (Var "f")) (NewColumn "f_agg" "float"))
+        (AggregationsItem (AnyNotNullAgg (Var "s")) (NewColumn "s_agg" "string"))
+    ]
+    [ (GroupingCols "k") ]
+)
+----
+project
+ ├── columns: i_agg:8!null f_agg:9 s_agg:10!null k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(8-10), (8,10)-->(1,9), (8,9)~~>(1,10)
+ ├── scan a
+ │    ├── columns: k:1!null i:2!null f:3 s:4!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
+ └── projections
+      ├── i:2 [as=i_agg:8, outer=(2)]
+      ├── f:3 [as=f_agg:9, outer=(3)]
+      └── s:4 [as=s_agg:10, outer=(4)]
+
+# Eliminate the GroupBy when there is a compound key.
+exprnorm expect=EliminateGroupBy
+(GroupBy
+    (Scan [ (Table "a") (Cols "i,f,s,j") ])
+    [
+        (AggregationsItem (ConstAgg (Var "f")) (LookupColumn "f"))
+        (AggregationsItem (ConstNotNullAgg (Var "j")) (NewColumn "j_agg" "json"))
+    ]
+    [ (GroupingCols "i,s") ]
+)
+----
+project
+ ├── columns: j_agg:8 i:2!null f:3 s:4!null
+ ├── key: (2,4)
+ ├── fd: (2,4)-->(3,8), (2,3)~~>(4,8)
+ ├── scan a
+ │    ├── columns: i:2!null f:3 s:4!null j:5
+ │    ├── key: (2,4)
+ │    └── fd: (2,4)-->(3,5), (2,3)~~>(4,5)
+ └── projections
+      └── j:5 [as=j_agg:8, outer=(5)]
+
+# Eliminate unnecessary GroupBy generated during join decorrelation.
+norm expect=EliminateGroupBy
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM a WHERE k = x AND i = 1
+) THEN 'Y' ELSE 'N' END
+FROM xy
+WHERE y = 2
+----
+project
+ ├── columns: case:14!null
+ ├── left-join (hash)
+ │    ├── columns: x:1!null y:2!null k:5 true:15
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(5,15)
+ │    ├── select
+ │    │    ├── columns: x:1!null y:2!null
+ │    │    ├── key: (1)
+ │    │    ├── fd: ()-->(2)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:1!null y:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    └── filters
+ │    │         └── y:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+ │    ├── project
+ │    │    ├── columns: true:15!null k:5!null
+ │    │    ├── key: (5)
+ │    │    ├── fd: ()-->(15)
+ │    │    ├── select
+ │    │    │    ├── columns: k:5!null i:6!null
+ │    │    │    ├── key: (5)
+ │    │    │    ├── fd: ()-->(6)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:5!null i:6!null
+ │    │    │    │    ├── key: (5)
+ │    │    │    │    └── fd: (5)-->(6)
+ │    │    │    └── filters
+ │    │    │         └── i:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+ │    │    └── projections
+ │    │         └── true [as=true:15]
+ │    └── filters
+ │         └── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ └── projections
+      └── CASE WHEN true:15 IS NOT NULL THEN 'Y' ELSE 'N' END [as=case:14, outer=(15)]
+
+# Don't eliminate the GroupBy if there is an aggregate function other than
+# ConstAgg, ConstNotNullAgg, or AnyNotNullAgg.
+exprnorm expect-not=EliminateGroupBy
+(GroupBy
+    (Scan [ (Table "a") (Cols "k,i,f,s") ])
+    [
+        (AggregationsItem (Sum (Var "i")) (NewColumn "sum" "int"))
+        (AggregationsItem (ConstNotNullAgg (Var "f")) (NewColumn "f_agg" "float"))
+        (AggregationsItem (AnyNotNullAgg (Var "s")) (NewColumn "s_agg" "string"))
+    ]
+    [ (GroupingCols "k") ]
+)
+----
+group-by (hash)
+ ├── columns: k:1!null sum:8!null f_agg:9 s_agg:10!null
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(8-10)
+ ├── scan a
+ │    ├── columns: k:1!null i:2!null f:3 s:4!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
+ └── aggregations
+      ├── sum [as=sum:8, outer=(2)]
+      │    └── i:2
+      ├── const-not-null-agg [as=f_agg:9, outer=(3)]
+      │    └── f:3
+      └── any-not-null-agg [as=s_agg:10, outer=(4)]
+           └── s:4
+
+# Don't eliminate the GroupBy if the grouping columns do not form a key in the
+# input.
+exprnorm expect-not=EliminateGroupBy
+(GroupBy
+    (Scan [ (Table "a") (Cols "i,f,s") ])
+    [
+        (AggregationsItem (ConstNotNullAgg (Var "f")) (NewColumn "f_agg" "float"))
+        (AggregationsItem (AnyNotNullAgg (Var "s")) (NewColumn "s_agg" "string"))
+    ]
+    [ (GroupingCols "i") ]
+)
+----
+group-by (hash)
+ ├── columns: i:2!null f_agg:8 s_agg:9!null
+ ├── grouping columns: i:2!null
+ ├── key: (2)
+ ├── fd: (2)-->(8,9)
+ ├── scan a
+ │    ├── columns: i:2!null f:3 s:4!null
+ │    ├── key: (2,4)
+ │    └── fd: (2,4)-->(3), (2,3)~~>(4)
+ └── aggregations
+      ├── const-not-null-agg [as=f_agg:8, outer=(3)]
+      │    └── f:3
+      └── any-not-null-agg [as=s_agg:9, outer=(4)]
+           └── s:4
+
+# Don't eliminate the GroupBy if the grouping columns form a lax key.
+exprnorm expect-not=EliminateGroupBy
+(GroupBy
+    (Scan [ (Table "a") (Cols "i,f,s,j") ])
+    [
+        (AggregationsItem (ConstAgg (Var "s")) (LookupColumn "s"))
+        (AggregationsItem (ConstNotNullAgg (Var "j")) (NewColumn "j_agg" "json"))
+    ]
+    [ (GroupingCols "i,f") ]
+)
+----
+group-by (hash)
+ ├── columns: i:2!null f:3 s:4!null j_agg:8
+ ├── grouping columns: i:2!null f:3
+ ├── key: (2,4)
+ ├── fd: (2,4)-->(3,8), (2,3)-->(4,8)
+ ├── scan a
+ │    ├── columns: i:2!null f:3 s:4!null j:5
+ │    ├── key: (2,4)
+ │    └── fd: (2,4)-->(3,5), (2,3)~~>(4,5)
+ └── aggregations
+      ├── const-agg [as=s:4, outer=(4)]
+      │    └── s:4
+      └── const-not-null-agg [as=j_agg:8, outer=(5)]
+           └── j:5
+
+# --------------------------------------------------
 # EliminateGroupByProject
 # --------------------------------------------------
 norm expect=EliminateGroupByProject disable=ConvertUnionToDistinctUnionAll
@@ -1186,26 +1384,26 @@ ON CONFLICT (c1) DO UPDATE SET c3=1
 upsert nullablecols
  ├── arbiter indexes: nullablecols_c1_key
  ├── columns: <none>
- ├── canary column: rowid:25
- ├── fetch columns: c1:22 c2:23 c3:24 rowid:25
+ ├── canary column: rowid:26
+ ├── fetch columns: c1:23 c2:24 c3:25 rowid:26
  ├── insert-mapping:
  │    ├── i:8 => c1:1
  │    ├── i:8 => c2:2
  │    ├── i:8 => c3:3
  │    └── i:8 => rowid:4
  ├── update-mapping:
- │    └── upsert_c3:31 => c3:3
+ │    └── upsert_c3:32 => c3:3
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: upsert_c3:31!null i:8!null c1:22 c2:23 c3:24 rowid:25
-      ├── key: (8,25)
-      ├── fd: (25)-->(22-24), (22)~~>(23-25), (23,24)~~>(22,25), (8,25)-->(31)
+      ├── columns: upsert_c3:32!null i:8!null c1:23 c2:24 c3:25 rowid:26
+      ├── key: (8,26)
+      ├── fd: (26)-->(23-25), (23)~~>(24-26), (24,25)~~>(23,26), (8,26)-->(32)
       ├── left-join (hash)
-      │    ├── columns: i:8!null c1:22 c2:23 c3:24 rowid:25
+      │    ├── columns: i:8!null c1:23 c2:24 c3:25 rowid:26
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
-      │    ├── key: (8,25)
-      │    ├── fd: (25)-->(22-24), (22)~~>(23-25), (23,24)~~>(22,25)
+      │    ├── key: (8,26)
+      │    ├── fd: (26)-->(23-25), (23)~~>(24-26), (24,25)~~>(23,26)
       │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: i:8!null
       │    │    ├── grouping columns: i:8!null
@@ -1223,10 +1421,10 @@ upsert nullablecols
       │    │              ├── coalesce [subquery]
       │    │              │    ├── subquery
       │    │              │    │    └── project
-      │    │              │    │         ├── columns: column21:21!null
+      │    │              │    │         ├── columns: column22:22!null
       │    │              │    │         ├── cardinality: [0 - 1]
       │    │              │    │         ├── key: ()
-      │    │              │    │         ├── fd: ()-->(21)
+      │    │              │    │         ├── fd: ()-->(22)
       │    │              │    │         ├── limit
       │    │              │    │         │    ├── cardinality: [0 - 1]
       │    │              │    │         │    ├── key: ()
@@ -1234,17 +1432,17 @@ upsert nullablecols
       │    │              │    │         │    │    └── limit hint: 1.00
       │    │              │    │         │    └── 1
       │    │              │    │         └── projections
-      │    │              │    │              └── true [as=column21:21]
+      │    │              │    │              └── true [as=column22:22]
       │    │              │    └── false
       │    │              └── k:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
       │    ├── scan nullablecols
-      │    │    ├── columns: c1:22 c2:23 c3:24 rowid:25!null
-      │    │    ├── key: (25)
-      │    │    └── fd: (25)-->(22-24), (22)~~>(23-25), (23,24)~~>(22,25)
+      │    │    ├── columns: c1:23 c2:24 c3:25 rowid:26!null
+      │    │    ├── key: (26)
+      │    │    └── fd: (26)-->(23-25), (23)~~>(24-26), (24,25)~~>(23,26)
       │    └── filters
-      │         └── i:8 = c1:22 [outer=(8,22), constraints=(/8: (/NULL - ]; /22: (/NULL - ]), fd=(8)==(22), (22)==(8)]
+      │         └── i:8 = c1:23 [outer=(8,23), constraints=(/8: (/NULL - ]; /23: (/NULL - ]), fd=(8)==(23), (23)==(8)]
       └── projections
-           └── CASE WHEN rowid:25 IS NULL THEN i:8 ELSE 1 END [as=upsert_c3:31, outer=(8,25)]
+           └── CASE WHEN rowid:26 IS NULL THEN i:8 ELSE 1 END [as=upsert_c3:32, outer=(8,26)]
 
 # Don't eliminate project if it computes extra column(s).
 norm expect-not=EliminateGroupByProject

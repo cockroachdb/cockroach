@@ -23,7 +23,7 @@ error: pq: failed to satisfy CHECK constraint (a > 1:::INT8)
 sql-stats
  └── $ some app
       ├── [nodist] CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))
-      └── [failed,nodist] INSERT INTO _ SELECT _(ARRAY[_, _, __more1_10__])
+      └── [nodist] INSERT INTO _ SELECT _(ARRAY[_, __more__])
 
 # Verify statements are correctly separated by app.
 sql-stats
@@ -43,5 +43,5 @@ sql-stats
       ├── [nodist] CREATE TABLE _ (_ INT8, _ INT8)
       ├── [nodist] CREATE TABLE _ (_ INT8, _ INT8)
       ├── [nodist] CREATE TABLE _ (_ INT8, _ INT8)
-      ├── [nodist] INSERT INTO _ VALUES (_, _), (__more1_10__)
-      └── [nodist] SET application_name = '_'
+      ├── [nodist] INSERT INTO _ VALUES (_, __more__), (__more__)
+      └── [nodist] SET application_name = _

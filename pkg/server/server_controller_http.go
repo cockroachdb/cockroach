@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -98,20 +98,8 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 
 		log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 		// Clear session and tenant cookies since it appears they reference invalid state.
-		http.SetCookie(w, &http.Cookie{
-			Name:     authserver.SessionCookieName,
-			Value:    "",
-			Path:     "/",
-			HttpOnly: true,
-			Expires:  timeutil.Unix(0, 0),
-		})
-		http.SetCookie(w, &http.Cookie{
-			Name:     authserver.TenantSelectCookieName,
-			Value:    "",
-			Path:     "/",
-			HttpOnly: false,
-			Expires:  timeutil.Unix(0, 0),
-		})
+		http.SetCookie(w, authserver.CreateEmptySessionCookieWithImmediateExpiry(!c.disableTLSForHTTP))
+		http.SetCookie(w, authserver.CreateEmptyTenantSelectCookieWithImmediateExpiry(!c.disableTLSForHTTP))
 		// Fall back to serving requests from the default tenant. This helps us serve
 		// the root path along with static assets even when the browser contains invalid
 		// tenant names or sessions (common during development). Otherwise the user can
@@ -120,8 +108,20 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		defaultTenantName := roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&c.st.SV))
 		s, _, err = c.getServer(ctx, defaultTenantName)
 		if err != nil {
-			log.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
-			w.WriteHeader(http.StatusInternalServerError)
+			if log.V(1) {
+				// This could get triggered often if a customer has the default
+				// tenant set up but not active yet. Every DB Console HTTP
+				// request will go through this branch in that scenario.
+				log.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
+			}
+			sys, _, errSystem := c.getServer(ctx, catconstants.SystemTenantName)
+			if errSystem != nil {
+				log.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
+				log.Warningf(ctx, "unable to find server for system tenant: %v", errSystem)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			sys.getHTTPHandlerFn()(w, r)
 			return
 		}
 		s.getHTTPHandlerFn()(w, r)
@@ -231,13 +231,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 		// for any of the tenants.
 		if len(tenantNameToSetCookieSlice) > 0 {
 			sessionsStr := authserver.CreateAggregatedSessionCookieValue(tenantNameToSetCookieSlice)
-			cookie := http.Cookie{
-				Name:     authserver.SessionCookieName,
-				Value:    sessionsStr,
-				Path:     "/",
-				HttpOnly: false,
-			}
-			http.SetCookie(w, &cookie)
+			http.SetCookie(w, authserver.CreateSessionCookie(sessionsStr, !c.disableTLSForHTTP /* forHTTPSOnly */))
 			// The tenant cookie needs to be set at some point in order for
 			// the dropdown to have a current selection on first load.
 
@@ -252,13 +246,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 					break
 				}
 			}
-			cookie = http.Cookie{
-				Name:     authserver.TenantSelectCookieName,
-				Value:    tenantSelection,
-				Path:     "/",
-				HttpOnly: false,
-			}
-			http.SetCookie(w, &cookie)
+			http.SetCookie(w, authserver.CreateTenantSelectCookie(tenantSelection, !c.disableTLSForHTTP /* forHTTPSOnly */))
 			if r.Header.Get(AcceptHeader) == JSONContentType {
 				w.Header().Add(ContentTypeHeader, JSONContentType)
 				_, err = w.Write([]byte("{}"))
@@ -349,22 +337,9 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			}
 		}
 		// Clear session and tenant cookies after all logouts have completed.
-		cookie := http.Cookie{
-			Name:     authserver.SessionCookieName,
-			Value:    "",
-			Path:     "/",
-			HttpOnly: false,
-			Expires:  timeutil.Unix(0, 0),
-		}
-		http.SetCookie(w, &cookie)
-		cookie = http.Cookie{
-			Name:     authserver.TenantSelectCookieName,
-			Value:    "",
-			Path:     "/",
-			HttpOnly: false,
-			Expires:  timeutil.Unix(0, 0),
-		}
-		http.SetCookie(w, &cookie)
+		http.SetCookie(w, authserver.CreateEmptySessionCookieWithImmediateExpiry(!c.disableTLSForHTTP /* forHTTPSOnly */))
+		http.SetCookie(w, authserver.CreateEmptyTenantSelectCookieWithImmediateExpiry(!c.disableTLSForHTTP /* forHTTPSOnly */))
+
 		if r.Header.Get(AcceptHeader) == JSONContentType {
 			w.Header().Add(ContentTypeHeader, JSONContentType)
 			_, err = w.Write([]byte("{}"))

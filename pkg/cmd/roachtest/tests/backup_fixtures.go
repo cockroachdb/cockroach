@@ -118,7 +118,7 @@ type backupFixtureSpecs struct {
 }
 
 func (bf *backupFixtureSpecs) initTestName() {
-	bf.testName = "backupFixture/" + bf.scheduledBackupSpecs.workload.String() + "/" + bf.scheduledBackupSpecs.cloud
+	bf.testName = fmt.Sprintf("backupFixture/%s/revision-history=%t/%s", bf.scheduledBackupSpecs.workload.String(), !bf.scheduledBackupSpecs.nonRevisionHistory, bf.scheduledBackupSpecs.cloud)
 }
 
 func makeBackupDriver(t test.Test, c cluster.Cluster, sp backupFixtureSpecs) backupDriver {
@@ -154,14 +154,14 @@ func (bd *backupDriver) prepareCluster(ctx context.Context) {
 
 	require.NoError(bd.t, clusterupgrade.StartWithSettings(ctx, bd.t.L(), bd.c,
 		bd.sp.hardware.getCRDBNodes(),
-		option.DefaultStartOptsNoBackups(),
+		option.NewStartOpts(option.NoBackupSchedule),
 		install.BinaryOption(binaryPath)))
 
 	bd.assertCorrectCockroachBinary(ctx)
 	if !bd.sp.scheduledBackupSpecs.ignoreExistingBackups {
 		// This check allows the roachtest to fail fast, instead of when the
 		// scheduled backup cmd is issued.
-		require.False(bd.t, bd.checkForExistingBackupCollection(ctx))
+		require.False(bd.t, bd.checkForExistingBackupCollection(ctx), fmt.Sprintf("existing backup in collection %s", bd.sp.scheduledBackupSpecs.backupCollection()))
 	}
 }
 
@@ -268,6 +268,52 @@ func registerBackupFixtures(r registry.Registry) {
 			},
 			skip:   "only for fixture generation",
 			suites: registry.Suites(registry.Nightly),
+		},
+		{
+			// 400GB backup fixture, no revision history, with 48 incremental layers.
+			// This will used by the online restore roachtests. During 24.2
+			// development, we can use it to enable OR of incremental backups.
+			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
+			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
+				backupSpecs: backupSpecs{
+					version:            fixtureFromMasterVersion,
+					nonRevisionHistory: true,
+				},
+			}),
+			timeout: 5 * time.Hour,
+			initWorkloadViaRestore: &restoreSpecs{
+				backup: backupSpecs{
+					version:           fixtureFromMasterVersion,
+					numBackupsInChain: 48,
+				},
+				restoreUptoIncremental: 12,
+			},
+			skip:   "only for fixture generation",
+			suites: registry.Suites(registry.Nightly),
+		},
+		{
+			// 8TB backup fixture, no revision history, with 48 incremental layers.
+			// This will used by the online restore roachtests. During 24.2
+			// development, we can use it to enable OR of incremental backups.
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 1500, workloadNode: true}),
+			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
+				backupSpecs: backupSpecs{
+					version:            fixtureFromMasterVersion,
+					nonRevisionHistory: true,
+					workload:           tpceRestore{customers: 500000},
+				},
+			}),
+			timeout: 23 * time.Hour,
+			initWorkloadViaRestore: &restoreSpecs{
+				backup: backupSpecs{
+					version:            "v23.1.11",
+					numBackupsInChain:  48,
+					nonRevisionHistory: true,
+				},
+				restoreUptoIncremental: 12,
+			},
+			skip:   "only for fixture generation",
+			suites: registry.Suites(registry.Weekly),
 		},
 		{
 			// 15 GB backup fixture with 48 incremental layers. This is used by

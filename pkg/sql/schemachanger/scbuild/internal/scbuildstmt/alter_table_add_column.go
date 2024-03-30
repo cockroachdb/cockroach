@@ -49,7 +49,6 @@ func alterTableAddColumn(
 	// throw an unsupported error.
 	fallBackIfSubZoneConfigExists(b, t, tbl.TableID)
 	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
-	fallBackIfVirtualColumnWithNotNullConstraint(t)
 	// Version gates functionally that is implemented after the statement is
 	// publicly published.
 	fallbackIfAddColDropColAlterPKInOneAlterTableStmtBeforeV232(b, tbl.TableID, t)
@@ -335,12 +334,6 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 	addColumnIgnoringNotNull := func(
 		b BuildCtx, spec addColumnSpec, n tree.NodeFormatter,
 	) (backing *scpb.PrimaryIndex) {
-		if spec.def == nil && spec.colType.ComputeExpr == nil && spec.notNull && spec.unique {
-			panic(scerrors.NotImplementedErrorf(n,
-				"`ADD COLUMN NOT NULL UNIQUE` is problematic with "+
-					"concurrent insert. See issue #90174"))
-		}
-
 		b.Add(spec.col)
 		if spec.fam != nil {
 			b.Add(spec.fam)

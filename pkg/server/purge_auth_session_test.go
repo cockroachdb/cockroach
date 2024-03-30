@@ -89,7 +89,7 @@ VALUES($1, $2, $3, $4, (SELECT user_id FROM system.users WHERE username = $2))
 				ctx,
 				"add-session",
 				nil, /* txn */
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				insertSessionStmt,
 				hashedSecret,
 				userName.Normalized(),

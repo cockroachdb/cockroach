@@ -176,7 +176,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
            ├── 9 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT           Column:{DescID: 104 (t), ColumnID: 3 (k-)}
            │    ├── PUBLIC      → ABSENT           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (k-)}
-           │    ├── PUBLIC      → ABSENT           ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 3 (k-)}
+           │    ├── PUBLIC      → ABSENT           ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 3 (k-), Expr: 32:::INT8}
            │    ├── PUBLIC      → ABSENT           ColumnOnUpdateExpression:{DescID: 104 (t), ColumnID: 3 (k-)}
            │    ├── DELETE_ONLY → ABSENT           Column:{DescID: 104 (t), ColumnID: 2 (j-)}
            │    ├── PUBLIC      → ABSENT           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j-)}

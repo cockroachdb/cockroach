@@ -198,7 +198,20 @@ func (b *Builder) finishBuildGeneratorFunction(
 	lastAlias := inScope.alias
 	if def.ReturnsRecordType {
 		if lastAlias == nil {
-			panic(pgerror.New(pgcode.Syntax, "a column definition list is required for functions returning \"record\""))
+			var numOutParams int
+			for _, param := range def.RoutineParams {
+				if param.IsOutParam() {
+					numOutParams++
+				}
+				if numOutParams == 2 {
+					break
+				}
+			}
+			// If we have at least two OUT parameters, they specify an implicit
+			// alias for the RECORD return type.
+			if numOutParams < 2 {
+				panic(pgerror.New(pgcode.Syntax, "a column definition list is required for functions returning \"record\""))
+			}
 		}
 	} else if lastAlias != nil {
 		// Non-record type return with a table alias that includes types is not

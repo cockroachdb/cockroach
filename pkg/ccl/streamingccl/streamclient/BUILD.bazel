@@ -56,10 +56,6 @@ go_test(
         "span_config_stream_client_test.go",
     ],
     embed = [":streamclient"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     tags = [
         "ccl_test",
         "no-remote-exec",
@@ -84,6 +80,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/testutils",
+        "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

@@ -108,7 +108,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		}
 	}
 
-	if err := d.resolveCollectedObjects(ctx, p); err != nil {
+	if err := d.resolveCollectedObjects(ctx, true /*dropDatabase*/, p); err != nil {
 		return nil, err
 	}
 
@@ -218,7 +218,6 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	// TODO(jeffswenson): delete once region_livess is implemented (#107966)
 	if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
 		return err
 	}

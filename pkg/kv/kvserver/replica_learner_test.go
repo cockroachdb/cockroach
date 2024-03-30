@@ -950,7 +950,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	scratchStartKey := tc.ScratchRange(t)
 	g, ctx := errgroup.WithContext(ctx)
 
-	metrics := []string{".rebalancing", ".recovery", ".unknown", ""}
+	metrics := []string{".rebalancing", ".recovery", ""}
 	// Record the snapshot metrics before anything has been sent / received.
 	senderMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */, metrics)
 	receiverMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */, metrics)
@@ -1021,7 +1021,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	// snapshot being sent.
 	<-blockUntilSnapshotSendCh
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-	snapshotLength, err := getExpectedSnapshotSizeBytes(ctx, store, repl, kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE)
+	snapshotLength, err := getExpectedSnapshotSizeBytes(ctx, store, repl)
 	require.NoError(t, err)
 
 	close(blockSnapshotSendCh)
@@ -1037,7 +1037,6 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	senderMapExpected := map[string]snapshotBytesMetrics{
 		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
 		".recovery":    {sentBytes: snapshotLength, rcvdBytes: 0},
-		".unknown":     {sentBytes: 0, rcvdBytes: 0},
 		"":             {sentBytes: snapshotLength, rcvdBytes: 0},
 	}
 	require.Equal(t, senderMapExpected, senderMapDelta)
@@ -1053,7 +1052,6 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	receiverMapExpected := map[string]snapshotBytesMetrics{
 		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
 		".recovery":    {sentBytes: 0, rcvdBytes: snapshotLength},
-		".unknown":     {sentBytes: 0, rcvdBytes: 0},
 		"":             {sentBytes: 0, rcvdBytes: snapshotLength},
 	}
 	require.Equal(t, receiverMapExpected, receiverMapDelta)
@@ -1270,7 +1268,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	{
 		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-		store.SetReplicateQueueActive(true)
+		store.TestingSetReplicateQueueActive(true)
 		trace, processErr, err := store.Enqueue(
 			ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 		)
@@ -1291,14 +1289,14 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 			return nil
 		})
 		// It has done everything it needs to do now, disable before the next test section.
-		store.SetReplicateQueueActive(false)
+		store.TestingSetReplicateQueueActive(false)
 	}
 
 	// Create a VOTER_OUTGOING, i.e. a joint configuration.
 	ltk.withStopAfterJointConfig(func() {
 		desc := tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(2))
 		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
-		store.SetReplicateQueueActive(true)
+		store.TestingSetReplicateQueueActive(true)
 		trace, processErr, err := store.Enqueue(
 			ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 		)
@@ -1314,7 +1312,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 			}
 			return nil
 		})
-		store.SetReplicateQueueActive(false)
+		store.TestingSetReplicateQueueActive(false)
 	})
 }
 
@@ -1367,9 +1365,6 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "probable OOM")
-
 	ctx := context.Background()
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
@@ -2221,10 +2216,7 @@ func getSnapshotMetricsDiff(
 // NB: This calculation assumes the snapshot size is less than
 // `kv.snapshot_sender.batch_size` and will fit in a single storage.Batch.
 func getExpectedSnapshotSizeBytes(
-	ctx context.Context,
-	originStore *kvserver.Store,
-	originRepl *kvserver.Replica,
-	snapType kvserverpb.SnapshotRequest_Type,
+	ctx context.Context, originStore *kvserver.Store, originRepl *kvserver.Replica,
 ) (int64, error) {
 	snap, err := originRepl.GetSnapshot(ctx, uuid.MakeV4())
 	if err != nil {
@@ -2360,7 +2352,7 @@ func TestRebalancingAndCrossRegionZoneSnapshotMetrics(t *testing.T) {
 		// changeReplicaFn and the snapshot being sent.
 		<-blockUntilSnapshotSendCh
 		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-		snapshotLength, err := getExpectedSnapshotSizeBytes(ctx, store, repl, kvserverpb.SnapshotRequest_INITIAL)
+		snapshotLength, err := getExpectedSnapshotSizeBytes(ctx, store, repl)
 		require.NoError(t, err)
 
 		close(blockSnapshotSendCh)
@@ -2370,7 +2362,7 @@ func TestRebalancingAndCrossRegionZoneSnapshotMetrics(t *testing.T) {
 		return snapshotLength
 	}
 
-	metrics := []string{".rebalancing", ".recovery", ".unknown", ".cross-region", ".cross-zone", ""}
+	metrics := []string{".rebalancing", ".recovery", ".cross-region", ".cross-zone", ""}
 	// Record the snapshot metrics before anything has been sent / received.
 	senderBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */, metrics)
 	firstReceiverBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */, metrics)
@@ -2394,7 +2386,6 @@ func TestRebalancingAndCrossRegionZoneSnapshotMetrics(t *testing.T) {
 		senderExpected := map[string]snapshotBytesMetrics{
 			".rebalancing": {sentBytes: totalSnapshotLength, rcvdBytes: 0},
 			".recovery":    {sentBytes: 0, rcvdBytes: 0},
-			".unknown":     {sentBytes: 0, rcvdBytes: 0},
 			// The first snapshot was sent from server0 to server1, so it is
 			// cross-region.
 			".cross-region": {sentBytes: firstSnapshotLength, rcvdBytes: 0},
@@ -2414,7 +2405,6 @@ func TestRebalancingAndCrossRegionZoneSnapshotMetrics(t *testing.T) {
 		firstReceiverExpected := map[string]snapshotBytesMetrics{
 			".rebalancing": {sentBytes: 0, rcvdBytes: firstSnapshotLength},
 			".recovery":    {sentBytes: 0, rcvdBytes: 0},
-			".unknown":     {sentBytes: 0, rcvdBytes: 0},
 			// The first snapshot was sent from server0 to server1, so it is
 			// cross-region.
 			".cross-region": {sentBytes: 0, rcvdBytes: firstSnapshotLength},
@@ -2432,7 +2422,6 @@ func TestRebalancingAndCrossRegionZoneSnapshotMetrics(t *testing.T) {
 		secReceiverExpected := map[string]snapshotBytesMetrics{
 			".rebalancing": {sentBytes: 0, rcvdBytes: secSnapshotLength},
 			".recovery":    {sentBytes: 0, rcvdBytes: 0},
-			".unknown":     {sentBytes: 0, rcvdBytes: 0},
 			// The second snapshot was sent from server0 to server2, so it is
 			// cross-zone within same region.
 			".cross-region": {sentBytes: 0, rcvdBytes: 0},

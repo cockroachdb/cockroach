@@ -17,6 +17,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/optional",
         "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
@@ -33,10 +34,6 @@ go_test(
         "utils_test.go",
     ],
     embed = [":execstats"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/kv/kvpb",

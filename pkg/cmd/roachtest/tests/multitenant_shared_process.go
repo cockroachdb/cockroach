@@ -27,7 +27,7 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:             "multitenant/shared-process/basic",
-		Owner:            registry.OwnerMultiTenant,
+		Owner:            registry.OwnerDisasterRecovery,
 		Cluster:          r.MakeClusterSpec(crdbNodeCount + 1),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
@@ -44,11 +44,11 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 
 			// In order to observe the app tenant's db console, create a secure
 			// cluster and add Admin roles to the system and app tenant.
-			clusterSettings := install.MakeClusterSettings(install.SecureOption(true))
+			clusterSettings := install.MakeClusterSettings()
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), clusterSettings, crdbNodes)
 
-			startOpts := option.DefaultStartSharedVirtualClusterOpts(appTenantName)
-			c.StartServiceForVirtualCluster(ctx, t.L(), crdbNodes, startOpts, clusterSettings, crdbNodes)
+			startOpts := option.StartSharedVirtualClusterOpts(appTenantName)
+			c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, clusterSettings)
 
 			t.Status(`initialize tpcc workload`)
 			initCmd := fmt.Sprintf(`./workload init tpcc --data-loader import --warehouses %d {pgurl%s:%s}`,

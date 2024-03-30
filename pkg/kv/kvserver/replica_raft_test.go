@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -43,7 +44,6 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/tracker"
 )
 
 func TestLastUpdateTimesMap(t *testing.T) {
@@ -103,6 +103,8 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 				numEntriesProcessed:      2,
 				numEntriesProcessedBytes: 3,
 				numEmptyEntries:          5,
+				numAddSST:                3,
+				numAddSSTCopies:          1,
 			},
 			stateAssertions:      4,
 			numConfChangeEntries: 6,

@@ -31,8 +31,8 @@ define Subquery {
 }
 
 # SubqueryPrivate contains information related to a subquery (Subquery, Any,
-# Exists). It is shared between the operators so that the same rules can be used
-# across all the subquery operators.
+# Exists). It is shared between the Subquery and Any operators so that the same
+# rules can be used across both expressions.
 [Private]
 define SubqueryPrivate {
     OriginalExpr Subquery
@@ -49,11 +49,6 @@ define SubqueryPrivate {
 
     # Cmp is only used for AnyOp.
     Cmp Operator
-
-    # WasLimited indicates a limit was applied "under" the subquery to
-    # restrict how many rows are fetched to determine the result.  See
-    # e.g. the rule IntroduceExistsLimit.
-    WasLimited bool
 }
 
 # Any is a SQL operator that applies a comparison to every row of an input
@@ -88,6 +83,18 @@ define Any {
 [Scalar, Bool]
 define Exists {
     Input RelExpr
+    _ ExistsPrivate
+}
+
+# ExistsPrivate contains information related to an Exists subquery.
+[Private]
+define ExistsPrivate {
+    # LazyEvalProjectionCol is used when the Exists is planned as a
+    # lazily-evaluated routine (see execbuilder.Builder.buildExistsSubquery).
+    # The decision to execute the Exists lazily is not made until
+    # execbuilder-time, so all Exists expressions are assigned a column during
+    # optimization.
+    LazyEvalProjectionCol ColumnID
     _ SubqueryPrivate
 }
 
@@ -1016,6 +1023,11 @@ define JsonbObjectAgg {
 }
 
 [Scalar, Aggregate]
+define MergeAggregatedStmtMetadata {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
 define MergeStatsMetadata {
     Input ScalarExpr
 }
@@ -1260,11 +1272,38 @@ define UDFCall {
 define UDFCallPrivate {
     # Def points to the UDF SQL body.
     Def UDFDefinition
+}
 
-    # TailCall indicates whether the UDF is in tail-call position, meaning that
-    # it is nested in a parent routine which will not perform any additional
-    # processing once this call is evaluated.
-    TailCall bool
+# TxnControl allows PL/pgSQL stored procedures to pause their execution, commit
+# or rollback the current transaction, and then continue execution in the new
+# transaction.
+[Scalar]
+define TxnControl {
+    # Args contains the scalar expressions given as arguments to the
+    # "continuation" stored procedure invocation.
+    Args ScalarListExpr
+    _ TxnControlPrivate
+}
+
+[Private]
+define TxnControlPrivate {
+    # TxnOp indicates whether the current transaction should be committed or
+    # aborted.
+    TxnOp StoredProcTxnOp
+
+    # TxnModes allows SET TRANSACTION statements to apply to the new transaction
+    # that follows the COMMIT/ROLLBACK.
+    TxnModes TransactionModes
+
+    # Props is used when building the plan for the continuation SP.
+    Props PhysProps
+
+    # OutCols is used when building the plan for the continuation SP.
+    OutCols ColList
+
+    # Def stores the procedure that will resume execution of the parent SP in
+    # the new transaction.
+    Def UDFDefinition
 }
 
 # KVOptions is a set of KVOptionItems that specify arbitrary keys and values

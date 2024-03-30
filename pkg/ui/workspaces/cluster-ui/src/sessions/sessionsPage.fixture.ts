@@ -51,6 +51,8 @@ export const idleSession: SessionInfo = {
     txn_fingerprint_ids: [],
     status: Status.IDLE,
     pg_backend_pid: 123,
+    trace_id: Long.fromNumber(123),
+    goroutine_id: Long.fromNumber(456),
   },
 };
 
@@ -91,6 +93,8 @@ export const idleTransactionSession: SessionInfo = {
     txn_fingerprint_ids: [],
     status: Status.IDLE,
     pg_backend_pid: 123,
+    trace_id: Long.fromNumber(123),
+    goroutine_id: Long.fromNumber(456),
   },
 };
 
@@ -145,6 +149,8 @@ export const activeSession: SessionInfo = {
     num_txns_executed: 1,
     txn_fingerprint_ids: [],
     pg_backend_pid: 123,
+    trace_id: Long.fromNumber(123),
+    goroutine_id: Long.fromNumber(456),
   },
 };
 
@@ -172,6 +178,8 @@ export const closedSession: SessionInfo = {
     num_txns_executed: 1,
     txn_fingerprint_ids: [],
     pg_backend_pid: 123,
+    trace_id: Long.fromNumber(123),
+    goroutine_id: Long.fromNumber(456),
   },
 };
 

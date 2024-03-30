@@ -88,6 +88,14 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 	return newKVAccessor(k.db, k.ie, k.settings, k.clock, k.configurationsTableFQN, k.knobs, txn)
 }
 
+// WithISQLTxn is part of the KVAccessor interface.
+func (k *KVAccessor) WithISQLTxn(ctx context.Context, txn isql.Txn) spanconfig.KVAccessor {
+	if k.optionalTxn != nil {
+		log.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithISQLTxn(...) chained multiple times?)")
+	}
+	return newKVAccessor(txn.KV().DB(), txn, k.settings, k.clock, k.configurationsTableFQN, k.knobs, txn.KV())
+}
+
 // GetAllSystemSpanConfigsThatApply is part of the spanconfig.KVAccessor
 // interface.
 func (k *KVAccessor) GetAllSystemSpanConfigsThatApply(
@@ -222,7 +230,7 @@ func (k *KVAccessor) getSpanConfigRecordsWithTxn(
 		targetsBatch := targets[startIdx:endIdx]
 		getStmt, getQueryArgs := k.constructGetStmtAndArgs(targetsBatch)
 		it, err := k.ie.QueryIteratorEx(ctx, "get-span-cfgs", txn,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			getStmt, getQueryArgs...,
 		)
 		if err != nil {
@@ -308,7 +316,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			toDeleteBatch := toDelete[startIdx:endIdx]
 			deleteStmt, deleteQueryArgs := k.constructDeleteStmtAndArgs(toDeleteBatch)
 			n, err := k.ie.ExecEx(ctx, "delete-span-cfgs", txn,
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				deleteStmt, deleteQueryArgs...,
 			)
 			if err != nil {
@@ -334,7 +342,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			return err
 		}
 		if n, err := k.ie.ExecEx(ctx, "upsert-span-cfgs", txn,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			upsertStmt, upsertQueryArgs...,
 		); err != nil {
 			return err
@@ -344,7 +352,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 
 		validationStmt, validationQueryArgs := k.constructValidationStmtAndArgs(toUpsertBatch)
 		if datums, err := k.ie.QueryRowEx(ctx, "validate-span-cfgs", txn,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			validationStmt, validationQueryArgs...,
 		); err != nil {
 			return err

@@ -31,7 +31,6 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/startup",
-        "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
@@ -45,10 +44,6 @@ go_test(
         "main_test.go",
         "manager_external_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":upgrademanager",
         "//pkg/base",

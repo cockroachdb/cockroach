@@ -30,7 +30,7 @@ func TestBuffer(t *testing.T) {
 
 	ctx := context.Background()
 	const limit = 25
-	buffer := rangefeedbuffer.New(limit)
+	buffer := rangefeedbuffer.New[*testEvent](limit)
 
 	{ // Sanity check the newly initialized rangefeed buffer.
 		events := buffer.Flush(ctx, ts(0))
@@ -62,16 +62,16 @@ func TestBuffer(t *testing.T) {
 		events := buffer.Flush(ctx, ts(14))
 
 		require.True(t, len(events) == 3)
-		require.Equal(t, events[0].(*testEvent).data, "b") // b@11
-		require.Equal(t, events[1].(*testEvent).data, "d") // d@12
-		require.Equal(t, events[2].(*testEvent).data, "a") // a@13
+		require.Equal(t, events[0].data, "b") // b@11
+		require.Equal(t, events[1].data, "d") // d@12
+		require.Equal(t, events[2].data, "a") // a@13
 	}
 
 	{ // Incremental advances should only surface the events until the given timestamp.
 		events := buffer.Flush(ctx, ts(15))
 
 		require.True(t, len(events) == 1)
-		require.Equal(t, events[0].(*testEvent).data, "c") // c@15
+		require.Equal(t, events[0].data, "c") // c@15
 	}
 
 	{ // Adding events with timestamps <= the last flush are discarded.
@@ -90,14 +90,14 @@ func TestBuffer(t *testing.T) {
 
 		events := buffer.Flush(ctx, ts(20))
 		require.True(t, len(events) == 2)
-		require.Equal(t, events[0].(*testEvent).data, "e") // e@18
-		require.Equal(t, events[1].(*testEvent).data, "f") // f@19
+		require.Equal(t, events[0].data, "e") // e@18
+		require.Equal(t, events[1].data, "f") // f@19
 	}
 
 	{ // Ensure that a timestamp greater than any previous event flushes everything.
 		events := buffer.Flush(ctx, ts(100))
 		require.True(t, len(events) == 1)
-		require.Equal(t, events[0].(*testEvent).data, "g") // g@21
+		require.Equal(t, events[0].data, "g") // g@21
 	}
 
 	{ // Sanity check that there are no events left over.
@@ -138,6 +138,6 @@ func (t *testEvent) Timestamp() hlc.Timestamp {
 
 var _ rangefeedbuffer.Event = &testEvent{}
 
-func makeEvent(data string, ts hlc.Timestamp) rangefeedbuffer.Event {
+func makeEvent(data string, ts hlc.Timestamp) *testEvent {
 	return &testEvent{data: data, ts: ts}
 }

@@ -13,11 +13,8 @@ package sql
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -41,140 +38,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v2"
 )
-
-type optionValue struct {
-	inheritValue  bool
-	explicitValue tree.TypedExpr
-}
 
 type setZoneConfigNode struct {
 	zoneSpecifier tree.ZoneSpecifier
 	allIndexes    bool
 	yamlConfig    tree.TypedExpr
-	options       map[tree.Name]optionValue
+	options       map[tree.Name]zone.OptionValue
 	setDefault    bool
 
 	run setZoneConfigRun
-}
-
-// zoneConfigOption describes a field one can set on a ZoneConfig.
-type zoneConfigOption struct {
-	field        config.Field
-	requiredType *types.T
-	setter       func(*zonepb.ZoneConfig, tree.Datum)
-	checkAllowed func(context.Context, *ExecutorConfig, tree.Datum) error
-}
-
-// supportedZoneConfigOptions indicates how to translate SQL variable
-// assignments in ALTER CONFIGURE ZONE to assignments to the member
-// fields of zonepb.ZoneConfig.
-var supportedZoneConfigOptions map[tree.Name]zoneConfigOption
-
-// zoneOptionKeys contains the keys from suportedZoneConfigOptions in
-// deterministic order. Needed to make the event log output
-// deterministic.
-var zoneOptionKeys []string
-
-func init() {
-	opts := []zoneConfigOption{
-		{
-			field:        config.RangeMinBytes,
-			requiredType: types.Int,
-			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) },
-		},
-		{
-			field:        config.RangeMaxBytes,
-			requiredType: types.Int,
-			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) },
-		},
-		{
-			field:        config.GlobalReads,
-			requiredType: types.Bool,
-			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.GlobalReads = proto.Bool(bool(tree.MustBeDBool(d))) },
-			checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, d tree.Datum) error {
-				if !tree.MustBeDBool(d) {
-					// Always allow the value to be unset.
-					return nil
-				}
-				return base.CheckEnterpriseEnabled(
-					execCfg.Settings,
-					"global_reads",
-				)
-			},
-		},
-		{
-			field:        config.NumReplicas,
-			requiredType: types.Int,
-			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) },
-		},
-		{
-			field:        config.NumVoters,
-			requiredType: types.Int,
-			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumVoters = proto.Int32(int32(tree.MustBeDInt(d))) },
-		},
-		{
-			field:        config.GCTTL,
-			requiredType: types.Int,
-			setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-				c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
-			},
-		},
-		{
-			field:        config.Constraints,
-			requiredType: types.String,
-			setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-				constraintsList := zonepb.ConstraintsList{
-					Constraints: c.Constraints,
-					Inherited:   c.InheritedConstraints,
-				}
-				loadYAML(&constraintsList, string(tree.MustBeDString(d)))
-				c.Constraints = constraintsList.Constraints
-				c.InheritedConstraints = false
-			},
-		},
-		{
-			field:        config.VoterConstraints,
-			requiredType: types.String,
-			setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-				voterConstraintsList := zonepb.ConstraintsList{
-					Constraints: c.VoterConstraints,
-					Inherited:   c.InheritedVoterConstraints(),
-				}
-				loadYAML(&voterConstraintsList, string(tree.MustBeDString(d)))
-				c.VoterConstraints = voterConstraintsList.Constraints
-				c.NullVoterConstraintsIsEmpty = true
-			},
-		},
-		{
-			field:        config.LeasePreferences,
-			requiredType: types.String,
-			setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-				loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
-				c.InheritedLeasePreferences = false
-			},
-		},
-	}
-	supportedZoneConfigOptions = make(map[tree.Name]zoneConfigOption, len(opts))
-	zoneOptionKeys = make([]string, len(opts))
-	for i, opt := range opts {
-		name := opt.field.String()
-		key := tree.Name(name)
-		if _, exists := supportedZoneConfigOptions[key]; exists {
-			panic(errors.AssertionFailedf("duplicate entry for key %s", name))
-		}
-		supportedZoneConfigOptions[key] = opt
-		zoneOptionKeys[i] = name
-	}
-	sort.Strings(zoneOptionKeys)
-}
-
-func loadYAML(dst interface{}, yamlString string) {
-	if err := yaml.UnmarshalStrict([]byte(yamlString), dst); err != nil {
-		panic(err)
-	}
 }
 
 func (p *planner) getUpdatedZoneConfigYamlConfig(
@@ -190,7 +64,7 @@ func (p *planner) getUpdatedZoneConfigYamlConfig(
 
 		var err error
 		yamlConfig, err = p.analyzeExpr(
-			ctx, n, nil, tree.IndexedVarHelper{}, types.String, false /*requireType*/, "configure zone")
+			ctx, n, tree.IndexedVarHelper{}, types.String, false /*requireType*/, "configure zone")
 		if err != nil {
 			return nil, err
 		}
@@ -210,21 +84,21 @@ func (p *planner) getUpdatedZoneConfigYamlConfig(
 
 func (p *planner) getUpdatedZoneConfigOptions(
 	ctx context.Context, n tree.KVOptions, telemetryName string,
-) (map[tree.Name]optionValue, error) {
+) (map[tree.Name]zone.OptionValue, error) {
 
-	var options map[tree.Name]optionValue
+	var options map[tree.Name]zone.OptionValue
 	if n != nil {
 		// We have a CONFIGURE ZONE USING ... assignment.
 		// Here we are constrained by the supported ZoneConfig fields,
 		// as described by supportedZoneConfigOptions above.
 
-		options = make(map[tree.Name]optionValue)
+		options = make(map[tree.Name]zone.OptionValue)
 		for _, opt := range n {
 			if _, alreadyExists := options[opt.Key]; alreadyExists {
 				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"duplicate zone config parameter: %q", tree.ErrString(&opt.Key))
 			}
-			req, ok := supportedZoneConfigOptions[opt.Key]
+			req, ok := zone.SupportedZoneConfigOptions[opt.Key]
 			if !ok {
 				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
@@ -236,15 +110,15 @@ func (p *planner) getUpdatedZoneConfigOptions(
 				),
 			)
 			if opt.Value == nil {
-				options[opt.Key] = optionValue{inheritValue: true, explicitValue: nil}
+				options[opt.Key] = zone.OptionValue{InheritValue: true, ExplicitValue: nil}
 				continue
 			}
 			valExpr, err := p.analyzeExpr(
-				ctx, opt.Value, nil, tree.IndexedVarHelper{}, req.requiredType, true /*requireType*/, string(opt.Key))
+				ctx, opt.Value, tree.IndexedVarHelper{}, req.RequiredType, true /*requireType*/, string(opt.Key))
 			if err != nil {
 				return nil, err
 			}
-			options[opt.Key] = optionValue{inheritValue: false, explicitValue: valExpr}
+			options[opt.Key] = zone.OptionValue{InheritValue: false, ExplicitValue: valExpr}
 		}
 	}
 	return options, nil
@@ -301,11 +175,11 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 	// an admin. Otherwise we require CREATE privileges on the database or table
 	// in question.
 	if zs.NamedZone != "" {
-		return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA)
+		return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER)
 	}
 	if zs.Database != "" {
 		if zs.Database == "system" {
-			return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA)
+			return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER)
 		}
 		dbDesc, err := p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, string(zs.Database))
 		if err != nil {
@@ -319,9 +193,8 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 			return nil
 		}
 
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"user %s does not have %s or %s privilege on %s %s",
-			p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, dbDesc.DescriptorType(), dbDesc.GetName())
+		return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(p.SessionData().User(),
+			[]privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}, string(dbDesc.DescriptorType()), dbDesc.GetName())
 	}
 	tableDesc, err := p.resolveTableForZone(ctx, &zs)
 	if err != nil {
@@ -331,7 +204,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 		return err
 	}
 	if tableDesc.GetParentID() == keys.SystemDatabaseID {
-		return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA)
+		return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER)
 	}
 
 	// Can set ZoneConfig if user has either CREATE privilege or ZONECONFIG privilege at the Table level
@@ -342,9 +215,8 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 		return nil
 	}
 
-	return pgerror.Newf(pgcode.InsufficientPrivilege,
-		"user %s does not have %s or %s privilege on %s %s",
-		p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, tableDesc.DescriptorType(), tableDesc.GetName())
+	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(p.SessionData().User(),
+		[]privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}, string(tableDesc.DescriptorType()), tableDesc.GetName())
 }
 
 // setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
@@ -381,7 +253,7 @@ func evaluateYAMLConfig(expr tree.TypedExpr, params runParams) (string, bool, er
 }
 
 func evaluateZoneOptions(
-	options map[tree.Name]optionValue, params runParams,
+	options map[tree.Name]zone.OptionValue, params runParams,
 ) (
 	optionsStr []string,
 	copyFromParentList []tree.Name,
@@ -394,8 +266,8 @@ func evaluateZoneOptions(
 		// We iterate over zoneOptionKeys instead of iterating over
 		// n.options directly so that the optionStr string constructed for
 		// the event log remains deterministic.
-		for i := range zoneOptionKeys {
-			name := (*tree.Name)(&zoneOptionKeys[i])
+		for i := range zone.ZoneOptionKeys {
+			name := (*tree.Name)(&zone.ZoneOptionKeys[i])
 			val, ok := options[*name]
 			if !ok {
 				continue
@@ -405,7 +277,7 @@ func evaluateZoneOptions(
 			// value would apply to the zone and setting that value explicitly.
 			// Instead we add the fields to a list that we use at a later time
 			// to copy values over.
-			inheritVal, expr := val.inheritValue, val.explicitValue
+			inheritVal, expr := val.InheritValue, val.ExplicitValue
 			if inheritVal {
 				copyFromParentList = append(copyFromParentList, *name)
 				optionsStr = append(optionsStr, fmt.Sprintf("%s = COPY FROM PARENT", name))
@@ -419,13 +291,13 @@ func evaluateZoneOptions(
 				return nil, nil, nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported NULL value for %q", tree.ErrString(name))
 			}
-			opt := supportedZoneConfigOptions[*name]
-			if opt.checkAllowed != nil {
-				if err := opt.checkAllowed(params.ctx, params.ExecCfg(), datum); err != nil {
+			opt := zone.SupportedZoneConfigOptions[*name]
+			if opt.CheckAllowed != nil {
+				if err := opt.CheckAllowed(params.ctx, params.ExecCfg().Settings, datum); err != nil {
 					return nil, nil, nil, err
 				}
 			}
-			setter := opt.setter
+			setter := opt.Setter
 			setters = append(setters, func(c *zonepb.ZoneConfig) { setter(c, datum) })
 			optionsStr = append(optionsStr, fmt.Sprintf("%s = %s", name, datum))
 		}

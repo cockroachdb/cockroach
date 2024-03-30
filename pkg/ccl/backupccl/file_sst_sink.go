@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	io "io"
@@ -19,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -38,8 +41,9 @@ type sstSinkConf struct {
 }
 
 type fileSSTSink struct {
-	dest cloud.ExternalStorage
-	conf sstSinkConf
+	dest  cloud.ExternalStorage
+	conf  sstSinkConf
+	pacer *admission.Pacer
 
 	sst     storage.SSTWriter
 	ctx     context.Context
@@ -50,6 +54,8 @@ type fileSSTSink struct {
 	flushedFiles []backuppb.BackupManifest_File
 	flushedSize  int64
 
+	midKey bool
+
 	// flushedRevStart is the earliest start time of the export responses
 	// written to this sink since the last flush. Resets on each flush.
 	flushedRevStart hlc.Timestamp
@@ -57,6 +63,9 @@ type fileSSTSink struct {
 	// completedSpans contain the number of completed spans since the last
 	// flush. This counter resets on each flush.
 	completedSpans int32
+
+	elideMode   execinfrapb.ElidePrefix
+	elidePrefix roachpb.Key
 
 	// stats contain statistics about the actions of the fileSSTSink over its
 	// entire lifespan.
@@ -69,8 +78,10 @@ type fileSSTSink struct {
 	}
 }
 
-func makeFileSSTSink(conf sstSinkConf, dest cloud.ExternalStorage) *fileSSTSink {
-	return &fileSSTSink{conf: conf, dest: dest}
+func makeFileSSTSink(
+	conf sstSinkConf, dest cloud.ExternalStorage, pacer *admission.Pacer,
+) *fileSSTSink {
+	return &fileSSTSink{conf: conf, dest: dest, pacer: pacer}
 }
 
 func (s *fileSSTSink) Close() error {
@@ -116,6 +127,15 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 		}
 		return nil
 	}
+
+	if s.midKey {
+		var lastKey roachpb.Key
+		if len(s.flushedFiles) > 0 {
+			lastKey = s.flushedFiles[len(s.flushedFiles)-1].Span.EndKey
+		}
+		return errors.AssertionFailedf("backup closed file ending mid-key in %q", lastKey)
+	}
+
 	s.stats.flushes++
 
 	if err := s.sst.Finish(); err != nil {
@@ -125,8 +145,13 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 		log.Warningf(ctx, "failed to close write in fileSSTSink: % #v", pretty.Formatter(err))
 		return errors.Wrap(err, "writing SST")
 	}
+	wroteSize := s.sst.Meta.Size
 	s.outName = ""
 	s.out = nil
+
+	for i := range s.flushedFiles {
+		s.flushedFiles[i].BackingFileSize = wroteSize
+	}
 
 	progDetails := backuppb.BackupManifest_Progress{
 		RevStartTime:   s.flushedRevStart,
@@ -146,6 +171,7 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 	}
 
 	s.flushedFiles = nil
+	s.elidePrefix = s.elidePrefix[:0]
 	s.flushedSize = 0
 	s.flushedRevStart.Reset()
 	s.completedSpans = 0
@@ -171,13 +197,19 @@ func (s *fileSSTSink) open(ctx context.Context) error {
 		s.out = e
 	}
 	// TODO(dt): make ExternalStorage.Writer return objstorage.Writable.
-	s.sst = storage.MakeIngestionSSTWriter(ctx, s.dest.Settings(), storage.NoopFinishAbortWritable(s.out))
+	//
+	// Value blocks are disabled since such SSTs can be huge (e.g. 750MB in the
+	// mixed_version_backup.go roachtest), which can cause OOMs due to value
+	// block buffering.
+	s.sst = storage.MakeIngestionSSTWriterWithValueBlockOverride(
+		ctx, s.dest.Settings(), storage.NoopFinishAbortWritable(s.out), true)
 
 	return nil
 }
 
 func (s *fileSSTSink) writeWithNoData(resp exportedSpan) {
 	s.completedSpans += resp.completedSpans
+	s.midKey = false
 }
 
 func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
@@ -185,11 +217,16 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 
 	span := resp.metadata.Span
 
+	spanPrefix, err := elidedPrefix(span.Key, s.elideMode)
+	if err != nil {
+		return err
+	}
+
 	// If this span starts before the last buffered span ended, we need to flush
 	// since it overlaps but SSTWriter demands writes in-order.
 	if len(s.flushedFiles) > 0 {
 		last := s.flushedFiles[len(s.flushedFiles)-1].Span.EndKey
-		if span.Key.Compare(last) < 0 {
+		if span.Key.Compare(last) < 0 || !bytes.Equal(spanPrefix, s.elidePrefix) {
 			log.VEventf(ctx, 1, "flushing backup file %s of size %d because span %s cannot append before %s",
 				s.outName, s.flushedSize, span, last,
 			)
@@ -206,6 +243,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 			return err
 		}
 	}
+	s.elidePrefix = append(s.elidePrefix[:0], spanPrefix...)
 
 	log.VEventf(ctx, 2, "writing %s to backup file %s", span, s.outName)
 
@@ -214,7 +252,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	//
 	// TODO(msbutler): investigate using single a single iterator that surfaces
 	// all point keys first and then all range keys
-	if err := s.copyPointKeys(resp.dataSST); err != nil {
+	if err := s.copyPointKeys(ctx, resp.dataSST); err != nil {
 		return err
 	}
 	if err := s.copyRangeKeys(resp.dataSST); err != nil {
@@ -229,7 +267,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 		s.flushedFiles[l].StartTime.EqOrdering(resp.metadata.StartTime) {
 		s.flushedFiles[l].Span.EndKey = span.EndKey
 		s.flushedFiles[l].EntryCounts.Add(resp.metadata.EntryCounts)
-		s.flushedFiles[l].BackingFileSize += resp.metadata.BackingFileSize
+		s.flushedFiles[l].ApproximatePhysicalSize += resp.metadata.ApproximatePhysicalSize
 		s.stats.spanGrows++
 	} else {
 		f := resp.metadata
@@ -239,6 +277,8 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	s.flushedRevStart.Forward(resp.revStart)
 	s.completedSpans += resp.completedSpans
 	s.flushedSize += int64(len(resp.dataSST))
+
+	s.midKey = !resp.atKeyBoundary
 
 	// If our accumulated SST is now big enough, and we are positioned at the end
 	// of a range flush it.
@@ -254,7 +294,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	return nil
 }
 
-func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
+func (s *fileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) error {
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		LowerBound: keys.LocalMax,
@@ -266,7 +306,12 @@ func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
 	}
 	defer iter.Close()
 
+	var valueBuf []byte
+
 	for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
+		if err := s.pacer.Pace(ctx); err != nil {
+			return err
+		}
 		if valid, err := iter.Valid(); !valid || err != nil {
 			if err != nil {
 				return err
@@ -274,16 +319,41 @@ func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
 			break
 		}
 		k := iter.UnsafeKey()
-		v, err := iter.UnsafeValue()
+		suffix, ok := bytes.CutPrefix(k.Key, s.elidePrefix)
+		if !ok {
+			return errors.AssertionFailedf("prefix mismatch %q does not have %q", k.Key, s.elidePrefix)
+		}
+		k.Key = suffix
+
+		raw, err := iter.UnsafeValue()
 		if err != nil {
 			return err
 		}
+
+		valueBuf = append(valueBuf[:0], raw...)
+		v, err := storage.DecodeValueFromMVCCValue(valueBuf)
+		if err != nil {
+			return errors.Wrapf(err, "decoding mvcc value %s", k)
+		}
+
+		// Checksums include the key, but *exported* keys no longer live at that key
+		// once they are exported, and could be restored as some other key, so zero
+		// out the checksum.
+		v.ClearChecksum()
+
+		// NB: DecodeValueFromMVCCValue does not decode the MVCCValueHeader, which
+		// we need to back up. In other words, if we passed v.RawBytes to the put
+		// call below, we would lose data. By putting valueBuf, we pass the value
+		// header and the cleared checksum.
+		//
+		// TODO(msbutler): create a ClearChecksum() method that can act on raw value
+		// bytes, and remove this hacky code.
 		if k.Timestamp.IsEmpty() {
-			if err := s.sst.PutUnversioned(k.Key, v); err != nil {
+			if err := s.sst.PutUnversioned(k.Key, valueBuf); err != nil {
 				return err
 			}
 		} else {
-			if err := s.sst.PutRawMVCC(iter.UnsafeKey(), v); err != nil {
+			if err := s.sst.PutRawMVCC(k, valueBuf); err != nil {
 				return err
 			}
 		}
@@ -311,7 +381,15 @@ func (s *fileSSTSink) copyRangeKeys(dataSST []byte) error {
 		}
 		rangeKeys := iter.RangeKeys()
 		for _, v := range rangeKeys.Versions {
-			if err := s.sst.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), v.Value); err != nil {
+			rk := rangeKeys.AsRangeKey(v)
+			var ok bool
+			if rk.StartKey, ok = bytes.CutPrefix(rk.StartKey, s.elidePrefix); !ok {
+				return errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.StartKey, s.elidePrefix)
+			}
+			if rk.EndKey, ok = bytes.CutPrefix(rk.EndKey, s.elidePrefix); !ok {
+				return errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.EndKey, s.elidePrefix)
+			}
+			if err := s.sst.PutRawMVCCRangeKey(rk, v.Value); err != nil {
 				return err
 			}
 		}
@@ -324,4 +402,23 @@ func generateUniqueSSTName(nodeID base.SQLInstanceID) string {
 	// common file/bucket browse UIs.
 	return fmt.Sprintf("data/%d.sst",
 		builtins.GenerateUniqueInt(builtins.ProcessUniqueID(nodeID)))
+}
+
+func elidedPrefix(key roachpb.Key, mode execinfrapb.ElidePrefix) ([]byte, error) {
+	switch mode {
+	case execinfrapb.ElidePrefix_TenantAndTable:
+		rest, err := keys.StripTablePrefix(key)
+		if err != nil {
+			return nil, err
+		}
+		return key[: len(key)-len(rest) : len(key)-len(rest)], nil
+
+	case execinfrapb.ElidePrefix_Tenant:
+		rest, err := keys.StripTenantPrefix(key)
+		if err != nil {
+			return nil, err
+		}
+		return key[: len(key)-len(rest) : len(key)-len(rest)], nil
+	}
+	return nil, nil
 }

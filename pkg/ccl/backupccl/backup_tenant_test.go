@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -55,8 +55,6 @@ func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
 		InitManualReplication, params)
 	defer cleanup()
 
-	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_split.enabled=true")
-	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_scatter.enabled=true")
 	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING server.sqlliveness.ttl='2s'")
 	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING server.sqlliveness.heartbeat='250ms'")
 
@@ -101,7 +99,7 @@ func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
 	// for instance-based planning to recognize the downed node.
 	sv := &tenantApp.ClusterSettings().SV
 	padding := 10 * time.Second
-	timeout := slinstance.DefaultTTL.Get(sv) + slinstance.DefaultHeartBeat.Get(sv) + padding
+	timeout := slbase.DefaultTTL.Get(sv) + slbase.DefaultHeartBeat.Get(sv) + padding
 	testutils.SucceedsWithin(t, func() error {
 		_, err := tenantDB.Exec("BACKUP INTO 'nodelocal://1/worker-failure'")
 		return err
@@ -154,7 +152,10 @@ func TestBackupTenantImportingTable(t *testing.T) {
 	}
 	// Destroy the tenant, then restore it.
 	tSrv.AppStopper().Stop(ctx)
-	if _, err := sqlDB.DB.ExecContext(ctx, "ALTER TENANT [10] STOP SERVICE; DROP TENANT [10] IMMEDIATE"); err != nil {
+	if _, err := sqlDB.DB.ExecContext(ctx, "ALTER TENANT [10] STOP SERVICE"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.DB.ExecContext(ctx, "DROP TENANT [10] IMMEDIATE"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.DB.ExecContext(ctx, "RESTORE TENANT 10 FROM $1", dst); err != nil {

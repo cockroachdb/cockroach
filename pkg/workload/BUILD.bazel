@@ -49,10 +49,6 @@ go_test(
         "workload_test.go",
     ],
     embed = [":workload"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/col/coldata",
         "//pkg/security/securityassets",
@@ -70,6 +66,5 @@ go_test(
         "//pkg/workload/bank",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpch",
-        "@com_github_stretchr_testify//require",
     ],
 )

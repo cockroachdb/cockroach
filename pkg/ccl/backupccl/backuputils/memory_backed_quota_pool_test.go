@@ -22,6 +22,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func getMemoryMonitor(limit int64) *mon.BytesMonitor {
+	return mon.NewMonitor(mon.Options{
+		Name:      "test-mon",
+		Limit:     limit,
+		Increment: 1,
+		Settings:  cluster.MakeTestingClusterSettings(),
+	})
+}
+
 func TestMemoryBackedQuotaPool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -75,10 +84,7 @@ func TestMemoryBackedQuotaPool(t *testing.T) {
 	t.Run("external-mon-user", func(t *testing.T) {
 		// Create a quota pool of limit 10.
 		const limit = 10
-		mm := mon.NewMonitorWithLimit(
-			"test-mon", mon.MemoryResource, limit,
-			nil, nil, 1, 0,
-			cluster.MakeTestingClusterSettings())
+		mm := getMemoryMonitor(limit)
 		mm.Start(ctx, nil, mon.NewStandaloneBudget(limit))
 		defer mm.Stop(ctx)
 
@@ -129,10 +135,7 @@ func TestMemoryBackedQuotaPoolConcurrent(t *testing.T) {
 		for _, numGoroutines := range []int{1, 10, 100} {
 			quota := quota
 			ctx := context.Background()
-			mm := mon.NewMonitorWithLimit(
-				"test-mon", mon.MemoryResource, quota,
-				nil, nil, 1, 0,
-				cluster.MakeTestingClusterSettings())
+			mm := getMemoryMonitor(quota)
 			mm.Start(ctx, nil, mon.NewStandaloneBudget(quota))
 			mem := mm.MakeConcurrentBoundAccount()
 
@@ -187,10 +190,7 @@ func TestMemoryBackedQuotaPoolConcurrent(t *testing.T) {
 func makeTestingQuotaPool(
 	ctx context.Context, limit int64,
 ) (qp *MemoryBackedQuotaPool, cleanup func()) {
-	mm := mon.NewMonitorWithLimit(
-		"test-mon", mon.MemoryResource, limit,
-		nil, nil, 1, 0,
-		cluster.MakeTestingClusterSettings())
+	mm := getMemoryMonitor(limit)
 	mm.Start(ctx, nil, mon.NewStandaloneBudget(limit))
 
 	qp = NewMemoryBackedQuotaPool(ctx, mm, "test-qp", limit)

@@ -13,9 +13,9 @@ package mixedversion
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/stretchr/testify/require"
 )
@@ -54,15 +54,20 @@ func Test_runSingleStep(t *testing.T) {
 	require.Contains(t, err.Error(), "panic (stack trace above): runtime error: index out of range [0] with length 0")
 }
 
+func testAddAnnotation() error {
+	return nil
+}
+
 func testTestRunner() *testRunner {
 	runnerCtx, cancel := context.WithCancel(ctx)
 	return &testRunner{
-		ctx:        runnerCtx,
-		cancel:     cancel,
-		logger:     nilLogger,
-		crdbNodes:  nodes,
-		background: newBackgroundRunner(runnerCtx, nilLogger),
-		seed:       seed,
+		ctx:            runnerCtx,
+		cancel:         cancel,
+		logger:         nilLogger,
+		crdbNodes:      nodes,
+		background:     newBackgroundRunner(runnerCtx, nilLogger),
+		seed:           seed,
+		_addAnnotation: testAddAnnotation,
 	}
 }
 
@@ -70,17 +75,14 @@ type testSingleStep struct {
 	runFunc func() error
 }
 
-func (testSingleStep) ID() int                { return 42 }
-func (testSingleStep) Description() string    { return "testSingleStep" }
-func (testSingleStep) Background() shouldStop { return nil }
+func (*testSingleStep) Description() string    { return "testSingleStep" }
+func (*testSingleStep) Background() shouldStop { return nil }
 
-func (tss testSingleStep) Run(
-	_ context.Context, _ *logger.Logger, _ cluster.Cluster, _ *Helper,
-) error {
+func (tss *testSingleStep) Run(_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper) error {
 	return tss.runFunc()
 }
 
-func newTestStep(f func() error) singleStep {
+func newTestStep(f func() error) *singleStep {
 	initialVersion := parseVersions([]string{predecessorVersion})[0]
-	return newSingleStep(newInitialContext(initialVersion, nodes), testSingleStep{runFunc: f})
+	return newSingleStep(newInitialContext(initialVersion, nodes), &testSingleStep{runFunc: f}, newRand())
 }

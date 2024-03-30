@@ -13,7 +13,9 @@ package kvserver
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -64,13 +66,39 @@ func TestStoreGossipDeltaTrigger(t *testing.T) {
 			expectedReason: "queries-per-second(100.0) writes-per-second(-100.0) range-count(5.0) lease-count(-5.0) change",
 			expectedShould: true,
 		},
+		{
+			desc:           "no delta: IO overload <= minimum",
+			lastGossiped:   roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(0)},
+			cached:         roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultLeaseIOOverloadThreshold - 1e9)},
+			expectedReason: "",
+			expectedShould: false,
+		},
+		{
+			desc:           "no delta: IO overload unchanged",
+			lastGossiped:   roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultLeaseIOOverloadThreshold)},
+			cached:         roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultLeaseIOOverloadThreshold)},
+			expectedReason: "",
+			expectedShould: false,
+		},
+		{
+			desc:           "should gossip on IO overload increase greater than min",
+			lastGossiped:   roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(0)},
+			cached:         roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultLeaseIOOverloadThreshold)},
+			expectedReason: "io-overload(0.3) change",
+			expectedShould: true,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			cfg := &StoreConfig{}
 			cfg.SetDefaults(1 /* numStores */)
-			sg := NewStoreGossip(nil, nil, cfg.TestingKnobs.GossipTestingKnobs)
+			sg := NewStoreGossip(
+				nil,
+				nil,
+				cfg.TestingKnobs.GossipTestingKnobs,
+				&cluster.MakeTestingClusterSettings().SV,
+			)
 			sg.cachedCapacity.cached = tc.cached
 			sg.cachedCapacity.lastGossiped = tc.lastGossiped
 

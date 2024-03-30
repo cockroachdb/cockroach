@@ -249,6 +249,17 @@ func (sb *statisticsBuilder) clear() {
 	sb.md = nil
 }
 
+// colStatCols returns the set of columns which may be looked up in
+// props.Statistics().ColStats, which includes props.OutputCols and any virtual
+// computed columns we have statistics on that are in scope.
+func (sb *statisticsBuilder) colStatCols(props *props.Relational) opt.ColSet {
+	if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
+		!props.Statistics().VirtualCols.Empty() {
+		return props.OutputCols.Union(props.Statistics().VirtualCols)
+	}
+	return props.OutputCols
+}
+
 // colStatFromChild retrieves a column statistic from a specific child of the
 // given expression.
 func (sb *statisticsBuilder) colStatFromChild(
@@ -259,7 +270,7 @@ func (sb *statisticsBuilder) colStatFromChild(
 	child := e.Child(childIdx).(RelExpr)
 	childProps := child.Relational()
 	if !colSet.SubsetOf(childProps.OutputCols) {
-		colSet = colSet.Intersection(childProps.OutputCols)
+		colSet = colSet.Intersection(sb.colStatCols(childProps))
 		if colSet.Empty() {
 			// All the columns in colSet are outer columns; therefore, we can treat
 			// them as a constant.
@@ -338,24 +349,26 @@ func (sb *statisticsBuilder) colStatFromInput(
 
 	if lookupJoin != nil || invertedJoin != nil || zigzagJoin != nil ||
 		opt.IsJoinOp(e) || e.Op() == opt.MergeJoinOp {
+
 		var leftProps *props.Relational
 		if zigzagJoin != nil {
 			leftProps = &zigzagJoin.leftProps
 		} else {
 			leftProps = e.Child(0).(RelExpr).Relational()
 		}
+		intersectsLeft := sb.colStatCols(leftProps).Intersects(colSet)
 
-		intersectsLeft := leftProps.OutputCols.Intersects(colSet)
-		var intersectsRight bool
+		var rightProps *props.Relational
 		if lookupJoin != nil {
-			intersectsRight = lookupJoin.lookupProps.OutputCols.Intersects(colSet)
+			rightProps = &lookupJoin.lookupProps
 		} else if invertedJoin != nil {
-			intersectsRight = invertedJoin.lookupProps.OutputCols.Intersects(colSet)
+			rightProps = &invertedJoin.lookupProps
 		} else if zigzagJoin != nil {
-			intersectsRight = zigzagJoin.rightProps.OutputCols.Intersects(colSet)
+			rightProps = &zigzagJoin.rightProps
 		} else {
-			intersectsRight = e.Child(1).(RelExpr).Relational().OutputCols.Intersects(colSet)
+			rightProps = e.Child(1).(RelExpr).Relational()
 		}
+		intersectsRight := sb.colStatCols(rightProps).Intersects(colSet)
 
 		// It's possible that colSet intersects both left and right if we have a
 		// lookup join that was converted from an index join, so check the left
@@ -456,6 +469,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.LimitOp:
 		return sb.colStatLimit(colSet, e.(*LimitExpr))
 
+	case opt.TopKOp:
+		return sb.colStatTopK(colSet, e.(*TopKExpr))
+
 	case opt.OffsetOp:
 		return sb.colStatOffset(colSet, e.(*OffsetExpr))
 
@@ -482,6 +498,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 
 	case opt.BarrierOp:
 		return sb.colStatBarrier(colSet, e.(*BarrierExpr))
+
+	case opt.CallOp:
+		return sb.colStatCall(colSet, e.(*CallExpr))
 
 	case opt.SequenceSelectOp:
 		return sb.colStatSequenceSelect(colSet, e.(*SequenceSelectExpr))
@@ -643,6 +662,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 
 		// Add all the column statistics, using the most recent statistic for each
 		// column set. Stats are ordered with most recent first.
+	EachStat:
 		for i := first; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
 			if stat.IsPartial() {
@@ -659,7 +679,18 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			var colOrd int
 			for i := 0; i < stat.ColumnCount(); i++ {
 				colOrd = stat.ColumnOrdinal(i)
-				cols.Add(tabID.ColumnID(colOrd))
+				col := tabID.ColumnID(colOrd)
+				cols.Add(col)
+				if tab.Column(colOrd).IsVirtualComputed() {
+					if !sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats {
+						continue EachStat
+					}
+					// We only add virtual columns if we have statistics on them, so that
+					// in higher groups we can decide whether to look up statistics on
+					// virtual columns or on the columns used in their defining
+					// expressions.
+					stats.VirtualCols.Add(col)
+				}
 			}
 
 			// We currently only use average column sizes of single column
@@ -800,6 +831,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 
 	inputStats := sb.makeTableStatistics(scan.Table)
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	pred := scan.PartialIndexPredicate(sb.md)
 
 	// If the constraints and pred are nil, then this scan is an unconstrained
@@ -1027,6 +1059,7 @@ func (sb *statisticsBuilder) buildSelect(sel *SelectExpr, relProps *props.Relati
 	s.Available = sb.availabilityFromInput(sel)
 	inputStats := sel.Input.Relational().Statistics()
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 
 	sb.filterRelExpr(sel.Filters, sel, relProps.NotNullCols, relProps, s, &sel.Input.Relational().FuncDeps)
 
@@ -1069,6 +1102,7 @@ func (sb *statisticsBuilder) buildProject(prj *ProjectExpr, relProps *props.Rela
 	inputStats := prj.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -1081,7 +1115,7 @@ func (sb *statisticsBuilder) colStatProject(
 	// Columns may be passed through from the input, or they may reference a
 	// higher scope (in the case of a correlated subquery), or they
 	// may be synthesized by the projection operation.
-	inputCols := prj.Input.Relational().OutputCols
+	inputCols := sb.colStatCols(prj.Input.Relational())
 	reqInputCols := colSet.Intersection(inputCols)
 	nonNullFound := false
 	reqSynthCols := colSet.Difference(inputCols)
@@ -1096,6 +1130,19 @@ func (sb *statisticsBuilder) colStatProject(
 		for i := range prj.Projections {
 			item := &prj.Projections[i]
 			if reqSynthCols.Contains(item.Col) {
+				// Before checking OuterCols, try to replace any virtual computed column
+				// expressions with the corresponding virtual column.
+				if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
+					!s.VirtualCols.Empty() {
+					element := sb.factorOutVirtualCols(
+						item.Element, &item.scalar.Shared, s.VirtualCols, prj.Memo(),
+					).(opt.ScalarExpr)
+					if element != item.Element {
+						newItem := constructProjectionsItem(element, item.Col, prj.Memo())
+						item = &newItem
+					}
+				}
+
 				reqInputCols.UnionWith(item.scalar.OuterCols)
 
 				// If the element is not a null constant, account for that
@@ -1168,6 +1215,7 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 	// -----------------------------------
 	inputStats := invFilter.Input.Relational().Statistics()
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, invFilter, s)
 	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, invFilter, s, corr))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps.NotNullCols, constrainedCols))
@@ -1216,9 +1264,19 @@ func (sb *statisticsBuilder) buildJoin(
 
 	leftStats := h.leftProps.Statistics()
 	rightStats := h.rightProps.Statistics()
-	leftCols := h.leftProps.OutputCols.Copy()
-	rightCols := h.rightProps.OutputCols.Copy()
+	leftCols := sb.colStatCols(h.leftProps)
+	rightCols := sb.colStatCols(h.rightProps)
 	equivReps := h.filtersFD.EquivReps()
+
+	switch h.joinType {
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		// For semi- and anti-joins, colStatJoin will only be called with columns
+		// from the left side.
+		s.VirtualCols.UnionWith(leftStats.VirtualCols)
+	default:
+		s.VirtualCols.UnionWith(leftStats.VirtualCols)
+		s.VirtualCols.UnionWith(rightStats.VirtualCols)
+	}
 
 	// Shortcut if there are no ON conditions. Note that for lookup join, there
 	// are implicit equality conditions on KeyCols.
@@ -1291,8 +1349,8 @@ func (sb *statisticsBuilder) buildJoin(
 	constrainedCols = sb.tryReduceJoinCols(
 		constrainedCols,
 		s,
-		h.leftProps.OutputCols,
-		h.rightProps.OutputCols,
+		leftCols,
+		rightCols,
 		&h.leftProps.FuncDeps,
 		&h.rightProps.FuncDeps,
 	)
@@ -1309,7 +1367,7 @@ func (sb *statisticsBuilder) buildJoin(
 		// calculations. It will be fixed below.
 		s.RowCount = leftStats.RowCount
 		s.ApplySelectivity(sb.selectivityFromEquivalenciesSemiJoin(
-			equivReps, h.leftProps.OutputCols, h.rightProps.OutputCols, &h.filtersFD, join, s,
+			equivReps, leftCols, rightCols, &h.filtersFD, join, s,
 		))
 		var oredTermSelectivity props.Selectivity
 		oredTermSelectivity, numUnappliedConjuncts =
@@ -1369,7 +1427,7 @@ func (sb *statisticsBuilder) buildJoin(
 	switch h.joinType {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Keep only column stats from the left side.
-		s.ColStats.RemoveIntersecting(h.rightProps.OutputCols)
+		s.ColStats.RemoveIntersecting(rightCols)
 	}
 
 	// The above calculation is for inner joins. Other joins need to remove stats
@@ -1378,12 +1436,12 @@ func (sb *statisticsBuilder) buildJoin(
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		// Keep only column stats from the right side. The stats from the left side
 		// are not valid.
-		s.ColStats.RemoveIntersecting(h.leftProps.OutputCols)
+		s.ColStats.RemoveIntersecting(leftCols)
 
 	case opt.RightJoinOp:
 		// Keep only column stats from the left side. The stats from the right side
 		// are not valid.
-		s.ColStats.RemoveIntersecting(h.rightProps.OutputCols)
+		s.ColStats.RemoveIntersecting(rightCols)
 
 	case opt.FullJoinOp:
 		// Do not keep any column stats.
@@ -1509,6 +1567,9 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		rightProps = join.Child(1).(RelExpr).Relational()
 	}
 
+	leftCols := sb.colStatCols(leftProps)
+	rightCols := sb.colStatCols(rightProps)
+
 	switch joinType {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Column stats come from left side of join.
@@ -1535,8 +1596,8 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		inputRowCount := leftProps.Statistics().RowCount * rightProps.Statistics().RowCount
 		leftNullCount := leftProps.Statistics().RowCount
 		rightNullCount := rightProps.Statistics().RowCount
-		leftColsAreEmpty := !leftProps.OutputCols.Intersects(colSet)
-		rightColsAreEmpty := !rightProps.OutputCols.Intersects(colSet)
+		leftColsAreEmpty := !leftCols.Intersects(colSet)
+		rightColsAreEmpty := !rightCols.Intersects(colSet)
 		if rightColsAreEmpty {
 			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinLeft(colSet, join))
 			leftNullCount = colStat.NullCount
@@ -1552,12 +1613,9 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 		} else {
-			// Column stats come from both sides of join.
-			leftCols := leftProps.OutputCols.Intersection(colSet)
-			rightCols := rightProps.OutputCols.Intersection(colSet)
 			// Make a copy of the input column stats so we don't modify the originals.
-			leftColStat := *sb.colStatFromJoinLeft(leftCols, join)
-			rightColStat := *sb.colStatFromJoinRight(rightCols, join)
+			leftColStat := *sb.colStatFromJoinLeft(leftCols.Intersection(colSet), join)
+			rightColStat := *sb.colStatFromJoinRight(rightCols.Intersection(colSet), join)
 
 			leftNullCount = leftColStat.NullCount
 			rightNullCount = rightColStat.NullCount
@@ -1738,6 +1796,8 @@ func (sb *statisticsBuilder) buildIndexJoin(indexJoin *IndexJoinExpr, relProps *
 	inputStats := indexJoin.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
+	s.VirtualCols.UnionWith(sb.makeTableStatistics(indexJoin.Table).VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -1748,7 +1808,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 	s := relProps.Statistics()
 
 	inputProps := join.Input.Relational()
-	inputCols := inputProps.OutputCols
+	inputCols := sb.colStatCols(inputProps)
 
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
@@ -1815,6 +1875,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	s.Available = sb.availabilityFromInput(zigzag)
 
 	leftStats := zigzag.leftProps.Statistics()
+	rightStats := zigzag.rightProps.Statistics()
 	equivReps := h.filtersFD.EquivReps()
 
 	// We assume that we only plan zigzag joins in cases where the result set
@@ -1822,6 +1883,9 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// row counts, and where the left and right sides are indexes on the same
 	// table. Their row count should be the same, so use either row count.
 	s.RowCount = leftStats.RowCount
+
+	s.VirtualCols.UnionWith(leftStats.VirtualCols)
+	s.VirtualCols.UnionWith(rightStats.VirtualCols)
 
 	// Calculate distinct counts for constrained columns
 	// -------------------------------------------------
@@ -1913,6 +1977,9 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 	groupingPrivate := groupNode.Private().(*GroupingPrivate)
 	groupingColSet := groupingPrivate.GroupingCols
 
+	inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
+
 	if groupingColSet.Empty() {
 		if groupNode.Op() == opt.ScalarGroupByOp {
 			// ScalarGroupBy always returns exactly one row.
@@ -1921,12 +1988,9 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 			// GroupBy with empty grouping columns returns 0 or 1 rows, depending
 			// on whether input has rows. If input has < 1 row, use that, as that
 			// represents the probability of having 0 vs. 1 rows.
-			inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
 			s.RowCount = min(1, inputStats.RowCount)
 		}
 	} else {
-		inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
-
 		if groupingPrivate.ErrorOnDup != "" {
 			// If any input group has more than one row, then the distinct operator
 			// will raise an error, so in non-error cases it has the same number of
@@ -2024,6 +2088,12 @@ func (sb *statisticsBuilder) buildSetNode(setNode RelExpr, relProps *props.Relat
 
 	leftStats := sb.statsFromChild(setNode, 0 /* childIdx */)
 	rightStats := sb.statsFromChild(setNode, 1 /* childIdx */)
+
+	// TODO(michae2): Set operations and with-scans currently act as barriers for
+	// VirtualCols, due to the column ID translation. To fix this we would need to
+	// rewrite virtual computed column expressions in terms of the translated
+	// column IDs, and would need to store the rewritten expressions somewhere
+	// other than TableMeta.
 
 	// These calculations are an upper bound on the row count. It's likely that
 	// there is some overlap between the two sets, but not full overlap.
@@ -2230,6 +2300,7 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 
 	// Copy row count from input.
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 
 	// Update row count if limit is a constant and row count is non-zero.
 	if cnst, ok := limit.Limit.(*ConstExpr); ok && inputStats.RowCount > 0 {
@@ -2238,28 +2309,6 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 			s.RowCount = min(float64(hardLimit), inputStats.RowCount)
 			s.Selectivity = props.MakeSelectivity(s.RowCount / inputStats.RowCount)
 		}
-	}
-
-	sb.finalizeFromCardinality(relProps)
-}
-
-func (sb *statisticsBuilder) buildTopK(topK *TopKExpr, relProps *props.Relational) {
-	s := relProps.Statistics()
-	if zeroCardinality := s.Init(relProps); zeroCardinality {
-		// Short cut if cardinality is 0.
-		return
-	}
-	s.Available = sb.availabilityFromInput(topK)
-
-	inputStats := topK.Input.Relational().Statistics()
-
-	// Copy row count from input.
-	s.RowCount = inputStats.RowCount
-
-	// Update row count if row count and k are non-zero.
-	if inputStats.RowCount > 0 && topK.K > 0 {
-		s.RowCount = min(float64(topK.K), inputStats.RowCount)
-		s.Selectivity = props.MakeSelectivity(s.RowCount / inputStats.RowCount)
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -2274,6 +2323,44 @@ func (sb *statisticsBuilder) colStatLimit(
 	colStat := sb.copyColStatFromChild(colSet, limit, s)
 
 	// Scale distinct count based on the selectivity of the limit operation.
+	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
+	if colSet.Intersects(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
+func (sb *statisticsBuilder) buildTopK(topK *TopKExpr, relProps *props.Relational) {
+	s := relProps.Statistics()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(topK)
+
+	inputStats := topK.Input.Relational().Statistics()
+
+	// Copy row count from input.
+	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
+
+	// Update row count if row count and k are non-zero.
+	if inputStats.RowCount > 0 && topK.K > 0 {
+		s.RowCount = min(float64(topK.K), inputStats.RowCount)
+		s.Selectivity = props.MakeSelectivity(s.RowCount / inputStats.RowCount)
+	}
+
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatTopK(colSet opt.ColSet, topK *TopKExpr) *props.ColumnStatistic {
+	relProps := topK.Relational()
+	s := relProps.Statistics()
+	inputStats := topK.Input.Relational().Statistics()
+	colStat := sb.copyColStatFromChild(colSet, topK, s)
+
+	// Scale distinct count based on the selectivity of the topK operation.
 	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
@@ -2298,6 +2385,7 @@ func (sb *statisticsBuilder) buildOffset(offset *OffsetExpr, relProps *props.Rel
 
 	// Copy row count from input.
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 
 	// Update row count if offset is a constant and row count is non-zero.
 	if cnst, ok := offset.Offset.(*ConstExpr); ok && inputStats.RowCount > 0 {
@@ -2379,6 +2467,7 @@ func (sb *statisticsBuilder) buildOrdinality(ord *OrdinalityExpr, relProps *prop
 	inputStats := ord.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2424,7 +2513,7 @@ func (sb *statisticsBuilder) buildWindow(window *WindowExpr, relProps *props.Rel
 
 	// The row count of a window is equal to the row count of its input.
 	s.RowCount = inputStats.RowCount
-
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2508,7 +2597,7 @@ func (sb *statisticsBuilder) buildProjectSet(
 	// Multiply by the input row count to get the total.
 	inputStats := projectSet.Input.Relational().Statistics()
 	s.RowCount = zipRowCount * inputStats.RowCount
-
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2524,7 +2613,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 
 	inputProps := projectSet.Input.Relational()
 	inputStats := inputProps.Statistics()
-	inputCols := inputProps.OutputCols
+	inputCols := sb.colStatCols(inputProps)
 
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
@@ -2579,7 +2668,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 					zipColsNullCount *= (s.RowCount - inputStats.RowCount) / s.RowCount
 				}
 
-				if item.ScalarProps().OuterCols.Intersects(inputProps.OutputCols) {
+				if item.ScalarProps().OuterCols.Intersects(inputCols) {
 					// The column(s) are correlated with the input, so they may have a
 					// distinct value for each distinct row of the input.
 					zipColsDistinctCount *= inputStats.RowCount * UnknownDistinctCountRatio
@@ -2622,6 +2711,13 @@ func (sb *statisticsBuilder) buildWithScan(
 
 	s.Available = bindingProps.Statistics().Available
 	s.RowCount = bindingProps.Statistics().RowCount
+
+	// TODO(michae2): Set operations and with-scans currently act as barriers for
+	// VirtualCols, due to the column ID translation. To fix this we would need to
+	// rewrite virtual computed column expressions in terms of the translated
+	// column IDs, and would need to store the rewritten expressions somewhere
+	// other than TableMeta.
+
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2659,6 +2755,7 @@ func (sb *statisticsBuilder) buildMutation(mutation RelExpr, relProps *props.Rel
 	inputStats := sb.statsFromChild(mutation, 0 /* childIdx */)
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2696,6 +2793,7 @@ func (sb *statisticsBuilder) buildLock(lock *LockExpr, relProps *props.Relationa
 	inputStats := lock.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2727,6 +2825,7 @@ func (sb *statisticsBuilder) buildBarrier(barrier *BarrierExpr, relProps *props.
 	inputStats := barrier.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2741,6 +2840,30 @@ func (sb *statisticsBuilder) colStatBarrier(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
+// +------+
+// | Call |
+// +------+
+
+func (sb *statisticsBuilder) buildCall(call *CallExpr, relProps *props.Relational) {
+	s := relProps.Statistics()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short-cut if cardinality is 0.
+		return
+	}
+	s.Available = true
+	s.RowCount = 1
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatCall(colSet opt.ColSet, call *CallExpr) *props.ColumnStatistic {
+	s := call.Relational().Statistics()
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = 1
+	colStat.NullCount = s.RowCount * UnknownNullCountRatio
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -3016,8 +3139,8 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 			panic(errors.AssertionFailedf("rowsProcessed not supported for operator type %v", redact.Safe(e.Op())))
 		}
 
-		leftCols := e.Child(0).(RelExpr).Relational().OutputCols
-		rightCols := e.Child(1).(RelExpr).Relational().OutputCols
+		leftCols := sb.colStatCols(e.Child(0).(RelExpr).Relational())
+		rightCols := sb.colStatCols(e.Child(1).(RelExpr).Relational())
 		filters := e.Child(2).(*FiltersExpr)
 
 		// Remove ON conditions that are not equality conditions,
@@ -3216,6 +3339,19 @@ func (sb *statisticsBuilder) applyFilters(
 func (sb *statisticsBuilder) applyFiltersItem(
 	filter *FiltersItem, e RelExpr, relProps *props.Relational,
 ) (numUnappliedConjuncts float64, constrainedCols, histCols opt.ColSet) {
+	// Before checking anything, try to replace any virtual computed column
+	// expressions with the corresponding virtual column.
+	if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
+		!relProps.Statistics().VirtualCols.Empty() {
+		cond := sb.factorOutVirtualCols(
+			filter.Condition, &filter.scalar.Shared, relProps.Statistics().VirtualCols, e.Memo(),
+		).(opt.ScalarExpr)
+		if cond != filter.Condition {
+			newFilter := constructFiltersItem(cond, e.Memo())
+			filter = &newFilter
+		}
+	}
+
 	if isEqualityWithTwoVars(filter.Condition) {
 		// Equalities are handled by applyEquivalencies.
 		return 0, opt.ColSet{}, opt.ColSet{}
@@ -4362,7 +4498,8 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 			equivReps := FD.EquivReps()
 			if semiJoin {
 				singleSelectivity = sb.selectivityFromEquivalenciesSemiJoin(
-					equivReps, h.leftProps.OutputCols, h.rightProps.OutputCols, FD, e, s,
+					equivReps, sb.colStatCols(h.leftProps), sb.colStatCols(h.rightProps),
+					FD, e, s,
 				)
 			} else {
 				singleSelectivity = sb.selectivityFromEquivalencies(equivReps, FD, e, s)
@@ -4429,6 +4566,15 @@ func combineOredSelectivities(selectivities []props.Selectivity) props.Selectivi
 // in cases where the Factory is not accessible.
 func constructFiltersItem(condition opt.ScalarExpr, m *Memo) FiltersItem {
 	item := FiltersItem{Condition: condition}
+	item.PopulateProps(m)
+	return item
+}
+
+// constructProjectionsItem constructs an expression for the ProjectionsItem
+// operator, with identical behavior to the Factor method of the same name, but
+// for use in cases where the Factory is not accessible.
+func constructProjectionsItem(element opt.ScalarExpr, col opt.ColumnID, m *Memo) ProjectionsItem {
+	item := ProjectionsItem{Element: element, Col: col}
 	item.PopulateProps(m)
 	return item
 }
@@ -4825,12 +4971,15 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 				// Each single-column prefix value from the Spans is a sample value.
 				// Give each sample value its own bucket, up to a maximum of 200
 				// buckets, with even distribution.
-				_, unencodedBuckets, err := stats.EquiDepthHistogram(sb.evalCtx,
+				_, unencodedBuckets, err := stats.EquiDepthHistogram(
+					sb.ctx,
+					sb.evalCtx,
 					dataType,
 					values, /* samples */
 					numRows,
 					int64(numValues), /* distinctCount */
 					int(stats.DefaultHistogramBuckets.Get(&sb.evalCtx.Settings.SV)), /* maxBuckets */
+					sb.evalCtx.Settings,
 				)
 				// This shouldn't error out, but if it does, let's not punish the user.
 				// Just build stats without the histogram in that case.
@@ -4858,4 +5007,55 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 		}
 	}
 	return false
+}
+
+// factorOutVirtualCols replaces any subexpressions matching any virtual
+// computed column expressions with a reference to the virtual computed
+// column. This allows us to directly use statistics collected on the virtual
+// computed column instead of estimating from the expression.
+func (sb *statisticsBuilder) factorOutVirtualCols(
+	e opt.Expr, shared *props.Shared, virtualCols opt.ColSet, m *Memo,
+) opt.Expr {
+	if m.replacer == nil {
+		panic(errors.AssertionFailedf("Memo.replacer unset"))
+	}
+
+	// Optimization: build a slice of virtual computed column expressions to find,
+	// and also prune any virtual cols whose outer columns are not contained in
+	// the expression's outer columns.
+	type virtExpr struct {
+		colID opt.ColumnID
+		expr  opt.Expr
+	}
+	virtExprs := make([]virtExpr, virtualCols.Len())
+	virtualCols.ForEach(func(colID opt.ColumnID) {
+		col := sb.md.ColumnMeta(colID)
+		tab := sb.md.TableMeta(col.Table)
+		if !tab.ColsInComputedColsExpressions.Intersects(shared.OuterCols) {
+			return
+		}
+		expr, ok := tab.ComputedCols[colID]
+		if !ok {
+			panic(errors.AssertionFailedf(
+				"could not find computed column expression for column %v in table %v", colID, tab.Alias,
+			))
+		}
+		virtExprs = append(virtExprs, virtExpr{colID: colID, expr: expr})
+	})
+
+	if len(virtExprs) == 0 {
+		return e
+	}
+
+	// Replace all virtual col expressions with the corresponding virtual col.
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		for _, ve := range virtExprs {
+			if e == ve.expr {
+				return m.MemoizeVariable(ve.colID)
+			}
+		}
+		return m.replacer(e, replace)
+	}
+	return replace(e)
 }

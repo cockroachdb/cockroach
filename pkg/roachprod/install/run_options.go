@@ -37,7 +37,10 @@ type RunOptions struct {
 type FailOption int8
 
 const (
-	// FailDefault will use the default behaviour of the function you are using.
+	// FailDefault will use the default behaviour of the function it's being used
+	// with. For instance, note that `RunWithDetails` will use FailSlow, while
+	// `Run` and `Parallel` will use FailFast when FailDefault is specified in the
+	// RunOptions.
 	FailDefault FailOption = iota
 	// FailFast will exit immediately on the first error, in which case the slice
 	// of ParallelResults will only contain the one error result.
@@ -52,10 +55,18 @@ const (
 // result was.
 var AlwaysTrue = func(res *RunResultDetails) bool { return true }
 
-func WithNodes(nodes Nodes) RunOptions {
+func DefaultRunOptions() RunOptions {
 	return RunOptions{
-		Nodes: nodes,
+		RetryOptions:  DefaultRetryOpt,
+		ShouldRetryFn: DefaultShouldRetryFn,
+		FailOption:    FailDefault,
 	}
+}
+
+func WithNodes(nodes Nodes) RunOptions {
+	r := DefaultRunOptions()
+	r.Nodes = nodes
+	return r
 }
 
 func (r RunOptions) WithRetryOpts(retryOpts retry.Options) RunOptions {

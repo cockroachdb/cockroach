@@ -82,7 +82,6 @@ go_library(
         "@com_github_cockroachdb_redact//interfaces",
         "@com_github_cockroachdb_ttycolor//:ttycolor",
         "@com_github_petermattis_goid//:goid",
-        "@org_golang_x_net//trace",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "@org_golang_x_sys//unix",
@@ -164,10 +163,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":log"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base/serverident",
         "//pkg/build",
@@ -175,7 +170,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/util/caller",
         "//pkg/util/ctxgroup",
-        "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/log/channel",
         "//pkg/util/log/logconfig",
@@ -196,7 +190,6 @@ go_test(
         "@com_github_pmezard_go_difflib//difflib",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
-        "@org_golang_x_net//trace",
         "@org_golang_x_sys//unix",
     ],
 )

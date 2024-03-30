@@ -46,7 +46,6 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
   "querySummary": "{{.String}}",
   "db":           "{{.String}}",
   "distsql": {{.Bool}},
-  "failed":  {{.Bool}},
   "implicitTxn": {{.Bool}},
   "vec":         {{.Bool}},
   "fullScan":    {{.Bool}}
@@ -58,6 +57,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
        "statistics": {
          "cnt": {{.Int64}},
          "firstAttemptCnt": {{.Int64}},
+         "failureCount":    {{.Int64}},
          "maxRetries":      {{.Int64}},
          "lastExecAt":      "{{stringifyTime .Time}}",
          "numRows": {
@@ -586,7 +586,6 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
   "querySummary": "{{.String}}",
   "implicitTxn": {{.Bool}},
   "distSQLCount": {{.Int64}},
-  "failedCount": {{.Int64}},
   "vecCount": {{.Int64}},
   "fullScanCount": {{.Int64}},
   "totalCount": {{.Int64}},

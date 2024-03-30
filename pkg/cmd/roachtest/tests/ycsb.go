@@ -68,12 +68,12 @@ func registerYCSB(r registry.Registry) {
 		}
 
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Range(1, nodes))
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, c.Range(1, nodes))
 
 		db := c.Conn(ctx, t.L(), 1)
 		err := enableIsolationLevels(ctx, t, db)
 		require.NoError(t, err)
-		err = WaitFor3XReplication(ctx, t, db)
+		err = WaitFor3XReplication(ctx, t, t.L(), db)
 		require.NoError(t, err)
 		require.NoError(t, db.Close())
 
@@ -168,6 +168,9 @@ func registerYCSB(r registry.Registry) {
 
 func enableIsolationLevels(ctx context.Context, t test.Test, db *gosql.DB) error {
 	for _, cmd := range []string{
+		// NOTE: even as we switch the default value of these setting to true on
+		// master, we should keep these to ensure that the settings are configured
+		// properly in mixed-version roachtests.
 		`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = 'true';`,
 		`SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = 'true';`,
 	} {

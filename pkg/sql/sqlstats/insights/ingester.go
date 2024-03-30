@@ -31,12 +31,23 @@ type concurrentBufferIngester struct {
 		eventBuffer *eventBuffer
 	}
 
-	eventBufferCh chan *eventBuffer
+	opts struct {
+		// noTimedFlush prevents time-triggered flushes from being scheduled.
+		noTimedFlush bool
+	}
+
+	eventBufferCh chan eventBufChPayload
 	registry      *lockingRegistry
 	running       uint64
+	clearRegistry uint32
 }
 
-var _ Writer = &concurrentBufferIngester{}
+type eventBufChPayload struct {
+	clearRegistry bool
+	events        *eventBuffer
+}
+
+var _ Writer = (*concurrentBufferIngester)(nil)
 
 // concurrentBufferIngester buffers the "events" it sees (via ObserveStatement
 // and ObserveTransaction) and passes them along to the underlying registry
@@ -60,7 +71,23 @@ type event struct {
 	statement   *Statement
 }
 
-func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stopper) {
+type BufferOpt func(i *concurrentBufferIngester)
+
+// WithoutTimedFlush prevents the concurrentBufferIngester from performing
+// timed flushes to the underlying registry. Generally only useful for
+// testing purposes.
+func WithoutTimedFlush() BufferOpt {
+	return func(i *concurrentBufferIngester) {
+		i.opts.noTimedFlush = true
+	}
+}
+
+func (i *concurrentBufferIngester) Start(
+	ctx context.Context, stopper *stop.Stopper, opts ...BufferOpt,
+) {
+	for _, opt := range opts {
+		opt(i)
+	}
 	// This task pulls buffers from the channel and forwards them along to the
 	// underlying registry.
 	_ = stopper.RunAsyncTask(ctx, "insights-ingester", func(ctx context.Context) {
@@ -68,9 +95,12 @@ func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stop
 
 		for {
 			select {
-			case events := <-i.eventBufferCh:
-				i.ingest(ctx, events) // note that injest clears the buffer
-				eventBufferPool.Put(events)
+			case payload := <-i.eventBufferCh:
+				i.ingest(payload.events) // note that ingest clears the buffer
+				if payload.clearRegistry {
+					i.registry.Clear()
+				}
+				eventBufferPool.Put(payload.events)
 			case <-stopper.ShouldQuiesce():
 				atomic.StoreUint64(&i.running, 0)
 				return
@@ -78,24 +108,35 @@ func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stop
 		}
 	})
 
-	// This task eagerly flushes partial buffers into the channel, to avoid
-	// delays identifying insights in low-traffic clusters and tests.
-	_ = stopper.RunAsyncTask(ctx, "insights-ingester-flush", func(ctx context.Context) {
-		ticker := time.NewTicker(500 * time.Millisecond)
+	if !i.opts.noTimedFlush {
+		// This task eagerly flushes partial buffers into the channel, to avoid
+		// delays identifying insights in low-traffic clusters and tests.
+		_ = stopper.RunAsyncTask(ctx, "insights-ingester-flush", func(ctx context.Context) {
+			ticker := time.NewTicker(500 * time.Millisecond)
 
-		for {
-			select {
-			case <-ticker.C:
-				i.guard.ForceSync()
-			case <-stopper.ShouldQuiesce():
-				ticker.Stop()
-				return
+			for {
+				select {
+				case <-ticker.C:
+					i.guard.ForceSync()
+				case <-stopper.ShouldQuiesce():
+					ticker.Stop()
+					return
+				}
 			}
-		}
+		})
+	}
+}
+
+// Clear flushes the underlying buffer, and signals the underlying registry
+// to clear any remaining cached data afterward. This is an async operation.
+func (i *concurrentBufferIngester) Clear() {
+	i.guard.ForceSyncExec(func() {
+		// Our flush function defined on the guard is responsible for setting clearRegistry back to 0.
+		atomic.StoreUint32(&i.clearRegistry, 1)
 	})
 }
 
-func (i *concurrentBufferIngester) ingest(ctx context.Context, events *eventBuffer) {
+func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 	for idx, e := range events {
 		// Because an eventBuffer is a fixed-size array, rather than a slice,
 		// we do not know how full it is until we hit a nil entry.
@@ -105,7 +146,7 @@ func (i *concurrentBufferIngester) ingest(ctx context.Context, events *eventBuff
 		if e.statement != nil {
 			i.registry.ObserveStatement(e.sessionID, e.statement)
 		} else {
-			i.registry.ObserveTransaction(ctx, e.sessionID, e.transaction)
+			i.registry.ObserveTransaction(e.sessionID, e.transaction)
 		}
 		events[idx] = event{}
 	}
@@ -126,7 +167,7 @@ func (i *concurrentBufferIngester) ObserveStatement(
 }
 
 func (i *concurrentBufferIngester) ObserveTransaction(
-	_ context.Context, sessionID clusterunique.ID, transaction *Transaction,
+	sessionID clusterunique.ID, transaction *Transaction,
 ) {
 	if !i.registry.enabled() {
 		return
@@ -147,7 +188,7 @@ func newConcurrentBufferIngester(registry *lockingRegistry) *concurrentBufferIng
 		// in the micro-benchmarks, but further increases had no effect.
 		// Otherwise, we rely solely on the size of the eventBuffer for
 		// adjusting our carrying capacity.
-		eventBufferCh: make(chan *eventBuffer, 1),
+		eventBufferCh: make(chan eventBufChPayload, 1),
 		registry:      registry,
 	}
 
@@ -157,8 +198,17 @@ func newConcurrentBufferIngester(registry *lockingRegistry) *concurrentBufferIng
 			return bufferSize
 		},
 		func(currentWriterIndex int64) {
+			clearRegistry := atomic.LoadUint32(&i.clearRegistry) == 1
+			if clearRegistry {
+				defer func() {
+					atomic.StoreUint32(&i.clearRegistry, 0)
+				}()
+			}
 			if atomic.LoadUint64(&i.running) == 1 {
-				i.eventBufferCh <- i.guard.eventBuffer
+				i.eventBufferCh <- eventBufChPayload{
+					clearRegistry: clearRegistry,
+					events:        i.guard.eventBuffer,
+				}
 			}
 			i.guard.eventBuffer = eventBufferPool.Get().(*eventBuffer)
 		},

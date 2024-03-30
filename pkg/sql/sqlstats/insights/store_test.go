@@ -14,7 +14,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -25,7 +24,7 @@ import (
 func TestStore(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	store := newStore(st, obs.NoopEventsExporter{})
+	store := newStore(st)
 
 	// With the ExecutionInsightsCapacity set to 5, we retain the 5 most recently-seen insights.
 	ExecutionInsightsCapacity.Override(ctx, &st.SV, 5)

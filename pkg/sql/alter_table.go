@@ -122,7 +122,6 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		}
 		typedExpr, err := p.analyzeExpr(
 			ctx, injectStats.Stats,
-			nil, /* sources - no name resolution */
 			tree.IndexedVarHelper{},
 			types.Jsonb, true, /* requireType */
 			"INJECT STATISTICS" /* typingContext */)
@@ -897,21 +896,15 @@ func (p *planner) setAuditMode(
 	event := &auditevents.SensitiveTableAccessEvent{TableDesc: desc, Writing: true}
 	p.curPlan.auditEventBuilders = append(p.curPlan.auditEventBuilders, event)
 
-	// Requires admin or MODIFYCLUSTERSETTING as of 22.2
-	hasAdmin, err := p.HasAdminRole(ctx)
+	// Requires MODIFYCLUSTERSETTING as of 22.2.
+	// Check for system privilege first, otherwise fall back to role options.
+	hasModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
 	if err != nil {
 		return false, err
 	}
-	if !hasAdmin {
-		// Check for system privilege first, otherwise fall back to role options.
-		hasModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
-		if err != nil {
-			return false, err
-		}
-		if !hasModify {
-			return false, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"only users with admin or %s system privilege are allowed to change audit settings on a table ", privilege.MODIFYCLUSTERSETTING)
-		}
+	if !hasModify {
+		return false, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only users with admin or %s system privilege are allowed to change audit settings on a table ", privilege.MODIFYCLUSTERSETTING)
 	}
 
 	telemetry.Inc(sqltelemetry.SchemaSetAuditModeCounter(auditMode.TelemetryName()))
@@ -1058,6 +1051,206 @@ func applyColumnMutation(
 				"column %q is not a stored computed column", col.GetName())
 		}
 		col.ColumnDesc().ComputeExpr = nil
+
+	case *tree.AlterTableAddIdentity:
+		if typ := col.GetType(); typ == nil || typ.InternalType.Family != types.IntFamily {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"column %q of relation %q type must be an integer type", col.GetName(), tableDesc.GetName())
+		}
+		if col.IsGeneratedAsIdentity() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q is already an identity column",
+				col.GetName(), tableDesc.GetName())
+		}
+		if col.HasDefault() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q already has a default value", col.GetName(), tableDesc.GetName())
+		}
+		if col.IsComputed() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q already has a computed value", col.GetName(), tableDesc.GetName())
+		}
+		if col.IsNullable() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q must be declared NOT NULL before identity can be added", col.GetName(), tableDesc.GetName())
+		}
+		if col.HasOnUpdate() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q already has an update expression", col.GetName(), tableDesc.GetName())
+		}
+
+		// Create column definition for identity column
+		q := []tree.NamedColumnQualification{{Qualification: t.Qualification}}
+		colDef, err := tree.NewColumnTableDef(tree.Name(col.GetName()), col.GetType(), false /* isSerial */, q)
+		if err != nil {
+			return err
+		}
+		newDef, prefix, seqName, seqOpts, err := params.p.processSerialLikeInColumnDef(params.ctx, colDef, tn)
+		if err != nil {
+			return err
+		}
+		if seqName == nil {
+			return errors.Newf("failed to create sequence %q for new identity column %q in %q", seqName, col.ColName(), tn)
+		}
+		colDef = newDef
+
+		colOwnedSeqDesc, err := doCreateSequence(
+			ctx,
+			params.p,
+			params.SessionData(),
+			prefix.Database,
+			prefix.Schema,
+			seqName,
+			tree.PersistencePermanent,
+			seqOpts,
+			fmt.Sprintf("creating sequence %q for new identity column %q in %q", seqName, col.ColName(), tn),
+		)
+		if err != nil {
+			return err
+		}
+
+		typedExpr, _, err := sanitizeColumnExpression(params, colDef.DefaultExpr.Expr, col, tree.ColumnDefaultExprInSetDefault)
+		if err != nil {
+			return err
+		}
+
+		changedSeqDescs, err := maybeAddSequenceDependencies(
+			params.ctx,
+			params.p.ExecCfg().Settings,
+			params.p,
+			tableDesc,
+			col.ColumnDesc(),
+			typedExpr,
+			nil, /* backrefs */
+			tabledesc.DefaultExpr,
+		)
+		if err != nil {
+			return err
+		}
+		for _, changedSeqDesc := range changedSeqDescs {
+			// `colOwnedSeqDesc` and `changedSeqDesc` should refer to a same instance.
+			// But we still want to use the right copy to write a schema change for by
+			// using `changedSeqDesc` just in case the assumption became false in the
+			// future.
+			if colOwnedSeqDesc != nil && colOwnedSeqDesc.ID == changedSeqDesc.ID {
+				if err := setSequenceOwner(changedSeqDesc, col.ColName(), tableDesc); err != nil {
+					return err
+				}
+			}
+			if err := params.p.writeSchemaChange(
+				params.ctx, changedSeqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(t, params.Ann()),
+			); err != nil {
+				return err
+			}
+		}
+
+		// Set column description to identity
+		switch (t.Qualification).(type) {
+		case *tree.GeneratedAlwaysAsIdentity:
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_ALWAYS
+		case *tree.GeneratedByDefAsIdentity:
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
+		}
+		seqOptsStr := tree.Serialize(&seqOpts)
+		col.ColumnDesc().GeneratedAsIdentitySequenceOption = &seqOptsStr
+
+	case *tree.AlterTableSetIdentity:
+		if !col.IsGeneratedAsIdentity() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q is not an identity column",
+				col.GetName(), tableDesc.GetName())
+		}
+
+		switch t.GeneratedAsIdentityType {
+		case tree.GeneratedAlways:
+			if col.IsGeneratedAlwaysAsIdentity() {
+				return nil
+			}
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_ALWAYS
+		case tree.GeneratedByDefault:
+			if col.IsGeneratedByDefaultAsIdentity() {
+				return nil
+			}
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
+		}
+
+	case *tree.AlterTableIdentity:
+		if !col.IsGeneratedAsIdentity() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q is not an identity column",
+				col.GetName(), tableDesc.GetName())
+		}
+
+		// It is assumed that an identify column owns only one sequence.
+		if col.NumUsesSequences() != 1 {
+			return errors.AssertionFailedf(
+				"identity column %q of relation %q has %d sequences instead of 1",
+				col.GetName(), tableDesc.GetName(), col.NumUsesSequences())
+		}
+
+		seqDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Table(ctx, col.GetUsesSequenceID(0))
+		if err != nil {
+			return err
+		}
+
+		// Alter referenced sequence for identity with sepcified option.
+		// Does not override existing values if not specified.
+		if err := alterSequenceImpl(params, seqDesc, t.SeqOptions, t); err != nil {
+			return err
+		}
+
+		opts := seqDesc.GetSequenceOpts()
+		optsNode := tree.SequenceOptions{}
+		if opts.CacheSize > 1 {
+			optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &opts.CacheSize})
+		}
+		optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptMinValue, IntVal: &opts.MinValue})
+		optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptMaxValue, IntVal: &opts.MaxValue})
+		optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &opts.Increment})
+		optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &opts.Start})
+		if opts.Virtual {
+			optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptVirtual})
+		}
+		s := tree.Serialize(&optsNode)
+		col.ColumnDesc().GeneratedAsIdentitySequenceOption = &s
+
+	case *tree.AlterTableDropIdentity:
+		if !col.IsGeneratedAsIdentity() {
+			if t.IfExists {
+				params.p.BufferClientNotice(
+					params.ctx,
+					pgnotice.Newf("column %q of relation %q is not an identity column, skipping", col.GetName(), tableDesc.GetName()),
+				)
+				return nil
+			}
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q is not an identity column",
+				col.GetName(), tableDesc.GetName())
+		}
+
+		// It is assumed that an identify column owns only one sequence.
+		if col.NumUsesSequences() != 1 {
+			return errors.AssertionFailedf(
+				"identity column %q of relation %q has %d sequences instead of 1",
+				col.GetName(), tableDesc.GetName(), col.NumUsesSequences())
+		}
+
+		// Verify sequence is not depended on by another column.
+		// Use tree.DropDefault behavior to verify without the need to alter other dependencies via tree.DropCascade.
+		if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, tableDesc, col, tree.DropDefault); err != nil {
+			return err
+		}
+		// Drop the identity sequence and remove it from the column OwnsSequenceIds and DefaultExpr.
+		// Use tree.DropCascade behavior to remove dependencies on the column.
+		if err := params.p.dropSequencesOwnedByCol(params.ctx, col, true /* queueJob */, tree.DropCascade); err != nil {
+			return err
+		}
+
+		// Remove column identity descriptors
+		col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
+		col.ColumnDesc().GeneratedAsIdentitySequenceOption = nil
+
 	}
 	return nil
 }

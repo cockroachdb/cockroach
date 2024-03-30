@@ -26,7 +26,7 @@ func (b *Builder) buildAlterRangeRelocate(
 	relocate *tree.RelocateRange, inScope *scope,
 ) (outScope *scope) {
 
-	if err := b.catalog.CheckPrivilege(b.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
+	if err := b.catalog.CheckPrivilege(b.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER); err != nil {
 		panic(err)
 	}
 

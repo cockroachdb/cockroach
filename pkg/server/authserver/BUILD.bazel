@@ -35,6 +35,7 @@ go_library(
         "//pkg/util/grpcutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
@@ -52,10 +53,6 @@ go_test(
         "authentication_test.go",
         "main_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":authserver",
         "//pkg/base",

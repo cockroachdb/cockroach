@@ -30,6 +30,9 @@ var _ catalog.TableDescriptor = (*Mutable)(nil)
 var _ catalog.MutableDescriptor = (*Mutable)(nil)
 var _ catalog.TableDescriptor = (*wrapper)(nil)
 
+// OfflineReasonImporting hard codes the Offline Reason for Importing Tables
+const OfflineReasonImporting = "importing"
+
 // wrapper is the base implementation of the catalog.Descriptor
 // interface, which is overloaded by immutable and Mutable.
 type wrapper struct {
@@ -203,7 +206,15 @@ func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.Ind
 	desc.Indexes[indexOrdinal-1] = index
 }
 
-// InitializeImport binds the import start time to the table descriptor
+// OfflineForImport sets the descriptor offline in advance of an
+// import, bumping the ImportEpoch.
+func (desc *Mutable) OfflineForImport() {
+	desc.SetOffline(OfflineReasonImporting)
+	desc.ImportType = descpb.ImportType_IMPORT_WITH_IMPORT_EPOCH
+	desc.ImportEpoch++
+}
+
+// InitializeImport binds the import start time to the table descriptor.
 func (desc *Mutable) InitializeImport(startWallTime int64) error {
 	if desc.ImportStartWallTime != 0 {
 		return errors.AssertionFailedf("Import in progress with start time %v", desc.ImportStartWallTime)
@@ -212,8 +223,9 @@ func (desc *Mutable) InitializeImport(startWallTime int64) error {
 	return nil
 }
 
-// FinalizeImport removes the ImportStartTime
+// FinalizeImport removes in progress import metadata from the descriptor
 func (desc *Mutable) FinalizeImport() {
+	desc.ImportType = 0
 	desc.ImportStartWallTime = 0
 }
 
@@ -636,4 +648,46 @@ func (desc *wrapper) ForEachUDTDependentForHydration(fn func(t *types.T) error) 
 // IsSchemaLocked implements the TableDescriptor interface.
 func (desc *wrapper) IsSchemaLocked() bool {
 	return desc.SchemaLocked
+}
+
+// IsPrimaryKeySwapMutation implements the TableDescriptor interface.
+func (desc *wrapper) IsPrimaryKeySwapMutation(m *descpb.DescriptorMutation) bool {
+	switch t := m.Descriptor_.(type) {
+	case *descpb.DescriptorMutation_PrimaryKeySwap:
+		return true
+	case *descpb.DescriptorMutation_Index:
+		// The declarative schema changer handles primary key swaps differently,
+		// and does not use a PrimaryKeySwap mutation for this operation. Instead,
+		// it will create a new index with a primary index encoding as an
+		// index mutation. To detect a primary index swap scenario we are going to
+		// in the declarative case detect the encoding type
+		// and check if a declarative scpb.PrimaryIndex element with a matching ID
+		// exists and is going public. Since a table can only have a single primary
+		// index at a time, this would indicate this index is replacing the existing
+		// primary index.
+		if t.Index.EncodingType != catenumpb.PrimaryIndexEncoding {
+			return false
+		}
+		state := desc.GetDeclarativeSchemaChangerState()
+		if state == nil {
+			return false
+		}
+		// Loop over all targets searching for primary indexes.
+		for _, pk := range state.Targets {
+			// Confirm the target is a primary index going to public.
+			if pk.TargetStatus != scpb.Status_PUBLIC {
+				continue
+			}
+			pk, ok := pk.ElementOneOf.(*scpb.ElementProto_PrimaryIndex)
+			if !ok {
+				continue
+			}
+			// If the primary index going public matches any current mutation
+			// then this is an index swap scenario.
+			if pk.PrimaryIndex.IndexID == t.Index.ID {
+				return true
+			}
+		}
+	}
+	return false
 }

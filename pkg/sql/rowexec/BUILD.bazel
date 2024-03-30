@@ -5,7 +5,6 @@ go_library(
     name = "rowexec",
     srcs = [
         "aggregator.go",
-        "backfiller.go",
         "bulk_row_writer.go",
         "columnbackfiller.go",
         "countrows.go",
@@ -147,8 +146,8 @@ go_test(
     ],
     embed = [":rowexec"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "//pkg/base",

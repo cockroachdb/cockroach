@@ -7,6 +7,7 @@ go_library(
     srcs = [
         "local_only_session_data.go",
         "sequence_cache.go",
+        "sequence_cache_node.go",
         "session_data.go",
     ],
     embed = [":sessiondatapb_go_proto"],
@@ -14,8 +15,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/security/username",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/types",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",  # keep
     ],
@@ -59,10 +62,6 @@ go_test(
     name = "sessiondatapb_test",
     srcs = ["session_data_test.go"],
     embed = [":sessiondatapb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/protoreflect",
         "@com_github_stretchr_testify//require",

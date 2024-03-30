@@ -229,12 +229,17 @@ var retiredSettings = map[InternalKey]struct{}{
 	"bulkio.restore.remove_regions.enabled":                    {},
 
 	// removed as of 24.1
-	"storage.mvcc.range_tombstones.enabled":                {},
-	"changefeed.balance_range_distribution.enable":         {},
-	"changefeed.mux_rangefeed.enabled":                     {},
-	"kv.rangefeed.catchup_scan_concurrency":                {},
-	"kv.rangefeed.scheduler.enabled":                       {},
-	"physical_replication.producer.mux_rangefeeds.enabled": {},
+	"storage.mvcc.range_tombstones.enabled":                  {},
+	"changefeed.balance_range_distribution.enable":           {},
+	"changefeed.mux_rangefeed.enabled":                       {},
+	"kv.rangefeed.catchup_scan_concurrency":                  {},
+	"physical_replication.producer.mux_rangefeeds.enabled":   {},
+	"kv.rangefeed.use_dedicated_connection_class.enabled":    {},
+	"sql.trace.session_eventlog.enabled":                     {},
+	"sql.show_ranges_deprecated_behavior.enabled":            {},
+	"sql.drop_virtual_cluster.enabled":                       {},
+	"cross_cluster_replication.enabled":                      {},
+	"server.controller.default_tenant.check_service.enabled": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
@@ -368,12 +373,10 @@ func ConsoleKeys() (res []InternalKey) {
 }
 
 var allConsoleKeys = []InternalKey{
-	"cross_cluster_replication.enabled",
 	"keyvisualizer.enabled",
 	"keyvisualizer.sample_interval",
 	"sql.index_recommendation.drop_unused_duration",
 	"sql.insights.anomaly_detection.latency_threshold",
-	"sql.insights.export.enabled",
 	"sql.insights.high_retry_count.threshold",
 	"sql.insights.latency_threshold",
 	"sql.stats.automatic_collection.enabled",

@@ -40,7 +40,7 @@ write *eventpb.DropFunction to event log:
     statement: DROP FUNCTION ‹""›.‹""›.‹f›
     tag: DROP FUNCTION
     user: root
-## StatementPhase stage 1 of 1 with 12 MutationType ops
+## StatementPhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #101
    schema:
   -  functions:
@@ -61,8 +61,8 @@ upsert descriptor #101
   ...
          withGrantOption: "2"
        version: 3
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #104
   ...
        - 1
@@ -92,8 +92,8 @@ upsert descriptor #105
   -  dependedOnBy:
   -  - byId: true
   -    id: 109
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101
@@ -144,7 +144,7 @@ upsert descriptor #109
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 19 MutationType ops
+## PreCommitPhase stage 2 of 2 with 20 MutationType ops
 upsert descriptor #101
    schema:
   -  functions:
@@ -165,8 +165,8 @@ upsert descriptor #101
   ...
          withGrantOption: "2"
        version: 3
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -226,8 +226,8 @@ upsert descriptor #105
   +    nameMapping:
   +      id: 105
   +      name: sq1
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101
@@ -377,8 +377,8 @@ upsert descriptor #105
   -    nameMapping:
   -      id: 105
   -      name: sq1
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101

@@ -522,25 +522,41 @@ func TestAvroArrayCap(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
-func TestAvroCollatedString(t *testing.T) {
+func TestCollatedString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b string collate "fr-CA")`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'désolée' collate "fr-CA")`)
+	for _, tc := range []struct {
+		format   changefeedbase.FormatType
+		expected string
+	}{
+		{
+			format:   changefeedbase.OptFormatAvro,
+			expected: `foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"désolée"}}}}`,
+		},
+		{
+			format:   changefeedbase.OptFormatJSON,
+			expected: `foo: [1]->{"after": {"a": 1, "b": "désolée"}}`,
+		},
+		{
+			format:   changefeedbase.OptFormatCSV,
+			expected: `foo: ->1,désolée`,
+		},
+	} {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b string collate "fr-CA")`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'désolée' collate "fr-CA")`)
 
-		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
-			`WITH format=%s`,
-			changefeedbase.OptFormatAvro))
-		defer closeFeed(t, foo)
-		assertPayloads(t, foo, []string{
-			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"désolée"}}}}`,
-		})
+			foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+				`WITH format=%s, initial_scan_only`, tc.format))
+			defer closeFeed(t, foo)
+			assertPayloads(t, foo, []string{
+				tc.expected,
+			})
+		}
+		cdcTest(t, testFn, feedTestForceSink("kafka"))
 	}
-
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAvroEnum(t *testing.T) {
@@ -1121,7 +1137,7 @@ func TestJsonRountrip(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 
 	isFloatOrDecimal := func(typ *types.T) bool {
-		return typ == types.Float4 || typ == types.Float || typ == types.Decimal
+		return typ.Identical(types.Float4) || typ.Identical(types.Float) || typ.Identical(types.Decimal)
 	}
 
 	type test struct {
@@ -1221,6 +1237,77 @@ func TestJsonRountrip(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, cmp, 0)
 			}
+		})
+	}
+}
+
+// TestAvroWithRegionalTable tests how the avro encoder works with regional
+// tables and with different envelope formats. This is a regression test for
+// #119428.
+func TestAvroWithRegionalTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		envelope string
+		payload  []string
+	}{
+		{
+			envelope: "wrapped",
+			payload: []string{
+				`table1: {"a":{"long":1},"crdb_region":{"string":"us-east1"}}->{"after":{"table1":{"a":{"long":1},"crdb_region":{"string":"us-east1"}}}}`,
+				`table1: {"a":{"long":2},"crdb_region":{"string":"us-east1"}}->{"after":{"table1":{"a":{"long":2},"crdb_region":{"string":"us-east1"}}}}`,
+				`table1: {"a":{"long":3},"crdb_region":{"string":"us-east1"}}->{"after":{"table1":{"a":{"long":3},"crdb_region":{"string":"us-east1"}}}}`,
+			},
+		},
+		{
+			envelope: "bare",
+			payload: []string{
+				`table1: {"a":{"long":1},"crdb_region":{"string":"us-east1"}}->{"record":{"table1":{"a":{"long":1},"crdb_region":{"string":"us-east1"}}}}`,
+				`table1: {"a":{"long":2},"crdb_region":{"string":"us-east1"}}->{"record":{"table1":{"a":{"long":2},"crdb_region":{"string":"us-east1"}}}}`,
+				`table1: {"a":{"long":3},"crdb_region":{"string":"us-east1"}}->{"record":{"table1":{"a":{"long":3},"crdb_region":{"string":"us-east1"}}}}`,
+			},
+		},
+		{
+			envelope: "key_only",
+			payload: []string{
+				`table1: {"a":{"long":1},"crdb_region":{"string":"us-east1"}}->`,
+				`table1: {"a":{"long":2},"crdb_region":{"string":"us-east1"}}->`,
+				`table1: {"a":{"long":3},"crdb_region":{"string":"us-east1"}}->`,
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.envelope, func(t *testing.T) {
+			// Run the test with one and three(default) workers to test both the
+			// default behaviour and the behaviour when
+			// confluentAvroEncoder.keyCache and confluentAvroEncoder.valueCache
+			// are used. With one worker, the cache is forced to be used during
+			// encoding for the second row.
+			testutils.RunTrueAndFalse(t, "overrideWithSingleWorker", func(t *testing.T, overrideWithSingleWorker bool) {
+				cluster, db, cleanup := startTestCluster(t)
+				defer cleanup()
+				if overrideWithSingleWorker {
+					t.Logf("overriding number of parallel workers to one")
+					changefeedbase.EventConsumerWorkers.Override(
+						context.Background(), &cluster.ApplicationLayer(0).ClusterSettings().SV, 1)
+				}
+
+				sqlDB := sqlutils.MakeSQLRunner(db)
+				sqlDB.Exec(t, `CREATE TABLE table1 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
+				schemaReg := cdctest.StartTestSchemaRegistry()
+				defer schemaReg.Close()
+				stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE table1 WITH format = avro, envelope = %s, 
+	confluent_schema_registry = "%s", schema_change_events = column_changes, schema_change_policy = nobackfill`,
+					test.envelope, schemaReg.URL())
+
+				f := makeKafkaFeedFactory(cluster, db)
+				testFeed := feed(t, f, stmt)
+				defer closeFeed(t, testFeed)
+
+				sqlDB.Exec(t, `INSERT INTO table1(a) values(1), (2), (3)`)
+				assertPayloads(t, testFeed, test.payload)
+			})
 		})
 	}
 }

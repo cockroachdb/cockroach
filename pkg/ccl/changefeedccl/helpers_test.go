@@ -671,9 +671,9 @@ var jobRecordPollFrequency = 3 * time.Second
 
 var jobRecordRetryOpts = retry.Options{
 	InitialBackoff: jobRecordPollFrequency,
-	Multiplier:     1,
-	MaxBackoff:     5 * time.Second,
-	MaxRetries:     30,
+	Multiplier:     2,
+	MaxBackoff:     1 * time.Minute,
+	MaxRetries:     10,
 }
 
 // waitForCheckpoint waits for the specified job to have a non-empty checkpoint
@@ -682,7 +682,7 @@ func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Reg
 		t.Log("waiting for checkpoint")
 		progress := loadProgress(t, jf, jr)
 		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-			t.Logf("read checkpoint %v", p.Checkpoint)
+			t.Logf("read checkpoint: %#v", p.Checkpoint)
 			return
 		}
 		if !r.Next() {
@@ -697,7 +697,7 @@ func waitForHighwater(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Regi
 		t.Log("waiting for highwater")
 		progress := loadProgress(t, jf, jr)
 		if hw := progress.GetHighWater(); hw != nil && !hw.IsEmpty() {
-			t.Logf("read highwater %s", hw)
+			t.Logf("read highwater: %s", hw)
 			return
 		}
 		if !r.Next() {
@@ -881,6 +881,7 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 		"pubsub":       1,
 		"sinkless":     2,
 		"cloudstorage": 0,
+		"pulsar":       1,
 	}
 	if options.externalIODir != "" {
 		sinkWeights["cloudstorage"] = 3
@@ -996,6 +997,11 @@ func makeFeedFactoryWithOptions(
 		f := makePubsubFeedFactory(srvOrCluster, db)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*pubsubFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
+		return f, func() { cleanup() }
+	case "pulsar":
+		f := makePulsarFeedFactory(srvOrCluster, db)
+		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
+		f.(*pulsarFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
 		return f, func() { cleanup() }
 	case "sinkless":
 		pgURLForUserSinkless := func(u string, pass ...string) (url.URL, func()) {
@@ -1150,7 +1156,7 @@ func maybeUseExternalConnection(
 	// percentExternal is the chance of randomly running a test using an `external://` uri.
 	// Set to 1 to always do this.
 	const percentExternal = 0.5
-	if sinkType == `sinkless` || sinkType == `enterprise` || strings.Contains(flakyWhenExternalConnection, sinkType) ||
+	if sinkType == `sinkless` || sinkType == `enterprise` || sinkType == `pulsar` || strings.Contains(flakyWhenExternalConnection, sinkType) ||
 		options.forceNoExternalConnectionURI || rand.Float32() > percentExternal {
 		return factory
 	}
@@ -1241,6 +1247,7 @@ func verifyLogsWithEmittedBytesAndMessages(
 		var emittedBytes int64 = 0
 		var emittedMessages int64 = 0
 		for _, msg := range emittedBytesLogs {
+			t.Logf("read message %v", msg)
 			if msg.JobId != int64(jobID) {
 				continue
 			}

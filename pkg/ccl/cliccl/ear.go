@@ -10,58 +10,53 @@ package cliccl
 
 import (
 	"bytes"
-	"context"
+	"cmp"
 	"fmt"
 	"io"
-	"os"
-	"sort"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/spf13/cobra"
 )
 
-func runDecrypt(_ *cobra.Command, args []string) (returnErr error) {
+func runDecrypt(cmd *cobra.Command, args []string) (returnErr error) {
 	dir, inPath := args[0], args[1]
 	var outPath string
 	if len(args) > 2 {
 		outPath = args[2]
 	}
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-
-	db, err := cli.OpenEngine(dir, stopper, storage.MustExist, storage.ReadOnly)
+	env, err := cli.OpenFilesystemEnv(dir, fs.ReadOnly)
 	if err != nil {
 		return errors.Wrap(err, "could not open store")
 	}
+	defer env.Close()
 
 	// Open the specified file through the FS, decrypting it.
-	f, err := db.Open(inPath)
+	f, err := env.Open(inPath)
 	if err != nil {
 		return errors.Wrapf(err, "could not open input file %s", inPath)
 	}
 	defer f.Close()
 
 	// Copy the raw bytes into the destination file.
-	outFile := os.Stdout
+	out := cmd.OutOrStdout()
 	if outPath != "" {
-		outFile, err = os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+		outFile, err := env.UnencryptedFS.Create(outPath)
 		if err != nil {
 			return errors.Wrapf(err, "could not open output file %s", outPath)
 		}
 		defer outFile.Close()
+		out = outFile
 	}
-	if _, err = io.Copy(outFile, f); err != nil {
+	if _, err = io.Copy(out, f); err != nil {
 		return errors.Wrapf(err, "could not write to output file")
 	}
-
 	return nil
 }
 
@@ -86,23 +81,22 @@ func (f fileEntry) String() string {
 	return b.String()
 }
 
-func runList(cmd *cobra.Command, args []string) error {
+func runList(cmd *cobra.Command, args []string) (returnErr error) {
 	dir := args[0]
 
-	fr := &storage.PebbleFileRegistry{
-		FS:                  vfs.Default,
-		DBDir:               dir,
-		ReadOnly:            true,
-		NumOldRegistryFiles: storage.DefaultNumOldFileRegistryFiles,
+	env, err := cli.OpenFilesystemEnv(dir, fs.ReadOnly)
+	if err != nil {
+		return errors.Wrap(err, "could not open store")
 	}
-	if err := fr.Load(cmd.Context()); err != nil {
-		return errors.Wrapf(err, "could not load file registry")
+	defer env.Close()
+
+	if env.Registry == nil {
+		return errors.Newf("encryption-at-rest not enabled")
 	}
-	defer func() { _ = fr.Close() }()
 
 	// List files and print to stdout.
 	var entries []fileEntry
-	for name, entry := range fr.List() {
+	for name, entry := range env.Registry.List() {
 		var encSettings enginepbccl.EncryptionSettings
 		settings := entry.EncryptionSettings
 		if err := protoutil.Unmarshal(settings, &encSettings); err != nil {
@@ -114,12 +108,9 @@ func runList(cmd *cobra.Command, args []string) error {
 			settings: encSettings,
 		})
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].name < entries[j].name
-	})
+	slices.SortFunc(entries, func(a, b fileEntry) int { return cmp.Compare(a.name, b.name) })
 	for _, e := range entries {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", e)
 	}
-
 	return nil
 }

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -178,7 +179,11 @@ func (p *planner) prepareUsingOptimizer(
 		colMeta := md.ColumnMeta(col.ID)
 		resultCols[i].Name = col.Alias
 		resultCols[i].Typ = colMeta.Type
-		if err := checkResultType(resultCols[i].Typ); err != nil {
+		// At PREPARE time we don't know yet which format the client will
+		// request (this is only known at BIND time), so we optimistically
+		// assume that it'll be TEXT (which is the default).
+		fmtCode := pgwirebase.FormatText
+		if err = checkResultType(resultCols[i].Typ, fmtCode); err != nil {
 			return 0, err
 		}
 		// If the column came from a table, set up the relevant metadata.
@@ -528,6 +533,14 @@ func (opc *optPlanningCtx) reuseMemo(
 // The returned memo is only safe to use in one thread, during execution of the
 // current statement.
 func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ error) {
+	if resumeProc := opc.p.storedProcTxnState.getResumeProc(); resumeProc != nil {
+		// We are executing a stored procedure which has paused to commit or
+		// rollback its transaction. Use resumeProc to resume execution in a new
+		// transaction where the control statement left off.
+		opc.log(ctx, "resuming stored procedure execution in a new transaction")
+		return opc.reuseMemo(ctx, resumeProc)
+	}
+
 	prepared := opc.p.stmt.Prepared
 	p := opc.p
 	if opc.allowMemoReuse && prepared != nil && prepared.Memo != nil {
@@ -546,8 +559,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 			}
 		}
 		opc.log(ctx, "reusing cached memo")
-		memo, err := opc.reuseMemo(ctx, prepared.Memo)
-		return memo, err
+		return opc.reuseMemo(ctx, prepared.Memo)
 	}
 
 	if opc.useCache {
@@ -571,8 +583,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 				opc.log(ctx, "query cache hit")
 				opc.flags.Set(planFlagOptCacheHit)
 			}
-			memo, err := opc.reuseMemo(ctx, cachedData.Memo)
-			return memo, err
+			return opc.reuseMemo(ctx, cachedData.Memo)
 		}
 		opc.flags.Set(planFlagOptCacheMiss)
 		opc.log(ctx, "query cache miss")
@@ -704,10 +715,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 
 	planTop.planComponents = *result
 	planTop.stmt = stmt
-	planTop.flags = opc.flags
-	if bld.IsDDL {
-		planTop.flags.Set(planFlagIsDDL)
-
+	planTop.flags |= opc.flags
+	if planTop.flags.IsSet(planFlagIsDDL) {
 		// The declarative schema changer mode would have already been set here,
 		// since all declarative schema changes are built opaquely. However, some
 		// DDLs (e.g. CREATE TABLE) are built non-opaquely, so we need to set the
@@ -716,27 +725,6 @@ func (opc *optPlanningCtx) runExecBuilder(
 			telemetry.Inc(sqltelemetry.LegacySchemaChangerCounter)
 			planTop.instrumentation.schemaChangerMode = schemaChangerModeLegacy
 		}
-	}
-	if bld.ContainsFullTableScan {
-		planTop.flags.Set(planFlagContainsFullTableScan)
-	}
-	if bld.ContainsFullIndexScan {
-		planTop.flags.Set(planFlagContainsFullIndexScan)
-	}
-	if bld.ContainsLargeFullTableScan {
-		planTop.flags.Set(planFlagContainsLargeFullTableScan)
-	}
-	if bld.ContainsLargeFullIndexScan {
-		planTop.flags.Set(planFlagContainsLargeFullIndexScan)
-	}
-	if bld.ContainsMutation {
-		planTop.flags.Set(planFlagContainsMutation)
-	}
-	if bld.ContainsNonDefaultKeyLocking {
-		planTop.flags.Set(planFlagContainsNonDefaultLocking)
-	}
-	if bld.CheckContainsNonDefaultKeyLocking {
-		planTop.flags.Set(planFlagCheckContainsNonDefaultLocking)
 	}
 	planTop.mem = mem
 	planTop.catalog = opc.catalog

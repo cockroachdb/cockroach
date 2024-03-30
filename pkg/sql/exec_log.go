@@ -109,6 +109,18 @@ const (
 	executorTypeInternal
 )
 
+// shouldForceLogStatement returns true if the statement should be force logged to
+// TELEMETRY. Currently the criteria is if the statement is not of type DML and is
+// not BEGIN or COMMIT.
+func shouldForceLogStatement(ast tree.Statement) bool {
+	switch ast.(type) {
+	case *tree.BeginTransaction, *tree.CommitTransaction:
+		return false
+	default:
+		return ast.StatementType() != tree.TypeDML
+	}
+}
+
 // vLevel returns the vmodule log level at which logs from the given executor
 // should be written to the logs.
 func (s executorType) vLevel() log.Level { return log.Level(s) + 2 }
@@ -128,16 +140,17 @@ func (p *planner) maybeLogStatement(
 	err error,
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
-	telemetryLoggingMetrics *TelemetryLoggingMetrics,
+	telemetryLoggingMetrics *telemetryLoggingMetrics,
 	stmtFingerprintID appstatspb.StmtFingerprintID,
 	queryStats *topLevelQueryStats,
 	statsCollector sqlstats.StatsCollector,
+	shouldLogToTelemetry bool,
 ) {
 	p.maybeAuditRoleBasedAuditEvent(ctx, execType)
 	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter,
 		rows, stmtCount, bulkJobId, err, queryReceived, hasAdminRoleCache,
 		telemetryLoggingMetrics, stmtFingerprintID, queryStats, statsCollector,
-	)
+		shouldLogToTelemetry)
 }
 
 func (p *planner) maybeLogStatementInternal(
@@ -148,10 +161,11 @@ func (p *planner) maybeLogStatementInternal(
 	err error,
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
-	telemetryMetrics *TelemetryLoggingMetrics,
+	telemetryMetrics *telemetryLoggingMetrics,
 	stmtFingerprintID appstatspb.StmtFingerprintID,
 	topLevelQueryStats *topLevelQueryStats,
 	statsCollector sqlstats.StatsCollector,
+	shouldLogToTelemetry bool,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -165,7 +179,7 @@ func (p *planner) maybeLogStatementInternal(
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEventBuilders) != 0
 	logConsoleQuery := telemetryInternalConsoleQueriesEnabled.Get(&p.execCfg.Settings.SV) &&
-		strings.HasPrefix(p.SessionData().ApplicationName, "$ internal-console")
+		strings.HasPrefix(p.SessionData().ApplicationName, internalConsoleAppName)
 
 	// We only consider non-internal SQL statements for telemetry logging unless
 	// the telemetryInternalQueriesEnabled is true.
@@ -282,17 +296,28 @@ func (p *planner) maybeLogStatementInternal(
 		// the last event emission.
 		tracingEnabled := telemetryMetrics.isTracing(p.curPlan.instrumentation.Tracing())
 
-		isStmtMode := telemetrySamplingMode.Get(&p.execCfg.Settings.SV) == telemetryModeStatement
-
 		// Always sample if one of the scenarios is true:
-		// - on 'statement' sampling and the current statement is not of type DML
-		// - on 'transaction' sampling mode and the current statement is not of type DML and is not a COMMIT
+		// - statement is not of type DML and is not BEGIN or COMMIT
 		// - tracing is enabled for this statement
 		// - this is a query emitted by our console (application_name starts with `$ internal-console`) and
 		// the cluster setting to log console queries is enabled
-		forceLog := (p.stmt.AST.StatementType() != tree.TypeDML &&
-			(isStmtMode || p.stmt.AST.StatementTag() != "COMMIT")) ||
-			tracingEnabled || logConsoleQuery
+		forceSampling := shouldForceLogStatement(p.stmt.AST) || tracingEnabled || logConsoleQuery
+
+		emit, skippedQueries := telemetryMetrics.shouldEmitStatementLog(shouldLogToTelemetry, stmtCount, forceSampling)
+		if !emit {
+			return
+		}
+
+		var queryLevelStats execstats.QueryLevelStats
+		if stats, ok := p.instrumentation.GetQueryLevelStats(); ok {
+			queryLevelStats = *stats
+		}
+
+		queryLevelStats = telemetryMetrics.getQueryLevelStats(queryLevelStats)
+		indexRecs := make([]string, 0, len(p.curPlan.instrumentation.indexRecs))
+		for _, rec := range p.curPlan.instrumentation.indexRecs {
+			indexRecs = append(indexRecs, rec.SQL)
+		}
 
 		var txnID string
 		// p.txn can be nil for COPY.
@@ -300,131 +325,197 @@ func (p *planner) maybeLogStatementInternal(
 			txnID = p.txn.ID().String()
 		}
 
-		if telemetryMetrics.shouldEmitStatementLog(telemetryMetrics.timeNow(), txnID, forceLog, stmtCount) {
-			var queryLevelStats execstats.QueryLevelStats
-			if stats, ok := p.instrumentation.GetQueryLevelStats(); ok {
-				queryLevelStats = *stats
+		phaseTimes := statsCollector.PhaseTimes()
+
+		// Collect the statistics.
+		idleLatRaw := phaseTimes.GetIdleLatency(statsCollector.PreviousPhaseTimes())
+		idleLatNanos := idleLatRaw.Nanoseconds()
+		runLatRaw := phaseTimes.GetRunLatency()
+		runLatNanos := runLatRaw.Nanoseconds()
+		parseLatNanos := phaseTimes.GetParsingLatency().Nanoseconds()
+		planLatNanos := phaseTimes.GetPlanningLatency().Nanoseconds()
+		// We want to exclude any overhead to reduce possible confusion.
+		svcLatRaw := phaseTimes.GetServiceLatencyNoOverhead()
+		svcLatNanos := svcLatRaw.Nanoseconds()
+
+		// processing latency: contributing towards SQL results.
+		processingLatNanos := parseLatNanos + planLatNanos + runLatNanos
+
+		// overhead latency: txn/retry management, error checking, etc
+		execOverheadNanos := svcLatNanos - processingLatNanos
+
+		var sqlInstanceIDs []int32
+		if len(queryLevelStats.SqlInstanceIds) > 0 {
+			sqlInstanceIDs = make([]int32, 0, len(queryLevelStats.SqlInstanceIds))
+			for sqlId := range queryLevelStats.SqlInstanceIds {
+				sqlInstanceIDs = append(sqlInstanceIDs, int32(sqlId))
 			}
+			sort.Slice(sqlInstanceIDs, func(i, j int) bool {
+				return sqlInstanceIDs[i] < sqlInstanceIDs[j]
+			})
+		}
 
-			queryLevelStats = telemetryMetrics.getQueryLevelStats(queryLevelStats)
-			indexRecs := make([]string, 0, len(p.curPlan.instrumentation.indexRecs))
-			for _, rec := range p.curPlan.instrumentation.indexRecs {
-				indexRecs = append(indexRecs, rec.SQL)
-			}
+		sampledQuery := getSampledQuery()
+		defer releaseSampledQuery(sampledQuery)
 
-			phaseTimes := statsCollector.PhaseTimes()
+		*sampledQuery = eventpb.SampledQuery{
+			CommonSQLExecDetails:                  execDetails,
+			SkippedQueries:                        skippedQueries,
+			CostEstimate:                          p.curPlan.instrumentation.costEstimate,
+			Distribution:                          p.curPlan.instrumentation.distribution.String(),
+			PlanGist:                              p.curPlan.instrumentation.planGist.String(),
+			SessionID:                             p.extendedEvalCtx.SessionID.String(),
+			Database:                              p.CurrentDatabase(),
+			StatementID:                           p.stmt.QueryID.String(),
+			TransactionID:                         txnID,
+			StatementFingerprintID:                uint64(stmtFingerprintID),
+			MaxFullScanRowsEstimate:               p.curPlan.instrumentation.maxFullScanRows,
+			TotalScanRowsEstimate:                 p.curPlan.instrumentation.totalScanRows,
+			OutputRowsEstimate:                    p.curPlan.instrumentation.outputRows,
+			StatsAvailable:                        p.curPlan.instrumentation.statsAvailable,
+			NanosSinceStatsCollected:              int64(p.curPlan.instrumentation.nanosSinceStatsCollected),
+			BytesRead:                             topLevelQueryStats.bytesRead,
+			RowsRead:                              topLevelQueryStats.rowsRead,
+			RowsWritten:                           topLevelQueryStats.rowsWritten,
+			InnerJoinCount:                        int64(p.curPlan.instrumentation.joinTypeCounts[descpb.InnerJoin]),
+			LeftOuterJoinCount:                    int64(p.curPlan.instrumentation.joinTypeCounts[descpb.LeftOuterJoin]),
+			FullOuterJoinCount:                    int64(p.curPlan.instrumentation.joinTypeCounts[descpb.FullOuterJoin]),
+			SemiJoinCount:                         int64(p.curPlan.instrumentation.joinTypeCounts[descpb.LeftSemiJoin]),
+			AntiJoinCount:                         int64(p.curPlan.instrumentation.joinTypeCounts[descpb.LeftAntiJoin]),
+			IntersectAllJoinCount:                 int64(p.curPlan.instrumentation.joinTypeCounts[descpb.IntersectAllJoin]),
+			ExceptAllJoinCount:                    int64(p.curPlan.instrumentation.joinTypeCounts[descpb.ExceptAllJoin]),
+			HashJoinCount:                         int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.HashJoin]),
+			CrossJoinCount:                        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.CrossJoin]),
+			IndexJoinCount:                        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.IndexJoin]),
+			LookupJoinCount:                       int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.LookupJoin]),
+			MergeJoinCount:                        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.MergeJoin]),
+			InvertedJoinCount:                     int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.InvertedJoin]),
+			ApplyJoinCount:                        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ApplyJoin]),
+			ZigZagJoinCount:                       int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
+			ContentionNanos:                       queryLevelStats.ContentionTime.Nanoseconds(),
+			Regions:                               queryLevelStats.Regions,
+			SQLInstanceIDs:                        sqlInstanceIDs,
+			NetworkBytesSent:                      queryLevelStats.NetworkBytesSent,
+			MaxMemUsage:                           queryLevelStats.MaxMemUsage,
+			MaxDiskUsage:                          queryLevelStats.MaxDiskUsage,
+			KVBytesRead:                           queryLevelStats.KVBytesRead,
+			KVPairsRead:                           queryLevelStats.KVPairsRead,
+			KVRowsRead:                            queryLevelStats.KVRowsRead,
+			KvTimeNanos:                           queryLevelStats.KVTime.Nanoseconds(),
+			KvGrpcCalls:                           queryLevelStats.KVBatchRequestsIssued,
+			NetworkMessages:                       queryLevelStats.NetworkMessages,
+			CpuTimeNanos:                          queryLevelStats.CPUTime.Nanoseconds(),
+			IndexRecommendations:                  indexRecs,
+			Indexes:                               p.curPlan.instrumentation.indexesUsed,
+			ScanCount:                             int64(p.curPlan.instrumentation.scanCounts[exec.ScanCount]),
+			ScanWithStatsCount:                    int64(p.curPlan.instrumentation.scanCounts[exec.ScanWithStatsCount]),
+			ScanWithStatsForecastCount:            int64(p.curPlan.instrumentation.scanCounts[exec.ScanWithStatsForecastCount]),
+			TotalScanRowsWithoutForecastsEstimate: p.curPlan.instrumentation.totalScanRowsWithoutForecasts,
+			NanosSinceStatsForecasted:             int64(p.curPlan.instrumentation.nanosSinceStatsForecasted),
+			IdleLatencyNanos:                      idleLatNanos,
+			ServiceLatencyNanos:                   svcLatNanos,
+			RunLatencyNanos:                       runLatNanos,
+			PlanLatencyNanos:                      planLatNanos,
+			ParseLatencyNanos:                     parseLatNanos,
+			OverheadLatencyNanos:                  execOverheadNanos,
+			MvccBlockBytes:                        queryLevelStats.MvccBlockBytes,
+			MvccBlockBytesInCache:                 queryLevelStats.MvccBlockBytesInCache,
+			MvccKeyBytes:                          queryLevelStats.MvccKeyBytes,
+			MvccPointCount:                        queryLevelStats.MvccPointCount,
+			MvccPointsCoveredByRangeTombstones:    queryLevelStats.MvccPointsCoveredByRangeTombstones,
+			MvccRangeKeyContainedPoints:           queryLevelStats.MvccRangeKeyContainedPoints,
+			MvccRangeKeyCount:                     queryLevelStats.MvccRangeKeyCount,
+			MvccRangeKeySkippedPoints:             queryLevelStats.MvccRangeKeySkippedPoints,
+			MvccSeekCountInternal:                 queryLevelStats.MvccSeeksInternal,
+			MvccSeekCount:                         queryLevelStats.MvccSeeks,
+			MvccStepCountInternal:                 queryLevelStats.MvccStepsInternal,
+			MvccStepCount:                         queryLevelStats.MvccSteps,
+			MvccValueBytes:                        queryLevelStats.MvccValueBytes,
+			SchemaChangerMode:                     p.curPlan.instrumentation.schemaChangerMode.String(),
+		}
 
-			// Collect the statistics.
-			idleLatRaw := phaseTimes.GetIdleLatency(statsCollector.PreviousPhaseTimes())
-			idleLatNanos := idleLatRaw.Nanoseconds()
-			runLatRaw := phaseTimes.GetRunLatency()
-			runLatNanos := runLatRaw.Nanoseconds()
-			parseLatNanos := phaseTimes.GetParsingLatency().Nanoseconds()
-			planLatNanos := phaseTimes.GetPlanningLatency().Nanoseconds()
-			// We want to exclude any overhead to reduce possible confusion.
-			svcLatRaw := phaseTimes.GetServiceLatencyNoOverhead()
-			svcLatNanos := svcLatRaw.Nanoseconds()
+		p.logOperationalEventsOnlyExternally(ctx, sampledQuery)
+	}
+}
 
-			// processing latency: contributing towards SQL results.
-			processingLatNanos := parseLatNanos + planLatNanos + runLatNanos
+// logTransaction records the current transaction to the TELEMETRY channel.
+func (p *planner) logTransaction(
+	ctx context.Context,
+	txnCounter int,
+	txnFingerprintID appstatspb.TransactionFingerprintID,
+	txnStats *sqlstats.RecordedTxnStats,
+	skippedTransactions uint64,
+) {
 
-			// overhead latency: txn/retry management, error checking, etc
-			execOverheadNanos := svcLatNanos - processingLatNanos
+	// Redact error messages.
+	var execErrStr, retryErr redact.RedactableString
+	sqlErrState := ""
+	if txnStats.TxnErr != nil {
+		execErrStr = redact.Sprint(txnStats.TxnErr)
+		sqlErrState = pgerror.GetPGCode(txnStats.TxnErr).String()
+	}
 
-			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
+	if txnStats.AutoRetryReason != nil {
+		retryErr = redact.Sprint(txnStats.AutoRetryReason)
+	}
 
-			var sqlInstanceIDs []int32
-			if len(queryLevelStats.SqlInstanceIds) > 0 {
-				sqlInstanceIDs = make([]int32, 0, len(queryLevelStats.SqlInstanceIds))
-				for sqlId := range queryLevelStats.SqlInstanceIds {
-					sqlInstanceIDs = append(sqlInstanceIDs, int32(sqlId))
-				}
-				sort.Slice(sqlInstanceIDs, func(i, j int) bool {
-					return sqlInstanceIDs[i] < sqlInstanceIDs[j]
-				})
-			}
+	sampledTxn := getSampledTransaction()
+	defer releaseSampledTransaction(sampledTxn)
 
-			sampledQuery := eventpb.SampledQuery{
-				CommonSQLExecDetails:                  execDetails,
-				SkippedQueries:                        skippedQueries,
-				CostEstimate:                          p.curPlan.instrumentation.costEstimate,
-				Distribution:                          p.curPlan.instrumentation.distribution.String(),
-				PlanGist:                              p.curPlan.instrumentation.planGist.String(),
-				SessionID:                             p.extendedEvalCtx.SessionID.String(),
-				Database:                              p.CurrentDatabase(),
-				StatementID:                           p.stmt.QueryID.String(),
-				TransactionID:                         txnID,
-				StatementFingerprintID:                uint64(stmtFingerprintID),
-				MaxFullScanRowsEstimate:               p.curPlan.instrumentation.maxFullScanRows,
-				TotalScanRowsEstimate:                 p.curPlan.instrumentation.totalScanRows,
-				OutputRowsEstimate:                    p.curPlan.instrumentation.outputRows,
-				StatsAvailable:                        p.curPlan.instrumentation.statsAvailable,
-				NanosSinceStatsCollected:              int64(p.curPlan.instrumentation.nanosSinceStatsCollected),
-				BytesRead:                             topLevelQueryStats.bytesRead,
-				RowsRead:                              topLevelQueryStats.rowsRead,
-				RowsWritten:                           topLevelQueryStats.rowsWritten,
-				InnerJoinCount:                        int64(p.curPlan.instrumentation.joinTypeCounts[descpb.InnerJoin]),
-				LeftOuterJoinCount:                    int64(p.curPlan.instrumentation.joinTypeCounts[descpb.LeftOuterJoin]),
-				FullOuterJoinCount:                    int64(p.curPlan.instrumentation.joinTypeCounts[descpb.FullOuterJoin]),
-				SemiJoinCount:                         int64(p.curPlan.instrumentation.joinTypeCounts[descpb.LeftSemiJoin]),
-				AntiJoinCount:                         int64(p.curPlan.instrumentation.joinTypeCounts[descpb.LeftAntiJoin]),
-				IntersectAllJoinCount:                 int64(p.curPlan.instrumentation.joinTypeCounts[descpb.IntersectAllJoin]),
-				ExceptAllJoinCount:                    int64(p.curPlan.instrumentation.joinTypeCounts[descpb.ExceptAllJoin]),
-				HashJoinCount:                         int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.HashJoin]),
-				CrossJoinCount:                        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.CrossJoin]),
-				IndexJoinCount:                        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.IndexJoin]),
-				LookupJoinCount:                       int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.LookupJoin]),
-				MergeJoinCount:                        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.MergeJoin]),
-				InvertedJoinCount:                     int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.InvertedJoin]),
-				ApplyJoinCount:                        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ApplyJoin]),
-				ZigZagJoinCount:                       int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
-				ContentionNanos:                       queryLevelStats.ContentionTime.Nanoseconds(),
-				Regions:                               queryLevelStats.Regions,
-				SQLInstanceIDs:                        sqlInstanceIDs,
-				NetworkBytesSent:                      queryLevelStats.NetworkBytesSent,
-				MaxMemUsage:                           queryLevelStats.MaxMemUsage,
-				MaxDiskUsage:                          queryLevelStats.MaxDiskUsage,
-				KVBytesRead:                           queryLevelStats.KVBytesRead,
-				KVPairsRead:                           queryLevelStats.KVPairsRead,
-				KVRowsRead:                            queryLevelStats.KVRowsRead,
-				KvTimeNanos:                           queryLevelStats.KVTime.Nanoseconds(),
-				KvGrpcCalls:                           queryLevelStats.KVBatchRequestsIssued,
-				NetworkMessages:                       queryLevelStats.NetworkMessages,
-				CpuTimeNanos:                          queryLevelStats.CPUTime.Nanoseconds(),
-				IndexRecommendations:                  indexRecs,
-				Indexes:                               p.curPlan.instrumentation.indexesUsed,
-				ScanCount:                             int64(p.curPlan.instrumentation.scanCounts[exec.ScanCount]),
-				ScanWithStatsCount:                    int64(p.curPlan.instrumentation.scanCounts[exec.ScanWithStatsCount]),
-				ScanWithStatsForecastCount:            int64(p.curPlan.instrumentation.scanCounts[exec.ScanWithStatsForecastCount]),
-				TotalScanRowsWithoutForecastsEstimate: p.curPlan.instrumentation.totalScanRowsWithoutForecasts,
-				NanosSinceStatsForecasted:             int64(p.curPlan.instrumentation.nanosSinceStatsForecasted),
-				IdleLatencyNanos:                      idleLatNanos,
-				ServiceLatencyNanos:                   svcLatNanos,
-				RunLatencyNanos:                       runLatNanos,
-				PlanLatencyNanos:                      planLatNanos,
-				ParseLatencyNanos:                     parseLatNanos,
-				OverheadLatencyNanos:                  execOverheadNanos,
-				MvccBlockBytes:                        queryLevelStats.MvccBlockBytes,
-				MvccBlockBytesInCache:                 queryLevelStats.MvccBlockBytesInCache,
-				MvccKeyBytes:                          queryLevelStats.MvccKeyBytes,
-				MvccPointCount:                        queryLevelStats.MvccPointCount,
-				MvccPointsCoveredByRangeTombstones:    queryLevelStats.MvccPointsCoveredByRangeTombstones,
-				MvccRangeKeyContainedPoints:           queryLevelStats.MvccRangeKeyContainedPoints,
-				MvccRangeKeyCount:                     queryLevelStats.MvccRangeKeyCount,
-				MvccRangeKeySkippedPoints:             queryLevelStats.MvccRangeKeySkippedPoints,
-				MvccSeekCountInternal:                 queryLevelStats.MvccSeeksInternal,
-				MvccSeekCount:                         queryLevelStats.MvccSeeks,
-				MvccStepCountInternal:                 queryLevelStats.MvccStepsInternal,
-				MvccStepCount:                         queryLevelStats.MvccSteps,
-				MvccValueBytes:                        queryLevelStats.MvccValueBytes,
-				SchemaChangerMode:                     p.curPlan.instrumentation.schemaChangerMode.String(),
-			}
+	*sampledTxn = eventpb.SampledTransaction{
+		SkippedTransactions:      int64(skippedTransactions),
+		User:                     txnStats.SessionData.SessionUser().Normalized(),
+		ApplicationName:          txnStats.SessionData.ApplicationName,
+		TxnCounter:               uint32(txnCounter),
+		SessionID:                txnStats.SessionID.String(),
+		TransactionID:            txnStats.TransactionID.String(),
+		TransactionFingerprintID: txnFingerprintID,
+		Committed:                txnStats.Committed,
+		ImplicitTxn:              txnStats.ImplicitTxn,
+		StartTimeUnixNanos:       txnStats.StartTime.UnixNano(),
+		EndTimeUnixNanos:         txnStats.EndTime.UnixNano(),
+		ServiceLatNanos:          txnStats.ServiceLatency.Nanoseconds(),
+		SQLSTATE:                 sqlErrState,
+		ErrorText:                execErrStr,
+		NumRetries:               txnStats.RetryCount,
+		LastAutoRetryReason:      retryErr,
+		StatementFingerprintIDs:  txnStats.StatementFingerprintIDs,
+		NumRows:                  int64(txnStats.RowsAffected),
+		RetryLatNanos:            txnStats.RetryLatency.Nanoseconds(),
+		CommitLatNanos:           txnStats.CommitLatency.Nanoseconds(),
+		IdleLatNanos:             txnStats.IdleLatency.Nanoseconds(),
+		BytesRead:                txnStats.BytesRead,
+		RowsRead:                 txnStats.RowsRead,
+		RowsWritten:              txnStats.RowsWritten,
+	}
 
-			p.logOperationalEventsOnlyExternally(ctx, &sampledQuery)
-		} else {
-			telemetryMetrics.incSkippedQueryCount()
+	if txnStats.CollectedExecStats {
+		sampledTxn.SampledExecStats = &eventpb.SampledExecStats{
+			NetworkBytes:    txnStats.ExecStats.NetworkBytesSent,
+			MaxMemUsage:     txnStats.ExecStats.MaxMemUsage,
+			ContentionTime:  int64(txnStats.ExecStats.ContentionTime.Seconds()),
+			NetworkMessages: txnStats.ExecStats.NetworkMessages,
+			MaxDiskUsage:    txnStats.ExecStats.MaxDiskUsage,
+			CPUSQLNanos:     txnStats.ExecStats.CPUTime.Nanoseconds(),
+			MVCCIteratorStats: eventpb.MVCCIteratorStats{
+				StepCount:                      txnStats.ExecStats.MvccSteps,
+				StepCountInternal:              txnStats.ExecStats.MvccStepsInternal,
+				SeekCount:                      txnStats.ExecStats.MvccSeeks,
+				SeekCountInternal:              txnStats.ExecStats.MvccSeeksInternal,
+				BlockBytes:                     txnStats.ExecStats.MvccBlockBytes,
+				BlockBytesInCache:              txnStats.ExecStats.MvccBlockBytesInCache,
+				KeyBytes:                       txnStats.ExecStats.MvccKeyBytes,
+				ValueBytes:                     txnStats.ExecStats.MvccValueBytes,
+				PointCount:                     txnStats.ExecStats.MvccPointCount,
+				PointsCoveredByRangeTombstones: txnStats.ExecStats.MvccPointsCoveredByRangeTombstones,
+				RangeKeyCount:                  txnStats.ExecStats.MvccRangeKeyCount,
+				RangeKeyContainedPoints:        txnStats.ExecStats.MvccRangeKeyContainedPoints,
+				RangeKeySkippedPoints:          txnStats.ExecStats.MvccRangeKeySkippedPoints,
+			},
 		}
 	}
+
+	log.StructuredEvent(ctx, sampledTxn)
 }
 
 func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...logpb.EventPayload) {

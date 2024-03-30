@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -92,7 +91,7 @@ func (sd *SpanConfigDecoder) decode(kv roachpb.KeyValue) (spanconfig.Record, err
 
 func (sd *SpanConfigDecoder) TranslateEvent(
 	ctx context.Context, ev *kvpb.RangeFeedValue,
-) rangefeedbuffer.Event {
+) (*BufferEvent, bool) {
 	deleted := !ev.Value.IsPresent()
 	var value roachpb.Value
 	if deleted {
@@ -100,7 +99,7 @@ func (sd *SpanConfigDecoder) TranslateEvent(
 			// It's possible to write a KV tombstone on top of another KV
 			// tombstone -- both the new and old value will be empty. We simply
 			// ignore these events.
-			return nil
+			return nil, false
 		}
 
 		// Since the end key is not part of the primary key, we need to
@@ -132,7 +131,7 @@ func (sd *SpanConfigDecoder) TranslateEvent(
 		update = spanconfig.Update(record)
 	}
 
-	return &BufferEvent{update, ev.Value.Timestamp}
+	return &BufferEvent{update, ev.Value.Timestamp}, true
 }
 
 // TestingDecoderFn exports the decoding routine for testing purposes.

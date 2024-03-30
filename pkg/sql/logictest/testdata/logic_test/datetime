@@ -225,7 +225,7 @@ SELECT now() - transaction_timestamp() = interval '0s'
 true
 
 statement ok
-BEGIN TRANSACTION
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 statement ok
 CREATE TABLE kv (
@@ -368,7 +368,7 @@ CREATE TABLE kv (
 # Test that cluster_logical_timestamp() is consistent in transactions
 # spanning multiple batches of statements.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 INSERT INTO kv (k,v) VALUES (1, cluster_logical_timestamp());
 SELECT * FROM kv
 
@@ -378,7 +378,7 @@ SELECT * FROM kv;
 COMMIT
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SELECT * FROM kv;
 INSERT INTO kv (k,v) VALUES (3, cluster_logical_timestamp());
 COMMIT
@@ -390,6 +390,12 @@ SELECT count(DISTINCT (v)) FROM kv
 
 statement ok
 DELETE FROM kv
+
+let $old_default_transaction_isolation
+SHOW default_transaction_isolation
+
+statement ok
+SET default_transaction_isolation = 'serializable'
 
 statement ok
 CREATE TABLE m (mints DECIMAL)
@@ -421,6 +427,9 @@ SELECT * FROM kv
 statement ok
 INSERT INTO kv (k,v) VALUES (6, cluster_logical_timestamp()-(select mints from m));
 SELECT * FROM kv
+
+statement ok
+SET default_transaction_isolation = '$old_default_transaction_isolation'
 
 query I
 SELECT k FROM kv ORDER BY v
@@ -1989,6 +1998,8 @@ ORDER BY pk
 
 statement ok
 SET intervalstyle = iso_8601;
+
+statement ok
 CREATE TABLE table_71776 (interval_col interval DEFAULT 'P3Y')
 
 query TTT

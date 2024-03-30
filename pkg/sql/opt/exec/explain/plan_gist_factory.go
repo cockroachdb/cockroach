@@ -147,8 +147,9 @@ func (f *PlanGistFactory) ConstructPlan(
 	cascades []exec.Cascade,
 	checks []exec.Node,
 	rootRowCount int64,
+	flags exec.PlanFlags,
 ) (exec.Plan, error) {
-	plan, err := f.wrappedFactory.ConstructPlan(root, subqueries, cascades, checks, rootRowCount)
+	plan, err := f.wrappedFactory.ConstructPlan(root, subqueries, cascades, checks, rootRowCount, flags)
 	return plan, err
 }
 
@@ -303,7 +304,7 @@ func (f *PlanGistFactory) decodeTable() cat.Table {
 		return &unknownTable{}
 	}
 	id := f.decodeID()
-	ds, _, err := f.catalog.ResolveDataSourceByID(context.TODO(), cat.Flags{}, id)
+	ds, _, err := f.catalog.ResolveDataSourceByID(f.Ctx(), cat.Flags{}, id)
 	if err == nil {
 		return ds.(cat.Table)
 	}

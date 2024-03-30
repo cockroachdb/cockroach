@@ -9,6 +9,7 @@ SELECT id FROM system.zones
 ----
 0
 1
+11
 16
 17
 22
@@ -34,6 +35,7 @@ SELECT id FROM system.zones
 ----
 0
 1
+11
 25
 27
 42
@@ -58,7 +60,7 @@ full-translate
 /Table/{7-8}                               database system (host)
 /Table/{8-9}                               database system (host)
 /Table/{9-10}                              database system (host)
-/Table/1{1-2}                              database system (host)
+/Table/1{1-2}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
 /Table/1{2-3}                              database system (host)
 /Table/1{3-4}                              database system (host)
 /Table/1{4-5}                              database system (host)
@@ -72,9 +74,9 @@ full-translate
 /Table/2{2-3}                              range system
 /Table/2{3-4}                              database system (host)
 /Table/2{4-5}                              database system (host)
-/Table/2{5-6}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/2{5-6}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
 /Table/2{6-7}                              database system (host)
-/Table/2{7-8}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/2{7-8}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
 /Table/2{8-9}                              database system (host)
 /{Table/29-NamespaceTable/30}              range system
 /NamespaceTable/{30-Max}                   database system (host)
@@ -92,9 +94,9 @@ full-translate
 /Table/4{2-3}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/4{3-4}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/4{4-5}                              database system (host)
-/Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
 /Table/4{6-7}                              database system (host)
-/Table/4{7-8}                              database system (host)
+/Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)

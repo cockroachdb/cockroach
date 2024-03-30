@@ -71,6 +71,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 		},
 	} {
 		b.Run(tc.testName, func(b *testing.B) {
+			tc.flags.DesiredObjectKind = tree.TableObject
 			ctx := context.Background()
 			s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
@@ -90,7 +91,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			txn := kvDB.NewTxn(ctx, "test")
-			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sd)
+			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg, sd)
 			defer cleanup()
 
 			// The internal planner overrides the database to "system", here we
@@ -182,7 +183,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			txn := kvDB.NewTxn(ctx, "test")
-			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sd)
+			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg, sd)
 			defer cleanup()
 
 			// The internal planner overrides the database to "system", here we

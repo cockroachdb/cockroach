@@ -13,6 +13,7 @@ package kv
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -46,6 +47,21 @@ import (
 // path for some reason), and the async pool is full (i.e. the system is
 // under load), then it makes sense to abandon the cleanup before too long.
 const asyncRollbackTimeout = time.Minute
+
+// MaxInternalTxnAutoRetries controls the maximum number of auto-retries a call
+// to kv.DB.Txn will perform before aborting the transaction and returning an
+// error. This is used to prevent infinite retry loops where a transaction has
+// little chance of succeeding in the future but continues to hold locks from
+// earlier epochs.
+var MaxInternalTxnAutoRetries = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.internal.max_auto_retries",
+	"controls the maximum number of auto-retries an internal KV transaction will "+
+		"perform before aborting and returning an error. Can be set to 0 to disable any "+
+		"retry attempt.",
+	100,
+	settings.NonNegativeInt,
+)
 
 // Txn is an in-progress distributed database transaction. A Txn is safe for
 // concurrent use by multiple goroutines.
@@ -864,7 +880,7 @@ func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) erro
 // the current time, except in extraordinary circumstances. In cases where
 // considering it helps, it helps a lot. In cases where considering it
 // does not help, it does not hurt much.
-func (txn *Txn) DeadlineLikelySufficient(sv *settings.Values) bool {
+func (txn *Txn) DeadlineLikelySufficient() bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	// Instead of using the current HLC clock we will
@@ -876,6 +892,7 @@ func (txn *Txn) DeadlineLikelySufficient(sv *settings.Values) bool {
 	// 3) If we are writing to non-blocking ranges than any
 	//    push will be into the future.
 	getTargetTS := func() hlc.Timestamp {
+		sv := txn.db.SettingsValues()
 		now := txn.db.Clock().NowAsClockTimestamp()
 		maxClockOffset := txn.db.Clock().MaxOffset()
 		lagTargetDuration := closedts.TargetDuration.Get(sv)
@@ -1025,7 +1042,7 @@ func (e *AutoCommitError) Error() string {
 func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-	for {
+	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return errors.Wrap(err, "txn exec")
 		}
@@ -1084,6 +1101,33 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 
 		if !retryable {
 			break
+		}
+
+		// Determine whether the transaction has exceeded the maximum number of
+		// automatic retries. We check this after each failed attempt to allow the
+		// cluster setting to be changed while a transaction is stuck in a retry
+		// loop.
+		maxRetries := math.MaxInt64
+		if txn.db.ctx.Settings != nil {
+			// txn.db.ctx.Settings == nil is only expected in tests.
+			maxRetries = int(MaxInternalTxnAutoRetries.Get(&txn.db.ctx.Settings.SV))
+		}
+		if attempt > maxRetries {
+			// If the retries limit has been exceeded, rollback and return an error.
+			rollbackErr := txn.Rollback(ctx)
+			// NOTE: we don't errors.Wrap the most recent retry error because we want
+			// to terminate it here. Instead, we just include it in the error text.
+			err = errors.Errorf("have retried transaction: %s %d times, most recently because of the "+
+				"retryable error: %s. Terminating retry loop and returning error due to cluster setting %s (%d). "+
+				"Rollback error: %v.", txn.DebugName(), attempt, err, MaxInternalTxnAutoRetries.Name(), maxRetries, rollbackErr)
+			log.Warningf(ctx, "%v", err)
+			break
+		}
+
+		const warnEvery = 10
+		if attempt%warnEvery == 0 {
+			log.Warningf(ctx, "have retried transaction: %s %d times, most recently because of the "+
+				"retryable error: %s. Is the transaction stuck in a retry loop?", txn.DebugName(), attempt, err)
 		}
 
 		if err := txn.PrepareForRetry(ctx); err != nil {

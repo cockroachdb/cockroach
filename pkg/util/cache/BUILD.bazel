@@ -16,10 +16,6 @@ go_test(
     size = "small",
     srcs = ["cache_test.go"],
     embed = [":cache"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/util/log",
         "@com_github_biogo_store//llrb",

@@ -234,7 +234,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	// Wait for upreplication.
 	require.NoError(
-		t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */, atLeastReplicationFactor),
+		t, WaitForReplication(ctx, t, t.L(), conn, 5 /* replicationFactor */, atLeastReplicationFactor),
 	)
 
 	// Create the kv database. If this is a read-only workload, populate it with
@@ -257,7 +257,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	// Wait for upreplication of the new ranges.
 	require.NoError(
-		t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */, atLeastReplicationFactor),
+		t, WaitForReplication(ctx, t, t.L(), conn, 5 /* replicationFactor */, atLeastReplicationFactor),
 	)
 
 	// Run workload on n10 via n1-n2 gateways until test ends (context cancels).
@@ -406,14 +406,14 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 
 	// Wait for upreplication.
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
 	// Create the kv database with 5 replicas on n2-n6, and leases on n4.
 	t.L().Printf("creating workload database")
 	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{
-		replicas: 5, onlyNodes: []int{2, 3, 4, 5, 6}, leaseNode: 4})
+		replicas: 5, onlyNodes: []int{2, 3, 4, 5, 6}, leasePreference: "[+node4]"})
 
 	c.Run(ctx, option.WithNodes(c.Node(6)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
@@ -543,7 +543,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	// NB: We want to ensure the system ranges are all down-replicated from their
 	// initial RF of 5, so pass in exactlyReplicationFactor below.
-	require.NoError(t, WaitForReplication(ctx, t, conn, 3, exactlyReplicationFactor))
+	require.NoError(t, WaitForReplication(ctx, t, t.L(), conn, 3, exactlyReplicationFactor))
 
 	// Now that system ranges are properly placed on n1-n3, start n4-n6.
 	c.Start(ctx, t.L(), opts, settings, c.Range(4, 6))
@@ -672,10 +672,10 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	// Place all ranges on n1-n3, and an extra liveness leaseholder replica on n4.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{
-		replicas: 4, onlyNodes: []int{1, 2, 3, 4}, leaseNode: 4})
+		replicas: 4, onlyNodes: []int{1, 2, 3, 4}, leasePreference: "[+node4]"})
 
 	// Wait for upreplication.
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
 	// Create the kv database on n5-n7.
 	t.L().Printf("creating workload database")
@@ -791,7 +791,7 @@ func runFailoverNonSystem(
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 
 	// Wait for upreplication.
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
 	// Create the kv database, constrained to n4-n6. Despite the zone config, the
 	// ranges will initially be distributed across all cluster nodes.
@@ -900,10 +900,10 @@ func runFailoverLiveness(
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 
 	// Constrain the liveness range to n1-n4, with leaseholder preference on n4.
-	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{replicas: 4, leaseNode: 4})
+	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{replicas: 4, leasePreference: "[+node4]"})
 
 	// Wait for upreplication.
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
 	// Create the kv database, constrained to n1-n3. Despite the zone config, the
 	// ranges will initially be distributed across all cluster nodes.
@@ -1017,7 +1017,7 @@ func runFailoverSystemNonLiveness(
 	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 
 	// Wait for upreplication.
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
 	// Create the kv database, constrained to n1-n3. Despite the zone config, the
 	// ranges will initially be distributed across all cluster nodes.
@@ -1699,9 +1699,9 @@ func relocateLeases(t test.Test, ctx context.Context, conn *gosql.DB, predicate 
 }
 
 type zoneConfig struct {
-	replicas  int
-	onlyNodes []int
-	leaseNode int
+	replicas        int
+	onlyNodes       []int
+	leasePreference string
 }
 
 // configureZone sets the zone config for the given target.
@@ -1734,14 +1734,9 @@ func configureZone(
 		}
 	}
 
-	var leaseString string
-	if cfg.leaseNode > 0 {
-		leaseString += fmt.Sprintf("[+node%d]", cfg.leaseNode)
-	}
-
 	_, err := conn.ExecContext(ctx, fmt.Sprintf(
 		`ALTER %s CONFIGURE ZONE USING num_replicas = %d, constraints = '[%s]', lease_preferences = '[%s]'`,
-		target, cfg.replicas, constraintsString, leaseString))
+		target, cfg.replicas, constraintsString, cfg.leasePreference))
 	require.NoError(t, err)
 }
 

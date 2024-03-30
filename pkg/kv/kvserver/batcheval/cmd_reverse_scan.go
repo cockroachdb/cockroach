@@ -35,8 +35,12 @@ func ReverseScan(
 	h := cArgs.Header
 	reply := resp.(*kvpb.ReverseScanResponse)
 
-	if err := maybeDisallowSkipLockedRequest(h, args.KeyLockingStrength); err != nil {
-		return result.Result{}, err
+	var lockTableForSkipLocked storage.LockTableView
+	if h.WaitPolicy == lock.WaitPolicy_SkipLocked {
+		lockTableForSkipLocked = newRequestBoundLockTableView(
+			readWriter, cArgs.Concurrency, h.Txn, args.KeyLockingStrength,
+		)
+		defer lockTableForSkipLocked.Close()
 	}
 
 	var res result.Result
@@ -45,22 +49,23 @@ func ReverseScan(
 
 	readCategory := ScanReadCategory(cArgs.EvalCtx.AdmissionHeader())
 	opts := storage.MVCCScanOptions{
-		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
-		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
-		Txn:                   h.Txn,
-		ScanStats:             cArgs.ScanStats,
-		Uncertainty:           cArgs.Uncertainty,
-		MaxKeys:               h.MaxSpanRequestKeys,
-		MaxLockConflicts:      storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-		TargetBytes:           h.TargetBytes,
-		AllowEmpty:            h.AllowEmpty,
-		WholeRowsOfSize:       h.WholeRowsOfSize,
-		FailOnMoreRecent:      args.KeyLockingStrength != lock.None,
-		Reverse:               true,
-		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
-		LockTable:             cArgs.Concurrency,
-		DontInterleaveIntents: cArgs.DontInterleaveIntents,
-		ReadCategory:          readCategory,
+		Inconsistent:            h.ReadConsistency != kvpb.CONSISTENT,
+		SkipLocked:              h.WaitPolicy == lock.WaitPolicy_SkipLocked,
+		Txn:                     h.Txn,
+		ScanStats:               cArgs.ScanStats,
+		Uncertainty:             cArgs.Uncertainty,
+		MaxKeys:                 h.MaxSpanRequestKeys,
+		MaxLockConflicts:        storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		TargetLockConflictBytes: storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		TargetBytes:             h.TargetBytes,
+		AllowEmpty:              h.AllowEmpty,
+		WholeRowsOfSize:         h.WholeRowsOfSize,
+		FailOnMoreRecent:        args.KeyLockingStrength != lock.None,
+		Reverse:                 true,
+		MemoryAccount:           cArgs.EvalCtx.GetResponseMemoryAccount(),
+		LockTable:               lockTableForSkipLocked,
+		DontInterleaveIntents:   cArgs.DontInterleaveIntents,
+		ReadCategory:            readCategory,
 	}
 
 	switch args.ScanFormat {
@@ -115,12 +120,12 @@ func ReverseScan(
 		}
 	}
 
-	if args.KeyLockingStrength != lock.None && h.Txn != nil {
+	if args.KeyLockingStrength != lock.None {
 		acquiredLocks, err := acquireLocksOnKeys(
 			ctx, readWriter, h.Txn, args.KeyLockingStrength, args.KeyLockingDurability,
 			args.ScanFormat, &scanRes, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
-			return result.Result{}, maybeInterceptDisallowedSkipLockedUsage(h, err)
+			return result.Result{}, err
 		}
 		res.Local.AcquiredLocks = acquiredLocks
 	}

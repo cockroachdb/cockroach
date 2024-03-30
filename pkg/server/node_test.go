@@ -14,9 +14,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"path"
 	"reflect"
 	"runtime/pprof"
 	"sort"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -41,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -965,21 +969,23 @@ func TestDiskStatsMap(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
 	// Specs for two stores, one of which overrides the cluster-level
 	// provisioned bandwidth.
 	specs := []base.StoreSpec{
 		{
 			ProvisionedRateSpec: base.ProvisionedRateSpec{
-				DiskName: "foo",
 				// ProvisionedBandwidth is 0 so the cluster setting will be used.
 				ProvisionedBandwidth: 0,
 			},
+			Path: path.Join(dir, "foo"),
 		},
 		{
 			ProvisionedRateSpec: base.ProvisionedRateSpec{
-				DiskName:             "bar",
 				ProvisionedBandwidth: 200,
 			},
+			Path: path.Join(dir, "bar"),
 		},
 	}
 	// Engines.
@@ -999,38 +1005,42 @@ func TestDiskStatsMap(t *testing.T) {
 		require.NoError(t, storage.MVCCBlindPutProto(ctx, engines[i], keys.StoreIdentKey(),
 			hlc.Timestamp{}, &ident, storage.MVCCWriteOptions{}))
 	}
+	fs := vfs.Default
+	for _, storeSpec := range specs {
+		_, err := fs.Create(storeSpec.Path)
+		require.NoError(t, err)
+	}
 	var dsm diskStatsMap
+	defer dsm.closeDiskMonitors()
 	clusterProvisionedBW := int64(150)
 
 	// diskStatsMap contains nothing, so does not populate anything.
-	stats, err := dsm.tryPopulateAdmissionDiskStats(ctx, clusterProvisionedBW, nil)
+	stats, err := dsm.tryPopulateAdmissionDiskStats(clusterProvisionedBW, nil)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(stats))
 
+	diskManager := disk.NewMonitorManager(fs)
 	// diskStatsMap initialized with these two stores.
-	require.NoError(t, dsm.initDiskStatsMap(specs, engines))
+	require.NoError(t, dsm.initDiskStatsMap(specs, engines, diskManager))
 
 	// diskStatsFunc returns stats for these two stores, and an unknown store.
-	diskStatsFunc := func(context.Context) ([]status.DiskStats, error) {
-		return []status.DiskStats{
-			{
-				Name:       "baz",
+	diskStatsFunc := func(map[string]disk.Monitor) (map[string]status.DiskStats, error) {
+		return map[string]status.DiskStats{
+			path.Join(dir, "baz"): {
 				ReadBytes:  100,
 				WriteBytes: 200,
 			},
-			{
-				Name:       "foo",
+			path.Join(dir, "foo"): {
 				ReadBytes:  500,
 				WriteBytes: 1000,
 			},
-			{
-				Name:       "bar",
+			path.Join(dir, "bar"): {
 				ReadBytes:  2000,
 				WriteBytes: 2500,
 			},
 		}, nil
 	}
-	stats, err = dsm.tryPopulateAdmissionDiskStats(ctx, clusterProvisionedBW, diskStatsFunc)
+	stats, err = dsm.tryPopulateAdmissionDiskStats(clusterProvisionedBW, diskStatsFunc)
 	require.NoError(t, err)
 	// The stats for the two stores are as expected.
 	require.Equal(t, 2, len(stats))
@@ -1052,16 +1062,15 @@ func TestDiskStatsMap(t *testing.T) {
 	}
 
 	// disk stats are only retrieved for "foo".
-	diskStatsFunc = func(context.Context) ([]status.DiskStats, error) {
-		return []status.DiskStats{
-			{
-				Name:       "foo",
+	diskStatsFunc = func(map[string]disk.Monitor) (map[string]status.DiskStats, error) {
+		return map[string]status.DiskStats{
+			path.Join(dir, "foo"): {
 				ReadBytes:  3500,
 				WriteBytes: 4500,
 			},
 		}, nil
 	}
-	stats, err = dsm.tryPopulateAdmissionDiskStats(ctx, clusterProvisionedBW, diskStatsFunc)
+	stats, err = dsm.tryPopulateAdmissionDiskStats(clusterProvisionedBW, diskStatsFunc)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(stats))
 	for i := range engineIDs {
@@ -1080,4 +1089,57 @@ func TestDiskStatsMap(t *testing.T) {
 		}
 		require.Equal(t, expectedDS, ds)
 	}
+}
+
+// TestRevertToEpochIfTooManyRanges verifies that leases switch from epoch back
+// to expiration after a short time interval if there are enough ranges on a node.
+func TestRevertToEpochIfTooManyRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const expirationThreshold = 100
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// Use expiration leases by default, but decrease the limit for the test to
+	// avoid having to create too many splits.
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+	kvserver.ExpirationLeasesMaxReplicasPerNode.Override(ctx, &st.SV, expirationThreshold)
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	defer s.Stopper().Stop(ctx)
+
+	// Create range and upreplicate.
+	key := roachpb.Key("a")
+	require.NoError(t, kvDB.AdminSplit(ctx, key, hlc.MaxTimestamp))
+
+	// Make sure the lease is an expiration lease.
+	lease, _, err := s.GetRangeLease(ctx, key, roachpb.QueryLocalNodeOnly)
+	require.NoError(t, err)
+	require.Equal(t, roachpb.LeaseExpiration, lease.Current().Type())
+
+	node := s.Node().(*Node)
+
+	// Force a metrics computation and check the current number of ranges. There
+	// are 68 ranges by default in 24.1.
+	require.NoError(t, node.computeMetricsPeriodically(ctx, map[*kvserver.Store]*storage.MetricsForInterval{}, 0))
+	num := node.storeCfg.RangeCount.Load()
+	require.Greaterf(t, num, int64(50), "Expected more than 50 ranges, only found %d", num)
+
+	// Add 50 more ranges to push over the 100 replica expiration limit.
+	for i := 0; i < 50; i++ {
+		require.NoError(t, kvDB.AdminSplit(ctx, roachpb.Key("a"+strconv.Itoa(i)), hlc.MaxTimestamp))
+	}
+	// Check metrics again. This has the impact of updating the RangeCount.
+	require.NoError(t, node.computeMetricsPeriodically(ctx, map[*kvserver.Store]*storage.MetricsForInterval{}, 0))
+	num = node.storeCfg.RangeCount.Load()
+	require.Greaterf(t, num, int64(expirationThreshold), "Expected more than 100 ranges, only found %d", num)
+
+	// Verify the lease switched back to Epoch automatically.
+	testutils.SucceedsSoon(t, func() error {
+		lease, _, err = s.GetRangeLease(ctx, key, roachpb.QueryLocalNodeOnly)
+		require.NoError(t, err)
+		if lease.Current().Type() != roachpb.LeaseEpoch {
+			return errors.New("Lease is still expiration")
+		}
+		return nil
+	})
 }

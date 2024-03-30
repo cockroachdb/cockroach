@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -234,6 +235,13 @@ func (d *datadrivenTestState) getIODir(t *testing.T, name string) string {
 		t.Fatalf("cluster %s does not exist", name)
 	}
 	return dir
+}
+
+func (d *datadrivenTestState) clearConnCache() {
+	for _, db := range d.sqlDBs {
+		db.Close()
+	}
+	d.sqlDBs = make(map[sqlDBKey]*gosql.DB)
 }
 
 func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *gosql.DB {
@@ -462,14 +470,13 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			ds.noticeBuffer = nil
 			const user = "root"
 			sqlDB := ds.getSQLDB(t, lastCreatedCluster, user)
-			// First, run the schema change.
 
 			_, err := sqlDB.Exec(d.Input)
 
 			var jobID jobspb.JobID
 			{
-				const qFmt = `SELECT job_id FROM [SHOW JOBS] WHERE job_type = '%s' ORDER BY created DESC LIMIT 1`
-				errJob := sqlDB.QueryRow(fmt.Sprintf(qFmt, jobType)).Scan(&jobID)
+				const query = `SELECT id FROM system.jobs WHERE job_type = $1 ORDER BY created DESC LIMIT 1`
+				errJob := sqlDB.QueryRow(query, jobType.String()).Scan(&jobID)
 				if !errors.Is(errJob, gosql.ErrNoRows) {
 					require.NoError(t, errJob)
 				}
@@ -512,11 +519,21 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			skip.WithIssue(t, issue)
 			return ""
 
+		case "skip-under-duress":
+			skip.UnderDuress(t)
+			return ""
+
 		case "reset":
 			ds.cleanup(ctx, t)
 			ds = newDatadrivenTestState()
+			if d.HasArg("test-nodelocal") {
+				nodelocalCleanup := nodelocal.ReplaceNodeLocalForTesting(t.TempDir())
+				ds.cleanupFns = append(ds.cleanupFns, nodelocalCleanup)
+			}
 			return ""
-
+		case "clear-conn-cache":
+			ds.clearConnCache()
+			return ""
 		case "new-cluster":
 			var name, shareDirWith, iodir, localities, beforeVersion, testingKnobCfg string
 			var splits int
@@ -637,7 +654,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				var jobID jobspb.JobID
 				require.NoError(t,
 					ds.getSQLDB(t, cluster, user).QueryRow(
-						`SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1`).Scan(&jobID))
+						`SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID))
 				fmt.Printf("expecting pausepoint, found job ID %d\n\n\n", jobID)
 
 				runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
@@ -695,6 +712,23 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				d.ScanArgs(t, "user", &user)
 			}
 			checkForClusterSetting(t, d.Input, ds.clusters[cluster].NumServers())
+			if d.HasArg("retry") {
+				var eventualOutput string
+				testutils.SucceedsSoon(t, func() error {
+					rows, err := ds.getSQLDB(t, cluster, user).Query(d.Input)
+					if err != nil {
+						return err
+					}
+					output, err := sqlutils.RowsToDataDrivenOutput(rows)
+					require.NoError(t, err)
+					if output != d.Expected {
+						return errors.Newf("latest output: %s\n expected: %s", output, d.Expected)
+					}
+					eventualOutput = output
+					return nil
+				})
+				return eventualOutput
+			}
 			rows, err := ds.getSQLDB(t, cluster, user).Query(d.Input)
 			if err != nil {
 				return err.Error()

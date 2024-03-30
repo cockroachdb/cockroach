@@ -17,10 +17,6 @@ go_test(
     name = "label-merged-pr_test",
     srcs = ["main_test.go"],
     embed = [":label-merged-pr_lib"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/testutils/skip",
         "@com_github_stretchr_testify//assert",

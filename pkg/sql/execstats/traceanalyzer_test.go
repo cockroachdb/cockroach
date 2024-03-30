@@ -132,7 +132,7 @@ func TestTraceAnalyzer(t *testing.T) {
 			execCtx,
 			t.Name(),
 			nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			testStmt,
 		)
 		require.NoError(t, err)
@@ -284,6 +284,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		MvccRangeKeySkippedPoints:          23,
 		SqlInstanceIds:                     aSQLInstanceIds,
 		Regions:                            []string{"east-usA"},
+		ClientTime:                         time.Second,
 	}
 	bEvent := kvpb.ContentionEvent{Duration: 14 * time.Second}
 	bSQLInstanceIds := map[base.SQLInstanceID]struct{}{}
@@ -317,6 +318,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		MvccRangeKeySkippedPoints:          30,
 		SqlInstanceIds:                     bSQLInstanceIds,
 		Regions:                            []string{"east-usB"},
+		ClientTime:                         2 * time.Second,
 	}
 	cSQLInstanceIds := map[base.SQLInstanceID]struct{}{}
 	cSQLInstanceIds[1] = struct{}{}
@@ -350,6 +352,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		MvccRangeKeySkippedPoints:          53,
 		SqlInstanceIds:                     cSQLInstanceIds,
 		Regions:                            []string{"east-usA", "east-usB"},
+		ClientTime:                         3 * time.Second,
 	}
 
 	aCopy := a

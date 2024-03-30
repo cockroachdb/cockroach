@@ -141,9 +141,6 @@ func (r *Replica) SendWithWriteBytes(
 	// recorded regardless of errors that are encountered.
 	startCPU := grunning.Time()
 	defer r.MeasureReqCPUNanos(startCPU)
-	// Record summary throughput information about the batch request for
-	// accounting.
-	r.recordBatchRequestLoad(ctx, ba)
 
 	// If the internal Raft group is quiesced, wake it and the leader.
 	r.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)
@@ -216,6 +213,9 @@ func (r *Replica) SendWithWriteBytes(
 		r.recordBatchForLoadBasedSplitting(ctx, ba, br, int(grunning.Difference(startCPU, grunning.Time())))
 	}
 
+	// Record summary throughput information about the batch request for
+	// accounting.
+	r.recordBatchRequestLoad(ctx, ba)
 	r.recordRequestWriteBytes(writeBytes)
 	r.recordImpactOnRateLimiter(ctx, br, isReadOnly)
 	return br, writeBytes, pErr
@@ -431,7 +431,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	defer func() {
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
-			r.concMgr.FinishReq(g)
+			r.concMgr.FinishReq(ctx, g)
 		}
 	}()
 	pp := poison.Policy_Error
@@ -531,7 +531,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 				if reuseLatchAndLockSpans {
 					latchSpans, lockSpans = g.TakeSpanSets()
 				}
-				r.concMgr.FinishReq(g)
+				r.concMgr.FinishReq(ctx, g)
 				g = nil
 			}
 		}
@@ -967,7 +967,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *kvpb.AdminChangeReplicasRequest:
 		chgs := tArgs.Changes()
-		desc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonAdminRequest, "", chgs)
+		desc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, kvserverpb.ReasonAdminRequest, "", chgs)
 		pErr = kvpb.NewError(err)
 		if pErr != nil {
 			resp = &kvpb.AdminChangeReplicasResponse{}
@@ -1365,6 +1365,6 @@ func (ec *endCmds) done(
 	// this method is called and the Guard is not set. Consider removing this
 	// check and upgrading the previous observation to an invariant.
 	if ec.g != nil {
-		ec.repl.concMgr.FinishReq(ec.g)
+		ec.repl.concMgr.FinishReq(ctx, ec.g)
 	}
 }

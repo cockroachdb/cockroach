@@ -44,7 +44,9 @@ ALTER DATABASE test RENAME TO u
 
 statement ok
 SET sql_safe_updates = FALSE;
- ALTER DATABASE test RENAME TO u
+
+statement ok
+ALTER DATABASE test RENAME TO u
 
 statement error pgcode 3D000 database "test" does not exist
 SELECT * FROM kv
@@ -270,4 +272,7 @@ statement ok
 ALTER DATABASE db2 RENAME TO db1
 
 statement ok
-USE defaultdb; DROP DATABASE db1 CASCADE
+USE defaultdb
+
+statement ok
+DROP DATABASE db1 CASCADE

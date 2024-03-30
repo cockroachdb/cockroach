@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -300,4 +301,33 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 		return err == nil
 	})
 	return err
+}
+
+// RegisterDiskMonitors injects a monitor into each store to track an individual disk's stats.
+func (ls *Stores) RegisterDiskMonitors(
+	diskManager *disk.MonitorManager, diskPathToStore map[string]roachpb.StoreID,
+) error {
+	monitors := make(map[roachpb.StoreID]disk.Monitor)
+	for path, id := range diskPathToStore {
+		monitor, err := diskManager.Monitor(path)
+		if err != nil {
+			return err
+		}
+		monitors[id] = *monitor
+	}
+	return ls.VisitStores(func(s *Store) error {
+		if monitor, ok := monitors[s.StoreID()]; ok {
+			s.diskMonitor = &monitor
+		}
+		return nil
+	})
+}
+
+func (ls *Stores) CloseDiskMonitors() {
+	_ = ls.VisitStores(func(s *Store) error {
+		if s.diskMonitor != nil {
+			s.diskMonitor.Close()
+		}
+		return nil
+	})
 }

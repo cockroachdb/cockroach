@@ -22,9 +22,5 @@ go_test(
     size = "small",
     srcs = ["vm_test.go"],
     embed = [":vm"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = ["@com_github_stretchr_testify//assert"],
 )

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -46,12 +47,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeSession() sqlliveness.SessionID {
-	session, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+func makeSession() *sqllivenesstestutils.FakeSession {
+	sessionID, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
 	if err != nil {
 		panic(err)
 	}
-	return session
+	return &sqllivenesstestutils.FakeSession{SessionID: sessionID}
 }
 
 // TestStorage verifies that instancestorage stores and retrieves SQL instance data correctly.
@@ -89,14 +90,16 @@ func TestStorage(t *testing.T) {
 		stopper, storage, _, clock := setup(t)
 		defer stopper.Stop(ctx)
 		const id = base.SQLInstanceID(1)
-		sessionID := makeSession()
+		session := makeSession()
 		const rpcAddr = "rpcAddr"
 		const sqlAddr = "sqlAddr"
 		locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}, {Key: "az", Value: "a"}}}
 		binaryVersion := roachpb.Version{Major: 28, Minor: 4}
 		const expiration = time.Minute
 		{
-			instance, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), rpcAddr, sqlAddr, locality, binaryVersion)
+			session.StartTS = clock.Now()
+			session.ExpTS = session.StartTS.Add(expiration.Nanoseconds(), 0)
+			instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion)
 			require.NoError(t, err)
 			require.Equal(t, id, instance.InstanceID)
 		}
@@ -107,6 +110,7 @@ func TestStorage(t *testing.T) {
 		stopper, storage, slStorage, clock := setup(t)
 		defer stopper.Stop(ctx)
 
+		sessionStart := clock.Now()
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 
 		makeInstance := func(id int) sqlinstance.InstanceInfo {
@@ -115,7 +119,7 @@ func TestStorage(t *testing.T) {
 				InstanceID:      base.SQLInstanceID(id),
 				InstanceSQLAddr: fmt.Sprintf("sql-addr-%d", id),
 				InstanceRPCAddr: fmt.Sprintf("rpc-addr-%d", id),
-				SessionID:       makeSession(),
+				SessionID:       makeSession().ID(),
 				Locality:        roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: fmt.Sprintf("region-%d", id)}}},
 				BinaryVersion:   roachpb.Version{Major: 22, Minor: int32(id)},
 			}
@@ -130,7 +134,10 @@ func TestStorage(t *testing.T) {
 				require.NoError(t, slStorage.Insert(ctx, instance.SessionID, sessionExpiry))
 			}
 
-			created, err := storage.CreateInstance(ctx, instance.SessionID, sessionExpiry, instance.InstanceRPCAddr, instance.InstanceSQLAddr, instance.Locality, instance.BinaryVersion)
+			session := &sqllivenesstestutils.FakeSession{SessionID: instance.SessionID,
+				StartTS: sessionStart,
+				ExpTS:   sessionExpiry}
+			created, err := storage.CreateInstance(ctx, session, instance.InstanceRPCAddr, instance.InstanceSQLAddr, instance.Locality, instance.BinaryVersion)
 			require.NoError(t, err)
 
 			require.Equal(t, instance, created)
@@ -268,10 +275,12 @@ func TestSQLAccess(t *testing.T) {
 	var locality roachpb.Locality
 	var binaryVersion roachpb.Version
 	require.NoError(t, locality.Set(tierStr))
+	session := makeSession()
+	session.StartTS = clock.Now()
+	session.ExpTS = session.StartTS.Add(expiration.Nanoseconds(), 0)
 	instance, err := storage.CreateInstance(
 		ctx,
-		makeSession(),
-		clock.Now().Add(expiration.Nanoseconds(), 0),
+		session,
 		"rpcAddr",
 		"sqlAddr",
 		locality,
@@ -402,11 +411,12 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 		sqlAddr         = "sqlAddr"
 		expiration      = time.Minute
 	)
-	sessionID := makeSession()
+	session := makeSession()
+	session.StartTS = clock.Now()
+	session.ExpTS = session.StartTS.Add(expiration.Nanoseconds(), 0)
 	locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test-region"}}}
 	binaryVersion := roachpb.Version{Major: 23, Minor: 4}
-	sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-	err := slStorage.Insert(ctx, sessionID, sessionExpiry)
+	err := slStorage.Insert(ctx, session.ID(), session.Expiration())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,12 +435,12 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			t.Helper()
 			state.Lock()
 			defer state.Unlock()
-			sessionExpiry = clock.Now().Add(expiration.Nanoseconds(), 0)
-			_, err = slStorage.Update(ctx, sessionID, sessionExpiry)
+			session.ExpTS = clock.Now().Add(expiration.Nanoseconds(), 0)
+			_, _, err = slStorage.Update(ctx, session.ID(), session.Expiration())
 			if err != nil {
 				t.Fatal(err)
 			}
-			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality, binaryVersion)
+			instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion)
 			require.NoError(t, err)
 			if len(state.freeInstances) > 0 {
 				_, free := state.freeInstances[instance.InstanceID]
@@ -454,7 +464,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			if i == -1 {
 				return
 			}
-			require.NoError(t, storage.ReleaseInstance(ctx, sessionID, i))
+			require.NoError(t, storage.ReleaseInstance(ctx, session.ID(), i))
 			state.freeInstances[i] = struct{}{}
 			delete(state.liveInstances, i)
 		}
@@ -493,7 +503,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			} else {
 				require.Equal(t, rpcAddr, instanceInfo.InstanceRPCAddr)
 				require.Equal(t, sqlAddr, instanceInfo.InstanceSQLAddr)
-				require.Equal(t, sessionID, instanceInfo.SessionID)
+				require.Equal(t, session.ID(), instanceInfo.SessionID)
 				require.Equal(t, locality, instanceInfo.Locality)
 				require.Equal(t, binaryVersion, instanceInfo.BinaryVersion)
 				_, live := state.liveInstances[i]
@@ -557,7 +567,8 @@ func TestReclaimLoop(t *testing.T) {
 
 	// Expiration < ReclaimLoopInterval.
 	const expiration = 5 * time.Hour
-	sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
+	sessionStart := clock.Now()
+	sessionExpiry := sessionStart.Add(expiration.Nanoseconds(), 0)
 
 	db := s.InternalDB().(descs.DB)
 	err := storage.RunInstanceIDReclaimLoop(ctx, s.AppStopper(), ts, db, func() hlc.Timestamp {
@@ -609,7 +620,11 @@ func TestReclaimLoop(t *testing.T) {
 	instanceIDs := [...]base.SQLInstanceID{1, 2}
 	rpcAddresses := [...]string{"addr1", "addr2"}
 	sqlAddresses := [...]string{"addr3", "addr4"}
-	sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession()}
+	sessionIDs := [...]*sqllivenesstestutils.FakeSession{makeSession(), makeSession()}
+	for _, id := range sessionIDs {
+		id.StartTS = sessionStart
+		id.ExpTS = sessionExpiry
+	}
 	localities := [...]roachpb.Locality{
 		{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
 		{Tiers: []roachpb.Tier{{Key: "region", Value: "region2"}}},
@@ -619,14 +634,14 @@ func TestReclaimLoop(t *testing.T) {
 	}
 
 	for i, id := range instanceIDs {
-		require.NoError(t, slStorage.Insert(ctx, sessionIDs[i], sessionExpiry))
+		require.NoError(t, slStorage.Insert(ctx, sessionIDs[i].ID(), sessionExpiry))
 		require.NoError(t, storage.CreateInstanceDataForTest(
 			ctx,
 			region,
 			id,
 			rpcAddresses[i],
 			sqlAddresses[i],
-			sessionIDs[i],
+			sessionIDs[i].ID(),
 			sessionExpiry,
 			localities[i],
 			binaryVersions[i],
@@ -662,7 +677,7 @@ func TestReclaimLoop(t *testing.T) {
 		case 0, 1:
 			require.Equal(t, rpcAddresses[i], instance.InstanceRPCAddr)
 			require.Equal(t, sqlAddresses[i], instance.InstanceSQLAddr)
-			require.Equal(t, sessionIDs[i], instance.SessionID)
+			require.Equal(t, sessionIDs[i].ID(), instance.SessionID)
 			require.Equal(t, localities[i], instance.Locality)
 			require.Equal(t, binaryVersions[i], instance.BinaryVersion)
 		default:

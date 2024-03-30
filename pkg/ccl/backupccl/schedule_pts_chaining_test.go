@@ -274,7 +274,7 @@ INSERT INTO t values (1), (10), (100);
 		runSchedule(t, fullSchedule)
 
 		var numRows int
-		th.sqlDB.QueryRow(t, `SELECT num_records FROM system.protected_ts_meta`).Scan(&numRows)
+		th.sqlDB.QueryRow(t, `SELECT count(*) FROM system.protected_ts_records`).Scan(&numRows)
 		require.Zero(t, numRows)
 	})
 
@@ -383,7 +383,7 @@ INSERT INTO t values (1), (10), (100);
 	// Ensure that the pts record on the incremental schedule has been released
 	// by the DROP.
 	var numRows int
-	th.sqlDB.QueryRow(t, `SELECT num_records FROM system.protected_ts_meta`).Scan(&numRows)
+	th.sqlDB.QueryRow(t, `SELECT count(*) FROM system.protected_ts_records`).Scan(&numRows)
 	require.Zero(t, numRows)
 
 	// Also ensure that the full schedule doesn't have DependentID set anymore.

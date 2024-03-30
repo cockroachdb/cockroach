@@ -64,17 +64,6 @@ export const selectAutomaticStatsCollectionEnabled = createSelector(
   },
 );
 
-export const selectCrossClusterReplicationEnabled = createSelector(
-  selectClusterSettings,
-  (settings): boolean | undefined => {
-    if (!settings) {
-      return undefined;
-    }
-    const value = settings["cross_cluster_replication.enabled"]?.value;
-    return value === "true";
-  },
-);
-
 export const selectIndexRecommendationsEnabled = createSelector(
   selectClusterSettings,
   (settings): boolean => {

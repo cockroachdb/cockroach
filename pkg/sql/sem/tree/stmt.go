@@ -664,7 +664,7 @@ func (*BeginTransaction) StatementType() StatementType { return TypeTCL }
 func (*BeginTransaction) StatementTag() string { return "BEGIN" }
 
 // StatementReturnType implements the Statement interface.
-func (*Call) StatementReturnType() StatementReturnType { return Ack }
+func (*Call) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
 func (*Call) StatementType() StatementType { return TypeTCL }
@@ -1038,6 +1038,9 @@ func (d *Discard) StatementTag() string {
 	}
 	return "DISCARD"
 }
+
+// modifiesSchema implements the canModifySchema interface.
+func (*Discard) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
 func (n *DeclareCursor) StatementReturnType() StatementReturnType { return Ack }
@@ -1862,6 +1865,17 @@ func (*ShowUsers) StatementType() StatementType { return TypeDML }
 func (*ShowUsers) StatementTag() string { return "SHOW USERS" }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowDefaultSessionVariablesForRole) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowDefaultSessionVariablesForRole) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowDefaultSessionVariablesForRole) StatementTag() string {
+	return "SHOW DEFAULT SESSION VARIABLES FOR ROLE"
+}
+
+// StatementReturnType implements the Statement interface.
 func (*ShowFullTableScans) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -2261,6 +2275,8 @@ func (n *AlterTableDropColumn) String() string                { return AsString(
 func (n *AlterTableDropConstraint) String() string            { return AsString(n) }
 func (n *AlterTableDropNotNull) String() string               { return AsString(n) }
 func (n *AlterTableDropStored) String() string                { return AsString(n) }
+func (n *AlterTableAddIdentity) String() string               { return AsString(n) }
+func (n *AlterTableIdentity) String() string                  { return AsString(n) }
 func (n *AlterTableLocality) String() string                  { return AsString(n) }
 func (n *AlterTableSetDefault) String() string                { return AsString(n) }
 func (n *AlterTableSetVisible) String() string                { return AsString(n) }
@@ -2417,6 +2433,7 @@ func (n *ShowTransactionStatus) String() string               { return AsString(
 func (n *ShowTransactions) String() string                    { return AsString(n) }
 func (n *ShowTransferState) String() string                   { return AsString(n) }
 func (n *ShowUsers) String() string                           { return AsString(n) }
+func (n *ShowDefaultSessionVariablesForRole) String() string  { return AsString(n) }
 func (n *ShowVar) String() string                             { return AsString(n) }
 func (n *ShowZoneConfig) String() string                      { return AsString(n) }
 func (n *ShowFingerprints) String() string                    { return AsString(n) }

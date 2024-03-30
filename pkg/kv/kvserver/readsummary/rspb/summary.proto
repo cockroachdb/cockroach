@@ -58,5 +58,22 @@ message Segment {
   option (gogoproto.equal) = true;
 
   util.hlc.Timestamp low_water = 1 [(gogoproto.nullable) = false];
-  // TODO(nvanbenschoten): add higher resolution portion.
+  // The spans are sorted by key and are non-overlapping.
+  repeated ReadSpan read_spans = 2 [(gogoproto.nullable) = false];
+}
+
+// ReadSpan is a key span that has been read at a timestamp. The span carries an
+// optional transaction ID that signifies which transaction performed the read.
+// This is used to exclude a given read from being considered as a source of a
+// read-write conflict if a transaction returns to write to a key that it had
+// previously read from.
+message ReadSpan {
+  option (gogoproto.equal) = true;
+
+  bytes key                    = 1;
+  bytes end_key                = 2;
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  bytes txn_id                 = 4 [(gogoproto.customname) = "TxnID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false];
 }

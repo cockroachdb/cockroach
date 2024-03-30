@@ -14,8 +14,4 @@ go_test(
         "list_test.go",
     ],
     embed = [":list"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
 )

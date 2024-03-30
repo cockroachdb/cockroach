@@ -19,13 +19,12 @@ import (
 
 // RangeFeedValueEventToKV is a function to type assert an Event into a
 // *kvpb.RangeFeedValue and then convert it to a roachpb.KeyValue.
-func RangeFeedValueEventToKV(event Event) roachpb.KeyValue {
-	rfv := event.(*kvpb.RangeFeedValue)
+func RangeFeedValueEventToKV(rfv *kvpb.RangeFeedValue) roachpb.KeyValue {
 	return roachpb.KeyValue{Key: rfv.Key, Value: rfv.Value}
 }
 
 // EventsToKVs converts a slice of Events to a slice of KeyValue pairs.
-func EventsToKVs(events []Event, f func(ev Event) roachpb.KeyValue) []roachpb.KeyValue {
+func EventsToKVs[E Event](events []E, f func(ev E) roachpb.KeyValue) []roachpb.KeyValue {
 	kvs := make([]roachpb.KeyValue, 0, len(events))
 	for _, ev := range events {
 		kvs = append(kvs, f(ev))

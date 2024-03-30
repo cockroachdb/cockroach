@@ -186,6 +186,26 @@ type T struct {
 	TypeMeta UserDefinedTypeMetadata
 }
 
+// CopyForHydrate returns a copy of the type that can be safely hydrated.
+// Recursive type references (as for tuples or arrays) are copied, but other
+// pointer fields are not deeply copied.
+//
+// Copy should be kept in alignment with the struct fields.
+func (t *T) CopyForHydrate() *T {
+	newT := *t
+	if t.InternalType.TupleContents != nil {
+		newTupleContents := make([]*T, len(t.InternalType.TupleContents))
+		for i := range t.InternalType.TupleContents {
+			newTupleContents[i] = t.InternalType.TupleContents[i].CopyForHydrate()
+		}
+		newT.InternalType.TupleContents = newTupleContents
+	}
+	if t.InternalType.ArrayContents != nil {
+		newT.InternalType.ArrayContents = t.InternalType.ArrayContents.CopyForHydrate()
+	}
+	return &newT
+}
+
 // UserDefinedTypeMetadata contains metadata needed for runtime
 // operations on user defined types. The metadata must be read only.
 type UserDefinedTypeMetadata struct {
@@ -2139,9 +2159,14 @@ func (t *T) Equal(other *T) bool {
 // IsWildcardType returns true if the type is only used as a wildcard during
 // static analysis, and cannot be used during execution.
 func (t *T) IsWildcardType() bool {
-	switch t {
-	case Any, AnyArray, AnyCollatedString, AnyEnum, AnyEnumArray, AnyTuple, AnyTupleArray:
-		return true
+	for _, wildcard := range []*T{
+		Any, AnyArray, AnyCollatedString, AnyEnum, AnyEnumArray, AnyTuple, AnyTupleArray,
+	} {
+		// Note that pointer comparison is insufficient since we might have
+		// deserialized t from disk.
+		if t.Identical(wildcard) {
+			return true
+		}
 	}
 	return false
 }
@@ -2706,7 +2731,7 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 }
 
 // EnumValueNotYetPublicError enum value is not public yet.
-var EnumValueNotYetPublicError = errors.New("enum value is not yet public")
+var EnumValueNotYetPublicError = pgerror.New(pgcode.InvalidParameterValue, "enum value is not yet public")
 
 // EnumGetIdxOfLogical returns the index within the TypeMeta's slice of
 // enum logical representations that matches the input string.
@@ -3006,6 +3031,11 @@ func (t *T) Delimiter() string {
 	switch t.Family() {
 	case Geometry.Family(), Geography.Family():
 		return ":"
+	case ArrayFamily:
+		if t.Oid() == oidext.T__geometry || t.Oid() == oidext.T__geography {
+			return ":"
+		}
+		return ","
 	default:
 		return ","
 	}

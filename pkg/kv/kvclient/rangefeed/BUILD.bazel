@@ -62,10 +62,6 @@ go_test(
         ":mock_rangefeed",  # keep
     ],
     embed = [":rangefeed"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/keys",
@@ -74,6 +70,7 @@ go_test(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -85,12 +82,14 @@ go_test(
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/storageutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
+        "//pkg/util/future",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

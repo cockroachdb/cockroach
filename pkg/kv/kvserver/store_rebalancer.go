@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3"
 )
 
 var (
@@ -299,7 +299,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
 	_ = stopper.RunAsyncTask(ctx, "store-rebalancer", func(ctx context.Context) {
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		defer timer.Stop()
 		timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&sr.st.SV)))
 		for {
@@ -537,6 +537,16 @@ func (sr *StoreRebalancer) RebalanceLeases(
 func (sr *StoreRebalancer) applyLeaseRebalance(
 	ctx context.Context, candidateReplica CandidateReplica, target roachpb.ReplicaDescriptor,
 ) bool {
+	// Try to acquire the allocator token. If this fails, don't retry the range
+	// -- it will most likely be picked up in the next store rebalancer loop
+	// iteration.
+	if err := candidateReplica.Repl().allocatorToken.TryAcquire(ctx,
+		"store-rebalancer"); err != nil {
+		log.KvDistribution.Infof(ctx, "unable to transfer lease to s%d: %v", target.StoreID, err)
+		return false
+	}
+	defer candidateReplica.Repl().allocatorToken.Release(ctx)
+
 	timeout := sr.processTimeoutFn(candidateReplica)
 	if err := timeutil.RunWithTimeout(ctx, "transfer lease", timeout, func(ctx context.Context) error {
 		return sr.rr.TransferLease(
@@ -691,6 +701,16 @@ func (sr *StoreRebalancer) applyRangeRebalance(
 	candidateReplica CandidateReplica,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 ) bool {
+	// Try to acquire the allocator token. If this fails, don't retry the range
+	// -- it will most likely be picked up in the next store rebalancer loop
+	// iteration.
+	if err := candidateReplica.Repl().allocatorToken.TryAcquire(
+		ctx, "store-rebalancer"); err != nil {
+		log.KvDistribution.Errorf(ctx, "unable to relocate range to %v: %v", voterTargets, err)
+		return false
+	}
+	defer candidateReplica.Repl().allocatorToken.Release(ctx)
+
 	descBeforeRebalance := candidateReplica.Desc()
 	log.KvDistribution.Infof(
 		ctx,

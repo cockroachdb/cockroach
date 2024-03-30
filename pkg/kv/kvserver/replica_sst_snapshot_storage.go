@@ -73,7 +73,7 @@ func (s *SSTSnapshotStorage) NewScratchSpace(
 
 // Clear removes all created directories and SSTs.
 func (s *SSTSnapshotStorage) Clear() error {
-	return s.engine.RemoveAll(s.dir)
+	return s.engine.Env().RemoveAll(s.dir)
 }
 
 // scratchClosed is called when an SSTSnapshotStorageScratch created by this
@@ -94,7 +94,7 @@ func (s *SSTSnapshotStorage) scratchClosed(rangeID roachpb.RangeID) {
 		// Suppressing an error here is okay, as orphaned directories are at worst
 		// a performance issue when we later walk directories in pebble.Capacity()
 		// but not a correctness issue.
-		_ = s.engine.RemoveAll(filepath.Join(s.dir, strconv.Itoa(int(rangeID))))
+		_ = s.engine.Env().RemoveAll(filepath.Join(s.dir, strconv.Itoa(int(rangeID))))
 	}
 }
 
@@ -115,7 +115,7 @@ func (s *SSTSnapshotStorageScratch) filename(id int) string {
 }
 
 func (s *SSTSnapshotStorageScratch) createDir() error {
-	err := s.storage.engine.MkdirAll(s.snapDir, os.ModePerm)
+	err := s.storage.engine.Env().MkdirAll(s.snapDir, os.ModePerm)
 	s.dirCreated = s.dirCreated || err == nil
 	return err
 }
@@ -176,7 +176,7 @@ func (s *SSTSnapshotStorageScratch) Close() error {
 	}
 	s.closed = true
 	defer s.storage.scratchClosed(s.rangeID)
-	return s.storage.engine.RemoveAll(s.snapDir)
+	return s.storage.engine.Env().RemoveAll(s.snapDir)
 }
 
 // SSTSnapshotStorageFile is an SST file managed by a
@@ -209,9 +209,9 @@ func (f *SSTSnapshotStorageFile) ensureFile() error {
 	}
 	var err error
 	if f.bytesPerSync > 0 {
-		f.file, err = fs.CreateWithSync(f.scratch.storage.engine, f.filename, int(f.bytesPerSync))
+		f.file, err = fs.CreateWithSync(f.scratch.storage.engine.Env(), f.filename, int(f.bytesPerSync))
 	} else {
-		f.file, err = f.scratch.storage.engine.Create(f.filename)
+		f.file, err = f.scratch.storage.engine.Env().Create(f.filename)
 	}
 	if err != nil {
 		return err

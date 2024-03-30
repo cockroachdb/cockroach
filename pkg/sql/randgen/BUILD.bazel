@@ -28,7 +28,6 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/rowenc",
-        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/cast",
         "//pkg/sql/sem/eval",
@@ -41,7 +40,6 @@ go_library(
         "//pkg/util",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
-        "//pkg/util/encoding",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/randident",
@@ -68,10 +66,6 @@ go_test(
         "types_test.go",
     ],
     embed = [":randgen"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/ccl",

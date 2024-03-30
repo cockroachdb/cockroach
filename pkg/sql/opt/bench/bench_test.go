@@ -730,6 +730,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 	h.evalCtx.SessionData().InsertFastPath = true
 	h.evalCtx.SessionData().OptSplitScanLimit = tabledesc.MaxBucketAllowed
 	h.evalCtx.SessionData().VariableInequalityLookupJoinEnabled = true
+	h.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = true
 
 	// Set up the test catalog.
 	h.testCat = testcat.New()
@@ -746,9 +747,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 		}
 	}
 
-	if err := h.semaCtx.Placeholders.Init(len(query.args), nil /* typeHints */); err != nil {
-		tb.Fatal(err)
-	}
+	h.semaCtx.Placeholders.Init(len(query.args), nil /* typeHints */)
 	// Run optbuilder to build the memo for Prepare. Even if we will not be using
 	// the Prepare method, we still want to run the optbuilder to infer any
 	// placeholder types.
@@ -1580,6 +1579,73 @@ func BenchmarkSlowQueries(b *testing.B) {
 						h.runSimple(b, query, Explore)
 					}
 				})
+			}
+		})
+	}
+}
+
+// BenchmarkExecBuild measures the time that the execbuilder phase takes. It
+// does not include any other phases.
+func BenchmarkExecBuild(b *testing.B) {
+	type testCase struct {
+		query  benchQuery
+		schema []string
+	}
+	var testCases []testCase
+
+	// Add the basic queries.
+	for _, query := range queriesToTest(b) {
+		testCases = append(testCases, testCase{query, schemas})
+	}
+
+	// Add the slow queries.
+	p := datapathutils.TestDataPath(b, "slow-schemas.sql")
+	slowSchemas, err := os.ReadFile(p)
+	if err != nil {
+		b.Fatalf("%v", err)
+	}
+	for _, query := range slowQueries {
+		testCases = append(testCases, testCase{query, []string{string(slowSchemas)}})
+	}
+
+	for _, tc := range testCases {
+		h := newHarness(b, tc.query, tc.schema)
+
+		stmt, err := parser.ParseOne(tc.query.query)
+		if err != nil {
+			b.Fatalf("%v", err)
+		}
+
+		h.optimizer.Init(context.Background(), &h.evalCtx, h.testCat)
+		bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.testCat, h.optimizer.Factory(), stmt.AST)
+		if err = bld.Build(); err != nil {
+			b.Fatalf("%v", err)
+		}
+
+		if _, err := h.optimizer.Optimize(); err != nil {
+			panic(err)
+		}
+
+		execMemo := h.optimizer.Memo()
+		root := execMemo.RootExpr()
+
+		b.Run(tc.query.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				eb := execbuilder.New(
+					context.Background(),
+					explain.NewPlanGistFactory(exec.StubFactory{}),
+					&h.optimizer,
+					execMemo,
+					nil, /* catalog */
+					root,
+					&h.semaCtx,
+					&h.evalCtx,
+					true,  /* allowAutoCommit */
+					false, /* isANSIDML */
+				)
+				if _, err := eb.Build(); err != nil {
+					b.Fatalf("%v", err)
+				}
 			}
 		})
 	}

@@ -54,9 +54,9 @@ func (tb *testBridge) OnProbeDone(breaker *Breaker) {
 	tb.EventLogger.OnProbeDone(breaker)
 }
 
-func (tb *testBridge) OnReset(breaker *Breaker) {
+func (tb *testBridge) OnReset(breaker *Breaker, prev error) {
 	tb.reset++
-	tb.EventLogger.OnReset(breaker)
+	tb.EventLogger.OnReset(breaker, prev)
 }
 
 // RequireNumTrippedEqualsNumResets verifies that the number of trip events
@@ -106,6 +106,8 @@ func TestBreaker(t *testing.T) {
 	// Nobody should call errFn in this situation, but it's fine if they do.
 	require.NoError(t, sig.Err())
 	require.NoError(t, br.Signal().Err())
+	require.False(t, sig.IsTripped())
+	require.False(t, br.Signal().IsTripped())
 	require.Nil(t, report)
 	require.Nil(t, done)
 	boomErr := errors.New("boom")
@@ -113,6 +115,8 @@ func TestBreaker(t *testing.T) {
 	require.ErrorIs(t, br.Signal().Err(), boomErr)
 	// NB: this can't use ErrorIs because error marks are a cockroachdb/errors'ism.
 	require.True(t, errors.Is(br.Signal().Err(), ErrBreakerOpen))
+	require.True(t, sig.IsTripped())
+	require.True(t, br.Signal().IsTripped())
 	require.NotNil(t, report)
 	require.NotNil(t, done)
 	select {
@@ -146,6 +150,7 @@ func TestBreaker(t *testing.T) {
 	}
 	br.Reset()
 	require.NoError(t, br.Signal().Err())
+	require.False(t, br.Signal().IsTripped())
 	// errFn from above should not return nil now, as per the
 	// contract on Signal(). However, it has to fall back to
 	// ErrBreakerOpen as boomErr is now wiped from the Breaker.
@@ -173,6 +178,7 @@ func TestBreaker(t *testing.T) {
 		report(refErr)
 		err := br.Signal().Err()
 		require.True(t, errors.Is(err, refErr), "%+v not marked as %+v", err, refErr)
+		require.True(t, br.Signal().IsTripped())
 	}
 
 	{
@@ -183,18 +189,24 @@ func TestBreaker(t *testing.T) {
 		br.Report(refErr)
 		err := br.Signal().Err()
 		require.True(t, errors.Is(err, refErr), "%+v not marked as %+v", err, refErr)
+		require.True(t, br.Signal().IsTripped())
 	}
 
 	// Can't reset the breaker by calling `br.Report(nil)`. It's the probe's
 	// job to reset the breaker.
 	br.Report(nil)
 	require.Error(t, br.Signal().Err())
+	require.True(t, br.Signal().IsTripped())
 
 	{
 		// The probe finishes. Breaker is still open, so next time anyone
-		// observes that, another probe is launched.
+		// observes that, another probe is launched. However, a probe
+		// is not launched by IsTripped().
 		done()
 		report, done = nil, nil
+		require.True(t, br.Signal().IsTripped())
+		require.Nil(t, report)
+		require.Nil(t, done)
 		require.Error(t, br.Signal().Err())
 		require.NotNil(t, report)
 		require.NotNil(t, done)
@@ -205,10 +217,12 @@ func TestBreaker(t *testing.T) {
 		// stay that way.
 		report(nil)
 		require.NoError(t, br.Signal().Err())
+		require.False(t, br.Signal().IsTripped())
 		// The probe finishes.
 		done()
 		require.NoError(t, br.Signal().Err())
 		require.NoError(t, br.Signal().Err())
+		require.False(t, br.Signal().IsTripped())
 	}
 
 	datadriven.RunTest(t,
@@ -438,7 +452,6 @@ func BenchmarkBreaker_Signal(b *testing.B) {
 		AsyncProbe: func(_ func(error), done func()) {
 			done() // never untrip
 		},
-		EventHandler: &EventLogger{Log: func(redact.StringBuilder) {}},
 	})
 
 	// The point of this benchmark is to verify the absence of allocations when

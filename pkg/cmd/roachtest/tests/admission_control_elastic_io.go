@@ -65,17 +65,16 @@ func registerElasticIO(r registry.Registry) {
 				WithGrafanaDashboardJSON(grafana.ChangefeedAdmissionControlGrafana)
 			err := c.StartGrafana(ctx, t.L(), promCfg)
 			require.NoError(t, err)
-			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
-			require.NoError(t, err)
-			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
-
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workAndPromNode))
-			startOpts := option.DefaultStartOptsNoBackups()
+			startOpts := option.NewStartOpts(option.NoBackupSchedule)
 			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=io_load_listener=2")
 			settings := install.MakeClusterSettings()
 			c.Start(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes))
+			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
+			require.NoError(t, err)
+			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 			setAdmissionControl(ctx, t, c, true)
 			duration := 30 * time.Minute
 			t.Status("running workload")
@@ -85,7 +84,7 @@ func registerElasticIO(r registry.Registry) {
 				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
 				cmd := "./workload run kv --init --histograms=perf/stats.json --concurrency=512 " +
 					"--splits=1000 --read-percent=0 --min-block-bytes=65536 --max-block-bytes=65536 " +
-					"--txn-qos=background --tolerate-errors" + dur + url
+					"--txn-qos=background --tolerate-errors --secure" + dur + url
 				c.Run(ctx, option.WithNodes(c.Node(workAndPromNode)), cmd)
 				return nil
 			})
@@ -123,16 +122,24 @@ func registerElasticIO(r registry.Registry) {
 				// not working, the threshold of 7 will be easily breached, since
 				// regular tokens allow sub-levels to exceed 10.
 				const subLevelThreshold = 7
+				const sampleCountForL0Sublevel = 12
+				var l0SublevelCount []float64
 				// Sleep initially for stability to be achieved, before measuring.
 				time.Sleep(5 * time.Minute)
 				for {
-					time.Sleep(30 * time.Second)
+					time.Sleep(10 * time.Second)
 					val, err := getMetricVal(subLevelMetric)
 					if err != nil {
 						continue
 					}
-					if val > subLevelThreshold {
-						t.Fatalf("sub-level count %f exceeded threshold", val)
+					l0SublevelCount = append(l0SublevelCount, val)
+					// We want to use the mean of the last 2m of data to avoid short-lived
+					// spikes causing failures.
+					if len(l0SublevelCount) >= sampleCountForL0Sublevel {
+						latestSampleMeanL0Sublevels := getMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
+						if latestSampleMeanL0Sublevels > subLevelThreshold {
+							t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
+						}
 					}
 					if timeutil.Now().After(endTime) {
 						return nil

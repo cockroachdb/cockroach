@@ -116,6 +116,7 @@
             "pkg/kv/kvnemesis/watcher.go": "flagged by linter, should be evaluated",
             "pkg/kv/txn.go": "flagged by linter, should be evaluated",
             "pkg/obs/event_exporter.go": "flagged by linter, should be evaluated",
+            "pkg/raft/.*": "imported third-party package",
             "pkg/roachprod/install/cluster_synced.go": "flagged by linter, should be evaluated",
             "pkg/roachprod/install/services.go": "flagged by linter, should be evaluated",
             "pkg/roachprod/roachprod.go": "flagged by linter, should be evaluated",
@@ -198,7 +199,8 @@
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
             "pkg/.*_generated\\.go$": "generated code",
-            "cockroach/bazel-out/.*/testmain\\.go$": "generated test main file by rules_go"
+            "cockroach/bazel-out/.*/testmain\\.go$": "generated test main file by rules_go",
+            "cockroach/pkg/raft/.*": "imported third-party package"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code",
@@ -216,6 +218,7 @@
             "cockroach/pkg/kv/kvclient/kvcoord/lock_spans_over_budget_error\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/kv/kvpb/batch_generated-gen\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/kv/kvpb/errors\\.go$": "invalid direct cast on error object",
+            "cockroach/pkg/raft/.*": "imported third-party package",
             "cockroach/pkg/sql/pgwire/pgerror/constraint_name\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/sql/pgwire/pgerror/pgcode\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/testutils/lint/lint_test\\.go$": "invalid direct cast on error object",
@@ -241,6 +244,7 @@
     "fmtsafe": {
         "exclude_files": {
             "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/raft/.*": "imported third-party package",
             "cockroach/pkg/roachprod/logger/log\\.go$": "format argument is not a constant expression",
             "cockroach/pkg/util/log/channels\\.go$": "format argument is not a constant expression",
             "pkg/util/log/log_channels_generated\\.go$": "format argument is not a constant expression"
@@ -267,6 +271,12 @@
             "cockroach/pkg/.*$": "first-party code",
             "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
         }
+    },
+    "loopvarcapture": {
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code",
+           "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+       }
     },
     "lostcancel": {
         "only_files": {
@@ -511,7 +521,8 @@
             "pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/raft/.*": "imported third-party package"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code",
@@ -1169,7 +1180,8 @@
             "pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "pkg/.*_generated\\.go$": "generated code",
+            "cockroach/pkg/raft/.*": "imported third-party package"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code",
@@ -1844,6 +1856,7 @@
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
             "pkg/.*_generated\\.go$": "generated code",
+            "pkg/raft/.*": "imported third-party package",
             "pkg/sql/roleoption": "generated code"
         },
         "only_files": {
@@ -2076,8 +2089,9 @@
     "shadow": {
        "exclude_files": {
             "pkg/.*\\.eg\\.go$": "generated code",
-            "pkg/.*\\.og\\.go$": "generated code"
-        },
+            "pkg/.*\\.og\\.go$": "generated code",
+            "pkg/raft/.*": "imported third-party package"
+       },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code",
             "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"

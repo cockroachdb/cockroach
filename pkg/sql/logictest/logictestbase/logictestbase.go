@@ -82,6 +82,9 @@ type TestClusterConfig struct {
 	// disableLocalityOptimizedSearch disables the cluster setting
 	// locality_optimized_partitioned_index_scan, which is enabled by default.
 	DisableLocalityOptimizedSearch bool
+	// EnableDefaultReadCommitted uses READ COMMITTED for all transactions
+	// by default.
+	EnableDefaultReadCommitted bool
 	// DeclarativeCorpusCollection enables support for collecting corpuses
 	// for the declarative schema changer.
 	DeclarativeCorpusCollection bool
@@ -299,6 +302,13 @@ var LogicTestConfigs = []TestClusterConfig{
 		OverrideVectorize:   "off",
 	},
 	{
+		Name:                       "local-read-committed",
+		NumNodes:                   1,
+		OverrideDistSQLMode:        "off",
+		IsCCLConfig:                true,
+		EnableDefaultReadCommitted: true,
+	},
+	{
 		Name:                "fakedist",
 		NumNodes:            3,
 		UseFakeSpanResolver: true,
@@ -491,8 +501,19 @@ var LogicTestConfigs = []TestClusterConfig{
 		DeclarativeCorpusCollection: true,
 	},
 	{
-		Name:                     "cockroach-go-testserver-upgrade-to-master",
+		// This config runs a cluster with 3 nodes, with a separate process per
+		// node. The nodes initially start on v23.1.
+		Name:                     "cockroach-go-testserver-23.1",
 		UseCockroachGoTestserver: true,
+		BootstrapVersion:         clusterversion.V23_1,
+		NumNodes:                 3,
+	},
+	{
+		// This config runs a cluster with 3 nodes, with a separate process per
+		// node. The nodes initially start on v23.2.
+		Name:                     "cockroach-go-testserver-23.2",
+		UseCockroachGoTestserver: true,
+		BootstrapVersion:         clusterversion.V23_2,
 		NumNodes:                 3,
 	},
 }
@@ -559,6 +580,7 @@ var (
 		"local",
 		"local-legacy-schema-changer",
 		"local-vec-off",
+		"local-read-committed",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
@@ -580,12 +602,22 @@ var (
 		"3node-tenant",
 		"3node-tenant-multiregion",
 	}
+	// EnterpriseConfigName is a special alias for all enterprise configs.
+	EnterpriseConfigName = "enterprise-configs"
+	// EnterpriseConfigNames is the list of all enterprise configs.
+	EnterpriseConfigNames = []string{
+		"3node-tenant",
+		"3node-tenant-multiregion",
+		"local-read-committed",
+	}
 	// DefaultConfig is the default test configuration.
 	DefaultConfig = parseTestConfig(DefaultConfigNames)
 	// FiveNodeDefaultConfig is the five-node default test configuration.
 	FiveNodeDefaultConfig = parseTestConfig(FiveNodeDefaultConfigNames)
 	// ThreeNodeTenantDefaultConfig is the three-node tenant default test configuration.
 	ThreeNodeTenantDefaultConfig = parseTestConfig(ThreeNodeTenantDefaultConfigNames)
+	// EnterpriseConfig is the enterprise test configuration.
+	EnterpriseConfig = parseTestConfig(EnterpriseConfigNames)
 )
 
 // logger is an interface implemented by testing.TB as well as stdlogger below.
@@ -773,6 +805,8 @@ func processConfigs(
 				configs = append(configs, applyBlocklistToConfigs(FiveNodeDefaultConfig, blocklist)...)
 			case ThreeNodeTenantDefaultConfigName:
 				configs = append(configs, applyBlocklistToConfigs(ThreeNodeTenantDefaultConfig, blocklist)...)
+			case EnterpriseConfigName:
+				configs = append(configs, applyBlocklistToConfigs(EnterpriseConfig, blocklist)...)
 			default:
 				t.Fatalf("%s: unknown config name %s", path, configName)
 			}
@@ -846,6 +880,8 @@ func getDefaultConfigListNames(name string) []string {
 		return FiveNodeDefaultConfigNames
 	case ThreeNodeTenantDefaultConfigName:
 		return ThreeNodeTenantDefaultConfigNames
+	case EnterpriseConfigName:
+		return EnterpriseConfigNames
 	}
 	return []string{}
 }

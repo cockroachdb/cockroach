@@ -19,10 +19,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -36,25 +36,6 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-var (
-	// DefaultTTL specifies the time to expiration when a session is created.
-	DefaultTTL = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
-		"server.sqlliveness.ttl",
-		"default sqlliveness session ttl",
-		40*time.Second,
-		settings.NonNegativeDuration,
-	)
-	// DefaultHeartBeat specifies the period between attempts to extend a session.
-	DefaultHeartBeat = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
-		"server.sqlliveness.heartbeat",
-		"duration heart beats to push session expiration further out in time",
-		5*time.Second,
-		settings.NonNegativeDuration,
-	)
-)
-
 // Writer provides interactions with the storage of session records.
 type Writer interface {
 	// Insert stores the input Session.
@@ -62,7 +43,7 @@ type Writer interface {
 	// Update looks for a Session with the same SessionID as the input Session in
 	// the storage and if found replaces it with the input returning true.
 	// Otherwise it returns false to indicate that the session does not exist.
-	Update(ctx context.Context, id sqlliveness.SessionID, expiration hlc.Timestamp) (bool, error)
+	Update(ctx context.Context, id sqlliveness.SessionID, expiration hlc.Timestamp) (bool, hlc.Timestamp, error)
 	// Delete removes the session from the sqlliveness table.
 	Delete(ctx context.Context, id sqlliveness.SessionID) error
 }
@@ -145,6 +126,9 @@ type Instance struct {
 		stopErr error
 		// s is the current session, if any.
 		s *session
+		// blockedExtensions indicates if extensions are disallowed because of availability
+		// issues on dependent tables.
+		blockedExtensions int
 		// blockCh is set when s == nil && stopErr == nil. It is used to wait on
 		// updates to s.
 		blockCh chan struct{}
@@ -269,6 +253,15 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) {
 	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
 
+	// If extensions are disallowed we are only going to heartbeat the same
+	// timestamp, so that we can detect if the sqlliveness row was removed.
+	l.mu.Lock()
+	extensionsBlocked := l.mu.blockedExtensions
+	l.mu.Unlock()
+	if extensionsBlocked > 0 {
+		exp = s.Expiration()
+	}
+
 	opts := retry.Options{
 		InitialBackoff: 10 * time.Millisecond,
 		MaxBackoff:     2 * time.Second,
@@ -278,7 +271,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	var found bool
 	// Retry until success or until the context is canceled.
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		if found, err = l.storage.Update(ctx, s.ID(), exp); err != nil {
+		if found, exp, err = l.storage.Update(ctx, s.ID(), exp); err != nil {
 			if ctx.Err() != nil {
 				break
 			}
@@ -296,7 +289,6 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	if !found {
 		return false, nil
 	}
-
 	s.setExpiration(exp)
 	return true, nil
 }
@@ -337,7 +329,7 @@ func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 	// don't cancel their ctx.
 	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
-	t := timeutil.NewTimer()
+	var t timeutil.Timer
 	defer t.Stop()
 
 	t.Reset(0)
@@ -413,10 +405,10 @@ func NewSQLInstance(
 		stopper:        stopper,
 		sessionEvents:  sessionEvents,
 		ttl: func() time.Duration {
-			return DefaultTTL.Get(&settings.SV)
+			return slbase.DefaultTTL.Get(&settings.SV)
 		},
 		hb: func() time.Duration {
-			return DefaultHeartBeat.Get(&settings.SV)
+			return slbase.DefaultHeartBeat.Get(&settings.SV)
 		},
 		drain: make(chan struct{}),
 	}
@@ -465,6 +457,26 @@ func (l *Instance) Release(ctx context.Context) (sqlliveness.SessionID, error) {
 	}
 
 	return session.ID(), nil
+}
+
+func (l *Instance) PauseLivenessHeartbeat(ctx context.Context) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	firstToBlock := l.mu.blockedExtensions == 0
+	l.mu.blockedExtensions++
+	if firstToBlock {
+		log.Infof(ctx, "disabling sqlliveness extension because of availability issue on system tables")
+	}
+}
+
+func (l *Instance) UnpauseLivenessHeartbeat(ctx context.Context) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.mu.blockedExtensions--
+	lastToUnblock := l.mu.blockedExtensions == 0
+	if lastToUnblock {
+		log.Infof(ctx, "enabling sqlliveness extension due to restored availability")
+	}
 }
 
 // Session returns a live session id. For each Sqlliveness instance the

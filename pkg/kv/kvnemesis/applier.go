@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -120,10 +119,6 @@ func exceptSkipLockedReplayError(err error) bool { // true if skip locked replay
 	return errors.Is(err, &concurrency.SkipLockedReplayError{})
 }
 
-func exceptSkipLockedUnsupportedError(err error) bool { // true if unsupported use of skip locked error
-	return errors.Is(err, &batcheval.SkipLockedUnsupportedError{})
-}
-
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation,
@@ -150,6 +145,14 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		o.Result = resultInit(ctx, err)
 	case *ChangeZoneOperation:
 		err := updateZoneConfigInEnv(ctx, env, o.Type)
+		o.Result = resultInit(ctx, err)
+	case *BarrierOperation:
+		var err error
+		if o.WithLeaseAppliedIndex {
+			_, _, err = db.BarrierWithLAI(ctx, o.Key, o.EndKey)
+		} else {
+			_, err = db.Barrier(ctx, o.Key, o.EndKey)
+		}
 		o.Result = resultInit(ctx, err)
 	case *ClosureTxnOperation:
 		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between
@@ -446,6 +449,17 @@ func applyClientOp(
 			return
 		}
 		o.Result.OptionalTimestamp = ts
+	case *BarrierOperation:
+		_, _, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
+			b.AddRawRequest(&kvpb.BarrierRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    o.Key,
+					EndKey: o.EndKey,
+				},
+				WithLeaseAppliedIndex: o.WithLeaseAppliedIndex,
+			})
+		})
+		o.Result = resultInit(ctx, err)
 	case *BatchOperation:
 		b := &kv.Batch{}
 		applyBatchOp(ctx, b, db.Run, o)
@@ -564,6 +578,8 @@ func applyBatchOp(
 			setLastReqSeq(b, subO.Seq)
 		case *AddSSTableOperation:
 			panic(errors.AssertionFailedf(`AddSSTable cannot be used in batches`))
+		case *BarrierOperation:
+			panic(errors.AssertionFailedf(`Barrier cannot be used in batches`))
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
@@ -661,17 +677,23 @@ func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*kv.DB) roachpb.R
 
 func newGetReplicasFn(dbs ...*kv.DB) GetReplicasFn {
 	ctx := context.Background()
-	return func(key roachpb.Key) []roachpb.ReplicationTarget {
+	return func(key roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget) {
 		desc := getRangeDesc(ctx, key, dbs...)
 		replicas := desc.Replicas().Descriptors()
-		targets := make([]roachpb.ReplicationTarget, len(replicas))
-		for i, replica := range replicas {
-			targets[i] = roachpb.ReplicationTarget{
+		var voters []roachpb.ReplicationTarget
+		var nonVoters []roachpb.ReplicationTarget
+		for _, replica := range replicas {
+			target := roachpb.ReplicationTarget{
 				NodeID:  replica.NodeID,
 				StoreID: replica.StoreID,
 			}
+			if replica.Type == roachpb.NON_VOTER {
+				nonVoters = append(nonVoters, target)
+			} else {
+				voters = append(voters, target)
+			}
 		}
-		return targets
+		return voters, nonVoters
 	}
 }
 

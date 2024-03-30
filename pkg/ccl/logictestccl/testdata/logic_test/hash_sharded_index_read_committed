@@ -1,0 +1,22 @@
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+CREATE TABLE sharded_primary (
+  a INT NOT NULL,
+  PRIMARY KEY (a) USING HASH
+)
+
+statement ok
+CREATE TABLE sharded_unique (
+  a INT NOT NULL
+)
+
+statement ok
+CREATE UNIQUE INDEX ON sharded_unique (a) USING HASH
+
+statement ok
+INSERT INTO sharded_primary VALUES (1)
+
+statement ok
+INSERT INTO sharded_unique VALUES (1)

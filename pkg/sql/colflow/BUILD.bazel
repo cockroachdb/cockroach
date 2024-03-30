@@ -82,10 +82,6 @@ go_test(
         "vectorized_panic_propagation_test.go",
     ],
     embed = [":colflow"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/col/coldata",
@@ -119,7 +115,7 @@ go_test(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/eval",
         "//pkg/sql/types",
-        "//pkg/storage",
+        "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/serverutils",

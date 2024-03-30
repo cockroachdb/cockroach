@@ -75,10 +75,11 @@ func TestRandStep(t *testing.T) {
 
 	const minEachType = 5
 	config := newAllOperationsConfig()
-	config.NumNodes, config.NumReplicas = 2, 1
+	config.NumNodes, config.NumReplicas = 3, 2
 	rng, _ := randutil.NewTestRand()
-	getReplicasFn := func(_ roachpb.Key) []roachpb.ReplicationTarget {
-		return make([]roachpb.ReplicationTarget, rng.Intn(2)+1)
+	getReplicasFn := func(_ roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget) {
+		return make([]roachpb.ReplicationTarget, rng.Intn(config.NumNodes)+1),
+			make([]roachpb.ReplicationTarget, rng.Intn(config.NumNodes)+1)
 	}
 	g, err := MakeGenerator(config, getReplicasFn)
 	require.NoError(t, err)
@@ -250,6 +251,8 @@ func TestRandStep(t *testing.T) {
 				client.DeleteRangeUsingTombstone++
 			case *AddSSTableOperation:
 				client.AddSSTable++
+			case *BarrierOperation:
+				client.Barrier++
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
@@ -285,7 +288,8 @@ func TestRandStep(t *testing.T) {
 			*DeleteOperation,
 			*DeleteRangeOperation,
 			*DeleteRangeUsingTombstoneOperation,
-			*AddSSTableOperation:
+			*AddSSTableOperation,
+			*BarrierOperation:
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)
@@ -339,21 +343,35 @@ func TestRandStep(t *testing.T) {
 				counts.Merge.MergeNotSplit++
 			}
 		case *ChangeReplicasOperation:
-			var adds, removes int
+			var voterAdds, voterRemoves, nonVoterAdds, nonVoterRemoves int
 			for _, change := range o.Changes {
 				switch change.ChangeType {
 				case roachpb.ADD_VOTER:
-					adds++
+					voterAdds++
 				case roachpb.REMOVE_VOTER:
-					removes++
+					voterRemoves++
+				case roachpb.ADD_NON_VOTER:
+					nonVoterAdds++
+				case roachpb.REMOVE_NON_VOTER:
+					nonVoterRemoves++
 				}
 			}
-			if adds == 1 && removes == 0 {
-				counts.ChangeReplicas.AddReplica++
-			} else if adds == 0 && removes == 1 {
-				counts.ChangeReplicas.RemoveReplica++
-			} else if adds == 1 && removes == 1 {
-				counts.ChangeReplicas.AtomicSwapReplica++
+			if voterAdds == 1 && voterRemoves == 0 && nonVoterRemoves == 0 {
+				counts.ChangeReplicas.AddVotingReplica++
+			} else if voterAdds == 0 && voterRemoves == 1 && nonVoterAdds == 0 {
+				counts.ChangeReplicas.RemoveVotingReplica++
+			} else if voterAdds == 1 && voterRemoves == 1 {
+				counts.ChangeReplicas.AtomicSwapVotingReplica++
+			} else if nonVoterAdds == 1 && nonVoterRemoves == 0 && voterRemoves == 0 {
+				counts.ChangeReplicas.AddNonVotingReplica++
+			} else if nonVoterAdds == 0 && nonVoterRemoves == 1 && voterAdds == 0 {
+				counts.ChangeReplicas.RemoveNonVotingReplica++
+			} else if nonVoterAdds == 1 && nonVoterRemoves == 1 {
+				counts.ChangeReplicas.AtomicSwapNonVotingReplica++
+			} else if voterAdds == 1 && nonVoterRemoves == 1 {
+				counts.ChangeReplicas.PromoteReplica++
+			} else if voterRemoves == 1 && nonVoterAdds == 1 {
+				counts.ChangeReplicas.DemoteReplica++
 			}
 		case *TransferLeaseOperation:
 			counts.ChangeLease.TransferLease++

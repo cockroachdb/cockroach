@@ -108,16 +108,12 @@ func TestSampleReservoir(t *testing.T) {
 			})
 			for _, mem := range []int64{1 << 8, 1 << 10, 1 << 12} {
 				t.Run(fmt.Sprintf("n=%d/k=%d/mem=%d", n, k, mem), func(t *testing.T) {
-					monitor := mon.NewMonitorWithLimit(
-						"test-monitor",
-						mon.MemoryResource,
-						mem,
-						nil,
-						nil,
-						1,
-						math.MaxInt64,
-						st,
-					)
+					monitor := mon.NewMonitor(mon.Options{
+						Name:      "test-monitor",
+						Limit:     mem,
+						Increment: 1,
+						Settings:  st,
+					})
 					monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 					memAcc := monitor.MakeBoundAccount()
 					expectedK := k

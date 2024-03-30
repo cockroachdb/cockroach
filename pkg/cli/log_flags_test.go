@@ -66,7 +66,7 @@ func TestSetupLogging(t *testing.T) {
 		`file-defaults: \{` +
 			`dir: (?P<path>[^,]+), ` +
 			`max-file-size: 10MiB, ` +
-			`file-permissions: "0644", ` +
+			`file-permissions: "0640", ` +
 			`buffered-writes: true, ` +
 			`filter: INFO, ` +
 			`format: crdb-v2, ` +
@@ -75,14 +75,14 @@ func TestSetupLogging(t *testing.T) {
 	fileDefaultsNoMaxSizeRe := regexp.MustCompile(
 		`file-defaults: \{` +
 			`dir: (?P<path>[^,]+), ` +
-			`file-permissions: "0644", ` +
+			`file-permissions: "0640", ` +
 			`buffered-writes: true, ` +
 			`filter: INFO, ` +
 			`format: crdb-v2, ` +
 			`redactable: true, ` +
 			`buffering: NONE\}`)
 	const fileDefaultsNoDir = `file-defaults: {` +
-		`file-permissions: "0644", ` +
+		`file-permissions: "0640", ` +
 		`buffered-writes: true, ` +
 		`filter: INFO, ` +
 		`format: crdb-v2, ` +
@@ -97,7 +97,7 @@ func TestSetupLogging(t *testing.T) {
 		`\{channels: \{(?P<chans>[^}]*)\}, ` +
 			`dir: (?P<path>[^,]+), ` +
 			`max-file-size: 10MiB, ` +
-			`file-permissions: "0644", ` +
+			`file-permissions: "0640", ` +
 			`buffered-writes: (?P<buf>[^,]+), ` +
 			`filter: INFO, ` +
 			`format: (?P<format>[^,]+), ` +
@@ -108,7 +108,7 @@ func TestSetupLogging(t *testing.T) {
 			`dir: (?P<path>[^,]+), ` +
 			`max-file-size: 100KiB, ` +
 			`max-group-size: 1.0MiB, ` +
-			`file-permissions: "0644", ` +
+			`file-permissions: "0640", ` +
 			`buffered-writes: true, ` +
 			`filter: INFO, ` +
 			`format: crdb-v2, ` +

@@ -93,9 +93,10 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"LeaseTransferOutcome": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl": {
-						"AllocatorAction":   {},
-						"TargetReplicaType": {},
-						"ReplicaStatus":     {},
+						"AllocatorAction":       {},
+						"TargetReplicaType":     {},
+						"ReplicaStatus":         {},
+						"TransferLeaseDecision": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load": {
 						"Dimension": {},
@@ -147,7 +148,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"TenantID":          {},
 						"TransactionStatus": {},
 					},
-					"github.com/cockroachdb/cockroach/pkg/rpc": {
+					"github.com/cockroachdb/cockroach/pkg/rpc/rpcpb": {
 						"ConnectionClass": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb": {

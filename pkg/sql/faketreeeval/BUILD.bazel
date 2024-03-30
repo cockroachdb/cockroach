@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/sql/catalog/descpb",
@@ -14,7 +15,6 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/privilege",
-        "//pkg/sql/roleoption",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",

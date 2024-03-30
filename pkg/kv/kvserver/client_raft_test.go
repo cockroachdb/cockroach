@@ -40,6 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	raft "github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -47,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -71,8 +74,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	raft "go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
 	"google.golang.org/grpc"
 )
 
@@ -112,7 +113,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyVFSRegistry: server.NewStickyVFSRegistry(),
+						StickyVFSRegistry: fs.NewStickyRegistry(),
 					},
 				},
 			},
@@ -202,7 +203,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := fs.NewStickyRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -347,7 +348,7 @@ func TestRestoreReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := fs.NewStickyRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -684,7 +685,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
-							StickyVFSRegistry: server.NewStickyVFSRegistry(),
+							StickyVFSRegistry: fs.NewStickyRegistry(),
 						},
 					},
 				}
@@ -1564,7 +1565,7 @@ func TestReceiveSnapshotLogging(t *testing.T) {
 		chgs := kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(receiverNodeIdx))
 
 		testStartTs := timeutil.Now()
-		_, pErr := repl.ChangeReplicas(ctx, rngDesc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
+		_, pErr := repl.ChangeReplicas(ctx, rngDesc, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
 
 		// When ready, flush logs and check messages from store_raft.go since
 		// call to repl.ChangeReplicas(..).
@@ -1728,7 +1729,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 				},
 			},
 		}
@@ -1811,7 +1812,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable the replica GC queue so that it doesn't accidentally pick up the
@@ -1905,7 +1906,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			RaftConfig: raftConfig,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable leader transfers during leaseholder changes so that we
@@ -2138,7 +2139,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 
 	addReplica := func(storeNum int, desc *roachpb.RangeDescriptor) error {
 		chgs := kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(storeNum))
-		_, err := repl.ChangeReplicas(ctx, desc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
+		_, err := repl.ChangeReplicas(ctx, desc, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
 		return err
 	}
 
@@ -2210,7 +2211,7 @@ func TestProgressWithDownNode(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 				},
 			},
 		}
@@ -2292,7 +2293,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 					WallClock:         manualClock,
 				},
 			},
@@ -2395,7 +2396,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 					WallClock:         manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
@@ -2647,6 +2648,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	const numReplicas = 3
 
 	ctx := context.Background()
+	manual := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, numReplicas,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -2656,15 +2658,30 @@ func TestWedgedReplicaDetection(t *testing.T) {
 					// this test doesn't expect.
 					RaftElectionTimeoutTicks: 100000,
 				},
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						WallClock: manual,
+					},
+				},
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
+
+	// Pause the manual clock so that we can carefully control the perceived
+	// timing of the follower replica's activity.
+	manual.Pause()
 
 	key := []byte("a")
 	tc.SplitRangeOrFatal(t, key)
 	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 
+	// Do a write; we'll use it to determine when the dust has settled.
+	_, err := tc.Servers[0].DB().Inc(ctx, key, 1)
+	require.Nil(t, err)
+	tc.WaitForValues(t, key, []int64{1, 1, 1})
+
 	leaderRepl := tc.GetRaftLeader(t, key)
+	leaderClock := leaderRepl.Clock()
 	followerRepl := func() *kvserver.Replica {
 		for i := range tc.Servers {
 			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
@@ -2692,18 +2709,20 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	wg.Wait()
 	defer followerRepl.RaftUnlock()
 
-	// TODO(andrei): The test becomes flaky with a lower threshold because the
-	// follower is considered inactive just below. Figure out how to switch the
-	// test to a manual clock. The activity tracking for followers uses the
-	// physical clock.
+	// inactivityThreshold is the test's duration of inactivity after which the
+	// follower replica is considered inactive. In practice, this is set to the
+	// range lease duration.
 	inactivityThreshold := time.Second
+
+	// Increment the clock to be close to inactivityThreshold, but not past it.
+	manual.Increment(inactivityThreshold.Nanoseconds() - 1)
 
 	// Send a request to the leader replica. followerRepl is locked so it will
 	// not respond.
 	value := []byte("value")
 	ba := &kvpb.BatchRequest{}
 	ba.Add(putArgs(key, value))
-	if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
+	if err := ba.SetActiveTimestamp(leaderClock); err != nil {
 		t.Fatal(err)
 	}
 	if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
@@ -2712,7 +2731,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 
 	// The follower should still be active.
 	followerID := followerRepl.ReplicaID()
-	if !leaderRepl.IsFollowerActiveSince(ctx, followerID, inactivityThreshold) {
+	if !leaderRepl.IsFollowerActiveSince(followerID, leaderClock.PhysicalTime(), inactivityThreshold) {
 		t.Fatalf("expected follower to still be considered active")
 	}
 
@@ -2721,6 +2740,9 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	// would bump the last active timestamp on the leader. Because of this,
 	// we check whether the follower is eventually considered inactive.
 	testutils.SucceedsSoon(t, func() error {
+		// Increment the clock to past inactivityThreshold.
+		manual.Increment(inactivityThreshold.Nanoseconds() + 1)
+
 		// Send another request to the leader replica. followerRepl is locked
 		// so it will not respond.
 		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
@@ -2728,7 +2750,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		}
 
 		// The follower should no longer be considered active.
-		if leaderRepl.IsFollowerActiveSince(ctx, followerID, inactivityThreshold) {
+		if leaderRepl.IsFollowerActiveSince(followerID, leaderClock.PhysicalTime(), inactivityThreshold) {
 			return errors.New("expected follower to be considered inactive")
 		}
 		return nil
@@ -3208,7 +3230,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_VOTER, roachpb.ADD_VOTER} {
 			for {
 				chgs := kvpb.MakeReplicationChanges(action, tc.Target(1))
-				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonUnknown, "", chgs); err != nil {
+				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.ReasonUnknown, "", chgs); err != nil {
 					if kvserver.IsRetriableReplicationChangeError(err) ||
 						kvserver.IsReplicationChangeInProgressError(err) {
 						continue
@@ -3310,7 +3332,7 @@ func TestReplicaGCRace(t *testing.T) {
 		NodeID:  toStore.Ident.NodeID,
 		StoreID: toStore.Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3359,7 +3381,7 @@ func TestReplicaGCRace(t *testing.T) {
 
 	// Remove the victim replica and manually GC it.
 	chgs[0].ChangeType = roachpb.REMOVE_VOTER
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.ReasonRangeOverReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3494,7 +3516,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 					WallClock:         manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
@@ -3838,7 +3860,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableScanner: true,
@@ -3935,7 +3957,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 				},
 			},
 		}
@@ -4802,7 +4824,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := fs.NewStickyRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -5211,7 +5233,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyVFSRegistry: server.NewStickyVFSRegistry(),
+						StickyVFSRegistry: fs.NewStickyRegistry(),
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						// Newly-started stores (including the "rogue" one) should not GC
@@ -5577,7 +5599,7 @@ func TestElectionAfterRestart(t *testing.T) {
 	const electionTimeoutTicks = 30
 	const raftTickInterval = 200 * time.Millisecond
 
-	r := server.NewStickyVFSRegistry()
+	r := fs.NewStickyRegistry()
 	newTCArgs := func(parallel bool, replMode base.TestClusterReplicationMode, onTimeoutCampaign func(roachpb.RangeID)) base.TestClusterArgs {
 		return base.TestClusterArgs{
 			ReplicationMode: replMode,
@@ -5810,7 +5832,11 @@ func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
 		require.Len(t, ccResp.Result, 1)
 		result := ccResp.Result[0]
 		require.Equal(t, desc.RangeID, result.RangeID)
-		require.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
+		if kvserver.EnableEstimatedMVCCStatsInSplit.Get(&ts.ClusterSettings().SV) {
+			require.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED, result.Status, "%+v", result)
+		} else {
+			require.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
+		}
 	}
 
 	checkConsistency(descA)
@@ -6051,7 +6077,7 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 
 	repl1, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 	require.NoError(t, err)
-	repl2, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+	repl2, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
 	require.NoError(t, err)
 	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
 	require.NoError(t, err)
@@ -6130,10 +6156,10 @@ func TestRaftPreVote(t *testing.T) {
 				// We install a proposal filter which rejects proposals to the range
 				// during the partition (typically txn record cleanup via GC requests,
 				// but also e.g. lease extensions).
-				var partitioned atomic.Bool
+				var partitioned, blocked atomic.Bool
 				var rangeID roachpb.RangeID
 				propFilter := func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
-					if partitioned.Load() && args.Req.RangeID == rangeID {
+					if blocked.Load() && args.Req.RangeID == rangeID {
 						t.Logf("r%d proposal rejected: %s", rangeID, args.Req)
 						return kvpb.NewError(errors.New("rejected"))
 					}
@@ -6206,13 +6232,45 @@ func TestRaftPreVote(t *testing.T) {
 				tc.WaitForValues(t, key, []int64{2, 2, 2})
 				t.Logf("n1 has lease")
 
-				// Wait for the range to quiesce, if enabled.
+				// Block new proposals to the range.
+				blocked.Store(true)
+				t.Logf("n1 proposals blocked")
+
+				// Wait for the range to quiesce, if enabled. Otherwise, wait for the
+				// range to stabilize such that the leader's log does not change for a
+				// second, and has been replicated to all followers.
 				if quiesce {
 					require.Eventually(t, repl3.IsQuiescent, 10*time.Second, 100*time.Millisecond)
 					t.Logf("n3 quiesced")
 				} else {
 					require.False(t, repl3.IsQuiescent())
 					t.Logf("n3 not quiesced")
+
+					var lastIndex uint64
+					var lastChanged time.Time
+					require.Eventually(t, func() bool {
+						status := repl1.RaftStatus()
+						require.Equal(t, raft.StateLeader, status.RaftState)
+						if i := status.Progress[1].Match; i > lastIndex {
+							t.Logf("n1 last index changed: %d -> %d", lastIndex, i)
+							lastIndex, lastChanged = i, time.Now()
+							return false
+						}
+						for i, pr := range status.Progress {
+							if pr.Match != lastIndex {
+								t.Logf("n%d match %d not at n1 last index %d, waiting", i, pr.Match, lastIndex)
+								return false
+							}
+						}
+						if since := time.Since(lastChanged); since < time.Second {
+							t.Logf("n1 last index %d changed %s ago, waiting",
+								lastIndex, since.Truncate(time.Millisecond))
+							return false
+						}
+						return true
+					}, 10*time.Second, 200*time.Millisecond)
+					t.Logf("n1 stabilized range")
+					logStatus(repl1.RaftStatus())
 				}
 
 				// Partition n3.
@@ -6266,7 +6324,9 @@ func TestRaftPreVote(t *testing.T) {
 				}
 				t.Logf("n1 is still leader")
 
-				// Heal the partition, and wait for the replica to become a follower.
+				// Heal the partition and unblock proposals, then wait for the replica
+				// to become a follower.
+				blocked.Store(false)
 				partitioned.Store(false)
 				t.Logf("n3 partition healed")
 
@@ -6498,9 +6558,9 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Timing-sensitive, so skip under deadlock detector and stressrace.
+	// Timing-sensitive, so skip under deadlock detector and race.
 	skip.UnderDeadlock(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

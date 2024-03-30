@@ -144,7 +144,7 @@ DEALLOCATE ALL
 ----
 
 exec
-SET prepared_statements_cache_size = '10 KiB'
+SET prepared_statements_cache_size = '12 KiB'
 ----
 
 wire_prepare pscs1

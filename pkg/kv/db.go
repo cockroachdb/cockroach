@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -183,18 +184,22 @@ type DBContext struct {
 	// NodeID provides the node ID for setting the gateway node and avoiding
 	// clock uncertainty for root transactions started at the gateway.
 	NodeID *base.SQLIDContainer
+	// Settings is the collection of cluster settings. The field is optional and
+	// can be set to nil in tests.
+	Settings *cluster.Settings
 	// Stopper is used for async tasks.
 	Stopper *stop.Stopper
 }
 
 // DefaultDBContext returns (a copy of) the default options for
 // NewDBWithContext.
-func DefaultDBContext(stopper *stop.Stopper) DBContext {
+func DefaultDBContext(settings *cluster.Settings, stopper *stop.Stopper) DBContext {
 	return DBContext{
 		UserPriority: roachpb.NormalUserPriority,
 		// TODO(tbg): this is ugly. Force callers to pass in an SQLIDContainer.
-		NodeID:  &base.SQLIDContainer{},
-		Stopper: stopper,
+		NodeID:   &base.SQLIDContainer{},
+		Settings: settings,
+		Stopper:  stopper,
 	}
 }
 
@@ -269,7 +274,6 @@ type DB struct {
 	// Especially SettingsValue.
 	SQLKVResponseAdmissionQ *admission.WorkQueue
 	AdmissionPacerFactory   admission.PacerFactory
-	SettingsValues          *settings.Values
 }
 
 // NonTransactionalSender returns a Sender that can be used for sending
@@ -297,6 +301,14 @@ func (db *DB) Context() DBContext {
 	return db.ctx
 }
 
+// SettingsValues returns the DB's settings.Values, if configured.
+func (db *DB) SettingsValues() *settings.Values {
+	if db.ctx.Settings == nil {
+		return nil
+	}
+	return &db.ctx.Settings.SV
+}
+
 // NewBatch creates a new empty batch.
 func (db *DB) NewBatch() *Batch {
 	return &Batch{}
@@ -306,7 +318,7 @@ func (db *DB) NewBatch() *Batch {
 func NewDB(
 	actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock, stopper *stop.Stopper,
 ) *DB {
-	return NewDBWithContext(actx, factory, clock, DefaultDBContext(stopper))
+	return NewDBWithContext(actx, factory, clock, DefaultDBContext(nil /* settings */, stopper))
 }
 
 // NewDBWithContext returns a new DB with the given parameters.
@@ -771,8 +783,6 @@ func (db *DB) AdminRelocateRange(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-var noRemoteFile kvpb.AddSSTableRequest_RemoteFile
-
 // AddSSTable links a file into the Pebble log-structured merge-tree.
 //
 // The disallowConflicts, disallowShadowingBelow parameters
@@ -789,7 +799,7 @@ func (db *DB) AddSSTable(
 	batchTs hlc.Timestamp,
 ) (roachpb.Span, int64, error) {
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
-	b.addSSTable(begin, end, data, noRemoteFile, disallowConflicts, disallowShadowing, disallowShadowingBelow,
+	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
 		stats, ingestAsWrites, hlc.Timestamp{} /* sstTimestampToRequestTimestamp */)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
@@ -802,23 +812,23 @@ func (db *DB) AddSSTable(
 	return resp.RangeSpan, resp.AvailableBytes, nil
 }
 
-func (db *DB) AddRemoteSSTable(
+// LinkExternalSSTable links an external sst into the Pebble log-structured merge-tree.
+func (db *DB) LinkExternalSSTable(
 	ctx context.Context,
 	span roachpb.Span,
-	file kvpb.AddSSTableRequest_RemoteFile,
-	stats *enginepb.MVCCStats,
-) (roachpb.Span, int64, error) {
-	b := &Batch{}
-	b.addSSTable(span.Key, span.EndKey, nil, file, false, false, hlc.Timestamp{}, stats, false, hlc.Timestamp{})
+	file kvpb.LinkExternalSSTableRequest_ExternalFile,
+	batchTimestamp hlc.Timestamp,
+) error {
+	b := &Batch{Header: kvpb.Header{Timestamp: batchTimestamp}}
+	b.linkExternalSSTable(span, file)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
-		return roachpb.Span{}, 0, err
+		return err
 	}
 	if l := len(b.response.Responses); l != 1 {
-		return roachpb.Span{}, 0, errors.AssertionFailedf("expected single response, got %d", l)
+		return errors.AssertionFailedf("expected single response, got %d", l)
 	}
-	resp := b.response.Responses[0].GetAddSstable()
-	return resp.RangeSpan, resp.AvailableBytes, nil
+	return nil
 }
 
 // AddSSTableAtBatchTimestamp links a file into the Pebble log-structured
@@ -839,7 +849,7 @@ func (db *DB) AddSSTableAtBatchTimestamp(
 	batchTs hlc.Timestamp,
 ) (hlc.Timestamp, roachpb.Span, int64, error) {
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
-	b.addSSTable(begin, end, data, noRemoteFile,
+	b.addSSTable(begin, end, data,
 		disallowConflicts, disallowShadowing, disallowShadowingBelow,
 		stats, ingestAsWrites, batchTs)
 	err := getOneErr(db.Run(ctx, b), b)
@@ -889,21 +899,45 @@ func (db *DB) QueryResolvedTimestamp(
 // writes on the specified key range to finish.
 func (db *DB) Barrier(ctx context.Context, begin, end interface{}) (hlc.Timestamp, error) {
 	b := &Batch{}
-	b.barrier(begin, end)
-	err := getOneErr(db.Run(ctx, b), b)
-	if err != nil {
+	b.barrier(begin, end, false /* withLAI */)
+	if err := getOneErr(db.Run(ctx, b), b); err != nil {
 		return hlc.Timestamp{}, err
 	}
-	responses := b.response.Responses
-	if len(responses) == 0 {
-		return hlc.Timestamp{}, errors.Errorf("unexpected empty response for Barrier")
+	if l := len(b.response.Responses); l != 1 {
+		return hlc.Timestamp{}, errors.Errorf("got %d responses for Barrier", l)
 	}
-	resp, ok := responses[0].GetInner().(*kvpb.BarrierResponse)
-	if !ok {
-		return hlc.Timestamp{}, errors.Errorf("unexpected response of type %T for Barrier",
-			responses[0].GetInner())
+	resp := b.response.Responses[0].GetBarrier()
+	if resp == nil {
+		return hlc.Timestamp{}, errors.Errorf("unexpected response %T for Barrier",
+			b.response.Responses[0].GetInner())
 	}
 	return resp.Timestamp, nil
+}
+
+// BarrierWithLAI is like Barrier, but also returns the lease applied index and
+// range descriptor at which the barrier was applied. In this case, the barrier
+// can't span multiple ranges, otherwise a RangeKeyMismatchError is returned.
+//
+// NB: the protocol support for this was added in a patch release, and is not
+// guaranteed to be present with nodes prior to 24.1. In this case, the request
+// will return an empty result.
+func (db *DB) BarrierWithLAI(
+	ctx context.Context, begin, end interface{},
+) (kvpb.LeaseAppliedIndex, roachpb.RangeDescriptor, error) {
+	b := &Batch{}
+	b.barrier(begin, end, true /* withLAI */)
+	if err := getOneErr(db.Run(ctx, b), b); err != nil {
+		return 0, roachpb.RangeDescriptor{}, err
+	}
+	if l := len(b.response.Responses); l != 1 {
+		return 0, roachpb.RangeDescriptor{}, errors.Errorf("got %d responses for Barrier", l)
+	}
+	resp := b.response.Responses[0].GetBarrier()
+	if resp == nil {
+		return 0, roachpb.RangeDescriptor{}, errors.Errorf("unexpected response %T for Barrier",
+			b.response.Responses[0].GetInner())
+	}
+	return resp.LeaseAppliedIndex, resp.RangeDesc, nil
 }
 
 // sendAndFill is a helper which sends the given batch and fills its results,
@@ -1140,7 +1174,9 @@ func getOneRow(runErr error, b *Batch) (KeyValue, error) {
 func IncrementValRetryable(ctx context.Context, db *DB, key roachpb.Key, inc int64) (int64, error) {
 	var err error
 	var res KeyValue
-	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.Closer = db.Context().Stopper.ShouldQuiesce()
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		res, err = db.Inc(ctx, key, inc)
 		if errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil)) ||
 			errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {

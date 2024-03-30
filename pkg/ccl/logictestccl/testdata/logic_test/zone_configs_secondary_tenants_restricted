@@ -1,5 +1,7 @@
 # LogicTest: 3node-tenant
 
+# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled=false
+
 # 'sql.zone_configs.allow_for_secondary_tenant.enabled' is enabled, but
 # 'sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled' is not,
 # so we should be able to modify zone configs except when modifying constraints

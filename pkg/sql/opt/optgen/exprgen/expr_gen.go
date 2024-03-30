@@ -308,6 +308,9 @@ func (eg *exprGen) castToDesiredType(arg interface{}, desiredType reflect.Type) 
 		if desiredType == reflect.TypeOf(memo.ScanLimit(0)) {
 			return memo.MakeScanLimit(int64(*i), false)
 		}
+		if desiredType == reflect.TypeOf(int64(0)) {
+			return int64(*i)
+		}
 	}
 
 	if str, ok := arg.(string); ok {

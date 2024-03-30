@@ -25,6 +25,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/sql/sessiondatapb",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
@@ -62,10 +63,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":kv"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     shard_count = 16,
     deps = [
         "//pkg/base",
@@ -82,6 +79,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/settings/cluster",
         "//pkg/sql/sessiondatapb",
         "//pkg/storage/enginepb",
         "//pkg/testutils",

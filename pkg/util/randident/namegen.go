@@ -33,7 +33,7 @@ func NewNameGenerator(cfg *NameGeneratorConfig, rand *rand.Rand, pattern string)
 		cfg:           cfg,
 		rand:          rand,
 		pattern:       pattern,
-		numberReplace: strings.Contains(pattern, "#"),
+		suffixReplace: strings.Contains(pattern, "#"),
 	}
 }
 
@@ -41,7 +41,7 @@ type nameGenerator struct {
 	cfg           *NameGeneratorConfig
 	rand          *rand.Rand
 	pattern       string
-	numberReplace bool
+	suffixReplace bool
 }
 
 var _ NameGenerator = (*nameGenerator)(nil)
@@ -63,7 +63,7 @@ var escGenerators = []func(s *strings.Builder, r *rand.Rand){
 }
 
 // GenerateOne generates one random name.
-func (g *nameGenerator) GenerateOne(number int) string {
+func (g *nameGenerator) GenerateOne(suffix string) string {
 	var s strings.Builder
 
 	// We want to consider every character position, including the start
@@ -147,14 +147,13 @@ func (g *nameGenerator) GenerateOne(number int) string {
 		insertNoise()
 	}
 
-	if g.cfg.Number {
-		if g.numberReplace {
-			is := strconv.Itoa(number)
-			r := strings.ReplaceAll(s.String(), "#", is)
+	if g.cfg.Suffix {
+		if g.suffixReplace {
+			r := strings.ReplaceAll(s.String(), "#", suffix)
 			r = lexbase.NormalizeString(r)
 			return r
 		}
-		fmt.Fprintf(&s, "%d", number)
+		fmt.Fprintf(&s, "_%s", suffix)
 	}
 	// The introduction of special unicode characters above may result
 	// in combined runes that should be reduced to NFC to form a valid
@@ -173,7 +172,7 @@ func (g *nameGenerator) GenerateMultiple(
 			return nil, ctx.Err()
 		default:
 		}
-		candidateName := g.GenerateOne(i)
+		candidateName := g.GenerateOne(strconv.Itoa(i))
 		if _, ok := conflictNames[candidateName]; ok {
 			continue
 		}

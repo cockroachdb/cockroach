@@ -52,6 +52,12 @@ kv.closed_timestamp.follower_reads.enabled	boolean	true	allow (all) replicas to 
 kv.closed_timestamp.lead_for_global_reads_override	duration	0s	if nonzero, overrides the lead time that global_read ranges use to publish closed timestamps	system-visible
 kv.closed_timestamp.side_transport_interval	duration	200ms	the interval at which the closed timestamp side-transport attempts to advance each range's closed timestamp; set to 0 to disable the side-transport	system-visible
 kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration	system-visible
+kv.dist_sender.circuit_breaker.cancellation.enabled	boolean	true	when enabled, in-flight requests will be cancelled when the circuit breaker trips	application
+kv.dist_sender.circuit_breaker.cancellation.write_grace_period	duration	10s	how long after the circuit breaker trips to cancel write requests (these can't retry internally, so should be long enough to allow quorum/lease recovery)	application
+kv.dist_sender.circuit_breaker.enabled	boolean	true	enable circuit breakers for failing or stalled replicas	application
+kv.dist_sender.circuit_breaker.probe.interval	duration	3s	interval between replica probes	application
+kv.dist_sender.circuit_breaker.probe.threshold	duration	3s	duration of errors or stalls after which a replica will be probed	application
+kv.dist_sender.circuit_breaker.probe.timeout	duration	3s	timeout for replica probes	application
 kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records	system-visible
 kv.rangefeed.client.stream_startup_rate	integer	100	controls the rate per second the client will initiate new rangefeed stream for a single range; 0 implies unlimited	application
 kv.rangefeed.closed_timestamp_refresh_interval	duration	3s	the interval at which closed-timestamp updatesare delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval	system-visible
@@ -80,6 +86,7 @@ server.identity_map.configuration	string		system-identity to database-username m
 server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries to delete on each purge of log-like system tables	application
 server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries	application
 server.max_connections_per_gateway	integer	-1	the maximum number of SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
+server.max_open_transactions_per_gateway	integer	-1	the maximum number of open SQL transactions per gateway allowed at a given time. Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
 server.oidc_authentication.autologin.enabled	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	application
 server.oidc_authentication.button_text	string	Log in with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)	application
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)	application
@@ -95,6 +102,8 @@ server.shutdown.connections.timeout	duration	0s	the maximum amount of time a ser
 server.shutdown.initial_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.initial_wait is to set the wait time for health probes to notice that the node is not ready.)	application
 server.shutdown.jobs.timeout	duration	10s	the maximum amount of time a server waits for all currently executing jobs to notice drain request and to perform orderly shutdown	application
 server.shutdown.transactions.timeout	duration	10s	the timeout for waiting for active transactions to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
+server.sql_tcp_keep_alive.count	integer	3	maximum number of probes that will be sent out before a connection is dropped because it's unresponsive (Linux and Darwin only)	application
+server.sql_tcp_keep_alive.interval	duration	10s	time between keep alive probes and idle time before probes are sent out	application
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead	application
 server.user_login.cert_password_method.auto_scram_promotion.enabled	boolean	true	whether to automatically promote cert-password authentication to use SCRAM	application
 server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled	boolean	true	if server.user_login.password_encryption=crdb-bcrypt, this controls whether to automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt	application
@@ -210,7 +219,7 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.results_buffer.size	byte size	16 KiB	"default size of the buffer that accumulates results for a statement or a batch of statements before they are sent to the client. This can be overridden on an individual connection with the 'results_buffer_size' parameter. Note that auto-retries generally only happen while no results have been delivered to the client, so reducing this size can increase the number of retriable errors a client receives. On the other hand, increasing the buffer size can increase the delay until the client receives the first result row. Updating the setting only affects new connections. Setting to 0 disables any buffering.
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
-sql.defaults.serial_normalization	enumeration	rowid	"default handling of SERIAL in table definitions [rowid = 0, virtual_sequence = 1, sql_sequence = 2, sql_sequence_cached = 3, unordered_rowid = 4]
+sql.defaults.serial_normalization	enumeration	rowid	"default handling of SERIAL in table definitions [rowid = 0, virtual_sequence = 1, sql_sequence = 2, sql_sequence_cached = 3, unordered_rowid = 4, sql_sequence_cached_node = 5]
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.statement_timeout	duration	0s	"default value for the statement_timeout; default value for the statement_timeout session setting; controls the duration a query is permitted to run before it is canceled; if set to 0, there is no timeout
@@ -247,6 +256,7 @@ sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in by
 sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable	application
 sql.guardrails.max_row_size_log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable	application
 sql.hash_sharded_range_pre_split.max	integer	16	max pre-split ranges to have when adding hash sharded index to an existing table	application
+sql.index_recommendation.drop_unused_duration	duration	168h0m0s	the index unused duration at which we begin to recommend dropping the index	application
 sql.insights.anomaly_detection.enabled	boolean	true	enable per-fingerprint latency recording and anomaly detection	application
 sql.insights.anomaly_detection.latency_threshold	duration	50ms	statements must surpass this threshold to trigger anomaly detection and identification	application
 sql.insights.anomaly_detection.memory_limit	byte size	1.0 MiB	the maximum amount of memory allowed for tracking statement latencies	application
@@ -277,7 +287,6 @@ sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRI
 sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent	application
 sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability	application
 sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job	system-visible
-sql.show_ranges_deprecated_behavior.enabled	boolean	false	if set, SHOW RANGES and crdb_internal.ranges{_no_leases} behave with deprecated pre-v23.1 semantics. NB: the new SHOW RANGES interface has richer WITH options than pre-v23.1 SHOW RANGES.	application
 sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators	application
 sql.stats.activity.persisted_rows.max	integer	200000	maximum number of rows of statement and transaction activity that will be persisted in the system tables	application
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	application
@@ -298,27 +307,29 @@ sql.stats.response.max	integer	20000	the maximum number of statements and transa
 sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements and if internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display statistics on the SQL Activity pages	application
 sql.stats.system_tables.enabled	boolean	true	when true, enables use of statistics on system tables by the query optimizer	application
 sql.stats.system_tables_autostats.enabled	boolean	true	when true, enables automatic collection of statistics on system tables	application
+sql.stats.virtual_computed_columns.enabled	boolean	true	set to true to collect table statistics on virtual computed columns	application
 sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed queries will emit an event on the telemetry logging channel	application
 sql.telemetry.query_sampling.internal.enabled	boolean	false	when set to true, internal queries will be sampled in telemetry logging	application
-sql.telemetry.query_sampling.max_event_frequency	integer	8	the max event frequency at which we sample executions for telemetry, note that it is recommended that this value shares a log-line limit of 10  logs per second on the telemetry pipeline with all other telemetry events. If sampling mode is set to 'transaction', all statements associated with a single transaction are counted as 1 unit.	application
-sql.telemetry.query_sampling.mode	enumeration	statement	the execution level used for telemetry sampling. If set to 'statement', events are sampled at the statement execution level. If set to 'transaction', events are sampled at the txn execution level, i.e. all statements for a txn will be logged and are counted together as one sampled event (events are still emitted one per statement) [statement = 0, transaction = 1]	application
-sql.telemetry.txn_mode.tracking_limit	integer	10000	the maximum number of transactions tracked at one time for which we will send all statements to telemetry	application
+sql.telemetry.query_sampling.max_event_frequency	integer	8	the max event frequency (events per second) at which we sample executions for telemetry, note that it is recommended that this value shares a log-line limit of 10 logs per second on the telemetry pipeline with all other telemetry events. If sampling mode is set to 'transaction', this value is ignored.	application
+sql.telemetry.query_sampling.mode	enumeration	statement	the execution level used for telemetry sampling. If set to 'statement', events are sampled at the statement execution level. If set to 'transaction', events are sampled at the transaction execution level, i.e. all statements for a transaction will be logged and are counted together as one sampled event (events are still emitted one per statement). [statement = 0, transaction = 1]	application
+sql.telemetry.transaction_sampling.max_event_frequency	integer	8	the max event frequency (events per second) at which we sample transactions for telemetry. If sampling mode is set to 'statement', this setting is ignored. In practice, this means that we only sample a transaction if 1/max_event_frequency seconds have elapsed since the last transaction was sampled.	application
+sql.telemetry.transaction_sampling.statement_events_per_transaction.max	integer	50	the maximum number of statement events to log for every sampled transaction. Note that statements that are logged by force do not adhere to this limit.	application
 sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects	application
 sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up	application
 sql.log.all_statements.enabled	boolean	false	set to true to enable logging of all executed statements	application
-sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session tracing; note that enabling this may have a negative performance impact	application
 sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; statements executing for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold	application
 sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)	application
-sql.ttl.changefeed_replication.disabled	boolean	false	if true, deletes issued by TTL will not be replicated via changefeeds	application
+sql.ttl.changefeed_replication.disabled	boolean	false	if true, deletes issued by TTL will not be replicated via changefeeds (this setting will be ignored by changefeeds that have the ignore_disable_changefeed_replication option set; such changefeeds will continue to replicate all TTL deletes)	application
 sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job	application
 sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.	application
 sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job	application
 sql.ttl.default_select_rate_limit	integer	0	default select rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.	application
 sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	application
-sql.txn.read_committed_isolation.enabled	boolean	false	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	application
+sql.txn.read_committed_isolation.enabled	boolean	true	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	application
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	application
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
 storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
+storage.sstable.compression_algorithm	enumeration	snappy	"determines the compression algorithm to use when compressing sstable data blocks; supported values: ""snappy"", ""zstd"" [snappy = 1, zstd = 2]"	system-visible
 storage.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in sstables	application
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	system-visible
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	system-visible
@@ -328,4 +339,4 @@ trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace 
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	application
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	application
-version	version	1000023.2-upgrading-to-1000024.1-step-004	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000023.2-upgrading-to-1000024.1-step-024	set the active cluster version in the format '<major>.<minor>'	application

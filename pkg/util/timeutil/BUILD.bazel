@@ -41,10 +41,6 @@ go_test(
         "timer_test.go",
     ],
     embed = [":timeutil"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",

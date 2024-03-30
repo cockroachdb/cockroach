@@ -12,7 +12,6 @@ package execinfrapb
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -23,56 +22,80 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-type testVarContainer struct{}
-
-var _ tree.IndexedVarContainer = testVarContainer{}
-
-func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
-	return types.Int
-}
-
-func (d testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("var%d", idx))
-	return &n
-}
-
-func TestProcessExpression(t *testing.T) {
+func TestDeserializeExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	e := Expression{Expr: "@1 * (@2 + @3) + @1"}
 
-	h := tree.MakeIndexedVarHelper(testVarContainer{}, 4)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	semaCtx := tree.MakeSemaContext()
-	expr, err := processExpression(context.Background(), e, &evalCtx, &semaCtx, &h)
+	expr, err := DeserializeExpr(
+		context.Background(),
+		e,
+		[]*types.T{types.Int, types.Int, types.Int},
+		&semaCtx,
+		&evalCtx,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !h.IndexedVarUsed(0) || !h.IndexedVarUsed(1) || !h.IndexedVarUsed(2) || h.IndexedVarUsed(3) {
-		t.Errorf("invalid IndexedVarUsed results %t %t %t %t (expected false false false true)",
-			h.IndexedVarUsed(0), h.IndexedVarUsed(1), h.IndexedVarUsed(2), h.IndexedVarUsed(3))
-	}
-
 	str := expr.String()
-	expectedStr := "(var0 * (var1 + var2)) + var0"
+	expectedStr := "(@1 * (@2 + @3)) + @1"
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
+	}
+
+	// Verify the expression is fully typed.
+	typ := expr.ResolvedType()
+	if !typ.Equivalent(types.Int) {
+		t.Errorf("invalid expression type %s", typ)
+	}
+
+	// We can process a new expression with the same tree.IndexedVarHelper.
+	e = Expression{Expr: "@4 - @1"}
+	expr, err = DeserializeExpr(
+		context.Background(),
+		e,
+		[]*types.T{types.Int, types.Int, types.Int, types.Int},
+		&semaCtx,
+		&evalCtx,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the new expression can be formatted correctly.
+	str = expr.String()
+	expectedStr = "@4 - @1"
+	if str != expectedStr {
+		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
+	}
+
+	// Verify the expression is fully typed.
+	typ = expr.ResolvedType()
+	if !typ.Equivalent(types.Int) {
+		t.Errorf("invalid expression type %s", typ)
 	}
 }
 
 // Test that processExpression evaluates constant exprs into datums.
-func TestProcessExpressionConstantEval(t *testing.T) {
+func TestDeserializeExpressionConstantEval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	e := Expression{Expr: "ARRAY[1:::INT,2:::INT]"}
 
-	h := tree.MakeIndexedVarHelper(nil, 0)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	semaCtx := tree.MakeSemaContext()
-	expr, err := processExpression(context.Background(), e, &evalCtx, &semaCtx, &h)
+	expr, err := DeserializeExpr(
+		context.Background(),
+		e,
+		[]*types.T{types.Int, types.Int},
+		&semaCtx,
+		&evalCtx,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

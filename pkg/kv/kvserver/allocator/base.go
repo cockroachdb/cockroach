@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"go.etcd.io/raft/v3"
 )
 
 const (
@@ -96,7 +96,7 @@ type TestingKnobs struct {
 	) *raft.Status
 	// BlockTransferTarget can be used to block returning any transfer targets
 	// from TransferLeaseTarget.
-	BlockTransferTarget func() bool
+	BlockTransferTarget func(roachpb.RangeID) bool
 }
 
 // QPSRebalanceThreshold is much like rangeRebalanceThreshold, but for

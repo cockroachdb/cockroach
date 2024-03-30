@@ -50,10 +50,6 @@ go_test(
     ],
     data = ["//c-deps:libgeos"],
     embed = [":geogfn"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/geo",
         "//pkg/geo/geoprojbase",

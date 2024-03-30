@@ -18,6 +18,7 @@ import {
   defaultFilters,
   api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import * as fakeApi from "src/util/fakeApi";
@@ -199,7 +200,9 @@ describe("Databases Page", function () {
       "gcp-europe-west1",
     ];
 
-    const nodes = Array.from(Array(regions.length).keys()).map(node_id => {
+    const nodes: cockroach.server.serverpb.INodeResponse[] = Array.from(
+      Array(regions.length).keys(),
+    ).map(node_id => {
       return {
         desc: {
           node_id: node_id + 1, // 1-index offset.
@@ -212,6 +215,7 @@ describe("Databases Page", function () {
             ],
           },
         },
+        store_statuses: [{ desc: { store_id: node_id + 1 } }],
       };
     });
 
@@ -254,16 +258,13 @@ describe("Databases Page", function () {
         {
           rows: [
             {
-              replicas: [1, 2, 3],
-              regions: ["gcp-europe-west1", "gcp-europe-west2"],
+              store_ids: [1, 2, 3],
             },
             {
-              replicas: [1, 2, 3],
-              regions: ["gcp-europe-west1", "gcp-europe-west2"],
+              store_ids: [1, 2, 3],
             },
             {
-              replicas: [1, 2, 3],
-              regions: ["gcp-europe-west1", "gcp-europe-west2"],
+              store_ids: [1, 2, 3],
             },
           ],
         },

@@ -80,11 +80,12 @@ var (
 
 	// storageCluster is used for cluster virtualization and multi-tenant functionality.
 	storageCluster string
-	// externalProcessNodes indicates the cluster/nodes where external
-	// process SQL instances should be deployed.
-	externalProcessNodes string
 
 	revertUpdate bool
+
+	grafanaTags         []string
+	grafanaDashboardUID string
+	grafanaTimeRange    []int64
 )
 
 func initFlags() {
@@ -171,7 +172,7 @@ func initFlags() {
 	pgurlCmd.Flags().BoolVar(&external,
 		"external", false, "return pgurls for external connections")
 	pgurlCmd.Flags().StringVar(&pgurlCertsDir,
-		"certs-dir", "./certs", "cert dir to use for secure connections")
+		"certs-dir", install.CockroachNodeCertsDir, "cert dir to use for secure connections")
 
 	pprofCmd.Flags().DurationVar(&pprofOpts.Duration,
 		"duration", 30*time.Second, "Duration of profile to capture")
@@ -198,23 +199,20 @@ func initFlags() {
 		"encrypt", startOpts.EncryptedStores, "start nodes with encryption at rest turned on")
 	startCmd.Flags().BoolVar(&startOpts.SkipInit,
 		"skip-init", startOpts.SkipInit, "skip initializing the cluster")
+	startCmd.Flags().BoolVar(&startOpts.IsRestart,
+		"restart", startOpts.IsRestart, "restart an existing cluster (skips serial start and init)")
 	startCmd.Flags().IntVar(&startOpts.InitTarget,
 		"init-target", startOpts.InitTarget, "node on which to run initialization")
 	startCmd.Flags().IntVar(&startOpts.StoreCount,
 		"store-count", startOpts.StoreCount, "number of stores to start each node with")
-	startCmd.Flags().BoolVar(&startOpts.ScheduleBackups,
-		"schedule-backups", startOpts.ScheduleBackups,
-		"create a cluster backup schedule once the cluster has started (by default, "+
-			"full backup hourly and incremental every 15 minutes)")
-	startCmd.Flags().StringVar(&startOpts.ScheduleBackupArgs, "schedule-backup-args", "",
-		`Recurrence and scheduled backup options specification.
-Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS first_run = 'now'"`)
+	startCmd.Flags().IntVar(&startOpts.AdminUIPort,
+		"admin-ui-port", startOpts.AdminUIPort, "port to serve the admin UI on")
 
 	startInstanceCmd.Flags().StringVarP(&storageCluster, "storage-cluster", "S", "", "storage cluster")
 	_ = startInstanceCmd.MarkFlagRequired("storage-cluster")
 	startInstanceCmd.Flags().IntVar(&startOpts.SQLInstance,
 		"sql-instance", 0, "specific SQL/HTTP instance to connect to (this is a roachprod abstraction for separate-process deployments distinct from the internal instance ID)")
-	startInstanceCmd.Flags().StringVar(&externalProcessNodes, "external-cluster", externalProcessNodes, "start service in external mode, as a separate process in the given nodes")
+	startInstanceCmd.Flags().StringVar(&startOpts.VirtualClusterLocation, "external-nodes", startOpts.VirtualClusterLocation, "if set, starts service in external mode, as a separate process in the given nodes")
 
 	// Flags for processes that stop (kill) processes.
 	for _, stopProcessesCmd := range []*cobra.Command{stopCmd, stopInstanceCmd} {
@@ -337,8 +335,17 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	}
 
 	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd} {
+		cmd.Flags().BoolVar(&startOpts.ScheduleBackups,
+			"schedule-backups", startOpts.ScheduleBackups,
+			"create a cluster backup schedule once the cluster has started (by default, "+
+				"full backup hourly and incremental every 15 minutes)")
+		cmd.Flags().StringVar(&startOpts.ScheduleBackupArgs,
+			"schedule-backup-args", startOpts.ScheduleBackupArgs,
+			"Recurrence and scheduled backup options specification")
 		cmd.Flags().Int64Var(&startOpts.NumFilesLimit, "num-files-limit", startOpts.NumFilesLimit,
 			"limit the number of files that can be created by the cockroach process")
+		cmd.Flags().IntVar(&startOpts.SQLPort,
+			"sql-port", startOpts.SQLPort, "port on which to listen for SQL clients")
 	}
 
 	for _, cmd := range []*cobra.Command{
@@ -358,7 +365,7 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 		cmd.Flags().StringVarP(&config.Binary,
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
-	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd, jaegerStartCmd} {
+	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd, jaegerStartCmd, grafanaAnnotationCmd} {
 		cmd.Flags().BoolVar(&secure,
 			"secure", false, "use a secure cluster")
 	}
@@ -369,4 +376,10 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 			"sql-instance", 0, "specific SQL/HTTP instance to connect to (this is a roachprod abstraction distinct from the internal instance ID)")
 	}
 
+	grafanaAnnotationCmd.Flags().StringArrayVar(&grafanaTags,
+		"tags", []string{}, "grafana annotation tags")
+	grafanaAnnotationCmd.Flags().StringVar(&grafanaDashboardUID,
+		"dashboard-uid", "", "grafana dashboard UID")
+	grafanaAnnotationCmd.Flags().Int64SliceVar(&grafanaTimeRange,
+		"time-range", []int64{}, "grafana annotation time range in epoch time")
 }

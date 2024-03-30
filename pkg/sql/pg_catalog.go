@@ -504,7 +504,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				if populatedColumns.Contains(colOrdinal) {
 					continue
 				}
-				colName := strings.Replace(fmt.Sprintf("........pg.dropped.%-8d", colOrdinal), " ", ".", -1)
+				colName := fmt.Sprintf("........pg.dropped.%d........", colOrdinal)
 				if err := addRow(
 					tableID,                             // attrelid
 					tree.NewDName(colName),              // attname
@@ -1596,6 +1596,7 @@ var (
 	pgClassTableName       = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_class"))
 	pgDatabaseTableName    = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_database"))
 	pgRewriteTableName     = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_rewrite"))
+	pgProcTableName        = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_proc"))
 )
 
 // pg_depend is a fairly complex table that details many different kinds of
@@ -1624,8 +1625,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_rewrite")
 		}
+		pgProcDesc, err := vt.getVirtualTableDesc(&pgProcTableName, p)
+		if err != nil {
+			return errors.New("could not find pg_catalog.pg_rewrite")
+		}
 		h := makeOidHasher()
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
+		err = forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
 			db catalog.DatabaseDescriptor,
 			sc catalog.SchemaDescriptor,
 			table catalog.TableDescriptor,
@@ -1709,6 +1714,35 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 			}
 			return nil
 		})
+		if err != nil {
+			return err
+		}
+		return forEachSchema(ctx, p, dbContext, true, func(sc catalog.SchemaDescriptor) error {
+			pgProcTableOid := tableOid(pgProcDesc.GetID())
+			return sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+				funcDesc, err := p.Descriptors().ByID(p.txn).Get().Function(ctx, sig.ID)
+				if err != nil {
+					return err
+				}
+				sourceID := catid.FuncIDToOID(funcDesc.GetID())
+				for _, otherFunction := range funcDesc.GetDependsOnFunctions() {
+					destID := catid.FuncIDToOID(otherFunction)
+					if err := addRow(
+						pgProcTableOid,         // classid
+						tree.NewDOid(sourceID), // objid
+						zeroVal,                // objsubid
+						pgProcTableOid,         // refclassid
+						tree.NewDOid(destID),   // refobjid
+						zeroVal,                // refobjsubid
+						depTypeNormal,          // deptype
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		})
+
 	},
 }
 
@@ -3724,7 +3758,7 @@ https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html`,
 			ctx,
 			"select-db-role-settings",
 			p.Txn(),
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			`SELECT database_id, role_name, settings FROM system.public.database_role_settings`,
 		)
 		if err != nil {
@@ -4193,12 +4227,12 @@ https://www.postgresql.org/docs/14/view-pg-cursors.html`,
 				return err
 			}
 			if err := addRow(
-				tree.NewDString(string(name)), /* name */
-				tree.NewDString(c.statement),  /* statement */
-				tree.DBoolFalse,               /* is_holdable */
-				tree.DBoolFalse,               /* is_binary */
-				tree.DBoolFalse,               /* is_scrollable */
-				tz,                            /* creation_date */
+				tree.NewDString(string(name)),          /* name */
+				tree.NewDString(c.statement),           /* statement */
+				tree.MakeDBool(tree.DBool(c.withHold)), /* is_holdable */
+				tree.DBoolFalse,                        /* is_binary */
+				tree.DBoolFalse,                        /* is_scrollable */
+				tz,                                     /* creation_date */
 			); err != nil {
 				return err
 			}

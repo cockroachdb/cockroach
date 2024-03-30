@@ -213,14 +213,6 @@ func MakeColumnIDMutationSelector(columnID descpb.ColumnID) MutationSelector {
 	}
 }
 
-// MakeMutationIDMutationSelector returns a MutationSelector which matches the
-// first mutation with this ID.
-func MakeMutationIDMutationSelector(mutationID descpb.MutationID) MutationSelector {
-	return func(mut catalog.Mutation) bool {
-		return mut.MutationID() == mutationID
-	}
-}
-
 // enqueueNonIndexMutation enqueues a non-index mutation `m` (of generic type M)
 // with direction `dir` without increasing the next mutation ID.
 // The mutation state will be DELETE_ONLY if `dir=ADD` and WRITE_ONLY if `dir=DROP`.
@@ -262,6 +254,7 @@ func updateColumnExprSequenceUsage(d *descpb.ColumnDescriptor) error {
 		ids.ForEach(all.Add)
 	}
 	d.UsesSequenceIds = all.Ordered()
+	d.OwnsSequenceIds = all.Ordered()
 	return nil
 }
 
@@ -277,7 +270,7 @@ func updateColumnExprFunctionsUsage(d *descpb.ColumnDescriptor) error {
 		}
 		ids.ForEach(all.Add)
 	}
-	d.UsesSequenceIds = all.Ordered()
+	d.UsesFunctionIds = all.Ordered()
 	return nil
 }
 

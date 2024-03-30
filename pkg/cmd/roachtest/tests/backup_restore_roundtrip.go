@@ -79,6 +79,7 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			Cluster:           r.MakeClusterSpec(4),
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			RequiresLicense:   true,
+			NativeLibs:        registry.LibGEOS,
 			CompatibleClouds:  registry.OnlyGCE,
 			Suites:            registry.Suites(registry.Nightly),
 			Skip:              sp.skip,
@@ -110,7 +111,7 @@ func backupRestoreRoundTrip(
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
 	})
 
-	c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings(install.SecureOption(true), envOption), roachNodes)
+	c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings(envOption), roachNodes)
 	m := c.NewMonitor(ctx, roachNodes)
 
 	m.Go(func(ctx context.Context) error {

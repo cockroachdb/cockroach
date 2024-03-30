@@ -21,10 +21,6 @@ go_library(
 go_test(
     name = "grpcinterceptor_test",
     srcs = ["grpc_interceptor_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":grpcinterceptor",
         "//pkg/testutils",

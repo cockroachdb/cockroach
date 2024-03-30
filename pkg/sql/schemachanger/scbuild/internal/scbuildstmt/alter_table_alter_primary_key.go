@@ -479,15 +479,9 @@ func mustRetrieveCurrentPrimaryIndexElement(
 func mustRetrieveColumnElem(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) (column *scpb.Column) {
-	scpb.ForEachColumn(b.QueryByID(tableID), func(current scpb.Status, target scpb.TargetStatus, e *scpb.Column) {
-		if e.ColumnID == columnID {
-			column = e
-		}
-	})
-	if column == nil {
-		panic(errors.AssertionFailedf("programming error: cannot find a Column element for column ID %v", columnID))
-	}
-	return column
+	return b.QueryByID(tableID).FilterColumn().Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.Column) bool {
+		return e.ColumnID == columnID
+	}).MustGetOneElement()
 }
 
 func retrieveColumnElemAndStatus(

@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -97,10 +98,10 @@ Create a ballast file to fill the store directory up to a given amount
 	RunE: runDebugBallast,
 }
 
-// PopulateStorageConfigHook is a callback set by CCL code.
-// It populates any needed fields in the StorageConfig.
+// PopulateEnvConfigHook is a callback set by CCL code.
+// It populates any needed fields in the EnvConfig.
 // It must stay unset in OSS code.
-var PopulateStorageConfigHook func(*base.StorageConfig) error
+var PopulateEnvConfigHook func(dir string, cfg *fs.EnvConfig) error
 
 // EncryptedStorePathsHook is a callback set by CCL code.
 // It returns the store paths that are encrypted.
@@ -171,24 +172,43 @@ func (f *keyFormat) Type() string {
 	return "hex|base64"
 }
 
+// OpenFilesystemEnv opens the filesystem environment at 'dir'. Note that
+// opening the fs.Env will acquire the directory lock and prevent opening of the
+// engine through [OpenEngine]. If the caller wishes to then open the storage
+// engine, they should manually open it using storage.Open. The returned Env has
+// 1 reference and the caller must ensure it's closed.
+func OpenFilesystemEnv(dir string, rw fs.RWMode) (*fs.Env, error) {
+	envConfig := fs.EnvConfig{RW: rw}
+	if PopulateEnvConfigHook != nil {
+		if err := PopulateEnvConfigHook(dir, &envConfig); err != nil {
+			return nil, err
+		}
+	}
+	return fs.InitEnv(context.Background(), vfs.Default, dir, envConfig)
+}
+
 // OpenEngine opens the engine at 'dir'. Depending on the supplied options,
 // an empty engine might be initialized.
 func OpenEngine(
-	dir string, stopper *stop.Stopper, opts ...storage.ConfigOption,
+	dir string, stopper *stop.Stopper, rw fs.RWMode, opts ...storage.ConfigOption,
 ) (storage.Engine, error) {
+	env, err := OpenFilesystemEnv(dir, rw)
+	if err != nil {
+		return nil, err
+	}
 	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
 	if err != nil {
 		return nil, err
 	}
 	db, err := storage.Open(
 		context.Background(),
-		storage.Filesystem(dir),
+		env,
 		serverCfg.Settings,
 		storage.MaxOpenFiles(int(maxOpenFiles)),
 		storage.CacheSize(server.DefaultCacheSize),
-		storage.Hook(PopulateStorageConfigHook),
 		storage.CombineOptions(opts...))
 	if err != nil {
+		env.Close()
 		return nil, err
 	}
 
@@ -277,7 +297,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenEngine(args[0], stopper, storage.MustExist, storage.ReadOnly)
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -458,10 +478,22 @@ state like the raft HardState. With --replicated, only includes data covered by
 }
 
 func runDebugRangeData(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
-	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
+	earlyBootAccessor := cloud.NewEarlyBootExternalStorageAccessor(serverCfg.Settings, serverCfg.ExternalIODirConfig)
+	opts := []storage.ConfigOption{storage.MustExist, storage.RemoteStorageFactory(earlyBootAccessor)}
+	if serverCfg.SharedStorage != "" {
+		es, err := cloud.ExternalStorageFromURI(ctx, serverCfg.SharedStorage,
+			base.ExternalIODirConfig{}, serverCfg.Settings, nil, username.RootUserName(), nil,
+			nil, cloud.NilMetrics)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, storage.SharedStorage(es))
+	}
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, opts...)
 	if err != nil {
 		return err
 	}
@@ -581,7 +613,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -750,7 +782,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -823,7 +855,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -933,7 +965,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenEngine(args[0], stopper,
+	db, err := OpenEngine(args[0], stopper, fs.ReadWrite,
 		storage.MustExist,
 		storage.DisableAutomaticCompactions,
 		storage.MaxConcurrentCompactions(debugCompactOpts.maxConcurrency),
@@ -1254,7 +1286,7 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	db, err := OpenEngine(args[0], stopper, storage.MustExist, storage.ReadOnly)
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -1437,6 +1469,7 @@ func init() {
 			}
 			return err
 		}),
+		tool.OpenOptions(pebbleOpenOptionLockDir{pebbleToolFS}),
 	)
 	DebugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	f := DebugPebbleCmd.PersistentFlags()
@@ -1456,6 +1489,13 @@ func init() {
 	DebugCmd.AddCommand(debugStatementBundleCmd)
 
 	DebugCmd.AddCommand(debugJobTraceFromClusterCmd)
+	DebugCmd.AddCommand(debugJobCleanupInfoRows)
+	f = debugJobCleanupInfoRows.PersistentFlags()
+	f.IntVar(&jobCleanupInfoRowOpts.PageSize, "page-size", jobCleanupInfoRowOpts.PageSize,
+		"number of deletes to perform per query",
+	)
+	f.DurationVar(&jobCleanupInfoRowOpts.Age, "age", jobCleanupInfoRowOpts.Age,
+		"minimum age of job_info rows to delete; rows younger than this will not be deleted")
 
 	f = debugSyncBenchCmd.Flags()
 	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
@@ -1596,23 +1636,18 @@ func initPebbleCmds(cmd *cobra.Command, pebbleTool *tool.T) {
 }
 
 func pebbleCryptoInitializer(ctx context.Context) {
-	if EncryptedStorePathsHook != nil && PopulateStorageConfigHook != nil {
+	if EncryptedStorePathsHook != nil && PopulateEnvConfigHook != nil {
 		encryptedPaths := EncryptedStorePathsHook()
-		resolveFn := func(dir string) (vfs.FS, error) {
-			storageConfig := base.StorageConfig{
-				Settings: serverCfg.Settings,
-				Dir:      dir,
-			}
-			if err := PopulateStorageConfigHook(&storageConfig); err != nil {
+		resolveFn := func(dir string) (*fs.Env, error) {
+			var envConfig fs.EnvConfig
+			if err := PopulateEnvConfigHook(dir, &envConfig); err != nil {
 				return nil, err
 			}
-			_, encryptedEnv, err := storage.ResolveEncryptedEnvOptions(
-				ctx, &storageConfig, vfs.Default, false /* readOnly */)
+			env, err := fs.InitEnv(ctx, vfs.Default, dir, envConfig)
 			if err != nil {
 				return nil, err
 			}
-			return encryptedEnv.FS, nil
-
+			return env, nil
 		}
 		pebbleToolFS.Init(encryptedPaths, resolveFn)
 	}

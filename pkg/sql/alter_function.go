@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 type alterFunctionOptionsNode struct {
@@ -182,8 +184,10 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 
 	maybeExistingFuncObj := fnDesc.ToRoutineObj()
 	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
-	existing, err := params.p.matchRoutine(params.ctx, maybeExistingFuncObj,
-		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
+	existing, err := params.p.matchRoutine(
+		params.ctx, maybeExistingFuncObj, false, /* required */
+		tree.UDFRoutine|tree.ProcedureRoutine, false, /* inDropContext */
+	)
 	if err != nil {
 		return err
 	}
@@ -200,6 +204,34 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 				tree.AsString(maybeExistingFuncObj), scDesc.GetName(),
 			)
 		}
+	}
+
+	// Disallow renaming if this rename operation will break other UDF's invoking
+	// this one.
+	var dependentFuncs []string
+	for _, dep := range fnDesc.GetDependedOnBy() {
+		desc, err := params.p.Descriptors().ByID(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
+		if err != nil {
+			return err
+		}
+		_, ok := desc.(catalog.FunctionDescriptor)
+		if !ok {
+			continue
+		}
+		fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
+		if err != nil {
+			return err
+		}
+		dependentFuncs = append(dependentFuncs, fullyResolvedName.FQString())
+	}
+	if len(dependentFuncs) > 0 {
+		return errors.UnimplementedErrorf(
+			errors.IssueLink{
+				IssueURL: "https://github.com/cockroachdb/cockroach/issues/83233",
+				Detail:   "renames are disallowed because references are by name",
+			},
+			"cannot rename function %q because other functions ([%v]) still depend on it",
+			fnDesc.Name, strings.Join(dependentFuncs, ", "))
 	}
 
 	scDesc.RemoveFunction(fnDesc.GetName(), fnDesc.GetID())
@@ -377,8 +409,10 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	maybeExistingFuncObj := fnDesc.ToRoutineObj()
 	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(targetSc.GetName())
 	maybeExistingFuncObj.FuncName.ExplicitSchema = true
-	existing, err := params.p.matchRoutine(params.ctx, maybeExistingFuncObj,
-		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
+	existing, err := params.p.matchRoutine(
+		params.ctx, maybeExistingFuncObj, false, /* required */
+		tree.UDFRoutine|tree.ProcedureRoutine, false, /* inDropContext */
+	)
 	if err != nil {
 		return err
 	}
@@ -441,7 +475,10 @@ func (n *alterFunctionDepExtensionNode) Close(ctx context.Context)           {}
 func (p *planner) mustGetMutableFunctionForAlter(
 	ctx context.Context, routineObj *tree.RoutineObj,
 ) (*funcdesc.Mutable, error) {
-	ol, err := p.matchRoutine(ctx, routineObj, true /*required*/, tree.UDFRoutine|tree.ProcedureRoutine)
+	ol, err := p.matchRoutine(
+		ctx, routineObj, true, /* required */
+		tree.UDFRoutine|tree.ProcedureRoutine, false, /* inDropContext */
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -456,13 +493,20 @@ func (p *planner) mustGetMutableFunctionForAlter(
 func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor_FunctionSignature {
 	ret := descpb.SchemaDescriptor_FunctionSignature{
 		ID:          fnDesc.GetID(),
-		ArgTypes:    make([]*types.T, len(fnDesc.GetParams())),
+		ArgTypes:    make([]*types.T, 0, len(fnDesc.GetParams())),
 		ReturnType:  fnDesc.ReturnType.Type,
 		ReturnSet:   fnDesc.ReturnType.ReturnSet,
 		IsProcedure: fnDesc.IsProcedure(),
 	}
-	for i := range fnDesc.Params {
-		ret.ArgTypes[i] = fnDesc.Params[i].Type
+	for paramIdx, param := range fnDesc.Params {
+		class := funcdesc.ToTreeRoutineParamClass(param.Class)
+		if tree.IsInParamClass(class) {
+			ret.ArgTypes = append(ret.ArgTypes, param.Type)
+		}
+		if class == tree.RoutineParamOut {
+			ret.OutParamOrdinals = append(ret.OutParamOrdinals, int32(paramIdx))
+			ret.OutParamTypes = append(ret.OutParamTypes, param.Type)
+		}
 	}
 	return ret
 }

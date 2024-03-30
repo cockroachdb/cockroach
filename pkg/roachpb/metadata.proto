@@ -322,17 +322,17 @@ message StoreCapacity {
   // This is the sum of all the replica's cpu time on this store, which is
   // tracked in replica stats.
   optional double cpu_per_second = 14 [(gogoproto.nullable) = false, (gogoproto.customname) = "CPUPerSecond"];
-  // l0_sublevels tracks the current number of l0 sublevels in the store.
-  // TODO(kvoli): Remove this field in 23.2. The field is no longer consulted
-  // in 23.1
-  optional int64 l0_sublevels = 12 [(gogoproto.nullable) = false];
   optional cockroach.util.admission.admissionpb.IOThreshold io_threshold = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IOThreshold" ];
+  // io_threshold_max tracks the maximum io overload values the store has had
+  // over the last 5 minutes.
+  optional cockroach.util.admission.admissionpb.IOThreshold io_threshold_max = 15 [(gogoproto.nullable) = false, (gogoproto.customname) = "IOThresholdMax" ];
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.
   // This information can be used for rebalancing decisions.
   optional Percentiles bytes_per_replica = 6 [(gogoproto.nullable) = false];
   optional Percentiles writes_per_replica = 7 [(gogoproto.nullable) = false];
   reserved 11;
+  reserved 12;
 }
 
 // StoreProperties contains configuration and OS-level details for a storage device.
@@ -341,6 +341,11 @@ message StoreProperties {
   optional bool encrypted = 1 [(gogoproto.nullable) = false];
   // read_only indicates whether the store is attached read_only.
   optional bool read_only = 2 [(gogoproto.nullable) = false];
+  // dir is the path to the store's data directory on the node.
+  optional string dir = 4 [(gogoproto.nullable) = false];
+  // wal_failover_path encodes the path to the secondary WAL directory used for
+  // failover in the event of high write latency to the primary WAL.
+  optional string wal_failover_path = 5;
 
   // disk_properties reports details about the underlying filesystem,
   // when the store is supported by a file store. Unset otherwise.

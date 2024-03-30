@@ -187,6 +187,10 @@ func Generate[T tree.Statement](
 		aIsSuccess := a.Code == pgcode.SuccessfulCompletion
 		bIsSuccess := b.Code == pgcode.SuccessfulCompletion
 
+		if aIsSuccess && bIsSuccess {
+			// If both are valid, choose randomly.
+			return rng.Float64() < 0.5
+		}
 		return aIsSuccess && !bIsSuccess
 	})
 
@@ -204,7 +208,7 @@ func Generate[T tree.Statement](
 		// NB: Parsing the template result as SQL ensures that we catch any
 		// template errors and distinguish them from workload errors. It also
 		// allows us to normalize the outputs so users don't have to worry about
-		// whitespace and/or captialization.
+		// whitespace and/or capitalization.
 		stmt, err := parser.ParseOne(raw.String())
 		if err != nil {
 			return zero, pgcode.Code{}, errors.AssertionFailedf(

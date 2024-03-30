@@ -64,28 +64,26 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.L().Printf("Supported sqlalchemy release is %s.", supportedSQLAlchemyTag)
 
 	if err := repeatRunE(ctx, t, c, node, "update apt-get", `
-		sudo add-apt-repository ppa:deadsnakes/ppa &&
 		sudo apt-get -qq update
 	`); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := repeatRunE(ctx, t, c, node, "install dependencies", `
-		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential python3.7-distutils python3-virtualenv python3-typing-extensions
+		sudo apt-get -qq install make python3.10 libpq-dev python3.10-dev gcc python3-setuptools python-setuptools build-essential python3.10-distutils python3-virtualenv python3-typing-extensions
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "set python3.7 as default", `
-		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
-		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 2
+	if err := repeatRunE(ctx, t, c, node, "set python3.10 as default", `
+		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
 		sudo update-alternatives --config python3
 	`); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := repeatRunE(ctx, t, c, node, "install pip", `
-		curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.7
+		curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.10
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +123,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Phew, after having setup all that, let's actually run the test.
 
 	t.Status("setting up cockroach")
-	c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
+	c.Start(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), install.MakeClusterSettings(), c.All())
 
 	version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 	if err != nil {
@@ -144,11 +142,11 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Status("running sqlalchemy test suite")
 	// Note that this is expected to return an error, since the test suite
 	// will fail. And it is safe to swallow it here.
-	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
-		`source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb/ && pytest --maxfail=0 \
-		--dburi='cockroachdb://root@localhost:{pgport:1}/defaultdb?sslmode=disable&disable_cockroachdb_telemetry=true' \
+	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
+		fmt.Sprintf(`source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb/ && pytest --maxfail=0 \
+		--dburi='cockroachdb://%s:%s@localhost:{pgport:1}/defaultdb?sslmode=require&disable_cockroachdb_telemetry=true' \
 		test/test_suite_sqlalchemy.py
-	`)
+	`, install.DefaultUser, install.DefaultPassword))
 
 	// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
 	// Proceed for any other (command) errors

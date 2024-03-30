@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -48,8 +47,6 @@ import (
 func TestEvalAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderDeadlock(t, "probable OOM")
 
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 
@@ -147,7 +144,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:            kvs{pointKVWithLocalTS("a", 2, 1, "a2")},
 			expect:         kvs{pointKVWithLocalTS("a", 2, 1, "a2")},
 			expectStatsEst: true,
-			expectErrRace:  `SST contains non-empty MVCC value header for key "a"/2.000000000,0`,
+			expectErrRace:  `SST contains non-empty Local Timestamp in the MVCC value header for key "a"/2.000000000,0`,
 		},
 		"blind rejects local timestamp on range key under race only": { // unfortunately, for performance
 			sst:            kvs{rangeKVWithLocalTS("a", "d", 2, 1, "")},
@@ -300,7 +297,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:            kvs{pointKVWithLocalTS("a", 2, 1, "a2")},
 			expect:         kvs{pointKVWithLocalTS("a", 10, 1, "a2")},
 			expectStatsEst: true,
-			expectErrRace:  `SST contains non-empty MVCC value header for key "a"/2.000000000,0`,
+			expectErrRace:  `SST contains non-empty Local Timestamp in the MVCC value header for key "a"/2.000000000,0`,
 		},
 		"SSTTimestampToRequestTimestamp with DisallowConflicts causes estimated stats with range key masking": {
 			reqTS:          5,
@@ -1154,7 +1151,8 @@ func TestEvalAddSSTable(t *testing.T) {
 								kv.RangeKey.Timestamp.WallTime *= 1e9
 								v.MVCCValueHeader.LocalTimestamp.WallTime *= 1e9
 								require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
-									ctx, b, nil, kv.RangeKey.StartKey, kv.RangeKey.EndKey, kv.RangeKey.Timestamp, v.MVCCValueHeader.LocalTimestamp, nil, nil, false, 0, nil))
+									ctx, b, nil, kv.RangeKey.StartKey, kv.RangeKey.EndKey, kv.RangeKey.Timestamp, v.MVCCValueHeader.LocalTimestamp, nil, nil, false,
+									0, 0, nil))
 							default:
 								t.Fatalf("unknown KV type %T", kv)
 							}
@@ -1253,7 +1251,7 @@ func TestEvalAddSSTable(t *testing.T) {
 							require.Nil(t, result.Replicated.AddSSTable)
 						} else {
 							require.NotNil(t, result.Replicated.AddSSTable)
-							require.NoError(t, fs.WriteFile(engine, "sst", result.Replicated.AddSSTable.Data))
+							require.NoError(t, fs.WriteFile(engine.Env(), "sst", result.Replicated.AddSSTable.Data))
 							require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
 						}
 
@@ -1671,7 +1669,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	_, err := batcheval.EvalAddSSTable(ctx, engine, cArgs, &resp)
 	require.NoError(t, err)
 
-	require.NoError(t, fs.WriteFile(engine, "sst", sst))
+	require.NoError(t, fs.WriteFile(engine.Env(), "sst", sst))
 	require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
 
 	statsEvaled := statsBefore

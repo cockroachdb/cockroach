@@ -57,7 +57,7 @@ var devOffsetKeyStart = func() Key {
 	if forceDev && forceRelease {
 		panic(errors.AssertionFailedf("cannot set both COCKROACH_FORCE_DEV_VERSION and COCKROACH_TESTING_FORCE_RELEASE_BRANCH"))
 	}
-	isDev := (developmentBranch || forceDev) && !forceRelease
+	isDev := (DevelopmentBranch || forceDev) && !forceRelease
 	if !isDev {
 		// No dev offsets.
 		return numKeys + 1
@@ -69,9 +69,9 @@ var devOffsetKeyStart = func() Key {
 	if allowUpgradeToDev {
 		return MinSupported + 1
 	}
-	// Apply the dev offset to all versions (except VPrimordial versions, which
+	// Apply the dev offset to all versions (except VBootstrap versions, which
 	// don't matter for offsetting logic).
-	return VPrimordialMax + 1
+	return VBootstrapMax + 1
 }()
 
 // DevOffset is the offset applied to major versions into the future if this is
@@ -86,8 +86,8 @@ func maybeApplyDevOffset(key Key, v roachpb.Version) roachpb.Version {
 	return v
 }
 
-// removeDevOffset removes DevOffset from the given version, if it was applied.
-func removeDevOffset(v roachpb.Version) roachpb.Version {
+// RemoveDevOffset removes DevOffset from the given version, if it was applied.
+func RemoveDevOffset(v roachpb.Version) roachpb.Version {
 	if v.Major > DevOffset {
 		v.Major -= DevOffset
 	}

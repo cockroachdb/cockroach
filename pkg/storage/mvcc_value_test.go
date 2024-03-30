@@ -80,26 +80,72 @@ func TestMVCCValueGetLocalTimestamp(t *testing.T) {
 	}
 }
 
+func TestEncodeMVCCValueForExport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var strVal, intVal roachpb.Value
+	strVal.SetString("foo")
+	intVal.SetInt(17)
+
+	var importEpoch uint32 = 3
+	tsHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp{WallTime: 9}}
+
+	valHeaderFull := tsHeader
+	valHeaderFull.ImportEpoch = importEpoch
+
+	jobIDHeader := enginepb.MVCCValueHeader{ImportEpoch: importEpoch}
+
+	testcases := map[string]struct {
+		val    MVCCValue
+		expect MVCCValue
+	}{
+		"noHeader":   {val: MVCCValue{Value: intVal}, expect: MVCCValue{Value: intVal}},
+		"tsHeader":   {val: MVCCValue{MVCCValueHeader: tsHeader, Value: intVal}, expect: MVCCValue{Value: intVal}},
+		"jobIDOnly":  {val: MVCCValue{MVCCValueHeader: jobIDHeader, Value: intVal}, expect: MVCCValue{MVCCValueHeader: jobIDHeader, Value: intVal}},
+		"fullHeader": {val: MVCCValue{MVCCValueHeader: valHeaderFull, Value: intVal}, expect: MVCCValue{MVCCValueHeader: jobIDHeader, Value: intVal}},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			encodedVal, _, err := EncodeMVCCValueForExport(tc.val, nil)
+			require.NoError(t, err)
+			strippedMVCCVal, err := DecodeMVCCValue(encodedVal)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, strippedMVCCVal)
+		})
+	}
+
+}
 func TestMVCCValueFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var strVal, intVal roachpb.Value
 	strVal.SetString("foo")
 	intVal.SetInt(17)
+	var importEpoch uint32 = 3
 
 	valHeader := enginepb.MVCCValueHeader{}
 	valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
+
+	valHeaderFull := valHeader
+	valHeaderFull.ImportEpoch = importEpoch
+
+	valHeaderWithJobIDOnly := enginepb.MVCCValueHeader{ImportEpoch: importEpoch}
 
 	testcases := map[string]struct {
 		val    MVCCValue
 		expect string
 	}{
-		"tombstone":        {val: MVCCValue{}, expect: "/<empty>"},
-		"bytes":            {val: MVCCValue{Value: strVal}, expect: "/BYTES/foo"},
-		"int":              {val: MVCCValue{Value: intVal}, expect: "/INT/17"},
-		"header+tombstone": {val: MVCCValue{MVCCValueHeader: valHeader}, expect: "{localTs=0.000000009,0}/<empty>"},
-		"header+bytes":     {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}, expect: "{localTs=0.000000009,0}/BYTES/foo"},
-		"header+int":       {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}, expect: "{localTs=0.000000009,0}/INT/17"},
+		"tombstone":                 {val: MVCCValue{}, expect: "/<empty>"},
+		"bytes":                     {val: MVCCValue{Value: strVal}, expect: "/BYTES/foo"},
+		"int":                       {val: MVCCValue{Value: intVal}, expect: "/INT/17"},
+		"header+tombstone":          {val: MVCCValue{MVCCValueHeader: valHeader}, expect: "{localTs=0.000000009,0}/<empty>"},
+		"header+bytes":              {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}, expect: "{localTs=0.000000009,0}/BYTES/foo"},
+		"header+int":                {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}, expect: "{localTs=0.000000009,0}/INT/17"},
+		"headerJobIDOnly+tombstone": {val: MVCCValue{MVCCValueHeader: valHeaderWithJobIDOnly}, expect: "{importEpoch=3}/<empty>"},
+		"headerJobIDOnly+bytes":     {val: MVCCValue{MVCCValueHeader: valHeaderWithJobIDOnly, Value: strVal}, expect: "{importEpoch=3}/BYTES/foo"},
+		"headerJobIDOnly+int":       {val: MVCCValue{MVCCValueHeader: valHeaderWithJobIDOnly, Value: intVal}, expect: "{importEpoch=3}/INT/17"},
+		"headerFull+tombstone":      {val: MVCCValue{MVCCValueHeader: valHeaderFull}, expect: "{localTs=0.000000009,0, importEpoch=3}/<empty>"},
+		"headerFull+bytes":          {val: MVCCValue{MVCCValueHeader: valHeaderFull, Value: strVal}, expect: "{localTs=0.000000009,0, importEpoch=3}/BYTES/foo"},
+		"headerFull+int":            {val: MVCCValue{MVCCValueHeader: valHeaderFull, Value: intVal}, expect: "{localTs=0.000000009,0, importEpoch=3}/INT/17"},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
@@ -115,19 +161,31 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 	var strVal, intVal roachpb.Value
 	strVal.SetString("foo")
 	intVal.SetInt(17)
+	var importEpoch uint32 = 3
 
 	valHeader := enginepb.MVCCValueHeader{}
 	valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
 
+	valHeaderFull := valHeader
+	valHeaderFull.ImportEpoch = importEpoch
+
+	valHeaderWithJobIDOnly := enginepb.MVCCValueHeader{ImportEpoch: importEpoch}
+
 	testcases := map[string]struct {
 		val MVCCValue
 	}{
-		"tombstone":        {val: MVCCValue{}},
-		"bytes":            {val: MVCCValue{Value: strVal}},
-		"int":              {val: MVCCValue{Value: intVal}},
-		"header+tombstone": {val: MVCCValue{MVCCValueHeader: valHeader}},
-		"header+bytes":     {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}},
-		"header+int":       {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}},
+		"tombstone":                 {val: MVCCValue{}},
+		"bytes":                     {val: MVCCValue{Value: strVal}},
+		"int":                       {val: MVCCValue{Value: intVal}},
+		"header+tombstone":          {val: MVCCValue{MVCCValueHeader: valHeader}},
+		"header+bytes":              {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}},
+		"header+int":                {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}},
+		"headerJobIDOnly+tombstone": {val: MVCCValue{MVCCValueHeader: valHeaderWithJobIDOnly}},
+		"headerJobIDOnly+bytes":     {val: MVCCValue{MVCCValueHeader: valHeaderWithJobIDOnly, Value: strVal}},
+		"headerJobIDOnly+int":       {val: MVCCValue{MVCCValueHeader: valHeaderWithJobIDOnly, Value: intVal}},
+		"headerFull+tombstone":      {val: MVCCValue{MVCCValueHeader: valHeaderFull}},
+		"headerFull+bytes":          {val: MVCCValue{MVCCValueHeader: valHeaderFull, Value: strVal}},
+		"headerFull+int":            {val: MVCCValue{MVCCValueHeader: valHeaderFull, Value: intVal}},
 	}
 	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))
 	for name, tc := range testcases {
@@ -153,6 +211,24 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 
 			return buf.String()
 		}))
+		t.Run("DeocdeValueFromMVCCValue/"+name, func(t *testing.T) {
+			enc, err := EncodeMVCCValue(tc.val)
+			require.NoError(t, err)
+			assert.Equal(t, encodedMVCCValueSize(tc.val), len(enc))
+
+			dec, err := DecodeValueFromMVCCValue(enc)
+			require.NoError(t, err)
+
+			if len(dec.RawBytes) == 0 {
+				dec.RawBytes = nil // normalize
+			}
+
+			require.Equal(t, tc.val.Value, dec)
+			require.Equal(t, tc.val.IsTombstone(), len(dec.RawBytes) == 0)
+			isTombstone, err := EncodedMVCCValueIsTombstone(enc)
+			require.NoError(t, err)
+			require.Equal(t, tc.val.IsTombstone(), isTombstone)
+		})
 	}
 }
 
@@ -175,6 +251,14 @@ func TestDecodeMVCCValueErrors(t *testing.T) {
 			require.Equal(t, tc.expect, err)
 			require.False(t, isTombstone)
 		})
+		t.Run("DecodeValueFromMVCCValue/"+name, func(t *testing.T) {
+			dec, err := DecodeValueFromMVCCValue(tc.enc)
+			require.Equal(t, tc.expect, err)
+			require.Zero(t, dec)
+			isTombstone, err := EncodedMVCCValueIsTombstone(tc.enc)
+			require.Equal(t, tc.expect, err)
+			require.False(t, isTombstone)
+		})
 	}
 }
 
@@ -183,15 +267,19 @@ func mvccValueBenchmarkConfigs() (
 	values map[string]roachpb.Value,
 ) {
 	headers = map[string]enginepb.MVCCValueHeader{
-		"empty":                  {},
-		"local walltime":         {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545}},
-		"local walltime+logical": {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 4096}},
-		"omit in rangefeeds":     {OmitInRangefeeds: true},
+		"empty":                        {},
+		"jobID":                        {ImportEpoch: 3},
+		"local walltime":               {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545}},
+		"local walltime+logical":       {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 4096}},
+		"omit in rangefeeds":           {OmitInRangefeeds: true},
+		"local walltime+jobID":         {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545}, ImportEpoch: 3},
+		"local walltime+logical+jobID": {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 4096}, ImportEpoch: 3},
 	}
 	if testing.Short() {
 		// Reduce the number of configurations in short mode.
 		delete(headers, "local walltime")
 		delete(headers, "omit in rangefeeds")
+		delete(headers, "local walltime+jobID")
 	}
 	values = map[string]roachpb.Value{
 		"tombstone": {},
@@ -215,6 +303,50 @@ func BenchmarkEncodeMVCCValue(b *testing.B) {
 						require.NoError(b, err)
 					}
 					_ = res
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkEncodeMVCCValueForExport(b *testing.B) {
+	DisableMetamorphicSimpleValueEncoding(b)
+	headers, values := mvccValueBenchmarkConfigs()
+	for hDesc, h := range headers {
+		for vDesc, v := range values {
+			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
+			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
+			var buf []byte
+			b.Run(name, func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					var err error
+					buf, _, err = EncodeMVCCValueForExport(mvccValue, buf[:0])
+					if err != nil { // for performance
+						require.NoError(b, err)
+					}
+					_ = buf
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkEncodeMVCCValueWithAllocator(b *testing.B) {
+	DisableMetamorphicSimpleValueEncoding(b)
+	headers, values := mvccValueBenchmarkConfigs()
+	for hDesc, h := range headers {
+		for vDesc, v := range values {
+			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
+			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
+			var buf []byte
+			b.Run(name, func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					var err error
+					buf, _, err = EncodeMVCCValueToBuf(mvccValue, buf[:0])
+					if err != nil { // for performance
+						require.NoError(b, err)
+					}
+					_ = buf
 				}
 			})
 		}
@@ -250,6 +382,27 @@ func BenchmarkDecodeMVCCValue(b *testing.B) {
 					}
 				})
 			}
+		}
+	}
+}
+
+func BenchmarkDecodeValueFromMVCCValue(b *testing.B) {
+	headers, values := mvccValueBenchmarkConfigs()
+	for hDesc, h := range headers {
+		for vDesc, v := range values {
+			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
+			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
+			buf, err := EncodeMVCCValue(mvccValue)
+			require.NoError(b, err)
+			b.Run(name, func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					res, err := DecodeValueFromMVCCValue(buf)
+					if err != nil { // for performance
+						require.NoError(b, err)
+					}
+					_ = res
+				}
+			})
 		}
 	}
 }

@@ -11,7 +11,6 @@ package sql
 
 import (
 	"context"
-	"math"
 	"testing"
 	"time"
 
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -292,10 +290,10 @@ func startConnExecutor(
 	}
 	defer tempEngine.Close()
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
-	pool := mon.NewUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource,
-		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
-	)
+	pool := mon.NewUnlimitedMonitor(ctx, mon.Options{
+		Name:     "test",
+		Settings: st,
+	})
 	// This pool should never be Stop()ed because, if the test is failing, memory
 	// is not properly released.
 	collectionFactory := descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec)
@@ -315,7 +313,7 @@ func startConnExecutor(
 		},
 		Codec: keys.SystemSQLCodec,
 		DistSQLPlanner: NewDistSQLPlanner(
-			ctx, execinfra.Version, st, 1, /* sqlInstanceID */
+			ctx, st, 1, /* sqlInstanceID */
 			nil, /* rpcCtx */
 			distsql.NewServer(
 				ctx,
@@ -349,7 +347,7 @@ func startConnExecutor(
 		CollectionFactory:       collectionFactory,
 	}
 
-	s := NewServer(cfg, pool, obs.NoopEventsExporter{})
+	s := NewServer(cfg, pool)
 	buf := NewStmtBuf()
 	syncResults := make(chan []*streamingCommandResult, 1)
 	resultChannel := newAsyncIEResultChannel()

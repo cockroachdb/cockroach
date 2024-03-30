@@ -99,14 +99,13 @@ func Authorize(
 	payload *jobspb.Payload,
 	accessLevel AccessLevel,
 ) error {
-	userIsAdmin, err := a.HasAdminRole(ctx)
+	callerIsAdmin, err := a.UserHasAdminRole(ctx, a.User())
 	if err != nil {
 		return err
 	}
-	if userIsAdmin {
+	if callerIsAdmin {
 		return nil
 	}
-
 	hasControlJob, err := a.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CONTROLJOB)
 	if err != nil {
 		return err

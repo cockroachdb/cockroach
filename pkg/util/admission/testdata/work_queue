@@ -18,8 +18,7 @@ closed epoch: 0 tenantHeap len: 0
 set-try-get-return-value v=false
 ----
 
-# bypass=true is ignored since not system tenant.
-admit id=2 tenant=53 priority=0 create-time-millis=3 bypass=true
+admit id=2 tenant=53 priority=0 create-time-millis=3 bypass=false
 ----
 tryGet: returning false
 
@@ -91,22 +90,31 @@ closed epoch: 0 tenantHeap len: 2 top tenant: 53
  tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
  tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
-# A request from the system tenant bypasses admission control, but is
-# reflected in the WorkQueue state.
+# Requests from a system and application tenant bypass admission control,
+# but are reflected in the WorkQueue state.
 admit id=6 tenant=1 priority=0 create-time-millis=6 bypass=true
 ----
 tookWithoutPermission 1
 id 6: admit succeeded
+
+admit id=9 tenant=71 priority=0 create-time-millis=7 bypass=true
+----
+tookWithoutPermission 1
+id 9: admit succeeded
 
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 53
  tenant-id: 1 used: 1, w: 1, fifo: -128
  tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
- tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
+ tenant-id: 71 used: 2, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
-# The system tenant work is done and consumed 10 cpu nanos.
+# The bypass work is done and consumed 10 and 0 cpu nanos respectively.
 work-done id=6 cpu-time=10
+----
+returnGrant 1
+
+work-done id=9 cpu-time=0
 ----
 returnGrant 1
 

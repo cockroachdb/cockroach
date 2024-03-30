@@ -120,6 +120,16 @@ func (b *SelectQueryBuilder) buildQuery() string {
 
 var qosLevel = sessiondatapb.TTLLow
 
+func getInternalExecutorOverride(
+	qosLevel sessiondatapb.QoSLevel,
+) sessiondata.InternalExecutorOverride {
+	return sessiondata.InternalExecutorOverride{
+		User:                   username.NodeUserName(),
+		QualityOfService:       &qosLevel,
+		OptimizerUseHistograms: true,
+	}
+}
+
 func (b *SelectQueryBuilder) Run(
 	ctx context.Context, ie isql.Executor,
 ) (_ []tree.Datums, hasNext bool, _ error) {
@@ -148,10 +158,7 @@ func (b *SelectQueryBuilder) Run(
 		ctx,
 		b.selectOpName,
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User:             username.RootUserName(),
-			QualityOfService: &qosLevel,
-		},
+		getInternalExecutorOverride(qosLevel),
 		query,
 		b.cachedArgs...,
 	)
@@ -254,10 +261,7 @@ func (b *DeleteQueryBuilder) Run(
 		ctx,
 		b.deleteOpName,
 		txn.KV(),
-		sessiondata.InternalExecutorOverride{
-			User:             username.RootUserName(),
-			QualityOfService: &qosLevel,
-		},
+		getInternalExecutorOverride(qosLevel),
 		query,
 		deleteArgs...,
 	)

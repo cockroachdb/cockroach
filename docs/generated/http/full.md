@@ -1629,12 +1629,88 @@ Tier represents one level of the locality hierarchy.
 
 
 
+## TenantServiceStatus
+
+`GET /_status/tenant_service_status`
+
+TenantServiceStatus returns the current service and data state of
+the given tenant as known to the server orchestrator, which may
+differ from the database state.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.TenantServiceStatusRequest-string) |  |  | [reserved](#support-status) |
+| tenant_id | [uint64](#cockroach.server.serverpb.TenantServiceStatusRequest-uint64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| status_by_node_id | [TenantServiceStatusResponse.StatusByNodeIdEntry](#cockroach.server.serverpb.TenantServiceStatusResponse-cockroach.server.serverpb.TenantServiceStatusResponse.StatusByNodeIdEntry) | repeated |  | [reserved](#support-status) |
+| errors_by_node_id | [TenantServiceStatusResponse.ErrorsByNodeIdEntry](#cockroach.server.serverpb.TenantServiceStatusResponse-cockroach.server.serverpb.TenantServiceStatusResponse.ErrorsByNodeIdEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantServiceStatusResponse-cockroach.server.serverpb.TenantServiceStatusResponse.StatusByNodeIdEntry"></a>
+#### TenantServiceStatusResponse.StatusByNodeIdEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.TenantServiceStatusResponse-int32) |  |  |  |
+| value | [cockroach.multitenant.SQLInfo](#cockroach.server.serverpb.TenantServiceStatusResponse-cockroach.multitenant.SQLInfo) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantServiceStatusResponse-cockroach.server.serverpb.TenantServiceStatusResponse.ErrorsByNodeIdEntry"></a>
+#### TenantServiceStatusResponse.ErrorsByNodeIdEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.TenantServiceStatusResponse-int32) |  |  |  |
+| value | [string](#cockroach.server.serverpb.TenantServiceStatusResponse-string) |  |  |  |
+
+
+
+
+
+
 ## TenantRanges
 
 `GET /_status/tenant_ranges`
 
 TenantRanges requests internal details about all range replicas within
-the tenant's keyspace.
+the tenant's keyspace at the time the request is processed.
 
 Support status: [reserved](#support-status)
 
@@ -2120,6 +2196,8 @@ Session represents one SQL session.
 | txn_fingerprint_ids | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) | repeated | List of transaction fingerprint IDs in this session. | [reserved](#support-status) |
 | total_active_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | The session's total active time. | [reserved](#support-status) |
 | pg_backend_pid | [uint32](#cockroach.server.serverpb.ListSessionsResponse-uint32) |  | The numerical ID attached to the session which is used to mimic a Postgres backend PID for compatibility with the query cancellation protocol. Unlike in Postgres, this value does not correspond to a real process ID. | [reserved](#support-status) |
+| trace_id | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | The ID of the session's active trace. It will be 0 if tracing is off. | [reserved](#support-status) |
+| goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
 
 
 
@@ -2267,6 +2345,8 @@ Session represents one SQL session.
 | txn_fingerprint_ids | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) | repeated | List of transaction fingerprint IDs in this session. | [reserved](#support-status) |
 | total_active_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | The session's total active time. | [reserved](#support-status) |
 | pg_backend_pid | [uint32](#cockroach.server.serverpb.ListSessionsResponse-uint32) |  | The numerical ID attached to the session which is used to mimic a Postgres backend PID for compatibility with the query cancellation protocol. Unlike in Postgres, this value does not correspond to a real process ID. | [reserved](#support-status) |
+| trace_id | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | The ID of the session's active trace. It will be 0 if tracing is off. | [reserved](#support-status) |
+| goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
 
 
 
@@ -2347,53 +2427,6 @@ An error wrapper object for ListSessionsResponse.
 `POST /_status/cancel_query/{node_id}`
 
 CancelQuery cancels a SQL query given its ID.
-
-Support status: [reserved](#support-status)
-
-#### Request Parameters
-
-
-
-
-Request object for issuing a query cancel request.
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| node_id | [string](#cockroach.server.serverpb.CancelQueryRequest-string) |  | ID of gateway node for the query to be canceled.<br><br>TODO(itsbilal): use [(gogoproto.customname) = "NodeID"] below. Need to figure out how to teach grpc-gateway about custom names.<br><br>node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
-| query_id | [string](#cockroach.server.serverpb.CancelQueryRequest-string) |  | ID of query to be canceled (converted to string). | [reserved](#support-status) |
-| username | [string](#cockroach.server.serverpb.CancelQueryRequest-string) |  | Username of the user making this cancellation request. This may be omitted if the user is the same as the one issuing the CancelQueryRequest. The caller is responsible for case-folding and NFC normalization. | [reserved](#support-status) |
-
-
-
-
-
-
-
-#### Response Parameters
-
-
-
-
-Response returned by target query's gateway node.
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| canceled | [bool](#cockroach.server.serverpb.CancelQueryResponse-bool) |  | Whether the cancellation request succeeded and the query was canceled. | [reserved](#support-status) |
-| error | [string](#cockroach.server.serverpb.CancelQueryResponse-string) |  | Error message (accompanied with canceled = false). | [reserved](#support-status) |
-
-
-
-
-
-
-
-## CancelLocalQuery
-
-`POST /_status/cancel_local_query`
-
-CancelLocalQuery cancels a SQL query running on this node given its ID.
 
 Support status: [reserved](#support-status)
 
@@ -2827,53 +2860,6 @@ identify individual tenant pods.
 `POST /_status/cancel_session/{node_id}`
 
 CancelSessions forcefully terminates a SQL session given its ID.
-
-Support status: [reserved](#support-status)
-
-#### Request Parameters
-
-
-
-
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| node_id | [string](#cockroach.server.serverpb.CancelSessionRequest-string) |  | TODO(abhimadan): use [(gogoproto.customname) = "NodeID"] below. Need to figure out how to teach grpc-gateway about custom names.<br><br>node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
-| session_id | [bytes](#cockroach.server.serverpb.CancelSessionRequest-bytes) |  |  | [reserved](#support-status) |
-| username | [string](#cockroach.server.serverpb.CancelSessionRequest-string) |  | Username of the user making this cancellation request. This may be omitted if the user is the same as the one issuing the CancelSessionRequest. The caller is responsible for case-folding and NFC normalization. | [reserved](#support-status) |
-
-
-
-
-
-
-
-#### Response Parameters
-
-
-
-
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| canceled | [bool](#cockroach.server.serverpb.CancelSessionResponse-bool) |  |  | [reserved](#support-status) |
-| error | [string](#cockroach.server.serverpb.CancelSessionResponse-string) |  |  | [reserved](#support-status) |
-
-
-
-
-
-
-
-## CancelLocalSession
-
-`POST /_status/cancel_local_session`
-
-CancelLocalSession forcefully terminates a SQL session running on this node given its ID.
 
 Support status: [reserved](#support-status)
 
@@ -3430,6 +3416,7 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.DownloadSpanRequest-string) |  |  | [reserved](#support-status) |
 | spans | [cockroach.roachpb.Span](#cockroach.server.serverpb.DownloadSpanRequest-cockroach.roachpb.Span) | repeated |  | [reserved](#support-status) |
+| via_backing_file_download | [bool](#cockroach.server.serverpb.DownloadSpanRequest-bool) |  |  | [reserved](#support-status) |
 
 
 
@@ -4103,11 +4090,14 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | store_id | [int32](#cockroach.server.serverpb.StoresResponse-int32) |  |  | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.StoresResponse-int32) |  |  | [reserved](#support-status) |
 | encryption_status | [bytes](#cockroach.server.serverpb.StoresResponse-bytes) |  | encryption_status is a serialized ccl/storageccl/engineccl/enginepbccl/stats.go::EncryptionStatus protobuf. | [reserved](#support-status) |
 | total_files | [uint64](#cockroach.server.serverpb.StoresResponse-uint64) |  | Basic file stats when encryption is enabled. Total files/bytes. | [reserved](#support-status) |
 | total_bytes | [uint64](#cockroach.server.serverpb.StoresResponse-uint64) |  |  | [reserved](#support-status) |
 | active_key_files | [uint64](#cockroach.server.serverpb.StoresResponse-uint64) |  | Files/bytes using the active data key. | [reserved](#support-status) |
 | active_key_bytes | [uint64](#cockroach.server.serverpb.StoresResponse-uint64) |  |  | [reserved](#support-status) |
+| dir | [string](#cockroach.server.serverpb.StoresResponse-string) |  | dir is the path to the store's data directory on the node. | [reserved](#support-status) |
+| wal_failover_path | [string](#cockroach.server.serverpb.StoresResponse-string) |  | wal_failover_path encodes the path to the secondary WAL directory used for failover in the event of high write latency to the primary WAL. | [reserved](#support-status) |
 
 
 

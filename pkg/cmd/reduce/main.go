@@ -23,12 +23,14 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/go-cmp/cmp"
 )
 
 var (
@@ -51,6 +53,7 @@ var (
 	flags             = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	binary            = flags.String("binary", "./cockroach", "path to cockroach binary")
 	file              = flags.String("file", "", "the path to a file containing SQL queries to reduce; required")
+	outFlag           = flags.String("out", "", "if set, the path to a new file where reduced result will be written to")
 	verbose           = flags.Bool("v", false, "print progress to standard output and the original test case output if it is not interesting")
 	contains          = flags.String("contains", "", "error regex to search for")
 	unknown           = flags.Bool("unknown", false, "print unknown types during walk")
@@ -125,7 +128,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(out)
+	if *outFlag != "" {
+		file, err := os.Create(*outFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+		fmt.Fprint(file, out)
+	} else {
+		fmt.Println(out)
+	}
 }
 
 func reduceSQL(
@@ -339,7 +351,7 @@ SELECT '%[1]s';
 					logger.Printf("control and perturbed query results were the same: \n%v\n\n%v\n", string(parts[1]), string(parts[4]))
 				}
 			}
-			return !bytes.Equal(parts[1], parts[4]), logOriginalHint
+			return !unsortedLinesEqual(string(parts[1]), string(parts[4])), logOriginalHint
 		}
 		if unoptimizedOracle {
 			parts := bytes.Split(out, []byte(unoptimizedOracleSep))
@@ -356,7 +368,7 @@ SELECT '%[1]s';
 					logger.Printf("unoptimized and optimized query results were the same: \n%v\n\n%v\n", string(parts[2]), string(parts[4]))
 				}
 			}
-			return !bytes.Equal(parts[2], parts[4]), logOriginalHint
+			return !unsortedLinesEqual(string(parts[2]), string(parts[4])), logOriginalHint
 		}
 		if verbose {
 			logOriginalHint = func() {
@@ -422,4 +434,12 @@ func findPreviousSetStatements(lines []string, lineIdx int) (string, int) {
 	// firstQueryLineIdx right now points at an empty line before the statement.
 	query := strings.Join(lines[firstQueryLineIdx+1:lastQueryLineIdx+1], " ")
 	return query, firstQueryLineIdx
+}
+
+func unsortedLinesEqual(part1, part2 string) bool {
+	lines1 := strings.Split(part1, "\n")
+	lines2 := strings.Split(part2, "\n")
+	sort.Strings(lines1)
+	sort.Strings(lines2)
+	return cmp.Equal(lines1, lines2)
 }

@@ -17,10 +17,6 @@ go_test(
     srcs = ["tenant_token_bucket_test.go"],
     data = glob(["testdata/**"]),
     embed = [":tenanttokenbucket"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/kv/kvpb",

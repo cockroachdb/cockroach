@@ -66,6 +66,9 @@ const emptyDataFromServer: DataFromServer = {
   OIDCGenerateJWTAuthTokenEnabled: false,
   Tag: "",
   Version: "",
+  LicenseType: "OSS",
+  SecondsUntilLicenseExpiry: 0,
+  IsManaged: false,
 };
 
 export const featureFlagSelector = createSelector(

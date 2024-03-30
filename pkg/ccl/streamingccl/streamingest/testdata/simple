@@ -21,14 +21,14 @@ CREATE FUNCTION strip_host(s string) returns string language sql AS $$ select co
 ----
 
 query-sql as=destination-system
-SELECT strip_host(description) FROM [SHOW JOBS] WHERE job_type='REPLICATION STREAM INGESTION'
+SELECT strip_host(description) FROM [SHOW JOBS SELECT id FROM system.jobs WHERE job_type='REPLICATION STREAM INGESTION']
 ----
-CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF source ON ('postgres://root@?sslcert=redacted&sslkey=redacted&sslmode=verify-full&sslrootcert=redacted')
+CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF source ON ('postgres://root@?redacted')
 
 query-sql as=destination-system
 SELECT strip_host(source_cluster_uri) FROM [SHOW TENANT destination WITH REPLICATION STATUS]
 ----
-postgres://root@?sslcert=redacted&sslkey=redacted&sslmode=verify-full&sslrootcert=redacted
+postgres://root@?redacted
 
 # The session on the source should have an app name set.
 query-sql as=source-system
@@ -40,7 +40,7 @@ repstream job id=$_producerJobID
 query-sql as=source-system
 SHOW TENANT source WITH REPLICATION STATUS
 ----
-10 source ready shared <nil> <nil> <nil> <nil> <nil> <nil>
+10 source <nil> <nil> <nil> <nil> <nil> <nil> ready
 
 exec-sql as=source-tenant
 CREATE TABLE d.x (id INT PRIMARY KEY, n INT);
@@ -67,10 +67,10 @@ SHOW TENANTS
 2 destination replicating none
 
 query-sql as=destination-system
-SELECT id, name, data_state, service_mode, source_tenant_name, cutover_time FROM [SHOW TENANTS WITH REPLICATION STATUS]
+SELECT id, name, source_tenant_name, cutover_time, status FROM [SHOW TENANTS WITH REPLICATION STATUS]
 ----
-1 system ready shared <nil> <nil>
-2 destination replicating none source <nil>
+1 system <nil> <nil> ready
+2 destination source <nil> replicating
 
 let $ts as=source-system
 SELECT clock_timestamp()::timestamptz::string

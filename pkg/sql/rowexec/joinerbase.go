@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -60,11 +59,11 @@ func (jb *joinerBase) init(
 
 	jb.emptyLeft = make(rowenc.EncDatumRow, len(leftTypes))
 	for i := range jb.emptyLeft {
-		jb.emptyLeft[i] = rowenc.DatumToEncDatum(leftTypes[i], tree.DNull)
+		jb.emptyLeft[i] = rowenc.NullEncDatum()
 	}
 	jb.emptyRight = make(rowenc.EncDatumRow, len(rightTypes))
 	for i := range jb.emptyRight {
-		jb.emptyRight[i] = rowenc.DatumToEncDatum(rightTypes[i], tree.DNull)
+		jb.emptyRight[i] = rowenc.NullEncDatum()
 	}
 
 	rowSize := len(leftTypes) + len(rightTypes)
@@ -157,7 +156,7 @@ func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 func (jb *joinerBase) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
 	outputRow := jb.renderForOutput(lrow, rrow)
 
-	if jb.onCond.Expr != nil {
+	if jb.onCond.Expr() != nil {
 		// We need to evaluate the ON condition which can refer to the columns
 		// from both sides of the join regardless of the join type, so we need
 		// to have the combined row.

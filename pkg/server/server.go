@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -53,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
@@ -479,9 +481,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
-	dbCtx := kv.DefaultDBContext(stopper)
+	dbCtx := kv.DefaultDBContext(st, stopper)
 	dbCtx.NodeID = idContainer
-	dbCtx.Stopper = stopper
 	db := kv.NewDBWithContext(cfg.AmbientCtx, tcsFactory, clock, dbCtx)
 
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
@@ -590,7 +591,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
 	db.AdmissionPacerFactory = gcoords.Elastic
-	db.SettingsValues = &cfg.Settings.SV
 	cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
 	stopper.AddCloser(stop.CloserFn(func() {
 		goschedstats.UnregisterRunnableCountCallback(cbID)
@@ -689,7 +689,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
 	kvMemoryMonitor.StartNoReserved(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
-	rangeReedBudgetFactory := serverrangefeed.NewBudgetFactory(
+	rangeFeedBudgetFactory := serverrangefeed.NewBudgetFactory(
 		ctx,
 		serverrangefeed.CreateBudgetFactoryConfig(
 			kvMemoryMonitor,
@@ -705,16 +705,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 				return limit
 			},
 			&st.SV))
-	if rangeReedBudgetFactory != nil {
-		nodeRegistry.AddMetricStruct(rangeReedBudgetFactory.Metrics())
+	if rangeFeedBudgetFactory != nil {
+		nodeRegistry.AddMetricStruct(rangeFeedBudgetFactory.Metrics())
 	}
+
+	raftEntriesMonitor := logstore.NewRaftEntriesSoftLimit()
+	nodeRegistry.AddMetric(raftEntriesMonitor.Metric)
+
 	// Closer order is important with BytesMonitor.
-	stopper.AddCloser(stop.CloserFn(func() {
-		rangeReedBudgetFactory.Stop(ctx)
-	}))
-	stopper.AddCloser(stop.CloserFn(func() {
-		kvMemoryMonitor.Stop(ctx)
-	}))
+	stopper.AddCloser(stop.CloserFn(func() { rangeFeedBudgetFactory.Stop(ctx) }))
+	stopper.AddCloser(stop.CloserFn(func() { kvMemoryMonitor.Stop(ctx) }))
 
 	tsDB := ts.NewDB(db, cfg.Settings)
 	nodeRegistry.AddMetricStruct(tsDB.Metrics())
@@ -811,7 +811,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		fn := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs).ProtectedTSReaderOverrideFn
 		protectedTSReader = fn(clock)
 	} else {
-		protectedTSReader = spanconfigptsreader.NewAdapter(protectedtsProvider.(*ptprovider.Provider).Cache, spanConfig.subscriber)
+		protectedTSReader = spanconfigptsreader.NewAdapter(protectedtsProvider.(*ptprovider.Provider).Cache,
+			spanConfig.subscriber, cfg.Settings)
 	}
 
 	rangeLogWriter := rangelog.NewWriter(
@@ -854,7 +855,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		ProtectedTimestampReader:     protectedTSReader,
 		EagerLeaseAcquisitionLimiter: eagerLeaseAcquisitionLimiter,
 		KVMemoryMonitor:              kvMemoryMonitor,
-		RangefeedBudgetFactory:       rangeReedBudgetFactory,
+		RangefeedBudgetFactory:       rangeFeedBudgetFactory,
+		RaftEntriesMonitor:           raftEntriesMonitor,
 		SharedStorageEnabled:         cfg.SharedStorage != "",
 		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,
@@ -866,6 +868,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowHandles:                admissionControl.storesFlowControl,
 		KVFlowHandleMetrics:          admissionControl.kvFlowHandleMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
+		RangeCount:                   &atomic.Int64{},
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
@@ -922,6 +925,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		tenantCapabilitiesWatcher,
 		spanConfig.kvAccessor,
 		spanConfig.reporter,
+		distSender,
 	)
 	kvpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -1167,7 +1171,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		p, cleanup := sql.NewInternalPlanner(
 			opName,
 			txn,
-			username.RootUserName(),
+			username.NodeUserName(),
 			&sql.MemoryMetrics{},
 			sqlServer.execCfg,
 			sql.NewInternalSessionData(ctx, sqlServer.execCfg.Settings, opName),
@@ -1227,6 +1231,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		systemTenantNameContainer,
 		pgPreServer.SendRoutingError,
 		tenantCapabilitiesWatcher,
+		cfg.DisableSQLServer,
+		cfg.BaseConfig.DisableTLSForHTTP,
 	)
 	drain.serverCtl = sc
 
@@ -1887,6 +1893,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.runtime,
 		s.status.sessionRegistry,
 		s.sqlServer.execCfg.RootMemoryMonitor,
+		s.cfg.TestingKnobs,
 	); err != nil {
 		return err
 	}
@@ -1954,9 +1961,10 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// wholly initialized stores (it reads the StoreIdentKeys). It also needs
 	// to come before the call into SetPebbleMetricsProvider, which internally
 	// uses the disk stats map we're initializing.
-	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines); err != nil {
+	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines, s.cfg.DiskMonitorManager); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
+	s.stopper.AddCloser(stop.CloserFn(func() { s.node.diskStatsMap.closeDiskMonitors() }))
 
 	// Stores have been initialized, so Node can now provide Pebble metrics.
 	//
@@ -2077,6 +2085,10 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		nil, /* TenantExternalIORecorder */
 		s.appRegistry,
 	)
+
+	if err := s.runIdempontentSQLForInitType(ctx, state.initType); err != nil {
+		return err
+	}
 
 	// Start the job scheduler now that the SQL Server and
 	// external storage is initialized.
@@ -2223,6 +2235,58 @@ func (s *topLevelServer) initJobScheduler(ctx context.Context) error {
 	return nil
 }
 
+// runIdempontentSQLForInitType runs one-time initialization steps via
+// SQL based on the given InitType.
+func (s *topLevelServer) runIdempontentSQLForInitType(
+	ctx context.Context, typ serverpb.InitType,
+) error {
+	if typ == serverpb.InitType_NONE || typ == serverpb.InitType_DEFAULT {
+		return nil
+	}
+
+	initAttempt := func() error {
+		const defaulVirtuallusterName = "main"
+		switch typ {
+		case serverpb.InitType_VIRTUALIZED:
+			ie := s.sqlServer.execCfg.InternalDB.Executor()
+			_, err := ie.Exec(ctx, "init-create-app-tenant", nil, /* txn */
+				"CREATE VIRTUAL CLUSTER IF NOT EXISTS $1", defaulVirtuallusterName)
+			if err != nil {
+				return err
+			}
+			_, err = ie.Exec(ctx, "init-default-app-tenant", nil, /* txn */
+				"ALTER VIRTUAL CLUSTER $1 START SERVICE SHARED", defaulVirtuallusterName)
+			if err != nil {
+				return err
+			}
+			fallthrough
+		case serverpb.InitType_VIRTUALIZED_EMPTY:
+			ie := s.sqlServer.execCfg.InternalDB.Executor()
+			_, err := ie.Exec(ctx, "init-default-target-cluster-setting", nil, /* txn */
+				"SET CLUSTER SETTING server.controller.default_target_cluster = $1", defaulVirtuallusterName)
+			if err != nil {
+				return err
+			}
+		default:
+			return errors.Errorf("unknown bootstrap init type: %d", typ)
+		}
+		return nil
+	}
+
+	rOpts := retry.Options{
+		MaxBackoff:     10 * time.Second,
+		InitialBackoff: time.Second,
+	}
+	for r := retry.StartWithCtx(ctx, rOpts); r.Next(); {
+		if err := initAttempt(); err != nil {
+			log.Errorf(ctx, "cluster initialization attempt failed: %s", err.Error())
+			continue
+		}
+		return nil
+	}
+	return errors.Errorf("cluster initialization failed; cluster may need to be manually configured")
+}
+
 // AcceptClients starts listening for incoming SQL clients over the network.
 // This mirrors the implementation of (*SQLServerWrapper).AcceptClients.
 // TODO(knz): Find a way to implement this method only once for both.
@@ -2239,6 +2303,7 @@ func (s *topLevelServer) AcceptClients(ctx context.Context) error {
 		s.pgPreServer,
 		s.serverController.sqlMux,
 		s.pgL,
+		s.ClusterSettings(),
 		&s.cfg.SocketFile,
 	); err != nil {
 		return err

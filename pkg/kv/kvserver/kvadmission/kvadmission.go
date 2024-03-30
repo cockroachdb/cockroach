@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -35,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"go.etcd.io/raft/v3/raftpb"
 )
 
 // elasticCPUDurationPerExportRequest controls how many CPU tokens are allotted
@@ -63,7 +63,7 @@ var elasticCPUDurationPerInternalLowPriRead = settings.RegisterDurationSetting(
 var internalLowPriReadElasticControlEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kvadmission.low_pri_read_elastic_control.enabled",
-	"determines whether the internally submitted low priority reads reads integrate with elastic CPU control",
+	"determines whether the internally submitted low priority reads integrate with elastic CPU control",
 	true,
 )
 
@@ -100,8 +100,10 @@ var rangefeedCatchupScanElasticControlEnabled = settings.RegisterBoolSetting(
 // bandwidth for each store in the cluster.
 var ProvisionedBandwidth = settings.RegisterByteSizeSetting(
 	settings.SystemOnly, "kvadmission.store.provisioned_bandwidth",
-	"if set to a non-zero value, this is used as the provisioned bandwidth (in bytes/s), "+
-		"for each store. It can be over-ridden on a per-store basis using the --store flag",
+	"if set to a non-zero value, this is used as the provisioned bandwidth (in bytes/s), for "+
+		"each store. It can be overridden on a per-store basis using the --store flag. Note that "+
+		"setting the provisioned bandwidth to a positive value may enable disk bandwidth based "+
+		"admission control, since admission.disk_bandwidth_tokens.elastic.enabled defaults to true",
 	0,
 	settings.WithPublic)
 
@@ -300,6 +302,14 @@ func (n *controllerImpl) AdmitKVWork(
 		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
 			bypassAdmission = true
 		}
+	}
+	// LeaseInfo requests are used as makeshift replica health probes by
+	// DistSender circuit breakers, make sure they bypass AC.
+	//
+	// TODO(erikgrinaker): the various bypass conditions here should be moved to
+	// one or more request flags.
+	if ba.IsSingleLeaseInfoRequest() {
+		bypassAdmission = true
 	}
 	createTime := ba.AdmissionHeader.CreateTime
 	if !bypassAdmission && createTime == 0 {

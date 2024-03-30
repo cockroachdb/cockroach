@@ -23,10 +23,6 @@ go_test(
     name = "lexbase_test",
     size = "small",
     srcs = ["encode_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":lexbase",
         "//pkg/sql/parser",

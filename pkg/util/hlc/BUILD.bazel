@@ -33,10 +33,6 @@ go_test(
         "timestamp_test.go",
     ],
     embed = [":hlc"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/cli/exit",
         "//pkg/testutils/zerofields",

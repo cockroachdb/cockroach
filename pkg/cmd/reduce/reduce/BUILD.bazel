@@ -22,9 +22,5 @@ go_test(
     size = "small",
     srcs = ["reduce_test.go"],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [":reduce"],
 )

@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
@@ -75,8 +75,8 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		--db-driver=pgsql \
 		--pgsql-host=%s \
 		--pgsql-port=%s \
-		--pgsql-user=root \
-		--pgsql-password= \
+		--pgsql-user=%s \
+		--pgsql-password=%s \
 		--pgsql-db=sysbench \
 		--report-interval=1 \
 		--time=%d \
@@ -87,6 +87,8 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		%s`,
 		pghost,
 		pgport,
+		install.DefaultUser,
+		install.DefaultPassword,
 		int(o.duration.Seconds()),
 		o.concurrency,
 		o.tables,
@@ -102,14 +104,23 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 	t.Status("installing cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-	err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), allNodes[0]))
+	err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), allNodes[0]))
 	require.NoError(t, err)
 
 	t.Status("installing haproxy")
 	if err = c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, option.WithNodes(loadNode), "./cockroach gen haproxy --insecure --url {pgurl:1}")
+	// cockroach gen haproxy does not support specifying a non root user
+	pgurl, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
+		External: true,
+		Auth:     install.AuthRootCert,
+		Secure:   c.IsSecure(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Run(ctx, option.WithNodes(loadNode), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
 	c.Run(ctx, option.WithNodes(loadNode), "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
@@ -120,16 +131,12 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	m := c.NewMonitor(ctx, roachNodes)
 	m.Go(func(ctx context.Context) error {
 		t.Status("preparing workload")
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
-		if err != nil {
-			t.Fatal(err)
-		}
-		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf(`./cockroach sql --insecure --url=%s -e "CREATE DATABASE sysbench"`, pgurl))
+		c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach sql --url={pgurl:1} -e "CREATE DATABASE sysbench"`)
 		c.Run(ctx, option.WithNodes(loadNode), opts.cmd(false /* haproxy */)+" prepare")
 
 		t.Status("running workload")
 		cmd := opts.cmd(true /* haproxy */) + " run"
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode, cmd)
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(loadNode), cmd)
 
 		// Sysbench occasionally segfaults. When that happens, don't fail the
 		// test.

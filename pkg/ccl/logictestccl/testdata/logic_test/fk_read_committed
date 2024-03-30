@@ -1,0 +1,100 @@
+statement ok
+CREATE TABLE jars (j INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE cookies (c INT PRIMARY KEY, j INT REFERENCES jars (j), FAMILY (c, j))
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+INSERT INTO jars VALUES (1), (2)
+
+statement ok
+INSERT INTO cookies VALUES (1, 1)
+
+statement ok
+UPDATE cookies SET j = 2 WHERE c = 1
+
+query error violates foreign key constraint
+UPDATE jars SET j = j + 4
+
+query error violates foreign key constraint
+DELETE FROM jars WHERE j = 2
+
+statement ok
+DELETE FROM cookies WHERE c = 1
+
+statement ok
+DELETE FROM jars WHERE j = 2
+
+# Test that we do not use parallel FK checks under RC (see #111888).
+subtest no-parallel-fk-checks
+
+statement ok
+CREATE TABLE a (a PRIMARY KEY) AS SELECT 1
+
+statement ok
+CREATE TABLE b (b PRIMARY KEY) AS SELECT 1
+
+statement ok
+CREATE TABLE c (c PRIMARY KEY) AS SELECT 1
+
+statement ok
+CREATE TABLE d (d PRIMARY KEY) AS SELECT 1
+
+statement ok
+CREATE TABLE e (e PRIMARY KEY) AS SELECT 1
+
+statement ok
+CREATE TABLE f (
+  a INT REFERENCES a (a) ON UPDATE CASCADE,
+  b INT REFERENCES b (b),
+  c INT REFERENCES c (c),
+  d INT REFERENCES d (d),
+  e INT REFERENCES e (e),
+  f INT PRIMARY KEY
+)
+
+statement ok
+SET enable_insert_fast_path = off
+
+statement ok
+INSERT INTO f VALUES (1, 1, 1, 1, 1, 1)
+
+statement ok
+RESET enable_insert_fast_path
+
+# Test that we do not use parallel FK checks under RC (see #111888).
+subtest no-parallel-fk-checks-from-cascade
+
+statement ok
+CREATE TABLE x (
+  x INT,
+  FOREIGN KEY (x) REFERENCES a (a) ON UPDATE CASCADE,
+  FOREIGN KEY (x) REFERENCES b (b),
+  FOREIGN KEY (x) REFERENCES c (c),
+  FOREIGN KEY (x) REFERENCES d (d),
+  FOREIGN KEY (x) REFERENCES e (e)
+)
+
+statement ok
+INSERT INTO x VALUES (1)
+
+statement error pq: update on table "x" violates foreign key constraint
+UPDATE a SET a = 2 WHERE a = 1
+
+statement ok
+INSERT INTO b VALUES (2)
+
+statement ok
+INSERT INTO c VALUES (2)
+
+statement ok
+INSERT INTO d VALUES (2)
+
+statement ok
+INSERT INTO e VALUES (2)
+
+statement ok
+UPDATE a SET a = 2 WHERE a = 1

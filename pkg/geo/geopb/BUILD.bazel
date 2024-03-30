@@ -38,9 +38,5 @@ go_test(
     name = "geopb_test",
     srcs = ["types_test.go"],
     embed = [":geopb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = ["@com_github_stretchr_testify//require"],
 )

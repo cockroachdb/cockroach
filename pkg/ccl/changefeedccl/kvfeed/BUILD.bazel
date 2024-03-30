@@ -20,6 +20,7 @@ go_library(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/covering",
@@ -46,10 +47,6 @@ go_test(
         "scanner_test.go",
     ],
     embed = [":kvfeed"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
@@ -84,7 +81,10 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
+        "//pkg/util/span",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//slices",
     ],
 )

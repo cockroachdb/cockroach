@@ -1,15 +1,10 @@
 # Test invalid lock acquisition inputs.
 
 run error
-check_for_acquire_lock notxn k=k1 str=shared
-----
-error: (*withstack.withStack:) txn must be non-nil to acquire lock
-
-run error
 acquire_lock notxn k=k1 str=shared
 ----
 >> at end:
-error: (*withstack.withStack:) txn must be non-nil to acquire lock
+error: (*withstack.withStack:) txn must be non-nil to acquire a replicated lock
 
 run ok
 txn_begin t=A ts=10,0

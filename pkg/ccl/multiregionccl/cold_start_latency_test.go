@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -47,7 +48,6 @@ func TestColdStartLatency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderDuress(t, "too slow")
-
 	// We'll need to make some per-node args to assign the different
 	// KV nodes to different regions and AZs. We'll want to do it to
 	// look somewhat like the real cluster topologies we have in mind.
@@ -115,11 +115,13 @@ func TestColdStartLatency(t *testing.T) {
 		args.Knobs.Server = serverKnobs
 		perServerArgs[i] = args
 	}
+	cs := cluster.MakeTestingClusterSettings()
 	tc := testcluster.NewTestCluster(t, numNodes, base.TestClusterArgs{
 		ParallelStart:     true,
 		ServerArgsPerNode: perServerArgs,
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TODOTestTenantDisabled,
+			Settings:          cs,
 		},
 	})
 	go func() {
@@ -150,6 +152,10 @@ func TestColdStartLatency(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`)
 	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
+	// Until a migration is added, we cannot guarantee that the descriptor will have
+	// the appropriate zone config for MR testing with fake latency. So, avoid using
+	// session based leases here.
+	tdb.Exec(t, "SET CLUSTER SETTING sql.catalog.experimental_use_session_based_leasing='off'")
 	// Lengthen the lead time for the global tables to prevent overload from
 	// resulting in delays in propagating closed timestamps and, ultimately
 	// forcing requests from being redirected to the leaseholder. Without this
@@ -251,6 +257,7 @@ COMMIT;`}
 	const password = "asdf"
 	{
 		tenant, tenantDB := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+			Settings: cs,
 			TenantID: serverutils.TestTenantID(),
 			TestingKnobs: base.TestingKnobs{
 				Server: tenantServerKnobs(0),
@@ -316,6 +323,7 @@ SELECT checkpoint > extract(epoch from after)
 		start := timeutil.Now()
 		sn := tenantServerKnobs(i)
 		tenant, err := tc.Server(i).TenantController().StartTenant(ctx, base.TestTenantArgs{
+			Settings:            cs,
 			TenantID:            serverutils.TestTenantID(),
 			DisableCreateTenant: true,
 			SkipTenantCheck:     true,

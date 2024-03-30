@@ -73,7 +73,7 @@ const (
 
 	// FmtHideConstants instructs the pretty-printer to produce a
 	// representation that does not disclose query-specific data. It
-	// also shorten long lists in tuples, VALUES and array expressions.
+	// also shortens long lists in tuples, VALUES and array expressions.
 	FmtHideConstants
 
 	// FmtAnonymize instructs the pretty-printer to remove any name.
@@ -105,10 +105,6 @@ const (
 	// :::interval) as necessary to disambiguate between possible type
 	// resolutions.
 	fmtDisambiguateDatumTypes
-
-	// fmtSymbolicVars indicates that IndexedVars must be pretty-printed
-	// using numeric notation (@123).
-	fmtSymbolicVars
 
 	// fmtUnicodeStrings prints strings and JSON using the Go string
 	// formatter. This is used e.g. for emitting values to CSV files.
@@ -172,7 +168,30 @@ const (
 	// FmtTagDollarQuotes instructs tags to be kept intact in tagged dollar
 	// quotes. It also applies tags when formatting UDFs.
 	FmtTagDollarQuotes
+
+	// FmtShortenConstants shortens long lists in tuples, VALUES and array
+	// expressions. FmtHideConstants takes precedence over it.
+	FmtShortenConstants
+
+	// FmtCollapseLists instructs the pretty-printer to shorten lists
+	// containing only literals, placeholders and/or similar subexpressions
+	// of literals/placeholders to their first element (scrubbed) followed
+	// by "__more__". E.g.
+	//  SELECT * FROM foo where v IN (1, 2+2, $1, $2*3) => SELECT * FROM foo where v IN (_, __more__)
+	FmtCollapseLists
+
+	// FmtConstantsAsUnderscores instructs the pretty-printer to format
+	// constants (literals, placeholders) as underscores.
+	// e.g.
+	//   SELECT 1, 'a', $1 => SELECT _, _, _
+	FmtConstantsAsUnderscores
 )
+
+const genericArityIndicator = "__more__"
+
+// StmtFingerprintPlaceholder is the char that replaces all literals and
+// placeholders in a query when computing its fingerprint.
+const StmtFingerprintPlaceholder = '_'
 
 // PasswordSubstitution is the string that replaces
 // passwords unless FmtShowPasswords is specified.
@@ -216,8 +235,7 @@ const (
 	//  - user defined types and datums of user defined types are formatted
 	//    using static representations to avoid name resolution and invalidation
 	//    due to changes in the underlying type.
-	FmtCheckEquivalence = fmtSymbolicVars |
-		fmtDisambiguateDatumTypes |
+	FmtCheckEquivalence = fmtDisambiguateDatumTypes |
 		FmtParsableNumerics |
 		fmtStaticallyFormatUserDefinedTypes
 
@@ -350,6 +368,7 @@ func NewFmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
 	if ctx.ann == nil && f&flagsRequiringAnnotations != 0 {
 		panic(errors.AssertionFailedf("no Annotations provided"))
 	}
+
 	return ctx
 }
 
@@ -441,7 +460,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			if f.HasFlags(FmtMarkRedactionNode) {
 				ctx.formatNodeMaybeMarkRedaction(n)
 			} else {
-				ctx.formatNodeOrHideConstants(n)
+				ctx.formatNodeOrAdjustConstants(n)
 			}
 
 			ctx.WriteString(")[")
@@ -473,7 +492,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 	if f.HasFlags(FmtMarkRedactionNode) {
 		ctx.formatNodeMaybeMarkRedaction(n)
 	} else {
-		ctx.formatNodeOrHideConstants(n)
+		ctx.formatNodeOrAdjustConstants(n)
 	}
 
 	if f.HasFlags(FmtAlwaysGroupExprs) {

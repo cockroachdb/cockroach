@@ -208,25 +208,17 @@ var _ invertedexpr.DatumsToInvertedExpr = &jsonOrArrayDatumsToInvertedExpr{}
 var _ eval.IndexedVarContainer = &jsonOrArrayDatumsToInvertedExpr{}
 
 // IndexedVarEval is part of the eval.IndexedVarContainer interface.
-func (g *jsonOrArrayDatumsToInvertedExpr) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
+func (g *jsonOrArrayDatumsToInvertedExpr) IndexedVarEval(idx int) (tree.Datum, error) {
 	err := g.row[idx].EnsureDecoded(g.colTypes[idx], &g.alloc)
 	if err != nil {
 		return nil, err
 	}
-	return g.row[idx].Datum.Eval(ctx, e)
+	return g.row[idx].Datum, nil
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (g *jsonOrArrayDatumsToInvertedExpr) IndexedVarResolvedType(idx int) *types.T {
 	return g.colTypes[idx]
-}
-
-// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
-func (g *jsonOrArrayDatumsToInvertedExpr) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("$%d", idx))
-	return &n
 }
 
 // NewJSONOrArrayDatumsToInvertedExpr returns a new

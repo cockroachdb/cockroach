@@ -112,7 +112,11 @@ func (f *RangeFeed) getSpansToScan(ctx context.Context) (func() []roachpb.Span, 
 				return err
 			}
 		}
-		_, err := frontier.Forward(sp, f.initialTimestamp)
+		advanced, err := frontier.Forward(sp, f.initialTimestamp)
+		if f.frontierVisitor != nil {
+			f.frontierVisitor(ctx, advanced, frontier)
+		}
+
 		return err
 	}
 

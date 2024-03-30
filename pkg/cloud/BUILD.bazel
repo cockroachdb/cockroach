@@ -43,10 +43,6 @@ go_test(
         "uris_test.go",
     ],
     embed = [":cloud"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/cloud/cloudpb",
         "//pkg/util/ioctx",

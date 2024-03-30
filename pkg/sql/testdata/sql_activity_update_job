@@ -1,0 +1,151 @@
+# On this test we will first start by adding fingerprint A and B to time X
+# Then we will add more executions of A into time X and also time X+1, and a new fingerprint C to time X+1
+# The goal is to check the top activity table will get properly updated for both X and X+1 for all different
+# fingerprint cases.
+# For this test we use:
+# A= SELECT 1
+# B: SELECT 1 WHERE 1=1
+# C: SELECT 1 WHERE 1=1 and 2=2
+# X: 2024-01-01 1:00 (and consequently X+1 will be 2024-01-01 2:00)
+
+# Add Stats for X:00
+update-time time=(2024-01-01 1:00:00)
+----
+
+# Set an application to make easier for look for specific cases during the check.
+update-app ignore=false
+----
+
+run-sql
+SELECT 1
+----
+1
+
+run-sql
+SELECT 1 WHERE 1=1
+----
+1
+
+flush-stats
+----
+
+update-top-activity
+----
+
+# Change the application so all the queries used for checking values do not influence the results.
+update-app ignore=true
+----
+
+# Check the values got properly added to the system tables.
+run-sql useApp=true
+SELECT aggregated_ts, metadata -> 'query' as query, statistics -> 'statistics' -> 'cnt' as count FROM
+system.statement_statistics WHERE app_name = $1 ORDER BY aggregated_ts, metadata -> 'query'
+----
+2024-01-01 01:00:00 +0000 UTC,"SELECT _",1
+2024-01-01 01:00:00 +0000 UTC,"SELECT _ WHERE _ = _",1
+
+run-sql useApp=true
+SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
+system.transaction_statistics WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
+----
+2024-01-01 01:00:00 +0000 UTC,["1d2a16425a50b884"],1
+2024-01-01 01:00:00 +0000 UTC,["78da04360628cf28"],1
+
+# Check the values got properly added to the top activity tables.
+run-sql useApp=true
+SELECT aggregated_ts, metadata -> 'query' as query, statistics -> 'statistics' -> 'cnt' as count FROM
+system.statement_activity WHERE app_name = $1 ORDER BY aggregated_ts, metadata -> 'query'
+----
+2024-01-01 01:00:00 +0000 UTC,"SELECT _",1
+2024-01-01 01:00:00 +0000 UTC,"SELECT _ WHERE _ = _",1
+
+run-sql useApp=true
+SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
+system.transaction_activity WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
+----
+2024-01-01 01:00:00 +0000 UTC,["1d2a16425a50b884"],1
+2024-01-01 01:00:00 +0000 UTC,["78da04360628cf28"],1
+
+# Change the app name back, so new stats can be added.
+update-app ignore=false
+----
+
+# Add more Stats for X:00
+run-sql
+SELECT 1
+----
+1
+
+run-sql
+SELECT 1
+----
+1
+
+flush-stats
+----
+
+# Add Stats for X+1:00
+update-time time=(2024-01-01 2:00:00)
+----
+
+run-sql
+SELECT 1
+----
+1
+
+run-sql
+SELECT 1 WHERE 1=1 AND 2=2
+----
+1
+
+flush-stats
+----
+
+update-top-activity
+----
+
+# Change the application so all the queries used for checking values do not influence the results.
+update-app ignore=true
+----
+
+# Check the values got properly added to the system tables
+run-sql useApp=true
+SELECT aggregated_ts, metadata -> 'query' as query, statistics -> 'statistics' -> 'cnt' as count FROM
+system.statement_statistics WHERE app_name = $1 ORDER BY aggregated_ts, metadata -> 'query'
+----
+2024-01-01 01:00:00 +0000 UTC,"SELECT _",3
+2024-01-01 01:00:00 +0000 UTC,"SELECT _ WHERE _ = _",1
+2024-01-01 01:00:00 +0000 UTC,"SET application_name = _",1
+2024-01-01 02:00:00 +0000 UTC,"SELECT _",1
+2024-01-01 02:00:00 +0000 UTC,"SELECT _ WHERE (_ = _) AND (_ = _)",1
+
+run-sql useApp=true
+SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
+system.transaction_statistics WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
+----
+2024-01-01 01:00:00 +0000 UTC,["e4e9b6317139aad1"],1
+2024-01-01 01:00:00 +0000 UTC,["1d2a16425a50b884"],3
+2024-01-01 01:00:00 +0000 UTC,["78da04360628cf28"],1
+2024-01-01 02:00:00 +0000 UTC,["2e9ed501bad29d2a"],1
+2024-01-01 02:00:00 +0000 UTC,["1d2a16425a50b884"],1
+
+# Check the values got properly added to the top activity tables
+run-sql useApp=true
+SELECT aggregated_ts, metadata -> 'query' as query, statistics -> 'statistics' -> 'cnt' as count FROM
+system.statement_activity WHERE app_name = $1 ORDER BY aggregated_ts, metadata -> 'query'
+----
+2024-01-01 01:00:00 +0000 UTC,"SELECT _",3
+2024-01-01 01:00:00 +0000 UTC,"SELECT _ WHERE _ = _",1
+2024-01-01 01:00:00 +0000 UTC,"SET application_name = _",1
+2024-01-01 02:00:00 +0000 UTC,"SELECT _",1
+2024-01-01 02:00:00 +0000 UTC,"SELECT _ WHERE (_ = _) AND (_ = _)",1
+
+run-sql useApp=true
+SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
+system.transaction_activity WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
+----
+2024-01-01 01:00:00 +0000 UTC,["e4e9b6317139aad1"],1
+2024-01-01 01:00:00 +0000 UTC,["1d2a16425a50b884"],3
+2024-01-01 01:00:00 +0000 UTC,["78da04360628cf28"],1
+2024-01-01 02:00:00 +0000 UTC,["2e9ed501bad29d2a"],1
+2024-01-01 02:00:00 +0000 UTC,["1d2a16425a50b884"],1

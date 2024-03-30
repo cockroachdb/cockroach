@@ -56,9 +56,20 @@ func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 
 	log.Infof(ctx, "New proxy with opts: %+v", proxyContext)
 
-	proxyLn, err := net.Listen("tcp", proxyContext.ListenAddr)
-	if err != nil {
-		return err
+	var proxyLn net.Listener
+	if proxyContext.ListenAddr != "" {
+		proxyLn, err = net.Listen("tcp", proxyContext.ListenAddr)
+		if err != nil {
+			return err
+		}
+	}
+
+	var proxyProtocolLn net.Listener
+	if proxyContext.ProxyProtocolListenAddr != "" {
+		proxyProtocolLn, err = net.Listen("tcp", proxyContext.ProxyProtocolListenAddr)
+		if err != nil {
+			return err
+		}
 	}
 
 	metricsLn, err := net.Listen("tcp", proxyContext.MetricsAddress)
@@ -84,15 +95,14 @@ func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 	}
 
 	if err := stopper.RunAsyncTask(ctx, "serve-proxy", func(ctx context.Context) {
-		log.Infof(ctx, "proxy server listening at %s", proxyLn.Addr())
-		if err := server.Serve(ctx, proxyLn); err != nil {
+		if err := server.ServeSQL(ctx, proxyLn, proxyProtocolLn); err != nil {
 			errChan <- err
 		}
 	}); err != nil {
 		return err
 	}
 
-	return waitForSignals(ctx, server, stopper, proxyLn, errChan)
+	return waitForSignals(ctx, server, stopper, proxyLn, proxyProtocolLn, errChan)
 }
 
 func initLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.Stopper, err error) {
@@ -110,6 +120,7 @@ func waitForSignals(
 	server *sqlproxyccl.Server,
 	stopper *stop.Stopper,
 	proxyLn net.Listener,
+	proxyProtocolLn net.Listener,
 	errChan chan error,
 ) (returnErr error) {
 	// Need to alias the signals if this has to run on non-unix OSes too.
@@ -139,7 +150,12 @@ func waitForSignals(
 			//    waiting for "shutdownConnectionTimeout" to elapse after which
 			//    open TCP connections will be forcefully closed so the server can stop
 			log.Infof(ctx, "stopping tcp listener")
-			_ = proxyLn.Close()
+			if proxyLn != nil {
+				_ = proxyLn.Close()
+			}
+			if proxyProtocolLn != nil {
+				_ = proxyProtocolLn.Close()
+			}
 			select {
 			case <-server.AwaitNoConnections(ctx):
 			case <-time.After(shutdownConnectionTimeout):

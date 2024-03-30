@@ -71,39 +71,39 @@ import (
 // processed (in a queue). At this time the PlanFn method is called and the
 // following happens:
 //
-//  1. We set up a new empty memo and add metadata for the columns of the
-//     buffer node (binding &1).
+//	1: We set up a new empty memo and add metadata for the columns of the
+//	   buffer node (binding &1).
 //
-//  2. We invoke the memo.CascadeBuilder to optbuild the cascading query. At this
-//     point, the new memo will contain the following expression:
+//	2: We invoke the memo.CascadeBuilder to optbuild the cascading query. At
+//	   this point, the new memo will contain the following expression:
 //
-//     delete child
-//     ├── columns: <none>
-//     ├── fetch columns: c:4 child.p:5
-//     └── semi-join (hash)
-//     ├── columns: c:4!null child.p:5!null
-//     ├── scan child
-//     │    └── columns: c:4!null child.p:5!null
-//     ├── with-scan &1
-//     │    ├── columns: p:6!null
-//     │    └── mapping:
-//     │         └──  parent.p:1 => p:6
-//     └── filters
-//     └── child.p:5 = p:6
+//	delete child
+//	 ├── columns: <none>
+//	 ├── fetch columns: c:4 child.p:5
+//	 └── semi-join (hash)
+//		  ├── columns: c:4!null child.p:5!null
+//		  ├── scan child
+//		  │    └── columns: c:4!null child.p:5!null
+//		  ├── with-scan &1
+//		  │    ├── columns: p:6!null
+//		  │    └── mapping:
+//		  │         └──  parent.p:1 => p:6
+//		  └── filters
+//		       └── child.p:5 = p:6
 //
-//     Notes:
-//     - normally, a WithScan can only refer to an ancestor mutation or With
-//     operator. In this case we are creating a reference "out of the void".
-//     This works just fine; we can consider adding a special dummy root
-//     operator but so far it hasn't been necessary;
-//     - the binding &1 column ID has changed: it used to be 2, it is now 1.
-//     This is because we are starting with a fresh memo. We need to take into
-//     account this remapping when referring to the foreign key columns.
+//	Notes:
+//	- normally, a WithScan can only refer to an ancestor mutation or With
+//	  operator. In this case we are creating a reference "out of the void".
+//	  This works just fine; we can consider adding a special dummy root
+//	  operator but so far it hasn't been necessary;
+//	- the binding &1 column ID has changed: it used to be 2, it is now 1.
+//	  This is because we are starting with a fresh memo. We need to take into
+//	  account this remapping when referring to the foreign key columns.
 //
-//  3. We optimize the newly built expression.
+//	3: We optimize the newly built expression.
 //
-//  4. We execbuild the optimizer expression. We have to be careful to set up
-//     the "With" reference before starting.
+//	4: We execbuild the optimizer expression. We have to be careful to set up
+//	   the "With" reference before starting.
 //
 // After PlanFn is called, the resulting plan is executed. Note that this plan
 // could itself have more exec.Cascades; these are queued and handled in the
@@ -113,7 +113,7 @@ type cascadeBuilder struct {
 	mutationBuffer exec.Node
 	// mutationBufferCols maps With column IDs from the original memo to buffer
 	// node column ordinals; see builtWithExpr.outputCols.
-	mutationBufferCols opt.ColMap
+	mutationBufferCols colOrdMap
 
 	// colMeta remembers the metadata of the With columns from the original memo.
 	colMeta []opt.ColumnMeta
@@ -142,10 +142,9 @@ func makeCascadeBuilder(b *Builder, mutationWithID opt.WithID) (*cascadeBuilder,
 	// Remember the column metadata, as we will need to recreate it in the new
 	// memo.
 	md := b.mem.Metadata()
-	cb.colMeta = make([]opt.ColumnMeta, 0, cb.mutationBufferCols.Len())
-	cb.mutationBufferCols.ForEach(func(key, val int) {
-		id := opt.ColumnID(key)
-		cb.colMeta = append(cb.colMeta, *md.ColumnMeta(id))
+	cb.colMeta = make([]opt.ColumnMeta, 0, cb.mutationBufferCols.MaxOrd())
+	cb.mutationBufferCols.ForEach(func(col opt.ColumnID, ord int) {
+		cb.colMeta = append(cb.colMeta, *md.ColumnMeta(col))
 	})
 
 	return cb, nil
@@ -198,7 +197,7 @@ func (cb *cascadeBuilder) planCascade(
 	var relExpr memo.RelExpr
 	// bufferColMap is the mapping between the column IDs in the new memo and
 	// the column ordinal in the buffer node.
-	var bufferColMap opt.ColMap
+	var bufferColMap colOrdMap
 	if bufferRef == nil {
 		// No input buffering.
 		var err error
@@ -219,6 +218,10 @@ func (cb *cascadeBuilder) planCascade(
 	} else {
 		// Set up metadata for the buffer columns.
 
+		// Allocate a map with enough capacity to store the new columns being
+		// added below.
+		bufferColMap = newColOrdMap(md.MaxColumn() + opt.ColumnID(len(cb.colMeta)))
+
 		// withColRemap is the mapping between the With column IDs in the original
 		// memo and the corresponding column IDs in the new memo.
 		var withColRemap opt.ColMap
@@ -226,8 +229,8 @@ func (cb *cascadeBuilder) planCascade(
 		for i := range cb.colMeta {
 			id := md.AddColumn(cb.colMeta[i].Alias, cb.colMeta[i].Type)
 			withCols.Add(id)
-			ordinal, _ := cb.mutationBufferCols.Get(int(cb.colMeta[i].MetaID))
-			bufferColMap.Set(int(id), ordinal)
+			ordinal, _ := cb.mutationBufferCols.Get(cb.colMeta[i].MetaID)
+			bufferColMap.Set(id, ordinal)
 			withColRemap.Set(int(cb.colMeta[i].MetaID), int(id))
 		}
 

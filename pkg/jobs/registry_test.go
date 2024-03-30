@@ -128,7 +128,6 @@ func TestRegistryGC(t *testing.T) {
 				// This test wants to look at job records.
 				DontUseJobs:                       true,
 				SkipJobMetricsPollingJobBootstrap: true,
-				SkipAutoConfigRunnerJobBootstrap:  true,
 				SkipMVCCStatisticsJobBootstrap:    true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
@@ -205,7 +204,7 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 
 		var id jobspb.JobID
 		db.QueryRow(t,
-			`INSERT INTO system.jobs (status, created) VALUES ($1, $2) RETURNING id`, status, created).Scan(&id)
+			`INSERT INTO system.jobs (status, created, job_type) VALUES ($1, $2, 'SCHEMA CHANGE') RETURNING id`, status, created).Scan(&id)
 		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, id, GetLegacyPayloadKey(), payload)
 		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, id, GetLegacyProgressKey(), progress)
 		return strconv.Itoa(int(id))
@@ -239,9 +238,9 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 			newCanceledJob := writeJob("new_canceled", earlier, earlier.Add(time.Minute),
 				StatusCanceled, mutOptions)
 
-			sqlActivityJob := fmt.Sprintf("%d", SqlActivityUpdaterJobID)
-			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-				{sqlActivityJob}, {oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldRevertFailedJob}, {oldCanceledJob},
+			selectJobsQuery := `SELECT id FROM system.jobs WHERE job_type = 'SCHEMA CHANGE' ORDER BY id`
+			db.CheckQueryResults(t, selectJobsQuery, [][]string{
+				{oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldRevertFailedJob}, {oldCanceledJob},
 				{newRunningJob}, {newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
 
 			testutils.SucceedsSoon(t, func() error {
@@ -251,19 +250,19 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 				return nil
 			})
 
-			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-				{sqlActivityJob}, {oldRunningJob}, {oldRevertFailedJob}, {newRunningJob},
+			db.CheckQueryResults(t, selectJobsQuery, [][]string{
+				{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob},
 				{newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
 
 			if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
 				t.Fatal(err)
 			}
-			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-				{sqlActivityJob}, {oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newRevertFailedJob}})
+			db.CheckQueryResults(t, selectJobsQuery, [][]string{
+				{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newRevertFailedJob}})
 
 			// Delete the revert failed, and running jobs for the next run of the
 			// test.
-			_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id = $1 OR id = $2 OR id = $3 OR id = $4`,
+			_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id IN ($1, $2, $3, $4)`,
 				oldRevertFailedJob, newRevertFailedJob, oldRunningJob, newRunningJob)
 			require.NoError(t, err)
 		}
@@ -287,7 +286,6 @@ func TestRegistryGCPagination(t *testing.T) {
 				// This test wants to count job records.
 				DontUseJobs:                       true,
 				SkipJobMetricsPollingJobBootstrap: true,
-				SkipAutoConfigRunnerJobBootstrap:  true,
 				SkipUpdateSQLActivityJobBootstrap: true,
 				SkipMVCCStatisticsJobBootstrap:    true,
 			},
@@ -317,6 +315,66 @@ func TestRegistryGCPagination(t *testing.T) {
 	var count int
 	db.QueryRow(t, `SELECT count(1) FROM system.jobs WHERE status = $1`, StatusCanceled).Scan(&count)
 	require.Zero(t, count)
+}
+
+func TestRegistryAbandedJobInfoRowsCleanupQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	defer srv.Stopper().Stop(ctx)
+
+	var (
+		now                  = timeutil.Now()
+		insertAge            = now.Add(-12 * time.Hour)
+		cleanupStartTsTooOld = now.Add(-24 * time.Hour)
+		cleanupStartTs       = now.Add(-6 * time.Hour)
+	)
+
+	assertAbandonedJobInfoCount := func(expected int) {
+		t.Helper()
+		var count int
+		db.QueryRow(t, "SELECT count(1) FROM system.job_info WHERE job_id NOT IN (SELECT id FROM system.jobs)").Scan(&count)
+		require.Equal(t, expected, count)
+	}
+
+	assertDeletedCount := func(r gosql.Result, expected int64) {
+		t.Helper()
+		actual, err := r.RowsAffected()
+		require.NoError(t, err)
+		require.Equal(t, expected, actual)
+	}
+
+	// Insert 10 bad rows.
+	db.Exec(t, "INSERT INTO system.job_info (job_id, info_key, value, written) (SELECT id, 'hello', 'world', $1 FROM  generate_series(2000, 2009) as id)",
+		insertAge)
+	assertAbandonedJobInfoCount(10)
+
+	// Delete with a time before the inserts finds nothing.
+	assertDeletedCount(db.Exec(t, AbandonedJobInfoRowsCleanupQuery, cleanupStartTsTooOld, 5),
+		0)
+
+	// Delete with limit 5 only deletes 5.
+	assertDeletedCount(db.Exec(t, AbandonedJobInfoRowsCleanupQuery, cleanupStartTs, 5),
+		5)
+
+	// We should still have 5 left.
+	assertAbandonedJobInfoCount(5)
+
+	// Delete with limit 20 deletes 5 more
+	assertDeletedCount(db.Exec(t, AbandonedJobInfoRowsCleanupQuery, cleanupStartTs, 20),
+		5)
+
+	// We should still have none left.
+	assertAbandonedJobInfoCount(0)
+
+	// Delete should find nothing
+	assertDeletedCount(db.Exec(t, AbandonedJobInfoRowsCleanupQuery, cleanupStartTs, 5),
+		0)
+	assertDeletedCount(db.Exec(t, AbandonedJobInfoRowsCleanupQuery, timeutil.Now(), 5),
+		0)
 }
 
 // TestCreateJobWritesToJobInfo tests that the `Create` methods exposed by the
@@ -469,7 +527,7 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 				ctx,
 				"check if job exists",
 				txn.KV(),
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				sessiondata.NodeUserSessionDataOverride,
 				"SELECT id FROM system.jobs WHERE id = $1",
 				tempRecord.JobID,
 			)
@@ -500,6 +558,7 @@ func TestBatchJobsCreation(t *testing.T) {
 				if test.batchSize > 10 {
 					skip.UnderStress(t, "skipping stress test for batch size ", test.batchSize)
 					skip.UnderRace(t, "skipping test for batch size ", test.batchSize)
+					skip.UnderDeadlock(t, "skipping test for batch size ", test.batchSize)
 				}
 
 				args := base.TestServerArgs{
@@ -512,7 +571,6 @@ func TestBatchJobsCreation(t *testing.T) {
 						UpgradeManager: &upgradebase.TestingKnobs{
 							DontUseJobs:                       true,
 							SkipJobMetricsPollingJobBootstrap: true,
-							SkipAutoConfigRunnerJobBootstrap:  true,
 						},
 						KeyVisualizer: &keyvisualizer.TestingKnobs{
 							SkipJobBootstrap: true,
@@ -638,7 +696,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			if pauseJob {
 				return registry.PauseRequested(ctx, txn, jobID, "")
 			}
-			return registry.cancelRequested(ctx, txn, jobID)
+			return registry.CancelRequested(ctx, txn, jobID)
 		}))
 	}
 	// nextDelay returns the next delay based calculated from the given retryCnt
@@ -666,7 +724,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		jobMetrics               *JobTypeMetrics
 		adopted                  *metric.Counter
 		resumed                  *metric.Counter
-		afterJobStateMachineKnob func()
+		afterJobStateMachineKnob func(id jobspb.JobID)
 		// expectImmediateRetry is true if the test should expect immediate
 		// resumption on retry, such as after pausing and resuming job.
 		expectImmediateRetry bool
@@ -700,7 +758,6 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 				UpgradeManager: &upgradebase.TestingKnobs{
 					DontUseJobs:                       true,
 					SkipJobMetricsPollingJobBootstrap: true,
-					SkipAutoConfigRunnerJobBootstrap:  true,
 					SkipUpdateSQLActivityJobBootstrap: true,
 					SkipMVCCStatisticsJobBootstrap:    true,
 				},
@@ -842,7 +899,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("running", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(_ jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}
@@ -871,7 +928,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			bti.errCh <- nil
 			<-bti.transitionCh
 		}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}
@@ -897,7 +954,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("revert on fail", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}
@@ -936,7 +993,6 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		bti.clock.AdvanceTo(lastRun)
 		<-bti.resumeCh
 		pauseOrCancelJob(t, ctx, bti.idb, bti.registry, jobID, cancel)
-		bti.errCh <- nil
 		<-bti.failOrCancelCh
 		bti.errCh <- MarkAsRetryJobError(errors.New("injecting error in reverting state"))
 		expectedResumed := bti.resumed.Count()
@@ -956,7 +1012,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			bti.errCh <- nil
 			<-bti.transitionCh
 		}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}
@@ -1219,6 +1275,112 @@ func BenchmarkRunEmptyJob(b *testing.B) {
 			require.NoError(b, r.Run(ctx, []jobspb.JobID{jobID}))
 		}
 	})
+}
+
+func TestDeleteTerminalJobByID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer ResetConstructors()
+
+	errCh := make(chan error)
+	RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+		return jobstest.FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case err := <-errCh:
+					return err
+				}
+			},
+			FailOrCancel: func(ctx context.Context) error {
+				return nil
+			},
+		}
+	}, UsesTenantCostControl)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	var (
+		r   = s.ApplicationLayer().JobRegistry().(*Registry)
+		idb = s.ApplicationLayer().InternalDB().(isql.DB)
+	)
+
+	createStartableJob := func() *StartableJob {
+		jobID := r.MakeJobID()
+		var j *StartableJob
+		err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return r.CreateStartableJobWithTxn(ctx, &j, jobID, txn, Record{
+				JobID:       jobID,
+				Description: "testing",
+				Username:    username.RootUserName(),
+				Details:     jobspb.ImportDetails{},
+				Progress:    jobspb.ImportProgress{},
+			})
+		})
+		require.NoError(t, err)
+		return j
+	}
+
+	assertValidDeletion := func(id jobspb.JobID) {
+		var count int
+		require.NoError(t, sqlDB.QueryRow("SELECT count(*) FROM system.jobs WHERE id = $1", id).Scan(&count))
+		require.Equal(t, 0, count, "expected no job rows")
+		sqlDB.QueryRow("SELECT count(*) FROM system.job_info WHERE job_id = $1", id)
+		require.Equal(t, 0, count, "expected no job_info rows")
+	}
+
+	t.Run("running job is not deleted", func(t *testing.T) {
+		j := createStartableJob()
+		require.NoError(t, j.Start(ctx))
+		require.Error(t, r.DeleteTerminalJobByID(ctx, j.ID()))
+		errCh <- nil
+		require.NoError(t, j.AwaitCompletion(ctx))
+	})
+	t.Run("paused job is not deleted", func(t *testing.T) {
+		j := createStartableJob()
+		require.NoError(t, j.Start(ctx))
+		require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return r.PauseRequested(ctx, txn, j.ID(), "test paused")
+		}))
+		require.Error(t, j.AwaitCompletion(ctx))
+		_ = r.WaitForJobs(ctx, []jobspb.JobID{j.ID()})
+		require.Error(t, r.DeleteTerminalJobByID(ctx, j.ID()))
+	})
+	t.Run("successful job is deleted", func(t *testing.T) {
+		j := createStartableJob()
+		require.NoError(t, j.Start(ctx))
+		errCh <- nil
+		require.NoError(t, j.AwaitCompletion(ctx))
+		_ = r.WaitForJobs(ctx, []jobspb.JobID{j.ID()})
+		require.NoError(t, r.DeleteTerminalJobByID(ctx, j.ID()))
+		assertValidDeletion(j.ID())
+	})
+	t.Run("failed job is deleted", func(t *testing.T) {
+		j := createStartableJob()
+		require.NoError(t, j.Start(ctx))
+		errCh <- errors.New("test error")
+		require.Error(t, j.AwaitCompletion(ctx))
+		_ = r.WaitForJobs(ctx, []jobspb.JobID{j.ID()})
+		require.NoError(t, r.DeleteTerminalJobByID(ctx, j.ID()))
+		assertValidDeletion(j.ID())
+	})
+	t.Run("canceled job is deleted", func(t *testing.T) {
+		j := createStartableJob()
+		require.NoError(t, j.Start(ctx))
+		require.NoError(t, j.Cancel(ctx))
+		require.Error(t, j.AwaitCompletion(ctx))
+		_ = r.WaitForJobs(ctx, []jobspb.JobID{j.ID()})
+		require.NoError(t, r.DeleteTerminalJobByID(ctx, j.ID()))
+		assertValidDeletion(j.ID())
+	})
+
 }
 
 // TestRunWithoutLoop tests that Run calls will trigger the execution of a

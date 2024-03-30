@@ -50,9 +50,17 @@
 /pkg/sql/col*                @cockroachdb/sql-queries-prs
 /pkg/sql/create_stats*       @cockroachdb/sql-queries-prs
 /pkg/sql/distsql*.go         @cockroachdb/sql-queries-prs
-/pkg/sql/exec*               @cockroachdb/sql-queries-prs
-#!/pkg/sql/exec_log*.go        @cockroachdb/sql-queries-noreview
-#!/pkg/sql/exec_util*.go       @cockroachdb/sql-queries-noreview
+/pkg/sql/execinfra/          @cockroachdb/sql-queries-prs
+/pkg/sql/execinfrapb/        @cockroachdb/sql-queries-prs
+/pkg/sql/execstats/          @cockroachdb/sql-queries-prs
+/pkg/sql/execinfrapb/processors_bulk_io.proto     @cockroachdb/disaster-recovery
+/pkg/sql/execinfrapb/processors_changefeeds.proto @cockroachdb/cdc-prs
+/pkg/sql/execinfrapb/processors_ttl.proto         @cockroachdb/sql-foundations
+/pkg/sql/exec_factory_util.go          @cockroachdb/sql-queries-prs
+#!/pkg/sql/exec_log*.go                @cockroachdb/sql-queries-noreview
+#!/pkg/sql/exec_util*.go               @cockroachdb/sql-queries-noreview
+/pkg/sql/execute.go                    @cockroachdb/sql-queries-prs
+/pkg/sql/executor_statement_metrics.go @cockroachdb/obs-inf-prs
 /pkg/sql/flowinfra/          @cockroachdb/sql-queries-prs
 /pkg/sql/physicalplan/       @cockroachdb/sql-queries-prs
 /pkg/sql/row*                @cockroachdb/sql-queries-prs
@@ -63,11 +71,11 @@
 /pkg/sql/importer/           @cockroachdb/sql-queries-prs
 /pkg/ccl/importerccl/        @cockroachdb/sql-queries-prs
 
-/pkg/sql/appstatspb          @cockroachdb/cluster-observability
-/pkg/sql/execstats/          @cockroachdb/cluster-observability
-/pkg/sql/scheduledlogging/   @cockroachdb/cluster-observability
-/pkg/sql/sqlstats/           @cockroachdb/cluster-observability
-/pkg/ccl/testccl/sqlstatsccl/ @cockroachdb/cluster-observability
+/pkg/sql/appstatspb          @cockroachdb/obs-inf-prs
+/pkg/sql/execstats/          @cockroachdb/obs-inf-prs
+/pkg/sql/scheduledlogging/   @cockroachdb/obs-inf-prs
+/pkg/sql/sqlstats/           @cockroachdb/obs-inf-prs
+/pkg/ccl/testccl/sqlstatsccl/ @cockroachdb/obs-inf-prs
 
 /pkg/sql/sem/tree/           @cockroachdb/sql-syntax-prs
 /pkg/sql/parser/             @cockroachdb/sql-syntax-prs
@@ -136,7 +144,7 @@
 /pkg/cli/doctor*.go          @cockroachdb/sql-foundations     @cockroachdb/cli-prs
 /pkg/cli/flags*.go           @cockroachdb/cli-prs
 /pkg/cli/import*.go          @cockroachdb/sql-foundations   @cockroachdb/cli-prs
-/pkg/cli/inflight_trace_dump/ @cockroachdb/cluster-observability @cockroachdb/cli-prs
+/pkg/cli/inflight_trace_dump/ @cockroachdb/obs-inf-prs @cockroachdb/cli-prs
 /pkg/cli/init.go             @cockroachdb/kv-prs         @cockroachdb/cli-prs
 /pkg/cli/log*.go             @cockroachdb/obs-inf-prs    @cockroachdb/cli-prs
 /pkg/cli/mt_cert*            @cockroachdb/prodsec
@@ -147,7 +155,7 @@
 /pkg/cli/rpc*.go             @cockroachdb/kv-prs         @cockroachdb/cli-prs
 /pkg/cli/sql*.go             @cockroachdb/sql-foundations   @cockroachdb/cli-prs
 /pkg/cli/start*.go           @cockroachdb/server-prs     @cockroachdb/cli-prs
-/pkg/cli/statement*.go       @cockroachdb/cluster-observability @cockroachdb/cli-prs
+/pkg/cli/statement*.go       @cockroachdb/obs-inf-prs @cockroachdb/cli-prs
 /pkg/cli/syncbench/          @cockroachdb/storage @cockroachdb/kv-prs
 /pkg/cli/swappable_fs*       @cockroachdb/storage
 /pkg/cli/testutils.go        @cockroachdb/test-eng
@@ -166,10 +174,9 @@
 /pkg/server/api_v2*.go                   @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/api_v2_auth*.go              @cockroachdb/obs-inf-prs @cockroachdb/server-prs @cockroachdb/prodsec
 /pkg/server/authentication*.go           @cockroachdb/prodsec     @cockroachdb/server-prs
-/pkg/server/autoconfig/                  @cockroachdb/jobs-prs    @cockroachdb/multi-tenant
 /pkg/server/clock_monotonicity.go        @cockroachdb/kv-prs
-/pkg/server/combined_statement_stats*.go @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
-/pkg/server/critical_nodes*.go           @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
+/pkg/server/combined_statement_stats*.go @cockroachdb/obs-inf-prs
+/pkg/server/critical_nodes*.go           @cockroachdb/obs-inf-prs
 /pkg/server/debug/                       @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/decommission*.go             @cockroachdb/kv-prs      @cockroachdb/server-prs
 /pkg/server/drain*.go                    @cockroachdb/kv-prs      @cockroachdb/server-prs
@@ -181,53 +188,51 @@
 /pkg/server/goroutinedumper/             @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/heapprofiler/                @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/import_ts*.go                @cockroachdb/obs-inf-prs @cockroachdb/server-prs  @cockroachdb/kv-prs
-/pkg/server/index_usage*.go              @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
+/pkg/server/index_usage*.go              @cockroachdb/obs-inf-prs
 /pkg/server/init*.go                     @cockroachdb/kv-prs      @cockroachdb/server-prs
 /pkg/server/intent_*.go                  @cockroachdb/kv-prs      @cockroachdb/server-prs
-/pkg/server/key_vis*                     @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
+/pkg/server/key_vis*                     @cockroachdb/obs-inf-prs
 /pkg/server/load_endpoint*               @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/loss_of_quorum*.go           @cockroachdb/kv-prs
 /pkg/server/migration*                   @cockroachdb/sql-foundations
 /pkg/server/multi_store*                 @cockroachdb/kv-prs      @cockroachdb/storage
 /pkg/server/node*                        @cockroachdb/kv-prs      @cockroachdb/server-prs
 /pkg/server/node_http*.go                @cockroachdb/obs-inf-prs @cockroachdb/server-prs
-/pkg/server/node_tenant*go               @cockroachdb/obs-inf-prs @cockroachdb/multi-tenant @cockroachdb/server-prs
+/pkg/server/node_tenant*go               @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/pgurl/                       @cockroachdb/sql-foundations @cockroachdb/cli-prs
 /pkg/server/pagination*                  @cockroachdb/obs-inf-prs @cockroachdb/server-prs
-/pkg/server/problem_ranges*.go           @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
+/pkg/server/problem_ranges*.go           @cockroachdb/obs-inf-prs
 /pkg/server/profiler/                    @cockroachdb/obs-inf-prs @cockroachdb/kv-prs
 /pkg/server/purge_auth_*                 @cockroachdb/obs-inf-prs @cockroachdb/server-prs
-/pkg/server/server_controller_*.go       @cockroachdb/multi-tenant @cockroachdb/server-prs
+/pkg/server/server_controller_*.go       @cockroachdb/server-prs
 /pkg/server/server_controller_http.go    @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/server_controller_sql.go     @cockroachdb/sql-foundations @cockroachdb/server-prs
 /pkg/server/server_http*.go              @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/server_import_ts*.go         @cockroachdb/obs-inf-prs @cockroachdb/kv-prs
 /pkg/server/server_obs*                  @cockroachdb/obs-inf-prs
-/pkg/server/server_systemlog*            @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
+/pkg/server/server_systemlog*            @cockroachdb/obs-inf-prs
 /pkg/server/serverpb/                    @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/serverpb/authentication*     @cockroachdb/obs-inf-prs @cockroachdb/prodsec @cockroachdb/server-prs
-/pkg/server/serverpb/index_reco*         @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
+/pkg/server/serverpb/index_reco*         @cockroachdb/obs-inf-prs
 /pkg/server/serverrules/                 @cockroachdb/obs-inf-prs @cockroachdb/server-prs
-/pkg/server/settings_cache*.go           @cockroachdb/multi-tenant @cockroachdb/server-prs
-/pkg/server/settingswatcher/             @cockroachdb/multi-tenant @cockroachdb/server-prs
-/pkg/server/span_stats*.go               @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
-/pkg/server/sql_stats*.go                @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
-/pkg/server/statement*.go                @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
+/pkg/server/settings_cache*.go           @cockroachdb/server-prs
+/pkg/server/settingswatcher/             @cockroachdb/server-prs
+/pkg/server/span_stats*.go               @cockroachdb/obs-inf-prs
+/pkg/server/sql_stats*.go                @cockroachdb/obs-inf-prs
+/pkg/server/statement*.go                @cockroachdb/obs-inf-prs
 /pkg/server/status*go                    @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/status*go                    @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/status/                      @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/sticky_vfs*                  @cockroachdb/storage
-/pkg/server/structlogging/               @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
-/pkg/server/systemconfigwatcher/         @cockroachdb/kv-prs      @cockroachdb/multi-tenant
+/pkg/server/structlogging/               @cockroachdb/obs-inf-prs
+/pkg/server/systemconfigwatcher/         @cockroachdb/kv-prs
 /pkg/server/telemetry/                   @cockroachdb/obs-inf-prs @cockroachdb/server-prs
-/pkg/server/tenant*.go                   @cockroachdb/obs-inf-prs @cockroachdb/multi-tenant @cockroachdb/server-prs
-/pkg/server/tenantsettingswatcher/       @cockroachdb/multi-tenant
+/pkg/server/tenant*.go                   @cockroachdb/obs-inf-prs @cockroachdb/server-prs
+/pkg/server/tenantsettingswatcher/       @cockroachdb/server-prs
 /pkg/server/testserver*.go               @cockroachdb/test-eng    @cockroachdb/server-prs
 /pkg/server/tracedumper/                 @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/user*.go                     @cockroachdb/obs-inf-prs @cockroachdb/server-prs @cockroachdb/prodsec
 /pkg/server/version_cluster*.go          @cockroachdb/dev-inf
-
-/pkg/configprofiles/                     @cockroachdb/multi-tenant @cockroachdb/server-prs
 
 
 /pkg/ccl/jobsccl/            @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
@@ -327,6 +332,10 @@
 /pkg/kv/kvserver/txnwait/               @cockroachdb/kv-prs
 /pkg/kv/kvserver/uncertainty/           @cockroachdb/kv-prs
 
+# KV/replication team owns integration with raft.
+#
+/pkg/raft/ @cockroachdb/repl-prs
+
 /pkg/ccl/spanconfigccl/                            @cockroachdb/kv-prs @cockroachdb/sql-foundations
 /pkg/ccl/spanconfigccl/spanconfigkvaccessorccl/    @cockroachdb/kv-prs
 /pkg/ccl/spanconfigccl/spanconfiglimiterccl/       @cockroachdb/sql-foundations
@@ -367,12 +376,12 @@
 #!/pkg/ccl/gssapiccl/        @cockroachdb/unowned
 /pkg/ccl/jwtauthccl/         @cockroachdb/cloud-identity
 #!/pkg/ccl/kvccl/              @cockroachdb/kv-noreview
-/pkg/ccl/kvccl/kvtenantccl/  @cockroachdb/multi-tenant
+/pkg/ccl/kvccl/kvtenantccl/  @cockroachdb/server-prs
 #!/pkg/ccl/upgradeccl/       @cockroachdb/release-eng
 #!/pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
 #!/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
 /pkg/ccl/multiregionccl/     @cockroachdb/sql-foundations
-/pkg/ccl/multitenantccl/     @cockroachdb/multi-tenant
+/pkg/ccl/multitenantccl/     @cockroachdb/server-prs
 /pkg/ccl/multitenant/tenantcostclient/ @cockroachdb/sqlproxy-prs
 /pkg/ccl/multitenant/tenantcostserver/ @cockroachdb/sqlproxy-prs
 /pkg/ccl/oidcccl/            @cockroachdb/obs-inf-prs
@@ -382,12 +391,12 @@
 
 #!/pkg/ccl/serverccl/        @cockroachdb/unowned
 /pkg/ccl/serverccl/diagnosticsccl/ @cockroachdb/obs-inf-prs
-/pkg/ccl/serverccl/server_sql* @cockroachdb/multi-tenant @cockroachdb/server-prs
-/pkg/ccl/serverccl/server_controller* @cockroachdb/multi-tenant @cockroachdb/server-prs
-/pkg/ccl/serverccl/tenant_*  @cockroachdb/multi-tenant @cockroachdb/server-prs
-/pkg/ccl/serverccl/statusccl/ @cockroachdb/cluster-observability @cockroachdb/multi-tenant
-/pkg/ccl/serverccl/admin_*   @cockroachdb/cluster-observability
-/pkg/ccl/serverccl/api_*     @cockroachdb/cluster-observability
+/pkg/ccl/serverccl/server_sql* @cockroachdb/server-prs
+/pkg/ccl/serverccl/server_controller* @cockroachdb/server-prs
+/pkg/ccl/serverccl/tenant_*  @cockroachdb/server-prs
+/pkg/ccl/serverccl/statusccl/ @cockroachdb/obs-inf-prs
+/pkg/ccl/serverccl/admin_*   @cockroachdb/obs-inf-prs
+/pkg/ccl/serverccl/api_*     @cockroachdb/obs-inf-prs
 /pkg/ccl/serverccl/chart_*   @cockroachdb/obs-inf-prs
 
 /pkg/ccl/telemetryccl/       @cockroachdb/obs-inf-prs
@@ -504,14 +513,14 @@
 # Don't ping KV on updates to reserved descriptor IDs and such.
 #!/pkg/keys/constants.go       @cockroachdb/kv-prs-noreview
 /pkg/upgrade/                @cockroachdb/release-eng
-/pkg/keyvisualizer/          @cockroachdb/cluster-observability
-/pkg/multitenant/            @cockroachdb/multi-tenant
+/pkg/keyvisualizer/          @cockroachdb/obs-inf-prs
+/pkg/multitenant/            @cockroachdb/server-prs
 /pkg/release/                @cockroachdb/dev-inf
 /pkg/roachpb/.gitattributes  @cockroachdb/dev-inf
 #!/pkg/roachpb/BUILD.bazel     @cockroachdb/kv-prs-noreview
 /pkg/roachpb/data*           @cockroachdb/kv-prs
 /pkg/roachpb/leaseinfo*      @cockroachdb/kv-prs
-/pkg/roachpb/index*          @cockroachdb/cluster-observability
+/pkg/roachpb/index*          @cockroachdb/obs-inf-prs
 /pkg/roachpb/internal*       @cockroachdb/kv-prs
 /pkg/roachpb/io-formats*     @cockroachdb/disaster-recovery
 #!/pkg/roachpb/main_test.go    @cockroachdb/kv-prs-noreview
@@ -524,7 +533,7 @@
 /pkg/roachprod/              @cockroachdb/test-eng
 /pkg/rpc/                    @cockroachdb/kv-prs
 /pkg/rpc/auth.go             @cockroachdb/kv-prs @cockroachdb/prodsec
-/pkg/rpc/auth_tenant.go      @cockroachdb/multi-tenant @cockroachdb/prodsec
+/pkg/rpc/auth_tenant.go      @cockroachdb/server-prs @cockroachdb/prodsec
 /pkg/scheduledjobs/          @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/security/               @cockroachdb/prodsec @cockroachdb/server-prs
 /pkg/security/clientsecopts/ @cockroachdb/sql-foundations @cockroachdb/prodsec
@@ -564,7 +573,8 @@
 /pkg/workload/               @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
 /pkg/obs/                    @cockroachdb/obs-inf-prs
 /pkg/obsservice/             @cockroachdb/obs-inf-prs
-/pkg/ccl/auditloggingccl     @cockroachdb/cluster-observability
+/pkg/ccl/auditloggingccl     @cockroachdb/obs-inf-prs
+/pkg/cmd/drt/scripts         @cockroachdb/test-eng
 
 # Own all bazel files to dev-inf, but don't request reviews for them
 # as they are mostly - but not only - generated code that changes with

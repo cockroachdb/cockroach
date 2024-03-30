@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -93,15 +92,10 @@ func (n *explainVecNode) startExec(params runParams) error {
 func newFlowCtxForExplainPurposes(
 	ctx context.Context, p *planner,
 ) (_ *execinfra.FlowCtx, cleanup func()) {
-	monitor := mon.NewMonitor(
-		"explain", /* name */
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		p.execCfg.Settings,
-	)
+	monitor := mon.NewMonitor(mon.Options{
+		Name:     "explain",
+		Settings: p.execCfg.Settings,
+	})
 	monitor.StartNoReserved(ctx, p.Mon())
 	cleanup = func() {
 		monitor.Stop(ctx)
@@ -128,9 +122,9 @@ func newPlanningCtxForExplainPurposes(
 	subqueryPlans []subquery,
 	distribution physicalplan.PlanDistribution,
 ) *PlanningCtx {
-	distribute := DistributionType(DistributionTypeNone)
+	distribute := DistributionType(LocalDistribution)
 	if distribution.WillDistribute() {
-		distribute = DistributionTypeAlways
+		distribute = FullDistribution
 	}
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx,
 		params.p, params.p.txn, distribute)

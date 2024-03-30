@@ -19,11 +19,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// OnPauseRequestFunc forwards the definition for use in tests.
-type OnPauseRequestFunc = onPauseRequestFunc
+// Functions in this file are exported for test code convience and
+// should not be used in production code.
 
+// CancelRequested marks the job as cancel-requested using the
+// specified txn (may be nil).
 func (r *Registry) CancelRequested(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	return r.cancelRequested(ctx, txn, id)
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
+	if err != nil {
+		return err
+	}
+	return job.WithTxn(txn).CancelRequested(ctx)
 }
 
 // Started is a wrapper around the internal function that moves a job to the
@@ -38,10 +44,19 @@ func (j *Job) Reverted(ctx context.Context, err error) error {
 	return j.NoTxn().reverted(ctx, err, nil)
 }
 
-// Paused is a wrapper around the internal function that moves a job to the
-// paused state.
+// Paused is a helper to the paused state.
 func (j *Job) Paused(ctx context.Context) error {
-	return j.NoTxn().paused(ctx, nil /* fn */)
+	return j.NoTxn().Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status == StatusPaused {
+			// Already paused - do nothing.
+			return nil
+		}
+		if md.Status != StatusPauseRequested {
+			return errors.Newf("job with status %s cannot be set to paused", md.Status)
+		}
+		ju.UpdateStatus(StatusPaused)
+		return nil
+	})
 }
 
 // Failed is a wrapper around the internal function that moves a job to the

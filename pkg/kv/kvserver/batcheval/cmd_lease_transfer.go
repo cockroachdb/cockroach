@@ -115,13 +115,7 @@ func TransferLease(
 	// previous lease was revoked).
 	newLease.Start.Forward(cArgs.EvalCtx.Clock().NowAsClockTimestamp())
 
-	// Collect a read summary from the outgoing leaseholder to ship to the
-	// incoming leaseholder. This is used to instruct the new leaseholder on how
-	// to update its timestamp cache to ensure that no future writes are allowed
-	// to invalidate prior reads.
-	priorReadSum := cArgs.EvalCtx.GetCurrentReadSummary(ctx)
-
 	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, newLease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
-		newLease, prevLease, &priorReadSum, false /* isExtension */, true /* isTransfer */)
+		newLease, prevLease, false /* isExtension */, true /* isTransfer */)
 }

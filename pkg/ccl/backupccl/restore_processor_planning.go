@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -32,14 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-)
-
-var memoryMonitorSSTs = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"bulkio.restore.memory_monitor_ssts",
-	"if true, restore will limit number of simultaneously open SSTs to keep memory usage under the configured memory fraction",
-	false,
-	settings.WithName("bulkio.restore.sst_memory_limit.enabled"),
 )
 
 type restoreJobMetadata struct {
@@ -53,6 +44,7 @@ type restoreJobMetadata struct {
 	spanFilter         spanCoveringFilter
 	numImportSpans     int
 	execLocality       roachpb.Locality
+	exclusiveEndKeys   bool
 }
 
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It
@@ -100,7 +92,6 @@ func distRestore(
 		fileEncryption = &kvpb.FileEncryptionOptions{Key: md.encryption.Key}
 	}
 
-	memMonSSTs := memoryMonitorSSTs.Get(execCtx.ExecCfg().SV())
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 
 		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
@@ -115,14 +106,13 @@ func distRestore(
 		p := planCtx.NewPhysicalPlan()
 
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
-			JobID:             int64(md.jobID),
-			RestoreTime:       md.restoreTime,
-			Encryption:        fileEncryption,
-			TableRekeys:       md.dataToRestore.getRekeys(),
-			TenantRekeys:      md.dataToRestore.getTenantRekeys(),
-			PKIDs:             md.dataToRestore.getPKIDs(),
-			ValidateOnly:      md.dataToRestore.isValidateOnly(),
-			MemoryMonitorSSTs: memMonSSTs,
+			JobID:        int64(md.jobID),
+			RestoreTime:  md.restoreTime,
+			Encryption:   fileEncryption,
+			TableRekeys:  md.dataToRestore.getRekeys(),
+			TenantRekeys: md.dataToRestore.getTenantRekeys(),
+			PKIDs:        md.dataToRestore.getPKIDs(),
+			ValidateOnly: md.dataToRestore.isValidateOnly(),
 		}
 
 		// Plan SplitAndScatter in a round-robin fashion.
@@ -173,22 +163,23 @@ func distRestore(
 		id := execCtx.ExecCfg().NodeInfo.NodeID.SQLInstanceID()
 
 		spec := &execinfrapb.GenerativeSplitAndScatterSpec{
-			TableRekeys:              md.dataToRestore.getRekeys(),
-			TenantRekeys:             md.dataToRestore.getTenantRekeys(),
-			ValidateOnly:             md.dataToRestore.isValidateOnly(),
-			URIs:                     md.uris,
-			Encryption:               md.encryption,
-			EndTime:                  md.restoreTime,
-			Spans:                    md.dataToRestore.getSpans(),
-			BackupLocalityInfo:       md.backupLocalityInfo,
-			HighWater:                md.spanFilter.highWaterMark,
-			UserProto:                execCtx.User().EncodeProto(),
-			TargetSize:               md.spanFilter.targetSize,
-			ChunkSize:                int64(chunkSize),
-			NumEntries:               int64(md.numImportSpans),
-			NumNodes:                 int64(numNodes),
-			UseFrontierCheckpointing: md.spanFilter.useFrontierCheckpointing,
-			JobID:                    int64(md.jobID),
+			TableRekeys:                 md.dataToRestore.getRekeys(),
+			TenantRekeys:                md.dataToRestore.getTenantRekeys(),
+			ValidateOnly:                md.dataToRestore.isValidateOnly(),
+			URIs:                        md.uris,
+			Encryption:                  md.encryption,
+			EndTime:                     md.restoreTime,
+			Spans:                       md.dataToRestore.getSpans(),
+			BackupLocalityInfo:          md.backupLocalityInfo,
+			HighWater:                   md.spanFilter.highWaterMark,
+			UserProto:                   execCtx.User().EncodeProto(),
+			TargetSize:                  md.spanFilter.targetSize,
+			ChunkSize:                   int64(chunkSize),
+			NumEntries:                  int64(md.numImportSpans),
+			NumNodes:                    int64(numNodes),
+			UseFrontierCheckpointing:    md.spanFilter.useFrontierCheckpointing,
+			JobID:                       int64(md.jobID),
+			ExclusiveFileSpanComparison: md.exclusiveEndKeys,
 		}
 		if md.spanFilter.useFrontierCheckpointing {
 			spec.CheckpointedSpans = persistFrontier(md.spanFilter.checkpointFrontier, 0)

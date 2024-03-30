@@ -76,6 +76,23 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Upgrades of SQL Transaction Isolation Level"
+      isKvGraph={false}
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`The total number of times a SQL transaction was upgraded to a stronger isolation level ${tooltipSelection}. If this metric is non-zero, then your application may be affected by the upcoming support of additional isolation levels.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="transactions">
+        <Metric
+          name="cr.node.sql.txn.upgraded_iso_level.count"
+          title="Upgrades of Transaction Isolation Level"
+          downsampleMax
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Open SQL Transactions"
       isKvGraph={false}
       sources={nodeSources}
@@ -196,17 +213,17 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The total number of full table/index scans ${tooltipSelection}.`}
+      tooltip={`The total number of full table/index scans per second ${tooltipSelection}.`}
       showMetricsInTooltip={true}
     >
-      <Axis label="full scans">
+      <Axis label="full scans per second">
         {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.full.scan.count"
             title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
-            downsampleMax
+            nonNegativeRate
           />
         ))}
       </Axis>
@@ -506,16 +523,6 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.node.txn.restarts.txnaborted"
           title="Aborted"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.txn.restarts.txnpush"
-          title="Push Failure"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.txn.restarts.unknown"
-          title="Unknown"
           nonNegativeRate
         />
       </Axis>

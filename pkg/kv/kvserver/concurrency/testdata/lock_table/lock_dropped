@@ -60,7 +60,6 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
    waiting readers:
     req: 1, txn: none
-   distinguished req: 1
 
 acquire r=req1 k=a durability=r strength=intent
 ----
@@ -101,7 +100,6 @@ num=1
     req: 1, txn: none
    queued locking requests:
     active: true req: 2, strength: Intent, txn: none
-   distinguished req: 1
 
 acquire r=req1 k=a durability=r strength=intent
 ----
@@ -112,11 +110,10 @@ num=1
     req: 1, txn: none
    queued locking requests:
     active: true req: 2, strength: Intent, txn: none
-   distinguished req: 1
 
 guard-state r=reqContendReader
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
 
 guard-state r=reqContendWriter
 ----
@@ -167,7 +164,7 @@ start-waiting: true
 
 guard-state r=req3
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
 
 acquire r=req2 k=b durability=r strength=intent
 ----
@@ -176,7 +173,6 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
    waiting readers:
     req: 3, txn: none
-   distinguished req: 3
 
 release txn=txn1 span=a
 ----

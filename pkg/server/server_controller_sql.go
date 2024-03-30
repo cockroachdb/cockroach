@@ -76,8 +76,19 @@ func (c *serverController) sqlMux(
 			s, err = c.waitForTenantServer(ctx, tenantName)
 		}
 		if err != nil {
-			log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 			c.sendSQLRoutingError(ctx, conn, tenantName)
+			// Avoid logging this error since it could
+			// just be the result of user error (the wrong
+			// tenant name) or an expected failure (such
+			// as while the server is draining).
+			//
+			// TODO(ssd): In the draining case the node
+			// should know we are draining and just stop
+			// accepting SQL clients even when waiting for
+			// application tenants to stop.
+			if errors.Is(err, errNoTenantServerRunning) {
+				return nil
+			}
 			return err
 		}
 
@@ -123,7 +134,7 @@ func (c *serverController) waitForTenantServer(
 	// waiting longer isn't going to help.
 	opts := singleflight.DoOpts{Stop: c.stopper, InheritCancelation: false}
 	futureRes, _ := c.tenantWaiter.DoChan(ctx, string(name), opts, func(ctx context.Context) (interface{}, error) {
-		t := timeutil.NewTimer()
+		var t timeutil.Timer
 		defer t.Stop()
 		t.Reset(multitenant.WaitForClusterStartTimeout.Get(&c.st.SV))
 		for {

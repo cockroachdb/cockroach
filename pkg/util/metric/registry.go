@@ -88,6 +88,17 @@ func (r *Registry) AddMetric(metric Iterable) {
 	}
 }
 
+// RemoveMetric removes the passed-in metric from the registry. If the metric
+// does not exist, this is a no-op.
+func (r *Registry) RemoveMetric(metric Iterable) {
+	r.Lock()
+	defer r.Unlock()
+	delete(r.tracked, metric.GetName())
+	if log.V(2) {
+		log.Infof(context.TODO(), "removed metric: %s (%T)", metric.GetName(), metric)
+	}
+}
+
 // AddMetricStruct examines all fields of metricStruct and adds
 // all Iterable or metric.Struct objects to the registry.
 func (r *Registry) AddMetricStruct(metricStruct interface{}) {

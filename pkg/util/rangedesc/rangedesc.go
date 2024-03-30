@@ -71,11 +71,26 @@ type Iterator interface {
 	CurRangeDescriptor() roachpb.RangeDescriptor
 }
 
+type LazyIterator interface {
+	Iterator
+	Error() error
+}
+
 // IteratorFactory is used to construct Iterators over arbitrary spans.
 type IteratorFactory interface {
-	// NewIterator constructs an iterator to iterate over range descriptors for
-	// ranges that overlap with the supplied span.
+	// NewIterator fetches all range descriptors that overlap with the supplied
+	// span and returns an iterator over those buffered fetched descriptors. If
+	// this result set may be large or will not be consumed in its entirety, this
+	// eager fetch of the entire result set might be less than ideal and a caller
+	// may wish to use NewLazyIterator instead.
 	NewIterator(ctx context.Context, span roachpb.Span) (Iterator, error)
+	// NewLazyIterator constructs an iterator to iterate over range descriptors
+	// for ranges that overlap with the supplied span, fetching results as it
+	// iterates. Note that batches of descriptors are fetched separately and thus
+	// observed results may not be consistent as of a single timestamp; callers
+	// that requite all results be consistent may wish to use the eager iterator
+	// or add a timestamp parameter to this API (or pick it on first fetch).
+	NewLazyIterator(ctx context.Context, span roachpb.Span, pageSize int) (LazyIterator, error)
 }
 
 // DB is a database handle to a CRDB cluster.
@@ -206,8 +221,22 @@ func (i *impl) Scan(
 
 // NewIterator implements the IteratorFactory interface.
 func (i *impl) NewIterator(ctx context.Context, span roachpb.Span) (Iterator, error) {
-	var rangeDescriptors []roachpb.RangeDescriptor
-	// We need to set a non-zero page size here since otherwise Scan will read all
+	rangeDescriptors, err := i.getPage(ctx, span, 0)
+	return NewSliceIterator(rangeDescriptors), err
+}
+
+// NewLazyIterator implements the IteratorFactory interface.
+func (i *impl) NewLazyIterator(
+	ctx context.Context, span roachpb.Span, pageSize int,
+) (LazyIterator, error) {
+	return NewPaginatedIter(ctx, span, pageSize, i.getPage)
+}
+
+func (i *impl) getPage(
+	ctx context.Context, span roachpb.Span, pageSize int,
+) ([]roachpb.RangeDescriptor, error) {
+	fetchPageSize := pageSize
+	// We need a non-zero fetch page size here since otherwise Scan will read all
 	// of the span between our span start and MetaMax into a slice when it calls
 	// txn.Scan, even if it later filters to only some small subset that intersect
 	// our span. This can be problem if NewIterator is called on many small spans,
@@ -218,21 +247,28 @@ func (i *impl) NewIterator(ctx context.Context, span roachpb.Span) (Iterator, er
 	// trips to meta1/2 reasonable for a huge (say 10k range) span, though such
 	// callers would be better off with Scan anyway as this method buffers all of
 	// the descs eagerly.
-	const pageSize = 128
-	err := i.Scan(ctx, pageSize, func() {
+	if fetchPageSize == 0 {
+		fetchPageSize = 128
+	}
+
+	var rangeDescriptors []roachpb.RangeDescriptor
+	err := iterutil.Map(i.Scan(ctx, fetchPageSize, func() {
 		rangeDescriptors = rangeDescriptors[:0] // retryable
 	}, span, func(descriptors ...roachpb.RangeDescriptor) error {
 		rangeDescriptors = append(rangeDescriptors, descriptors...)
+		if pageSize != 0 && len(rangeDescriptors) >= pageSize {
+			return iterutil.StopIteration()
+		}
 		return nil
-	})
+	}))
 	if err != nil {
 		return nil, err
 	}
+	return rangeDescriptors, nil
+}
 
-	return &iterator{
-		rangeDescs: rangeDescriptors,
-		curIdx:     0,
-	}, nil
+func NewSliceIterator(descs []roachpb.RangeDescriptor) Iterator {
+	return &iterator{rangeDescs: descs}
 }
 
 // iterator is a concrete (private) implementation of the Iterator interface.
@@ -254,4 +290,59 @@ func (i *iterator) Next() {
 // CurRangeDescriptor implements the Iterator interface.
 func (i *iterator) CurRangeDescriptor() roachpb.RangeDescriptor {
 	return i.rangeDescs[i.curIdx]
+}
+
+// NewPaginatedIter returns a LazyIterator backed by the passed page fetch fn.
+func NewPaginatedIter(
+	ctx context.Context,
+	span roachpb.Span,
+	pageSize int,
+	fn func(context.Context, roachpb.Span, int) ([]roachpb.RangeDescriptor, error),
+) (LazyIterator, error) {
+	it := &paginated{ctx: ctx, fetch: fn, pageSize: pageSize, span: span}
+	it.fill()
+	return it, it.Error()
+}
+
+type paginated struct {
+	ctx      context.Context
+	span     roachpb.Span
+	curPage  []roachpb.RangeDescriptor
+	curIdx   int
+	fetch    func(context.Context, roachpb.Span, int) ([]roachpb.RangeDescriptor, error)
+	pageSize int
+	err      error
+}
+
+// Valid implements the LazyIterator interface.
+func (i *paginated) Valid() bool {
+	return i.err == nil && i.curIdx < len(i.curPage)
+}
+
+// Error implements the LazyIterator interface.
+func (i *paginated) Error() error {
+	return i.err
+}
+
+// Next implements the LazyIterator interface.
+func (i *paginated) Next() {
+	i.curIdx++
+	if i.curIdx >= len(i.curPage) {
+		i.fill()
+	}
+}
+
+func (i *paginated) fill() {
+	if len(i.curPage) > 0 {
+		i.span.Key = i.curPage[len(i.curPage)-1].EndKey.AsRawKey()
+	}
+	if i.span.Valid() {
+		i.curPage, i.err = i.fetch(i.ctx, i.span, i.pageSize)
+		i.curIdx = 0
+	}
+}
+
+// CurRangeDescriptor implements the LazyIterator interface.
+func (i *paginated) CurRangeDescriptor() roachpb.RangeDescriptor {
+	return i.curPage[i.curIdx]
 }

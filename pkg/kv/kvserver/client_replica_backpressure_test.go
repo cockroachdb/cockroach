@@ -42,7 +42,6 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes >1m under race")
-	skip.UnderRemoteExecutionWithIssue(t, 113032, "probable OOM")
 
 	rRand, _ := randutil.NewTestRand()
 	ctx := context.Background()
@@ -297,7 +296,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		})
 
 		s, repl := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
-		s.SetReplicateQueueActive(false)
+		s.TestingSetReplicateQueueActive(false)
 		require.Len(t, repl.Desc().Replicas().Descriptors(), 1)
 		// We really need to make sure that the split queue has hit this range,
 		// otherwise we'll fail to backpressure.

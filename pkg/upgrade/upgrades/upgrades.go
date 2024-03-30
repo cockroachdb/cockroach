@@ -53,89 +53,16 @@ func NoTenantUpgradeFunc(context.Context, clusterversion.ClusterVersion, upgrade
 var registry = make(map[roachpb.Version]upgradebase.Upgrade)
 
 var upgrades = []upgradebase.Upgrade{
-	upgrade.NewPermanentTenantUpgrade(
-		"add users and roles",
-		clusterversion.VPrimordial1.Version(),
-		addRootUser,
-		// v22_2StartupMigrationName - this upgrade corresponds to 3 old
-		// startupmigrations, out of which "make root a member..." is the last one.
-		"make root a member of the admin role",
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
-	upgrade.NewPermanentTenantUpgrade(
-		"enable diagnostics reporting",
-		clusterversion.VPrimordial2.Version(),
-		optInToDiagnosticsStatReporting,
-		"enable diagnostics reporting", // v22_2StartupMigrationName
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
-	upgrade.NewPermanentSystemUpgrade(
-		"populate initial version cluster setting table entry",
-		clusterversion.VPrimordial3.Version(),
-		populateVersionSetting,
-		"populate initial version cluster setting table entry", // v22_2StartupMigrationName
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
-	upgrade.NewPermanentTenantUpgrade(
-		"initialize the cluster.secret setting",
-		clusterversion.VPrimordial4.Version(),
-		initializeClusterSecret,
-		"initialize cluster.secret", // v22_2StartupMigrationName
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
-	upgrade.NewPermanentTenantUpgrade(
-		"update system.locations with default location data",
-		clusterversion.VPrimordial5.Version(),
-		updateSystemLocationData,
-		"update system.locations with default location data", // v22_2StartupMigrationName
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
-	upgrade.NewPermanentTenantUpgrade(
-		"create default databases",
-		clusterversion.VPrimordial6.Version(),
-		createDefaultDbs,
-		"create default databases", // v22_2StartupMigrationName
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
-	upgrade.NewPermanentTenantUpgrade(
-		"add default SQL schema telemetry schedule",
-		clusterversion.Permanent_V22_2SQLSchemaTelemetryScheduledJobs.Version(),
-		ensureSQLSchemaTelemetrySchedule,
-		"add default SQL schema telemetry schedule",
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
-	upgrade.NewPermanentSystemUpgrade("add tables and jobs to support persisting key visualizer samples",
-		clusterversion.Permanent_V23_1KeyVisualizerTablesAndJobs.Version(),
-		keyVisualizerTablesMigration,
-		"initialize key visualizer tables and jobs",
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
-	upgrade.NewPermanentTenantUpgrade("create jobs metrics polling job",
-		clusterversion.Permanent_V23_1_CreateJobsMetricsPollingJob.Version(),
-		createJobsMetricsPollingJob,
-		"create jobs metrics polling job",
-		upgrade.RestoreActionNotRequired("jobs are not restored"),
-	),
-	upgrade.NewPermanentTenantUpgrade("create auto config runner job",
-		clusterversion.Permanent_V23_1_CreateAutoConfigRunnerJob.Version(),
-		createAutoConfigRunnerJob,
-		"create auto config runner job",
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
-	upgrade.NewPermanentSystemUpgrade(
-		"change TTL for SQL Stats system tables",
-		clusterversion.Permanent_V23_1ChangeSQLStatsTTL.Version(),
-		sqlStatsTTLChange,
-		"change TTL for SQL Stats system tables",
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
-	upgrade.NewPermanentTenantUpgrade(
-		"create sql activity updater job",
-		clusterversion.Permanent_V23_1CreateSystemActivityUpdateJob.Version(),
-		createActivityUpdateJobMigration,
-		"create statement_activity and transaction_activity job",
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
+	upgrade.NewSystemUpgrade("intitialize the system cluster",
+		clusterversion.VBootstrapSystem.Version(),
+		bootstrapSystem,
+		upgrade.RestoreActionNotRequired("initialization runs before restore")),
+
+	upgrade.NewTenantUpgrade("intitialize the cluster",
+		clusterversion.VBootstrapTenant.Version(),
+		upgrade.NoPrecondition,
+		bootstrapCluster,
+		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
 	newFirstUpgrade(clusterversion.V23_2Start.Version()),
 
@@ -153,11 +80,11 @@ var upgrades = []upgradebase.Upgrade{
 		createRegionLivenessTables,
 		upgrade.RestoreActionNotRequired("ephemeral table that is not backed up or restored"),
 	),
-	upgrade.NewPermanentTenantUpgrade(
+	upgrade.NewTenantUpgrade(
 		"create system.mvcc_statistics table and job",
-		clusterversion.Permanent_V23_2_MVCCStatisticsTable.Version(),
+		clusterversion.V23_2_MVCCStatisticsTable.Version(),
+		upgrade.NoPrecondition,
 		createMVCCStatisticsTableAndJobMigration,
-		"create system.mvcc_statistics table and job",
 		upgrade.RestoreActionNotRequired("table is relevant to the storage cluster and is not restored"),
 	),
 	upgrade.NewTenantUpgrade(
@@ -176,6 +103,46 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		dropPayloadProgressFromSystemJobs,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.jobs table"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"migrate old-style PTS records to the new style",
+		clusterversion.V24_1_MigrateOldStylePTSRecords.Version(),
+		upgrade.NoPrecondition,
+		migrateOldStylePTSRecords,
+		upgrade.RestoreActionNotRequired("restore does not restore the PTS table"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"stop writing expiration based leases to system.lease table (equivalent to experimental_use_session_based_leasing=drain)",
+		clusterversion.V24_1_SessionBasedLeasingDrain.Version(),
+		upgrade.NoPrecondition,
+		disableWritesForExpiryBasedLeases,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"only use session based leases  (equivalent to experimental_use_session_based_leasing=session)",
+		clusterversion.V24_1_SessionBasedLeasingOnly.Version(),
+		upgrade.NoPrecondition,
+		adoptUsingOnlySessionBasedLeases,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"update system.lease descriptor to be session base",
+		clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version(),
+		upgrade.NoPrecondition,
+		upgradeSystemLeasesDescriptor,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"set survivability goal on MR system database; fix-up gc.ttl and exclude_data_from_backup",
+		clusterversion.V24_1_SystemDatabaseSurvivability.Version(),
+		upgrade.NoPrecondition,
+		alterSystemDatabaseSurvivalGoal,
+		upgrade.RestoreActionNotRequired("cluster restore does not preserve the multiregion configuration of the system database"),
 	),
 
 	// Note: when starting a new release version, the first upgrade (for

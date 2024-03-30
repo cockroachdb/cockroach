@@ -211,6 +211,10 @@ func (f fakeLeaseManager) Acquire(
 	return ld, nil
 }
 
+func (f fakeLeaseManager) IncGaugeAfterLeaseDuration(gauge lease.AfterLeaseDurationGauge) func() {
+	return func() {}
+}
+
 var _ descs.LeaseManager = (*fakeLeaseManager)(nil)
 
 type fakeSystemDatabase struct {
@@ -245,7 +249,7 @@ type fakeLeasedDescriptor struct {
 func (f fakeLeasedDescriptor) Underlying() catalog.Descriptor {
 	return f.Descriptor
 }
-func (f fakeLeasedDescriptor) Expiration() hlc.Timestamp {
+func (f fakeLeasedDescriptor) Expiration(_ context.Context) hlc.Timestamp {
 	return hlc.MaxTimestamp
 }
 func (f fakeLeasedDescriptor) Release(ctx context.Context) {

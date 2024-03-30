@@ -170,14 +170,13 @@ type registryTestSuite struct {
 	failOrCancelCh      chan error
 	resumeCheckCh       chan struct{}
 	failOrCancelCheckCh chan struct{}
-	onPauseRequest      jobs.OnPauseRequestFunc
 
 	// beforeUpdate is invoked in the BeforeUpdate testing knob if non-nil.
 	beforeUpdate func(orig, updated jobs.JobMetadata) error
 
 	// afterJobStateMachine is invoked in the AfterJobStateMachine testing knob if
 	// non-nil.
-	afterJobStateMachine func()
+	afterJobStateMachine func(jobspb.JobID)
 
 	// Instead of a ch for success, use a variable because it can retry since it
 	// is in a transaction.
@@ -185,12 +184,6 @@ type registryTestSuite struct {
 
 	// controls whether job resumers will ask for a real tracing span.
 	traceRealSpan bool
-}
-
-func noopPauseRequestFunc(
-	ctx context.Context, planHookState interface{}, txn isql.Txn, progress *jobspb.Progress,
-) error {
-	return nil
 }
 
 var _ jobs.TraceableJob = (*jobstest.FakeResumer)(nil)
@@ -207,9 +200,9 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			}
 			return nil
 		}
-		knobs.AfterJobStateMachine = func() {
+		knobs.AfterJobStateMachine = func(id jobspb.JobID) {
 			if rts.afterJobStateMachine != nil {
-				rts.afterJobStateMachine()
+				rts.afterJobStateMachine(id)
 			}
 		}
 		args.Knobs.JobsTestingKnobs = knobs
@@ -219,7 +212,6 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 		args.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
 			DontUseJobs:                       true,
 			SkipJobMetricsPollingJobBootstrap: true,
-			SkipAutoConfigRunnerJobBootstrap:  true,
 			SkipUpdateSQLActivityJobBootstrap: true,
 			SkipMVCCStatisticsJobBootstrap:    true,
 		}
@@ -244,7 +236,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.failOrCancelCh = make(chan error)
 	rts.resumeCheckCh = make(chan struct{})
 	rts.failOrCancelCheckCh = make(chan struct{})
-	rts.onPauseRequest = noopPauseRequestFunc
+	rts.sqlDB.Exec(t, "CREATE USER testuser")
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
@@ -324,9 +316,6 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				}()
 				rts.mu.a.Success = true
 				return rts.successErr
-			},
-			PauseRequest: func(ctx context.Context, execCfg interface{}, txn isql.Txn, progress *jobspb.Progress) error {
-				return rts.onPauseRequest(ctx, execCfg, txn, progress)
 			},
 		}
 	}, jobs.UsesTenantCostControl)
@@ -739,11 +728,11 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	// Attempt to mark success, but fail, but fail that also.
 	t.Run("fail marking success and fail OnFailOrCancel", func(t *testing.T) {
-		var triedToMarkSucceeded atomic.Value
-		triedToMarkSucceeded.Store(false)
+		var triedToMarkSucceeded atomic.Bool
+		var injectFailures atomic.Bool
 		rts := registryTestSuite{beforeUpdate: func(orig, updated jobs.JobMetadata) error {
 			// Fail marking succeeded.
-			if updated.Status == jobs.StatusSucceeded {
+			if updated.Status == jobs.StatusSucceeded && injectFailures.Load() {
 				triedToMarkSucceeded.Store(true)
 				return errors.New("injected failure at marking as succeeded")
 			}
@@ -752,6 +741,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
+		injectFailures.Store(true)
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
@@ -780,7 +770,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		// First retry.
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		require.True(t, triedToMarkSucceeded.Load().(bool))
+		require.True(t, triedToMarkSucceeded.Load())
 		rts.check(t, jobs.StatusReverting)
 		rts.failOrCancelCh <- errors.New("injected failure while blocked in reverting")
 		rts.mu.e.OnFailOrCancelExit = true
@@ -898,89 +888,23 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.OnFailOrCancelExit = true
 		rts.check(t, jobs.StatusFailed)
 	})
-
-	t.Run("OnPauseRequest", func(t *testing.T) {
-		rts := registryTestSuite{}
-		rts.setUp(t)
-		defer rts.tearDown()
-		madeUpSpans := []roachpb.Span{
-			{Key: roachpb.Key("foo")},
-		}
-		rts.onPauseRequest = func(ctx context.Context, planHookState interface{}, txn isql.Txn, progress *jobspb.Progress) error {
-			progress.GetImport().SpanProgress = madeUpSpans
-			return nil
-		}
-
-		job, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
-		require.NoError(t, err)
-		rts.job = job
-
-		rts.resumeCheckCh <- struct{}{}
-		rts.mu.e.ResumeStart = true
-		rts.check(t, jobs.StatusRunning)
-
-		// Request that the job is paused.
-		pauseErrCh := make(chan error)
-		go func() {
-			_, err := rts.outerDB.Exec("PAUSE JOB $1", job.ID())
-			pauseErrCh <- err
-		}()
-
-		// Ensure that the pause went off without a problem.
-		require.NoError(t, <-pauseErrCh)
-		rts.check(t, jobs.StatusPaused)
-		{
-			// Make sure the side-effects of our pause function occurred.
-			j, err := rts.registry.LoadJob(rts.ctx, job.ID())
-			require.NoError(t, err)
-			progress := j.Progress()
-			require.Equal(t, madeUpSpans, progress.GetImport().SpanProgress)
-		}
-	})
-	t.Run("OnPauseRequest failure does not pause", func(t *testing.T) {
-		rts := registryTestSuite{}
-		rts.setUp(t)
-		defer rts.tearDown()
-
-		rts.onPauseRequest = func(ctx context.Context, planHookState interface{}, txn isql.Txn, progress *jobspb.Progress) error {
-			return errors.New("boom")
-		}
-
-		job, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
-		require.NoError(t, err)
-		rts.job = job
-
-		// Allow the job to start.
-		rts.resumeCheckCh <- struct{}{}
-		rts.mu.e.ResumeStart = true
-		rts.check(t, jobs.StatusRunning)
-
-		// Request that the job is paused and ensure that the pause hit the error
-		// and failed to pause.
-		_, err = rts.outerDB.Exec("PAUSE JOB $1", job.ID())
-		require.Regexp(t, "boom", err)
-
-		// Allow the job to complete.
-		rts.resumeCh <- nil
-		rts.mu.e.Success = true
-		rts.mu.e.ResumeExit++
-		rts.check(t, jobs.StatusSucceeded)
-	})
 	t.Run("dump traces on pause-unpause-success", func(t *testing.T) {
 		ctx := context.Background()
 		completeCh := make(chan struct{})
-		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
+		var expectedJobID atomic.Int64
+		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func(id jobspb.JobID) {
+			if int64(id) != expectedJobID.Load() {
+				return
+			}
 			completeCh <- struct{}{}
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
-
 		pauseUnpauseJob := func(expectedNumFiles int) {
-			j, err := jobs.TestingCreateAndStartJob(context.Background(), rts.registry, rts.idb(), rts.mockJob)
-			if err != nil {
-				t.Fatal(err)
-			}
+			j, err := jobs.TestingCreateAndStartJob(ctx, rts.registry, rts.idb(), rts.mockJob)
+			require.NoError(t, err)
 			rts.job = j
+			expectedJobID.Store(int64(j.ID()))
 
 			rts.mu.e.ResumeStart = true
 			rts.resumeCheckCh <- struct{}{}
@@ -1012,7 +936,11 @@ func TestRegistryLifecycle(t *testing.T) {
 	t.Run("dump traces on fail", func(t *testing.T) {
 		ctx := context.Background()
 		completeCh := make(chan struct{})
-		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
+		var expectedJobID atomic.Int64
+		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func(id jobspb.JobID) {
+			if int64(id) != expectedJobID.Load() {
+				return
+			}
 			completeCh <- struct{}{}
 		}}
 		rts.setUp(t)
@@ -1020,10 +948,9 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		runJobAndFail := func(expectedNumFiles int) {
 			j, err := jobs.TestingCreateAndStartJob(ctx, rts.registry, rts.idb(), rts.mockJob)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			rts.job = j
+			expectedJobID.Store(int64(j.ID()))
 
 			rts.mu.e.ResumeStart = true
 			rts.resumeCheckCh <- struct{}{}
@@ -1048,17 +975,20 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("dump traces on cancel", func(t *testing.T) {
 		completeCh := make(chan struct{})
-		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
+		var expectedJobID atomic.Int64
+		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func(id jobspb.JobID) {
+			if int64(id) != expectedJobID.Load() {
+				return
+			}
 			completeCh <- struct{}{}
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
-		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rts.job = j
 
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
+		require.NoError(t, err)
+		rts.job = j
+		expectedJobID.Store(int64(j.ID()))
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
 		rts.check(t, jobs.StatusRunning)
@@ -1541,7 +1471,7 @@ func TestJobLifecycle(t *testing.T) {
 			}, registry.MakeJobID(), txn)
 			return errors.New("boom")
 		}))
-		if err := job.Started(ctx); !testutils.IsError(err, "not found in system.jobs table") {
+		if err := job.Started(ctx); !testutils.IsError(err, "does not exist") {
 			t.Fatalf("unexpected error %v", err)
 		}
 	})
@@ -1562,26 +1492,6 @@ func TestJobLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("high-water progress works", func(t *testing.T) {
-		job, _ := createDefaultJob()
-		if err := job.Started(ctx); err != nil {
-			t.Fatal(err)
-		}
-		highWaters := []hlc.Timestamp{
-			{WallTime: 1, Logical: 1},
-			{WallTime: 2, Logical: 0},
-		}
-		for _, ts := range highWaters {
-			require.NoError(t, job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-				return ju.UpdateHighwaterProgressed(ts, md)
-			}))
-			p := job.Progress()
-			if actual := *p.GetHighWater(); actual != ts {
-				t.Fatalf(`got %s expected %s`, actual, ts)
-			}
-		}
-	})
-
 	t.Run("out of bounds progress fails", func(t *testing.T) {
 		job, _ := createDefaultJob()
 		if err := job.Started(ctx); err != nil {
@@ -1591,11 +1501,6 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
 		if err := job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(1.1)); !testutils.IsError(err, "outside allowable range") {
-			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
-		}
-		if err := job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			return ju.UpdateHighwaterProgressed(hlc.Timestamp{WallTime: -1}, md)
-		}); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
 	})
@@ -2161,6 +2066,8 @@ func TestShowJobWhenComplete(t *testing.T) {
 		Details:  jobspb.ImportDetails{},
 		Progress: jobspb.ImportProgress{},
 	}
+	_, err := db.Exec("CREATE USER testuser")
+	require.NoError(t, err)
 	done := make(chan struct{})
 	defer close(done)
 	jobs.RegisterConstructor(
@@ -3455,6 +3362,7 @@ func TestJobTypeMetrics(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "CREATE USER testuser")
 	reg := s.JobRegistry().(*jobs.Registry)
 
 	waitForPausedCount := func(typ jobspb.Type, numPaused int64) {

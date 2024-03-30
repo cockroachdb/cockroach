@@ -36,8 +36,10 @@ Epic: None
 Release justification: non-production (release infra) change.
 `
 
-const releasedVersionFlag = "released-version"
-const nextVersionFlag = "next-version"
+const (
+	releasedVersionFlag = "released-version"
+	nextVersionFlag     = "next-version"
+)
 
 var updateVersionsFlags = struct {
 	dryRun             bool
@@ -205,8 +207,10 @@ func (r prRepo) push() error {
 }
 
 func (r prRepo) createPullRequest() (string, error) {
-	parts := []string{"gh", "pr", "create", "--base", r.branch, "--fill", "--head",
-		fmt.Sprintf("%s:%s", r.githubUsername, r.prBranch)}
+	parts := []string{
+		"gh", "pr", "create", "--base", r.branch, "--fill", "--head",
+		fmt.Sprintf("%s:%s", r.githubUsername, r.prBranch),
+	}
 	cmd := exec.Command(parts[0], parts[1:]...)
 	log.Printf("creating PR by running `%s`", strings.Join(parts, " "))
 	cmd.Dir = r.checkoutDir()
@@ -342,7 +346,7 @@ func sendPrReport(version *semver.Version, prs []string, smtpPassword string) er
 
 func randomString(n int) string {
 	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	var alphanumerics = []rune("abcdefghijklmnopqrstuvwxyz0123456789")
+	alphanumerics := []rune("abcdefghijklmnopqrstuvwxyz0123456789")
 
 	s := make([]rune, n)
 	for i := range s {
@@ -476,7 +480,7 @@ func generateRepoList(
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
 			prBranch:       fmt.Sprintf("update-orchestration-versions-%s-%s", releasedVersion.Original(), randomString(4)),
-			commitMessage:  generateCommitMessage("release", releasedVersion, nextVersion),
+			commitMessage:  generateCommitMessage("orchestration", releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
 				return updateOrchestration(gitDir, releasedVersion.Original())
 			},

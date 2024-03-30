@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 func TestTableHistoryIngestionTracking(t *testing.T) {
@@ -55,52 +57,36 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 		default:
 		}
 	}
-	requireWaitingFor := func(t *testing.T, sf *schemaFeed, ts hlc.Timestamp) {
-		t.Helper()
-		testutils.SucceedsSoon(t, func() error {
-			sf.mu.Lock()
-			defer sf.mu.Unlock()
-
-			for _, w := range sf.mu.waiters {
-				if w.ts == ts {
-					return nil
-				}
-			}
-			return errors.Newf("expected to find waiter for ts=%s", ts)
-		})
-	}
 
 	m := schemaFeed{}
-	m.mu.highWater = ts(0)
+	frontier := func() hlc.Timestamp {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.mu.ts.frontier
+	}
 
-	require.Equal(t, ts(0), m.highWater())
+	require.Equal(t, ts(0), frontier())
 
 	// advance
 	require.NoError(t, m.ingestDescriptors(ctx, ts(0), ts(1), nil, validateFn))
-	require.Equal(t, ts(1), m.highWater())
+	require.Equal(t, ts(1), frontier())
 	require.NoError(t, m.ingestDescriptors(ctx, ts(1), ts(2), nil, validateFn))
-	require.Equal(t, ts(2), m.highWater())
-
-	// no-ops
-	require.NoError(t, m.ingestDescriptors(ctx, ts(0), ts(1), nil, validateFn))
-	require.Equal(t, ts(2), m.highWater())
-	require.NoError(t, m.ingestDescriptors(ctx, ts(1), ts(2), nil, validateFn))
-	require.Equal(t, ts(2), m.highWater())
+	require.Equal(t, ts(2), frontier())
 
 	// overlap
 	require.NoError(t, m.ingestDescriptors(ctx, ts(1), ts(3), nil, validateFn))
-	require.Equal(t, ts(3), m.highWater())
+	require.Equal(t, ts(3), frontier())
 
 	// gap
 	require.EqualError(t, m.ingestDescriptors(ctx, ts(4), ts(5), nil, validateFn),
 		`gap between 0.000000003,0 and 0.000000004,0`)
-	require.Equal(t, ts(3), m.highWater())
+	require.Equal(t, ts(3), frontier())
 
 	// validates
 	require.NoError(t, m.ingestDescriptors(ctx, ts(3), ts(4), []catalog.Descriptor{
 		tabledesc.NewBuilder(&descpb.TableDescriptor{ID: 0}).BuildImmutable(),
 	}, validateFn))
-	require.Equal(t, ts(4), m.highWater())
+	require.Equal(t, ts(4), frontier())
 
 	// high-water already high enough. fast-path
 	require.NoError(t, m.waitForTS(ctx, ts(3)))
@@ -111,8 +97,6 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	errCh7 := make(chan error, 1)
 	go func() { errCh7 <- m.waitForTS(ctx, ts(7)) }()
 	go func() { errCh6 <- m.waitForTS(ctx, ts(6)) }()
-	requireWaitingFor(t, &m, ts(7))
-	requireWaitingFor(t, &m, ts(6))
 	requireChannelEmpty(t, errCh6)
 	requireChannelEmpty(t, errCh7)
 
@@ -125,7 +109,6 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.NoError(t, m.ingestDescriptors(ctx, ts(5), ts(6), nil, validateFn))
 	require.NoError(t, <-errCh6)
 	requireChannelEmpty(t, errCh7)
-	requireWaitingFor(t, &m, ts(7))
 
 	// high-water advances again, unblocks errCh7
 	require.NoError(t, m.ingestDescriptors(ctx, ts(6), ts(7), nil, validateFn))
@@ -135,7 +118,6 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	errCh8 := make(chan error, 1)
 	ctxTS8, cancelTS8 := context.WithCancel(ctx)
 	go func() { errCh8 <- m.waitForTS(ctxTS8, ts(8)) }()
-	requireWaitingFor(t, &m, ts(8))
 	requireChannelEmpty(t, errCh8)
 	cancelTS8()
 	require.EqualError(t, <-errCh8, `context canceled`)
@@ -144,7 +126,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(10), []catalog.Descriptor{
 		tabledesc.NewBuilder(&descpb.TableDescriptor{ID: 0, Name: `whoops!`}).BuildImmutable(),
 	}, validateFn), `descriptor: whoops!`)
-	require.Equal(t, ts(7), m.highWater())
+	require.Equal(t, ts(7), frontier())
 
 	// ts 10 has errored, so validate can return its error without blocking
 	require.EqualError(t, m.waitForTS(ctx, ts(10)), `descriptor: whoops!`)
@@ -154,8 +136,6 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	errCh9 := make(chan error, 1)
 	go func() { errCh8 <- m.waitForTS(ctx, ts(8)) }()
 	go func() { errCh9 <- m.waitForTS(ctx, ts(9)) }()
-	requireWaitingFor(t, &m, ts(8))
-	requireWaitingFor(t, &m, ts(9))
 	requireChannelEmpty(t, errCh8)
 	requireChannelEmpty(t, errCh9)
 
@@ -163,11 +143,10 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(9), []catalog.Descriptor{
 		tabledesc.NewBuilder(&descpb.TableDescriptor{ID: 0, Name: `oh no!`}).BuildImmutable(),
 	}, validateFn), `descriptor: oh no!`)
-	require.Equal(t, ts(7), m.highWater())
+	require.Equal(t, ts(7), frontier())
 	require.EqualError(t, <-errCh9, `descriptor: oh no!`)
 
 	// ts 8 is still unknown
-	requireWaitingFor(t, &m, ts(8))
 	requireChannelEmpty(t, errCh8)
 
 	// always return the earliest error seen (so waiting for ts 10 immediately
@@ -176,7 +155,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 
 	// something earlier than ts 10 can still be okay
 	require.NoError(t, m.ingestDescriptors(ctx, ts(7), ts(8), nil, validateFn))
-	require.Equal(t, ts(8), m.highWater())
+	require.Equal(t, ts(8), frontier())
 	require.NoError(t, <-errCh8)
 }
 
@@ -336,4 +315,186 @@ func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
 	_, err := sf.fetchDescriptorVersions(ctx, beforeCreate, s.Clock().Now())
 	require.True(t, errors.Is(err, catalog.ErrDescriptorDropped),
 		"expected dropped descriptor error, found: %v", err)
+}
+
+// testLeaseAcquirer is a test implementation of leaseAcquirer.
+// It contains an ordered time map of descriptors for a single ID.
+// TODO(yang): Extend this for multiple IDs.
+type testLeaseAcquirer struct {
+	id    descpb.ID
+	descs []*testLeasedDescriptor
+}
+
+func (t *testLeaseAcquirer) Acquire(
+	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
+) (lease.LeasedDescriptor, error) {
+	if id != t.id {
+		return nil, errors.Newf("unknown id: %d", id)
+	}
+
+	i, ok := slices.BinarySearchFunc(t.descs, timestamp, func(desc *testLeasedDescriptor, timestamp hlc.Timestamp) int {
+		return desc.timestamp.Compare(timestamp)
+	})
+	if ok {
+		return t.descs[i], nil
+	}
+	if i == 0 {
+		return nil, errors.Newf("no descriptors for id: %d", id)
+	}
+	return t.descs[i-1], nil
+}
+
+func (t *testLeaseAcquirer) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) error {
+	if id != t.id {
+		return errors.Newf("unknown id: %d", id)
+	}
+	return nil
+}
+
+func (t *testLeaseAcquirer) Codec() keys.SQLCodec {
+	panic("should not be called")
+}
+
+type testLeasedDescriptor struct {
+	lease.LeasedDescriptor
+	timestamp hlc.Timestamp
+	desc      catalog.Descriptor
+}
+
+func newTestLeasedDescriptor(
+	id descpb.ID, version descpb.DescriptorVersion, schemaLocked bool, timestamp hlc.Timestamp,
+) *testLeasedDescriptor {
+	return &testLeasedDescriptor{
+		timestamp: timestamp,
+		desc: &testTableDescriptor{
+			id:           id,
+			version:      version,
+			schemaLocked: schemaLocked,
+		},
+	}
+}
+
+func (ld *testLeasedDescriptor) Release(ctx context.Context) {
+}
+
+func (ld *testLeasedDescriptor) Underlying() catalog.Descriptor {
+	return ld.desc
+}
+
+type testTableDescriptor struct {
+	catalog.TableDescriptor
+	id           descpb.ID
+	version      descpb.DescriptorVersion
+	schemaLocked bool
+}
+
+func (td *testTableDescriptor) GetID() descpb.ID {
+	return td.id
+}
+
+func (td *testTableDescriptor) GetVersion() descpb.DescriptorVersion {
+	return td.version
+}
+
+func (td *testTableDescriptor) IsSchemaLocked() bool {
+	return td.schemaLocked
+}
+
+func TestPauseOrResumePolling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	const tableID = 123
+	const (
+		v1 = 1
+		v2 = 2
+		v3 = 3
+	)
+	const (
+		schemaLocked    = true
+		notSchemaLocked = false
+	)
+	tableDescs := []*testLeasedDescriptor{
+		newTestLeasedDescriptor(tableID, v1, notSchemaLocked, hlc.Timestamp{WallTime: 20}),
+		newTestLeasedDescriptor(tableID, v2, schemaLocked, hlc.Timestamp{WallTime: 40}),
+		newTestLeasedDescriptor(tableID, v3, notSchemaLocked, hlc.Timestamp{WallTime: 60}),
+	}
+
+	sf := schemaFeed{
+		leaseMgr: &testLeaseAcquirer{
+			id:    tableID,
+			descs: tableDescs,
+		},
+		targets: CreateChangefeedTargets(tableID),
+	}
+
+	getFrontier := func() hlc.Timestamp {
+		sf.mu.Lock()
+		defer sf.mu.Unlock()
+		return sf.mu.ts.frontier
+	}
+	setFrontier := func(ts hlc.Timestamp) error {
+		sf.mu.Lock()
+		defer sf.mu.Unlock()
+		return sf.mu.ts.advanceFrontier(ts)
+	}
+
+	// Set the initial frontier to 10.
+	require.NoError(t, setFrontier(hlc.Timestamp{WallTime: 10}))
+
+	// Initially, polling should not be paused.
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 10}, getFrontier())
+
+	// We expect a non-terminal error to be swallowed for time 10.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 10}))
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 10}, getFrontier())
+
+	// We bump the highwater up to reflect a descriptor being read at time 20.
+	require.NoError(t, setFrontier(hlc.Timestamp{WallTime: 20}))
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 20}, getFrontier())
+
+	// We expect polling not to be paused for time 30.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 30}))
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 20}, getFrontier())
+
+	// We expect polling not to be paused for time 40 since the highwater
+	// has not caught up to the schema-locked version.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 40}))
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 20}, getFrontier())
+
+	// We bump the highwater up to reflect a descriptor being read at time 40.
+	require.NoError(t, setFrontier(hlc.Timestamp{WallTime: 40}))
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 40}, getFrontier())
+
+	// We expect polling to be paused for time 40 now that the highwater has
+	// caught up to the schema-locked version.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 40}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 40}, getFrontier())
+
+	// We expect polling continue to be paused for time 50 and to see the
+	// highwater bumped up.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 50}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 50}, getFrontier())
+
+	// We expect polling continue to be paused for time 20 and to see the
+	// highwater remain unchanged (fast path).
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 20}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 50}, getFrontier())
+
+	// We expect polling to be resumed for time 60 and to not see the highwater
+	// bumped up.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 60}))
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 50}, getFrontier())
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -48,7 +49,8 @@ var virtualSequenceOpts = tree.SequenceOptions{
 }
 
 // cachedSequencesCacheSize is the default cache size used when
-// SessionNormalizationMode is SerialUsesCachedSQLSequences.
+// SessionNormalizationMode is SerialUsesCachedSQLSequences or
+// SerialUsesCachedNodeSQLSequences.
 var cachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.serial_sequences_cache_size",
@@ -88,11 +90,17 @@ func (p *planner) generateSequenceForSerial(
 
 	// Now skip over all names that are already taken.
 	nameBase := seqName.ObjectName
+	flags := tree.ObjectLookupFlags{
+		Required:          false,
+		RequireMutable:    false,
+		IncludeOffline:    true,
+		DesiredObjectKind: tree.AnyObject,
+	}
 	for i := 0; ; i++ {
 		if i > 0 {
 			seqName.ObjectName = tree.Name(fmt.Sprintf("%s%d", nameBase, i))
 		}
-		res, err := p.resolveUncachedTableDescriptor(ctx, seqName, false /*required*/, tree.ResolveAnyTableKind)
+		res, _, err := resolver.ResolveExistingObject(ctx, p, seqName.ToUnresolvedObjectName(), flags)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
@@ -173,7 +181,7 @@ func (p *planner) generateSerialInColumnDef(
 		newSpec.Type = upgradeType
 		asIntType = upgradeType
 
-	case sessiondatapb.SerialUsesSQLSequences, sessiondatapb.SerialUsesCachedSQLSequences:
+	case sessiondatapb.SerialUsesSQLSequences, sessiondatapb.SerialUsesCachedSQLSequences, sessiondatapb.SerialUsesCachedNodeSQLSequences:
 		// With real sequences we can use the requested type as-is.
 
 	default:
@@ -211,6 +219,13 @@ func (p *planner) generateSerialInColumnDef(
 		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
 		seqOpts = tree.SequenceOptions{
 			tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &value},
+		}
+	} else if serialNormalizationMode == sessiondatapb.SerialUsesCachedNodeSQLSequences {
+		seqType = "cached node "
+
+		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
+		seqOpts = tree.SequenceOptions{
+			tree.SequenceOption{Name: tree.SeqOptCacheNode, IntVal: &value},
 		}
 	}
 

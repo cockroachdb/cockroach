@@ -107,7 +107,7 @@ func (ex *connExecutor) execStmt(
 ) (fsm.Event, fsm.EventPayload, error) {
 	ast := parserStmt.AST
 	if log.V(2) || logStatementsExecuteEnabled.Get(&ex.server.cfg.Settings.SV) ||
-		log.HasSpanOrEvent(ctx) {
+		log.HasSpan(ctx) {
 		log.VEventf(ctx, 2, "executing: %s in state: %s", ast, ex.machine.CurState())
 	}
 
@@ -386,11 +386,14 @@ func (ex *connExecutor) execStmtInOpenState(
 	os := ex.machine.CurState().(stateOpen)
 
 	isExtendedProtocol := portal != nil && portal.Stmt != nil
+	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
+
 	if isExtendedProtocol {
 		stmt = makeStatementFromPrepared(portal.Stmt, queryID)
 	} else {
-		stmt = makeStatement(parserStmt, queryID)
+		stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
 	}
+	stmtFingerprint := stmt.StmtNoConstants
 
 	var queryTimeoutTicker *time.Timer
 	var txnTimeoutTicker *time.Timer
@@ -502,9 +505,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			cancelQuery()
 		})
 
-		if ex.executorType != executorTypeInternal {
-			ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
-		}
+		// Note ex.metrics is Server.Metrics for the connExecutor that serves the
+		// client connection, and is Server.InternalMetrics for internal executors.
+		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 
 		// If the query timed out, we intercept the error, payload, and event here
 		// for the same reasons we intercept them for canceled queries above.
@@ -533,9 +536,19 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}(ctx, res)
 
-	if ex.executorType != executorTypeInternal {
-		ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
+	// Special handling for SET TRANSACTION statements within a stored procedure
+	// that uses COMMIT or ROLLBACK. This has to happen before the call to
+	// resetPlanner to ensure that the settings are propagated correctly.
+	if txnModes := ex.planner.storedProcTxnState.getTxnModes(); txnModes != nil {
+		_, err = ex.planner.SetTransaction(ctx, &tree.SetTransaction{Modes: *txnModes})
+		if err != nil {
+			return makeErrEvent(err)
+		}
 	}
+
+	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
+	// client connection, and is Server.InternalMetrics for internal executors.
+	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
 	// TODO(sql-sessions): persist the planner for a pausable portal, and reuse
 	// it for each re-execution.
@@ -547,6 +560,27 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.sessionDataMutatorIterator.paramStatusUpdater = res
 	p.noticeSender = res
 	ih := &p.instrumentation
+
+	if maxOpen := maxOpenTransactions.Get(&ex.server.cfg.Settings.SV); maxOpen > 0 && ex.executorType != executorTypeInternal {
+		// NB: ex.metrics includes internal executor transactions when executorType
+		// is executorTypeInternal, so that's why we exclude internal executors
+		// in the conditional.
+		if ex.metrics.EngineMetrics.SQLTxnsOpen.Value() > maxOpen {
+			hasAdmin, err := ex.planner.HasAdminRole(ctx)
+			if err != nil {
+				return makeErrEvent(err)
+			}
+			if !hasAdmin {
+				return makeErrEvent(errors.WithHintf(
+					pgerror.Newf(
+						pgcode.ConfigurationLimitExceeded,
+						"cannot execute operation due to server.max_open_transactions_per_gateway cluster setting",
+					),
+					"the maximum number of open transactions is %d", maxOpen,
+				))
+			}
+		}
+	}
 
 	// Special top-level handling for EXPLAIN ANALYZE.
 	if e, ok := ast.(*tree.ExplainAnalyze); ok {
@@ -586,6 +620,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		// TODO(radu): should we trim the "EXPLAIN ANALYZE (DEBUG)" part from
 		// stmt.SQL?
 
+		// Recompute statement fingerprint since the AST has changed.
+		flags := tree.FmtHideConstants | stmtFingerprintFmtMask
+		f := tree.NewFmtCtx(flags)
+		f.FormatNode(ast)
+		stmtFingerprint = f.CloseAndGetString()
+
 		// Clear any ExpectedTypes we set if we prepared this statement (they
 		// reflect the column types of the EXPLAIN itself and not those of the inner
 		// statement).
@@ -617,6 +657,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.ExpectedTypes = ps.Columns
 		stmt.StmtNoConstants = ps.StatementNoConstants
 		stmt.StmtSummary = ps.StatementSummary
+		stmtFingerprint = stmt.StmtNoConstants
 		res.ResetStmtType(ps.AST)
 
 		if e.DiscardRows {
@@ -778,9 +819,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.stmt = stmt
 	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	if err := p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders); err != nil {
-		return makeErrEvent(err)
-	}
+	p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
 	shouldLogToExecAndAudit := true
@@ -796,11 +835,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		if p, ok := retPayload.(payloadWithError); ok {
 			execErr = p.errorCause()
 		}
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
-		f.FormatNode(ast)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
-			f.CloseAndGetString(),
-			execErr != nil,
+			stmtFingerprint,
 			ex.implicitTxn(),
 			p.CurrentDatabase(),
 		)
@@ -820,7 +856,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			stmtFingerprintID,
 			&topLevelQueryStats{},
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	switch s := ast.(type) {
@@ -911,6 +947,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				NumAnnotations:  stmt.NumAnnotations,
 			},
 			ex.server.cfg.GenerateID(),
+			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
 		)
 		var rawTypeHints []oid.Oid
 
@@ -937,8 +974,29 @@ func (ex *connExecutor) execStmtInOpenState(
 	// dispatchToExecutionEngine.
 	shouldLogToExecAndAudit = false
 
+	if tree.CanModifySchema(ast) &&
+		(!ex.planner.EvalContext().TxnIsSingleStmt || !ex.implicitTxn()) &&
+		ex.extraTxnState.firstStmtExecuted &&
+		ex.sessionData().AutoCommitBeforeDDL &&
+		ex.executorType != executorTypeInternal {
+		if err := ex.planner.SendClientNotice(
+			ctx,
+			pgnotice.Newf("auto-committing transaction before processing DDL due to autocommit_before_ddl setting"),
+		); err != nil {
+			return nil, nil, err
+		}
+		retEv, retPayload = ex.handleAutoCommit(ctx, ast)
+		if _, committed := retEv.(eventTxnFinishCommitted); committed && retPayload == nil {
+			// Use eventTxnCommittedDueToDDL so that the current statement gets
+			// executed again when the state machine advances.
+			retEv = eventTxnCommittedDueToDDL{}
+		}
+		return
+	}
+
 	// For regular statements (the ones that get to this point), we
-	// don't return any event unless an error happens.
+	// don't return any event unless an error happens, or a CALL statement
+	// performs a nested transaction COMMIT or ROLLBACK.
 
 	// For a portal (prepared stmt), since handleAOST() is called when preparing
 	// the statement, and this function is idempotent, we don't need to
@@ -1201,6 +1259,29 @@ func (ex *connExecutor) execStmtInOpenState(
 		log.VEventf(ctx, 2, "push detected for non-refreshable txn but auto-retry not possible")
 	}
 
+	// Special handling for explicit transaction management in CALL statements.
+	// A stored procedure has executed a COMMIT or ROLLBACK statement and
+	// suspended its execution. Direct the connExecutor to commit/rollback the
+	// current transaction, and then resume execution within the new transaction.
+	switch ex.extraTxnState.storedProcTxnState.txnOp {
+	case tree.StoredProcTxnCommit:
+		// Commit the current transaction. The connExecutor will open a new
+		// transaction, and then return to executing the same CALL statement.
+		ev, payload := ex.commitSQLTransaction(ctx, ast, ex.commitSQLTransactionInternal)
+		if payload != nil {
+			return ev, payload, nil
+		}
+		return eventTxnFinishCommittedPLpgSQL{}, nil, nil
+	case tree.StoredProcTxnRollback:
+		// Abort the current transaction. The connExecutor will open a new
+		// transaction, and then return to executing the same CALL statement.
+		ev, payload := ex.rollbackSQLTransaction(ctx, ast)
+		if payload != nil {
+			return ev, payload, nil
+		}
+		return eventTxnFinishAbortedPLpgSQL{}, nil, nil
+	}
+
 	// No event was generated.
 	return nil, nil, nil
 }
@@ -1253,6 +1334,10 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 					return err
 				}
 			}
+			if err := ex.state.setReadOnlyMode(tree.ReadOnly); err != nil {
+				return err
+			}
+			p.extendedEvalCtx.TxnReadOnly = ex.state.readOnly.Load()
 			return nil
 		}
 		if *p.extendedEvalCtx.AsOfSystemTime == *asOf {
@@ -1332,7 +1417,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 	if knobs := ex.server.cfg.SchemaChangerTestingKnobs; knobs != nil {
 		inRetryBackoff = knobs.TwoVersionLeaseViolation
 	}
-	regionCache, err := regions.NewCachedDatabaseRegions(ctx, ex.server.cfg.DB, ex.server.cfg.LeaseManager)
+	regionCache, err := regions.NewCachedDatabaseRegionsAt(ctx, ex.server.cfg.DB, ex.server.cfg.LeaseManager, ex.state.mu.txn.ProvisionalCommitTimestamp())
 	if err != nil {
 		return err
 	}
@@ -1340,6 +1425,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		ctx,
 		ex.server.cfg.Clock,
 		ex.server.cfg.InternalDB,
+		ex.server.cfg.Codec,
 		ex.extraTxnState.descCollection,
 		regionCache,
 		ex.server.cfg.Settings,
@@ -1454,7 +1540,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		ex.recordDDLTxnTelemetry(failed)
 	}()
 
-	if err := ex.extraTxnState.sqlCursors.closeAll(true /* errorOnWithHold */); err != nil {
+	if err := ex.extraTxnState.sqlCursors.closeAll(cursorCloseForTxnCommit); err != nil {
 		return err
 	}
 
@@ -1581,7 +1667,7 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 func (ex *connExecutor) rollbackSQLTransaction(
 	ctx context.Context, stmt tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
-	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+	if err := ex.extraTxnState.sqlCursors.closeAll(cursorCloseForTxnRollback); err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}
 
@@ -1615,8 +1701,6 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		return err
 	}
 
-	// TODO(rafi): Figure out observability for these retries. We might want to
-	// add a new field similar to ex.state.mu.autoRetryCounter.
 	maxRetries := int(ex.sessionData().MaxRetriesForReadCommitted)
 	for attemptNum := 0; ; attemptNum++ {
 		bufferPos := res.BufferedResultsLen()
@@ -1671,6 +1755,8 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		if err := ex.state.mu.txn.PrepareForPartialRetry(ctx); err != nil {
 			return err
 		}
+		ex.state.mu.autoRetryCounter++
+		ex.state.mu.autoRetryReason = txnRetryErr
 	}
 	return nil
 }
@@ -1797,7 +1883,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						ppInfo.dispatchToExecutionEngine.stmtFingerprintID,
 						ppInfo.dispatchToExecutionEngine.queryStats,
 						ex.statsCollector,
-					)
+						ex.extraTxnState.shouldLogToTelemetry)
 				},
 			})
 		} else {
@@ -1824,7 +1910,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				stmtFingerprintID,
 				&stats,
 				ex.statsCollector,
-			)
+				ex.extraTxnState.shouldLogToTelemetry)
 		}
 	}()
 
@@ -1923,9 +2009,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	if ex.server.cfg.TestingKnobs.OnTxnRetry != nil && ex.state.mu.autoRetryReason != nil {
 		ex.server.cfg.TestingKnobs.OnTxnRetry(ex.state.mu.autoRetryReason, planner.EvalContext())
 	}
-	distribute := DistributionType(DistributionTypeNone)
+	distribute := DistributionType(LocalDistribution)
 	if distributePlan.WillDistribute() {
-		distribute = DistributionTypeAlways
+		distribute = FullDistribution
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err = ex.execWithDistSQLEngine(
@@ -1981,7 +2067,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
-		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
+		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), ex.executorType == executorTypeInternal, res.Err())
 	}
 
 	if limitsErr := ex.handleTxnRowsWrittenReadLimits(ctx); limitsErr != nil && res.Err() == nil {
@@ -2065,6 +2151,7 @@ func populateQueryLevelStats(
 				}
 			}
 		}
+		ih.queryLevelStatsWithErr.Stats.ClientTime = topLevelStats.clientTime
 	}
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
 		ih.traceMetadata.annotateExplain(
@@ -2235,17 +2322,17 @@ func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) erro
 	return errors.CombineErrors(writtenErr, readErr)
 }
 
+var txnSchemaChangeErr = pgerror.Newf(
+	pgcode.FeatureNotSupported,
+	"to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting",
+)
+
 // maybeUpgradeToSerializable checks if the statement is a schema change, and
 // upgrades the transaction to serializable isolation if it is. If the
 // transaction contains multiple statements, and an upgrade was attempted, an
 // error is returned.
 func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Statement) error {
 	p := &ex.planner
-	if ex.extraTxnState.upgradedToSerializable && ex.extraTxnState.firstStmtExecuted {
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported, "multi-statement transaction involving a schema change needs to be SERIALIZABLE",
-		)
-	}
 	if tree.CanModifySchema(stmt.AST) {
 		if ex.state.mu.txn.IsoLevel().ToleratesWriteSkew() {
 			if !ex.extraTxnState.firstStmtExecuted {
@@ -2255,9 +2342,7 @@ func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Sta
 				ex.extraTxnState.upgradedToSerializable = true
 				p.BufferClientNotice(ctx, pgnotice.Newf("setting transaction isolation level to SERIALIZABLE due to schema change"))
 			} else {
-				return pgerror.Newf(
-					pgcode.FeatureNotSupported, "multi-statement transaction involving a schema change needs to be SERIALIZABLE",
-				)
+				return txnSchemaChangeErr
 			}
 		}
 	}
@@ -2325,6 +2410,10 @@ type topLevelQueryStats struct {
 	// networkEgressEstimate is an estimate for the number of bytes sent to the
 	// client. It is used for estimating the number of RUs consumed by a query.
 	networkEgressEstimate int64
+	// clientTime is the amount of time query execution was blocked on the
+	// client receiving the PGWire protocol messages (as well as construcing
+	// those messages).
+	clientTime time.Duration
 }
 
 func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
@@ -2332,6 +2421,7 @@ func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.rowsRead += other.rowsRead
 	s.rowsWritten += other.rowsWritten
 	s.networkEgressEstimate += other.networkEgressEstimate
+	s.clientTime += other.clientTime
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -2356,9 +2446,10 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		ex.server.cfg.Clock,
 		&ex.sessionTracing,
 	)
+	recv.measureClientTime = planner.instrumentation.ShouldCollectExecStats()
 	recv.progressAtomic = progressAtomic
 	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
-		recv.testingKnobs.pushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
+		recv.testingKnobs.pushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(ctx, planner.stmt.SQL)
 	}
 	defer recv.Release()
 
@@ -2469,7 +2560,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		}
 
 		p := &ex.planner
-		stmt := makeStatement(parserStmt, ex.server.cfg.GenerateID())
+		stmt := makeStatement(parserStmt, ex.server.cfg.GenerateID(),
+			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)))
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
@@ -2480,11 +2572,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			execErr = p.errorCause()
 		}
 
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
-		f.FormatNode(stmt.AST)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
-			f.CloseAndGetString(),
-			execErr != nil,
+			stmt.StmtNoConstants,
 			ex.implicitTxn(),
 			p.CurrentDatabase(),
 		)
@@ -2504,7 +2593,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			stmtFingerprintID,
 			&topLevelQueryStats{},
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	// We're in the NoTxn state, so no statements were executed earlier. Bump the
@@ -2539,6 +2628,17 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		return ex.execShowCommitTimestampInNoTxnState(ctx, s, res)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
+		if ex.sessionData().AutoCommitBeforeDDL {
+			// If autocommit_before_ddl is set, we allow these statements to be
+			// executed, and send a warning rather than an error.
+			if err := ex.planner.SendClientNotice(
+				ctx,
+				pgerror.WithSeverity(errNoTransactionInProgress, "WARNING"),
+			); err != nil {
+				return ex.makeErrEvent(err, ast)
+			}
+			return nil, nil
+		}
 		return ex.makeErrEvent(errNoTransactionInProgress, ast)
 	default:
 		// NB: Implicit transactions are created with the session's default
@@ -3111,7 +3211,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 		transactionFingerprintID :=
 			appstatspb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
 
-		err := ex.txnFingerprintIDCache.Add(transactionFingerprintID)
+		err := ex.txnFingerprintIDCache.Add(ctx, transactionFingerprintID)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to enqueue transactionFingerprintID = %d: %s", transactionFingerprintID, err)
@@ -3139,11 +3239,9 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 			}
 			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 		}
+
 		// If we have a commitTimestamp, we should use it.
 		ex.previousTransactionCommitTimestamp.Forward(ev.commitTimestamp)
-		if telemetryLoggingEnabled.Get(&ex.server.cfg.Settings.SV) {
-			ex.server.TelemetryLoggingMetrics.onTxnFinish(ev.txnID.String())
-		}
 	}
 }
 
@@ -3164,6 +3262,7 @@ func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
 			ex.server.cfg.TestingKnobs.BeforeRestart(ctx, ex.state.mu.autoRetryReason)
 		}
+
 	}
 }
 
@@ -3199,14 +3298,21 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
 	}
 
-	if ex.executorType != executorTypeInternal {
-		ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
-	}
+	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
+	// client connection, and is Server.InternalMetrics for internal executors.
+	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
 
 	ex.extraTxnState.shouldExecuteOnTxnFinish = true
 	ex.extraTxnState.txnFinishClosure.txnStartTime = txnStart
 	ex.extraTxnState.txnFinishClosure.implicit = ex.implicitTxn()
 	ex.extraTxnState.shouldExecuteOnTxnRestart = true
+
+	// Determine telemetry logging.
+	isTracing := ex.planner.ExtendedEvalContext().Tracing.Enabled()
+	ex.extraTxnState.shouldLogToTelemetry, ex.extraTxnState.telemetrySkippedTxns =
+		ex.server.TelemetryLoggingMetrics.shouldEmitTransactionLog(isTracing,
+			ex.executorType == executorTypeInternal,
+			ex.applicationName.Load().(string))
 
 	ex.statsCollector.StartTransaction()
 
@@ -3233,14 +3339,20 @@ func (ex *connExecutor) recordTransactionFinish(
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
 	ex.totalActiveTimeStopWatch.Stop()
-	if ex.executorType != executorTypeInternal {
-		ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
-	}
-	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
+	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
+		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(
+			ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL,
+		)
+	}
+
+	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
+	// client connection, and is Server.InternalMetrics for internal executors.
 	if contentionDuration := ex.extraTxnState.accumulatedStats.ContentionTime.Nanoseconds(); contentionDuration > 0 {
 		ex.metrics.EngineMetrics.SQLContendedTxns.Inc(1)
 	}
+	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
+	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
 	ex.txnIDCacheWriter.Record(contentionpb.ResolvedTxnID{
 		TxnID:            ev.txnID,
@@ -3289,11 +3401,16 @@ func (ex *connExecutor) recordTransactionFinish(
 		TxnErr:      txnErr,
 	}
 
-	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
-		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL)
-	}
-
 	ex.maybeRecordRetrySerializableContention(ev.txnID, transactionFingerprintID, txnErr)
+
+	if ex.extraTxnState.shouldLogToTelemetry {
+		ex.planner.logTransaction(ctx,
+			int(ex.extraTxnState.txnCounter.Load()),
+			transactionFingerprintID,
+			&recordedTxnStats,
+			ex.extraTxnState.telemetrySkippedTxns,
+		)
+	}
 
 	return ex.statsCollector.RecordTransaction(
 		ctx,

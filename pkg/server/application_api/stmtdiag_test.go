@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -124,10 +123,10 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 		},
 		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
 	)
-	require.Contains(t, err.Error(), "requesting statement bundle requires VIEWACTIVITY or ADMIN role option")
+	require.Contains(t, err.Error(), "requesting statement bundle requires VIEWACTIVITY privilege")
 
 	// Grant VIEWACTIVITY and all test should work.
-	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", apiconstants.TestingUserNameNoAdmin().Normalized()))
+	db.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWACTIVITY TO %s", apiconstants.TestingUserNameNoAdmin().Normalized()))
 	req := &serverpb.CreateStatementDiagnosticsReportRequest{
 		StatementFingerprint: "INSERT INTO test VALUES (_)",
 	}
@@ -160,7 +159,7 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 `, [][]string{{"1"}})
 
 	// Grant VIEWACTIVITYREDACTED and all test should get permission errors.
-	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", apiconstants.TestingUserNameNoAdmin().Normalized()))
+	db.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWACTIVITYREDACTED TO %s", apiconstants.TestingUserNameNoAdmin().Normalized()))
 
 	if err := srvtestutils.PostStatusJSONProtoWithAdminOption(ts, "stmtdiagreports", req, &resp, false); err != nil {
 		if !testutils.IsError(err, "status: 403") {
@@ -182,7 +181,7 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 		},
 		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
 	)
-	require.Contains(t, err.Error(), "VIEWACTIVITYREDACTED role option cannot request statement bundle")
+	require.Contains(t, err.Error(), "VIEWACTIVITYREDACTED privilege cannot request statement bundle")
 }
 
 func TestStatementDiagnosticsCompleted(t *testing.T) {
@@ -231,8 +230,6 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 func TestStatementDiagnosticsDoesNotReturnExpiredRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderDeadlockWithIssue(t, 115914, "likely to time out")
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())

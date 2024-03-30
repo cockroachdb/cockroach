@@ -265,12 +265,10 @@ SELECT database_name,
 			if err != nil {
 				return nil, err
 			}
-			paramTypes, err := fn.ParamTypes(d.ctx, d.catalog)
-			if err != nil {
-				return nil, err
-			}
-			ol, err := fd.MatchOverload(paramTypes, fn.FuncName.Schema(),
-				&d.evalCtx.SessionData().SearchPath, routineType)
+			ol, err := fd.MatchOverload(
+				d.ctx, d.catalog, &fn, &d.evalCtx.SessionData().SearchPath,
+				routineType, false, /* inDropContext */
+			)
 			if err != nil {
 				return nil, err
 			}

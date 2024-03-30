@@ -18,7 +18,7 @@ import "roachpb/metadata.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
 import "kv/kvserver/kvflowcontrol/kvflowcontrolpb/kvflowcontrol.proto";
-import "raft/v3/raftpb/raft.proto";
+import "raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 
@@ -156,39 +156,6 @@ message RaftMessageResponse {
 
 // SnapshotRequest is the request used to send streaming snapshot requests.
 message SnapshotRequest {
-  enum Priority {
-    UNKNOWN = 0;
-    // RECOVERY is used for a Raft-initiated snapshots and for
-    // up-replication snapshots (i.e. when a dead node has been
-    // removed and the range needs to be up-replicated).
-    RECOVERY = 1;
-    // REBALANCE is used for snapshots involved in rebalancing.
-    REBALANCE = 2;
-  }
-
-  enum Strategy {
-    // KV_BATCH snapshots stream batches of KV pairs for all keys in a
-    // range from the sender the the receiver. These KV pairs are then
-    // combined into a large RocksDB WriteBatch that is atomically
-    // applied.
-    KV_BATCH = 0;
-  }
-
-  // Type is used for metrics collection on the receiver side. See
-  // applySnapshot in replica_raftstorage.go.
-  enum Type {
-    // VIA_SNAPSHOT_QUEUE indicates the snapshots sent by the raft snapshot
-    // queue to all types of replicas.
-    VIA_SNAPSHOT_QUEUE = 0;
-    // INITIAL indicates the initial snapshots sent to LEARNER (before they're
-    // promoted to full voters) and NON_VOTER replicas for upreplication.
-    //
-    // As of the time of writing, we only send this snapshot from the
-    // initializeRaftLearners after creating a new LEARNER or NON_VOTER replica.
-    INITIAL = 1;
-    reserved 2;
-  }
-
   // QueueName indicates the source of the snapshot. Snapshots are prioritized
   // within a queue and round-robin selected between queues for both the sending
   // and receiving side.
@@ -212,32 +179,6 @@ message SnapshotRequest {
     // The estimated size of the range, to be used in reservation decisions.
     int64 range_size = 3;
 
-    // The priority of the snapshot.
-    // Deprecated, prefer sender_queue_priority.
-    // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
-    Priority deprecated_priority = 6;
-
-    // The strategy of the snapshot.
-    // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
-    Strategy deprecated_strategy = 7;
-
-    // The type of the snapshot.
-    // Deprecated, prefer sender_queue_name.
-    // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
-    Type deprecated_type = 9;
-
-    // Whether the snapshot uses the unreplicated RaftTruncatedState or not.
-    // This is always true for snapshots generated in v21.1+ clusters. In v20.2
-    // it was possible for ranges to be using the replicated variant. v21.1
-    // therefore had code expecting that possibility (unlike v21.2 code, where
-    // this field is assumed to always be true and thus never read). For
-    // compatibility with v21.1 nodes however, v21.2 has to explicitly set this
-    // field to true. In v22.1 we can remove it entirely seeing as how v21.2
-    // code never reads the field.
-    //
-    // TODO(irfansharif): Remove this in v22.1.
-    bool deprecated_unreplicated_truncated_state = 8;
-
     // The sending queue's name, to be utilized to ensure fairness across
     // different snapshot sending sources. The default queue name, OTHER, is
     // reserved for any uncategorized and unprioritized snapshots, and requests
@@ -255,7 +196,12 @@ message SnapshotRequest {
     // metadata present in the snapshot, but not file contents.
     bool shared_replicate = 12;
 
-    reserved 1, 4;
+    // If true, the snapshot could contain external files. Such files
+    // will have their metadata present in the snapshot but not the
+    // file contents.
+    bool external_replicate = 13;
+
+    reserved 1, 4, 6, 7, 8, 9;
   }
 
   // SharedTable represents one shared SSTable present in shared storage.
@@ -301,6 +247,54 @@ message SnapshotRequest {
     uint64 size = 10;
   }
 
+  // ExternalTable represents one SSTable present in external storage.
+  // Intended to be the protobuf version of pebble.ExternalFile.
+  message ExternalTable {
+    // Used by the Pebble objstorage package to generate new blob storage drivers.
+    // Reserved for future use.
+    bytes locator = 1;
+
+    // ObjName is the unique name of this sstable on Locator.
+    string object_name = 2;
+
+    // Physical size of the sstable in bytes.
+    uint64 size = 3;
+
+    // StartKey is the loose, inclusive start key of the sstable.
+    bytes StartKey = 4;
+    // EndKey is the loose, end key of the sstable. Whether it is
+    // inclusive or exclusive is controlled by EndKeyIsInclusive.
+    bytes EndKey = 5;
+
+    // EndKeyIsInclusive is true if the EndKey is inclusive.
+    bool EndKeyIsInclusive = 6;
+
+    // HasPointKey denote whether this file contains point keys.
+    bool has_point_key = 7;
+
+    // HasRangeKey denote whether this file contains range keys.
+    bool has_range_key = 8;
+
+    // SyntheticPrefix will prepend this suffix to all keys in the file during
+    // iteration. Note that the backing file itself is not modified.
+    bytes synthetic_prefix = 9;
+
+    // SyntheticSuffix will replace the suffix of every key in the file during
+    // iteration. Note that the file itself is not modified, rather, every key
+    // returned by an iterator will have the synthetic suffix.
+    //
+    // SyntheticSuffix can only be used under the following conditions:
+    //  - the synthetic suffix must sort before any non-empty suffixes in the
+    //    backing sst (the entire sst, not just the part restricted to Bounds).
+    //  - the backing sst must not contain multiple keys with the same prefix.
+    bytes synthetic_suffix = 10;
+
+    // LSM level of the original sstable. This sstable will go into the same
+    // level in the destination LSM.
+    int32 level = 11;
+
+  }
+
   Header header = 1;
 
   // A BatchRepr. Multiple kv_batches may be sent across multiple request messages.
@@ -317,6 +311,8 @@ message SnapshotRequest {
   // the end of the snapshot (i.e. before the final = true request), and this
   // flag must be set to true before any user keys are streamed.
   bool transition_from_shared_to_regular_replicate = 6;
+
+  repeated ExternalTable external_tables = 7 [(gogoproto.nullable) = false];
 
   reserved 3;
 }
@@ -378,14 +374,6 @@ message DelegateSendSnapshotRequest {
   // The replica selected to act as the snapshot sender.
   roachpb.ReplicaDescriptor delegated_sender = 4 [(gogoproto.nullable) = false];
 
-  // The priority of the snapshot.
-  // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
-  SnapshotRequest.Priority deprecated_priority = 5;
-
-  // The type of the snapshot.
-  // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
-  SnapshotRequest.Type deprecated_type = 6;
-
   // The Raft term of the coordinator (in most cases the leaseholder) replica.
   // The term is used during snapshot receiving to reject messages from an older term.
   uint64 term = 7 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
@@ -409,6 +397,8 @@ message DelegateSendSnapshotRequest {
   bytes snap_id = 13 [
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.nullable) = false];
+
+  reserved 5, 6;
 }
 
 message DelegateSnapshotResponse {

@@ -82,6 +82,26 @@ var httpMetrics = settings.RegisterBoolSetting(
 // MakeHTTPClient makes an http client configured with the common settings used
 // for interacting with cloud storage (timeouts, retries, CA certs, etc).
 func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
+	t, err := MakeTransport(settings)
+	if err != nil {
+		return nil, err
+	}
+	return MakeHTTPClientForTransport(t)
+}
+
+// MakeHTTPClientForTransport creates a new http.Client with the given
+// transport.
+//
+// NB: This indirection is a little silly. But the goal is to prevent
+// us from modifying the defaults on some clients and not others.
+func MakeHTTPClientForTransport(t http.RoundTripper) (*http.Client, error) {
+	return &http.Client{Transport: t}, nil
+}
+
+// MakeHTTPClient makes an http transport configured with the common
+// settings used for interacting with cloud storage (timeouts,
+// retries, CA certs, etc). Prefer MakeHTTPClient where possible.
+func MakeTransport(settings *cluster.Settings) (*http.Transport, error) {
 	var tlsConf *tls.Config
 	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
 		roots, err := x509.SystemCertPool()
@@ -93,15 +113,15 @@ func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 		}
 		tlsConf = &tls.Config{RootCAs: roots}
 	}
+
 	t := http.DefaultTransport.(*http.Transport).Clone()
+
 	// Add our custom CA.
 	t.TLSClientConfig = tlsConf
-
 	// Bump up the default idle conn pool size as we have many parallel workers in
 	// most bulk jobs.
 	t.MaxIdleConnsPerHost = 64
-
-	return &http.Client{Transport: t}, nil
+	return t, nil
 }
 
 // MaxDelayedRetryAttempts is the number of times the delayedRetry method will

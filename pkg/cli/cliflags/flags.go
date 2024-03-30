@@ -191,6 +191,18 @@ metrics for the entire cluster. This capacity constraint does not affect
 SQL query execution.`,
 	}
 
+	GoGCPercent = FlagInfo{
+		Name: "go-gc-percent",
+		Description: `
+Garbage collection target percentage set on the Go runtime (which is also
+configurable via the GOGC environment variable, but --go-gc-percent has higher
+precedence if both are set). A garbage collection is triggered when the ratio of
+freshly allocated data to live data remaining after the previous collection
+reaches this percentage. If left unspecified, defaults to 300%. If set to a
+negative value, disables the target percentage garbage collection heuristic,
+leaving only the soft memory limit heuristic to trigger garbage collection.`,
+	}
+
 	SQLTempStorage = FlagInfo{
 		Name: "max-disk-temp-storage",
 		Description: `
@@ -989,6 +1001,42 @@ which use 'cockroach-data-tenant-X' for tenant 'X')
 `,
 	}
 
+	WALFailover = FlagInfo{
+		Name:   "wal-failover",
+		EnvVar: "COCKROACH_WAL_FAILOVER",
+		Description: `
+Configures the use and behavior of WAL failover. WAL failover enables
+automatic failover to another directory if a WAL write does not complete
+within the configured threshold. Defaults to "disabled". Possible values
+depend on the number of stores a node is configured to use.
+
+If a node has multiple stores, the value "among-stores" enables automatic
+failover to another store's data directory. CockroachDB will automatically
+assign each store a secondary to serve as its WAL failover destination.
+For example:
+<PRE>
+
+  --wal-failover=among-stores
+
+</PRE>
+
+If a node has a single store, the value "path=<path>" enables automatic
+failover to the provided path. After this setting is used, changing the
+configuration to a new path or disabling requires providing the previous
+path as ",prev_path=<path>". For example:
+
+<PRE>
+
+    --wal-failover=path=/mnt/data2
+    --wal-failover=path=/mnt/data3,prev_path=/mnt/data2
+    --wal-failover=disabled,prev_path=/mnt/data3
+
+</PRE>
+
+See the storage.wal_failover.unhealthy_op_threshold cluster setting.
+`,
+	}
+
 	StorageEngine = FlagInfo{
 		Name: "storage-engine",
 		Description: `
@@ -1445,12 +1493,6 @@ Disable the creation of a default dataset in the demo shell.
 This makes 'cockroach demo' faster to start.`,
 	}
 
-	ConfigProfile = FlagInfo{
-		Name:        "config-profile",
-		EnvVar:      "COCKROACH_CONFIG_PROFILE",
-		Description: `Select a configuration profile to apply.`,
-	}
-
 	GeoLibsDir = FlagInfo{
 		Name: "spatial-libs",
 		Description: `
@@ -1643,15 +1685,16 @@ necessary to support CockroachDB.
 	ZipIncludeRangeInfo = FlagInfo{
 		Name: "include-range-info",
 		Description: `
-Include one file per node with information about the KV ranges stored on that node, 
-in nodes/{node ID}/ranges.json. This information can be vital when debugging issues 
-that involve the KV storage layer, such as data placement, load balancing, performance 
-or other behaviors. In certain situations, on large clusters with large numbers of ranges, 
-these files can be omitted if and only if the issue being investigated is already known to
-be in another layer of the system (for example, an error message about an unsupported 
-feature or incompatible value in a SQL schema change or statement). Note however many 
-higher-level issues are ultimately related to the underlying KV storage layer described 
-by these files so only set this to false if directed to do so by Cockroach Labs support.
+Include one file per node with information about the KV ranges stored on that node,
+in nodes/{node ID}/ranges.json. Additionally, include problem ranges information.
+This information can be vital when debugging issues that involve the KV storage layer,
+such as data placement, load balancing, performance or other behaviors. In certain situations,
+on large clusters with large numbers of ranges, these files can be omitted if and only if the
+issue being investigated is already known to be in another layer of the system (for example,
+an error message about an unsupported feature or incompatible value in a SQL schema change or
+statement). Note however many higher-level issues are ultimately related to the underlying KV
+storage layer described by these files so only set this to false if directed to do so by Cockroach
+Labs support.
 `,
 	}
 

@@ -16,10 +16,6 @@ go_test(
     srcs = ["scanner_test.go"],
     data = glob(["testdata/**"]),
     embed = [":rulebasedscanner"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",

@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -21,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -63,18 +64,39 @@ func (b *Builder) buildUDF(
 	}
 
 	// Build the routine.
-	routine, rtyp, isMultiColDataSource := b.buildRoutine(f, def, inScope, colRefs)
+	routine, isMultiColDataSource := b.buildRoutine(f, def, inScope, outScope, colRefs)
 
 	// Synthesize an output columns if necessary.
 	if outCol == nil {
 		if isMultiColDataSource {
-			// TODO(harding): Add the returns record property during create function.
-			f.ResolvedOverload().ReturnsRecordType = types.IsRecordType(rtyp)
-			return b.finishBuildGeneratorFunction(f, f.ResolvedOverload(), routine, inScope, outScope, outCol)
+			return b.finishBuildGeneratorFunction(f, o, routine, inScope, outScope, outCol)
 		}
 		if outScope != nil {
 			outCol = b.synthesizeColumn(outScope, scopeColName(""), f.ResolvedType(), nil /* expr */, routine)
 		}
+	} else if b.insideDataSource {
+		// When we have a single OUT parameter, it becomes the output column
+		// name.
+		var firstOutParamName tree.Name
+		var numOutParams int
+		for _, param := range o.RoutineParams {
+			if param.IsOutParam() {
+				numOutParams++
+				if numOutParams == 1 {
+					firstOutParamName = param.Name
+				}
+			}
+			if numOutParams == 2 {
+				break
+			}
+		}
+		if numOutParams == 1 && firstOutParamName != "" {
+			outCol.name = scopeColName(firstOutParamName)
+		}
+	}
+
+	if b.trackSchemaDeps {
+		b.schemaFunctionDeps.Add(int(o.Oid))
 	}
 
 	return b.finishBuildScalar(f, routine, inScope, outScope, outCol)
@@ -93,17 +115,19 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	b.DisableMemoReuse = true
 	outScope := inScope.push()
 
-	// Type-check the procedure.
-	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+	// Type-check the procedure and its arguments. Subqueries are disallowed in
+	// arguments. Note that we don't use defer to reset semaCtx.Properties
+	// because it must be reset before the call to buildRoutine below, or else
+	// subqueries would be disallowed in the body of procedures.
+	originalProps := b.semaCtx.Properties
 	b.semaCtx.Properties.Require("CALL argument", tree.RejectSubqueries)
-	b.semaCtx.Properties.Ancestors.Push(tree.CallAncestor)
-	typedExpr, err := tree.TypeCheck(b.ctx, c.Proc, b.semaCtx, types.Any)
-	if err != nil {
-		panic(err)
-	}
+	typedExpr := inScope.resolveType(c.Proc, types.Any)
+	b.semaCtx.Properties = originalProps
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
-		panic(errors.AssertionFailedf("expected FuncExpr"))
+		panic(pgerror.Newf(pgcode.WrongObjectType,
+			"%s is not a procedure", c.Proc.Func.String(),
+		))
 	}
 
 	// Resolve the procedure reference.
@@ -114,13 +138,38 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 
 	o := f.ResolvedOverload()
 	if o.Type != tree.ProcedureRoutine {
+		typeNames := make([]string, len(f.Exprs))
+		for i, expr := range f.Exprs {
+			typeNames[i] = expr.(tree.TypedExpr).ResolvedType().String()
+		}
 		panic(errors.WithHint(
 			pgerror.Newf(
 				pgcode.WrongObjectType,
-				"%s(%s) is not a procedure", def.Name, o.Types.String(),
+				"%s(%s) is not a procedure", def.Name, strings.Join(typeNames, ", "),
 			),
 			"To call a function, use SELECT.",
 		))
+	}
+	if b.insideSQLRoutine {
+		for _, p := range o.RoutineParams {
+			if tree.IsOutParamClass(p.Class) {
+				panic(pgerror.New(pgcode.FeatureNotSupported,
+					"calling procedures with output arguments is not supported in SQL functions",
+				))
+			}
+		}
+	}
+
+	// Synthesize output columns for OUT parameters. We can use the return type
+	// to synthesize the columns, since it's based on the OUT parameters.
+	if rTyp := f.ResolvedType(); rTyp.Family() != types.VoidFamily {
+		if len(rTyp.TupleContents()) == 0 {
+			panic(errors.AssertionFailedf("expected procedure to return a record"))
+		}
+		for i := range rTyp.TupleContents() {
+			colName := scopeColName(tree.Name(rTyp.TupleLabels()[i]))
+			b.synthesizeColumn(outScope, colName, rTyp.TupleContents()[i], f, nil /* scalar */)
+		}
 	}
 
 	// Check for execution privileges.
@@ -129,22 +178,31 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	}
 
 	// Build the routine.
-	routine, _, _ := b.buildRoutine(c.Proc, def, inScope, nil /* colRefs */)
+	routine, _ := b.buildRoutine(f, def, inScope, outScope, nil /* colRefs */)
 	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
 		nil /* outScope */, nil /* outCol */)
 
 	// Build a call expression.
-	outScope.expr = b.factory.ConstructCall(routine)
+	callPrivate := &memo.CallPrivate{Columns: outScope.colList()}
+	outScope.expr = b.factory.ConstructCall(routine, callPrivate)
 	return outScope
 }
 
 // buildRoutine returns an expression representing the invocation of a
 // user-defined function or procedure. It also returns the return type of the
 // routine and a boolean that is true if the routine returns multiple columns.
+//
+// - outScope is only used for stored procedures, specifically when there is a
+// transaction control statement. This is necessary because transaction control
+// statements have to construct a new CALL statement to resume execution.
 func (b *Builder) buildRoutine(
-	f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition, inScope *scope, colRefs *opt.ColSet,
-) (out opt.ScalarExpr, returnType *types.T, isMultiColDataSource bool) {
+	f *tree.FuncExpr,
+	def *tree.ResolvedFunctionDefinition,
+	inScope, outScope *scope,
+	colRefs *opt.ColSet,
+) (out opt.ScalarExpr, isMultiColDataSource bool) {
 	o := f.ResolvedOverload()
+	isProc := o.Type == tree.ProcedureRoutine
 	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
 
 	// Validate that the return types match the original return types defined in
@@ -168,13 +226,13 @@ func (b *Builder) buildRoutine(
 	// represented as a tuple with any types and execution requires the types to
 	// be concrete in order to decode them correctly. We can determine the types
 	// from the result columns or tuple of the last statement.
-	finishResolveType := func(lastStmtScope *scope) *types.T {
-		if types.IsRecordType(rtyp) {
+	finishResolveType := func(lastStmtScope *scope) {
+		if types.IsWildcardTupleType(rtyp) {
 			if len(lastStmtScope.cols) == 1 &&
 				lastStmtScope.cols[0].typ.Family() == types.TupleFamily {
 				// When the final statement returns a single tuple, we can use
 				// the tuple's types as the function return type.
-				rtyp = lastStmtScope.cols[0].typ
+				f.SetTypeAnnotation(lastStmtScope.cols[0].typ)
 			} else {
 				// Get the types from the individual columns of the last
 				// statement.
@@ -184,28 +242,33 @@ func (b *Builder) buildRoutine(
 					tc[i] = col.typ
 					tl[i] = col.name.MetadataName()
 				}
-				rtyp = types.MakeLabeledTuple(tc, tl)
+				f.SetTypeAnnotation(types.MakeLabeledTuple(tc, tl))
 			}
-			f.SetTypeAnnotation(rtyp)
 		}
-		return rtyp
 	}
 
 	// Build the argument expressions.
 	var args memo.ScalarListExpr
 	if len(f.Exprs) > 0 {
-		args = make(memo.ScalarListExpr, len(f.Exprs))
+		args = make(memo.ScalarListExpr, 0, len(f.Exprs))
 		for i, pexpr := range f.Exprs {
-			args[i] = b.buildScalar(
+			if isProc && o.RoutineParams[i].Class == tree.RoutineParamOut {
+				// For procedures, OUT parameters need to be specified in the
+				// CALL statement, but they are not evaluated and shouldn't be
+				// passed down to the UDF Call (since the body can only
+				// reference the input parameters which we refer to by their
+				// ordinals).
+				continue
+			}
+			args = append(args, b.buildScalar(
 				pexpr.(tree.TypedExpr),
 				inScope,
 				nil, /* outScope */
 				nil, /* outCol */
 				colRefs,
-			)
+			))
 		}
 	}
-
 	// Create a new scope for building the statements in the function body. We
 	// start with an empty scope because a statement in the function body cannot
 	// refer to anything from the outer expression. If there are function
@@ -217,6 +280,7 @@ func (b *Builder) buildRoutine(
 	bodyScope := b.allocScope()
 	var params opt.ColList
 	if o.Types.Length() > 0 {
+		// Add all input parameters to the scope.
 		paramTypes, ok := o.Types.(tree.ParamTypes)
 		if !ok {
 			panic(unimplemented.NewWithIssue(88947,
@@ -232,10 +296,20 @@ func (b *Builder) buildRoutine(
 		}
 	}
 
-	// TODO(mgartner): Once other UDFs can be referenced from within a UDF, a
-	// boolean will not be sufficient to track whether or not we are in a UDF.
-	// We'll need to track the depth of the UDFs we are building expressions
-	// within.
+	if b.trackSchemaDeps {
+		b.schemaFunctionDeps.Add(int(o.Oid))
+	}
+	// Do not track any other routine invocations inside this routine, since
+	// for the schema changer we only need depth 1. Also keep track of when
+	// we have are executing inside a UDF (this could be nested so we need to
+	// track the previous state).
+	oldTrackingSchemaDeps := b.trackSchemaDeps
+	oldInsideUDF := b.insideUDF
+	defer func() {
+		b.trackSchemaDeps = oldTrackingSchemaDeps
+		b.insideUDF = oldInsideUDF
+	}()
+	b.trackSchemaDeps = false
 	b.insideUDF = true
 	isSetReturning := o.Class == tree.GeneratorClass
 	isMultiColDataSource = false
@@ -243,6 +317,7 @@ func (b *Builder) buildRoutine(
 	// Build an expression for each statement in the function body.
 	var body []memo.RelExpr
 	var bodyProps []*physical.Required
+	var bodyStmts []string
 	switch o.Language {
 	case tree.RoutineLangSQL:
 		// Parse the function body.
@@ -252,7 +327,7 @@ func (b *Builder) buildRoutine(
 		}
 		// Add a VALUES (NULL) statement if the return type of the function is
 		// VOID. We cannot simply project NULL from the last statement because
-		// all column would be pruned and the contents of last statement would
+		// all columns would be pruned and the contents of last statement would
 		// not be executed.
 		// TODO(mgartner): This will add some planning overhead for every
 		// invocation of the function. Is there a more efficient way to do this?
@@ -268,18 +343,27 @@ func (b *Builder) buildRoutine(
 		body = make([]memo.RelExpr, len(stmts))
 		bodyProps = make([]*physical.Required, len(stmts))
 
-		for i := range stmts {
-			stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
-			expr, physProps := stmtScope.expr, stmtScope.makePhysicalProps()
+		b.withinSQLRoutine(func() {
+			for i := range stmts {
+				stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+				expr, physProps := stmtScope.expr, stmtScope.makePhysicalProps()
 
-			// The last statement produces the output of the UDF.
-			if i == len(stmts)-1 {
-				rtyp = finishResolveType(stmtScope)
-				expr, physProps, isMultiColDataSource =
-					b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
+				// The last statement produces the output of the UDF.
+				if i == len(stmts)-1 {
+					finishResolveType(stmtScope)
+					expr, physProps, isMultiColDataSource =
+						b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
+				}
+				body[i] = expr
+				bodyProps[i] = physProps
 			}
-			body[i] = expr
-			bodyProps[i] = physProps
+		})
+
+		if b.verboseTracing {
+			bodyStmts = make([]string, len(stmts))
+			for i := range stmts {
+				bodyStmts[i] = stmts[i].AST.String()
+			}
 		}
 	case tree.RoutineLangPLpgSQL:
 		// Parse the function body.
@@ -287,32 +371,36 @@ func (b *Builder) buildRoutine(
 		if err != nil {
 			panic(err)
 		}
-		// Add a RETURN NULL statement if the return type of the function is
-		// VOID and the last statement is not already a RETURN statement. This
-		// ensures that all possible code paths lead to a RETURN statement.
-		// TODO(#108298): There is a parsing bug that affects some PLpgSQL
-		// functions with VOID return types.
-		if rtyp.Family() == types.VoidFamily {
-			lastStmt := stmt.AST.Body[len(stmt.AST.Body)-1]
-			if _, ok := lastStmt.(*plpgsqltree.Return); !ok {
-				stmt.AST.Body = append(stmt.AST.Body, &plpgsqltree.Return{Expr: tree.DNull})
+		routineParams := make([]routineParam, 0, len(o.RoutineParams))
+		for _, param := range o.RoutineParams {
+			// TODO(yuzefovich): can we avoid type resolution here?
+			typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
+			if err != nil {
+				panic(err)
 			}
+			routineParams = append(routineParams, routineParam{
+				name:  param.Name,
+				typ:   typ,
+				class: param.Class,
+			})
 		}
 		var expr memo.RelExpr
 		var physProps *physical.Required
-		var plBuilder plpgsqlBuilder
-		plBuilder.init(b, colRefs, o.Types.(tree.ParamTypes), stmt.AST, rtyp)
-		stmtScope := plBuilder.build(stmt.AST, bodyScope)
-		rtyp = finishResolveType(stmtScope)
+		plBuilder := newPLpgSQLBuilder(
+			b, def.Name, stmt.AST.Label, colRefs, routineParams, rtyp, isProc, outScope,
+		)
+		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
+		finishResolveType(stmtScope)
 		expr, physProps, isMultiColDataSource =
 			b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
 		body = []memo.RelExpr{expr}
 		bodyProps = []*physical.Required{physProps}
+		if b.verboseTracing {
+			bodyStmts = []string{stmt.String()}
+		}
 	default:
 		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
-
-	b.insideUDF = false
 
 	routine := b.factory.ConstructUDFCall(
 		args,
@@ -325,13 +413,15 @@ func (b *Builder) buildRoutine(
 				CalledOnNullInput:  o.CalledOnNullInput,
 				MultiColDataSource: isMultiColDataSource,
 				RoutineType:        o.Type,
+				RoutineLang:        o.Language,
 				Body:               body,
 				BodyProps:          bodyProps,
+				BodyStmts:          bodyStmts,
 				Params:             params,
 			},
 		},
 	)
-	return routine, rtyp, isMultiColDataSource
+	return routine, isMultiColDataSource
 }
 
 // finishBuildLastStmt manages the columns returned by the last statement of a
@@ -427,4 +517,12 @@ func (b *Builder) finishBuildLastStmt(
 		}
 	}
 	return expr, physProps, isMultiColDataSource
+}
+
+func (b *Builder) withinSQLRoutine(fn func()) {
+	defer func(origValue bool) {
+		b.insideSQLRoutine = origValue
+	}(b.insideSQLRoutine)
+	b.insideSQLRoutine = true
+	fn()
 }

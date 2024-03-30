@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -180,15 +179,12 @@ func MakeInternalExecutor(
 func MakeInternalExecutorMemMonitor(
 	memMetrics MemoryMetrics, settings *cluster.Settings,
 ) *mon.BytesMonitor {
-	return mon.NewMonitor(
-		"internal SQL executor",
-		mon.MemoryResource,
-		memMetrics.CurBytesCount,
-		memMetrics.MaxBytesHist,
-		-1,            /* use default increment */
-		math.MaxInt64, /* noteworthy */
-		settings,
-	)
+	return mon.NewMonitor(mon.Options{
+		Name:     "internal SQL executor",
+		CurCount: memMetrics.CurBytesCount,
+		MaxHist:  memMetrics.MaxBytesHist,
+		Settings: settings,
+	})
 }
 
 // SetSessionData binds the session variables that will be used by queries
@@ -389,9 +385,11 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
-		ex.dataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-			m.SetReadOnly(true)
-		})
+		if err := ex.dataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
+			return m.SetReadOnly(true)
+		}); err != nil {
+			return nil, err
+		}
 	}
 
 	// The new transaction stuff below requires active monitors and traces, so
@@ -623,7 +621,7 @@ func (r *rowsIterator) HasResults() bool {
 func (ie *InternalExecutor) QueryBuffered(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) ([]tree.Datums, error) {
-	return ie.QueryBufferedEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+	return ie.QueryBufferedEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
 
 // QueryBufferedEx executes the supplied SQL statement and returns the resulting
@@ -700,7 +698,7 @@ func (ie *InternalExecutor) queryInternalBuffered(
 func (ie *InternalExecutor) QueryRow(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) (tree.Datums, error) {
-	return ie.QueryRowEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+	return ie.QueryRowEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
 
 // QueryRowEx is like QueryRow, but allows the caller to override some session data
@@ -755,7 +753,7 @@ func (ie *InternalExecutor) QueryRowExWithCols(
 func (ie *InternalExecutor) Exec(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) (int, error) {
-	return ie.ExecEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+	return ie.ExecEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
 
 // ExecEx is like Exec, but allows the caller to override some session data
@@ -802,7 +800,7 @@ func (ie *InternalExecutor) ExecEx(
 func (ie *InternalExecutor) QueryIterator(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) (isql.Rows, error) {
-	return ie.QueryIteratorEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+	return ie.QueryIteratorEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
 
 // QueryIteratorEx executes the query, returning an iterator that can be used
@@ -831,10 +829,6 @@ func applyInternalExecutorSessionExceptions(sd *sessiondata.SessionData) {
 	// DisableBuffering is not supported by the InternalExecutor
 	// which uses streamingCommandResults.
 	sd.LocalOnlySessionData.AvoidBuffering = false
-	// At the moment, we disable the usage of the Streamer API in the internal
-	// executor to avoid possible concurrency with the "outer" query (which
-	// might be using the RootTxn).
-	sd.LocalOnlySessionData.StreamerEnabled = false
 	// If the internal executor creates a new transaction, then it runs in
 	// SERIALIZABLE. If it's used in an existing transaction, then it inherits the
 	// isolation level of the existing transaction.
@@ -863,21 +857,35 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	}
 	// We always override the injection knob based on the override struct.
 	sd.InjectRetryErrorsEnabled = o.InjectRetryErrorsEnabled
+	if o.OptimizerUseHistograms {
+		sd.OptimizerUseHistograms = true
+	}
+
+	if o.MultiOverride != "" {
+		overrides := strings.Split(o.MultiOverride, ",")
+		for _, override := range overrides {
+			parts := strings.Split(override, "=")
+			if len(parts) == 2 {
+				sd.Update(parts[0], parts[1])
+			}
+		}
+	}
+	// Add any new overrides above the MultiOverride.
 }
 
-func (ie *InternalExecutor) maybeRootSessionDataOverride(
+func (ie *InternalExecutor) maybeNodeSessionDataOverride(
 	opName string,
 ) sessiondata.InternalExecutorOverride {
 	if ie.sessionDataStack == nil {
 		return sessiondata.InternalExecutorOverride{
-			User:            username.RootUserName(),
+			User:            username.NodeUserName(),
 			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName,
 		}
 	}
 	o := sessiondata.NoSessionDataOverride
 	sd := ie.sessionDataStack.Top()
 	if sd.User().Undefined() {
-		o.User = username.RootUserName()
+		o.User = username.NodeUserName()
 	}
 	if sd.ApplicationName == "" {
 		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
@@ -890,6 +898,18 @@ var rowsAffectedResultColumns = colinfo.ResultColumns{
 		Name: "rows_affected",
 		Typ:  types.Int,
 	},
+}
+
+const opNameKey = "intExec"
+
+// GetInternalOpName returns the "opName" parameter that was specified when
+// issuing a query via the Internal Executor.
+func GetInternalOpName(ctx context.Context) (opName string, ok bool) {
+	tag, ok := logtags.FromContext(ctx).GetTag(opNameKey)
+	if !ok {
+		return "", false
+	}
+	return tag.ValueStr(), true
 }
 
 // execInternal is the main entry point for executing a statement via the
@@ -1005,7 +1025,7 @@ func (ie *InternalExecutor) execInternal(
 		return nil, err
 	}
 
-	ctx = logtags.AddTag(ctx, "intExec", opName)
+	ctx = logtags.AddTag(ctx, opNameKey, opName)
 
 	var sd *sessiondata.SessionData
 	if ie.sessionDataStack != nil {
@@ -1017,6 +1037,14 @@ func (ie *InternalExecutor) execInternal(
 
 	applyInternalExecutorSessionExceptions(sd)
 	applyOverrides(sessionDataOverride, sd)
+	if !rw.async() && (txn != nil && txn.Type() == kv.RootTxn) {
+		// If the "outer" query uses the RootTxn and the sync result channel is
+		// requested, then we must disable both DistSQL and Streamer to ensure
+		// that the "inner" query doesn't use the LeafTxn (which could result in
+		// illegal concurrency).
+		sd.DistSQLMode = sessiondatapb.DistSQLOff
+		sd.StreamerEnabled = false
+	}
 	sd.Internal = true
 	if sd.User().Undefined() {
 		return nil, errors.AssertionFailedf("no user specified for internal query")
@@ -1658,16 +1686,15 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 	txn *kv.Txn,
 	descCol *descs.Collection,
 ) (InternalExecutor, internalExecutorCommitTxnFunc) {
-	// By default, if not given session data, we initialize a sessionData that
-	// would be the same as what would be created if root logged in.
-	// The sessionData's user can be override when calling the query
-	// functions of internal executor.
+	// By default, if not given session data, we initialize a sessionData that is
+	// for the internal "node" user. The sessionData's user can be override when
+	// calling the query functions of internal executor.
 	// TODO(janexing): since we can be running queries with a higher privilege
 	// than the actual user, a security boundary should be added to the error
 	// handling of internal executor.
 	if sd == nil {
 		sd = NewInternalSessionData(ctx, settings, "" /* opName */)
-		sd.UserProto = username.RootUserName().EncodeProto()
+		sd.UserProto = username.NodeUserName().EncodeProto()
 		sd.SearchPath = sessiondata.DefaultSearchPathForUser(sd.User())
 	}
 

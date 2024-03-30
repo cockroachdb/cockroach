@@ -122,7 +122,7 @@ statement error pgcode XXC01 with_max_staleness can only be used with a CCL dist
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1s'::interval)
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 statement ok
 SELECT * from t
@@ -134,7 +134,7 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 statement ok
 INSERT INTO t VALUES(1)
@@ -160,3 +160,10 @@ select * from t as of system time '-1s'; select * from t as of system time '-2s'
 # Specifying the AOST in the first statement (and no others) is allowed.
 statement ok
 select * from t as of system time '-1s'; select * from t;
+
+# Verify that statements with AOST are read-only.
+statement error cannot execute UPDATE in a read-only transaction
+WITH x AS (UPDATE t SET i = 3 WHERE i = 2 RETURNING i) SELECT * FROM x AS OF SYSTEM TIME '-1ms'
+
+statement error cannot execute SELECT FOR UPDATE in a read-only transaction
+SELECT * FROM t AS OF SYSTEM TIME '-1ms' FOR UPDATE

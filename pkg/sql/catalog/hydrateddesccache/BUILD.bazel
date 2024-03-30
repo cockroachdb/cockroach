@@ -26,10 +26,6 @@ go_test(
     name = "hydrateddesccache_test",
     srcs = ["hydratedcache_test.go"],
     embed = [":hydrateddesccache"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/security/username",
         "//pkg/settings/cluster",

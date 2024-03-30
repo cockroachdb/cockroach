@@ -16,7 +16,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"net/http"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -189,10 +188,30 @@ func runFollowerReadsTest(
 	rc readConsistency,
 	data map[int]int64,
 ) {
+	// Set the default_transaction_isolation variable for each connection to a
+	// random isolation level, to ensure that the test exercises all available
+	// isolation levels. These isolation levels may be promoted to different
+	// levels in the mixed-version variant of this test than they are on master.
+	isoLevels := []string{"read committed", "snapshot", "serializable"}
+	require.NoError(t, func() error {
+		db := c.Conn(ctx, t.L(), 1)
+		defer db.Close()
+		err := enableIsolationLevels(ctx, t, db)
+		if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
+			// v23.1 and below does not have these cluster settings. That's fine, as
+			// all isolation levels will be transparently promoted to "serializable".
+			err = nil
+		}
+		return err
+	}())
+
 	var conns []*gosql.DB
 	for i := 0; i < c.Spec().NodeCount; i++ {
-		conns = append(conns, c.Conn(ctx, t.L(), i+1))
-		defer conns[i].Close()
+		isoLevel := isoLevels[rand.Intn(len(isoLevels))]
+		isoLevelOpt := option.ConnectionOption("default_transaction_isolation", isoLevel)
+		conn := c.Conn(ctx, t.L(), i+1, isoLevelOpt)
+		defer conn.Close()
+		conns = append(conns, conn)
 	}
 	db := conns[0]
 
@@ -665,6 +684,8 @@ func verifySQLLatency(
 	if err != nil {
 		t.Fatal(err)
 	}
+	// follower-reads/mixed-version runs on insecure mode, so we need http.
+	// Tests that do run on secure mode will redirect to https.
 	url := "http://" + adminURLs[0] + "/ts/query"
 	var sources []string
 	for i := range liveNodes {
@@ -681,8 +702,9 @@ func verifySQLLatency(
 			SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
 		}},
 	}
+	client := roachtestutil.DefaultHTTPClient(c, t.L())
 	var response tspb.TimeSeriesQueryResponse
-	if err := httputil.PostProtobuf(ctx, http.Client{}, url, &request, &response); err != nil {
+	if err := client.PostProtobuf(ctx, url, &request, &response); err != nil {
 		t.Fatal(err)
 	}
 	perTenSeconds := response.Results[0].Datapoints
@@ -731,6 +753,8 @@ func verifyHighFollowerReadRatios(
 	}
 	adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(adminNode))
 	require.NoError(t, err)
+	// follower-reads/mixed-version runs on insecure mode, so we need http.
+	// Tests that do run on secure mode will redirect to https.
 	url := "http://" + adminURLs[0] + "/ts/query"
 	request := tspb.TimeSeriesQueryRequest{
 		StartNanos: start.UnixNano(),
@@ -751,9 +775,9 @@ func verifyHighFollowerReadRatios(
 			Derivative: tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
 		})
 	}
-
+	client := roachtestutil.DefaultHTTPClient(c, t.L())
 	var response tspb.TimeSeriesQueryResponse
-	if err := httputil.PostProtobuf(ctx, http.Client{}, url, &request, &response); err != nil {
+	if err := client.PostProtobuf(ctx, url, &request, &response); err != nil {
 		t.Fatal(err)
 	}
 
@@ -839,8 +863,11 @@ func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) 
 			if err != nil {
 				return err
 			}
+			// follower-reads/mixed-version runs on insecure mode, so we need http.
+			// Tests that do run on secure mode will redirect to https.
 			url := "http://" + adminUIAddrs[0] + "/_status/vars"
-			resp, err := httputil.Get(ctx, url)
+			client := roachtestutil.DefaultHTTPClient(c, t.L())
+			resp, err := client.Get(ctx, url)
 			if err != nil {
 				return err
 			}
@@ -908,7 +935,14 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	topology := topologySpec{multiRegion: false}
-	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness)
+	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
+		// In 23.1, the `user_id` field was added to `system.web_sessions`.
+		// If the cluster is migrating to 23.1, auth-session login will not
+		// be aware of this new field and authentication will fail.
+		// TODO(DarrylWong): When 22.2 is no longer supported, we won't run
+		// into the above issue anymore and can enable secure clusters.
+		mixedversion.ClusterSettingOption(install.SecureOption(false)),
+	)
 }
 
 // runFollowerReadsMixedVersionGlobalTableTest runs a multi-region follower-read
@@ -928,6 +962,12 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		// Use a longer upgrade timeout to give the migrations enough time to finish
 		// considering the cross-region latency.
 		mixedversion.UpgradeTimeout(60*time.Minute),
+		// In 23.1, the `user_id` field was added to `system.web_sessions`.
+		// If the cluster is migrating to 23.1, auth-session login will not
+		// be aware of this new field and authentication will fail.
+		// TODO(DarrylWong): When 22.2 is no longer supported, we won't run
+		// into the above issue anymore and can enable secure clusters.
+		mixedversion.ClusterSettingOption(install.SecureOption(false)),
 	)
 }
 
@@ -941,14 +981,6 @@ func runFollowerReadsMixedVersionTest(
 	rc readConsistency,
 	opts ...mixedversion.CustomOption,
 ) {
-	// The http requests to the admin UI performed by the test don't play
-	// well with secure clusters. As of the time of writing, they return
-	// either of the following errors:
-	//  tls: failed to verify certificate: x509: “node” certificate is not standards compliant
-	//  tls: failed to verify certificate: x509: certificate signed by unknown authority
-	//
-	// Disable secure mode for simplicity.
-	opts = append(opts, mixedversion.ClusterSettingOption(install.SecureOption(false)))
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), opts...)
 
 	var data map[int]int64

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -89,7 +90,7 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 	succeeded := false
 	for r.Next() {
 		start = timeutil.Now()
-		det, err = c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), fmt.Sprintf(`cat /tmp/lineitem-table.csv | %s -c "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';"`, pg))
+		det, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(1)), fmt.Sprintf(`cat /tmp/lineitem-table.csv | %s -c "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';"`, pg))
 		if err == nil {
 			succeeded = true
 			break
@@ -112,7 +113,7 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 	require.NoError(t, err)
 	rate := int(float64(rows) / dur.Seconds())
 
-	det, err = c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "wc -c /tmp/lineitem-table.csv")
+	det, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(1)), "wc -c /tmp/lineitem-table.csv")
 	require.NoError(t, err)
 	var bytes float64
 	_, err = fmt.Sscan(det.Stdout, &bytes)
@@ -145,7 +146,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 	db, err := c.ConnE(ctx, t.L(), 1)
 	require.NoError(t, err)
 	stmts := []string{
-		"CREATE USER importer",
+		"CREATE USER importer WITH PASSWORD '123'",
 		fmt.Sprintf("ALTER ROLE importer SET copy_from_atomic_enabled = %t", atomic),
 	}
 	for _, stmt := range stmts {
@@ -154,7 +155,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 			t.Fatal(err)
 		}
 	}
-	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), "" /* tenant */, 0 /* sqlInstance */)
+	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{Auth: install.AuthUserPassword})
 	require.NoError(t, err)
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
@@ -162,10 +163,10 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 		urlstr := strings.Replace(urls[0], "?", "/defaultdb?", 1)
 		u, err := url.Parse(urlstr)
 		require.NoError(t, err)
-		u.User = url.User("importer")
+		u.User = url.UserPassword("importer", "123")
 		urlstr = u.String()
-		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql %s -c 'SELECT 1'", urlstr))
-		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql %s -c '%s'", urlstr, lineitemSchema))
+		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql '%s' -c 'SELECT 1'", urlstr))
+		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql '%s' -c '%s'", urlstr, lineitemSchema))
 		runTest(ctx, t, c, fmt.Sprintf("psql '%s'", urlstr))
 		return nil
 	})

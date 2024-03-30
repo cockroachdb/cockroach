@@ -33,6 +33,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -441,15 +442,61 @@ func SQL(
 	if len(c.Nodes) == 1 {
 		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, cmdArray)
 	}
+
 	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
 	if err != nil {
 		return err
 	}
 
-	for _, r := range results {
-		l.Printf("node %d:\n%s", r.Node, r.CombinedOut)
+	for i, r := range results {
+		printSQLResult(l, i, r, cmdArray)
 	}
 	return nil
+}
+
+// printSQLResult does a best-effort attempt to print single-result-row-per-node
+// result-sets gathered from many nodes as one-line-per-node instead of header
+// separated n-line blocks, to improve the overall readability, falling back to
+// normal header-plus-response-block per node otherwise.
+func printSQLResult(l *logger.Logger, i int, r *install.RunResultDetails, args []string) {
+	tableFormatted := false
+	for i, c := range args {
+		if c == "--format=table" || c == "--format" && len(args) > i+1 && args[i+1] == "table" {
+			tableFormatted = true
+			break
+		}
+	}
+
+	singleResultLen, resultLine := 3, 1 // 3 is header, result, empty-trailing.
+	if tableFormatted {
+		// table output adds separator above the result, and a trailing row count.
+		singleResultLen, resultLine = 5, 2
+	}
+	// If we got a header line and zero or one result lines, we can print the
+	// result line as one-line-per-node, rather than a header per node and then
+	// its n result lines, to make the aggregate output more readable. We can
+	// detect this by splitting on newline into only as many lines as we expect,
+	// and seeing if the final piece is empty or has the rest of >1 results in it.
+	lines := strings.SplitN(r.CombinedOut, "\n", singleResultLen)
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		if i == 0 { // Print the header line of the results once.
+			fmt.Printf("    %s\n", lines[0])
+			if tableFormatted {
+				fmt.Printf("    %s\n", lines[1])
+			}
+		}
+		// Print the result line if there is one.
+		if len(lines) > resultLine {
+			fmt.Printf("%2d: %s\n", r.Node, lines[resultLine])
+			return
+		}
+		// No result from this node, so print a blank for its ID.
+		fmt.Printf("%2d:\n", r.Node)
+		return
+	}
+	// Just print the roachprod header identifying the node, then the node's whole
+	// response, including its internal header row.
+	l.Printf("node %d:\n%s", r.Node, r.CombinedOut)
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
@@ -597,7 +644,9 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 		return err
 	}
 
-	cloudCluster.PrintDetails(l)
+	if err = cloudCluster.PrintDetails(l); err != nil {
+		return err
+	}
 	// Run ssh-keygen -R serially on each new VM in case an IP address has been recycled
 	for _, v := range cloudCluster.VMs {
 		cmd := exec.Command("ssh-keygen", "-R", v.PublicIP)
@@ -617,13 +666,6 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 	installCluster, err := newCluster(l, clusterName)
 	if err != nil {
 		return err
-	}
-	// For GCP clusters we need to use the config.OSUser even if the client
-	// requested the shared user.
-	for i := range installCluster.VMs {
-		if cloudCluster.VMs[i].Provider == gce.ProviderName {
-			installCluster.VMs[i].RemoteUser = config.OSUser.Username
-		}
 	}
 	if err := installCluster.Wait(ctx, l); err != nil {
 		return err
@@ -667,9 +709,12 @@ func Extend(l *logger.Logger, clusterName string, lifetime time.Duration) error 
 		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
 
-	c.PrintDetails(l)
-	return nil
+	return c.PrintDetails(l)
 }
+
+// Default scheduled backup runs a full backup every hour and an incremental
+// every 15 minutes.
+const DefaultBackupSchedule = `RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS first_run = 'now'`
 
 // DefaultStartOpts returns a StartOpts populated with default values.
 func DefaultStartOpts() install.StartOpts {
@@ -680,9 +725,10 @@ func DefaultStartOpts() install.StartOpts {
 		StoreCount:         1,
 		VirtualClusterID:   2,
 		ScheduleBackups:    false,
-		ScheduleBackupArgs: "",
+		ScheduleBackupArgs: DefaultBackupSchedule,
 		InitTarget:         1,
 		SQLPort:            0,
+		VirtualClusterName: install.SystemInterfaceName,
 		// TODO(DarrylWong): revert back to 0 once #117125 is addressed.
 		AdminUIPort: config.DefaultAdminUIPort,
 	}
@@ -918,6 +964,7 @@ type PGURLOptions struct {
 	External           bool
 	VirtualClusterName string
 	SQLInstance        int
+	Auth               install.PGAuthMode
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
@@ -956,7 +1003,7 @@ func PgURL(
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode, opts.Auth))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
@@ -1012,7 +1059,7 @@ func urlGenerator(
 			port = desc.Port
 		}
 		scheme := "http"
-		if c.Secure {
+		if uConfig.secure {
 			scheme = "https"
 		}
 		if !strings.HasPrefix(uConfig.path, "/") {
@@ -1074,9 +1121,14 @@ func AdminURL(
 	return urlGenerator(ctx, c, l, c.TargetNodes(), uConfig)
 }
 
-// AdminPorts finds the AdminUI ports for a cluster.
-func AdminPorts(
-	ctx context.Context, l *logger.Logger, clusterName string, secure bool,
+// SQLPorts finds the SQL ports for a cluster.
+func SQLPorts(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	secure bool,
+	virtualClusterName string,
+	sqlInstance int,
 ) ([]int, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
@@ -1087,7 +1139,34 @@ func AdminPorts(
 	}
 	var ports []int
 	for _, node := range c.Nodes {
-		port, err := c.NodeUIPort(ctx, node)
+		port, err := c.NodePort(ctx, node, virtualClusterName, sqlInstance)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Error discovering SQL Port for node %d", node)
+		}
+		ports = append(ports, port)
+	}
+	return ports, nil
+}
+
+// AdminPorts finds the AdminUI ports for a cluster.
+func AdminPorts(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	secure bool,
+	virtualClusterName string,
+	sqlInstance int,
+) ([]int, error) {
+	if err := LoadClusters(); err != nil {
+		return nil, err
+	}
+	c, err := newCluster(l, clusterName, install.SecureOption(secure))
+	if err != nil {
+		return nil, err
+	}
+	var ports []int
+	for _, node := range c.Nodes {
+		port, err := c.NodeUIPort(ctx, node, virtualClusterName, sqlInstance)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Error discovering UI Port for node %d", node)
 		}
@@ -1140,7 +1219,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
-			port, err := c.NodeUIPort(ctx, node)
+			port, err := c.NodeUIPort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 			if err != nil {
 				return nil, err
 			}
@@ -1427,11 +1506,11 @@ func Create(
 			if retErr == nil {
 				return
 			}
-			l.Errorf("Cleaning up partially-created cluster (prev err: %s)\n", retErr)
+			l.Errorf("Cleaning up partially-created cluster (prev err: %s)", retErr)
 			if err := cleanupFailedCreate(l, clusterName); err != nil {
-				l.Errorf("Error while cleaning up partially-created cluster: %s\n", err)
+				l.Errorf("Error while cleaning up partially-created cluster: %s", err)
 			} else {
-				l.Printf("Cleaning up OK\n")
+				l.Printf("Cleaning up OK")
 			}
 		}()
 	} else {
@@ -1453,7 +1532,7 @@ func Create(
 		}
 	}
 
-	l.Printf("Creating cluster %s with %d nodes", clusterName, numNodes)
+	l.Printf("Creating cluster %s with %d nodes...", clusterName, numNodes)
 	if createErr := cloud.CreateCluster(l, numNodes, createVMOpts, providerOptsContainer); createErr != nil {
 		return createErr
 	}
@@ -1461,6 +1540,28 @@ func Create(
 	if config.IsLocalClusterName(clusterName) {
 		// No need for ssh for local clusters.
 		return LoadClusters()
+	}
+	l.Printf("Created cluster %s; setting up SSH...", clusterName)
+	return SetupSSH(ctx, l, clusterName)
+}
+
+func Grow(ctx context.Context, l *logger.Logger, clusterName string, numNodes int) error {
+	if numNodes <= 0 || numNodes >= 1000 {
+		// Upper limit is just for safety.
+		return fmt.Errorf("number of nodes must be in [1..999]")
+	}
+
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	err = cloud.GrowCluster(l, &c.Cluster, numNodes)
+	if err != nil {
+		return err
 	}
 	return SetupSSH(ctx, l, clusterName)
 }
@@ -1697,6 +1798,12 @@ func GrafanaURL(
 		return "", err
 	}
 	return urls[0], nil
+}
+
+func AddGrafanaAnnotation(
+	ctx context.Context, host string, secure bool, req grafana.AddAnnotationRequest,
+) error {
+	return grafana.AddAnnotation(ctx, host, secure, req)
 }
 
 // PrometheusSnapshot takes a snapshot of prometheus and stores the snapshot and
@@ -2196,7 +2303,7 @@ func sendCaptureCommand(
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
 	_, _, err := c.ParallelE(ctx, l, install.WithNodes(nodes).WithDisplay(fmt.Sprintf("Performing workload capture %s", action)),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
-			port, err := c.NodeUIPort(ctx, node)
+			port, err := c.NodeUIPort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 			if err != nil {
 				return nil, err
 			}

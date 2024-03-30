@@ -13,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/kvccl/kvfollowerreadsccl",
         "//pkg/ccl/streamingccl",
         "//pkg/ccl/streamingccl/replicationutils",
         "//pkg/ccl/utilccl",
@@ -21,7 +22,6 @@ go_library(
         "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/kv/kvpb",
@@ -33,6 +33,7 @@ go_library(
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/username",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig/spanconfigkvsubscriber",
         "//pkg/sql",
@@ -57,11 +58,11 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/span",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
 
@@ -76,10 +77,6 @@ go_test(
         "stream_event_batcher_test.go",
     ],
     embed = [":streamproducer"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
@@ -89,7 +86,6 @@ go_test(
         "//pkg/ccl/storageccl",
         "//pkg/ccl/streamingccl",
         "//pkg/ccl/streamingccl/replicationtestutils",
-        "//pkg/ccl/utilccl",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",

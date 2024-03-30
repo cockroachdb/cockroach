@@ -23,6 +23,7 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/syncutil/singleflight",
+        "@com_github_go_ldap_ldap_v3//:ldap",
     ],
 )
 
@@ -32,10 +33,6 @@ go_test(
         "cache_test.go",
         "main_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":sessioninit",
         "//pkg/base",

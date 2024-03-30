@@ -305,6 +305,7 @@ show_stmt ::=
 	| show_transactions_stmt
 	| show_transfer_stmt
 	| show_users_stmt
+	| show_default_session_variables_for_role_stmt
 	| show_zone_stmt
 	| show_full_scans_stmt
 	| show_default_privileges_stmt
@@ -695,8 +696,8 @@ string_or_placeholder_list ::=
 	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
 
 insert_target ::=
-	table_name
-	| table_name 'AS' table_alias_name
+	table_name_opt_idx
+	| table_name_opt_idx 'AS' table_alias_name
 
 insert_rest ::=
 	select_stmt
@@ -962,6 +963,11 @@ show_transfer_stmt ::=
 show_users_stmt ::=
 	'SHOW' 'USERS'
 
+show_default_session_variables_for_role_stmt ::=
+	'SHOW' 'DEFAULT' 'SESSION' 'VARIABLES' 'FOR' role_or_group_or_user role_spec
+	| 'SHOW' 'DEFAULT' 'SESSION' 'VARIABLES' 'FOR' 'ROLE_ALL' 'ALL'
+	| 'SHOW' 'DEFAULT' 'SESSION' 'VARIABLES' 'FOR' 'USER_ALL' 'ALL'
+
 show_zone_stmt ::=
 	'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'RANGE' zone_name
 	| 'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'DATABASE' database_name
@@ -1162,6 +1168,7 @@ unreserved_keyword ::=
 	| 'FORCE_NULL'
 	| 'FORCE_QUOTE'
 	| 'FORCE_INDEX'
+	| 'FORCE_INVERTED_INDEX'
 	| 'FORCE_ZIGZAG'
 	| 'FORWARD'
 	| 'FREEZE'
@@ -1278,6 +1285,7 @@ unreserved_keyword ::=
 	| 'NOCREATEROLE'
 	| 'NOCONTROLCHANGEFEED'
 	| 'NOCONTROLJOB'
+	| 'NODE'
 	| 'NOLOGIN'
 	| 'NOMODIFYCLUSTERSETTING'
 	| 'NONVOTERS'
@@ -1311,6 +1319,7 @@ unreserved_keyword ::=
 	| 'PASSWORD'
 	| 'PAUSE'
 	| 'PAUSED'
+	| 'PER'
 	| 'PHYSICAL'
 	| 'PLACEMENT'
 	| 'PLAN'
@@ -1430,9 +1439,11 @@ unreserved_keyword ::=
 	| 'STORE'
 	| 'STORED'
 	| 'STORING'
+	| 'STRAIGHT'
 	| 'STREAM'
 	| 'STRICT'
 	| 'SUBSCRIPTION'
+	| 'SUBJECT'
 	| 'SUPER'
 	| 'SUPPORT'
 	| 'SURVIVE'
@@ -1479,6 +1490,7 @@ unreserved_keyword ::=
 	| 'VALID'
 	| 'VALIDATE'
 	| 'VALUE'
+	| 'VARIABLES'
 	| 'VARYING'
 	| 'VERIFY_BACKUP_TABLE_DATA'
 	| 'VIEW'
@@ -1788,6 +1800,7 @@ create_sequence_stmt ::=
 
 create_func_stmt ::=
 	'CREATE' opt_or_replace 'FUNCTION' routine_create_name '(' opt_routine_param_with_default_list ')' 'RETURNS' opt_return_set routine_return_type opt_create_routine_opt_list opt_routine_body
+	| 'CREATE' opt_or_replace 'FUNCTION' routine_create_name '(' opt_routine_param_with_default_list ')' opt_create_routine_opt_list opt_routine_body
 
 create_proc_stmt ::=
 	'CREATE' opt_or_replace 'PROCEDURE' routine_create_name '(' opt_routine_param_with_default_list ')' opt_create_routine_opt_list opt_routine_body
@@ -2085,6 +2098,7 @@ copy_options ::=
 	| 'HEADER'
 	| 'QUOTE' 'SCONST'
 	| 'ESCAPE' 'SCONST'
+	| 'ENCODING' 'SCONST'
 
 copy_generic_options ::=
 	'DESTINATION' string_or_placeholder
@@ -2099,6 +2113,7 @@ copy_generic_options ::=
 	| 'HEADER' 'FALSE'
 	| 'QUOTE' 'SCONST'
 	| 'ESCAPE' 'SCONST'
+	| 'ENCODING' 'SCONST'
 
 db_object_name_component ::=
 	name
@@ -2706,8 +2721,6 @@ restore_options ::=
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
 	| 'NEW_DB_NAME' '=' string_or_placeholder
-	| include_all_clusters
-	| include_all_clusters '=' a_expr
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| virtual_cluster_name '=' string_or_placeholder
 	| virtual_cluster_opt '=' string_or_placeholder
@@ -3039,6 +3052,7 @@ role_option ::=
 	| 'NOVIEWCLUSTERSETTING'
 	| password_clause
 	| valid_until_clause
+	| subject_clause
 	| 'REPLICATION'
 	| 'NOREPLICATION'
 
@@ -3405,6 +3419,15 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name alter_column_on_update
 	| 'ALTER' opt_column column_name alter_column_visible
 	| 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'
+	| 'ALTER' opt_column column_name 'ADD' generated_always_as 'IDENTITY'
+	| 'ALTER' opt_column column_name 'ADD' generated_by_default_as 'IDENTITY'
+	| 'ALTER' opt_column column_name 'ADD' generated_always_as 'IDENTITY' '(' opt_sequence_option_list ')'
+	| 'ALTER' opt_column column_name 'ADD' generated_by_default_as 'IDENTITY' '(' opt_sequence_option_list ')'
+	| 'ALTER' opt_column column_name set_generated_always
+	| 'ALTER' opt_column column_name set_generated_default
+	| 'ALTER' opt_column column_name identity_option_list
+	| 'ALTER' opt_column column_name 'DROP' 'IDENTITY'
+	| 'ALTER' opt_column column_name 'DROP' 'IDENTITY' 'IF' 'EXISTS'
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
 	| 'ALTER' opt_column column_name 'SET' 'NOT' 'NULL'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior
@@ -3433,6 +3456,7 @@ sequence_option_elem ::=
 	| 'OWNED' 'BY' 'NONE'
 	| 'OWNED' 'BY' column_path
 	| 'CACHE' signed_iconst64
+	| 'PER' 'NODE' 'CACHE' signed_iconst64
 	| 'INCREMENT' signed_iconst64
 	| 'INCREMENT' 'BY' signed_iconst64
 	| 'MINVALUE' signed_iconst64
@@ -3466,6 +3490,10 @@ password_clause ::=
 valid_until_clause ::=
 	'VALID' 'UNTIL' string_or_placeholder
 	| 'VALID' 'UNTIL' 'NULL'
+
+subject_clause ::=
+	'SUBJECT' string_or_placeholder
+	| 'SUBJECT' 'NULL'
 
 typed_literal ::=
 	func_name_no_crdb_extra 'SCONST'
@@ -3735,6 +3763,7 @@ bare_label_keywords ::=
 	| 'FORCE_NULL'
 	| 'FORCE_QUOTE'
 	| 'FORCE_INDEX'
+	| 'FORCE_INVERTED_INDEX'
 	| 'FORCE_ZIGZAG'
 	| 'FOREIGN'
 	| 'FORMAT'
@@ -3877,6 +3906,7 @@ bare_label_keywords ::=
 	| 'NOCREATEDB'
 	| 'NOCREATELOGIN'
 	| 'NOCREATEROLE'
+	| 'NODE'
 	| 'NOLOGIN'
 	| 'NOMODIFYCLUSTERSETTING'
 	| 'NONE'
@@ -3923,6 +3953,7 @@ bare_label_keywords ::=
 	| 'PASSWORD'
 	| 'PAUSE'
 	| 'PAUSED'
+	| 'PER'
 	| 'PHYSICAL'
 	| 'PLACEMENT'
 	| 'PLACING'
@@ -4056,11 +4087,13 @@ bare_label_keywords ::=
 	| 'STORE'
 	| 'STORED'
 	| 'STORING'
+	| 'STRAIGHT'
 	| 'STREAM'
 	| 'STRICT'
 	| 'STRING'
 	| 'SUBSCRIPTION'
 	| 'SUBSTRING'
+	| 'SUBJECT'
 	| 'SUPER'
 	| 'SUPPORT'
 	| 'SURVIVAL'
@@ -4124,6 +4157,7 @@ bare_label_keywords ::=
 	| 'VALUES'
 	| 'VARBIT'
 	| 'VARCHAR'
+	| 'VARIABLES'
 	| 'VARIADIC'
 	| 'VERIFY_BACKUP_TABLE_DATA'
 	| 'VIEW'
@@ -4166,6 +4200,7 @@ opt_join_hint ::=
 	| 'MERGE'
 	| 'LOOKUP'
 	| 'INVERTED'
+	| 'STRAIGHT'
 	| 
 
 join_type ::=
@@ -4310,6 +4345,21 @@ alter_column_on_update ::=
 alter_column_visible ::=
 	'SET' 'VISIBLE'
 	| 'SET' 'NOT' 'VISIBLE'
+
+generated_always_as ::=
+	'GENERATED_ALWAYS' 'ALWAYS' 'AS'
+
+generated_by_default_as ::=
+	'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS'
+
+set_generated_always ::=
+	'SET' 'GENERATED_ALWAYS' 'ALWAYS'
+
+set_generated_default ::=
+	'SET' 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT'
+
+identity_option_list ::=
+	( identity_option_elem ) ( ( identity_option_elem ) )*
 
 opt_set_data ::=
 	'SET' 'DATA'
@@ -4465,6 +4515,9 @@ window_definition ::=
 
 routine_param_class ::=
 	'IN'
+	| 'OUT'
+	| 'INOUT'
+	| 'IN' 'OUT'
 
 param_name ::=
 	type_function_name
@@ -4533,6 +4586,21 @@ interval_second ::=
 
 col_qual_list ::=
 	(  ) ( ( col_qualification ) )*
+
+identity_option_elem ::=
+	'SET' 'NO' 'CYCLE'
+	| 'SET' 'CACHE' signed_iconst64
+	| 'SET' 'INCREMENT' signed_iconst64
+	| 'SET' 'INCREMENT' 'BY' signed_iconst64
+	| 'SET' 'MINVALUE' signed_iconst64
+	| 'SET' 'NO' 'MINVALUE'
+	| 'SET' 'MAXVALUE' signed_iconst64
+	| 'SET' 'NO' 'MAXVALUE'
+	| 'SET' 'START' signed_iconst64
+	| 'SET' 'START' 'WITH' signed_iconst64
+	| 'RESTART'
+	| 'RESTART' signed_iconst64
+	| 'RESTART' 'WITH' signed_iconst64
 
 key_match ::=
 	'MATCH' 'SIMPLE'
@@ -4735,12 +4803,6 @@ opt_name_parens ::=
 generated_as ::=
 	'AS'
 	| generated_always_as
-
-generated_always_as ::=
-	'GENERATED_ALWAYS' 'ALWAYS' 'AS'
-
-generated_by_default_as ::=
-	'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS'
 
 frame_bound ::=
 	'UNBOUNDED' 'PRECEDING'

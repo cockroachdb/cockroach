@@ -86,22 +86,22 @@ var (
 // resolve_intent_range   t=<name> k=<key> end=<key> [status=<txnstatus>] [maxKeys=<int>] [targetBytes=<int>]
 // check_intent           k=<key> [none]
 // add_unreplicated_lock  t=<name> k=<key>
-// check_for_acquire_lock t=<name> k=<key> str=<strength> [maxLockConflicts=<int>]
-// acquire_lock           t=<name> k=<key> str=<strength> [maxLockConflicts=<int>]
+// check_for_acquire_lock t=<name> k=<key> str=<strength> [maxLockConflicts=<int>] [targetLockConflictBytes=<int>]
+// acquire_lock           t=<name> k=<key> str=<strength> [maxLockConflicts=<int>] [targetLockConflictBytes=<int>]
 //
-// cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw] [cond=<string>]
-// del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key>
-// del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> end=<key> [max=<max>] [returnKeys]
-// del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] k=<key> end=<key> [idempotent] [noCoveredStats]
-// del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
-// increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> [inc=<val>]
+// cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> v=<string> [raw] [cond=<string>]
+// del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key>
+// del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> end=<key> [max=<max>] [returnKeys]
+// del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> end=<key> [idempotent] [noCoveredStats]
+// del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
+// increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> [inc=<val>]
 // initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw] [failOnTombstones]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
 // put_blind_inline	k=<key> v=<string> [prev=<string>]
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
-// export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxLockConflicts=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
+// export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
 //
 // iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [minTimestamp=<int>[,<int>]] [maxTimestamp=<int>[,<int>]]
 // iter_new_incremental [k=<key>] [end=<key>] [startTs=<int>[,<int>]] [endTs=<int>[,<int>]] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [intents=error|aggregate|emit]
@@ -271,7 +271,7 @@ func TestMVCCHistories(t *testing.T) {
 			buf.Printf(">> %s:\n", name)
 
 			// Dump point keys.
-			iter, err := r.NewIter(nil, nil)
+			iter, err := r.NewIter(sstable.NoTransforms, nil, nil)
 			if err != nil {
 				return err
 			}
@@ -296,14 +296,12 @@ func TestMVCCHistories(t *testing.T) {
 			}
 
 			// Dump rangedels.
-			if rdIter, err := r.NewRawRangeDelIter(); err != nil {
+			if rdIter, err := r.NewRawRangeDelIter(sstable.NoTransforms); err != nil {
 				return err
 			} else if rdIter != nil {
 				defer func() { _ = rdIter.Close() }()
-				for s := rdIter.SeekGE(nil); s != nil; s = rdIter.Next() {
-					if err := rdIter.Error(); err != nil {
-						return err
-					}
+				s, err := rdIter.First()
+				for ; s != nil; s, err = rdIter.Next() {
 					start, err := storage.DecodeMVCCKey(s.Start)
 					if err != nil {
 						return err
@@ -317,17 +315,18 @@ func TestMVCCHistories(t *testing.T) {
 							roachpb.Span{Key: start.Key, EndKey: end.Key})
 					}
 				}
+				if err != nil {
+					return err
+				}
 			}
 
 			// Dump range keys.
-			if rkIter, err := r.NewRawRangeKeyIter(); err != nil {
+			if rkIter, err := r.NewRawRangeKeyIter(sstable.NoTransforms); err != nil {
 				return err
 			} else if rkIter != nil {
 				defer func() { _ = rkIter.Close() }()
-				for s := rkIter.SeekGE(nil); s != nil; s = rkIter.Next() {
-					if err := rkIter.Error(); err != nil {
-						return err
-					}
+				s, err := rkIter.First()
+				for ; s != nil; s, err = rkIter.Next() {
 					start, err := storage.DecodeMVCCKey(s.Start)
 					if err != nil {
 						return err
@@ -355,6 +354,9 @@ func TestMVCCHistories(t *testing.T) {
 						}
 						buf.Printf("\n")
 					}
+				}
+				if err != nil {
+					return err
 				}
 			}
 			return nil
@@ -410,9 +412,9 @@ func TestMVCCHistories(t *testing.T) {
 				}
 				sort.Strings(ks)
 				for _, k := range ks {
-					txn := e.unreplLocks[k]
+					info := e.unreplLocks[k]
 					buf.Printf("lock (%s): %v/%s -> %+v\n",
-						lock.Unreplicated, k, lock.Exclusive, txn)
+						lock.Unreplicated, k, info.str, info.txn)
 				}
 			}
 			return nil
@@ -838,6 +840,7 @@ var commands = map[string]cmd{
 	"add_unreplicated_lock":  {typLocksUpdate, cmdAddUnreplicatedLock},
 	"check_for_acquire_lock": {typReadOnly, cmdCheckForAcquireLock},
 	"acquire_lock":           {typLocksUpdate, cmdAcquireLock},
+	"verify_lock":            {typReadOnly, cmdVerifyLock},
 
 	"clear":                 {typDataUpdate, cmdClear},
 	"clear_range":           {typDataUpdate, cmdClearRange},
@@ -1152,7 +1155,11 @@ func cmdCheckIntent(e *evalCtx) error {
 func cmdAddUnreplicatedLock(e *evalCtx) error {
 	txn := e.getTxn(mandatory)
 	key := e.getKey()
-	e.unreplLocks[string(key)] = &txn.TxnMeta
+	str := lock.Exclusive // assume exclusive locks unless told otherwise
+	if e.hasArg("str") {
+		str = e.getStrength()
+	}
+	e.unreplLocks[string(key)] = unreplicatedLockInfo{txn: &txn.TxnMeta, str: str}
 	return nil
 }
 
@@ -1162,7 +1169,8 @@ func cmdCheckForAcquireLock(e *evalCtx) error {
 		key := e.getKey()
 		str := e.getStrength()
 		maxLockConflicts := e.getMaxLockConflicts()
-		return storage.MVCCCheckForAcquireLock(e.ctx, r, txn, str, key, maxLockConflicts)
+		targetLockConflictBytes := e.getTargetLockConflictBytes()
+		return storage.MVCCCheckForAcquireLock(e.ctx, r, txn, str, key, maxLockConflicts, targetLockConflictBytes)
 	})
 }
 
@@ -1172,7 +1180,22 @@ func cmdAcquireLock(e *evalCtx) error {
 		key := e.getKey()
 		str := e.getStrength()
 		maxLockConflicts := e.getMaxLockConflicts()
-		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, maxLockConflicts)
+		targetLockConflictBytes := e.getTargetLockConflictBytes()
+		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, maxLockConflicts, targetLockConflictBytes)
+	})
+}
+
+func cmdVerifyLock(e *evalCtx) error {
+	return e.withReader(func(r storage.Reader) error {
+		txn := e.getTxn(optional)
+		key := e.getKey()
+		str := e.getStrength()
+		found, err := storage.VerifyLock(e.ctx, r, &txn.TxnMeta, str, key, txn.IgnoredSeqNums)
+		if err != nil {
+			return err
+		}
+		e.results.buf.Printf("found: %v\n", found)
+		return nil
 	})
 }
 
@@ -1225,7 +1248,7 @@ func cmdClearTimeRange(e *evalCtx) error {
 
 	rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(batch, key, endKey)
 	resume, err := storage.MVCCClearTimeRange(e.ctx, rw, e.ms, key, endKey, targetTs, ts,
-		leftPeekBound, rightPeekBound, clearRangeThreshold, int64(maxBatchSize), int64(maxBatchByteSize))
+		leftPeekBound, rightPeekBound, clearRangeThreshold, int64(maxBatchSize), int64(maxBatchByteSize), 0)
 	if err != nil {
 		return err
 	}
@@ -1412,6 +1435,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	idempotent := e.hasArg("idempotent")
 	maxLockConflicts := e.getMaxLockConflicts()
+	targetLockConflictBytes := e.getTargetLockConflictBytes()
 
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
@@ -1430,7 +1454,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	return e.withWriter("del_range_ts", func(rw storage.ReadWriter) error {
 		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
 		return storage.MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs,
-			leftPeekBound, rightPeekBound, idempotent, maxLockConflicts, msCovered)
+			leftPeekBound, rightPeekBound, idempotent, maxLockConflicts, targetLockConflictBytes, msCovered)
 	})
 }
 
@@ -1448,18 +1472,24 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 	if e.hasArg("maxBytes") {
 		e.scanArg("maxBytes", &maxBytes)
 	}
+	importEpoch := 0
+	if e.hasArg("import_epoch") {
+		e.scanArg("import_epoch", &importEpoch)
+	}
 	predicates := kvpb.DeleteRangePredicates{
-		StartTime: e.getTsWithName("startTime"),
+		StartTime:   e.getTsWithName("startTime"),
+		ImportEpoch: uint32(importEpoch),
 	}
 	rangeThreshold := 64
 	if e.hasArg("rangeThreshold") {
 		e.scanArg("rangeThreshold", &rangeThreshold)
 	}
 	maxLockConflicts := e.getMaxLockConflicts()
+	targetLockConflictBytes := e.getTargetLockConflictBytes()
 	return e.withWriter("del_range_pred", func(rw storage.ReadWriter) error {
 		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
 		resumeSpan, err := storage.MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts, localTs,
-			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), maxLockConflicts)
+			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), maxLockConflicts, targetLockConflictBytes)
 
 		if resumeSpan != nil {
 			e.results.buf.Printf("del_range_pred: resume span [%s,%s)\n", resumeSpan.Key,
@@ -1481,7 +1511,7 @@ func cmdGet(e *evalCtx) error {
 	}
 	if e.hasArg("skipLocked") {
 		opts.SkipLocked = true
-		opts.LockTable = e.newLockTableView(txn, ts)
+		opts.LockTable = e.newLockTableView(txn, ts, e.getStrength())
 	}
 	if e.hasArg("tombstones") {
 		opts.Tombstones = true
@@ -1585,12 +1615,18 @@ func cmdPut(e *evalCtx) error {
 		val.InitChecksum(key)
 	}
 
+	importEpoch := 0
+	if e.hasArg("import_epoch") {
+		e.scanArg("import_epoch", &importEpoch)
+	}
+
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
 			Txn:                            txn,
 			LocalTimestamp:                 localTs,
+			ImportEpoch:                    uint32(importEpoch),
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
@@ -1661,6 +1697,9 @@ func cmdExport(e *evalCtx) error {
 	}
 	if e.hasArg("maxLockConflicts") {
 		e.scanArg("maxLockConflicts", &opts.MaxLockConflicts)
+	}
+	if e.hasArg("targetLockConflictBytes") {
+		e.scanArg("targetLockConflictBytes", &opts.TargetLockConflictBytes)
 	}
 	if e.hasArg("targetSize") {
 		e.scanArg("targetSize", &opts.TargetSize)
@@ -1787,7 +1826,7 @@ func cmdScan(e *evalCtx) error {
 	}
 	if e.hasArg("skipLocked") {
 		opts.SkipLocked = true
-		opts.LockTable = e.newLockTableView(txn, ts)
+		opts.LockTable = e.newLockTableView(txn, ts, e.getStrength())
 	}
 	if e.hasArg("tombstones") {
 		opts.Tombstones = true
@@ -1987,6 +2026,8 @@ func cmdIterNewIncremental(e *evalCtx) error {
 			opts.IntentPolicy = storage.MVCCIncrementalIterIntentPolicyEmit
 		case "aggregate":
 			opts.IntentPolicy = storage.MVCCIncrementalIterIntentPolicyAggregate
+		case "ignore":
+			opts.IntentPolicy = storage.MVCCIncrementalIterIntentPolicyIgnore
 		default:
 			return errors.Errorf("unknown intent policy %s", arg)
 		}
@@ -1994,6 +2035,14 @@ func cmdIterNewIncremental(e *evalCtx) error {
 
 	if e.iter != nil {
 		e.iter.Close()
+	}
+
+	if e.hasArg("maxLockConflicts") {
+		e.scanArg("maxLockConflicts", &opts.MaxLockConflicts)
+	}
+
+	if e.hasArg("targetLockConflictBytes") {
+		e.scanArg("targetLockConflictBytes", &opts.TargetLockConflictBytes)
 	}
 
 	r := e.newReader()
@@ -2418,7 +2467,7 @@ type evalCtx struct {
 	td                *datadriven.TestData
 	txns              map[string]*roachpb.Transaction
 	txnCounter        uint32
-	unreplLocks       map[string]*enginepb.TxnMeta
+	unreplLocks       map[string]unreplicatedLockInfo
 	ms                *enginepb.MVCCStats
 	sstWriter         *storage.SSTWriter
 	sstFile           *storage.MemObject
@@ -2434,7 +2483,7 @@ func newEvalCtx(ctx context.Context, engine storage.Engine) *evalCtx {
 		st:          cluster.MakeTestingClusterSettings(),
 		engine:      engine,
 		txns:        make(map[string]*roachpb.Transaction),
-		unreplLocks: make(map[string]*enginepb.TxnMeta),
+		unreplLocks: make(map[string]unreplicatedLockInfo),
 	}
 }
 
@@ -2556,11 +2605,11 @@ func (e *evalCtx) getTxn(opt optArg) *roachpb.Transaction {
 // newReader returns a new (metamorphic) reader for use by a single command. The
 // caller must call Close on the reader when done.
 func (e *evalCtx) newReader() storage.Reader {
-	switch mvccHistoriesReader {
+	switch strings.ToLower(mvccHistoriesReader) {
 	case "engine":
 		return noopCloseReader{e.engine}
-	case "readonly":
-		return e.engine.NewReadOnly(storage.StandardDurability)
+	case "reader", "readonly":
+		return e.engine.NewReader(storage.StandardDurability)
 	case "batch":
 		return e.engine.NewBatch()
 	case "snapshot":
@@ -2708,6 +2757,15 @@ func (e *evalCtx) getMaxLockConflicts() int64 {
 	return maxLockConflicts
 }
 
+func (e *evalCtx) getTargetLockConflictBytes() int64 {
+	e.t.Helper()
+	var targetLockConflictBytes int64
+	if e.hasArg("targetLockConflictBytes") {
+		e.scanArg("targetLockConflictBytes", &targetLockConflictBytes)
+	}
+	return targetLockConflictBytes
+}
+
 func (e *evalCtx) getTenantCodec() keys.SQLCodec {
 	if e.hasArg("tenant-prefix") {
 		var tenantID int
@@ -2787,33 +2845,62 @@ func (e *evalCtx) lookupTxn(txnName string) (*roachpb.Transaction, error) {
 }
 
 func (e *evalCtx) newLockTableView(
-	txn *roachpb.Transaction, ts hlc.Timestamp,
+	txn *roachpb.Transaction, ts hlc.Timestamp, str lock.Strength,
 ) storage.LockTableView {
-	return &mockLockTableView{unreplLocks: e.unreplLocks, txn: txn, ts: ts}
+	return &mockLockTableView{unreplLocks: e.unreplLocks, txn: txn, ts: ts, str: str}
 }
 
 // mockLockTableView is a mock implementation of LockTableView.
 type mockLockTableView struct {
-	unreplLocks map[string]*enginepb.TxnMeta
+	unreplLocks map[string]unreplicatedLockInfo
 	txn         *roachpb.Transaction
 	ts          hlc.Timestamp
+	str         lock.Strength
 }
 
 func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
-	k roachpb.Key, s lock.Strength,
+	_ context.Context, k roachpb.Key,
 ) (bool, *enginepb.TxnMeta, error) {
-	holder, ok := lt.unreplLocks[string(k)]
+	info, ok := lt.unreplLocks[string(k)]
 	if !ok {
 		return false, nil, nil
 	}
+	holder := info.txn
+	heldStr := info.str
 	if lt.txn != nil && lt.txn.ID == holder.ID {
 		return false, nil, nil
 	}
-	if s == lock.None && lt.ts.Less(holder.WriteTimestamp) {
-		return false, nil, nil
+
+	switch lt.str {
+	case lock.None:
+		switch heldStr {
+		case lock.Shared:
+			return false, nil, nil
+		case lock.Exclusive:
+			if lt.ts.Less(holder.WriteTimestamp) {
+				return false, nil, nil
+			}
+			return true, holder, nil
+		default:
+			panic(fmt.Sprintf("unexpected held strength %s", heldStr))
+		}
+	case lock.Shared:
+		switch heldStr {
+		case lock.Shared:
+			return false, nil, nil
+		case lock.Exclusive:
+			return true, holder, nil
+		default:
+			panic(fmt.Sprintf("unexpected held strength %s", heldStr))
+		}
+	case lock.Exclusive:
+		return true, holder, nil
+	default:
+		panic(fmt.Sprintf("unexpected lock strength %s", lt.str))
 	}
-	return true, holder, nil
 }
+
+func (lt *mockLockTableView) Close() {}
 
 func (e *evalCtx) visitWrappedIters(fn func(it storage.SimpleMVCCIterator) (done bool)) {
 	iter := e.iter
@@ -2972,7 +3059,7 @@ func toKey(s string, sqlCodec keys.SQLCodec) roachpb.Key {
 		var colMap catalog.TableColMap
 		colMap.Set(0, 0)
 		key := sqlCodec.IndexPrefix(1, 1)
-		key, _, err = rowenc.EncodeColumns([]descpb.ColumnID{0}, nil /* directions */, colMap, []tree.Datum{tree.NewDString(pk)}, key)
+		key, err = rowenc.EncodeColumns([]descpb.ColumnID{0}, nil /* directions */, colMap, []tree.Datum{tree.NewDString(pk)}, key)
 		if err != nil {
 			panic(err)
 		}
@@ -3003,3 +3090,10 @@ type noopCloseReader struct {
 }
 
 func (noopCloseReader) Close() {}
+
+// unreplicatedLockInfo captures information about an unreplicated lock. It
+// represents an unreplicated lock when associated with a key.
+type unreplicatedLockInfo struct {
+	txn *enginepb.TxnMeta
+	str lock.Strength
+}

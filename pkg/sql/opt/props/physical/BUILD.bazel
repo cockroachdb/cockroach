@@ -30,10 +30,6 @@ go_test(
         "required_test.go",
     ],
     embed = [":physical"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/config/zonepb",
         "//pkg/roachpb",

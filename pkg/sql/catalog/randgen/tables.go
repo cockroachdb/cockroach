@@ -106,9 +106,9 @@ func (g *testSchemaGenerator) selectNamesAndTemplates(
 			tbNamePat := g.models.tb[i].namePat
 			cfg := g.cfg.NameGen
 			if namesPerTemplate == 1 {
-				cfg.Number = false
+				cfg.Suffix = false
 				if !cfg.HasVariability() {
-					cfg.Number = true
+					cfg.Suffix = true
 				}
 			}
 			ng := randident.NewNameGenerator(&cfg, g.rand, tbNamePat)
@@ -181,10 +181,10 @@ func (g *testSchemaGenerator) genOneTable(
 	tmpl.desc.Temporary = sc.SchemaKind() == catalog.SchemaTemporary
 	if g.cfg.RandomizeColumns {
 		nameGenCfg := g.cfg.NameGen
-		nameGenCfg.Number = false
+		nameGenCfg.Suffix = false
 		for i, cPat := range tmpl.baseColumnNames {
 			ng := randident.NewNameGenerator(&nameGenCfg, g.rand, cPat)
-			colName := ng.GenerateOne(0)
+			colName := ng.GenerateOne("0")
 			tmpl.desc.Columns[i+1].Name = colName
 			tmpl.desc.Families[0].ColumnNames[i+1] = colName
 			for j := range tmpl.desc.PrimaryIndex.KeyColumnNames {
@@ -199,7 +199,7 @@ func (g *testSchemaGenerator) genOneTable(
 			}
 		}
 		ng := randident.NewNameGenerator(&nameGenCfg, g.rand, "primary")
-		idxName := ng.GenerateOne(0)
+		idxName := ng.GenerateOne("0")
 		tmpl.desc.PrimaryIndex.Name = idxName
 	}
 

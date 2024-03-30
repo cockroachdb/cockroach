@@ -26,10 +26,6 @@ go_test(
     srcs = ["geo_expression_test.go"],
     data = glob(["testdata/**"]),
     embed = [":invertedexpr"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/sql/inverted",

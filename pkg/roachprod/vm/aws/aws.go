@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
@@ -148,6 +149,10 @@ func (d *ebsDisk) Set(s string) error {
 		if d.Throughput == 0 {
 			// 125MB/s is base throughput for gp3.
 			d.Throughput = 125
+		}
+
+		if d.IOPs < d.Throughput*4 {
+			d.IOPs = d.Throughput * 6
 		}
 	case "io1", "io2":
 		if d.IOPs == 0 {
@@ -280,30 +285,19 @@ var defaultConfig = func() (cfg *awsConfig) {
 	return cfg
 }()
 
-// defaultCreateZones is the list of availability zones used by default for
-// cluster creation. If the geo flag is specified, nodes are distributed between
-// zones.
-// NOTE: a number of AWS roachtests are dependent on us-east-2 for loading fixtures,
-// out of s3://cockroach-fixtures-us-east-2. AWS doesn't support multi-regional buckets, thus resulting in material
-// egress cost if the test loads from a different region. See https://github.com/cockroachdb/cockroach/issues/105968.
-var defaultCreateZones = []string{
-	// N.B. us-east-2a is the default zone for non-geo distributed clusters. It appears to have a higher on-demand
-	// capacity of c7g.8xlarge (graviton3) than us-east-2b.
+// defaultZones is the list of availability zones used by default for
+// cluster creation. If the geo flag is specified, nodes are
+// distributed between zones.
+//
+// NOTE: a number of AWS roachtests are dependent on us-east-2 for
+// loading fixtures, out of s3://cockroach-fixtures-us-east-2. AWS
+// doesn't support multi-regional buckets, thus resulting in material
+// egress cost if the test loads from a different region. See
+// https://github.com/cockroachdb/cockroach/issues/105968.
+var defaultZones = []string{
 	"us-east-2a",
 	"us-west-2b",
 	"eu-west-2b",
-}
-
-// Overrides defaultCreateZones for specific machine types.
-// This is a workaround for,
-// "We currently do not have sufficient c6id.4xlarge capacity in the Availability Zone you requested (us-east-2a).
-// Our system will be working on provisioning additional capacity. You can currently get c6id.4xlarge capacity by
-// not specifying an Availability Zone in your request or choosing us-east-2b, us-east-2c."
-// N.B. we implicitly specify AZ to select an AMI in that zone, hence we fall back to instance-specific overrides.
-var overrideDefaultCreateZones = map[string][]string{
-	"c6id.4xlarge":  {"us-east-2c", "us-west-2b", "eu-west-2b"},
-	"c6id.8xlarge":  {"us-east-2c", "us-west-2b", "eu-west-2b"},
-	"c6id.24xlarge": {"us-east-2b", "us-west-2b", "eu-west-2b"},
 }
 
 type Tag struct {
@@ -367,7 +361,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("aws availability zones to use for cluster creation. If zones are formatted\n"+
 			"as AZ:N where N is an integer, the zone will be repeated N times. If > 1\n"+
 			"zone specified, the cluster will be spread out evenly by zone regardless\n"+
-			"of geo (default [%s])", strings.Join(defaultCreateZones, ",")))
+			"of geo (default [%s])", strings.Join(defaultZones, ",")))
 	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
 		o.ImageAMI, "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
 	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
@@ -433,7 +427,11 @@ func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 				if err != nil {
 					return err
 				}
-				l.Printf("imported %s as %s in region %s", sshPublicKeyFile, keyName, region)
+				sshPublicKeyPath, err := config.SSHPublicKeyPath()
+				if err != nil {
+					return err
+				}
+				l.Printf("imported %s as %s in region %s", sshPublicKeyPath, keyName, region)
 			}
 			return nil
 		})
@@ -534,13 +532,8 @@ func (p *Provider) Create(
 		return err
 	}
 
-	useDefaultZones := len(expandedZones) == 0
-	if useDefaultZones {
-		expandedZones = defaultCreateZones
-		if defaultAZOverride, ok := overrideDefaultCreateZones[machineType]; ok {
-			expandedZones = defaultAZOverride
-			l.Printf("WARNING: using default zones override %q for machine type %q", strings.Join(expandedZones, ","), machineType)
-		}
+	if len(expandedZones) == 0 {
+		expandedZones = defaultZones
 	}
 
 	// We need to make sure that the SSH keys have been distributed to all regions.
@@ -557,7 +550,14 @@ func (p *Provider) Create(
 	}
 
 	var zones []string // contains an az corresponding to each entry in names
-	if !opts.GeoDistributed && (useDefaultZones || len(expandedZones) == 1) {
+	if opts.GeoDistributed {
+		// Distribute the nodes amongst availability zones if geo distributed.
+		nodeZones := vm.ZonePlacement(len(expandedZones), len(names))
+		zones = make([]string, len(nodeZones))
+		for i, z := range nodeZones {
+			zones[i] = expandedZones[z]
+		}
+	} else {
 		// Only use one zone in the region if we're not creating a geo cluster.
 		regionZones, err := p.regionZones(regions[0], expandedZones)
 		if err != nil {
@@ -567,13 +567,6 @@ func (p *Provider) Create(
 		zone := regionZones[rand.Intn(len(regionZones))]
 		for range names {
 			zones = append(zones, zone)
-		}
-	} else {
-		// Distribute the nodes amongst availability zones if geo distributed.
-		nodeZones := vm.ZonePlacement(len(expandedZones), len(names))
-		zones = make([]string, len(nodeZones))
-		for i, z := range nodeZones {
-			zones[i] = expandedZones[z]
 		}
 	}
 
@@ -594,6 +587,10 @@ func (p *Provider) Create(
 	}
 
 	return p.waitForIPs(l, names, regions, providerOpts)
+}
+
+func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
+	panic("unimplemented")
 }
 
 // waitForIPs waits until AWS reports both internal and external IP addresses
@@ -1082,11 +1079,17 @@ func (p *Provider) runInstance(
 	m := vm.GetDefaultLabelMap(opts)
 	m[vm.TagCreated] = timeutil.Now().Format(time.RFC3339)
 	m["Name"] = name
+
+	if providerOpts.UseSpot {
+		m[vm.TagSpotInstance] = "true"
+	}
+
 	var awsLabelsNameMap = map[string]string{
-		vm.TagCluster:   "Cluster",
-		vm.TagCreated:   "Created",
-		vm.TagLifetime:  "Lifetime",
-		vm.TagRoachprod: "Roachprod",
+		vm.TagCluster:      "Cluster",
+		vm.TagCreated:      "Created",
+		vm.TagLifetime:     "Lifetime",
+		vm.TagRoachprod:    "Roachprod",
+		vm.TagSpotInstance: "Spot",
 	}
 
 	var labelPairs []string
@@ -1137,7 +1140,8 @@ func (p *Provider) runInstance(
 		return *fl
 	}
 	imageID := withFlagOverride(az.region.AMI_X86_64, &providerOpts.ImageAMI)
-	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "7g.") == 1
+	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "6gd.") == 1 ||
+		strings.Index(machineType, "7g.") == 1 || strings.Index(machineType, "7gd.") == 1
 	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
 		return errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
 	}

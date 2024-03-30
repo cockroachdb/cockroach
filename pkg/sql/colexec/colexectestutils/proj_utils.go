@@ -33,21 +33,13 @@ type MockTypeContext struct {
 var _ eval.IndexedVarContainer = &MockTypeContext{}
 
 // IndexedVarEval implements the eval.IndexedVarContainer interface.
-func (p *MockTypeContext) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	return tree.DNull.Eval(ctx, e)
+func (p *MockTypeContext) IndexedVarEval(idx int) (tree.Datum, error) {
+	return tree.DNull, nil
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (p *MockTypeContext) IndexedVarResolvedType(idx int) *types.T {
 	return p.Typs[idx]
-}
-
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (p *MockTypeContext) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("$%d", idx))
-	return &n
 }
 
 // CreateTestProjectingOperator creates a projecting operator that performs

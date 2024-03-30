@@ -84,12 +84,32 @@ var TransferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
 var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.expiration_leases_only.enabled",
-	"only use expiration-based leases, never epoch-based ones (experimental, affects performance)",
+	"only use expiration-based leases never epoch-based ones "+
+		"when there are less than kv.lease.expiration_max_replicas_per_node on the node, "+
+		"(experimental, affects performance)",
 	// false by default. Metamorphically enabled in tests, but not in deadlock
 	// builds because TestClusters are usually so slow that they're unable
 	// to maintain leases/leadership/liveness.
 	!syncutil.DeadlockEnabled &&
 		util.ConstantWithMetamorphicTestBool("kv.expiration_leases_only.enabled", false),
+)
+
+// ExpirationLeasesMaxReplicasPerNode converts from expiration back to epoch
+// leases if there are too many replicas on a node. Expiration leases are more
+// expensive to maintain than epoch leases, so they are only used on clusters
+// with a small number of replicas per node. We chose a conservative maximum of
+// 3000 replicas per node, but this maximum will increase as we decrease the
+// cost of expiration based leases. Note that the maximum is for all stores on
+// the node in a multi-store configuration. The decisions is node-local so in
+// some clusters there can be a mix of some nodes using expiration leases and
+// others using epoch leases. A mixed state is a valid state to be in, however
+// it doesn't bring the benefits of expiration based leases, and it does incur
+// the additional costs.
+var ExpirationLeasesMaxReplicasPerNode = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.lease.expiration_max_replicas_per_node",
+	"maximum number of replicas a node can have before expiration leases are disabled (0 disables this setting)",
+	0,
 )
 
 // DisableExpirationLeasesOnly is an escape hatch for ExpirationLeasesOnly,
@@ -122,6 +142,18 @@ var LeaseCheckPreferencesOnAcquisitionEnabled = settings.RegisterBoolSetting(
 	"controls whether lease preferences are checked on lease acquisition, "+
 		"if the new lease violates preferences, it is queued for processing",
 	true,
+)
+
+// RejectLeaseOnLeaderUnknown controls whether a replica that does not know the
+// current raft leader rejects a lease request.
+//
+// TODO(pav-kv): flip the default to true, and remove this setting when this
+// becomes the only behaviour.
+var RejectLeaseOnLeaderUnknown = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lease.reject_on_leader_unknown.enabled",
+	"reject lease requests on a replica that does not know the raft leader",
+	false,
 )
 
 var leaseStatusLogLimiter = func() *log.EveryN {
@@ -847,10 +879,17 @@ func (r *Replica) requiresExpirationLeaseRLocked() bool {
 
 // shouldUseExpirationLeaseRLocked returns true if this range should be using an
 // expiration-based lease, either because it requires one or because
-// kv.expiration_leases_only.enabled is enabled.
+// kv.expiration_leases_only.enabled is enabled and the number of ranges
+// (replicas) per node is fewer than kv.expiration_leases.max_replicas_per_node"
 func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
-	return (ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) && !DisableExpirationLeasesOnly) ||
-		r.requiresExpirationLeaseRLocked()
+	settingEnabled := ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) && !DisableExpirationLeasesOnly
+	maxAllowedReplicas := ExpirationLeasesMaxReplicasPerNode.Get(&r.ClusterSettings().SV)
+	// Disable the setting if there are too many replicas.
+	if settingEnabled && maxAllowedReplicas > 0 && r.store.getNodeRangeCount() > maxAllowedReplicas {
+		settingEnabled = false
+	}
+
+	return settingEnabled || r.requiresExpirationLeaseRLocked()
 }
 
 // requestLeaseLocked executes a request to obtain or extend a lease
@@ -1379,7 +1418,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 		// against this in checkRequestTimeRLocked). So instead of assuming
 		// anything, we iterate and check again.
 		pErr = func() (pErr *kvpb.Error) {
-			slowTimer := timeutil.NewTimer()
+			var slowTimer timeutil.Timer
 			defer slowTimer.Stop()
 			slowTimer.Reset(base.SlowRequestThreshold)
 			tBegin := timeutil.Now()

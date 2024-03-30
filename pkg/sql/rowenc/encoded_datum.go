@@ -186,15 +186,32 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 
 // DatumToEncDatum initializes an EncDatum with the given Datum.
 func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
+	ed, err := DatumToEncDatumEx(ctyp, d)
+	if err != nil {
+		panic(err)
+	}
+	return ed
+}
+
+// DatumToEncDatumEx is the same as DatumToEncDatum that returns an error
+// instead of panicking under unexpected circumstances.
+// TODO(yuzefovich): we should probably get rid of DatumToEncDatum in favor of
+// this method altogether.
+func DatumToEncDatumEx(ctyp *types.T, d tree.Datum) (EncDatum, error) {
 	if d == nil {
-		panic(errors.AssertionFailedf("cannot convert nil datum to EncDatum"))
+		return EncDatum{}, errors.AssertionFailedf("cannot convert nil datum to EncDatum")
 	}
 
 	dTyp := d.ResolvedType()
 	if d != tree.DNull && !ctyp.Equivalent(dTyp) && !dTyp.IsAmbiguous() {
-		panic(errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp.SQLStringForError(), ctyp.SQLStringForError()))
+		return EncDatum{}, errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp.SQLStringForError(), ctyp.SQLStringForError())
 	}
-	return EncDatum{Datum: d}
+	return EncDatum{Datum: d}, nil
+}
+
+// NullEncDatum initializes an EncDatum with the NULL value.
+func NullEncDatum() EncDatum {
+	return EncDatum{Datum: tree.DNull}
 }
 
 // UnsetDatum ensures subsequent IsUnset() calls return false.
@@ -301,6 +318,33 @@ func (ed *EncDatum) Encode(
 	}
 }
 
+func mustUseValueEncodingForFingerprinting(t *types.T) bool {
+	switch t.Family() {
+	// Both TSQuery and TSVector types don't have key-encoding, so we must use
+	// the value encoding for them. JSON type now (as of 23.2) has key-encoding
+	// available, but for historical reasons we will keep on using the
+	// value-encoding (Fingerprint is used by hash routers, so changing its
+	// behavior can result in incorrect results in mixed version clusters).
+	case types.JsonFamily, types.TSQueryFamily, types.TSVectorFamily:
+		return true
+	case types.ArrayFamily:
+		// Note that at time of this writing we don't support arrays of JSON
+		// (tracked via #23468) nor of TSQuery / TSVector types (tracked by
+		// #90886), so technically we don't need to do a recursive call here,
+		// but we choose to be on the safe side, so we do it anyway.
+		return mustUseValueEncodingForFingerprinting(t.ArrayContents())
+	case types.TupleFamily:
+		for _, tupleT := range t.TupleContents() {
+			if mustUseValueEncodingForFingerprinting(tupleT) {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
+
 // Fingerprint appends a unique hash of ed to the given slice. If datums are intended
 // to be deduplicated or grouped with hashes, this function should be used
 // instead of encode. Additionally, Fingerprint has the property that if the
@@ -321,15 +365,14 @@ func (ed *EncDatum) Fingerprint(
 	var fingerprint []byte
 	var err error
 	memUsageBefore := ed.Size()
-	switch typ.Family() {
-	case types.JsonFamily, types.TSVectorFamily:
+	if mustUseValueEncodingForFingerprinting(typ) {
 		if err = ed.EnsureDecoded(typ, a); err != nil {
 			return nil, err
 		}
 		// We must use value encodings without a column ID even if the EncDatum already
 		// is encoded with the value encoding so that the hashes are indeed unique.
 		fingerprint, err = valueside.Encode(appendTo, valueside.NoColumnID, ed.Datum, nil /* scratch */)
-	default:
+	} else {
 		// For values that are key encodable, using the ascending key.
 		// Note that using a value encoding will not easily work in case when
 		// there already exists the encoded representation because that

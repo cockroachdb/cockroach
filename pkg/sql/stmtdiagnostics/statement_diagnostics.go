@@ -157,11 +157,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
 
 func (r *Registry) poll(ctx context.Context) {
 	var (
-		timer timeutil.Timer
-		// We need to store timer.C reference separately because timer.Stop()
-		// (called when polling is disabled) puts timer into the pool and
-		// prohibits further usage of stored timer.C.
-		timerC              = timer.C
+		timer               timeutil.Timer
 		lastPoll            time.Time
 		deadline            time.Time
 		pollIntervalChanged = make(chan struct{}, 1)
@@ -169,15 +165,11 @@ func (r *Registry) poll(ctx context.Context) {
 			if interval := pollingInterval.Get(&r.st.SV); interval == 0 {
 				// Setting the interval to zero stops the polling.
 				timer.Stop()
-				// nil out the channel so that it'd block forever in the loop
-				// below (until the polling interval is changed).
-				timerC = nil
 			} else {
 				newDeadline := lastPoll.Add(interval)
 				if deadline.IsZero() || !deadline.Equal(newDeadline) {
 					deadline = newDeadline
 					timer.Reset(timeutil.Until(deadline))
-					timerC = timer.C
 				}
 			}
 		}
@@ -202,7 +194,7 @@ func (r *Registry) poll(ctx context.Context) {
 		select {
 		case <-pollIntervalChanged:
 			continue // go back around and maybe reset the timer
-		case <-timerC:
+		case <-timer.C:
 			timer.Read = true
 		case <-ctx.Done():
 			return
@@ -319,7 +311,7 @@ func (r *Registry) insertRequestInternal(
 		txn.KV().SetDebugName("stmt-diag-insert-request")
 		// Check if there's already a pending request for this fingerprint.
 		row, err := txn.QueryRowEx(ctx, "stmt-diag-check-pending", txn.KV(),
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			`SELECT count(1) FROM system.statement_diagnostics_requests
 				WHERE
 					completed = false AND
@@ -371,7 +363,7 @@ func (r *Registry) insertRequestInternal(
 			insertColumns + ") VALUES (" + valuesClause + ") RETURNING id;"
 		row, err = txn.QueryRowEx(
 			ctx, "stmt-diag-insert-request", txn.KV(),
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			stmt, qargs...,
 		)
 		if err != nil {
@@ -403,7 +395,7 @@ func (r *Registry) insertRequestInternal(
 // CancelRequest is part of the server.StmtDiagnosticsRequester interface.
 func (r *Registry) CancelRequest(ctx context.Context, requestID int64) error {
 	row, err := r.db.Executor().QueryRowEx(ctx, "stmt-diag-cancel-request", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		// Rather than deleting the row from the table, we choose to mark the
 		// request as "expired" by setting `expires_at` into the past. This will
 		// allow any queries that are currently being traced for this request to
@@ -537,7 +529,7 @@ func (r *Registry) InsertStatementDiagnostics(
 		txn.KV().SetDebugName("stmt-diag-insert-bundle")
 		if requestID != 0 {
 			row, err := txn.QueryRowEx(ctx, "stmt-diag-check-completed", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				"SELECT count(1) FROM system.statement_diagnostics_requests WHERE id = $1 AND completed = false",
 				requestID)
 			if err != nil {
@@ -574,7 +566,7 @@ func (r *Registry) InsertStatementDiagnostics(
 			// Insert the chunk into system.statement_bundle_chunks.
 			row, err := txn.QueryRowEx(
 				ctx, "stmt-bundle-chunks-insert", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
 				"statement diagnostics bundle",
 				tree.NewDBytes(tree.DBytes(chunk)),
@@ -596,7 +588,7 @@ func (r *Registry) InsertStatementDiagnostics(
 		// Insert the collection metadata into system.statement_diagnostics.
 		row, err := txn.QueryRowEx(
 			ctx, "stmt-diag-insert", txn.KV(),
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			"INSERT INTO system.statement_diagnostics "+
 				"(statement_fingerprint, statement, collected_at, bundle_chunks, error) "+
 				"VALUES ($1, $2, $3, $4, $5) RETURNING id",
@@ -629,7 +621,7 @@ func (r *Registry) InsertStatementDiagnostics(
 				}
 			}
 			_, err := txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				"UPDATE system.statement_diagnostics_requests "+
 					"SET completed = $1, statement_diagnostics_id = $2 WHERE id = $3",
 				shouldMarkCompleted, diagID, requestID)
@@ -641,7 +633,7 @@ func (r *Registry) InsertStatementDiagnostics(
 			// This is necessary because the UI uses this table to discover completed
 			// diagnostics.
 			_, err := txn.ExecEx(ctx, "stmt-diag-add-completed", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				"INSERT INTO system.statement_diagnostics_requests"+
 					" (completed, statement_fingerprint, statement_diagnostics_id, requested_at)"+
 					" VALUES (true, $1, $2, $3)",
@@ -675,7 +667,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 			extraColumns = ", plan_gist, anti_plan_gist"
 		}
 		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability%s
 				FROM system.statement_diagnostics_requests
 				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`, extraColumns),

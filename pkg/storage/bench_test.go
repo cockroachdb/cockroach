@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -214,6 +215,25 @@ func BenchmarkMVCCExportToSST(b *testing.B) {
 				numRangeKeys:        numRangeKey,
 				exportAllRevisions:  exportAllRevisionVal,
 				useElasticCPUHandle: useElasticCPUHandle,
+			}
+			runMVCCExportToSST(b, opts)
+		})
+	}
+	withImportEpochs := []bool{false, true}
+	for _, ie := range withImportEpochs {
+		numKey := numKeys[len(numKeys)-1]
+		numRevision := numRevisions[len(numRevisions)-1]
+		numRangeKey := numRangeKeys[len(numRangeKeys)-1]
+		exportAllRevisionVal := exportAllRevisions[len(exportAllRevisions)-1]
+		b.Run(fmt.Sprintf("importEpochs=%t/numKeys=%d/numRevisions=%d/exportAllRevisions=%t",
+			ie, numKey, numRevision, exportAllRevisionVal,
+		), func(b *testing.B) {
+			opts := mvccExportToSSTOpts{
+				numKeys:            numKey,
+				numRevisions:       numRevision,
+				numRangeKeys:       numRangeKey,
+				exportAllRevisions: exportAllRevisionVal,
+				importEpochs:       ie,
 			}
 			runMVCCExportToSST(b, opts)
 		})
@@ -678,7 +698,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 
 	eng, err := Open(
 		context.Background(),
-		Filesystem(dir),
+		fs.MustInitPhysicalTestingEnv(dir),
 		cluster.MakeTestingClusterSettings())
 	if err != nil {
 		return nil, err
@@ -1251,6 +1271,7 @@ func runMVCCDeleteRangeUsingTombstone(
 				rightPeekBound,
 				false, // idempotent
 				0,
+				0,
 				msCovered,
 			); err != nil {
 				b.Fatal(err)
@@ -1298,6 +1319,7 @@ func runMVCCDeleteRangeWithPredicate(
 				0,
 				math.MaxInt64,
 				rangeTombstoneThreshold,
+				0,
 				0,
 			)
 			b.StopTimer()
@@ -1480,7 +1502,7 @@ func runMVCCGarbageCollect(
 					}
 				}
 				if err := MVCCDeleteRangeUsingTombstone(ctx, batch, nil, startKey, endKey,
-					rts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+					rts, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -1639,9 +1661,9 @@ func runMVCCAcquireLockCommon(
 				txn = &txn2
 			}
 			// Acquire a shared and an exclusive lock on the key.
-			err := MVCCAcquireLock(ctx, eng, txn, lock.Shared, key, nil, 0)
+			err := MVCCAcquireLock(ctx, eng, txn, lock.Shared, key, nil, 0, 0)
 			require.NoError(b, err)
-			err = MVCCAcquireLock(ctx, eng, txn, lock.Exclusive, key, nil, 0)
+			err = MVCCAcquireLock(ctx, eng, txn, lock.Exclusive, key, nil, 0, 0)
 			require.NoError(b, err)
 		}
 	}
@@ -1661,9 +1683,9 @@ func runMVCCAcquireLockCommon(
 		txn := &txn1
 		var err error
 		if checkFor {
-			err = MVCCCheckForAcquireLock(ctx, rw, txn, strength, key, 0)
+			err = MVCCCheckForAcquireLock(ctx, rw, txn, strength, key, 0, 0)
 		} else {
-			err = MVCCAcquireLock(ctx, rw, txn, strength, key, ms, 0)
+			err = MVCCAcquireLock(ctx, rw, txn, strength, key, ms, 0, 0)
 		}
 		if heldOtherTxn {
 			require.Error(b, err)
@@ -1676,8 +1698,8 @@ func runMVCCAcquireLockCommon(
 }
 
 type mvccExportToSSTOpts struct {
-	numKeys, numRevisions, numRangeKeys     int
-	exportAllRevisions, useElasticCPUHandle bool
+	numKeys, numRevisions, numRangeKeys                   int
+	importEpochs, exportAllRevisions, useElasticCPUHandle bool
 
 	// percentage specifies the share of the dataset to export. 100 will be a full
 	// export, disabling the TBI optimization. <100 will be an incremental export
@@ -1727,7 +1749,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 			startKey := mkKey(start)
 			endKey := mkKey(end)
 			require.NoError(b, MVCCDeleteRangeUsingTombstone(
-				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
+				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil))
 		}
 		require.NoError(b, batch.Commit(false /* sync */))
 	}()
@@ -1739,6 +1761,9 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		for j := 0; j < opts.numRevisions; j++ {
 			mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: mkWall(j), Logical: 0}}
 			mvccValue := MVCCValue{Value: roachpb.MakeValueFromString("foobar")}
+			if opts.importEpochs {
+				mvccValue.ImportEpoch = 1
+			}
 			err := batch.PutMVCC(mvccKey, mvccValue)
 			if err != nil {
 				b.Fatal(err)
@@ -1790,14 +1815,15 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		startTS := hlc.Timestamp{WallTime: startWall}
 		endTS := hlc.Timestamp{WallTime: endWall}
 		_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
-			StartKey:           MVCCKey{Key: keys.LocalMax},
-			EndKey:             roachpb.KeyMax,
-			StartTS:            startTS,
-			EndTS:              endTS,
-			ExportAllRevisions: opts.exportAllRevisions,
-			TargetSize:         0,
-			MaxSize:            0,
-			StopMidKey:         false,
+			StartKey:               MVCCKey{Key: keys.LocalMax},
+			EndKey:                 roachpb.KeyMax,
+			StartTS:                startTS,
+			EndTS:                  endTS,
+			ExportAllRevisions:     opts.exportAllRevisions,
+			TargetSize:             0,
+			MaxSize:                0,
+			StopMidKey:             false,
+			IncludeMVCCValueHeader: opts.importEpochs,
 		}, &buf)
 		if err != nil {
 			b.Fatal(err)
@@ -1908,7 +1934,7 @@ func runCheckSSTConflicts(
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, sstStart.Key, sstEnd.Key.Next(), false, hlc.Timestamp{}, hlc.Timestamp{}, math.MaxInt64, usePrefixSeek)
+		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, sstStart.Key, sstEnd.Key.Next(), false, hlc.Timestamp{}, hlc.Timestamp{}, math.MaxInt64, 0, usePrefixSeek)
 		require.NoError(b, err)
 	}
 }
@@ -1965,7 +1991,7 @@ func init() {
 func makeBenchRowKey(b *testing.B, buf []byte, id int, columnFamily uint32) roachpb.Key {
 	var err error
 	buf = append(buf, benchRowPrefix...)
-	buf, _, err = rowenc.EncodeColumns(
+	buf, err = rowenc.EncodeColumns(
 		[]descpb.ColumnID{0}, nil /* directions */, benchRowColMap,
 		[]tree.Datum{tree.NewDInt(tree.DInt(id))}, buf)
 	if err != nil {
@@ -1998,7 +2024,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 	ctx := context.Background()
 	eng, err := Open(ctx, InMemory(), st, CacheSize(testCacheSize),
 		func(cfg *engineConfig) error {
-			cfg.Opts.DisableAutomaticCompactions = true
+			cfg.opts.DisableAutomaticCompactions = true
 			return nil
 		})
 	require.NoError(b, err)
@@ -2090,7 +2116,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 			return cmp < 0
 		})
 		sstFileName := fmt.Sprintf("tmp-ingest-%d", i)
-		sstFile, err := eng.Create(sstFileName)
+		sstFile, err := eng.Env().Create(sstFileName)
 		require.NoError(b, err)
 		// No improvement with v3 since the multiple versions are in different
 		// files.
@@ -2106,12 +2132,12 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		require.NoError(b, eng.IngestLocalFiles(ctx, []string{sstFileName}))
 	}
 	for i := 0; i < b.N; i++ {
-		rw := eng.NewReadOnly(StandardDurability)
+		ro := eng.NewReader(StandardDurability)
 		ts := hlc.Timestamp{WallTime: int64(numVersions) + 5}
 		startKey := makeKey(nil, 0)
 		endKey := makeKey(nil, totalNumKeys+1)
 		iter, err := newMVCCIterator(
-			ctx, rw, ts, false, false, IterOptions{
+			ctx, ro, ts, false, false, IterOptions{
 				KeyTypes:   IterKeyTypePointsAndRanges,
 				LowerBound: startKey,
 				UpperBound: endKey,
@@ -2134,6 +2160,6 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 			fmt.Printf("stats: %s\n", stats.Stats.String())
 		}
 		iter.Close()
-		rw.Close()
+		ro.Close()
 	}
 }

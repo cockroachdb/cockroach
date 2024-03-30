@@ -86,6 +86,10 @@ func (*UnaryOp) preferred() bool {
 	return false
 }
 
+func (*UnaryOp) outParamInfo() (RoutineType, []int32, TypeList) {
+	return BuiltinRoutine, nil, nil
+}
+
 func unaryOpFixups(
 	ops map[UnaryOperatorSymbol]*UnaryOpOverloads,
 ) map[UnaryOperatorSymbol]*UnaryOpOverloads {
@@ -258,6 +262,10 @@ func (op *BinOp) returnType() ReturnTyper {
 
 func (op *BinOp) preferred() bool {
 	return op.PreferredOverload
+}
+
+func (op *BinOp) outParamInfo() (RoutineType, []int32, TypeList) {
+	return BuiltinRoutine, nil, nil
 }
 
 // AppendToMaybeNullArray appends an element to an array. If the first
@@ -449,7 +457,7 @@ func initNonArrayToNonArrayConcatenation() {
 	for _, t := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
 		// Do not re-add String+String or String+Bytes, as they already exist
 		// and have predefined correct behavior.
-		if t != types.String && t != types.Bytes {
+		if !t.Identical(types.String) && !t.Identical(types.Bytes) {
 			addConcat(t, types.String, fromTypeToVolatility[t.Oid()])
 			addConcat(types.String, t, fromTypeToVolatility[t.Oid()])
 		}
@@ -1400,6 +1408,10 @@ func (op *CmpOp) returnType() ReturnTyper {
 
 func (op *CmpOp) preferred() bool {
 	return op.PreferredOverload
+}
+
+func (op *CmpOp) outParamInfo() (RoutineType, []int32, TypeList) {
+	return BuiltinRoutine, nil, nil
 }
 
 func cmpOpFixups(

@@ -28,6 +28,7 @@ go_library(
         "//pkg/kv/kvserver/allocator/load",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/raft/raftpb",
         "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
@@ -47,7 +48,6 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_golang_mock//gomock",  # keep
-        "@io_etcd_go_raft_v3//raftpb",
         "@org_golang_google_grpc//metadata",  # keep
     ],
 )
@@ -70,15 +70,16 @@ go_test(
         "version_test.go",
     ],
     embed = [":roachpb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/cli/exit",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/raft",
+        "//pkg/raft/confchange",
+        "//pkg/raft/quorum",
+        "//pkg/raft/raftpb",
+        "//pkg/raft/tracker",
         "//pkg/storage/enginepb",
         "//pkg/testutils/zerofields",
         "//pkg/util",
@@ -98,11 +99,6 @@ go_test(
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
-        "@io_etcd_go_raft_v3//:raft",
-        "@io_etcd_go_raft_v3//confchange",
-        "@io_etcd_go_raft_v3//quorum",
-        "@io_etcd_go_raft_v3//raftpb",
-        "@io_etcd_go_raft_v3//tracker",
     ],
 )
 

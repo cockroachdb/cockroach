@@ -35,6 +35,8 @@ const (
 	TagLifetime = "lifetime"
 	// TagRoachprod is roachprod tag const, value is true & false.
 	TagRoachprod = "roachprod"
+	// TagSpotInstance is a tag added to spot instance vms with value as true.
+	TagSpotInstance = "spot"
 	// TagUsage indicates where a certain resource is used. "roachtest" is used
 	// as the key for roachtest created resources.
 	TagUsage = "usage"
@@ -278,7 +280,6 @@ type CreateOpts struct {
 
 	GeoDistributed bool
 	Arch           string
-	UbuntuVersion  UbuntuVersion
 	VMProviders    []string
 	SSDOpts        struct {
 		UseLocalSSD bool
@@ -434,6 +435,7 @@ type Provider interface {
 	// zones for the given provider.
 	ConfigSSH(l *logger.Logger, zones []string) error
 	Create(l *logger.Logger, names []string, opts CreateOpts, providerOpts ProviderOpts) error
+	Grow(l *logger.Logger, vms List, clusterName string, names []string) error
 	Reset(l *logger.Logger, vms List) error
 	Delete(l *logger.Logger, vms List) error
 	Extend(l *logger.Logger, vms List, lifetime time.Duration) error
@@ -707,25 +709,4 @@ func SanitizeLabel(label string) string {
 	// Remove any leading or trailing hyphens
 	label = strings.Trim(label, "-")
 	return label
-}
-
-// UbuntuVersion specifies the version of Ubuntu used. Note that a default
-// version is already provided and this is only for overriding that default.
-// TODO(Darryl): Remove after all tests are upgraded to Ubuntu 22.04.
-// See: https://github.com/cockroachdb/cockroach/issues/112112.
-type UbuntuVersion string
-
-type UbuntuImages struct {
-	DefaultImage string
-	ARM64Image   string
-	FIPSImage    string
-}
-
-const (
-	FocalFossa UbuntuVersion = "20.04"
-)
-
-// IsOverridden returns true if an Ubuntu version was specified.
-func (u UbuntuVersion) IsOverridden() bool {
-	return u != ""
 }

@@ -50,11 +50,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.Name.ObjectNamePrefix = resName
 
-	// TODO(chengxiong,mgartner): this is a hack to disallow UDF usage in UDF and
-	// we will need to lift this hack when we plan to allow it.
-	preFuncResolver := b.semaCtx.FunctionResolver
-	b.semaCtx.FunctionResolver = nil
-
 	b.insideFuncDef = true
 	b.trackSchemaDeps = true
 	// Make sure datasource names are qualified.
@@ -70,7 +65,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		b.evalCtx.Annotations = oldEvalCtxAnn
 		b.semaCtx.Annotations = oldSemaCtxAnn
 
-		b.semaCtx.FunctionResolver = preFuncResolver
 		switch recErr := recover().(type) {
 		case nil:
 			// No error.
@@ -138,29 +132,68 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	// the function body.
 	var deps opt.SchemaDeps
 	var typeDeps opt.SchemaTypeDeps
+	var functionDeps opt.SchemaFunctionDeps
 
 	afterBuildStmt := func() {
+		functionDeps.UnionWith(b.schemaFunctionDeps)
 		deps = append(deps, b.schemaDeps...)
 		typeDeps.UnionWith(b.schemaTypeDeps)
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
+		b.schemaFunctionDeps = intsets.Fast{}
 
 		// Reset the annotations to the original values
 		b.evalCtx.Annotations = oldEvalCtxAnn
 		b.semaCtx.Annotations = oldSemaCtxAnn
 	}
 
+	if language == tree.RoutineLangPLpgSQL {
+		paramNameSeen := make(map[tree.Name]struct{})
+		for _, param := range cf.Params {
+			if param.Name != "" {
+				checkDuplicateParamName(param, paramNameSeen)
+			}
+		}
+	} else {
+		// For SQL routines, input and output parameters form separate
+		// "namespaces".
+		paramNameSeenIn, paramNameSeenOut := make(map[tree.Name]struct{}), make(map[tree.Name]struct{})
+		for _, param := range cf.Params {
+			if param.Name != "" {
+				if param.IsInParam() {
+					checkDuplicateParamName(param, paramNameSeenIn)
+				}
+				if param.IsOutParam() {
+					checkDuplicateParamName(param, paramNameSeenOut)
+				}
+			}
+		}
+	}
+
 	// bodyScope is the base scope for each statement in the body. We add the
 	// named parameters to the scope so that references to them in the body can
 	// be resolved.
 	bodyScope := b.allocScope()
-	var paramTypes tree.ParamTypes
+	// routineParams are all parameters of PLpgSQL routines.
+	var routineParams []routineParam
+	var outParamTypes []*types.T
+	// When multiple OUT parameters are present, parameter names become the
+	// labels in the output RECORD type.
+	var outParamNames []string
 	for i := range cf.Params {
 		param := &cf.Params[i]
 		typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
 		if err != nil {
 			panic(err)
+		}
+		if param.IsOutParam() {
+			outParamTypes = append(outParamTypes, typ)
+			paramName := string(param.Name)
+			if paramName == "" {
+				paramName = fmt.Sprintf("column%d", len(outParamTypes))
+			}
+			outParamNames = append(outParamNames, paramName)
 		}
 		// The parameter type must be supported by the current cluster version.
 		checkUnsupportedType(b.ctx, b.semaCtx, typ)
@@ -176,10 +209,12 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			}
 		}
 
-		// Add the parameter to the base scope of the body.
-		paramColName := funcParamColName(param.Name, i)
-		col := b.synthesizeColumn(bodyScope, paramColName, typ, nil /* expr */, nil /* scalar */)
-		col.setParamOrd(i)
+		// Add all input parameters to the base scope of the body.
+		if tree.IsInParamClass(param.Class) {
+			paramColName := funcParamColName(param.Name, i)
+			col := b.synthesizeColumn(bodyScope, paramColName, typ, nil /* expr */, nil /* scalar */)
+			col.setParamOrd(i)
+		}
 
 		// Collect the user defined type dependencies.
 		typedesc.GetTypeDescriptorClosure(typ).ForEach(func(id descpb.ID) {
@@ -188,17 +223,51 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 		// Collect the parameters for PLpgSQL routines.
 		if language == tree.RoutineLangPLpgSQL {
-			paramTypes = append(paramTypes, tree.ParamType{
-				Name: param.Name.String(),
-				Typ:  typ,
+			routineParams = append(routineParams, routineParam{
+				name:  param.Name,
+				typ:   typ,
+				class: param.Class,
 			})
 		}
 	}
 
-	// Collect the user defined type dependency of the return type.
-	funcReturnType, err := tree.ResolveType(b.ctx, cf.ReturnType.Type, b.semaCtx.TypeResolver)
-	if err != nil {
-		panic(err)
+	// Determine OUT parameter based return type.
+	var outParamType *types.T
+	if (cf.IsProcedure && len(outParamTypes) > 0) || len(outParamTypes) > 1 {
+		outParamType = types.MakeLabeledTuple(outParamTypes, outParamNames)
+	} else if len(outParamTypes) == 1 {
+		outParamType = outParamTypes[0]
+	}
+
+	var funcReturnType *types.T
+	var err error
+	if cf.ReturnType != nil {
+		funcReturnType, err = tree.ResolveType(b.ctx, cf.ReturnType.Type, b.semaCtx.TypeResolver)
+		if err != nil {
+			panic(err)
+		}
+	}
+	if outParamType != nil {
+		if funcReturnType != nil && !funcReturnType.Equivalent(outParamType) {
+			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
+		}
+		// Override the return types so that we do return type validation and SHOW
+		// CREATE correctly.
+		funcReturnType = outParamType
+		cf.ReturnType = &tree.RoutineReturnType{
+			Type: outParamType,
+		}
+	} else if funcReturnType == nil {
+		if cf.IsProcedure {
+			// A procedure doesn't need a return type. Use a VOID return type to avoid
+			// errors in shared logic later.
+			funcReturnType = types.Void
+			cf.ReturnType = &tree.RoutineReturnType{
+				Type: types.Void,
+			}
+		} else {
+			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "function result type must be specified"))
+		}
 	}
 	// We disallow creating functions that return UNKNOWN, for consistency with postgres.
 	if funcReturnType.Family() == types.UnknownFamily {
@@ -208,6 +277,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "PL/pgSQL functions cannot return type unknown"))
 		}
 	}
+	// Collect the user defined type dependency of the return type.
 	typedesc.GetTypeDescriptorClosure(funcReturnType).ForEach(func(id descpb.ID) {
 		typeDeps.Add(int(id))
 	})
@@ -224,31 +294,33 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if err != nil {
 			panic(err)
 		}
-		for i, stmt := range stmts {
-			// Add statement ast into CreateRoutine node for logging purpose, and set
-			// the annotations for this statement so names can be resolved.
-			cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
-			ann := tree.MakeAnnotations(stmt.NumAnnotations)
-			cf.BodyAnnotations = append(cf.BodyAnnotations, &ann)
+		b.withinSQLRoutine(func() {
+			for i, stmt := range stmts {
+				// Add statement ast into CreateRoutine node for logging purpose, and set
+				// the annotations for this statement so names can be resolved.
+				cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
+				ann := tree.MakeAnnotations(stmt.NumAnnotations)
+				cf.BodyAnnotations = append(cf.BodyAnnotations, &ann)
 
-			// The defer logic will reset the annotations to the old value.
-			b.semaCtx.Annotations = ann
-			b.evalCtx.Annotations = &ann
+				// The defer logic will reset the annotations to the old value.
+				b.semaCtx.Annotations = ann
+				b.evalCtx.Annotations = &ann
 
-			// We need to disable stable function folding because we want to catch the
-			// volatility of stable functions. If folded, we only get a scalar and
-			// lose the volatility.
-			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
-				stmtScope = b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
-			})
-			checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
+				// We need to disable stable function folding because we want to catch the
+				// volatility of stable functions. If folded, we only get a scalar and
+				// lose the volatility.
+				b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+					stmtScope = b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+				})
+				checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
 
-			// Format the statements with qualified datasource names.
-			formatFuncBodyStmt(fmtCtx, stmt.AST, language, i > 0 /* newLine */)
-			afterBuildStmt()
-		}
+				// Format the statements with qualified datasource names.
+				formatFuncBodyStmt(fmtCtx, stmt.AST, language, i > 0 /* newLine */)
+				afterBuildStmt()
+			}
+		})
 	case tree.RoutineLangPLpgSQL:
-		if cf.ReturnType.SetOf {
+		if cf.ReturnType != nil && cf.ReturnType.SetOf {
 			panic(unimplemented.NewWithIssueDetail(105240,
 				"set-returning PL/pgSQL functions",
 				"set-returning PL/pgSQL functions are not yet supported",
@@ -265,9 +337,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// volatility of stable functions. If folded, we only get a scalar and lose
 		// the volatility.
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
-			var plBuilder plpgsqlBuilder
-			plBuilder.init(b, nil /* colRefs */, paramTypes, stmt.AST, funcReturnType)
-			stmtScope = plBuilder.build(stmt.AST, bodyScope)
+			plBuilder := newPLpgSQLBuilder(
+				b, cf.Name.Object(), stmt.AST.Label, nil, /* colRefs */
+				routineParams, funcReturnType, cf.IsProcedure, nil, /* outScope */
+			)
+			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})
 		checkStmtVolatility(targetVolatility, stmtScope, stmt)
 
@@ -284,7 +358,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// TODO(mgartner): stmtScope.cols does not describe the result
 		// columns of the statement. We should use physical.Presentation
 		// instead.
-		err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols)
+		isSQLProcedure := cf.IsProcedure && language == tree.RoutineLangSQL
+		err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols, isSQLProcedure)
 		if err != nil {
 			panic(err)
 		}
@@ -314,6 +389,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			Syntax:   cf,
 			Deps:     deps,
 			TypeDeps: typeDeps,
+			FuncDeps: functionDeps,
 		},
 	)
 	return outScope
@@ -333,7 +409,11 @@ func formatFuncBodyStmt(
 }
 
 func validateReturnType(
-	ctx context.Context, semaCtx *tree.SemaContext, expected *types.T, cols []scopeColumn,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	expected *types.T,
+	cols []scopeColumn,
+	isSQLProcedure bool,
 ) error {
 	// The return type must be supported by the current cluster version.
 	checkUnsupportedType(ctx, semaCtx, expected)
@@ -356,14 +436,23 @@ func validateReturnType(
 		)
 	}
 
-	// If return type is RECORD, any column types are valid.
-	if types.IsRecordType(expected) {
+	// If return type is RECORD and the tuple content types unspecified by OUT
+	// parameters, any column types are valid. This is the case when we have
+	// RETURNS RECORD without OUT params - we don't need to check the types
+	// below.
+	if types.IsRecordType(expected) && types.IsWildcardTupleType(expected) {
 		return nil
 	}
 
 	if len(cols) == 1 {
-		if !expected.Equivalent(cols[0].typ) &&
-			!cast.ValidCast(cols[0].typ, expected, cast.ContextAssignment) {
+		typeToCheck := expected
+		if isSQLProcedure && types.IsRecordType(expected) && len(expected.TupleContents()) == 1 {
+			// For SQL procedures with output parameters we get a record type
+			// even with a single column.
+			typeToCheck = expected.TupleContents()[0]
+		}
+		if !typeToCheck.Equivalent(cols[0].typ) &&
+			!cast.ValidCast(cols[0].typ, typeToCheck, cast.ContextAssignment) {
 			return pgerror.WithCandidateCode(
 				errors.WithDetailf(
 					errors.Newf("return type mismatch in function declared to return %s", expected.Name()),
@@ -450,4 +539,14 @@ func checkUnsupportedType(ctx context.Context, semaCtx *tree.SemaContext, typ *t
 	if err := tree.CheckUnsupportedType(ctx, semaCtx, typ); err != nil {
 		panic(err)
 	}
+}
+
+func checkDuplicateParamName(param tree.RoutineParam, seen map[tree.Name]struct{}) {
+	if _, ok := seen[param.Name]; ok {
+		// Argument names cannot be used more than once.
+		panic(pgerror.Newf(
+			pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", param.Name,
+		))
+	}
+	seen[param.Name] = struct{}{}
 }

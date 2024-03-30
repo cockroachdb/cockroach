@@ -105,6 +105,15 @@ var processorsPerNode = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+var performConstraintValidation = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.constraint_validation.enabled",
+	"should import perform constraint validation after data load. "+
+		"NOTE: this setting should not be used on production clusters, as it could result in "+
+		"incorrect query results if the imported data set violates constraints (i.e. contains duplicates).",
+	true,
+)
+
 type preparedSchemaMetadata struct {
 	schemaPreparedDetails jobspb.ImportDetails
 	schemaRewrites        jobspb.DescRewriteMap
@@ -277,9 +286,11 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					return errors.Wrap(err, "checking if existing table is empty")
 				}
 				details.Tables[i].WasEmpty = len(res) == 0
-				// Update the descriptor in the job record and in the database with the ImportStartTime
+
+				// Update the descriptor in the job record and in the database
 				details.Tables[i].Desc.ImportStartWallTime = details.Walltime
-				if err := bindImportStartTime(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
+
+				if err := bindTableDescImportProperties(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
 					return err
 				}
 			}
@@ -287,6 +298,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
 			return err
+		}
+	}
+
+	if len(details.Tables) > 1 {
+		for _, tab := range details.Tables {
+			if !tab.IsNew {
+				return errors.AssertionFailedf("all tables in multi-table import must be new")
+			}
 		}
 	}
 
@@ -321,8 +340,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	if err := r.checkVirtualConstraints(ctx, p.ExecCfg(), r.job, p.User()); err != nil {
-		return err
+	if performConstraintValidation.Get(&p.ExecCfg().Settings.SV) {
+		if err := r.checkVirtualConstraints(ctx, p.ExecCfg(), r.job, p.User()); err != nil {
+			return err
+		}
 	}
 
 	// If the table being imported into referenced UDTs, ensure that a concurrent
@@ -398,9 +419,12 @@ func (r *importResumer) prepareTablesForIngestion(
 	var err error
 	var newTableDescs []jobspb.ImportDetails_Table
 	var desc *descpb.TableDescriptor
+
+	useImportEpochs := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V24_1)
+	useImportEpochs = useImportEpochs && importEpochs.Get(&p.ExecCfg().Settings.SV)
 	for i, table := range details.Tables {
 		if !table.IsNew {
-			desc, err = prepareExistingTablesForIngestion(ctx, txn, descsCol, table.Desc)
+			desc, err = prepareExistingTablesForIngestion(ctx, txn, descsCol, table.Desc, useImportEpochs)
 			if err != nil {
 				return importDetails, err
 			}
@@ -411,7 +435,6 @@ func (r *importResumer) prepareTablesForIngestion(
 				IsNew:      table.IsNew,
 				TargetCols: table.TargetCols,
 			}
-
 			hasExistingTables = true
 		} else {
 			// PGDUMP imports support non-public schemas.
@@ -479,7 +502,11 @@ func (r *importResumer) prepareTablesForIngestion(
 // prepareExistingTablesForIngestion prepares descriptors for existing tables
 // being imported into.
 func prepareExistingTablesForIngestion(
-	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, desc *descpb.TableDescriptor,
+	ctx context.Context,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	desc *descpb.TableDescriptor,
+	useImportEpochs bool,
 ) (*descpb.TableDescriptor, error) {
 	if len(desc.Mutations) > 0 {
 		return nil, errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", desc.Mutations[0].String())
@@ -499,7 +526,14 @@ func prepareExistingTablesForIngestion(
 	// Take the table offline for import.
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
 	// ensure that filtering by state handles IMPORTING correctly.
-	importing.SetOffline("importing")
+
+	// We only use the new OfflineForImport on 24.1, which bumps
+	// the ImportEpoch, if we are completely on 24.1.
+	if useImportEpochs {
+		importing.OfflineForImport()
+	} else {
+		importing.SetOffline(tabledesc.OfflineReasonImporting)
+	}
 
 	// TODO(dt): de-validate all the FKs.
 	if err := descsCol.WriteDesc(
@@ -584,7 +618,7 @@ func prepareNewTablesForIngestion(
 	// as tabledesc.TableDescriptor.
 	tableDescs := make([]catalog.TableDescriptor, len(newMutableTableDescriptors))
 	for i := range tableDescs {
-		newMutableTableDescriptors[i].SetOffline("importing")
+		newMutableTableDescriptors[i].SetOffline(tabledesc.OfflineReasonImporting)
 		tableDescs[i] = newMutableTableDescriptors[i]
 	}
 
@@ -709,8 +743,9 @@ func (r *importResumer) prepareSchemasForIngestion(
 	return schemaMetadata, err
 }
 
-// bindImportStarTime writes the ImportStarTime to the descriptor.
-func bindImportStartTime(
+// bindTableDescImportProperties updates the table descriptor at the start of an
+// import for a table that existed before the import.
+func bindTableDescImportProperties(
 	ctx context.Context, p sql.JobExecContext, id catid.DescID, startWallTime int64,
 ) error {
 	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
@@ -1037,14 +1072,7 @@ func (r *importResumer) writeStubStatisticsForImportedTables(
 			distinctCount := uint64(float64(rowCount) * memo.UnknownDistinctCountRatio)
 			nullCount := uint64(float64(rowCount) * memo.UnknownNullCountRatio)
 			avgRowSize := uint64(memo.UnknownAvgRowSize)
-			// Because we don't yet have real distinct and null counts, only produce
-			// single-column stats to avoid the appearance of perfectly correlated
-			// columns.
-			multiColEnabled := false
-			defaultHistogramBuckets := stats.GetDefaultHistogramBuckets(execCfg.SV(), desc)
-			statistics, err := sql.StubTableStats(
-				desc, jobspb.ImportStatsName, multiColEnabled, defaultHistogramBuckets,
-			)
+			statistics, err := sql.StubTableStats(desc, jobspb.ImportStatsName)
 			if err == nil {
 				for _, statistic := range statistics {
 					statistic.RowCount = rowCount
@@ -1232,6 +1260,26 @@ func (r *importResumer) checkForUDTModification(
 	return sql.DescsTxn(ctx, execCfg, checkTypesAreEquivalent)
 }
 
+var retryDuration = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.retry_duration",
+	"duration during which the IMPORT can be retried in face of non-permanent errors",
+	time.Minute*2,
+	settings.PositiveDuration,
+)
+
+var importEpochs = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.write_import_epoch.enabled",
+	"controls whether IMPORT will write ImportEpoch's to descriptors",
+	true,
+)
+
+func getFractionCompleted(job *jobs.Job) float64 {
+	p := job.Progress()
+	return float64(p.GetFractionCompleted())
+}
+
 func ingestWithRetry(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
@@ -1247,12 +1295,11 @@ func ingestWithRetry(
 	ctx, sp := tracing.ChildSpan(ctx, "importer.ingestWithRetry")
 	defer sp.Finish()
 
-	// We retry on pretty generic failures -- any rpc error. If a worker node were
-	// to restart, it would produce this kind of error, but there may be other
-	// errors that are also rpc errors. Don't retry to aggressively.
+	// Note that we don't specify MaxRetries since we use time-based limit
+	// in the loop below.
 	retryOpts := retry.Options{
-		MaxBackoff: 1 * time.Second,
-		MaxRetries: 5,
+		// Don't retry too aggressively.
+		MaxBackoff: 15 * time.Second,
 	}
 
 	// We want to retry an import if there are transient failures (i.e. worker
@@ -1260,11 +1307,15 @@ func ingestWithRetry(
 	// import.
 	var res kvpb.BulkOpSummary
 	var err error
+	// State to decide when to exit the retry loop.
+	lastProgressChange, lastProgress := timeutil.Now(), getFractionCompleted(job)
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		for {
-			res, err = distImport(ctx, execCtx, job, tables, typeDescs, from, format, walltime,
-				testingKnobs, procsPerNode)
-			// Replanning errors should not count towards retry limits.
+			res, err = distImport(
+				ctx, execCtx, job, tables, typeDescs, from, format, walltime, testingKnobs, procsPerNode,
+			)
+			// If we got a re-planning error, then do at least one more attempt
+			// regardless of the retry duration.
 			if err == nil || !errors.Is(err, sql.ErrPlanChanged) {
 				break
 			}
@@ -1299,8 +1350,33 @@ func ingestWithRetry(
 				job.ID(), reloadErr)
 		} else {
 			job = reloadedJob
+			// If we made decent progress with the IMPORT, reset the last
+			// progress state.
+			curProgress := getFractionCompleted(job)
+			if madeProgress := curProgress - lastProgress; madeProgress >= 0.01 {
+				log.Infof(ctx, "import made %d%% progress, resetting retry duration", int(math.Round(100*madeProgress)))
+				lastProgress = curProgress
+				lastProgressChange = timeutil.Now()
+				r.Reset()
+			}
 		}
-		log.Warningf(ctx, "encountered retryable error: %+v", err)
+
+		maxRetryDuration := retryDuration.Get(&execCtx.ExecCfg().Settings.SV)
+		if !execCtx.ExecCfg().Codec.ForSystemTenant() && flowinfra.IsFlowRetryableError(err) {
+			// If we encountered "could not register flow because the registry
+			// is draining" error in the application virtual cluster, we
+			// calibrate the retry duration. This is the case since DistSQL
+			// physical planning in virtual clusters uses 'sql_instances' table
+			// which currently doesn't have draining information
+			// TODO(#100578): remove this when this problem is addressed.
+			maxRetryDuration *= 30
+		}
+		if timeutil.Since(lastProgressChange) > maxRetryDuration {
+			log.Warningf(ctx, "encountered retryable error but exceeded retry duration, stopping: %+v", err)
+			break
+		} else {
+			log.Warningf(ctx, "encountered retryable error: %+v", err)
+		}
 	}
 
 	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
@@ -1534,7 +1610,7 @@ func (r *importResumer) dropTables(
 			execCfg.Codec,
 			&execCfg.Settings.SV,
 			execCfg.DistSender,
-			intoTable,
+			intoTable.GetID(),
 			predicates, sql.RevertTableDefaultBatchSize); err != nil {
 			return errors.Wrap(err, "rolling back IMPORT INTO in non empty table via DeleteRange")
 		}

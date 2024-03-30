@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "ssmemstorage",
@@ -27,5 +27,23 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "ssmemstorage_test",
+    srcs = ["ss_mem_writer_test.go"],
+    embed = [":ssmemstorage"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/clusterunique",
+        "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/insights",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
     ],
 )

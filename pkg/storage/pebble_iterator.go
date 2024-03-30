@@ -135,18 +135,13 @@ func newPebbleIteratorByCloning(
 
 // newPebbleSSTIterator creates a new Pebble iterator for the given SSTs.
 func newPebbleSSTIterator(
-	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
+	files [][]sstable.ReadableFile, opts IterOptions,
 ) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
 	p.init(context.Background(), nil, opts, StandardDurability, nil)
 
-	var externalIterOpts []pebble.ExternalIterOption
-	if forwardOnly {
-		externalIterOpts = append(externalIterOpts, pebble.ExternalIterForwardOnly{})
-	}
-
-	iter, err := pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files, externalIterOpts...)
+	iter, err := pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files)
 	if err != nil {
 		p.Close()
 		return nil, err
@@ -266,7 +261,7 @@ func (p *pebbleIterator) setOptions(
 		p.rangeKeyMaskingBuf = encodeMVCCTimestampSuffixToBuf(
 			p.rangeKeyMaskingBuf, opts.RangeKeyMaskingBelow)
 		p.options.RangeKeyMasking.Suffix = p.rangeKeyMaskingBuf
-		p.maskFilter.BlockIntervalFilter.Init(mvccWallTimeIntervalCollector, 0, math.MaxUint64)
+		p.maskFilter.BlockIntervalFilter.Init(mvccWallTimeIntervalCollector, 0, math.MaxUint64, MVCCBlockIntervalSyntheticReplacer{})
 		p.options.RangeKeyMasking.Filter = p.getBlockPropertyFilterMask
 	}
 
@@ -321,7 +316,9 @@ func (p *pebbleIterator) setOptions(
 		pkf := [2]pebble.BlockPropertyFilter{
 			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector,
 				uint64(opts.MinTimestamp.WallTime),
-				uint64(opts.MaxTimestamp.WallTime)+1),
+				uint64(opts.MaxTimestamp.WallTime)+1,
+				MVCCBlockIntervalSyntheticReplacer{},
+			),
 		}
 		p.options.PointKeyFilters = pkf[:1:2]
 		// NB: We disable range key block filtering because of complications in

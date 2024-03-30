@@ -220,11 +220,14 @@ func preExecutionProcessing(
 	if willLineBeExecutedInDSC(ctx, t, declarativeLine, declarativeConn) {
 		legacyLineModifiers := []sqlLineModifier{
 			modifyExprsReferencingSequencesWithTrue,
+			modifyLineMultipleAlterTables,
 			modifyAlterPKWithRowIDCol,
 			modifyAlterPKWithSamePKColsButDifferentSharding,
+			modifyLineToSkipValidateConstraint,
 		}
 		declarativeLineModifiers := []sqlLineModifier{
 			modifyExprsReferencingSequencesWithTrue,
+			modifyLineToSkipValidateConstraint,
 		}
 		for _, lm := range legacyLineModifiers {
 			parsedLineForLegacy = lm(ctx, t, parsedLineForLegacy, legacyConn)
@@ -531,6 +534,68 @@ func modifyExprsReferencingSequencesWithTrue(
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 	}
 
+	return newParsedStmts
+}
+
+// modifyLineMultipleAlterTables modifies line so that if there are multiple
+// ALTERs in one ALTER TABLE command, they are split up into multiple ALTER
+// TABLE statements.
+func modifyLineMultipleAlterTables(
+	ctx context.Context, t *testing.T, parsedStmts statements.Statements, conn *gosql.Conn,
+) (newParsedStmts statements.Statements) {
+	for _, parsedStmt := range parsedStmts {
+		atCmd, ok := parsedStmt.AST.(*tree.AlterTable)
+		if !ok || len(atCmd.Cmds) == 1 {
+			newParsedStmts = append(newParsedStmts, parsedStmt)
+			continue
+		}
+		for _, cmd := range atCmd.Cmds {
+			newParsedStmts = append(
+				newParsedStmts,
+				statements.Statement[tree.Statement]{
+					AST: &tree.BeginTransaction{},
+				},
+				statements.Statement[tree.Statement]{
+					AST: &tree.AlterTable{
+						Table:    atCmd.Table,
+						IfExists: atCmd.IfExists,
+						Cmds:     []tree.AlterTableCmd{cmd},
+					},
+				},
+				statements.Statement[tree.Statement]{
+					AST: &tree.CommitTransaction{},
+				},
+			)
+		}
+	}
+	return newParsedStmts
+}
+
+// modifyLineToSkipValidateConstraint modifies line to skip any `VALIDATE
+// CONSTRAINT` command. Validating a constraint in DSC results in a validated
+// constraint with new constraintID, whereas in LSC it retains the old
+// constraintID. This would subsequently cause the descriptor state identity
+// check to fail so we skip/erase any VALIDATE CONSTRAINT command into the
+// framework.
+func modifyLineToSkipValidateConstraint(
+	ctx context.Context, t *testing.T, parsedStmts statements.Statements, conn *gosql.Conn,
+) (newParsedStmts statements.Statements) {
+	for _, parsedStmt := range parsedStmts {
+		if atCmd, ok := parsedStmt.AST.(*tree.AlterTable); ok {
+			nonValidateConstraintCmds := make([]tree.AlterTableCmd, 0)
+			for _, cmd := range atCmd.Cmds {
+				if _, ok := cmd.(*tree.AlterTableValidateConstraint); !ok {
+					nonValidateConstraintCmds = append(nonValidateConstraintCmds, cmd)
+				}
+			}
+			if len(nonValidateConstraintCmds) != 0 {
+				parsedStmt.AST.(*tree.AlterTable).Cmds = nonValidateConstraintCmds
+				newParsedStmts = append(newParsedStmts, parsedStmt)
+			}
+		} else {
+			newParsedStmts = append(newParsedStmts, parsedStmt)
+		}
+	}
 	return newParsedStmts
 }
 

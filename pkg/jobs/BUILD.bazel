@@ -17,6 +17,7 @@ go_library(
         "progress.go",
         "registry.go",
         "resultcols.go",
+        "retired.go",
         "schedule_metrics.go",
         "scheduled_job.go",
         "scheduled_job_executor.go",
@@ -110,8 +111,8 @@ go_test(
     ],
     embed = [":jobs"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     shard_count = 16,
     deps = [

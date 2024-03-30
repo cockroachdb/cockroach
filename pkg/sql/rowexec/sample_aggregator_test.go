@@ -20,13 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -249,21 +247,16 @@ func runSampleAggregator(
 				t.Fatal(err)
 			}
 
+			var a tree.DatumAlloc
 			for _, b := range h.Buckets {
-				ed, _, err := rowenc.EncDatumFromBuffer(
-					catenumpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
-				)
+				datum, err := stats.DecodeUpperBound(h.Version, histEncType, &a, b.UpperBound)
 				if err != nil {
-					t.Fatal(err)
-				}
-				var d tree.DatumAlloc
-				if err := ed.EnsureDecoded(histEncType, &d); err != nil {
 					t.Fatal(err)
 				}
 				r.buckets = append(r.buckets, resultBucket{
 					numEq:    int(b.NumEq),
 					numRange: int(b.NumRange),
-					upper:    int(*ed.Datum.(*tree.DInt)),
+					upper:    int(*datum.(*tree.DInt)),
 				})
 			}
 

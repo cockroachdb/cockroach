@@ -145,7 +145,7 @@ func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns colinf
 	if expr == nil {
 		return
 	}
-	flags := tree.FmtSymbolicSubqueries
+	flags := tree.FmtSymbolicSubqueries | tree.FmtShortenConstants
 	if ob.flags.ShowTypes {
 		flags |= tree.FmtShowTypes
 	}
@@ -323,6 +323,15 @@ func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
 		delta = 100 * time.Microsecond
 	}
 	ob.AddTopLevelField("execution time", string(humanizeutil.Duration(delta)))
+}
+
+// AddClientTime adds a top-level client-level protocol time field. Cannot be
+// called while inside a node.
+func (ob *OutputBuilder) AddClientTime(delta time.Duration) {
+	if ob.flags.Deflake.Has(DeflakeVolatile) {
+		delta = time.Microsecond
+	}
+	ob.AddTopLevelField("client time", string(humanizeutil.Duration(delta)))
 }
 
 // AddKVReadStats adds a top-level field for the bytes/rows/KV pairs read from

@@ -31,6 +31,7 @@ go_library(
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/raftlog",
         "//pkg/kv/kvserver/stateloader",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/server/serverpb",
@@ -47,7 +48,6 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//vfs",
-        "@io_etcd_go_raft_v3//raftpb",
         "@org_golang_google_grpc//:go_default_library",
     ],
 )
@@ -72,8 +72,8 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":loqrecovery"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "//pkg/base",
@@ -87,6 +87,7 @@ go_test(
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/raftlog",
         "//pkg/kv/kvserver/stateloader",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security/securityassets",
@@ -97,6 +98,7 @@ go_test(
         "//pkg/spanconfig",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/listenerutil",
@@ -118,6 +120,5 @@ go_test(
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
-        "@io_etcd_go_raft_v3//raftpb",
     ],
 )

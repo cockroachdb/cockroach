@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -704,31 +703,106 @@ func TestOracle(t *testing.T) {
 		var noLeaseholder *roachpb.ReplicaDescriptor
 		var noCTPolicy roachpb.RangeClosedTimestampPolicy
 		var noQueryState replicaoracle.QueryState
+		sk := StreakConfig{Min: 10, SmallPlanMin: 3, SmallPlanThreshold: 3, MaxSkew: 0.95}
+		// intMap(k1, v1, k2, v2, ...) is a FastIntMaps constructor shorthand.
+		intMap := func(pairs ...int) util.FastIntMap {
+			f := util.FastIntMap{}
+			for i := 0; i < len(pairs); i += 2 {
+				f.Set(pairs[i], pairs[i+1])
+			}
+			return f
+		}
 
 		t.Run("no-followers", func(t *testing.T) {
-			br := NewBulkOracle(cfg(stNoFollowers), roachpb.Locality{})
+			br := NewBulkOracle(cfg(stNoFollowers), roachpb.Locality{}, sk)
 			leaseholder := &roachpb.ReplicaDescriptor{NodeID: 99}
 			picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, leaseholder, noCTPolicy, noQueryState)
 			require.NoError(t, err)
 			require.Equal(t, leaseholder.NodeID, picked.NodeID, "no follower reads means we pick the leaseholder")
 		})
 		t.Run("no-filter", func(t *testing.T) {
-			br := NewBulkOracle(cfg(st), roachpb.Locality{})
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
 			picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, noQueryState)
 			require.NoError(t, err)
 			require.NotNil(t, picked, "no filter picks some node but could be any node")
 		})
 		t.Run("filter", func(t *testing.T) {
-			br := NewBulkOracle(cfg(st), region("b"))
+			br := NewBulkOracle(cfg(st), region("b"), sk)
 			picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, noQueryState)
 			require.NoError(t, err)
 			require.Equal(t, roachpb.NodeID(2), picked.NodeID, "filter means we pick the node that matches the filter")
 		})
 		t.Run("filter-no-match", func(t *testing.T) {
-			br := NewBulkOracle(cfg(st), region("z"))
+			br := NewBulkOracle(cfg(st), region("z"), sk)
 			picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, noQueryState)
 			require.NoError(t, err)
 			require.NotNil(t, picked, "no match still picks some non-zero node")
+		})
+		t.Run("streak-short", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
+			for _, r := range replicas { // Check for each to show it isn't random.
+				picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, replicaoracle.QueryState{
+					NodeStreak:     1,
+					LastAssignment: r.NodeID,
+				})
+				require.NoError(t, err)
+				require.Equal(t, r.NodeID, picked.NodeID)
+			}
+		})
+		t.Run("streak-medium", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
+			for _, r := range replicas { // Check for each to show it isn't random.
+				picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, replicaoracle.QueryState{
+					NodeStreak:     9,
+					RangesPerNode:  intMap(1, 3, 2, 3, 3, 3),
+					LastAssignment: r.NodeID,
+				})
+				require.NoError(t, err)
+				require.Equal(t, r.NodeID, picked.NodeID)
+			}
+		})
+		t.Run("streak-long-even", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
+			for _, r := range replicas { // Check for each to show it isn't random.
+				picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, replicaoracle.QueryState{
+					NodeStreak:     50,
+					RangesPerNode:  intMap(1, 1000, 2, 1002, 3, 1005),
+					LastAssignment: r.NodeID,
+				})
+				require.NoError(t, err)
+				require.Equal(t, r.NodeID, picked.NodeID)
+			}
+		})
+		t.Run("streak-long-skewed-to-other", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
+			for i := 0; i < 10; i++ { // Prove it isn't just randomly picking n2.
+				qs := replicaoracle.QueryState{
+					NodeStreak:     50,
+					RangesPerNode:  intMap(1, 10, 2, 10, 3, 1005),
+					LastAssignment: 2,
+				}
+				picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, qs)
+				require.NoError(t, err)
+				require.Equal(t, roachpb.NodeID(2), picked.NodeID)
+			}
+		})
+		t.Run("streak-long-skewed-randomizes", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
+			qs := replicaoracle.QueryState{
+				NodeStreak:     50,
+				RangesPerNode:  intMap(1, 10, 2, 10, 3, 1005),
+				LastAssignment: 3,
+			}
+			randomized := false
+			for i := 0; i < 100; i++ { // .33^100 is close enough to zero that this shouldn't flake.
+				picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, qs)
+				require.NoError(t, err)
+				if picked.NodeID != qs.LastAssignment {
+					randomized = true
+					break
+				}
+			}
+			require.True(t, randomized)
 		})
 	})
 }
@@ -815,14 +889,14 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n1.QueryRow(t, `SELECT id from system.namespace WHERE name='test'`).Scan(&tableID)
 	tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
 	n4Cache := tc.Server(3).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-	entry := n4Cache.GetCached(ctx, tablePrefix, false /* inverted */)
-	require.NotNil(t, entry)
-	require.False(t, entry.Lease().Empty())
-	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
+	entry, err := n4Cache.TestingGetCached(ctx, tablePrefix, false /* inverted */)
+	require.NoError(t, err)
+	require.False(t, entry.Lease.Empty())
+	require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
 		{NodeID: 2, StoreID: 2, ReplicaID: 2},
-	}, entry.Desc().Replicas().Descriptors())
+	}, entry.Desc.Replicas().Descriptors())
 
 	// Remove the follower and add a new non-voter to n3. n2 will no longer have a
 	// replica.
@@ -838,19 +912,19 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	rec := <-recCh
 	require.False(t, kv.OnlyFollowerReads(rec), "query was served through follower reads: %s", rec)
 	// Check that the cache was properly updated.
-	entry = n4Cache.GetCached(ctx, tablePrefix, false /* inverted */)
-	require.NotNil(t, entry)
-	require.False(t, entry.Lease().Empty())
-	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
+	entry, err = n4Cache.TestingGetCached(ctx, tablePrefix, false /* inverted */)
+	require.NoError(t, err)
+	require.False(t, entry.Lease.Empty())
+	require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
 		{NodeID: 3, StoreID: 3, ReplicaID: 3, Type: roachpb.NON_VOTER},
-	}, entry.Desc().Replicas().Descriptors())
+	}, entry.Desc.Replicas().Descriptors())
 
 	// Make a note of the follower reads metric on n3. We'll check that it was
 	// incremented.
 	var followerReadsCountBefore int64
-	err := tc.Servers[2].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+	err = tc.Servers[2].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		followerReadsCountBefore = s.Metrics().FollowerReadsCount.Count()
 		return nil
 	})
@@ -881,14 +955,14 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n3 := sqlutils.MakeSQLRunner(tc.Conns[2])
 	n3.Exec(t, "SELECT * from test WHERE k=1")
 	n3Cache := tc.Server(2).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-	entry = n3Cache.GetCached(ctx, tablePrefix, false /* inverted */)
-	require.NotNil(t, entry)
-	require.False(t, entry.Lease().Empty())
-	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
+	entry, err = n3Cache.TestingGetCached(ctx, tablePrefix, false /* inverted */)
+	require.NoError(t, err)
+	require.False(t, entry.Lease.Empty())
+	require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
 		{NodeID: 3, StoreID: 3, ReplicaID: 3, Type: roachpb.NON_VOTER},
-	}, entry.Desc().Replicas().Descriptors())
+	}, entry.Desc.Replicas().Descriptors())
 
 	// Enable DistSQL so that we have a distributed plan with a single flow on
 	// n3 (local plans ignore the misplanned ranges).
@@ -942,6 +1016,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 	defer utilccl.TestingEnableEnterprise()()
 
 	skip.UnderRace(t, "times out")
+	skip.UnderDeadlock(t)
 
 	for _, testCase := range []struct {
 		name             string
@@ -952,11 +1027,6 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 		{name: "latency-based", sharedProcess: false, validLatencyFunc: true},
 		{name: "locality-based", sharedProcess: false, validLatencyFunc: false},
 	} {
-		if syncutil.DeadlockEnabled && testCase.sharedProcess {
-			// TODO(yuzefovich): unskipping shared-process config under deadlock
-			// is tracked by #113555.
-			continue
-		}
 		t.Run(testCase.name, func(t *testing.T) {
 			const numNodes = 4
 			gatewayNode := 3
@@ -1006,9 +1076,6 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			systemSQL := sqlutils.MakeSQLRunner(tc.Conns[0])
 			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
 			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
-			// We're making assertions on traces collected by the tenant using
-			// log lines in KV so we must ensure they're not redacted.
-			systemSQL.Exec(t, `SET CLUSTER SETTING trace.redact_at_virtual_cluster_boundary.enabled = 'false'`)
 
 			historicalQuery := `SELECT * FROM t.test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`
 			recCh := make(chan tracingpb.Recording, 1)
@@ -1134,15 +1201,15 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			tenantSQL.Exec(t, `SELECT * FROM t.test WHERE k = 1`)
 			tablePrefix := keys.MustAddr(codec.TenantPrefix())
 			cache := tenants[gatewayNode].DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-			entry := cache.GetCached(ctx, tablePrefix, false /* inverted */)
-			require.NotNil(t, entry)
-			require.False(t, entry.Lease().Empty())
-			require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
+			entry, err := cache.TestingGetCached(ctx, tablePrefix, false /* inverted */)
+			require.NoError(t, err)
+			require.False(t, entry.Lease.Empty())
+			require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
 			require.Equal(t, []roachpb.ReplicaDescriptor{
 				{NodeID: 1, StoreID: 1, ReplicaID: 1},
 				{NodeID: 2, StoreID: 2, ReplicaID: 2},
 				{NodeID: 3, StoreID: 3, ReplicaID: 3},
-			}, entry.Desc().Replicas().Descriptors())
+			}, entry.Desc.Replicas().Descriptors())
 
 			tenantSQL.Exec(t, historicalQuery)
 			rec := <-recCh

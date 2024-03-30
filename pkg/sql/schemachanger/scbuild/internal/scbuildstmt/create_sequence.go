@@ -11,6 +11,8 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -41,11 +43,12 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 	owner := b.CurrentUser()
 
 	// Detect duplicate sequence names.
-	ers := b.ResolveSequence(n.Name.ToUnresolvedObjectName(),
+	ers := b.ResolveRelation(n.Name.ToUnresolvedObjectName(),
 		ResolveParams{
 			IsExistenceOptional: true,
 			RequiredPrivilege:   privilege.USAGE,
 			WithOffline:         true, // We search sequence with provided name, including offline ones.
+			ResolveTypes:        true, // Check for collisions with type names.
 		})
 	if ers != nil && !ers.IsEmpty() {
 		if n.IfNotExists {
@@ -53,6 +56,28 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		}
 		panic(sqlerrors.NewRelationAlreadyExistsError(n.Name.FQString()))
 	}
+
+	if n.Persistence.IsTemporary() {
+		if !b.SessionData().TempTablesEnabled {
+			panic(errors.WithTelemetry(
+				pgerror.WithCandidateCode(
+					errors.WithHint(
+						errors.WithIssueLink(
+							errors.Newf("temporary tables are only supported experimentally"),
+							errors.IssueLink{IssueURL: build.MakeIssueURL(46260)},
+						),
+						"You can enable temporary tables by running `SET experimental_enable_temp_tables = 'on'`.",
+					),
+					pgcode.ExperimentalFeature,
+				),
+				"sql.schema.temp_tables_disabled",
+			))
+		}
+
+		panic(scerrors.NotImplementedErrorf(n, "temporary sequences are not yet "+
+			"implemented in the declarative schema changer"))
+	}
+
 	// Sanity check for duplication options on the sequence.
 	optionsSeen := map[string]bool{}
 	var sequenceOwnedBy *tree.ColumnItem
@@ -68,6 +93,10 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		}
 		if opt.Name == tree.SeqOptRestart {
 			restartWith = opt.IntVal
+		}
+		if opt.Name == tree.SeqOptCacheNode && !b.EvalCtx().Settings.Version.IsActive(b, clusterversion.V24_1) {
+			panic(scerrors.NotImplementedErrorf(n, "node-level sequence caching unsupported"+
+				"before V24.1"))
 		}
 	}
 	// If the database is multi-region then CREATE SEQUENCE will fallback.
@@ -109,6 +138,18 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		Name:         string(n.Name.ObjectName),
 	}
 	b.Add(sequenceNamespace)
+	// Set up a schema child entry. This will be a no-op for relations.
+	sequenceSchemaChild := &scpb.SchemaChild{
+		ChildObjectID: sequenceID,
+		SchemaID:      schemaElem.SchemaID,
+	}
+	b.Add(sequenceSchemaChild)
+	// Add a table data element, this go public with the descriptor.
+	tableData := &scpb.TableData{
+		TableID:    sequenceID,
+		DatabaseID: dbElem.DatabaseID,
+	}
+	b.Add(tableData)
 	// Add any sequence options.
 	options := scdecomp.GetSequenceOptions(sequenceElem.SequenceID, &tempSequenceOpts)
 	for _, opt := range options {

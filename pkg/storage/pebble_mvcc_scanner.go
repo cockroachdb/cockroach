@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -1805,11 +1804,7 @@ func (p *pebbleMVCCScanner) isKeyLockedByConflictingTxn(
 		p.err = err
 		return false, false
 	}
-	strength := lock.None
-	if p.failOnMoreRecent {
-		strength = lock.Exclusive
-	}
-	ok, txn, err := p.lockTable.IsKeyLockedByConflictingTxn(key, strength)
+	ok, txn, err := p.lockTable.IsKeyLockedByConflictingTxn(ctx, key)
 	if err != nil {
 		p.err = err
 		return false, false

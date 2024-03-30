@@ -1227,7 +1227,8 @@ func BenchmarkWindowFunctions(b *testing.B) {
 				colexecagg.ProcessAggregations(ctx, &evalCtx, &semaCtx, aggregations, sourceTypes)
 			require.NoError(b, err)
 			aggFnsAlloc, _, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-				ctx, &aggArgs, aggregations, 1 /* allocSize */, colexecagg.WindowAggKind,
+				ctx, &aggArgs, aggregations, 1, /* initialAllocSize */
+				1 /* maxAllocSize */, colexecagg.WindowAggKind,
 			)
 			require.NoError(b, err)
 			op = NewWindowAggregatorOperator(

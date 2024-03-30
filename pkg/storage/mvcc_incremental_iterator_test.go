@@ -83,7 +83,13 @@ func iterateExpectErr(
 		t.Helper()
 
 		t.Run("aggregate-intents", func(t *testing.T) {
-			assertExpectErrs(t, e, startKey, endKey, startTime, endTime, revisions, intents)
+			assertExpectErrs(t, e, startKey, endKey, startTime, endTime, revisions, intents, MaxConflictsPerLockConflictErrorDefault)
+		})
+		// Test case to check if iterator enforces maxLockConflict.
+		t.Run("aggregate-intents-with-limit", func(t *testing.T) {
+			if len(intents) > 0 {
+				assertExpectErrs(t, e, startKey, endKey, startTime, endTime, revisions, intents[:1], 1)
+			}
 		})
 		t.Run("first-intent", func(t *testing.T) {
 			assertExpectErr(t, e, startKey, endKey, startTime, endTime, revisions, intents[0])
@@ -141,12 +147,14 @@ func assertExpectErrs(
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
 	expectedIntents []roachpb.Intent,
+	maxLockConflicts uint64,
 ) {
 	iter, err := NewMVCCIncrementalIterator(context.Background(), e, MVCCIncrementalIterOptions{
-		EndKey:       endKey,
-		StartTime:    startTime,
-		EndTime:      endTime,
-		IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
+		EndKey:           endKey,
+		StartTime:        startTime,
+		EndTime:          endTime,
+		IntentPolicy:     MVCCIncrementalIterIntentPolicyAggregate,
+		MaxLockConflicts: maxLockConflicts,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -165,8 +173,8 @@ func assertExpectErrs(
 		// pass
 	}
 
-	if iter.NumCollectedIntents() != len(expectedIntents) {
-		t.Fatalf("Expected %d intents but found %d", len(expectedIntents), iter.NumCollectedIntents())
+	if len(iter.intents) != len(expectedIntents) {
+		t.Fatalf("Expected %d intents but found %d", len(expectedIntents), len(iter.intents))
 	}
 	err = iter.TryGetIntentError()
 	if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
@@ -194,15 +202,16 @@ func assertExportedErrs(
 	const big = 1 << 30
 	st := cluster.MakeTestingClusterSettings()
 	_, _, err := MVCCExportToSST(context.Background(), st, e, MVCCExportOptions{
-		StartKey:           MVCCKey{Key: startKey},
-		EndKey:             endKey,
-		StartTS:            startTime,
-		EndTS:              endTime,
-		ExportAllRevisions: revisions,
-		TargetSize:         big,
-		MaxSize:            big,
-		MaxLockConflicts:   uint64(MaxConflictsPerLockConflictError.Default()),
-		StopMidKey:         false,
+		StartKey:                MVCCKey{Key: startKey},
+		EndKey:                  endKey,
+		StartTS:                 startTime,
+		EndTS:                   endTime,
+		ExportAllRevisions:      revisions,
+		TargetSize:              big,
+		MaxSize:                 big,
+		MaxLockConflicts:        uint64(MaxConflictsPerLockConflictError.Default()),
+		TargetLockConflictBytes: uint64(TargetBytesPerLockConflictError.Default()),
+		StopMidKey:              false,
 	}, &bytes.Buffer{})
 	require.Error(t, err)
 
@@ -372,10 +381,11 @@ func assertIteratedKVs(
 	expected []MVCCKeyValue,
 ) {
 	iter, err := NewMVCCIncrementalIterator(context.Background(), e, MVCCIncrementalIterOptions{
-		EndKey:       endKey,
-		StartTime:    startTime,
-		EndTime:      endTime,
-		IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
+		EndKey:           endKey,
+		StartTime:        startTime,
+		EndTime:          endTime,
+		IntentPolicy:     MVCCIncrementalIterIntentPolicyAggregate,
+		MaxLockConflicts: MaxConflictsPerLockConflictErrorDefault,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -394,7 +404,7 @@ func assertIteratedKVs(
 		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
-		if iter.NumCollectedIntents() > 0 {
+		if len(iter.intents) > 0 {
 			t.Fatal("got unexpected intent error")
 		}
 		v, err := iter.UnsafeValue()
@@ -1376,7 +1386,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 
 	ingest := func(it EngineIterator, valid bool, err error, count int) {
 		memFile := &MemObject{}
-		sst := MakeIngestionSSTWriter(ctx, db2.settings, memFile)
+		sst := MakeIngestionSSTWriter(ctx, db2.cfg.settings, memFile)
 		defer sst.Close()
 
 		for i := 0; i < count; i++ {
@@ -1397,7 +1407,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		if err := sst.Finish(); err != nil {
 			t.Fatal(err)
 		}
-		if err := fs.WriteFile(db2, `ingest`, memFile.Data()); err != nil {
+		if err := fs.WriteFile(db2.Env(), `ingest`, memFile.Data()); err != nil {
 			t.Fatal(err)
 		}
 		if err := db2.IngestLocalFiles(ctx, []string{`ingest`}); err != nil {

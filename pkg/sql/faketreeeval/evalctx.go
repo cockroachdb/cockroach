@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -133,7 +133,7 @@ func (so *DummyRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDatabas
 // ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
 // interface.
 func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForTable(
-	_ context.Context, id int64,
+	_ context.Context, id int64, forceSurviveZone bool,
 ) error {
 	return errors.WithStack(errRegionOperator)
 }
@@ -352,6 +352,16 @@ func (*DummyEvalPlanner) PLpgSQLFetchCursor(
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+func (p *DummyEvalPlanner) StartHistoryRetentionJob(
+	ctx context.Context, desc string, protectTS hlc.Timestamp, expiration time.Duration,
+) (jobspb.JobID, error) {
+	return 0, errors.WithStack(errEvalPlanner)
+}
+
+func (p *DummyEvalPlanner) ExtendHistoryRetention(ctx context.Context, id jobspb.JobID) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
@@ -414,7 +424,9 @@ func (ep *DummyEvalPlanner) ResolveTableName(
 }
 
 // GetTypeFromValidSQLSyntax is part of the eval.Planner interface.
-func (ep *DummyEvalPlanner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
+func (ep *DummyEvalPlanner) GetTypeFromValidSQLSyntax(
+	ctx context.Context, sql string,
+) (*types.T, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
@@ -435,6 +447,13 @@ func (ep *DummyEvalPlanner) RoutineExprGenerator(
 	ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 ) eval.ValueGenerator {
 	return nil
+}
+
+// EvalTxnControlExpr is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) EvalTxnControlExpr(
+	ctx context.Context, expr *tree.TxnControlExpr, args tree.Datums,
+) (tree.Datum, error) {
+	return nil, errors.WithStack(errEvalPlanner)
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
@@ -600,23 +619,11 @@ func (ep *DummySessionAccessor) HasGlobalPrivilegeOrRoleOption(
 	return false, nil
 }
 
-// HasAdminRole is part of the eval.SessionAccessor interface.
-func (ep *DummySessionAccessor) HasAdminRole(_ context.Context) (bool, error) {
-	return false, errors.WithStack(errEvalSessionVar)
-}
-
 // CheckPrivilege is part of the eval.SessionAccessor interface.
 func (ep *DummySessionAccessor) CheckPrivilege(
 	_ context.Context, _ privilege.Object, _ privilege.Kind,
 ) error {
 	return errors.WithStack(errEvalSessionVar)
-}
-
-// HasRoleOption is part of the eval.SessionAccessor interface.
-func (ep *DummySessionAccessor) HasRoleOption(
-	ctx context.Context, roleOption roleoption.Option,
-) (bool, error) {
-	return false, errors.WithStack(errEvalSessionVar)
 }
 
 // HasViewActivityOrViewActivityRedactedRole is part of the eval.SessionAccessor interface.

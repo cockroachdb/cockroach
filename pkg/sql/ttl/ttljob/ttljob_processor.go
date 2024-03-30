@@ -143,7 +143,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			return errors.Wrapf(err, "error fetching table relation name for TTL")
 		}
 
-		relationName = tn.FQString()
+		relationName = tn.FQString() + "@" + lexbase.EscapeSQLIdent(primaryIndexDesc.Name)
 		return nil
 	}); err != nil {
 		return err
@@ -301,7 +301,9 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 			ctx,
 			"pre-select-delete-statement",
 			nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
+			// This is a test-only knob, so we're ok not specifying custom
+			// InternalExecutorOverride.
+			sessiondata.NodeUserSessionDataOverride,
 			preSelectStatement,
 		); err != nil {
 			return spanRowCount, err

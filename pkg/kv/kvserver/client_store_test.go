@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -113,13 +114,14 @@ func TestStoreRaftReplicaID(t *testing.T) {
 
 // TestStoreLoadReplicaQuiescent tests whether replicas are initially quiescent
 // when loaded during store start, with eager Raft group initialization. Epoch
-// lease ranges should be quiesced, but expiration leases shouldn't.
+// lease ranges will initially be quiesced (unless acquired by a store replica
+// queue), but expiration leases shouldn't.
 func TestStoreLoadReplicaQuiescent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "kv.expiration_leases_only.enabled", func(t *testing.T, expOnly bool) {
-		storeReg := server.NewStickyVFSRegistry()
+		storeReg := fs.NewStickyRegistry()
 		listenerReg := listenerutil.NewListenerRegistry()
 		defer listenerReg.Close()
 
@@ -141,6 +143,10 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						DisableScanner: true,
+						// The lease queue will unquiesce the range and acquire the
+						// proscribed leases upon restart. The range should quiesce again
+						// in the regular duration.
+						DisableLeaseQueue: true,
 					},
 				},
 				StoreSpecs: []base.StoreSpec{

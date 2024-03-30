@@ -68,7 +68,7 @@ CREATE FUNCTION f_no_ref(a int) RETURNS INT IMMUTABLE AS 'SELECT 1' LANGUAGE SQL
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_no_ref];
 ----
-CREATE FUNCTION public.f_no_ref(IN a INT8)
+CREATE FUNCTION public.f_no_ref(a INT8)
   RETURNS INT8
   IMMUTABLE
   NOT LEAKPROOF
@@ -101,7 +101,7 @@ $$
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f];
 ----
-CREATE FUNCTION public.f(IN a test.public.notmyworkday)
+CREATE FUNCTION public.f(a test.public.notmyworkday)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -224,9 +224,6 @@ subtest end
 
 subtest create_or_replace_function
 
-statement error pgcode 42P13 pq: parameter name "a" used more than once
-CREATE FUNCTION f_test_cor(a INT, a INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
-
 statement ok
 CREATE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF STRICT LANGUAGE SQL AS $$ SELECT 1 $$;
 
@@ -252,7 +249,7 @@ CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LEAKPROOF LANGUA
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_cor];
 ----
-CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+CREATE FUNCTION public.f_test_cor(a INT8, b INT8)
   RETURNS INT8
   IMMUTABLE
   LEAKPROOF
@@ -270,7 +267,7 @@ CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LANGUAGE SQL AS 
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_cor];
 ----
-CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+CREATE FUNCTION public.f_test_cor(a INT8, b INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -286,7 +283,7 @@ CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LEAKPR
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_cor];
 ----
-CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+CREATE FUNCTION public.f_test_cor(a INT8, b INT8)
   RETURNS INT8
   IMMUTABLE
   LEAKPROOF
@@ -672,7 +669,7 @@ $func$
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION single_quote]
 ----
-CREATE FUNCTION public.single_quote(IN s STRING)
+CREATE FUNCTION public.single_quote(s STRING)
   RETURNS STRING
   VOLATILE
   NOT LEAKPROOF
@@ -788,3 +785,10 @@ FROM purchase
 10.00  GBP
 
 subtest end
+
+statement ok
+CREATE FUNCTION f113186() RETURNS RECORD AS $$ SELECT 1.99; $$ LANGUAGE SQL;
+
+# Until #113186 is resolved, the internal error is expected.
+statement error pgcode XX000 internal error: invalid datum type given: DECIMAL, expected INT8
+SELECT * FROM f113186() AS foo(x INT);

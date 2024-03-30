@@ -24,10 +24,6 @@ go_test(
         "main_test.go",
         "stopper_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":stop",
         "//pkg/kv/kvpb",

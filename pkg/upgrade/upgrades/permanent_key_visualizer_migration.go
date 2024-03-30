@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
@@ -41,8 +42,9 @@ func keyVisualizerTablesMigration(
 	}
 
 	for _, table := range tables {
-		err := createSystemTable(ctx, d.DB.KV(), d.Settings, keys.SystemSQLCodec,
-			table)
+		err := createSystemTable(ctx, d.DB, d.Settings, keys.SystemSQLCodec,
+			table,
+			tree.LocalityLevelTable)
 		if err != nil {
 			return err
 		}
@@ -64,7 +66,7 @@ func keyVisualizerTablesMigration(
 			ctx,
 			"set-SpanStatsTenantBoundariesTable-TTL",
 			nil,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 			"ALTER TABLE system.span_stats_tenant_boundaries CONFIGURE ZONE USING gc.ttlseconds = $1",
 			3600, /* one hour */
 		); err != nil {

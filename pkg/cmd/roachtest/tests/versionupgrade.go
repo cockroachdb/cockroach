@@ -100,8 +100,16 @@ DROP TABLE splitmerge.t;
 }
 
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
+	testCtx := ctx
+	if c.IsLocal() {
+		localTimeout := 30 * time.Minute
+		var cancel context.CancelFunc
+		testCtx, cancel = context.WithTimeout(ctx, localTimeout)
+		defer cancel()
+	}
+
 	mvt := mixedversion.NewTest(
-		ctx, t, t.L(), c, c.All(),
+		testCtx, t, t.L(), c, c.All(),
 		mixedversion.AlwaysUseFixtures, mixedversion.AlwaysUseLatestPredecessors,
 	)
 	mvt.OnStartup(
@@ -145,12 +153,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			// TODO: re-enable once #116586 is addressed.
-			if h.Context.Finalizing {
-				l.Printf("schemachange workload has been flaking when run during upgrades; skipping")
-				return nil
-			}
-
 			randomNode := h.RandomNode(rng, c.All())
 			// The schemachange workload is designed to work up to one
 			// version back. Therefore, we upload a compatible `workload`
@@ -290,7 +292,7 @@ func binaryUpgradeStep(
 ) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := clusterupgrade.RestartNodesWithNewBinary(
-			ctx, t, t.L(), u.c, nodes, option.DefaultStartOptsNoBackups(), newVersion,
+			ctx, t, t.L(), u.c, nodes, option.NewStartOpts(option.NoBackupSchedule), newVersion,
 		); err != nil {
 			t.Fatal(err)
 		}

@@ -1,7 +1,4 @@
-# LogicTest: local
-
-statement ok
-SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
+# LogicTest: local-read-committed
 
 statement ok
 CREATE TABLE jars (j INT PRIMARY KEY)

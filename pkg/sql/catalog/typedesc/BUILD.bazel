@@ -45,10 +45,6 @@ go_test(
         "safe_format_test.go",
         "type_desc_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         ":typedesc",
         "//pkg/clusterversion",

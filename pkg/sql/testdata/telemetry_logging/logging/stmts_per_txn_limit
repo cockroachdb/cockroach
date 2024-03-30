@@ -1,0 +1,230 @@
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.max_event_frequency = 99999;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 1;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
+----
+
+spy-sql
+BEGIN; SELECT 1; SELECT 2; COMMIT;
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"SkippedQueries": 1,
+	"Statement": "SELECT ‹1›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 2,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		2101516650360650000,
+		2101516650360650000
+	],
+	"TransactionFingerprintID": 6419625091330320000,
+	"User": "root"
+}
+
+spy-sql
+SELECT 5;
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"SkippedQueries": 2,
+	"Statement": "SELECT ‹5›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 1,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		2101516650360650000
+	],
+	"TransactionFingerprintID": 12846987492365242000,
+	"User": "root"
+}
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 3;
+----
+
+spy-sql
+BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"SkippedQueries": 1,
+	"Statement": "SELECT ‹1›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT ‹2›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 2,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT ‹3›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 3,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 4,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		2101516650360650000,
+		2101516650360650000,
+		2101516650360650000,
+		2101516650360650000
+	],
+	"TransactionFingerprintID": 2831371359051261000,
+	"User": "root"
+}
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 4;
+----
+
+spy-sql
+BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"SkippedQueries": 1,
+	"Statement": "SELECT ‹1›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT ‹2›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 2,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT ‹3›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 3,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT ‹4›",
+	"StatementFingerprintID": 2101516650360650000,
+	"StmtPosInTxn": 4,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 4,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		2101516650360650000,
+		2101516650360650000,
+		2101516650360650000,
+		2101516650360650000
+	],
+	"TransactionFingerprintID": 2831371359051261000,
+	"User": "root"
+}

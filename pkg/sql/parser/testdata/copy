@@ -87,12 +87,12 @@ COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER '_', DESTINATION '_') --
 COPY _ (_, _, _) FROM STDIN WITH (FORMAT CSV, DELIMITER ' ', DESTINATION 'filename') -- identifiers removed
 
 parse
-COPY t (a, b, c) FROM STDIN destination = 'filename' CSV DELIMITER ' ' ESCAPE 'x' HEADER
+COPY t (a, b, c) FROM STDIN destination = 'filename' CSV DELIMITER ' ' ESCAPE 'x' HEADER ENCODING 'utf8'
 ----
-COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER ' ', DESTINATION 'filename', ESCAPE 'x', HEADER true) -- normalized!
-COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER (' '), DESTINATION ('filename'), ESCAPE ('x'), HEADER true) -- fully parenthesized
-COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER '_', DESTINATION '_', ESCAPE '_', HEADER true) -- literals removed
-COPY _ (_, _, _) FROM STDIN WITH (FORMAT CSV, DELIMITER ' ', DESTINATION 'filename', ESCAPE 'x', HEADER true) -- identifiers removed
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER ' ', ENCODING 'utf8', DESTINATION 'filename', ESCAPE 'x', HEADER true) -- normalized!
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER (' '), ENCODING ('utf8'), DESTINATION ('filename'), ESCAPE ('x'), HEADER true) -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER '_', ENCODING '_', DESTINATION '_', ESCAPE '_', HEADER true) -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH (FORMAT CSV, DELIMITER ' ', ENCODING 'utf8', DESTINATION 'filename', ESCAPE 'x', HEADER true) -- identifiers removed
 
 parse
 COPY t TO STDOUT
@@ -388,3 +388,35 @@ at or near "explain": syntax error
 DETAIL: source SQL:
 COPY (EXPLAIN SELECT * FROM t) TO STDOUT
       ^
+
+parse
+COPY "copytab" FROM STDIN (ENCODING 'utf8')
+----
+COPY copytab FROM STDIN WITH (ENCODING 'utf8') -- normalized!
+COPY copytab FROM STDIN WITH (ENCODING ('utf8')) -- fully parenthesized
+COPY copytab FROM STDIN WITH (ENCODING '_') -- literals removed
+COPY _ FROM STDIN WITH (ENCODING 'utf8') -- identifiers removed
+
+parse
+COPY "copytab" FROM STDIN (HEADER true, ESCAPE '%', ENCODING 'utf8')
+----
+COPY copytab FROM STDIN WITH (ENCODING 'utf8', ESCAPE '%', HEADER true) -- normalized!
+COPY copytab FROM STDIN WITH (ENCODING ('utf8'), ESCAPE ('%'), HEADER true) -- fully parenthesized
+COPY copytab FROM STDIN WITH (ENCODING '_', ESCAPE '_', HEADER true) -- literals removed
+COPY _ FROM STDIN WITH (ENCODING 'utf8', ESCAPE '%', HEADER true) -- identifiers removed
+
+parse
+COPY t (a, b, c) FROM STDIN destination = 'filename' CSV DELIMITER ' '
+----
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER ' ', DESTINATION 'filename') -- normalized!
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER (' '), DESTINATION ('filename')) -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER '_', DESTINATION '_') -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH (FORMAT CSV, DELIMITER ' ', DESTINATION 'filename') -- identifiers removed
+
+error
+COPY "copytab" FROM STDIN (FORMAT     csv, ENCODING 'abc', ENCODING 'def')
+----
+at or near "def": syntax error: encoding option specified multiple times
+DETAIL: source SQL:
+COPY "copytab" FROM STDIN (FORMAT     csv, ENCODING 'abc', ENCODING 'def')
+                                                                    ^

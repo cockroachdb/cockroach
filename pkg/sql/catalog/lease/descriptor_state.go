@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -108,7 +109,7 @@ func (t *descriptorState) findForTimestamp(
 		// Check to see if the ModificationTime is valid.
 		if desc := t.mu.active.data[i]; desc.GetModificationTime().LessEq(timestamp) {
 			latest := i+1 == len(t.mu.active.data)
-			if !desc.hasExpired(timestamp) {
+			if !desc.hasExpired(ctx, timestamp) {
 				// Existing valid descriptor version.
 				desc.incRefCount(ctx, expensiveLogEnabled)
 				return desc, latest, nil
@@ -131,7 +132,11 @@ func (t *descriptorState) findForTimestamp(
 // it and returns it. The regionEnumPrefix is used if the cluster is configured
 // for multi-region system tables.
 func (t *descriptorState) upsertLeaseLocked(
-	ctx context.Context, desc catalog.Descriptor, expiration hlc.Timestamp, regionEnumPrefix []byte,
+	ctx context.Context,
+	desc catalog.Descriptor,
+	expiration hlc.Timestamp,
+	session sqlliveness.Session,
+	regionEnumPrefix []byte,
 ) (createdDescriptorVersionState *descriptorVersionState, toRelease *storedLease, _ error) {
 	if t.mu.maxVersionSeen < desc.GetVersion() {
 		t.mu.maxVersionSeen = desc.GetVersion()
@@ -141,7 +146,7 @@ func (t *descriptorState) upsertLeaseLocked(
 		if t.mu.active.findNewest() != nil {
 			log.Infof(ctx, "new lease: %s", desc)
 		}
-		descState := newDescriptorVersionState(t, desc, expiration, regionEnumPrefix, true /* isLease */)
+		descState := newDescriptorVersionState(t, desc, expiration, session, regionEnumPrefix, true /* isLease */)
 		t.mu.active.insert(descState)
 		return descState, nil, nil
 	}
@@ -162,6 +167,7 @@ func (t *descriptorState) upsertLeaseLocked(
 	// released! This is because the new lease is valid at the same desc
 	// version at a greater expiration.
 	s.mu.expiration = expiration
+	s.mu.session = session
 	toRelease = s.mu.lease
 	s.mu.lease = &storedLease{
 		prefix:     regionEnumPrefix,
@@ -169,9 +175,17 @@ func (t *descriptorState) upsertLeaseLocked(
 		version:    int(desc.GetVersion()),
 		expiration: storedLeaseExpiration(expiration),
 	}
+	if session != nil {
+		s.mu.lease.sessionID = session.ID().UnsafeBytes()
+	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "replaced lease: %s with %s", toRelease, s.mu.lease)
 	}
+	// For session based leases there is no expiry, so when the lease
+	// is subsumed we have nothing to delete. In dual-write mode clearing
+	// this guarantees only the old expiry based lease is cleaned up. In
+	// Session only clearing this means the release is a no-op.
+	toRelease.sessionID = nil
 	return nil, toRelease, nil
 }
 
@@ -181,6 +195,7 @@ func newDescriptorVersionState(
 	t *descriptorState,
 	desc catalog.Descriptor,
 	expiration hlc.Timestamp,
+	session sqlliveness.Session,
 	prefix []byte,
 	isLease bool,
 ) *descriptorVersionState {
@@ -195,6 +210,10 @@ func newDescriptorVersionState(
 			prefix:     prefix,
 			version:    int(desc.GetVersion()),
 			expiration: storedLeaseExpiration(expiration),
+		}
+		if session != nil {
+			descState.mu.lease.sessionID = session.ID().UnsafeBytes()
+			descState.mu.session = session
 		}
 	}
 	return descState
@@ -273,7 +292,18 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		if l := maybeMarkRemoveStoredLease(s); l != nil {
-			t.mu.active.remove(s)
+			leaseReleased := true
+			// For testing, we will synchronously release leases, but that
+			// exposes us to the danger of the context getting cancelled. To
+			// eliminate this risk, we are going first remove the lease from
+			// storage and then delete if from mqemory.
+			if t.m.storage.testingKnobs.RemoveOnceDereferenced {
+				leaseReleased = releaseLease(ctx, l, t.m)
+				l = nil
+			}
+			if leaseReleased {
+				t.mu.active.remove(s)
+			}
 			return l
 		}
 		return nil

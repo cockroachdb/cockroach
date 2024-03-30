@@ -25,10 +25,6 @@ go_test(
         "startup_test.go",
     ],
     embed = [":startup"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/keys",
@@ -40,6 +36,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/storage/fs",
         "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

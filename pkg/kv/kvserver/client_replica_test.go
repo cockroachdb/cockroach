@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -40,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -50,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -71,7 +75,6 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/raftpb"
 )
 
 // TestReplicaClockUpdates verifies that the leaseholder updates its clocks
@@ -176,7 +179,10 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	require.NoError(t, err)
 
 	manual.Pause()
-	ts1 := s.Clock().Now()
+	ts1 := hlc.Timestamp{WallTime: manual.UnixNano()}
+	// NB: it's possible that HLC ran in front of manual.Now() after the Pause()
+	// call. Particularly, if the wall clock regressed during Pause(), and there
+	// was a concurrent Now() with a pre-regression higher timestamp. See #119362.
 
 	key := roachpb.Key("a")
 	incArgs := incrementArgs(key, 5)
@@ -186,37 +192,28 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	const numCmds = 3
 	clockOffset := s.Clock().MaxOffset() / numCmds
 	for i := int64(1); i <= numCmds; i++ {
-		ts := hlc.ClockTimestamp(ts1.Add(i*clockOffset.Nanoseconds(), 0))
-		if _, err := kv.SendWrappedWith(context.Background(), store.TestSender(), kvpb.Header{Now: ts}, incArgs); err != nil {
-			t.Fatal(err)
-		}
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{
+			Now: hlc.ClockTimestamp(ts1.Add(i*clockOffset.Nanoseconds(), 0)),
+		}, incArgs)
+		require.NoError(t, pErr.GoError())
 	}
 
+	// Expect the clock to advance.
 	ts2 := s.Clock().Now()
-	if expAdvance, advance := ts2.GoTime().Sub(ts1.GoTime()), numCmds*clockOffset; advance != expAdvance {
-		t.Fatalf("expected clock to advance %s; got %s", expAdvance, advance)
-	}
+	require.Equal(t, numCmds*clockOffset, ts2.GoTime().Sub(ts1.GoTime()))
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
 	tsFuture := hlc.ClockTimestamp(ts1.Add(s.Clock().MaxOffset().Nanoseconds()+1, 0))
 	_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{Now: tsFuture}, incArgs)
-	if !testutils.IsPError(pErr, "remote wall time is too far ahead") {
-		t.Fatalf("unexpected error %v", pErr)
-	}
+	require.True(t, testutils.IsPError(pErr, "remote wall time is too far ahead"))
 
 	// The clock did not advance and the final command was not executed.
 	ts3 := s.Clock().Now()
-	if advance := ts3.GoTime().Sub(ts2.GoTime()); advance != 0 {
-		t.Fatalf("expected clock not to advance, but it advanced by %s", advance)
-	}
+	require.Zero(t, ts3.GoTime().Sub(ts2.GoTime()))
 	valRes, err := storage.MVCCGet(context.Background(), store.TODOEngine(), key, ts3,
 		storage.MVCCGetOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := mustGetInt(valRes.Value), incArgs.Increment*numCmds; a != e {
-		t.Errorf("expected %d, got %d", e, a)
-	}
+	require.NoError(t, err)
+	require.Equal(t, incArgs.Increment*numCmds, mustGetInt(valRes.Value))
 }
 
 // TestTxnPutOutOfOrder tests a case where a put operation of an older
@@ -1639,7 +1636,7 @@ func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 			t.Fatal(err)
 		}
 		newLease, _ := l.replica0.GetLease()
-		if !origLease.Equivalent(newLease) {
+		if !origLease.Equivalent(newLease, true /* expToEpochEquiv */) {
 			t.Fatalf("original lease %v and new lease %v not equivalent", origLease, newLease)
 		}
 	}
@@ -2164,7 +2161,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := fs.NewStickyRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -2653,7 +2650,7 @@ func TestDrainRangeRejection(t *testing.T) {
 	drainingIdx := 1
 	tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */, false /* verbose */)
 	chgs := kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(drainingIdx))
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 }
@@ -2673,7 +2670,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 
 	oldGeneration := repl.Desc().Generation
 	chgs := kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1))
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+2)
@@ -2681,7 +2678,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	oldGeneration = repl.Desc().Generation
 	oldDesc := repl.Desc()
 	chgs[0].ChangeType = roachpb.REMOVE_VOTER
-	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs)
+	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserverpb.ReasonRangeOverReplicated, "", chgs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3760,7 +3757,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	change := func() {
 		<-seenAdd
 		chgs := kvpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, makeReplicationTargets(2)...)
-		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, kvserverpb.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
+		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, "replicate", "testing", chgs)
 	}
 	relocate := func() {
 		relocateErr = db.AdminRelocateRange(
@@ -4074,10 +4071,18 @@ func TestStrictGCEnforcement(t *testing.T) {
 		syncutil.Mutex
 		blockOnTimestampUpdate func()
 	}
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+
+	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// We don't strictly enforce the GC TTL if the protected timestamp
+					// state cached on the replica is older than the lease's start time.
+					// We disable the lease queue to prevent flakes right around lease
+					// transfers. See getImpliedGCThresholdRLocked for more details.
+					DisableLeaseQueue: true,
+				},
 				SpanConfig: &spanconfig.TestingKnobs{
 					KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
 						OnTimestampAdvance: func(timestamp hlc.Timestamp) {
@@ -4091,7 +4096,21 @@ func TestStrictGCEnforcement(t *testing.T) {
 				},
 			},
 		},
-	})
+	}
+
+	// TODO(#119243): remove this test in 24.2
+	// One subtest is a regression test for old-style PTS records.
+	// Randomly set an old cluster version to test this functionality.
+	testCache := false
+	if rand.Intn(2) == 0 {
+		testCache = true
+		args.ServerArgs.Knobs.Server = &server.TestingKnobs{
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
+			BinaryVersionOverride:          (clusterversion.V24_1_MigrateOldStylePTSRecords - 1).Version(),
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, 3, args)
 	defer tc.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
@@ -4308,6 +4327,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		_, err := txn.Scan(ctx, descriptorTable, descriptorTable.PrefixEnd(), 1)
 		require.NoError(t, err)
 	})
+
 	// This is a regression test for a bug where the implied GCThreshold computed
 	// when evaluating whether a batch request is below the replicas' GCThreshold,
 	// was not taking the `readAt` of the cached PTS state into consideration.
@@ -4317,6 +4337,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 	// erroneously reject requests even though their request time was above the
 	// "correct" GCThreshold.
 	t.Run("implied gcthreshold respects cached readAt", func(t *testing.T) {
+		if !testCache {
+			return
+		}
 		s := tc.Server(0)
 
 		// Block the KVSubscriber rangefeed from progressing.
@@ -4687,7 +4710,7 @@ func TestTenantID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := fs.NewStickyRegistry()
 	ctx := context.Background()
 	// Create a config with a sticky-in-mem engine so we can restart the server.
 	// We also configure the settings to be as robust as possible to problems
@@ -4886,8 +4909,8 @@ func TestRangeMigration(t *testing.T) {
 
 	// We're going to be transitioning from startV to endV. Think a cluster of
 	// binaries running vX, but with active version vX-1.
-	startV := roachpb.Version{Major: 41}
-	endV := roachpb.Version{Major: 42}
+	startV := clusterversion.PreviousRelease.Version()
+	endV := clusterversion.Latest.Version()
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -4973,6 +4996,226 @@ func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB
 	require.NoError(t, err)
 	require.NotNil(t, tup.Value)
 	return s, db
+}
+
+// TestNonTransactionalLockingRequestsConflictWithReplicated locks ensures that
+// non-transactional locking requests check for conflicts with replicated locks
+// even though they cannot acquire locks that outlive their request.
+//
+// Regression test for https://github.com/cockroachdb/cockroach/issues/117628.
+func TestNonTransactionalLockingRequestsConflictWithReplicatedLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db := setupDBAndWriteAAndB(t)
+	defer s.Stopper().Stop(ctx)
+
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	locksHeld := make(chan struct{})
+	canReleaseLocks := make(chan struct{})
+
+	// Set up the test by acquiring a replicated exclusive lock on keyA and a
+	// replicated shared lock on KeyB. We'll hold these locks for the duration of
+	// the test.
+	go func() {
+		defer wg.Done()
+
+		txn1 := db.NewTxn(ctx, "txn1")
+		_, err := txn1.GetForUpdate(ctx, keyA, kvpb.GuaranteedDurability)
+		if err != nil {
+			t.Error(err)
+		}
+		_, err = txn1.GetForShare(ctx, keyB, kvpb.GuaranteedDurability)
+		if err != nil {
+			t.Error(err)
+		}
+
+		close(locksHeld)
+		<-canReleaseLocks // block for all test cases
+
+		err = txn1.Commit(ctx)
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	<-locksHeld
+
+	for i, tc := range []struct {
+		setup    func(*kvpb.BatchRequest, bool)
+		expBlock bool
+	}{
+		// 1. Get requests.
+		// 1a. Exclusive locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyA)
+				req.KeyLockingStrength = lock.Exclusive
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyB)
+				req.KeyLockingStrength = lock.Exclusive
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyC)
+				req.KeyLockingStrength = lock.Exclusive
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: false,
+		},
+		// 1b. Shared locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyA)
+				req.KeyLockingStrength = lock.Shared
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyB)
+				req.KeyLockingStrength = lock.Shared
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: false,
+		},
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyC)
+				req.KeyLockingStrength = lock.Shared
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: false,
+		},
+		// 2. Scan requests.
+		// 2a. Exclusive locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := scanArgs(keyA, keyC)
+				req.KeyLockingStrength = lock.Exclusive
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		// 2b. Shared locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := scanArgs(keyA, keyC)
+				req.KeyLockingStrength = lock.Shared
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		// 3. ReverseScan requests.
+		// 3a. Exclusive locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := revScanArgs(keyA, keyC)
+				req.KeyLockingStrength = lock.Exclusive
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		// 3b. Shared locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := revScanArgs(keyA, keyC)
+				req.KeyLockingStrength = lock.Shared
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+	} {
+		testutils.RunTrueAndFalse(t, "replicated", func(t *testing.T, repl bool) {
+			t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+				ba := &kvpb.BatchRequest{}
+				// Having the request return an error instead of blocking on conflict
+				// makes the test easier.
+				ba.WaitPolicy = lock.WaitPolicy_Error
+				tc.setup(ba, repl)
+
+				store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+				require.NoError(t, err)
+				_, pErr := store.TestSender().Send(ctx, ba)
+
+				if tc.expBlock {
+					require.NotNil(t, pErr)
+					lcErr := new(kvpb.WriteIntentError)
+					require.True(t, errors.As(pErr.GoError(), &lcErr))
+					require.Equal(t, kvpb.WriteIntentError_REASON_WAIT_POLICY, lcErr.Reason)
+				} else {
+					require.Nil(t, pErr.GoError())
+				}
+			})
+		})
+	}
+
+	close(canReleaseLocks)
+	wg.Wait()
 }
 
 // TestSharedLocksBasic tests basic shared lock semantics. In particular, it
@@ -5069,7 +5312,7 @@ func TestOptimisticEvalRetry(t *testing.T) {
 		})
 	}()
 	removedLocks := false
-	timer := timeutil.NewTimer()
+	var timer timeutil.Timer
 	timer.Reset(time.Second * 2)
 	defer timer.Stop()
 	done := false

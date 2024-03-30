@@ -34,40 +34,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// DequalifyAndTypeCheckExpr type checks the given expression and returns the
-// type-checked expression disregarding volatility. The typed expression, which contains dummyColumns,
-// does not support evaluation.
-func DequalifyAndTypeCheckExpr(
-	ctx context.Context,
-	desc catalog.TableDescriptor,
-	expr tree.Expr,
-	semaCtx *tree.SemaContext,
-	tn *tree.TableName,
-) (tree.TypedExpr, error) {
-	nonDropColumns := desc.NonDropColumns()
-	sourceInfo := colinfo.NewSourceInfoForSingleTable(
-		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
-	)
-	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Replace the column variables with dummyColumns so that they can be
-	// type-checked.
-	replacedExpr, _, err := replaceColumnVars(desc, expr)
-	if err != nil {
-		return nil, err
-	}
-
-	typedExpr, err := tree.TypeCheck(ctx, replacedExpr, semaCtx, types.Any)
-	if err != nil {
-		return nil, err
-	}
-
-	return typedExpr, nil
-}
-
 // DequalifyAndValidateExprImpl validates that an expression has the given type and
 // contains no functions with a volatility greater than maxVolatility. The
 // type-checked and constant-folded expression, the type of the expression, and
@@ -77,6 +43,7 @@ func DequalifyAndTypeCheckExpr(
 // tree.TypedExpr would be dangerous. It contains dummyColumns which do not
 // support evaluation and are not useful outside the context of type-checking
 // the expression.
+// TODO(mgartner): Rename this function without "Impl".
 func DequalifyAndValidateExprImpl(
 	ctx context.Context,
 	expr tree.Expr,
@@ -396,8 +363,14 @@ func newNameResolver(
 // resolveNames returns an expression equivalent to the input expression with
 // unresolved names replaced with IndexedVars.
 func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
-	var v NameResolutionVisitor
-	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper)
+	v := nameResolutionVisitor{
+		iVarHelper: *nr.ivarHelper,
+		resolver: colinfo.ColumnResolver{
+			Source: nr.source,
+		},
+	}
+	expr, _ = tree.WalkExpr(&v, expr)
+	return expr, v.err
 }
 
 // addColumn adds a new column to the nameResolver so that it can be resolved in
@@ -422,24 +395,11 @@ type nameResolverIVarContainer struct {
 	cols []catalog.Column
 }
 
-var _ eval.IndexedVarContainer = &nameResolverIVarContainer{}
-
-// IndexedVarEval implements the eval.IndexedVarContainer interface.
-// Evaluation is not supported, so this function panics.
-func (nrc *nameResolverIVarContainer) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	panic("unsupported")
-}
+var _ tree.IndexedVarContainer = &nameResolverIVarContainer{}
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (nrc *nameResolverIVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return nrc.cols[idx].GetType()
-}
-
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (nrc *nameResolverIVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return nil
 }
 
 // SanitizeVarFreeExpr verifies that an expression is valid, has the correct

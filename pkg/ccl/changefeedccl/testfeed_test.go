@@ -30,7 +30,8 @@ import (
 	pubsubv1 "cloud.google.com/go/pubsub/apiv1"
 	pb "cloud.google.com/go/pubsub/apiv1/pubsubpb"
 	"cloud.google.com/go/pubsub/pstest"
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
+	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -2573,6 +2574,240 @@ func (p *pubsubFeed) Close() error {
 		return err
 	}
 	_ = p.mockServer.Close()
+	return nil
+}
+
+type mockPulsarServer struct {
+	msgCh chan *pulsar.ProducerMessage
+}
+
+func makeMockPulsarServer() *mockPulsarServer {
+	return &mockPulsarServer{
+		msgCh: make(chan *pulsar.ProducerMessage, 2048),
+	}
+}
+
+type mockPulsarClient struct {
+	pulsarServer *mockPulsarServer
+}
+
+var _ PulsarClient = (*mockPulsarClient)(nil)
+
+func (pc *mockPulsarClient) CreateProducer(opts pulsar.ProducerOptions) (pulsar.Producer, error) {
+	if opts.BatcherBuilderType != pulsar.KeyBasedBatchBuilder {
+		panic("unexpected batch builder type")
+	}
+	if opts.Topic == "" {
+		panic("expected topic for producer")
+	}
+	return &mockPulsarProducer{
+		topic:        opts.Topic,
+		pulsarServer: pc.pulsarServer,
+	}, nil
+}
+
+func (pc *mockPulsarClient) Close() {}
+
+type mockPulsarProducer struct {
+	topic        string
+	pulsarServer *mockPulsarServer
+}
+
+func (p *mockPulsarProducer) Topic() string {
+	return p.topic
+}
+
+func (p *mockPulsarProducer) Name() string {
+	panic("unimplemented")
+}
+
+func (p *mockPulsarProducer) Send(
+	context.Context, *pulsar.ProducerMessage,
+) (pulsar.MessageID, error) {
+	panic("unimplemented")
+}
+
+// TODO (#118899): for better testing, we should make this async and
+// implement Flush(), to simulate a real scenario. It would also
+// be ideal to make batches with the supplied ordering key.
+// For now, this is sufficient. End-to-end correctness testing will be addressed
+// by #118859.
+func (p *mockPulsarProducer) SendAsync(
+	ctx context.Context,
+	m *pulsar.ProducerMessage,
+	f func(pulsar.MessageID, *pulsar.ProducerMessage, error),
+) {
+	select {
+	case <-ctx.Done():
+		f(nil, m, ctx.Err())
+	case p.pulsarServer.msgCh <- m:
+		f(nil, m, nil)
+	}
+}
+
+func (p *mockPulsarProducer) LastSequenceID() int64 {
+	panic("unimplemented")
+}
+
+func (p *mockPulsarProducer) Flush() error {
+	return nil
+}
+
+func (p *mockPulsarProducer) Close() {}
+
+type pulsarFeedFactory struct {
+	enterpriseFeedFactory
+}
+
+var _ cdctest.TestFeedFactory = (*pulsarFeedFactory)(nil)
+
+// makePulsarFeedFactory returns a TestFeedFactory implementation using the `pulsar` uri.
+func makePulsarFeedFactory(srvOrCluster interface{}, rootDB *gosql.DB) cdctest.TestFeedFactory {
+	s, injectables := getInjectables(srvOrCluster)
+
+	switch t := srvOrCluster.(type) {
+	case serverutils.ApplicationLayerInterface:
+		t.DistSQLServer().(*distsql.ServerImpl).TestingKnobs.Changefeed.(*TestingKnobs).PulsarClientSkipCreation = true
+	case serverutils.TestClusterInterface:
+		servers := make([]feedInjectable, t.NumServers())
+		for i := range servers {
+			t.Server(i).DistSQLServer().(*distsql.ServerImpl).TestingKnobs.Changefeed.(*TestingKnobs).PulsarClientSkipCreation = true
+		}
+	}
+
+	return &pulsarFeedFactory{
+		enterpriseFeedFactory: enterpriseFeedFactory{
+			s:      s,
+			db:     rootDB,
+			rootDB: rootDB,
+			di:     newDepInjector(injectables...),
+		},
+	}
+}
+
+// Feed implements cdctest.TestFeedFactory
+func (p *pulsarFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
+	parsed, err := parser.ParseOne(create)
+	if err != nil {
+		return nil, err
+	}
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
+	if createStmt.SinkURI == nil {
+		err = setURI(createStmt, changefeedbase.SinkSchemePulsar+"://testfeed?region=testfeedRegion", true, &args)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	mockServer := makeMockPulsarServer()
+
+	var mu syncutil.Mutex
+	wrapSink := func(s Sink) Sink {
+		mu.Lock() // Called concurrently due to getEventSink and getResolvedTimestampSink
+		defer mu.Unlock()
+		pulsarSink := s.(*pulsarSink)
+		pulsarSink.client = &mockPulsarClient{
+			pulsarServer: mockServer,
+		}
+		if err := pulsarSink.initTopicProducers(); err != nil {
+			panic(err)
+		}
+		return s
+	}
+
+	c := &pulsarFeed{
+		jobFeed:        newJobFeed(p.jobsTableConn(), wrapSink),
+		seenTrackerMap: make(map[string]struct{}),
+		pulsarServer:   mockServer,
+	}
+
+	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// Server implements TestFeedFactory
+func (p *pulsarFeedFactory) Server() serverutils.ApplicationLayerInterface {
+	return p.s
+}
+
+type pulsarFeed struct {
+	*jobFeed
+	seenTrackerMap
+	pulsarServer *mockPulsarServer
+}
+
+var _ cdctest.TestFeed = (*pulsarFeed)(nil)
+
+// Partitions implements TestFeed
+func (p *pulsarFeed) Partitions() []string {
+	return []string{``}
+}
+
+// Next implements TestFeed
+func (p *pulsarFeed) Next() (*cdctest.TestFeedMessage, error) {
+	for {
+		var msg *pulsar.ProducerMessage
+		if err := timeutil.RunWithTimeout(
+			context.Background(), timeoutOp("pulsar.Next", p.jobID), timeout(),
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-p.shutdown:
+					return p.terminalJobError()
+				case msg = <-p.pulsarServer.msgCh:
+					return nil
+				}
+			},
+		); err != nil {
+			return nil, err
+		}
+
+		details, err := p.Details()
+		if err != nil {
+			return nil, err
+		}
+
+		m := &cdctest.TestFeedMessage{
+			RawMessage: msg,
+		}
+		switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
+		case ``, changefeedbase.OptFormatJSON:
+			resolved, err := isResolvedTimestamp(msg.Payload)
+			if err != nil {
+				return nil, err
+			}
+			msgBytes := msg.Payload
+			if resolved {
+				m.Resolved = msgBytes
+			} else {
+				m.Value, m.Key, m.Topic, err = extractJSONMessagePubsub(msgBytes)
+				if err != nil {
+					return nil, err
+				}
+				if isNew := p.markSeen(m); !isNew {
+					continue
+				}
+			}
+		case changefeedbase.OptFormatCSV:
+			m.Value = msg.Payload
+		default:
+			return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
+		}
+
+		return m, nil
+	}
+
+}
+
+// Close implements TestFeed
+func (p *pulsarFeed) Close() error {
+	err := p.jobFeed.Close()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

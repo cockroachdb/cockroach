@@ -305,6 +305,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *kvpb.MigrateRequest:
 			case *kvpb.QueryResolvedTimestampRequest:
 			case *kvpb.BarrierRequest:
+			case *kvpb.LinkExternalSSTableRequest:
 			default:
 				if result.Err == nil {
 					result.Err = errors.Errorf("unsupported reply: %T for %T",
@@ -1035,7 +1036,6 @@ func (b *Batch) adminRelocateRange(
 func (b *Batch) addSSTable(
 	s, e interface{},
 	data []byte,
-	remoteFile kvpb.AddSSTableRequest_RemoteFile,
 	disallowConflicts bool,
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
@@ -1059,13 +1059,26 @@ func (b *Batch) addSSTable(
 			EndKey: end,
 		},
 		Data:                           data,
-		RemoteFile:                     remoteFile,
 		DisallowConflicts:              disallowConflicts,
 		DisallowShadowing:              disallowShadowing,
 		DisallowShadowingBelow:         disallowShadowingBelow,
 		MVCCStats:                      stats,
 		IngestAsWrites:                 ingestAsWrites,
 		SSTTimestampToRequestTimestamp: sstTimestampToRequestTimestamp,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) linkExternalSSTable(
+	span roachpb.Span, externalFile kvpb.LinkExternalSSTableRequest_ExternalFile,
+) {
+	req := &kvpb.LinkExternalSSTableRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    span.Key,
+			EndKey: span.EndKey,
+		},
+		ExternalFile: externalFile,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
@@ -1116,7 +1129,7 @@ func (b *Batch) queryResolvedTimestamp(s, e interface{}) {
 	b.initResult(1, 0, notRaw, nil)
 }
 
-func (b *Batch) barrier(s, e interface{}) {
+func (b *Batch) barrier(s, e interface{}, withLAI bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -1132,6 +1145,7 @@ func (b *Batch) barrier(s, e interface{}) {
 			Key:    begin,
 			EndKey: end,
 		},
+		WithLeaseAppliedIndex: withLAI,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

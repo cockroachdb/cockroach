@@ -40,6 +40,7 @@ import "./layout.styl";
 import "./layoutPanel.styl";
 import { getDataFromServer } from "src/util/dataFromServer";
 import TenantDropdown from "../../components/tenantDropdown/tenantDropdown";
+import { LicenseNotification } from "../licenseNotification/licenseNotification";
 
 export interface LayoutProps {
   clusterName: string;
@@ -85,6 +86,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
                 <CockroachLabsLockupIcon height={26} />
               </Left>
               <Right>
+                <LicenseNotification />
                 <LoginIndicator />
               </Right>
             </GlobalNavigation>

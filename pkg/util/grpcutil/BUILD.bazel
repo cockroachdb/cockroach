@@ -37,10 +37,6 @@ go_test(
         "grpc_util_test.go",
     ],
     embed = [":grpcutil"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
     deps = [
         "//pkg/server",
         "//pkg/util/circuit",

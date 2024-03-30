@@ -1059,7 +1059,15 @@ func (n *AlterTenantReplication) walkStmt(v Visitor) Statement {
 			ret.Options.Retention = e
 		}
 	}
-
+	if n.Options.ExpirationWindow != nil {
+		e, changed := WalkExpr(v, n.Options.ExpirationWindow)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.Options.ExpirationWindow = e
+		}
+	}
 	return ret
 }
 
@@ -1123,7 +1131,15 @@ func (n *CreateTenantFromReplication) walkStmt(v Visitor) Statement {
 			ret.Options.Retention = e
 		}
 	}
-
+	if n.Options.ExpirationWindow != nil {
+		e, changed := WalkExpr(v, n.Options.ExpirationWindow)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.Options.ExpirationWindow = e
+		}
+	}
 	if n.Like.OtherTenant != nil {
 		ts, changed := walkTenantSpec(v, n.TenantSpec)
 		if changed {
@@ -1619,16 +1635,6 @@ func (stmt *Restore) walkStmt(v Visitor) Statement {
 				ret = stmt.copyNode()
 			}
 			ret.Options.IntoDB = intoDB
-		}
-	}
-
-	if stmt.Options.IncludeAllSecondaryTenants != nil {
-		include, changed := WalkExpr(v, stmt.Options.IncludeAllSecondaryTenants)
-		if changed {
-			if ret == stmt {
-				ret = stmt.copyNode()
-			}
-			ret.Options.IncludeAllSecondaryTenants = include
 		}
 	}
 

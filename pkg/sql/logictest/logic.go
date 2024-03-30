@@ -39,7 +39,6 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/testserver"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -66,7 +65,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
@@ -80,7 +78,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
@@ -308,11 +305,12 @@ import (
 //      - colnames: column names are verified (the expected column names
 //            are the first line in the expected results).
 //      - retry: if the expected results do not match the actual results, the
-//            test will be retried with exponential backoff up to some maximum
-//            duration. If the test succeeds at any time during that period, it
-//            is considered successful. Otherwise, it is a failure. See
-//            testutils.SucceedsSoon for more information. If run with the
-//            -rewrite flag, the query will be run only once after a 2s sleep.
+//            test will be retried with exponential backoff up to the duration
+//            given by retry_duration. If the test succeeds at any time during
+//            that period, it is considered successful. Otherwise, it is a
+//            failure. See testutils.SucceedsSoon for more information. If run
+//            with the -rewrite flag, the query will be run only once after a
+//            2s sleep.
 //      - async: runs the query asynchronously, marking it as a pending
 //            query using the label parameter as a unique name, to be completed
 //            and validated later with "awaitquery". This is intended for use
@@ -346,6 +344,9 @@ import (
 //  - query error <regexp>
 //    Runs the query that follows and expects an error
 //    that matches the given regexp.
+//
+//  - query empty
+//    Runs the query that follows and verifies that no rows are produced.
 //
 //  - awaitquery <name>
 //    Completes a pending query with the provided name, validating its
@@ -393,10 +394,23 @@ import (
 //    When using a cockroach-go/testserver logictest, upgrades the node at
 //    index N to the version specified by the logictest config.
 //
+//  - skip <ISSUE> [args...]
+//    Skips this entire logic test using skip.WithIssue(). Should be near top of
+//    test file. Note that this is different from `skipif`.
+//
+//  - skip ignorelint [args...]
+//    Skips this entire logic test using skip.IgnoreLint(). Should be near top
+//    of test file. Note that this is different from `skipif`.
+//
+//  - skip under <deadlock/race/stress/stressrace/metamorphic/duress> [ISSUE] [args...]
+//    Skips this entire logic test using skip.UnderDeadlock(), skip.UnderRace(),
+//    etc. Should be near top of test file. Note that this is different from
+//    `skipif`.
+//
 //  - skipif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
-//    Skips the following `statement` or `query` if the argument is
-//    postgresql, cockroachdb, or a config matching the currently
-//    running configuration.
+//    Skips the following `statement` or `query` if the argument is postgresql,
+//    cockroachdb, or a config matching the currently running
+//    configuration. Note that this is different from `skip`.
 //
 //  - onlyif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
 //    Skips the following `statement` or `query` if the argument is not
@@ -419,6 +433,10 @@ import (
 //    (including those which expect errors) will be retried for a fixed
 //    duration until the test passes, or the alloted time has elapsed.
 //    This is similar to the retry option of the query directive.
+//
+//  - retry_duration <duration>
+//    Specifies the amount of time to retry when using the retry directive.
+//    Defaults to testutils.DefaultSucceedsSoonDuration (45 seconds).
 //
 // The overall architecture of TestLogic is as follows:
 //
@@ -891,7 +909,9 @@ type logicQuery struct {
 	sorter logicSorter
 	// noSort is true if the nosort option was explicitly provided in the test.
 	noSort bool
-	// expectedErr and expectedErrCode are as in logicStatement.
+	// empty indicates whether the result is expected to be empty (i.e. 0 rows
+	// returned).
+	empty bool
 
 	// if set, the results are cross-checked against previous queries with the
 	// same label.
@@ -1082,6 +1102,10 @@ type logicTest struct {
 	// to false after every successful statement or query test point, including
 	// those which are supposed to error out.
 	retry bool
+
+	// retryDuration is the maximum duration to retry a statement when using
+	// the retry directive.
+	retryDuration time.Duration
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1239,6 +1263,11 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int, newSession bool) *
 	if _, err := db.Exec("SET index_recommendations_enabled = false"); err != nil {
 		t.Fatal(err)
 	}
+	if t.cfg.EnableDefaultReadCommitted {
+		if _, err := db.Exec("SET default_transaction_isolation = 'READ COMMITTED'"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if t.clients == nil {
 		t.clients = make(map[string]map[int]*gosql.DB)
 	}
@@ -1297,6 +1326,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	opts := []testserver.TestServerOpt{
 		testserver.ThreeNodeOpt(),
 		testserver.StoreOnDiskOpt(),
+		testserver.CacheSizeOpt(0.1),
 		testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
 		testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
 		testserver.PollListenURLTimeoutOpt(120),
@@ -1878,6 +1908,7 @@ func (t *logicTest) setup(
 	tempExternalIODir, tempExternalIODirCleanup := testutils.TempDir(t.rootT)
 	t.sharedIODir = tempExternalIODir
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
+	t.retryDuration = testutils.DefaultSucceedsSoonDuration
 
 	if cfg.UseCockroachGoTestserver {
 		skip.UnderRace(t.t(), "test uses a different binary, so the race detector doesn't work")
@@ -1889,11 +1920,8 @@ func (t *logicTest) setup(
 			t.Fatal("cockroach-go testserver tests must use 3 nodes")
 		}
 
-		upgradeVersion, err := version.Parse(build.BinaryVersion())
-		if err != nil {
-			t.Fatal(err)
-		}
-		bootstrapVersion, err := release.LatestPredecessor(upgradeVersion)
+		versionStr := clusterversion.RemoveDevOffset(cfg.BootstrapVersion.Version()).String()
+		bootstrapVersion, err := release.LatestPatch(versionStr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2488,6 +2516,21 @@ func (t *logicTest) processSubtest(
 				)
 			}
 			repeat = count
+
+		case "retry_duration":
+			var duration time.Duration
+			var err error
+			if len(fields) != 2 {
+				err = errors.New("invalid line format")
+			} else {
+				duration, err = time.ParseDuration(fields[1])
+			}
+			if err != nil {
+				return errors.Wrapf(err, "%s:%d invalid retry_duration line",
+					path, s.Line+subtest.lineLineIndexIntoFile)
+			}
+			t.retryDuration = duration
+
 		case "skip_on_retry":
 			t.skipOnRetry = true
 
@@ -2572,12 +2615,12 @@ func (t *logicTest) processSubtest(
 					var cont bool
 					var err error
 					if t.retry {
-						err = testutils.SucceedsSoonError(func() error {
+						err = testutils.SucceedsWithinError(func() error {
 							t.purgeZoneConfig()
 							var tempErr error
 							cont, tempErr = t.execStatement(stmt)
 							return tempErr
-						})
+						}, t.retryDuration)
 					} else {
 						cont, err = t.execStatement(stmt)
 					}
@@ -2627,14 +2670,19 @@ func (t *logicTest) processSubtest(
 			} else if len(fields) < 2 {
 				return errors.Errorf("%s: invalid test statement: %s", query.pos, s.Text())
 			} else {
-				// Parse "query <type-string> <options> <label>"
-				query.colTypes = fields[1]
-				if *Bigtest {
-					// bigtests put each expected value on its own line.
-					query.valsPerLine = 1
+				// Parse "query empty"
+				if len(fields) == 2 && fields[1] == "empty" {
+					query.empty = true
 				} else {
-					// Otherwise, expect number of values to match expected type count.
-					query.valsPerLine = len(query.colTypes)
+					// Parse "query <type-string> <options> <label>"
+					query.colTypes = fields[1]
+					if *Bigtest {
+						// bigtests put each expected value on its own line.
+						query.valsPerLine = 1
+					} else {
+						// Otherwise, expect number of values to match expected type count.
+						query.valsPerLine = len(query.colTypes)
+					}
 				}
 
 				if len(fields) >= 3 {
@@ -2908,10 +2956,10 @@ func (t *logicTest) processSubtest(
 
 				for i := 0; i < repeat; i++ {
 					if t.retry && !*rewriteResultsInTestfiles {
-						if err := testutils.SucceedsSoonError(func() error {
+						if err := testutils.SucceedsWithinError(func() error {
 							t.purgeZoneConfig()
 							return t.execQuery(query)
-						}); err != nil {
+						}, t.retryDuration); err != nil {
 							t.Error(err)
 						}
 					} else {
@@ -3014,11 +3062,94 @@ func (t *logicTest) processSubtest(
 			}
 
 		case "skip":
-			reason := "skipped"
-			if len(fields) > 1 {
-				reason = fields[1]
+			if len(fields) < 2 || fields[1] == "" {
+				return errors.Errorf("skip requires an argument")
 			}
-			skip.IgnoreLint(t.t(), reason)
+
+			// Parse [ISSUE] [args...] as the trailing arguments for most skip
+			// commands. Returns -1 if the first field is not parsable as a GitHub
+			// issue number.
+			parse := func(fields []string) (int, []interface{}) {
+				if len(fields) < 1 {
+					return -1, nil
+				}
+				if githubIssueID, err := strconv.ParseUint(fields[0], 10, 32); err == nil {
+					args := make([]interface{}, len(fields)-1)
+					for i := range args {
+						args[i] = fields[i+1]
+					}
+					return int(githubIssueID), args
+				}
+				args := make([]interface{}, len(fields))
+				for i := range args {
+					args[i] = fields[i]
+				}
+				return -1, args
+			}
+
+			switch fields[1] {
+			case "ignorelint":
+				if githubIssueID, args := parse(fields[2:]); githubIssueID < 0 {
+					skip.IgnoreLint(t.t(), args...)
+				} else {
+					return errors.Errorf("skip ignorelint does not take an issue ID: %v", githubIssueID)
+				}
+			case "under":
+				if len(fields) < 3 || fields[2] == "" {
+					return errors.Errorf("skip under command requires an argument")
+				}
+				switch fields[2] {
+				case "deadlock":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderDeadlock(t.t(), args...)
+					} else {
+						skip.UnderDeadlockWithIssue(t.t(), githubIssueID, args...)
+					}
+				case "race":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderRace(t.t(), args...)
+					} else {
+						skip.UnderRaceWithIssue(t.t(), githubIssueID, args...)
+					}
+				case "stress":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderStress(t.t(), args...)
+					} else {
+						skip.UnderStressWithIssue(t.t(), githubIssueID, args...)
+					}
+				case "stressrace":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderStressRace(t.t(), args...)
+					} else {
+						skip.UnderStressRaceWithIssue(t.t(), githubIssueID, args...)
+					}
+				case "metamorphic":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderMetamorphic(t.t(), args...)
+					} else {
+						skip.UnderMetamorphicWithIssue(t.t(), githubIssueID, args...)
+					}
+				case "duress":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderDuress(t.t(), args...)
+					} else {
+						skip.UnderDuressWithIssue(t.t(), githubIssueID, args...)
+					}
+				default:
+					return errors.Errorf("unsupported skip under command: %v", fields[2])
+				}
+			case "mysql", "mssql", "postgresql", "cockroachdb", "config", "backup-restore":
+				return errors.Errorf(
+					"should be skipif command instead of skip: %s:%d",
+					path, s.Line+subtest.lineLineIndexIntoFile,
+				)
+			default:
+				githubIssueID, args := parse(fields[1:])
+				if githubIssueID < 0 {
+					return errors.Errorf("unsupported skip command: %v", fields[1])
+				}
+				skip.WithIssue(t.t(), githubIssueID, args...)
+			}
 
 		case "force-backup-restore":
 			t.forceBackupAndRestore = true
@@ -3052,6 +3183,11 @@ func (t *logicTest) processSubtest(
 					s.SetSkip("backup-restore interferes with this check")
 				}
 				continue
+			case "under", "ignorelint":
+				return errors.Errorf(
+					"should be skip command instead of skipif: %s:%d",
+					path, s.Line+subtest.lineLineIndexIntoFile,
+				)
 			default:
 				return errors.Errorf("unimplemented test statement: %s", s.Text())
 			}
@@ -3455,7 +3591,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		if err != nil {
 			return err
 		}
-		if len(query.colTypes) != len(cols) {
+		if len(query.colTypes) != len(cols) && !query.empty {
 			return fmt.Errorf("%s: expected %d columns, but found %d",
 				query.pos, len(query.colTypes), len(cols))
 		}
@@ -3594,6 +3730,10 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 			allDuplicateRows = false
 			break
 		}
+	}
+
+	if query.empty && rowCount != 0 {
+		return errors.Newf("expected empty result, found %d rows\n%v", rowCount, actualResults)
 	}
 
 	if rowCount > 1 && !allDuplicateRows && query.sorter == nil && !query.noSort &&
@@ -4060,17 +4200,6 @@ func RunLogicTest(
 	// Note: there is special code in teamcity-trigger/main.go to run this package
 	// with less concurrency in the nightly stress runs. If you see problems
 	// please make adjustments there.
-	// As of 6/4/2019, the logic tests never complete under race.
-	skip.UnderStressRace(t, "logic tests and race detector don't mix: #37993")
-
-	// This test relies on repeated sequential storage.EventuallyFileOnlySnapshot
-	// acquisitions. Reduce the max wait time for each acquisition to speed up
-	// this test.
-	origEFOSWait := storage.MaxEFOSWait
-	storage.MaxEFOSWait = 30 * time.Millisecond
-	defer func() {
-		storage.MaxEFOSWait = origEFOSWait
-	}()
 
 	if skipLogicTests {
 		skip.IgnoreLint(t, "COCKROACH_LOGIC_TESTS_SKIP")

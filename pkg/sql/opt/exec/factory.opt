@@ -142,6 +142,10 @@ define GroupBy {
     # The grouping column order type (Streaming, PartialStreaming, or
     # NoStreaming).
     groupingOrderType exec.GroupingOrderType
+
+    # If set, the estimated number of rows that this GroupBy will output
+    # (rounded up).
+    estimatedRowCount uint64
 }
 
 # ScalarGroupBy runs a scalar aggregation, i.e.  one which performs a set of
@@ -771,6 +775,7 @@ define CreateFunction {
     Cr *tree.CreateRoutine
     Deps opt.SchemaDeps
     TypeDeps opt.SchemaTypeDeps
+    FunctionDeps opt.SchemaFunctionDeps
 }
 
 # LiteralValues allows datums to be planned directly that are type checked

@@ -13,8 +13,4 @@ go_test(
     size = "small",
     srcs = ["version_test.go"],
     embed = [":version"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
-    }),
 )

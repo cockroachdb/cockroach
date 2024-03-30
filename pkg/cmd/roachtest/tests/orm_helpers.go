@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
@@ -30,6 +31,11 @@ const (
 	statusFail
 	statusSkip
 )
+
+// This `startOpts` option configures in-memory databases to use a
+// fixed (30%) amount of memory and is used in a variety of client
+// library tests.
+var sqlClientsInMemoryDB = option.InMemoryDB(0.3)
 
 // alterZoneConfigAndClusterSettings changes the zone configurations so that GC
 // occurs more quickly and jobs are retained for less time. This is useful for
@@ -45,7 +51,14 @@ func alterZoneConfigAndClusterSettings(
 	}
 	defer db.Close()
 
+	createUserStmt := `CREATE USER test_admin`
+	if c.IsSecure() {
+		createUserStmt = `CREATE USER test_admin WITH PASSWORD 'testpw'`
+	}
+
 	for _, cmd := range []string{
+		createUserStmt,
+		`GRANT admin TO test_admin`,
 		`ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
 		`ALTER TABLE system.public.jobs CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
 		`ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
@@ -62,9 +75,11 @@ func alterZoneConfigAndClusterSettings(
 		// Test with SCRAM password authentication.
 		`SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256';`,
 
-		// Enable experimental/preview features.
+		// Enable experimental/preview/compatibility features.
 		`SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled = 'true';`,
-		`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = 'true';`,
+		`ALTER ROLE ALL SET multiple_active_portals_enabled = 'true';`,
+		`ALTER ROLE ALL SET serial_normalization = 'sql_sequence_cached'`,
+		`ALTER ROLE ALL SET statement_timeout = '60s'`,
 	} {
 		if _, err := db.ExecContext(ctx, cmd); err != nil {
 			return err

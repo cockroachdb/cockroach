@@ -131,7 +131,8 @@ func (dsp *DistSQLPlanner) Exec(
 	distribute bool,
 ) error {
 	p := localPlanner.(*planner)
-	p.stmt = makeStatement(stmt, clusterunique.ID{} /* queryID */)
+	p.stmt = makeStatement(stmt, clusterunique.ID{}, /* queryID */
+		tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)))
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}
@@ -151,9 +152,9 @@ func (dsp *DistSQLPlanner) Exec(
 	)
 	defer recv.Release()
 
-	distributionType := DistributionType(DistributionTypeNone)
+	distributionType := DistributionType(LocalDistribution)
 	if distribute {
-		distributionType = DistributionTypeSystemTenantOnly
+		distributionType = FullDistribution
 	}
 	evalCtx := p.ExtendedEvalContext()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
@@ -181,7 +182,7 @@ func (dsp *DistSQLPlanner) ExecLocalAll(
 	)
 	defer recv.Release()
 
-	distributionType := DistributionType(DistributionTypeNone)
+	distributionType := DistributionType(LocalDistribution)
 	evalCtx := p.ExtendedEvalContext()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
 		distributionType)

@@ -44,7 +44,7 @@ func registerDjango(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -60,9 +60,7 @@ func registerDjango(r registry.Registry) {
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get",
-			`
-				sudo add-apt-repository ppa:deadsnakes/ppa &&
-				sudo apt-get -qq update`,
+			`sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -73,15 +71,14 @@ func registerDjango(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3.8 libpq-dev python3.8-dev gcc python3-virtualenv python3-setuptools python-setuptools build-essential python3.8-distutils python3-apt libmemcached-dev`,
+			`sudo apt-get -qq install make python3.10 libpq-dev python3.10-dev gcc python3-virtualenv python3-setuptools python-setuptools build-essential python3.10-distutils python3-apt libmemcached-dev`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "set python3.8 as default", `
-    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
-    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 2
+			ctx, t, c, node, "set python3.10 as default", `
+    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
     		sudo update-alternatives --config python3`,
 		); err != nil {
 			t.Fatal(err)
@@ -89,7 +86,7 @@ func registerDjango(r registry.Registry) {
 
 		if err := repeatRunE(
 			ctx, t, c, node, "install pip",
-			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.8`,
+			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.10`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -186,7 +183,7 @@ func registerDjango(r registry.Registry) {
 		var fullTestResults []byte
 		for _, testName := range enabledDjangoTests {
 			t.Status("Running django test app ", testName)
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node, fmt.Sprintf(djangoRunTestCmd, testName))
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node), fmt.Sprintf(djangoRunTestCmd, testName))
 
 			// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
 			// Proceed for any other (command) errors
@@ -233,7 +230,7 @@ source venv/bin/activate && cd /mnt/data1/django/tests &&
 python3 runtests.py %[1]s --settings cockroach_settings -v 2 > %[1]s.stdout
 `
 
-const cockroachDjangoSettings = `
+var cockroachDjangoSettings = fmt.Sprintf(`
 from django.test.runner import DiscoverRunner
 
 
@@ -241,18 +238,18 @@ DATABASES = {
     'default': {
         'ENGINE': 'django_cockroachdb',
         'NAME': 'django_tests',
-        'USER': 'root',
-        'PASSWORD': '',
+        'USER': '%[1]s',
+        'PASSWORD': '%[2]s',
         'HOST': 'localhost',
-        'PORT': 26257,
+        'PORT': {pgport:1},
     },
     'other': {
         'ENGINE': 'django_cockroachdb',
         'NAME': 'django_tests2',
-        'USER': 'root',
-        'PASSWORD': '',
+        'USER': '%[1]s',
+        'PASSWORD': '%[2]s',
         'HOST': 'localhost',
-        'PORT': 26257,
+        'PORT': {pgport:1},
     },
 }
 SECRET_KEY = 'django_tests_secret_key'
@@ -272,4 +269,4 @@ class NonDescribingDiscoverRunner(DiscoverRunner):
         }
 
 USE_TZ = False
-`
+`, install.DefaultUser, install.DefaultPassword)

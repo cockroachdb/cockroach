@@ -220,6 +220,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"session_end",
 			"crdb_internal.hide_sql_constants(active_queries) as active_queries",
 			"crdb_internal.hide_sql_constants(last_active_query) as last_active_query",
+			"trace_id",
+			"goroutine_id",
 		},
 	},
 	"crdb_internal.cluster_settings": {
@@ -348,6 +350,44 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"descriptor_id",
 			"descriptor_name",
 			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
+		},
+	},
+	`"".crdb_internal.cluster_replication_spans`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"job_id",
+			"resolved",
+			"resolved_age",
+		},
+	},
+	`"".crdb_internal.cluster_replication_node_streams`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"consumer_id",
+			"spans",
+			"initial_ts",
+			"prev_ts",
+			"batches",
+			"checkpoints",
+			"last_checkpoint",
+			"rf_checkpoints",
+			"rf_advances",
+			"rf_last_advance",
+			"rf_resolved",
+			"rf_resolved_age",
+		},
+	},
+	`"".crdb_internal.cluster_replication_node_stream_spans`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"consumer_id",
+		},
+	},
+	`"".crdb_internal.cluster_replication_node_stream_checkpoints`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"consumer_id",
+			"resolved",
+			"resolved_age",
 		},
 	},
 	"crdb_internal.default_privileges": {
@@ -560,6 +600,28 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.transaction_contention_events": {
+		customQueryUnredacted: `
+SELECT collection_ts,
+       contention_duration,
+       waiting_txn_id,
+       waiting_txn_fingerprint_id,
+       waiting_stmt_fingerprint_id,
+       s.metadata ->> 'query'                      AS waiting_stmt_query,
+       blocking_txn_id,
+       blocking_txn_fingerprint_id,
+       array_agg(distinct ss.metadata ->> 'query') AS blocking_txn_queries_unordered,
+       contending_pretty_key,
+       index_name,
+       table_name,
+       database_name
+FROM crdb_internal.transaction_contention_events
+         LEFT JOIN system.statement_statistics AS s ON waiting_stmt_fingerprint_id = s.fingerprint_id
+         LEFT JOIN system.statement_statistics AS ss ON ss.transaction_fingerprint_id = blocking_txn_fingerprint_id
+WHERE ss.transaction_fingerprint_id != '\x0000000000000000' AND s.fingerprint_id != '\x0000000000000000'
+GROUP BY collection_ts, contention_duration, waiting_txn_id, waiting_txn_fingerprint_id, blocking_txn_id,
+         blocking_txn_fingerprint_id, waiting_stmt_fingerprint_id, contending_pretty_key, s.metadata ->> 'query',
+         index_name, table_name, database_name
+`,
 		// `contending_key` column contains the contended key, which may
 		// contain sensitive row-level data. So, we will only fetch if the
 		// table is under the system schema.
@@ -599,7 +661,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		nonSensitiveCols: NonSensitiveColumns{
 			"id",
 			"tags",
-			"startts",
+			"start_after",
 			"diff",
 			"node_id",
 			"range_id",
@@ -607,7 +669,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"range_start",
 			"range_end",
 			"resolved",
-			"last_event_utc",
+			"resolved_age",
+			"last_event",
 			"catchup",
 		},
 	},
@@ -793,6 +856,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"session_end",
 			"crdb_internal.hide_sql_constants(active_queries) as active_queries",
 			"crdb_internal.hide_sql_constants(last_active_query) as last_active_query",
+			"trace_id",
+			"goroutine_id",
 		},
 	},
 	"crdb_internal.node_statement_statistics": {
@@ -1074,12 +1139,9 @@ var zipSystemTables = DebugZipTableRegistry{
 			FROM system.job_info`,
 	},
 	"system.lease": {
-		nonSensitiveCols: NonSensitiveColumns{
-			`"descID"`,
-			"version",
-			`"nodeID"`,
-			"expiration",
-		},
+		customQueryUnredacted: `
+			SELECT * FROM system.lease;
+		`,
 	},
 	"system.locations": {
 		nonSensitiveCols: NonSensitiveColumns{
@@ -1236,7 +1298,13 @@ var zipSystemTables = DebugZipTableRegistry{
 	"system.span_configurations": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"config",
+			// Boundary keys for span configs, which are derived from zone configs, are typically on
+			// metadata object boundaries (database, table, or index), and not arbitrary range boundaries
+			// and therefore do not contain sensitive information. Therefore they can remain unredacted.
 			"start_key",
+			// Boundary keys for span configs, which are derived from zone configs, are typically on
+			// metadata object boundaries (database, table, or index), and not arbitrary range boundaries
+			// and therefore do not contain sensitive information. Therefore they can remain unredacted.
 			"end_key",
 		},
 	},
@@ -1248,6 +1316,35 @@ var zipSystemTables = DebugZipTableRegistry{
 			"locality",
 		},
 	},
+	// system.sql_stats_cardinality shows row counts for all of the system tables related to the SQL Stats
+	// system, grouped by aggregated timestamp. None of this information is sensitive. It aids in escalations
+	// involving the SQL Stats system.
+	"system.sql_stats_cardinality": func() TableRegistryConfig {
+		query := `
+			SELECT table_name, aggregated_ts, row_count
+			FROM (
+					SELECT 'system.statement_statistics' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.statement_statistics
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.transaction_statistics' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.transaction_statistics
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.statement_activity' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.statement_activity
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.transaction_activity' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.transaction_activity
+					GROUP BY aggregated_ts
+			)
+			ORDER BY table_name, aggregated_ts DESC;`
+		return TableRegistryConfig{
+			customQueryUnredacted: query,
+			customQueryRedacted:   query,
+		}
+	}(),
 	"system.sqlliveness": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"session_id",
@@ -1292,8 +1389,8 @@ var zipSystemTables = DebugZipTableRegistry{
        ss.plan_hash,
        ss.app_name,
        ss.agg_interval,
-       crdb_internal.merge_stats_metadata(array_agg(ss.metadata))    AS metadata,
-       crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+       merge_stats_metadata(ss.metadata)    AS metadata,
+       merge_statement_stats(ss.statistics) AS statistics,
        ss.plan,
        ss.index_recommendations
      FROM system.public.statement_statistics ss
@@ -1325,8 +1422,8 @@ limit 5000;`,
        ss.plan_hash,
        ss.app_name,
        ss.agg_interval,
-       crdb_internal.merge_stats_metadata(array_agg(ss.metadata))    AS metadata,
-       crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+       merge_stats_metadata(ss.metadata)    AS metadata,
+       merge_statement_stats(ss.statistics) AS statistics,
        ss.plan,
        ss.index_recommendations
      FROM system.public.statement_statistics ss

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strconv"
 	"strings"
 
 	apd "github.com/cockroachdb/apd/v3"
@@ -118,12 +119,12 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	tableIdx int,
 	isMultiRegion bool,
 	allowPartiallyVisibleIndex bool,
-	generateColumnIndexNumber func() int64,
+	generateColumnIndexSuffix func() string,
 ) *tree.CreateTable {
 	g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
-	name := g.GenerateOne(tableIdx)
+	name := g.GenerateOne(strconv.Itoa(tableIdx))
 	return RandCreateTableWithColumnIndexNumberGeneratorAndName(
-		rng, name, tableIdx, isMultiRegion, allowPartiallyVisibleIndex, generateColumnIndexNumber,
+		rng, name, tableIdx, isMultiRegion, allowPartiallyVisibleIndex, generateColumnIndexSuffix,
 	)
 }
 
@@ -141,7 +142,7 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 	tableIdx int,
 	isMultiRegion bool,
 	allowPartiallyVisibleIndex bool,
-	generateColumnIndexNumber func() int64,
+	generateColumnIndexSuffix func() string,
 ) *tree.CreateTable {
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
@@ -151,18 +152,18 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 	defs := make(tree.TableDefs, 0, len(columnDefs))
 
 	// colIdx generates numbers that are incorporated into column names.
-	colIdx := func(ordinal int) int {
-		if generateColumnIndexNumber != nil {
-			return int(generateColumnIndexNumber())
+	colSuffix := func(ordinal int) string {
+		if generateColumnIndexSuffix != nil {
+			return generateColumnIndexSuffix()
 		}
-		return ordinal
+		return strconv.Itoa(ordinal)
 	}
 
 	// Make new defs from scratch.
 	nComputedColumns := randutil.RandIntInRange(rng, 0, (nColumns+1)/2)
 	nNormalColumns := nColumns - nComputedColumns
 	for i := 0; i < nNormalColumns; i++ {
-		columnDef := randColumnTableDef(rng, tableIdx, colIdx(i))
+		columnDef := randColumnTableDef(rng, tableIdx, colSuffix(i))
 		columnDefs = append(columnDefs, columnDef)
 		defs = append(defs, columnDef)
 	}
@@ -170,7 +171,7 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 	// Make defs for computed columns.
 	normalColDefs := columnDefs
 	for i := nNormalColumns; i < nColumns; i++ {
-		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colIdx(i))
+		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i))
 		columnDefs = append(columnDefs, columnDef)
 		defs = append(defs, columnDef)
 	}
@@ -318,11 +319,14 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 //   - UNIQUE or CHECK constraint violation. RandDatum is naive to these constraints.
 //   - Out of range error for a computed INT2 or INT4 column.
 //
+// If a non-nil inserts is provided, it will be populated with the successful
+// insert statements.
+//
 // If numRowsInserted == 0, PopulateTableWithRandomData or RandDatum couldn't
 // handle this table's schema. Consider increasing numInserts or filing a bug.
 // TODO(harding): Populate data in partitions.
 func PopulateTableWithRandData(
-	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int,
+	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int, inserts *[]string,
 ) (numRowsInserted int, err error) {
 	var createStmtSQL string
 	res := db.QueryRow(fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tree.NameString(tableName)))
@@ -395,6 +399,9 @@ func PopulateTableWithRandData(
 		_, err := db.Exec(insertStmt)
 		if err == nil {
 			numRowsInserted++
+			if inserts != nil {
+				*inserts = append(*inserts, insertStmt)
+			}
 		}
 	}
 	return numRowsInserted, nil
@@ -462,9 +469,9 @@ func GenerateRandInterestingTable(db *gosql.DB, dbName, tableName string) error 
 
 // randColumnTableDef produces a random ColumnTableDef for a non-computed
 // column, with a random type and nullability.
-func randColumnTableDef(rng *rand.Rand, tableIdx int, colIdx int) *tree.ColumnTableDef {
-	g := randident.NewNameGenerator(&nameGenCfg, rng, fmt.Sprintf("col%d_", tableIdx))
-	colName := g.GenerateOne(colIdx)
+func randColumnTableDef(rng *rand.Rand, tableIdx int, colSuffix string) *tree.ColumnTableDef {
+	g := randident.NewNameGenerator(&nameGenCfg, rng, fmt.Sprintf("col%d", tableIdx))
+	colName := g.GenerateOne(colSuffix)
 	columnDef := &tree.ColumnTableDef{
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
@@ -490,9 +497,9 @@ func randColumnTableDef(rng *rand.Rand, tableIdx int, colIdx int) *tree.ColumnTa
 // column (either STORED or VIRTUAL). The computed expressions refer to columns
 // in normalColDefs.
 func randComputedColumnTableDef(
-	rng *rand.Rand, normalColDefs []*tree.ColumnTableDef, tableIdx int, colIdx int,
+	rng *rand.Rand, normalColDefs []*tree.ColumnTableDef, tableIdx int, colSuffix string,
 ) *tree.ColumnTableDef {
-	newDef := randColumnTableDef(rng, tableIdx, colIdx)
+	newDef := randColumnTableDef(rng, tableIdx, colSuffix)
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = rng.Intn(2) == 0
 
@@ -654,7 +661,7 @@ func randIndexTableDefFromCols(
 		numExpressions := rng.Intn(10) + 1
 		for i := 0; i < numPartitions; i++ {
 			var partition tree.ListPartition
-			partition.Name = tree.Name(g.GenerateOne(i))
+			partition.Name = tree.Name(g.GenerateOne(strconv.Itoa(i)))
 			// Add up to 10 expressions in each partition.
 			for j := 0; j < numExpressions; j++ {
 				// Use a tuple to contain the expressions in case there are multiple
