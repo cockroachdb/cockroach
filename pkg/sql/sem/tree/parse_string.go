@@ -120,7 +120,7 @@ func ParseAndRequireString(
 	if err != nil {
 		return d, dependsOnContext, err
 	}
-	d, err = AdjustValueToType(t, d)
+	d, err = AdjustValueToType(t, d, nil)
 	return d, dependsOnContext, err
 }
 

@@ -106,6 +106,7 @@ func GenerateInsertRow(
 	tableDesc catalog.TableDescriptor,
 	rowVals tree.Datums,
 	rowContainerForComputedVals *schemaexpr.RowIndexedVarContainer,
+	alloc *tree.DatumAlloc,
 ) (tree.Datums, error) {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
@@ -174,7 +175,7 @@ func GenerateInsertRow(
 
 	// Ensure that the values honor the specified column widths.
 	for i := 0; i < len(insertCols); i++ {
-		outVal, err := tree.AdjustValueToType(insertCols[i].GetType(), rowVals[i])
+		outVal, err := tree.AdjustValueToType(insertCols[i].GetType(), rowVals[i], alloc)
 		if err != nil {
 			return nil, err
 		}
@@ -231,6 +232,8 @@ type DatumRowConverter struct {
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
 	FractionFn     func() float32
+
+	alloc tree.DatumAlloc
 
 	db *kv.DB
 }
@@ -324,6 +327,7 @@ func NewDatumRowConverter(
 		EvalCtx:   evalCtx.Copy(),
 		db:        db,
 	}
+	c.alloc.AllocSize = 256
 
 	var targetCols []catalog.Column
 	var err error
@@ -525,7 +529,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 
 	insertRow, err := GenerateInsertRow(
 		ctx, c.defaultCache, c.computedExprs, c.cols, computedColsLookup, c.EvalCtx,
-		c.tableDesc, c.Datums, &c.computedIVarContainer)
+		c.tableDesc, c.Datums, &c.computedIVarContainer, &c.alloc)
 	if err != nil {
 		return errors.Wrap(err, "generate insert row")
 	}
