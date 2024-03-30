@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -35,6 +36,7 @@ type Inserter struct {
 	key      roachpb.Key
 	valueBuf []byte
 	value    roachpb.Value
+	alloc    bufalloc.ByteAllocator
 }
 
 // MakeInserter creates a Inserter for the given table.
@@ -162,7 +164,7 @@ func (ri *Inserter) InsertRow(
 		&ri.Helper, primaryIndexKey, ri.InsertCols,
 		values, ri.InsertColIDtoRowIndex,
 		ri.InsertColIDtoRowIndex,
-		&ri.key, &ri.value, ri.valueBuf, putFn, overwrite, traceKV)
+		&ri.key, &ri.value, ri.valueBuf, putFn, overwrite, traceKV, &ri.alloc)
 	if err != nil {
 		return err
 	}

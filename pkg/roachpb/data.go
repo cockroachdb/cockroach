@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -398,6 +399,15 @@ func (v Value) TagAndDataBytes() []byte {
 	return v.RawBytes[tagPos:]
 }
 
+func (v *Value) ensureRawBytesAlloc(size int, alloc *bufalloc.ByteAllocator) {
+	if cap(v.RawBytes) < size {
+		*alloc, v.RawBytes = alloc.Alloc(size, 0)
+		return
+	}
+	v.RawBytes = v.RawBytes[:size]
+	v.setChecksum(checksumUninitialized)
+}
+
 func (v *Value) ensureRawBytes(size int) {
 	if cap(v.RawBytes) < size {
 		v.RawBytes = make([]byte, size)
@@ -571,6 +581,14 @@ func (v *Value) SetDecimal(dec *apd.Decimal) error {
 // checksum.
 func (v *Value) SetTuple(data []byte) {
 	v.ensureRawBytes(headerSize + len(data))
+	copy(v.dataBytes(), data)
+	v.setTag(ValueType_TUPLE)
+}
+
+// SetTuple sets the tuple bytes and tag field of the receiver and clears the
+// checksum.
+func (v *Value) SetTupleAlloc(data []byte, alloc *bufalloc.ByteAllocator) {
+	v.ensureRawBytesAlloc(headerSize+len(data), alloc)
 	copy(v.dataBytes(), data)
 	v.setTag(ValueType_TUPLE)
 }
