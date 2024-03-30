@@ -719,7 +719,7 @@ func (w *tpcc) Tables() []workload.Table {
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `ol_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
-			NumBatches: numOrdersPerWarehouse * w.warehouses,
+			NumBatches: (numOrdersPerWarehouse / tpccOrderLineInitialRowBatchLength) * w.warehouses,
 			FillBatch:  w.tpccOrderLineInitialRowBatch,
 		},
 		Stats: w.tpccOrderLineStats(),
