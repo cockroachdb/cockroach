@@ -624,7 +624,7 @@ func (w *tpcc) Tables() []workload.Table {
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `c_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
-			NumBatches: numCustomersPerWarehouse * w.warehouses,
+			NumBatches: numCustomersPerWarehouse / tpccCustomerInitialRowBatchLength * w.warehouses,
 			FillBatch:  w.tpccCustomerInitialRowBatch,
 		},
 		Stats: w.tpccCustomerStats(),
