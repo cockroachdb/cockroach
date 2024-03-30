@@ -1064,6 +1064,10 @@ func AsDDecimal(e Expr) (*DDecimal, bool) {
 	return nil, false
 }
 
+func NewDDecimal(d DDecimal) *DDecimal {
+	return &d
+}
+
 // ParseDDecimal parses and returns the *DDecimal Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDDecimal(s string) (*DDecimal, error) {
@@ -6430,7 +6434,10 @@ func AdjustValueToType(typ *types.T, inVal Datum, alloc *DatumAlloc) (outVal Dat
 			if err != nil {
 				return nil, errors.Wrapf(err, "type %s", typ.SQLString())
 			}
-			return &outDec, nil
+			if alloc != nil {
+				return alloc.NewDDecimal(outDec), nil
+			}
+			return NewDDecimal(outDec), nil
 		}
 	case types.ArrayFamily:
 		if inArr, ok := inVal.(*DArray); ok {
