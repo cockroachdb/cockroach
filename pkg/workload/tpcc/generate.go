@@ -322,58 +322,66 @@ var customerTypes = []*types.T{
 	types.Bytes,
 }
 
+const tpccCustomerInitialRowBatchLength = 1000
+
 func (w *tpcc) tpccCustomerInitialRowBatch(
-	rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
+	batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Seed(RandomSeed.Seed() + uint64(rowIdx))
-	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
-	no := numbersOffset(l.rng.Intn(len(numbersAlphabet)))
-	lo := lettersOffset(l.rng.Intn(len(lettersAlphabet)))
 
-	cID := (rowIdx % numCustomersPerDistrict) + 1
-	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
-	wID := (rowIdx / numCustomersPerWarehouse)
+	cb.Reset(customerTypes, tpccCustomerInitialRowBatchLength, coldata.StandardColumnFactory)
 
-	// 10% of the customer rows have bad credit.
-	// See section 4.3, under the CUSTOMER table population section.
-	credit := goodCredit
-	if l.rng.Intn(9) == 0 {
-		// Poor 10% :(
-		credit = badCredit
+	batchStart := batchIdx * tpccCustomerInitialRowBatchLength
+	for i := 0; i < tpccCustomerInitialRowBatchLength; i++ {
+		rowIdx := batchStart + i
+		l.rng.Seed(RandomSeed.Seed() + uint64(rowIdx)) // TODO(dt): seed once per batch?
+		ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
+		no := numbersOffset(l.rng.Intn(len(numbersAlphabet)))
+		lo := lettersOffset(l.rng.Intn(len(lettersAlphabet)))
+
+		cID := (rowIdx % numCustomersPerDistrict) + 1
+		dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
+		wID := (rowIdx / numCustomersPerWarehouse)
+
+		// 10% of the customer rows have bad credit.
+		// See section 4.3, under the CUSTOMER table population section.
+		credit := goodCredit
+		if l.rng.Intn(9) == 0 {
+			// Poor 10% :(
+			credit = badCredit
+		}
+		var lastName []byte
+		// The first 1000 customers get a last name generated according to their id;
+		// the rest get an NURand generated last name.
+		if cID <= 1000 {
+			lastName = randCLastSyllables(cID-1, a)
+		} else {
+			lastName = w.randCLast(l.rng.Rand, a)
+		}
+
+		cb.ColVec(0).Int64()[i] = int64(cID)
+		cb.ColVec(1).Int64()[i] = int64(dID)
+		cb.ColVec(2).Int64()[i] = int64(wID)
+		cb.ColVec(3).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 8, 16)) // first name
+		cb.ColVec(4).Bytes().Set(i, middleName)
+		cb.ColVec(5).Bytes().Set(i, lastName)
+		cb.ColVec(6).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // street 1
+		cb.ColVec(7).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // street 2
+		cb.ColVec(8).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // city name
+		cb.ColVec(9).Bytes().Set(i, randStateInitialDataOnly(&l.rng, &lo, a))
+		cb.ColVec(10).Bytes().Set(i, randZipInitialDataOnly(&l.rng, &no, a))
+		cb.ColVec(11).Bytes().Set(i, randNStringInitialDataOnly(&l.rng, &no, a, 16, 16)) // phone number
+		cb.ColVec(12).Timestamp()[i] = w.nowTime
+		cb.ColVec(13).Bytes().Set(i, credit)
+		cb.ColVec(14).Float64()[i] = creditLimit
+		cb.ColVec(15).Float64()[i] = float64(randInt(l.rng.Rand, 0, 5000)) / float64(10000.0) // discount
+		cb.ColVec(16).Float64()[i] = balance
+		cb.ColVec(17).Float64()[i] = ytdPayment
+		cb.ColVec(18).Int64()[i] = paymentCount
+		cb.ColVec(19).Int64()[i] = deliveryCount
+		cb.ColVec(20).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 300, 500)) // data
 	}
-	var lastName []byte
-	// The first 1000 customers get a last name generated according to their id;
-	// the rest get an NURand generated last name.
-	if cID <= 1000 {
-		lastName = randCLastSyllables(cID-1, a)
-	} else {
-		lastName = w.randCLast(l.rng.Rand, a)
-	}
-
-	cb.Reset(customerTypes, 1, coldata.StandardColumnFactory)
-	cb.ColVec(0).Int64()[0] = int64(cID)
-	cb.ColVec(1).Int64()[0] = int64(dID)
-	cb.ColVec(2).Int64()[0] = int64(wID)
-	cb.ColVec(3).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 8, 16)) // first name
-	cb.ColVec(4).Bytes().Set(0, middleName)
-	cb.ColVec(5).Bytes().Set(0, lastName)
-	cb.ColVec(6).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // street 1
-	cb.ColVec(7).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // street 2
-	cb.ColVec(8).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // city name
-	cb.ColVec(9).Bytes().Set(0, randStateInitialDataOnly(&l.rng, &lo, a))
-	cb.ColVec(10).Bytes().Set(0, randZipInitialDataOnly(&l.rng, &no, a))
-	cb.ColVec(11).Bytes().Set(0, randNStringInitialDataOnly(&l.rng, &no, a, 16, 16)) // phone number
-	cb.ColVec(12).Timestamp()[0] = w.nowTime
-	cb.ColVec(13).Bytes().Set(0, credit)
-	cb.ColVec(14).Float64()[0] = creditLimit
-	cb.ColVec(15).Float64()[0] = float64(randInt(l.rng.Rand, 0, 5000)) / float64(10000.0) // discount
-	cb.ColVec(16).Float64()[0] = balance
-	cb.ColVec(17).Float64()[0] = ytdPayment
-	cb.ColVec(18).Int64()[0] = paymentCount
-	cb.ColVec(19).Int64()[0] = deliveryCount
-	cb.ColVec(20).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 300, 500)) // data
 }
 
 func (w *tpcc) tpccCustomerStats() []workload.JSONStatistic {
