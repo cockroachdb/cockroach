@@ -146,6 +146,13 @@ func (b *Builder) buildDataSource(
 					pgcode.FeatureNotSupported, "%s cannot be applied to the nullable side of an outer join",
 					lockCtx.locking.get().Strength))
 			}
+			// With sql_safe_updates set, we cannot use SELECT FOR UPDATE without a
+			// WHERE or LIMIT clause.
+			if !lockCtx.safeUpdate && b.evalCtx.SessionData().SafeUpdates {
+				panic(pgerror.DangerousStatementf(
+					"SELECT %s without WHERE or LIMIT clause", lockCtx.locking.get().Strength,
+				))
+			}
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
 			b.checkPrivilege(depName, ds, privilege.UPDATE)
 		}
@@ -274,6 +281,13 @@ func (b *Builder) buildDataSource(
 				panic(pgerror.Newf(
 					pgcode.FeatureNotSupported, "%s cannot be applied to the nullable side of an outer join",
 					lockCtx.locking.get().Strength))
+			}
+			// With sql_safe_updates set, we cannot use SELECT FOR UPDATE without a
+			// WHERE or LIMIT clause.
+			if !lockCtx.safeUpdate && b.evalCtx.SessionData().SafeUpdates {
+				panic(pgerror.DangerousStatementf(
+					"SELECT %s without WHERE or LIMIT clause", lockCtx.locking.get().Strength,
+				))
 			}
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
 			b.checkPrivilege(depName, ds, privilege.UPDATE)
@@ -1136,6 +1150,12 @@ func (b *Builder) buildSelectStmtWithoutParens(
 	for i := len(lockingClause) - 1; i >= 0; i-- {
 		lockCtx.push(lockingClause[i])
 	}
+	if len(lockingClause) > 0 {
+		lockCtx.safeUpdate = false
+	}
+	if limit != nil {
+		lockCtx.safeUpdate = true
+	}
 
 	// NB: The case statements are sorted lexicographically.
 	switch t := wrapped.(type) {
@@ -1217,6 +1237,10 @@ func (b *Builder) buildSelectClause(
 	desiredTypes []*types.T,
 	inScope *scope,
 ) (outScope *scope) {
+	if sel.Where != nil {
+		lockCtx.safeUpdate = true
+	}
+
 	fromScope := b.buildFrom(sel.From, lockCtx, inScope)
 
 	b.processWindowDefs(sel, fromScope)

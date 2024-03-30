@@ -4,11 +4,59 @@ CREATE TABLE foo(x INT)
 statement ok
 SET sql_safe_updates = true
 
-statement error rejected.*: UPDATE without WHERE clause
+statement error rejected.*: UPDATE without WHERE or LIMIT clause
 UPDATE foo SET x = 3
 
-statement error rejected.*: DELETE without WHERE clause
+statement ok
+UPDATE foo SET x = 3 WHERE x = 2
+
+statement ok
+UPDATE foo SET x = 3 ORDER BY x LIMIT 1
+
+statement error rejected.*: DELETE without WHERE or LIMIT clause
 DELETE FROM foo
+
+statement ok
+DELETE FROM foo WHERE x = 2
+
+statement ok
+DELETE FROM foo ORDER BY x LIMIT 1
+
+statement error rejected.*: SELECT FOR UPDATE without WHERE or LIMIT clause
+SELECT * FROM foo FOR UPDATE
+
+statement error rejected.*: SELECT FOR SHARE without WHERE or LIMIT clause
+SELECT * FROM foo FOR SHARE OF foo SKIP LOCKED
+
+statement ok
+SELECT * FROM foo WHERE x = 2 FOR UPDATE
+
+statement ok
+SELECT * FROM foo ORDER BY x LIMIT 1 FOR UPDATE
+
+statement error rejected.*: SELECT FOR UPDATE without WHERE or LIMIT clause
+(SELECT * FROM foo) FOR UPDATE
+
+statement ok
+(SELECT * FROM foo WHERE x = 2) FOR UPDATE
+
+statement ok
+SELECT * FROM (SELECT * FROM foo WHERE x = 2) FOR UPDATE
+
+statement ok
+SELECT * FROM (SELECT * FROM (SELECT * FROM foo) WHERE x = 2) FOR UPDATE
+
+statement error rejected.*: SELECT FOR UPDATE without WHERE or LIMIT clause
+SELECT * FROM (SELECT * FROM foo FOR UPDATE) WHERE x = 2 FOR UPDATE
+
+statement error rejected.*: SELECT FOR SHARE without WHERE or LIMIT clause
+SELECT * FROM (SELECT * FROM foo WHERE x = 2 FOR UPDATE) m, (SELECT * FROM foo) n FOR SHARE
+
+statement error rejected.*: SELECT FOR SHARE without WHERE or LIMIT clause
+SELECT * FROM (SELECT * FROM foo FOR SHARE) m, (SELECT * FROM foo) n WHERE m.x = n.x
+
+statement ok
+SELECT * FROM (SELECT * FROM (SELECT * FROM foo) WHERE x > 1) WHERE x > 2 FOR UPDATE
 
 statement error rejected.*: ALTER TABLE DROP COLUMN
 ALTER TABLE foo DROP COLUMN x
