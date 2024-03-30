@@ -70,8 +70,8 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	}
 
 	// UX friendliness safeguard.
-	if upd.Where == nil && b.evalCtx.SessionData().SafeUpdates {
-		panic(pgerror.DangerousStatementf("UPDATE without WHERE clause"))
+	if upd.Where == nil && upd.Limit == nil && b.evalCtx.SessionData().SafeUpdates {
+		panic(pgerror.DangerousStatementf("UPDATE without WHERE or LIMIT clause"))
 	}
 
 	// Find which table we're working on, check the permissions.
