@@ -339,7 +339,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			plBuilder := newPLpgSQLBuilder(
 				b, cf.Name.Object(), stmt.AST.Label, nil, /* colRefs */
-				routineParams, funcReturnType, cf.IsProcedure,
+				routineParams, funcReturnType, cf.IsProcedure, nil, /* outScope */
 			)
 			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})

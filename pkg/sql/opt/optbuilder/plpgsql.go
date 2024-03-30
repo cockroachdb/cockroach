@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
@@ -166,6 +167,13 @@ type plpgsqlBuilder struct {
 	// outParams is the set of OUT parameters for the routine.
 	outParams []ast.Variable
 
+	// outScope is the output scope for the routine. It is only used for
+	// transaction control statements in procedures, which need the presentation
+	// to construct a new procedure that will resume execution. Note that due to
+	// OUT parameters, stored procedures resolve their return type before
+	// building their body statements.
+	outScope *scope
+
 	routineName  string
 	isProcedure  bool
 	identCounter int
@@ -186,6 +194,7 @@ func newPLpgSQLBuilder(
 	routineParams []routineParam,
 	returnType *types.T,
 	isProcedure bool,
+	outScope *scope,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
 	b := &plpgsqlBuilder{
@@ -195,6 +204,7 @@ func newPLpgSQLBuilder(
 		blocks:      make([]plBlock, 0, initialBlocksCap),
 		routineName: routineName,
 		isProcedure: isProcedure,
+		outScope:    outScope,
 	}
 	// Build the initial block for the routine parameters, which are considered
 	// PL/pgSQL variables.
@@ -1698,12 +1708,17 @@ func (b *plpgsqlBuilder) callContinuationWithTxnOp(
 	b.addBarrier(s)
 	returnScope := s.push()
 	args := b.makeContinuationArgs(con, s)
-	txnControlExpr := b.ob.factory.ConstructTxnControl(args, &memo.TxnControlPrivate{
-		TxnOp:    txnOp,
-		TxnModes: txnModes,
-		Props:    returnScope.makePhysicalProps(),
-		Def:      con.def,
-	})
+	txnPrivate := &memo.TxnControlPrivate{TxnOp: txnOp, TxnModes: txnModes, Def: con.def}
+	if b.outScope != nil {
+		txnPrivate.Props = b.outScope.makePhysicalProps()
+		txnPrivate.OutCols = b.outScope.colList()
+	} else {
+		// outScope may be nil if we're in the context of function creation.
+		// It's fine to not fully initialize the TxnControl expression in this
+		// case.
+		txnPrivate.Props = &physical.Required{}
+	}
+	txnControlExpr := b.ob.factory.ConstructTxnControl(args, txnPrivate)
 	returnColName := scopeColName("").WithMetadataName(con.def.Name)
 	b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, txnControlExpr)
 	b.ob.constructProjectForScope(s, returnScope)
@@ -1856,6 +1871,10 @@ func (b *plpgsqlBuilder) makeReturnForOutParams() tree.Expr {
 		} else {
 			// TODO(100962): this logic will likely need to be
 			// changed.
+			// TODO(120521): if the unnamed parameter of INOUT type, then we
+			// should be using the argument expression here (assuming this
+			// parameter hasn't been modified via $i notation which is tracked
+			// by 119502).
 			exprs[i] = tree.DNull
 		}
 	}

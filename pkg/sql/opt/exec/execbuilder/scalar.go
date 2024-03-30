@@ -1274,14 +1274,16 @@ func (b *Builder) buildTxnControl(
 		// execution of the parent stored procedure in a new transaction.
 		var f norm.Factory
 		f.Init(ctx, b.evalCtx, b.catalog)
-		rootExpr := b.mem.RootExpr().(memo.RelExpr)
-		f.CopyAndReplace(rootExpr, txnExpr.Props, f.CopyWithoutAssigningPlaceholders)
+		f.CopyMetadataFrom(b.mem)
+
+		// Use the evaluated arguments to construct the continuation procedure.
 		memoArgs := make(memo.ScalarListExpr, len(evalArgs))
 		for i := range evalArgs {
 			memoArgs[i] = f.ConstructConstVal(evalArgs[i], evalArgs[i].ResolvedType())
 		}
 		continuationProc := f.ConstructUDFCall(memoArgs, &memo.UDFCallPrivate{Def: txnExpr.Def})
-		f.Memo().SetRoot(f.ConstructCall(continuationProc), f.Memo().RootProps())
+		call := f.ConstructCall(continuationProc, &memo.CallPrivate{Columns: txnExpr.OutCols})
+		f.Memo().SetRoot(call, txnExpr.Props)
 		return f.DetachMemo(), nil
 	}
 	return tree.NewTxnControlExpr(

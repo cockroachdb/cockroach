@@ -18,6 +18,7 @@ norm expect-not=HoistValuesSubquery format=show-scalars
 CALL p(1);
 ----
 call
+ ├── cardinality: [0 - 0]
  ├── volatile
  └── procedure: p
       ├── args

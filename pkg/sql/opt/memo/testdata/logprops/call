@@ -1,0 +1,163 @@
+# Properties with no OUT parameters.
+exec-ddl
+CREATE OR REPLACE PROCEDURE p() AS $$
+  BEGIN
+    SELECT 1;
+  END;
+$$ LANGUAGE PLpgSQL;
+----
+
+build
+CALL p();
+----
+call
+ ├── cardinality: [0 - 0]
+ ├── volatile
+ └── procedure: p [type=void]
+      └── body
+           └── limit
+                ├── columns: "_stmt_exec_1":3(void)
+                ├── cardinality: [1 - 1]
+                ├── immutable
+                ├── key: ()
+                ├── fd: ()-->(3)
+                ├── project
+                │    ├── columns: "_stmt_exec_1":3(void)
+                │    ├── cardinality: [1 - 1]
+                │    ├── immutable
+                │    ├── key: ()
+                │    ├── fd: ()-->(3)
+                │    ├── values
+                │    │    ├── cardinality: [1 - 1]
+                │    │    ├── key: ()
+                │    │    └── tuple [type=tuple]
+                │    └── projections
+                │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":3, type=void, immutable, udf]
+                │              └── body
+                │                   ├── project
+                │                   │    ├── columns: "?column?":1(int!null)
+                │                   │    ├── cardinality: [1 - 1]
+                │                   │    ├── key: ()
+                │                   │    ├── fd: ()-->(1)
+                │                   │    ├── values
+                │                   │    │    ├── cardinality: [1 - 1]
+                │                   │    │    ├── key: ()
+                │                   │    │    └── tuple [type=tuple]
+                │                   │    └── projections
+                │                   │         └── const: 1 [as="?column?":1, type=int]
+                │                   └── project
+                │                        ├── columns: "_implicit_return":2(void)
+                │                        ├── cardinality: [1 - 1]
+                │                        ├── immutable
+                │                        ├── key: ()
+                │                        ├── fd: ()-->(2)
+                │                        ├── values
+                │                        │    ├── cardinality: [1 - 1]
+                │                        │    ├── key: ()
+                │                        │    └── tuple [type=tuple]
+                │                        └── projections
+                │                             └── cast: VOID [as="_implicit_return":2, type=void, immutable]
+                │                                  └── null [type=unknown]
+                └── const: 1 [type=int]
+
+# Properties with OUT parameters.
+exec-ddl
+CREATE OR REPLACE PROCEDURE p(OUT a INT, OUT b INT) AS $$
+  BEGIN
+    a := 5;
+    SELECT 1;
+  END;
+$$ LANGUAGE PLpgSQL;
+----
+
+build
+CALL p(NULL, NULL);
+----
+call
+ ├── columns: a:1(int) b:2(int)
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ └── procedure: p [type=tuple{int AS a, int AS b}]
+      └── body
+           └── limit
+                ├── columns: "_stmt_exec_1":10(tuple{int AS a, int AS b})
+                ├── cardinality: [1 - 1]
+                ├── immutable
+                ├── key: ()
+                ├── fd: ()-->(10)
+                ├── project
+                │    ├── columns: "_stmt_exec_1":10(tuple{int AS a, int AS b})
+                │    ├── cardinality: [1 - 1]
+                │    ├── immutable
+                │    ├── key: ()
+                │    ├── fd: ()-->(10)
+                │    ├── project
+                │    │    ├── columns: a:5(int!null) b:4(int)
+                │    │    ├── cardinality: [1 - 1]
+                │    │    ├── immutable
+                │    │    ├── key: ()
+                │    │    ├── fd: ()-->(4,5)
+                │    │    ├── prune: (4,5)
+                │    │    ├── project
+                │    │    │    ├── columns: b:4(int) a:3(int)
+                │    │    │    ├── cardinality: [1 - 1]
+                │    │    │    ├── immutable
+                │    │    │    ├── key: ()
+                │    │    │    ├── fd: ()-->(3,4)
+                │    │    │    ├── prune: (3,4)
+                │    │    │    ├── project
+                │    │    │    │    ├── columns: a:3(int)
+                │    │    │    │    ├── cardinality: [1 - 1]
+                │    │    │    │    ├── immutable
+                │    │    │    │    ├── key: ()
+                │    │    │    │    ├── fd: ()-->(3)
+                │    │    │    │    ├── prune: (3)
+                │    │    │    │    ├── values
+                │    │    │    │    │    ├── cardinality: [1 - 1]
+                │    │    │    │    │    ├── key: ()
+                │    │    │    │    │    └── tuple [type=tuple]
+                │    │    │    │    └── projections
+                │    │    │    │         └── cast: INT8 [as=a:3, type=int, immutable]
+                │    │    │    │              └── null [type=unknown]
+                │    │    │    └── projections
+                │    │    │         └── cast: INT8 [as=b:4, type=int, immutable]
+                │    │    │              └── null [type=unknown]
+                │    │    └── projections
+                │    │         └── const: 5 [as=a:5, type=int]
+                │    └── projections
+                │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":10, type=tuple{int AS a, int AS b}, outer=(4,5), immutable, udf]
+                │              ├── args
+                │              │    ├── variable: a:5 [type=int]
+                │              │    └── variable: b:4 [type=int]
+                │              ├── params: a:6(int) b:7(int)
+                │              └── body
+                │                   ├── project
+                │                   │    ├── columns: "?column?":8(int!null)
+                │                   │    ├── cardinality: [1 - 1]
+                │                   │    ├── key: ()
+                │                   │    ├── fd: ()-->(8)
+                │                   │    ├── values
+                │                   │    │    ├── cardinality: [1 - 1]
+                │                   │    │    ├── key: ()
+                │                   │    │    └── tuple [type=tuple]
+                │                   │    └── projections
+                │                   │         └── const: 1 [as="?column?":8, type=int]
+                │                   └── project
+                │                        ├── columns: "_implicit_return":9(tuple{int AS a, int AS b})
+                │                        ├── outer: (6,7)
+                │                        ├── cardinality: [1 - 1]
+                │                        ├── immutable
+                │                        ├── key: ()
+                │                        ├── fd: ()-->(9)
+                │                        ├── values
+                │                        │    ├── cardinality: [1 - 1]
+                │                        │    ├── key: ()
+                │                        │    └── tuple [type=tuple]
+                │                        └── projections
+                │                             └── cast: RECORD [as="_implicit_return":9, type=tuple{int AS a, int AS b}, outer=(6,7), immutable]
+                │                                  └── tuple [type=tuple{int, int}]
+                │                                       ├── variable: a:6 [type=int]
+                │                                       └── variable: b:7 [type=int]
+                └── const: 1 [type=int]
