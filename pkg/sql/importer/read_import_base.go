@@ -78,6 +78,8 @@ func runImport(
 		return nil, err
 	}
 
+	_, isWorkload := conv.(*workloadReader)
+
 	// This group holds the go routines that are responsible for producing KV batches.
 	// and ingesting produced KVs.
 	// Depending on the import implementation both conv.start and conv.readFiles can
@@ -111,7 +113,7 @@ func runImport(
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *kvpb.BulkOpSummary
 	group.GoCtx(func(ctx context.Context) error {
-		summary, err = ingestKvs(ctx, flowCtx, spec, progCh, kvCh)
+		summary, err = ingestKvs(ctx, flowCtx, spec, progCh, kvCh, isWorkload)
 		return err
 	})
 

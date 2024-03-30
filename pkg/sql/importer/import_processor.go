@@ -357,6 +357,7 @@ func ingestKvs(
 	spec *execinfrapb.ReadImportDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
+	unsafeSkipConflictChecks bool,
 ) (*kvpb.BulkOpSummary, error) {
 	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
 	defer span.Finish()
@@ -364,7 +365,10 @@ func ingestKvs(
 	defer flowCtx.Cfg.JobRegistry.MarkAsIngesting(spec.Progress.JobID)()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
-
+	disallowShadowing := writeTS
+	if unsafeSkipConflictChecks {
+		disallowShadowing = hlc.Timestamp{}
+	}
 	var pkAdderName, indexAdderName = "rows", "indexes"
 	if len(spec.Tables) == 1 {
 		for k := range spec.Tables {
@@ -401,7 +405,7 @@ func ingestKvs(
 
 	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 		Name:                     pkAdderName,
-		DisallowShadowingBelow:   writeTS,
+		DisallowShadowingBelow:   disallowShadowing,
 		SkipDuplicates:           true,
 		MinBufferSize:            minBufferSize,
 		MaxBufferSize:            maxBufferSize,
@@ -418,7 +422,7 @@ func ingestKvs(
 		false /* isPKAdder */)
 	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 		Name:                     indexAdderName,
-		DisallowShadowingBelow:   writeTS,
+		DisallowShadowingBelow:   disallowShadowing,
 		SkipDuplicates:           true,
 		MinBufferSize:            minBufferSize,
 		MaxBufferSize:            maxBufferSize,
