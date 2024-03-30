@@ -229,6 +229,7 @@ type DatumRowConverter struct {
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
 	FractionFn     func() float32
+	kvInserter     KVInserter
 
 	db *kv.DB
 }
@@ -323,6 +324,11 @@ func NewDatumRowConverter(
 		// that they don't make a redundant copy of the eval context.
 		EvalCtx: evalCtx.Copy(),
 		db:      db,
+	}
+	c.kvInserter = func(kv roachpb.KeyValue) {
+		kv.Value.InitChecksum(kv.Key)
+		c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
+		c.KvBatch.MemSize += int64(cap(kv.Key) + cap(kv.Value.RawBytes))
 	}
 
 	var targetCols []catalog.Column
@@ -557,11 +563,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 
 	if err := c.ri.InsertRow(
 		ctx,
-		KVInserter(func(kv roachpb.KeyValue) {
-			kv.Value.InitChecksum(kv.Key)
-			c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
-			c.KvBatch.MemSize += int64(cap(kv.Key) + cap(kv.Value.RawBytes))
-		}),
+		c.kvInserter,
 		insertRow,
 		pm,
 		nil,   /* OriginTimestampCPutHelper */
