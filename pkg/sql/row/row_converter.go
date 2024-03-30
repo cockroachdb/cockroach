@@ -247,7 +247,13 @@ type DatumRowConverter struct {
 	FractionFn     func() float32
 	kvInserter     KVInserter
 
-	alloc tree.DatumAlloc
+	alloc      tree.DatumAlloc
+	allocPools struct {
+		strings []string
+		ints    []tree.DInt
+		dec     []tree.DDecimal
+		uuids   []tree.DUuid
+	}
 
 	db *kv.DB
 }
@@ -352,7 +358,15 @@ func NewDatumRowConverter(
 		c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
 		c.KvBatch.MemSize += int64(cap(kv.Key) + cap(kv.Value.RawBytes))
 	}
+	// The ones below will reuse after each reset, but for types that don't get
+	// reused we want a large alloc size. We don't worry about lifetime/aliasing
+	// with a large alloc since we know they're all being fed straight to encoding
+	// and then freed at the same time.
 	c.alloc.AllocSize = 256
+	c.allocPools.strings = make([]string, 32)
+	c.allocPools.ints = make([]tree.DInt, 32)
+	c.allocPools.dec = make([]tree.DDecimal, 32)
+	c.allocPools.uuids = make([]tree.DUuid, 32)
 
 	var targetCols []catalog.Column
 	var err error
@@ -528,6 +542,13 @@ const rowIDBits = 64 - builtinconstants.UniqueIntNodeIDBits
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
 func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
+	// Our datums don't live past the encoding into a KV so we can reset the alloc
+	// pool with the same backing slice to reuse them rather than allocating new
+	// datums for every call.
+	c.alloc.ResetStrings(c.allocPools.strings)
+	c.alloc.ResetInts(c.allocPools.ints)
+	c.alloc.ResetDecimals(c.allocPools.dec)
+	c.alloc.ResetUUIDs(c.allocPools.uuids)
 	getCellInfoAnnotation(c.EvalCtx.Annotations).reset(sourceID, rowIndex)
 	for i, col := range c.cols {
 		if col.HasDefault() {

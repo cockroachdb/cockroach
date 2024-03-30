@@ -282,7 +282,6 @@ func (w *WorkloadKVConverter) Worker(
 			a = a.Truncate()
 			w.rows.FillBatch(int(batchIdx), cb, &a)
 			for rowIdx, numRows := int64(0), int64(cb.Length()); rowIdx < numRows; rowIdx++ {
-				alloc.AllocSize = min(max(32, int(numRows*claim)), 2048)
 				for colIdx, col := range cb.ColVecs() {
 					// TODO(dan): This does a type switch once per-datum. Reduce this to
 					// a one-time switch per column.
