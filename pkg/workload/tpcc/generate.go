@@ -611,24 +611,24 @@ var orderLineTypes = []*types.T{
 	types.Bytes,
 }
 
+const tpccOrderLineInitialRowBatchLength = 1000
+
 func (w *tpcc) tpccOrderLineInitialRowBatch(
-	orderRowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
+	batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
-	// NB: numOrderLines is not allowed to use precomputed random data, make sure
-	// it stays that way. See 4.3.2.1.
-	l.rng.Seed(RandomSeed.Seed() + uint64(orderRowIdx))
-	numOrderLines := int(randInt(l.rng.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder))
+	batchStart := batchIdx * tpccOrderLineInitialRowBatchLength
 
-	// NB: There is one batch of order_line rows per order
-	oID := (orderRowIdx % numOrdersPerDistrict) + 1
-	dID := ((orderRowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
-	wID := (orderRowIdx / numOrdersPerWarehouse)
+	var totalLines int
+	for i := 0; i < tpccOrderLineInitialRowBatchLength; i++ {
+		orderRowIdx := batchStart + i
+		l.rng.Seed(RandomSeed.Seed() + uint64(orderRowIdx))
+		totalLines += int(randInt(l.rng.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder))
+	}
 
-	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
-	cb.Reset(orderLineTypes, numOrderLines, coldata.StandardColumnFactory)
+	cb.Reset(orderLineTypes, totalLines, coldata.StandardColumnFactory)
 	olOIDCol := cb.ColVec(0).Int64()
 	olDIDCol := cb.ColVec(1).Int64()
 	olWIDCol := cb.ColVec(2).Int64()
@@ -641,34 +641,49 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 	olQuantityCol := cb.ColVec(7).Int64()
 	olAmountCol := cb.ColVec(8).Float64()
 	olDistInfoCol := cb.ColVec(9).Bytes()
-
 	olDistInfoCol.Reset()
-	for rowIdx := 0; rowIdx < numOrderLines; rowIdx++ {
-		olNumber := rowIdx + 1
 
-		var amount float64
-		var deliveryDSet bool
-		if oID < 2101 {
-			amount = 0
-			deliveryDSet = true
-		} else {
-			amount = float64(randInt(l.rng.Rand, 1, 999999)) / 100.0
-		}
+	var rowIdx int
+	for i := 0; i < tpccOrderLineInitialRowBatchLength; i++ {
+		orderRowIdx := batchStart + i
+		// NB: numOrderLines is not allowed to use precomputed random data, make sure
+		// it stays that way. See 4.3.2.1.
+		l.rng.Seed(RandomSeed.Seed() + uint64(orderRowIdx))
+		numOrderLines := int(randInt(l.rng.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder))
 
-		olOIDCol[rowIdx] = int64(oID)
-		olDIDCol[rowIdx] = int64(dID)
-		olWIDCol[rowIdx] = int64(wID)
-		olNumberCol[rowIdx] = int64(olNumber)
-		olIIDCol[rowIdx] = randInt(l.rng.Rand, 1, 100000)
-		olSupplyWIDCol[rowIdx] = int64(wID)
-		if deliveryDSet {
-			olDeliveryDCol.Set(rowIdx, w.nowTime)
-		} else {
-			olDeliveryD.Nulls().SetNull(rowIdx)
+		// NB: There is one batch of order_line rows per order
+		oID := (orderRowIdx % numOrdersPerDistrict) + 1
+		dID := ((orderRowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
+		wID := (orderRowIdx / numOrdersPerWarehouse)
+
+		ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
+
+		for olNumber := 1; olNumber <= numOrderLines; olNumber++ {
+			var amount float64
+			var deliveryDSet bool
+			if oID < 2101 {
+				amount = 0
+				deliveryDSet = true
+			} else {
+				amount = float64(randInt(l.rng.Rand, 1, 999999)) / 100.0
+			}
+
+			olOIDCol[rowIdx] = int64(oID)
+			olDIDCol[rowIdx] = int64(dID)
+			olWIDCol[rowIdx] = int64(wID)
+			olNumberCol[rowIdx] = int64(olNumber)
+			olIIDCol[rowIdx] = randInt(l.rng.Rand, 1, 100000)
+			olSupplyWIDCol[rowIdx] = int64(wID)
+			if deliveryDSet {
+				olDeliveryDCol.Set(rowIdx, w.nowTime)
+			} else {
+				olDeliveryD.Nulls().SetNull(rowIdx)
+			}
+			olQuantityCol[rowIdx] = 5
+			olAmountCol[rowIdx] = amount
+			olDistInfoCol.Set(rowIdx, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))
+			rowIdx++
 		}
-		olQuantityCol[rowIdx] = 5
-		olAmountCol[rowIdx] = amount
-		olDistInfoCol.Set(rowIdx, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))
 	}
 }
 
