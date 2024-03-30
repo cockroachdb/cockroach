@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -100,6 +101,7 @@ func prepareInsertOrUpdateBatch(
 	rawValueBuf []byte,
 	putFn func(ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool),
 	overwrite, traceKV bool,
+	alloc *bufalloc.ByteAllocator,
 ) ([]byte, error) {
 	families := helper.TableDesc.GetFamilies()
 	for i := range families {
@@ -210,7 +212,7 @@ func prepareInsertOrUpdateBatch(
 			// Copy the contents of rawValueBuf into the roachpb.Value. This is
 			// a deep copy so rawValueBuf can be re-used by other calls to the
 			// function.
-			kvValue.SetTuple(rawValueBuf)
+			kvValue.SetTupleAlloc(rawValueBuf, alloc)
 			if err := helper.CheckRowSize(ctx, kvKey, kvValue.RawBytes, family.ID); err != nil {
 				return nil, err
 			}
