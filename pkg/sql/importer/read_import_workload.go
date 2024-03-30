@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 )
@@ -120,6 +121,10 @@ func makeDatumFromColOffset(
 			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
 			return alloc.NewDString(tree.DString(str)), nil
+		case types.UuidFamily:
+			u, err := uuid.FromBytes(col.Bytes().Get(rowIdx))
+			return alloc.NewDUuid(tree.DUuid{UUID: u}), err
+
 		default:
 			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
