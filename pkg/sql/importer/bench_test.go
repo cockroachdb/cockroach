@@ -38,15 +38,20 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// BenchmarkConvertToKVs/tpcc/warehouses=1-8         1        3558824936 ns/op          22.46 MB/s
-func BenchmarkConvertToKVs(b *testing.B) {
+// BenchmarkConvertToKVs_TPCC01-8         1        3558824936 ns/op          22.46 MB/s
+func BenchmarkConvertToKVs_TPCC01(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	skip.UnderShort(b, "skipping long benchmark")
-
 	tpccGen := tpcc.FromWarehouses(1)
-	b.Run(`tpcc/warehouses=1`, func(b *testing.B) {
-		benchmarkConvertToKVs(b, tpccGen)
-	})
+	benchmarkConvertToKVs(b, tpccGen)
+}
+
+// BenchmarkConvertToKVs_TPCC10
+func BenchmarkConvertToKVs_TPCC10(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	skip.UnderShort(b, "skipping long benchmark")
+	tpccGen := tpcc.FromWarehouses(10)
+	benchmarkConvertToKVs(b, tpccGen)
 }
 
 func toTableDescriptor(
@@ -82,39 +87,41 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 
 	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
 
-	var bytes int64
+	var bytes int
 	b.ResetTimer()
-	for _, t := range g.Tables() {
-		tableDesc, err := toTableDescriptor(t, tableID, ts)
-		if err != nil {
-			b.Fatal(err)
-		}
+	for i := 0; i < b.N; i++ {
+		for _, t := range g.Tables() {
+			tableDesc, err := toTableDescriptor(t, tableID, ts)
+			if err != nil {
+				b.Fatal(err)
+			}
 
-		kvCh := make(chan row.KVBatch)
-		g := ctxgroup.WithContext(ctx)
-		table := t // copy for safe reference in Go routine
-		g.GoCtx(func(ctx context.Context) error {
-			defer close(kvCh)
-			wc := importer.NewWorkloadKVConverter(
-				0, tableDesc, table.InitialRows, 0, table.InitialRows.NumBatches, kvCh, db)
-			evalCtx := &eval.Context{
-				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
-				Codec:            keys.SystemSQLCodec,
-				Settings:         cluster.MakeTestingClusterSettings(),
+			kvCh := make(chan row.KVBatch)
+			g := ctxgroup.WithContext(ctx)
+			table := t // copy for safe reference in Go routine
+			g.GoCtx(func(ctx context.Context) error {
+				defer close(kvCh)
+				wc := importer.NewWorkloadKVConverter(
+					0, tableDesc, table.InitialRows, 0, table.InitialRows.NumBatches, kvCh, db)
+				evalCtx := &eval.Context{
+					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+					Codec:            keys.SystemSQLCodec,
+					Settings:         cluster.MakeTestingClusterSettings(),
+				}
+				semaCtx := tree.MakeSemaContext()
+				return wc.Worker(ctx, evalCtx, &semaCtx)
+			})
+			for kvBatch := range kvCh {
+				for i := range kvBatch.KVs {
+					kv := &kvBatch.KVs[i]
+					bytes += len(kv.Key) + len(kv.Value.RawBytes)
+				}
 			}
-			semaCtx := tree.MakeSemaContext()
-			return wc.Worker(ctx, evalCtx, &semaCtx)
-		})
-		for kvBatch := range kvCh {
-			for i := range kvBatch.KVs {
-				kv := &kvBatch.KVs[i]
-				bytes += int64(len(kv.Key) + len(kv.Value.RawBytes))
+			if err := g.Wait(); err != nil {
+				b.Fatal(err)
 			}
-		}
-		if err := g.Wait(); err != nil {
-			b.Fatal(err)
 		}
 	}
 	b.StopTimer()
-	b.SetBytes(bytes)
+	b.SetBytes(int64(bytes / b.N))
 }
