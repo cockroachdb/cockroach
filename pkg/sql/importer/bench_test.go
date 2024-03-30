@@ -116,6 +116,7 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 					kv := &kvBatch.KVs[i]
 					bytes += len(kv.Key) + len(kv.Value.RawBytes)
 				}
+				kvBatch.Close()
 			}
 			if err := g.Wait(); err != nil {
 				b.Fatal(err)
