@@ -41,7 +41,7 @@ type tpcc struct {
 
 	warehouses       int
 	activeWarehouses int
-	nowString        []byte
+	nowTime          time.Time
 	numConns         int
 	idleConns        int
 	isoLevel         string
@@ -224,7 +224,11 @@ var tpccMeta = workload.Meta{
 
 		// Hardcode this since it doesn't seem like anyone will want to change
 		// it and it's really noisy in the generated fixture paths.
-		g.nowString = []byte(`2006-01-02 15:04:05`)
+		var err error
+		g.nowTime, err = time.Parse(`2006-01-02 15:04:05`, `2006-01-02 15:04:05`)
+		if err != nil {
+			panic(err) // unreachable.
+		}
 		return g
 	},
 }
