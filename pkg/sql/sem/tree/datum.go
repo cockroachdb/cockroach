@@ -6463,7 +6463,12 @@ func AdjustValueToType(typ *types.T, inVal Datum, alloc *DatumAlloc) (outVal Dat
 		}
 	case types.TimestampFamily:
 		if in, ok := inVal.(*DTimestamp); ok {
-			return in.Round(TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+			p := TimeFamilyPrecisionToRoundDuration(typ.Precision())
+			// If we don't need to round, skip calling it an allocating a new Datum.
+			if in.Time.Round(p).Equal(in.Time) {
+				return in, nil
+			}
+			return in.Round(p)
 		}
 	case types.TimestampTZFamily:
 		if in, ok := inVal.(*DTimestampTZ); ok {
