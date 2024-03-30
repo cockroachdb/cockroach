@@ -174,35 +174,40 @@ var stockTypes = []*types.T{
 	types.Bytes,
 }
 
-func (w *tpcc) tpccStockInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
+const tpccStockInitialRowBatchLength = 1000
+
+func (w *tpcc) tpccStockInitialRowBatch(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Seed(RandomSeed.Seed() + uint64(rowIdx))
-	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
+	batchStart := batchIdx * tpccStockInitialRowBatchLength
+	cb.Reset(stockTypes, tpccStockInitialRowBatchLength, coldata.StandardColumnFactory)
+	for i := 0; i < tpccStockInitialRowBatchLength; i++ {
+		rowIdx := batchStart + i
+		l.rng.Seed(RandomSeed.Seed() + uint64(rowIdx)) // TODO(dt): could this be once per batch?
+		ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
 
-	sID := (rowIdx % numStockPerWarehouse) + 1
-	wID := (rowIdx / numStockPerWarehouse)
+		sID := (rowIdx % numStockPerWarehouse) + 1
+		wID := (rowIdx / numStockPerWarehouse)
 
-	cb.Reset(stockTypes, 1, coldata.StandardColumnFactory)
-	cb.ColVec(0).Int64()[0] = int64(sID)
-	cb.ColVec(1).Int64()[0] = int64(wID)
-	cb.ColVec(2).Int64()[0] = randInt(l.rng.Rand, 10, 100)                           // quantity
-	cb.ColVec(3).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_01
-	cb.ColVec(4).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_02
-	cb.ColVec(5).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_03
-	cb.ColVec(6).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_04
-	cb.ColVec(7).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_05
-	cb.ColVec(8).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_06
-	cb.ColVec(9).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_07
-	cb.ColVec(10).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)) // dist_08
-	cb.ColVec(11).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)) // dist_09
-	cb.ColVec(12).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)) // dist_10
-	cb.ColVec(13).Int64()[0] = 0                                                     // ytd
-	cb.ColVec(14).Int64()[0] = 0                                                     // order_cnt
-	cb.ColVec(15).Int64()[0] = 0                                                     // remote_cnt
-	cb.ColVec(16).Bytes().Set(0, randOriginalStringInitialDataOnly(&l.rng, &ao, a))  // data
+		cb.ColVec(0).Int64()[i] = int64(sID)
+		cb.ColVec(1).Int64()[i] = int64(wID)
+		cb.ColVec(2).Int64()[i] = randInt(l.rng.Rand, 10, 100)                           // quantity
+		cb.ColVec(3).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_01
+		cb.ColVec(4).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_02
+		cb.ColVec(5).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_03
+		cb.ColVec(6).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_04
+		cb.ColVec(7).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_05
+		cb.ColVec(8).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_06
+		cb.ColVec(9).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_07
+		cb.ColVec(10).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)) // dist_08
+		cb.ColVec(11).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)) // dist_09
+		cb.ColVec(12).Bytes().Set(i, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)) // dist_10
+		cb.ColVec(13).Int64()[i] = 0                                                     // ytd
+		cb.ColVec(14).Int64()[i] = 0                                                     // order_cnt
+		cb.ColVec(15).Int64()[i] = 0                                                     // remote_cnt
+		cb.ColVec(16).Bytes().Set(i, randOriginalStringInitialDataOnly(&l.rng, &ao, a))  // data
+	}
 }
-
 func (w *tpcc) tpccStockStats() []workload.JSONStatistic {
 	rowCount := uint64(w.warehouses * numStockPerWarehouse)
 	// For all the s_dist_XX fields below, the number of possible values is
