@@ -361,6 +361,12 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 					datums[rowIdx*numCols+colIdx] = colBytes.Get(rowIdx)
 				}
 			}
+		case types.TimestampTZFamily:
+			for rowIdx, datum := range col.Timestamp()[:numRows] {
+				if !nulls.NullAt(rowIdx) {
+					datums[rowIdx*numCols+colIdx] = datum
+				}
+			}
 		default:
 			panic(fmt.Sprintf(`unhandled type %s`, col.Type()))
 		}
