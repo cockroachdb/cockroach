@@ -267,38 +267,47 @@ func (w *WorkloadKVConverter) Worker(
 	cb := coldata.NewMemBatchWithCapacity(nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
 
 	for {
-		batchIdx := int(atomic.AddInt64(&w.batchIdxAtomic, 1))
-		if batchIdx >= w.batchEnd {
+		claim := int64(1)
+		if w.totalBatches > 1000 {
+			claim = int64(w.totalBatches) / 100
+		}
+		lastBatch := atomic.AddInt64(&w.batchIdxAtomic, claim)
+		batchIdx := lastBatch - claim + 1 // lastBatch is inclusive, so + 1.
+		if batchIdx >= int64(w.batchEnd) {
 			break
 		}
-		a = a.Truncate()
-		w.rows.FillBatch(batchIdx, cb, &a)
-		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
-			for colIdx, col := range cb.ColVecs() {
-				// TODO(dan): This does a type switch once per-datum. Reduce this to
-				// a one-time switch per column.
-				converted, err := makeDatumFromColOffset(
-					ctx, &alloc, conv.VisibleColTypes[colIdx], conv.EvalCtx, conv.SemaCtx, col, rowIdx,
-				)
-				if err != nil {
+		lastBatch = min(lastBatch, int64(w.batchEnd-1))
+
+		for batchIdx := batchIdx; batchIdx <= lastBatch; batchIdx++ {
+			a = a.Truncate()
+			w.rows.FillBatch(int(batchIdx), cb, &a)
+			for rowIdx, numRows := int64(0), int64(cb.Length()); rowIdx < numRows; rowIdx++ {
+				alloc.AllocSize = min(max(32, int(numRows*claim)), 2048)
+				for colIdx, col := range cb.ColVecs() {
+					// TODO(dan): This does a type switch once per-datum. Reduce this to
+					// a one-time switch per column.
+					converted, err := makeDatumFromColOffset(
+						ctx, &alloc, conv.VisibleColTypes[colIdx], conv.EvalCtx, conv.SemaCtx, col, int(rowIdx),
+					)
+					if err != nil {
+						return err
+					}
+					conv.Datums[colIdx] = converted
+				}
+				// `conv.Row` uses these as arguments to GenerateUniqueID to generate
+				// hidden primary keys, when necessary. We want them to be ascending per
+				// batch (to reduce overlap in the resulting kvs) and non-conflicting
+				// (because of primary key uniqueness). The ids that come out of
+				// GenerateUniqueID are sorted by (fileIdx, timestamp) and unique as long
+				// as the two inputs are a unique combo, so using the index of the batch
+				// within the table and the index of the row within the batch should do
+				// what we want.
+				if err := conv.Row(ctx, w.fileID, (batchIdx*numRows)+rowIdx); err != nil {
 					return err
 				}
-				conv.Datums[colIdx] = converted
 			}
-			// `conv.Row` uses these as arguments to GenerateUniqueID to generate
-			// hidden primary keys, when necessary. We want them to be ascending per
-			// batch (to reduce overlap in the resulting kvs) and non-conflicting
-			// (because of primary key uniqueness). The ids that come out of
-			// GenerateUniqueID are sorted by (fileIdx, timestamp) and unique as long
-			// as the two inputs are a unique combo, so using the index of the batch
-			// within the table and the index of the row within the batch should do
-			// what we want.
-			fileIdx, timestamp := int32(batchIdx), int64(rowIdx)
-			if err := conv.Row(ctx, fileIdx, timestamp); err != nil {
-				return err
-			}
+			atomic.AddInt64(&w.finishedBatchesAtomic, 1)
 		}
-		atomic.AddInt64(&w.finishedBatchesAtomic, 1)
 	}
 	return conv.SendBatch(ctx)
 }
