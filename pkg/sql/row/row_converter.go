@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -194,8 +195,20 @@ type KVBatch struct {
 	// Progress represents the fraction of the input that generated this row.
 	Progress float32
 	// KVs is the actual converted KV data.
-	KVs     []roachpb.KeyValue
 	MemSize int64
+	*KVSlice
+	pool *sync.Pool
+}
+
+type KVSlice struct {
+	KVs []roachpb.KeyValue
+}
+
+func (k KVBatch) Close() {
+	if k.pool != nil {
+		k.KVs = k.KVs[:0]
+		k.pool.Put(k.KVSlice)
+	}
 }
 
 // DatumRowConverter converts Datums into kvs and streams it to the destination
@@ -326,6 +339,12 @@ func NewDatumRowConverter(
 		KvCh:      kvCh,
 		EvalCtx:   evalCtx.Copy(),
 		db:        db,
+		KvBatch: KVBatch{
+			KVSlice: &KVSlice{},
+			pool: &sync.Pool{New: func() interface{} {
+				return &KVSlice{}
+			}},
+		},
 	}
 	c.alloc.AllocSize = 256
 
@@ -449,8 +468,9 @@ func NewDatumRowConverter(
 	}
 
 	padding := 2 * (len(tableDesc.PublicNonPrimaryIndexes()) + len(tableDesc.GetFamilies()))
-	c.BatchCap = kvDatumRowConverterBatchSize + padding
-	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
+	if sz := kvDatumRowConverterBatchSize + padding; cap(c.KvBatch.KVs) < sz {
+		c.KvBatch.KVs = make([]roachpb.KeyValue, 0, sz)
+	}
 	c.KvBatch.MemSize = 0
 
 	colsOrdered := make([]catalog.Column, len(cols))
@@ -598,7 +618,7 @@ func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
+	c.KvBatch.KVSlice = c.KvBatch.pool.Get().(*KVSlice)
 	c.KvBatch.MemSize = 0
 	return nil
 }
