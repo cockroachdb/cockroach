@@ -339,7 +339,7 @@ func (expr *NumVal) ResolveAsType(
 				return nil, err
 			}
 		}
-		return AdjustValueToType(typ, &expr.resInt64)
+		return AdjustValueToType(typ, &expr.resInt64, nil)
 	case types.FloatFamily:
 		if !expr.resAsFloat {
 			if strings.EqualFold(expr.origString, "NaN") {

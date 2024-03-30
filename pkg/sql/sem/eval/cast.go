@@ -105,7 +105,7 @@ func performCast(
 	if err != nil {
 		return nil, err
 	}
-	return tree.AdjustValueToType(t, d)
+	return tree.AdjustValueToType(t, d, nil)
 }
 
 var (
