@@ -18477,15 +18477,15 @@ vectorized: true
 │ count: 100
 │
 └── • filter
-    │ estimated row count: 13
+    │ estimated row count: 631
     │ filter: d IS NOT NULL
     │
     └── • index join
-        │ estimated row count: 20
+        │ estimated row count: 631
         │ table: t1401@primary
         │
         └── • scan
-              estimated row count: 20 (<0.01% of the table; stats collected <hidden> ago; using stats forecast)
+              estimated row count: 101 - 632 (<0.01% of the table; stats collected <hidden> ago; using stats forecast)
               table: t1401@t1401_f_c_idx1 (partial index)
               spans: [/4458256 - /4458256/'2022-01-25 21:17:27.216095+00']
 

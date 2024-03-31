@@ -639,16 +639,17 @@ vectorized: true
         │ equality: (relnamespace) = (oid)
         │ pred: nspname = index_schema
         │
-        └── • virtual table lookup join
-            │ table: pg_class@pg_class_oid_idx
-            │ equality: (indexrelid) = (oid)
-            │ pred: (relname = index_name) AND (relnamespace = relnamespace)
+        └── • hash join
+            │ equality: (indexrelid, indrelid) = (oid, oid)
+            │
+            ├── • virtual table
+            │     table: pg_index@primary
             │
             └── • hash join
-                │ equality: (indrelid) = (oid)
+                │ equality: (relname, relnamespace) = (index_name, relnamespace)
                 │
                 ├── • virtual table
-                │     table: pg_index@primary
+                │     table: pg_class@primary
                 │
                 └── • merge join
                     │ equality: (relname) = (table_name)
@@ -2083,7 +2084,7 @@ vectorized: true
 │
 └── • filter
     │ columns: (attrelid, attname, attnum)
-    │ estimated row count: 0 (missing stats)
+    │ estimated row count: 1 (missing stats)
     │ filter: attname = 'b'
     │
     └── • virtual table

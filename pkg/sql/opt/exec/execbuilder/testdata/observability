@@ -353,15 +353,15 @@ vectorized: true
                     │
                     └── • union all
                         │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                        │ estimated row count: 0
+                        │ estimated row count: 2
                         │
                         ├── • union all
                         │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                        │   │ estimated row count: 0
+                        │   │ estimated row count: 1
                         │   │
                         │   ├── • union all
                         │   │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                        │   │   │ estimated row count: 0
+                        │   │   │ estimated row count: 1
                         │   │   │
                         │   │   ├── • filter
                         │   │   │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
@@ -370,7 +370,7 @@ vectorized: true
                         │   │   │   │
                         │   │   │   └── • scan
                         │   │   │         columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                        │   │   │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                        │   │   │         estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                         │   │   │         table: statement_statistics@primary
                         │   │   │         spans: /0/2023-04-10T16:00:00Z-/0/2023-04-10T16:00:00.000000001Z
                         │   │   │
@@ -381,13 +381,13 @@ vectorized: true
                         │   │       │
                         │   │       └── • scan
                         │   │             columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                        │   │             estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                        │   │             estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                         │   │             table: statement_statistics@primary
                         │   │             spans: /1/2023-04-10T16:00:00Z-/1/2023-04-10T16:00:00.000000001Z
                         │   │
                         │   └── • union all
                         │       │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                        │       │ estimated row count: 0
+                        │       │ estimated row count: 1
                         │       │
                         │       ├── • filter
                         │       │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
@@ -396,7 +396,7 @@ vectorized: true
                         │       │   │
                         │       │   └── • scan
                         │       │         columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                        │       │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                        │       │         estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                         │       │         table: statement_statistics@primary
                         │       │         spans: /2/2023-04-10T16:00:00Z-/2/2023-04-10T16:00:00.000000001Z
                         │       │
@@ -407,17 +407,17 @@ vectorized: true
                         │           │
                         │           └── • scan
                         │                 columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                        │                 estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                        │                 estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                         │                 table: statement_statistics@primary
                         │                 spans: /3/2023-04-10T16:00:00Z-/3/2023-04-10T16:00:00.000000001Z
                         │
                         └── • union all
                             │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                            │ estimated row count: 0
+                            │ estimated row count: 1
                             │
                             ├── • union all
                             │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                            │   │ estimated row count: 0
+                            │   │ estimated row count: 1
                             │   │
                             │   ├── • filter
                             │   │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
@@ -426,7 +426,7 @@ vectorized: true
                             │   │   │
                             │   │   └── • scan
                             │   │         columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                            │   │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                            │   │         estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                             │   │         table: statement_statistics@primary
                             │   │         spans: /4/2023-04-10T16:00:00Z-/4/2023-04-10T16:00:00.000000001Z
                             │   │
@@ -437,13 +437,13 @@ vectorized: true
                             │       │
                             │       └── • scan
                             │             columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                            │             estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                            │             estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                             │             table: statement_statistics@primary
                             │             spans: /5/2023-04-10T16:00:00Z-/5/2023-04-10T16:00:00.000000001Z
                             │
                             └── • union all
                                 │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                                │ estimated row count: 0
+                                │ estimated row count: 1
                                 │
                                 ├── • filter
                                 │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
@@ -452,7 +452,7 @@ vectorized: true
                                 │   │
                                 │   └── • scan
                                 │         columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                                │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                │         estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                                 │         table: statement_statistics@primary
                                 │         spans: /6/2023-04-10T16:00:00Z-/6/2023-04-10T16:00:00.000000001Z
                                 │
@@ -463,7 +463,7 @@ vectorized: true
                                     │
                                     └── • scan
                                           columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
-                                          estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                          estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                                           table: statement_statistics@primary
                                           spans: /7/2023-04-10T16:00:00Z-/7/2023-04-10T16:00:00.000000001Z
 
@@ -686,15 +686,15 @@ vectorized: true
                                                                                 │
                                                                                 └── • union all
                                                                                     │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                    │ estimated row count: 0
+                                                                                    │ estimated row count: 2
                                                                                     │
                                                                                     ├── • union all
                                                                                     │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                    │   │ estimated row count: 0
+                                                                                    │   │ estimated row count: 1
                                                                                     │   │
                                                                                     │   ├── • union all
                                                                                     │   │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                    │   │   │ estimated row count: 0
+                                                                                    │   │   │ estimated row count: 1
                                                                                     │   │   │
                                                                                     │   │   ├── • filter
                                                                                     │   │   │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
@@ -703,7 +703,7 @@ vectorized: true
                                                                                     │   │   │   │
                                                                                     │   │   │   └── • scan
                                                                                     │   │   │         columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                    │   │   │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                                    │   │   │         estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                                                                                     │   │   │         table: statement_statistics@primary
                                                                                     │   │   │         spans: /0/2023-04-10T16:00:00Z-/0/2023-04-10T16:00:00.000000001Z
                                                                                     │   │   │
@@ -714,13 +714,13 @@ vectorized: true
                                                                                     │   │       │
                                                                                     │   │       └── • scan
                                                                                     │   │             columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                    │   │             estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                                    │   │             estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                                                                                     │   │             table: statement_statistics@primary
                                                                                     │   │             spans: /1/2023-04-10T16:00:00Z-/1/2023-04-10T16:00:00.000000001Z
                                                                                     │   │
                                                                                     │   └── • union all
                                                                                     │       │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                    │       │ estimated row count: 0
+                                                                                    │       │ estimated row count: 1
                                                                                     │       │
                                                                                     │       ├── • filter
                                                                                     │       │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
@@ -729,7 +729,7 @@ vectorized: true
                                                                                     │       │   │
                                                                                     │       │   └── • scan
                                                                                     │       │         columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                    │       │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                                    │       │         estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                                                                                     │       │         table: statement_statistics@primary
                                                                                     │       │         spans: /2/2023-04-10T16:00:00Z-/2/2023-04-10T16:00:00.000000001Z
                                                                                     │       │
@@ -740,17 +740,17 @@ vectorized: true
                                                                                     │           │
                                                                                     │           └── • scan
                                                                                     │                 columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                    │                 estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                                    │                 estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                                                                                     │                 table: statement_statistics@primary
                                                                                     │                 spans: /3/2023-04-10T16:00:00Z-/3/2023-04-10T16:00:00.000000001Z
                                                                                     │
                                                                                     └── • union all
                                                                                         │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                        │ estimated row count: 0
+                                                                                        │ estimated row count: 1
                                                                                         │
                                                                                         ├── • union all
                                                                                         │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                        │   │ estimated row count: 0
+                                                                                        │   │ estimated row count: 1
                                                                                         │   │
                                                                                         │   ├── • filter
                                                                                         │   │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
@@ -759,7 +759,7 @@ vectorized: true
                                                                                         │   │   │
                                                                                         │   │   └── • scan
                                                                                         │   │         columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                        │   │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                                        │   │         estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                                                                                         │   │         table: statement_statistics@primary
                                                                                         │   │         spans: /4/2023-04-10T16:00:00Z-/4/2023-04-10T16:00:00.000000001Z
                                                                                         │   │
@@ -770,13 +770,13 @@ vectorized: true
                                                                                         │       │
                                                                                         │       └── • scan
                                                                                         │             columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                        │             estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                                        │             estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                                                                                         │             table: statement_statistics@primary
                                                                                         │             spans: /5/2023-04-10T16:00:00Z-/5/2023-04-10T16:00:00.000000001Z
                                                                                         │
                                                                                         └── • union all
                                                                                             │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                            │ estimated row count: 0
+                                                                                            │ estimated row count: 1
                                                                                             │
                                                                                             ├── • filter
                                                                                             │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
@@ -785,7 +785,7 @@ vectorized: true
                                                                                             │   │
                                                                                             │   └── • scan
                                                                                             │         columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                            │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                                            │         estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                                                                                             │         table: statement_statistics@primary
                                                                                             │         spans: /6/2023-04-10T16:00:00Z-/6/2023-04-10T16:00:00.000000001Z
                                                                                             │
@@ -796,7 +796,7 @@ vectorized: true
                                                                                                 │
                                                                                                 └── • scan
                                                                                                       columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                                      estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                                                      estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                                                                                                       table: statement_statistics@primary
                                                                                                       spans: /7/2023-04-10T16:00:00Z-/7/2023-04-10T16:00:00.000000001Z
 

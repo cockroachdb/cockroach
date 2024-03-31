@@ -2580,7 +2580,7 @@ vectorized: true
 │               │
 │               └── • scan
 │                     columns: (r, s, i, j)
-│                     estimated row count: 3 (missing stats)
+│                     estimated row count: 9 (missing stats)
 │                     table: uniq_enum@uniq_enum_pkey
 │                     spans: /"\xc0"/11-/"\xc0"/21
 │                     parallel
@@ -2596,7 +2596,7 @@ vectorized: true
 │           │
 │           └── • lookup join (semi)
 │               │ columns: (r_new, i_new)
-│               │ estimated row count: 1 (missing stats)
+│               │ estimated row count: 3 (missing stats)
 │               │ table: uniq_enum@uniq_enum_pkey
 │               │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (i_new = i)
 │               │ pred: r_new != r
@@ -2606,7 +2606,7 @@ vectorized: true
 │                   │
 │                   └── • scan buffer
 │                         columns: (r, s, i, j, r_new, s_new, i_new, check1)
-│                         estimated row count: 3 (missing stats)
+│                         estimated row count: 9 (missing stats)
 │                         label: buffer 1
 │
 └── • constraint-check
@@ -2619,7 +2619,7 @@ vectorized: true
             │
             └── • lookup join (semi)
                 │ columns: (r_new, s_new, i_new, j)
-                │ estimated row count: 1 (missing stats)
+                │ estimated row count: 3 (missing stats)
                 │ table: uniq_enum@uniq_enum_r_s_j_key
                 │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (s_new = s)) AND (j = j)
                 │ pred: (r_new != r) OR (i_new != i)
@@ -2629,7 +2629,7 @@ vectorized: true
                     │
                     └── • scan buffer
                           columns: (r, s, i, j, r_new, s_new, i_new, check1)
-                          estimated row count: 3 (missing stats)
+                          estimated row count: 9 (missing stats)
                           label: buffer 1
 
 # None of the updated values have nulls.

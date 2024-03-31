@@ -3838,12 +3838,14 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 // This selectivity will be used later to update the row count and the
 // distinct count for the unconstrained columns.
 //
-// We also return selectivityUpperBound, which is the minimum selectivity of any
-// single column. This would be the value of equation (2) if the columns were
-// completely correlated. selectivityLowerBound is the minimum multi-column
-// selectivity, which is the minimum new distinct count (min_value) divided by
-// the old row count. These values will be used later to measure the level of
-// correlation.
+// We also return selectivityUpperBound and selectivityLowerBound.
+// selectivityUpperBound would be the value of equation (2) if the columns were
+// completely correlated. It is equal to the minimum selectivity of any single
+// column. selectivityLowerBound would be the value of equation (2) if the
+// columns were completely independent. It is the minimum new distinct count
+// (min_value) divided by the product of the old single column distinct counts
+// (or the old row count, whichever is smaller). These values will be used later
+// to measure the level of correlation.
 //
 // [1] Ilyas, Ihab F., et al. "CORDS: automatic discovery of correlations and
 //
@@ -3977,10 +3979,11 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	multiColSelectivity = props.MinSelectivity(multiColSelectivity, minLocalSel)
 
 	// multiColSelectivityLowerBound is the minimum multi-column selectivity, which
-	// is the minimum possible new multi-col distinct count divided by the old row
-	// count.
+	// is the minimum possible new multi-col distinct count divided by the maximum
+	// old multi-column distinct count (either the product of the old single column
+	// distinct counts or the old row count, whichever is smaller).
 	multiColSelectivityLowerBound := props.MakeSelectivityFromFraction(
-		maxNewDistinct, inputStats.RowCount,
+		maxNewDistinct, min(inputStats.RowCount, oldDistinctProduct),
 	)
 	// Ensure that multiColSelectivityLowerBound is not larger than
 	// multiColSelectivity.
@@ -4013,9 +4016,14 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 // correlation coefficient between pairs of columns during table stats
 // collection. Instead, this is just a proxy obtained by estimating three values
 // for the selectivity of the filter constraining the given columns:
-//  1. lb (lower bound): the minimum possible multi-column selectivity,
-//     calculated based on the minimum new multi-column distinct count and the
-//     old row count.
+//  1. lb (lower bound): if optimizer_use_improved_multi_column_selectivity_estimate
+//     is true, this is the minimum possible multi-column selectivity, calculated
+//     based on the minimum new multi-column distinct count and the maximum old
+//     multi-column distinct count.
+//     Else, it is the value returned by multiplying the individual conjunct
+//     selectivities together, estimated from single-column distinct counts. This
+//     would be the selectivity of the entire predicate if the columns were
+//     completely independent.
 //  2. ub (upper bound): the lowest single-conjunct selectivity estimated from
 //     single-column distinct counts. This would be the selectivity of the entire
 //     predicate if the columns were completely correlated. In other words, this
@@ -4050,6 +4058,12 @@ func (sb *statisticsBuilder) correlationFromMultiColDistinctCounts(
 	}
 
 	selectivity, upperBound, lowerBound := sb.selectivityFromMultiColDistinctCounts(cols, e, s)
+	// Check s.Available since OptimizerUseImprovedMultiColumnSelectivityEstimate
+	// tends to cause some hash join plans to turn into lookup join plans, and
+	// when we're operating without stats, that bias is more risky.
+	if !sb.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate || !s.Available {
+		lowerBound, _ = sb.selectivityFromSingleColDistinctCounts(cols, e, s)
+	}
 	if upperBound == lowerBound {
 		return 0
 	}
@@ -4066,17 +4080,25 @@ func (sb *statisticsBuilder) correlationFromMultiColDistinctCountsForJoin(
 		return 0
 	}
 
-	lowerBound, _ := sb.selectivityFromSingleColDistinctCounts(cols, e, s)
-	selectivityLeft, upperBoundLeft, _ := sb.selectivityFromMultiColDistinctCounts(
+	selectivityLeft, upperBoundLeft, lowerBoundLeft := sb.selectivityFromMultiColDistinctCounts(
 		cols.Intersection(leftCols), e, s,
 	)
-	selectivityRight, upperBoundRight, _ := sb.selectivityFromMultiColDistinctCounts(
+	selectivityRight, upperBoundRight, lowerBoundRight := sb.selectivityFromMultiColDistinctCounts(
 		cols.Intersection(rightCols), e, s,
 	)
 	selectivity := selectivityLeft
 	selectivity.Multiply(selectivityRight)
 	upperBound := upperBoundLeft
 	upperBound.Multiply(upperBoundRight)
+	lowerBound := lowerBoundLeft
+	// Check s.Available since OptimizerUseImprovedMultiColumnSelectivityEstimate
+	// tends to cause some hash join plans to turn into lookup join plans, and
+	// when we're operating without stats, that bias is more risky.
+	if sb.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate && s.Available {
+		lowerBound.Multiply(lowerBoundRight)
+	} else {
+		lowerBound, _ = sb.selectivityFromSingleColDistinctCounts(cols, e, s)
+	}
 	if upperBound == lowerBound {
 		return 0
 	}
