@@ -442,6 +442,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = false
 	notStale()
 
+	// Stale optimizer_use_improved_multi_column_selectivity_estimate.
+	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
