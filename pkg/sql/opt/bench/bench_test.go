@@ -728,6 +728,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 	h.evalCtx.SessionData().OptSplitScanLimit = tabledesc.MaxBucketAllowed
 	h.evalCtx.SessionData().VariableInequalityLookupJoinEnabled = true
 	h.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
+	h.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
 
 	// Set up the test catalog.
 	h.testCat = testcat.New()
