@@ -2355,7 +2355,7 @@ vectorized: true
 └── • render
     │
     └── • filter
-        │ estimated row count: 1
+        │ estimated row count: 9
         │ filter: t IS NULL
         │
         └── • index join
