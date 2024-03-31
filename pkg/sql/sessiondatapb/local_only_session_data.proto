@@ -497,6 +497,10 @@ message LocalOnlySessionData {
   // OptimizerUseImprovedZigzagJoinCosting, when true, indicates that the
   // optimizer should use improved logic in the cost model for zigzag joins.
   bool optimizer_use_improved_zigzag_join_costing = 125;
+  // OptimizerUseImprovedMultiColumnSelectivityEstimate, when true, indicates
+  // that the optimizer should use an improved selectivity estimate for
+  // multi-column predicates.
+  bool optimizer_use_improved_multi_column_selectivity_estimate = 126;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

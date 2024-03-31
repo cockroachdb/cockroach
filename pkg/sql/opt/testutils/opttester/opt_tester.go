@@ -315,6 +315,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().OptimizerMergeJoinsEnabled = true
 	ot.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = true
 	ot.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
+	ot.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
 
 	return ot
 }

@@ -103,7 +103,7 @@ exp,benchmark
 3,ORMQueries/pg_namespace
 4,ORMQueries/pg_type
 133,ORMQueries/prisma_column_descriptions
-3,ORMQueries/prisma_column_descriptions_updated
+133,ORMQueries/prisma_column_descriptions_updated
 15,Revoke/revoke_all_on_1_table
 19,Revoke/revoke_all_on_2_tables
 23,Revoke/revoke_all_on_3_tables
