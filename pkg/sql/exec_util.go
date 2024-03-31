@@ -3748,6 +3748,10 @@ func (m *sessionDataMutator) SetOptimizerUseVirtualComputedColumnStats(val bool)
 	m.data.OptimizerUseVirtualComputedColumnStats = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseImprovedMultiColumnSelectivityEstimate(val bool) {
+	m.data.OptimizerUseImprovedMultiColumnSelectivityEstimate = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

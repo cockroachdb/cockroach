@@ -494,6 +494,10 @@ message LocalOnlySessionData {
   // statistics on virtual computed columns for cardinality estimation in the
   // optimizer.
   bool optimizer_use_virtual_computed_column_stats = 124;
+  // OptimizerUseImprovedMultiColumnSelectivityEstimate, when true, indicates
+  // that the optimizer should use an improved selectivity estimate for
+  // multi-column predicates.
+  bool optimizer_use_improved_multi_column_selectivity_estimate = 125;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
