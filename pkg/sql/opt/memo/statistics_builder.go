@@ -4153,9 +4153,13 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 // correlation coefficient between pairs of columns during table stats
 // collection. Instead, this is just a proxy obtained by estimating three values
 // for the selectivity of the filter constraining the given columns:
-//  1. lb (lower bound): the minimum possible multi-column selectivity,
-//     calculated based on the minimum new multi-column distinct count and the
-//     old row count.
+//  1. lb (lower bound): if optimizer_use_improved_multi_column_selectivity_estimate
+//     is true, this is the minimum possible multi-column selectivity, calculated
+//     based on the minimum new multi-column distinct count and the old row count.
+//     Else, it is the value returned by multiplying the individual conjunct
+//     selectivities together, estimated from single-column distinct counts. This
+//     would be the selectivity of the entire predicate if the columns were
+//     completely independent.
 //  2. ub (upper bound): the lowest single-conjunct selectivity estimated from
 //     single-column distinct counts. This would be the selectivity of the entire
 //     predicate if the columns were completely correlated. In other words, this
@@ -4190,6 +4194,9 @@ func (sb *statisticsBuilder) correlationFromMultiColDistinctCounts(
 	}
 
 	selectivity, upperBound, lowerBound := sb.selectivityFromMultiColDistinctCounts(cols, e, s)
+	if !sb.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate {
+		lowerBound, _ = sb.selectivityFromSingleColDistinctCounts(cols, e, s)
+	}
 	if upperBound == lowerBound {
 		return 0
 	}

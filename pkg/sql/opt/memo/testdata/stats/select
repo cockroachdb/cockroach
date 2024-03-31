@@ -4044,6 +4044,68 @@ left-join (lookup table1)
  └── filters
       └── table1.col1:10 = 'e' [type=bool, outer=(10), constraints=(/10: [/'e' - /'e']; tight), fd=()-->(10)]
 
+# Choose a hash join instead of a lookup join if using the legacy multi-column
+# stats selectivity estimate.
+opt set=optimizer_use_improved_multi_column_selectivity_estimate=false
+SELECT
+  DISTINCT
+  table1.col1 AS n_col1,
+  table1.col2 AS n_col2,
+  table1.col3 AS n_col3,
+  table2.col1 AS e_col1,
+  table2.col2 AS e_col2,
+  table2.col3 AS e_col3,
+  table2.col4 AS e_col4,
+  table2.col5 AS e_col5,
+  table2.col6 AS e_col6,
+  table2.col7 AS e_col7
+FROM
+  (SELECT * FROM table2 WHERE table2.col1 = 'b') AS table2
+  LEFT JOIN (SELECT * FROM table1 WHERE table1.col1  = 'e') AS table1 ON
+      table1.col1 = table2.col4 AND table1.col2 = table2.col5
+WHERE
+  (table2.col6, table2.col7) IN (('f', 'x'))
+----
+left-join (hash)
+ ├── columns: n_col1:10(string) n_col2:11(string) n_col3:12(int) e_col1:1(string!null) e_col2:2(string!null) e_col3:3(int!null) e_col4:4(string!null) e_col5:5(string!null) e_col6:6(string!null) e_col7:7(string!null)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── stats: [rows=2623.017, distinct(10)=1, null(10)=2123.01, distinct(11)=500.011, null(11)=2123.01]
+ ├── key: (2,4,5)
+ ├── fd: ()-->(1,6,7), (2,4,5)-->(3,10-12), (11)-->(12)
+ ├── select
+ │    ├── columns: table2.col1:1(string!null) table2.col2:2(string!null) table2.col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
+ │    ├── stats: [rows=2623.017, distinct(1)=1, null(1)=0, distinct(4)=4, null(4)=0, distinct(5)=2622.96, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
+ │    │   histogram(1)=  0 2623
+ │    │                <--- 'b'
+ │    │   histogram(6)=  0 2623
+ │    │                <--- 'f'
+ │    │   histogram(7)=  0 2623
+ │    │                <--- 'x'
+ │    ├── key: (2,4,5)
+ │    ├── fd: ()-->(1,6,7), (2,4,5)-->(3)
+ │    ├── scan table2
+ │    │    ├── columns: table2.col1:1(string!null) table2.col2:2(string!null) table2.col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
+ │    │    ├── constraint: /1/2/4/5/6/7: [/'b' - /'b']
+ │    │    ├── stats: [rows=5000, distinct(1)=1, null(1)=0]
+ │    │    │   histogram(1)=  0 5000
+ │    │    │                <--- 'b'
+ │    │    ├── key: (2,4-7)
+ │    │    └── fd: ()-->(1), (2,4-7)-->(3)
+ │    └── filters
+ │         ├── col6:6 = 'f' [type=bool, outer=(6), constraints=(/6: [/'f' - /'f']; tight), fd=()-->(6)]
+ │         └── col7:7 = 'x' [type=bool, outer=(7), constraints=(/7: [/'x' - /'x']; tight), fd=()-->(7)]
+ ├── scan table1
+ │    ├── columns: table1.col1:10(string!null) table1.col2:11(string!null) table1.col3:12(int!null)
+ │    ├── constraint: /10/11: [/'e' - /'e']
+ │    ├── stats: [rows=2000.002, distinct(10)=1, null(10)=0, distinct(11)=2000, null(11)=0]
+ │    │   histogram(10)=  0 2000
+ │    │                 <--- 'e'
+ │    ├── key: (11)
+ │    └── fd: ()-->(10), (11)-->(12)
+ └── filters
+      ├── table1.col1:10 = col4:4 [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+      └── table1.col2:11 = col5:5 [type=bool, outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
+
 # Tests for selectivity of disjunctions
 
 exec-ddl
