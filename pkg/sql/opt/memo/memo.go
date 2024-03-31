@@ -168,6 +168,7 @@ type Memo struct {
 	useImprovedComputedColumnFiltersDerivation bool
 	useProvidedOrderingFix                     bool
 	useImprovedZigzagJoinCosting               bool
+	useImprovedMultiColumnSelectivityEstimate  bool
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -231,6 +232,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useImprovedComputedColumnFiltersDerivation: evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation,
 		useProvidedOrderingFix:                     evalCtx.SessionData().OptimizerUseProvidedOrderingFix,
 		useImprovedZigzagJoinCosting:               evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting,
+		useImprovedMultiColumnSelectivityEstimate:  evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
@@ -377,7 +379,8 @@ func (m *Memo) IsStale(
 		m.hoistUncorrelatedEqualitySubqueries != evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries ||
 		m.useImprovedComputedColumnFiltersDerivation != evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation ||
 		m.useProvidedOrderingFix != evalCtx.SessionData().OptimizerUseProvidedOrderingFix ||
-		m.useImprovedZigzagJoinCosting != evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting {
+		m.useImprovedZigzagJoinCosting != evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting ||
+		m.useImprovedMultiColumnSelectivityEstimate != evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate {
 		return true, nil
 	}
 
