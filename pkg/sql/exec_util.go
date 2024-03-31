@@ -3761,6 +3761,10 @@ func (m *sessionDataMutator) SetOptimizerUseImprovedZigzagJoinCosting(val bool) 
 	m.data.OptimizerUseImprovedZigzagJoinCosting = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseImprovedMultiColumnSelectivityEstimate(val bool) {
+	m.data.OptimizerUseImprovedMultiColumnSelectivityEstimate = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
