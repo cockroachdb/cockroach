@@ -3850,3 +3850,10 @@ CREATE TABLE t_identity_drop_dependency(id INT PRIMARY KEY DEFAULT nextval('publ
 
 statement error pgcode 2BP01 pq: cannot drop table t_identity_drop because other objects depend on it
 ALTER TABLE t_identity_drop ALTER COLUMN b DROP IDENTITY;
+
+statement ok
+CREATE TABLE alter_col_redun_using(val int NOT NULL);
+
+# The using statement is the same as if it were not included.
+statement ok
+ALTER TABLE alter_col_redun_using ALTER val TYPE bigint USING val::bigint;
