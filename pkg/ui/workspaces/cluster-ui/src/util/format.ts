@@ -213,6 +213,7 @@ export function DurationCheckSample(nanoseconds: number): string {
 }
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
+export const DATE_WITH_SECONDS_FORMAT = "MMM DD, YYYY [at] H:mm:ss";
 export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT =
   "MMM DD, YYYY [at] H:mm:ss:ms";
 

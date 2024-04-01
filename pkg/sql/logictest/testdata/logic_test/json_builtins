@@ -577,20 +577,20 @@ SELECT json_build_object(''::void, 1)
 {"": 1}
 
 # even number of arguments
-query error pq: json_build_object\(\): argument list must have even number of elements
+statement error pgcode 22023 json_build_object\(\): argument list must have even number of elements
 SELECT json_build_object(1,2,3)
 
 # keys must be scalar and not null
-query error pq: json_build_object\(\): argument 1 cannot be null
+statement error pgcode 22004 json_build_object\(\): null value not allowed for object key
 SELECT json_build_object(null,2)
 
-query error pq: json_build_object\(\): key value must be scalar, not array, tuple, or json
+statement error pgcode 22023 json_build_object\(\): key value must be scalar, not array, composite, or json
 SELECT json_build_object((1,2),3)
 
-query error pq: json_build_object\(\): key value must be scalar, not array, tuple, or json
+statement error pgcode 22023 json_build_object\(\): key value must be scalar, not array, composite, or json
 SELECT json_build_object('{"a":1,"b":2}'::JSON, 3)
 
-query error pq: json_build_object\(\): key value must be scalar, not array, tuple, or json
+statement error pgcode 22023 json_build_object\(\): key value must be scalar, not array, composite, or json
 SELECT json_build_object('{1,2,3}'::int[], 3)
 
 query T
@@ -734,13 +734,13 @@ SELECT jsonb_build_array('+Inf'::FLOAT8, 'NaN'::FLOAT8)::STRING::JSONB
 ----
 ["Infinity", "NaN"]
 
-query error pq: json_object\(\): array must have even number of elements
+statement error pgcode 2202E json_object\(\): array must have even number of elements
 SELECT json_object('{a,b,c}'::TEXT[])
 
-query error pq: json_object\(\): null value not allowed for object key
+statement error pgcode 22004 json_object\(\): null value not allowed for object key
 SELECT json_object('{NULL, a}'::TEXT[])
 
-query error pq: json_object\(\): null value not allowed for object key
+statement error pgcode 22004 json_object\(\): null value not allowed for object key
 SELECT json_object('{a,b,NULL,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 
 query error pq: json_object\(\): mismatched array dimensions
@@ -787,13 +787,13 @@ SELECT json_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 ----
 {"a": "1", "b": "2", "c": "3", "d e f": "a b c"}
 
-query error pq: jsonb_object\(\): array must have even number of elements
+statement error pgcode 2202E jsonb_object\(\): array must have even number of elements
 SELECT jsonb_object('{a,b,c}'::TEXT[])
 
-query error pq: jsonb_object\(\): null value not allowed for object key
+statement error pgcode 22004 jsonb_object\(\): null value not allowed for object key
 SELECT jsonb_object('{NULL, a}'::TEXT[])
 
-query error pq: jsonb_object\(\): null value not allowed for object key
+statement error pgcode 22004 jsonb_object\(\): null value not allowed for object key
 SELECT jsonb_object('{a,b,NULL,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 
 query error pq: jsonb_object\(\): mismatched array dimensions
@@ -1490,3 +1490,16 @@ bar   blah
 bar   blah2
 bar2  blah
 bar2  blah2
+
+# Regression test for incorrectly using jsonString.String() for asserting that
+# keys are ordered in the jsonObject (#121326).
+query T rowsort
+WITH cte(col) AS (
+  VALUES
+    ('false'::JSONB),
+    (jsonb_object(ARRAY['0', '', e'\x14', '']::TEXT[]))
+  )
+SELECT jsonb_object_agg('k', 'v') OVER (PARTITION BY cte.col) FROM cte;
+----
+{"k": "v"}
+{"k": "v"}

@@ -46,6 +46,7 @@ type config struct {
 	onFrontierAdvance    OnFrontierAdvance
 	frontierVisitor      FrontierSpanVisitor
 	onSSTable            OnSSTable
+	onValues             OnValues
 	onDeleteRange        OnDeleteRange
 	extraPProfLabels     []string
 }
@@ -154,6 +155,19 @@ func WithRetry(options retry.Options) Option {
 	})
 }
 
+// WithOnValues sets up a callback that's invoked whenever a batch of values is
+// passed such as during initial scans, allowing passing it as a batch to the
+// client rather than key-by-key to reduce overhead. This however comes with
+// some limitations: for batches passed this way the rangefeed client will not
+// process individual values and instead leaves this to the caller, meaning that
+// the options WithRowTimestampInInitialScan is implied, and WithDiff is ignored
+// as these are per-key processing that is not performed on batches.
+func WithOnValues(fn OnValues) Option {
+	return optionFunc(func(c *config) {
+		c.onValues = fn
+	})
+}
+
 // OnCheckpoint is called when a rangefeed checkpoint occurs.
 type OnCheckpoint func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint)
 
@@ -232,8 +246,9 @@ type VisitableFrontier interface {
 	Entries(span.Operation)
 }
 
-// FrontierSpanVisitor is called when the FrontierSpanVisitTrigger requests the
-// frontier be visited after a checkpoint.
+// FrontierSpanVisitor is called when the frontier is updated by a checkpoint,
+// and is passed the iterable frontier, as well as if the checkpoint advanced it
+// when it was added.
 type FrontierSpanVisitor func(ctx context.Context, advanced bool, frontier VisitableFrontier)
 
 // WithFrontierSpanVisitor sets up a callback to optionally inspect the frontier
