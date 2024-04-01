@@ -1193,7 +1193,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 				ctx,
 				p,
 				dbContext,
-				func(_ catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
+				func(ctx context.Context, _ catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
 					nspOid := schemaOid(sc.GetID())
 					tn := tree.NewQualifiedTypeName(dbContext.GetName(), sc.GetName(), typeDesc.GetName())
 					typ, err := typedesc.HydratedTFromDesc(ctx, tn, typeDesc, p)
@@ -1829,7 +1829,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 
-		return forEachTypeDesc(ctx, p, dbContext, func(_ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, typDesc catalog.TypeDescriptor) error {
+		return forEachTypeDesc(ctx, p, dbContext, func(ctx context.Context, _ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, typDesc catalog.TypeDescriptor) error {
 			e := typDesc.AsEnumTypeDescriptor()
 			if e == nil {
 				// We only want to iterate over ENUM types and multi-region enums.
@@ -3553,7 +3553,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					ctx,
 					p,
 					db,
-					func(_ catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typDesc catalog.TypeDescriptor) error {
+					func(ctx context.Context, _ catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typDesc catalog.TypeDescriptor) error {
 						nspOid := schemaOid(sc.GetID())
 						tn := tree.NewQualifiedTypeName(db.GetName(), sc.GetName(), typDesc.GetName())
 						typ, err := typedesc.HydratedTFromDesc(ctx, tn, typDesc, p)
