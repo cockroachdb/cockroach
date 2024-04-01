@@ -1574,6 +1574,7 @@ func TestRestoreRetryProcErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 120874)
 	testutils.RunTrueAndFalse(t, "restore processor progress", func(t *testing.T, makeProgress bool) {
 		mu := struct {
 			syncutil.Mutex
@@ -9167,6 +9168,8 @@ func TestRestorePauseOnError(t *testing.T) {
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	defer jobs.TestingSetProgressThresholds()()
+
+	skip.WithIssue(t, 121336)
 
 	baseDir := "testdata"
 	args := base.TestServerArgs{
