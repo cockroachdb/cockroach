@@ -53,6 +53,7 @@ go_test(
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/testutilsccl",
         "//pkg/clusterversion",
+        "//pkg/cmd/roachtest/tests",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",

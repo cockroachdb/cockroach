@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -88,7 +90,9 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 	{
 		// Intentionally, alter settings so that the system database span config
 		// changes propagate faster, when we convert the system database to MR.
-		_, err := c.Conn(ctx, t.L(), 1).Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantID)
+		conn := c.Conn(ctx, t.L(), 1)
+		defer conn.Close()
+		_, err := conn.Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantID)
 		require.NoError(t, err)
 		configStmts := []string{
 			`SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled='true'`,
@@ -99,9 +103,10 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 			"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50 ms'",
 			`SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_override = '1500ms'`,
 			`ALTER TENANT ALL SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '500ms'`,
+			`SET CLUSTER setting kv.replication_reports.interval = '5s';`,
 		}
 		for _, stmt := range configStmts {
-			_, err := c.Conn(ctx, t.L(), 1).Exec(stmt)
+			_, err := conn.Exec(stmt)
 			require.NoError(t, err)
 		}
 	}
@@ -150,6 +155,61 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 		mkStmt(`INSERT INTO foo VALUES($1, $2)`, 1, "bar"),
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}))
+
+	// Wait for the span configs to propagate. After we know they have
+	// propagated, we'll shut down the tenant and wait for them to get
+	// applied.
+	tdb, tdbCloser := openDBAndMakeSQLRunner(t, tenants[0].pgURL)
+	defer tdbCloser()
+	t.Status("Waiting for span config reconciliation...")
+	WaitForSpanConfigReconciliation(t, tdb)
+	t.Status("Span config reconciliation complete")
+	t.Status("Waiting for replication changes...")
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+	//systemConn := sqlutils.MakeSQLRunner(conn)
+	checkStartTime := timeutil.Now()
+	count := 0
+	for timeutil.Since(checkStartTime) < time.Minute*5 {
+		res := tdb.QueryStr(t, `
+SELECT
+	locality_count
+FROM
+	(
+		SELECT
+			count(*) AS locality_count
+		FROM
+			(
+				SELECT
+					DISTINCT
+					range_id,
+					start_key,
+					split_part(
+						unnest(replica_localities),
+						',',
+						2
+					)
+				FROM
+					[SHOW RANGES FROM DATABASE system]
+				WHERE
+					(
+						start_key NOT LIKE '%Table/11/%'
+						AND start_key NOT LIKE '%Table/39/%'
+						AND start_key NOT LIKE '%Table/46/%'
+					)
+			)
+		GROUP BY
+			range_id
+	)
+WHERE
+	locality_count < 2;`)
+		if len(res) == 0 {
+			break
+		}
+		count += 1
+		time.Sleep(time.Second * 5)
+	}
+	t.Status("Replication changes complete")
 
 	// Stop all the tenants gracefully first.
 	for _, tenant := range tenants {

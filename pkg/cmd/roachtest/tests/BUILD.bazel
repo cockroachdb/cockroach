@@ -184,6 +184,7 @@ go_library(
         "util_disk_usage.go",
         "util_if_local.go",
         "util_load_group.go",
+        "util_mutiltregion.go",
         "validate_system_schema_after_version_upgrade.go",
         "versionupgrade.go",
         "ycsb.go",
