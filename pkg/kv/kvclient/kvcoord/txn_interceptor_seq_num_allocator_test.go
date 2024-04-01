@@ -526,5 +526,5 @@ func TestSequenceNumberAllocationSavepoint(t *testing.T) {
 
 	sp := &savepoint{}
 	s.createSavepointLocked(ctx, sp)
-	require.Equal(t, enginepb.TxnSeq(2), sp.seqNum)
+	require.Equal(t, enginepb.TxnSeq(2), s.writeSeq)
 }

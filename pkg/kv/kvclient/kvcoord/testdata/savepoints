@@ -13,7 +13,7 @@ get k
 
 savepoint x
 ----
-1 <noignore>
+2 <noignore>
 
 put k b
 ----
@@ -28,7 +28,7 @@ true
 
 release x
 ----
-2 <noignore>
+3 <noignore>
 
 get k
 ----
@@ -66,7 +66,7 @@ get k
 
 savepoint x
 ----
-1 <noignore>
+2 <noignore>
 
 put k b
 ----
@@ -81,7 +81,7 @@ true
 
 rollback x
 ----
-2 [2-2]
+4 [2-3]
 
 get k
 ----
@@ -114,14 +114,14 @@ put k ar
 
 savepoint x
 ----
-1 <noignore>
+2 <noignore>
 
 put k br
 ----
 
 savepoint y
 ----
-2 <noignore>
+4 <noignore>
 
 put k cr
 ----
@@ -132,7 +132,7 @@ true
 
 release y
 ----
-3 <noignore>
+5 <noignore>
 
 put k dr
 ----
@@ -143,7 +143,7 @@ true
 
 rollback x
 ----
-4 [2-4]
+7 [2-6]
 
 get k
 ----
@@ -179,7 +179,7 @@ put b d1
 
 savepoint x
 ----
-2 <noignore>
+3 <noignore>
 
 put a d2
 ----
@@ -190,14 +190,14 @@ true
 
 rollback x
 ----
-3 [3-3]
+5 [3-4]
 
 put c d1
 ----
 
 savepoint x
 ----
-4 [3-3]
+7 [3-4]
 
 put b 2
 ----
@@ -208,7 +208,7 @@ true
 
 rollback x
 ----
-5 [3-3][5-5]
+9 [3-4][7-8]
 
 put d 1
 ----
@@ -270,7 +270,7 @@ put k nop
 
 savepoint x
 ----
-1 <noignore>
+2 <noignore>
 
 can-use x
 ----
@@ -278,7 +278,7 @@ true
 
 rollback x
 ----
-1 <noignore>
+3 [2-2]
 
 can-use x
 ----
@@ -286,7 +286,7 @@ true
 
 release x
 ----
-1 <noignore>
+3 [2-2]
 
 commit
 ----
@@ -322,11 +322,11 @@ true
 
 rollback x
 ----
-1 [1-1]
+2 [0-1]
 
 rollback x
 ----
-1 [1-1]
+3 [0-2]
 
 get k
 ----
@@ -341,7 +341,7 @@ true
 
 rollback x
 ----
-2 [1-2]
+5 [0-4]
 
 commit
 ----
@@ -419,7 +419,7 @@ true
 
 rollback x
 ----
-1 [1-1]
+1 <noignore>
 
 subtest end
 
@@ -468,7 +468,7 @@ true
 
 rollback x
 ----
-1 [1-1]
+1 <noignore>
 
 subtest end
 
@@ -517,7 +517,7 @@ true
 
 rollback x
 ----
-1 [1-1]
+1 <noignore>
 
 subtest end
 
@@ -600,7 +600,7 @@ put k a
 
 savepoint x
 ----
-1 <noignore>
+2 <noignore>
 
 retry
 ----
