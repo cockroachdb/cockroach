@@ -90,7 +90,7 @@ case $1 in
         roachprod create drt-ua1 \
           --clouds="gce" \
           --gce-zones="us-east1-c" \
-          --nodes="8" \
+          --nodes="7" \
           --gce-machine-type="n2-standard-8" \
           --local-ssd="true"  \
           --gce-local-ssd-count="16" \
@@ -104,8 +104,8 @@ case $1 in
         roachprod create drt-ua2 \
           --clouds="gce" \
           --gce-zones="us-east1-c" \
-          --nodes="8" \
-          --gce-machine-type="n2-standard-8" \
+          --nodes="7" \
+          --gce-machine-type="n2d-standard-8" \
           --local-ssd="true"  \
           --gce-local-ssd-count="16" \
           --username="drt" \
