@@ -144,7 +144,6 @@ require (
 	github.com/elastic/gosigar v0.14.3
 	github.com/emicklei/dot v0.15.0
 	github.com/fatih/color v1.9.0
-	github.com/fraugster/parquet-go v0.10.0
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/getsentry/sentry-go v0.23.0
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
