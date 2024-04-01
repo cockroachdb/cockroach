@@ -43,7 +43,7 @@ concurrency:
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 jobs:
-  EXPERIMENTAL_acceptance:
+  acceptance:
     runs-on: [self-hosted, basic_big_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -118,7 +118,7 @@ jobs:
       - name: clean up
         run: ./cockroach/build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_lint:
+  lint:
     runs-on: [self-hosted, basic_big_runner_group]
     steps:
       - uses: actions/checkout@v4
