@@ -192,7 +192,7 @@ is chosen at random and run. The provided cluster name must already exist in roa
 this command does no setup/teardown of clusters.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("\nRunning operation %s.\n\n", args[0])
+			fmt.Printf("\nRunning operation %s on %s.\n\n", args[1], args[0])
 			cmd.SilenceUsage = true
 			return runOperation(operations.RegisterOperations, args[1], args[0])
 		},
