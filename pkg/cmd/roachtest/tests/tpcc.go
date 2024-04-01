@@ -351,11 +351,15 @@ var tpccSupportedWarehouses = []struct {
 	{hardware: "gce-n4cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
 	{hardware: "gce-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1250},
 	{hardware: "aws-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 2100},
+	// TODO(darrylwong): this number is copied from gce-n4cpu16. Adjust once we have a
+	// better idea of the actual number.
+	{hardware: "azure-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1300},
 
 	// TODO(tbg): this number is copied from gce-n4cpu16. The real number should be a
 	// little higher, find out what it is.
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1300},
 	{hardware: "aws-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 2100},
+	{hardware: "azure-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1300},
 	// Ditto.
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
 }
@@ -908,25 +912,29 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  4,
 
-		LoadWarehousesGCE: 1000,
-		LoadWarehousesAWS: 1000,
-		EstimatedMaxGCE:   750,
-		EstimatedMaxAWS:   900,
+		LoadWarehousesGCE:   1000,
+		LoadWarehousesAWS:   1000,
+		LoadWarehousesAzure: 1000,
+		EstimatedMaxGCE:     750,
+		EstimatedMaxAWS:     900,
+		EstimatedMaxAzure:   900,
 
-		Clouds: registry.AllExceptAWS,
+		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
 		CPUs:  4,
 
-		LoadWarehousesGCE: 1000,
-		LoadWarehousesAWS: 1000,
-		EstimatedMaxGCE:   750,
-		EstimatedMaxAWS:   900,
-		SharedProcessMT:   true,
+		LoadWarehousesGCE:   1000,
+		LoadWarehousesAWS:   1000,
+		LoadWarehousesAzure: 1000,
+		EstimatedMaxGCE:     750,
+		EstimatedMaxAWS:     900,
+		EstimatedMaxAzure:   900,
+		SharedProcessMT:     true,
 
-		Clouds: registry.AllExceptAWS,
+		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
@@ -936,45 +944,53 @@ func registerTPCC(r registry.Registry) {
 		EnableDefaultScheduledBackup: true,
 		LoadWarehousesGCE:            1000,
 		LoadWarehousesAWS:            1000,
+		LoadWarehousesAzure:          1000,
 		EstimatedMaxGCE:              750,
 		EstimatedMaxAWS:              900,
+		EstimatedMaxAzure:            900,
 
-		Clouds: registry.AllExceptAWS,
+		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehousesGCE: 3500,
-		LoadWarehousesAWS: 3900,
-		EstimatedMaxGCE:   3100,
-		EstimatedMaxAWS:   3600,
-		Clouds:            registry.AllClouds,
-		Suites:            registry.Suites(registry.Nightly),
+		LoadWarehousesGCE:   3500,
+		LoadWarehousesAWS:   3900,
+		LoadWarehousesAzure: 3900,
+		EstimatedMaxGCE:     3100,
+		EstimatedMaxAWS:     3600,
+		EstimatedMaxAzure:   3600,
+		Clouds:              registry.AllClouds,
+		Suites:              registry.Suites(registry.Nightly),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehousesGCE: 3500,
-		LoadWarehousesAWS: 3900,
-		EstimatedMaxGCE:   2900,
-		EstimatedMaxAWS:   3400,
-		Clouds:            registry.AllClouds,
-		Suites:            registry.Suites(registry.Nightly),
-		SharedProcessMT:   true,
+		LoadWarehousesGCE:   3500,
+		LoadWarehousesAWS:   3900,
+		LoadWarehousesAzure: 3900,
+		EstimatedMaxGCE:     2900,
+		EstimatedMaxAWS:     3400,
+		EstimatedMaxAzure:   3400,
+		Clouds:              registry.AllClouds,
+		Suites:              registry.Suites(registry.Nightly),
+		SharedProcessMT:     true,
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
 		CPUs:  16,
 
-		LoadWarehousesGCE: 11500,
-		LoadWarehousesAWS: 11500,
-		EstimatedMaxGCE:   10000,
-		EstimatedMaxAWS:   10000,
+		LoadWarehousesGCE:   11500,
+		LoadWarehousesAWS:   11500,
+		LoadWarehousesAzure: 11500,
+		EstimatedMaxGCE:     10000,
+		EstimatedMaxAWS:     10000,
+		EstimatedMaxAzure:   10000,
 
-		Clouds: registry.AllExceptAWS,
+		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Weekly),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
@@ -982,10 +998,12 @@ func registerTPCC(r registry.Registry) {
 		CPUs:         16,
 		Distribution: multiZone,
 
-		LoadWarehousesGCE: 6500,
-		LoadWarehousesAWS: 6500,
-		EstimatedMaxGCE:   6300,
-		EstimatedMaxAWS:   6300,
+		LoadWarehousesGCE:   6500,
+		LoadWarehousesAWS:   6500,
+		LoadWarehousesAzure: 6500,
+		EstimatedMaxGCE:     6300,
+		EstimatedMaxAWS:     6300,
+		EstimatedMaxAzure:   6300,
 
 		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
@@ -997,10 +1015,12 @@ func registerTPCC(r registry.Registry) {
 		Distribution: multiRegion,
 		LoadConfig:   multiLoadgen,
 
-		LoadWarehousesGCE: 3000,
-		LoadWarehousesAWS: 3000,
-		EstimatedMaxGCE:   2500,
-		EstimatedMaxAWS:   2500,
+		LoadWarehousesGCE:   3000,
+		LoadWarehousesAWS:   3000,
+		LoadWarehousesAzure: 3000,
+		EstimatedMaxGCE:     2500,
+		EstimatedMaxAWS:     2500,
+		EstimatedMaxAzure:   2500,
 
 		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
@@ -1011,12 +1031,14 @@ func registerTPCC(r registry.Registry) {
 		Chaos:      true,
 		LoadConfig: singlePartitionedLoadgen,
 
-		LoadWarehousesGCE: 2000,
-		LoadWarehousesAWS: 2000,
-		EstimatedMaxGCE:   1700,
-		EstimatedMaxAWS:   1700,
+		LoadWarehousesGCE:   2000,
+		LoadWarehousesAWS:   2000,
+		LoadWarehousesAzure: 2000,
+		EstimatedMaxGCE:     1700,
+		EstimatedMaxAWS:     1700,
+		EstimatedMaxAzure:   1700,
 
-		Clouds: registry.AllExceptAWS,
+		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
 	})
 
@@ -1026,38 +1048,44 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  4,
 
-		LoadWarehousesGCE: 1000,
-		LoadWarehousesAWS: 1000,
-		EstimatedMaxGCE:   750,
-		EstimatedMaxAWS:   900,
-		EncryptionEnabled: true,
+		LoadWarehousesGCE:   1000,
+		LoadWarehousesAWS:   1000,
+		LoadWarehousesAzure: 1000,
+		EstimatedMaxGCE:     750,
+		EstimatedMaxAWS:     900,
+		EstimatedMaxAzure:   900,
+		EncryptionEnabled:   true,
 
-		Clouds: registry.AllExceptAWS,
+		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehousesGCE: 3500,
-		LoadWarehousesAWS: 3900,
-		EstimatedMaxGCE:   3100,
-		EstimatedMaxAWS:   3600,
-		EncryptionEnabled: true,
-		Clouds:            registry.AllClouds,
-		Suites:            registry.Suites(registry.Nightly),
+		LoadWarehousesGCE:   3500,
+		LoadWarehousesAWS:   3900,
+		LoadWarehousesAzure: 3900,
+		EstimatedMaxGCE:     3100,
+		EstimatedMaxAWS:     3600,
+		EstimatedMaxAzure:   3600,
+		EncryptionEnabled:   true,
+		Clouds:              registry.AllClouds,
+		Suites:              registry.Suites(registry.Nightly),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
 		CPUs:  16,
 
-		LoadWarehousesGCE: 11500,
-		LoadWarehousesAWS: 11500,
-		EstimatedMaxGCE:   10000,
-		EstimatedMaxAWS:   10000,
-		EncryptionEnabled: true,
+		LoadWarehousesGCE:   11500,
+		LoadWarehousesAWS:   11500,
+		LoadWarehousesAzure: 11500,
+		EstimatedMaxGCE:     10000,
+		EstimatedMaxAWS:     10000,
+		EstimatedMaxAzure:   10000,
+		EncryptionEnabled:   true,
 
-		Clouds: registry.AllExceptAWS,
+		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Weekly),
 	})
 
@@ -1066,48 +1094,56 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  4,
 
-		LoadWarehousesGCE: 1000,
-		LoadWarehousesAWS: 1000,
-		EstimatedMaxGCE:   750,
-		EstimatedMaxAWS:   900,
-		ExpirationLeases:  true,
+		LoadWarehousesGCE:   1000,
+		LoadWarehousesAWS:   1000,
+		LoadWarehousesAzure: 1000,
+		EstimatedMaxGCE:     750,
+		EstimatedMaxAWS:     900,
+		EstimatedMaxAzure:   900,
+		ExpirationLeases:    true,
 
-		Clouds: registry.AllExceptAWS,
+		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehousesGCE: 3500,
-		LoadWarehousesAWS: 3900,
-		EstimatedMaxGCE:   3100,
-		EstimatedMaxAWS:   3600,
-		ExpirationLeases:  true,
-		Clouds:            registry.AllClouds,
-		Suites:            registry.Suites(registry.Nightly),
+		LoadWarehousesGCE:   3500,
+		LoadWarehousesAWS:   3900,
+		LoadWarehousesAzure: 3900,
+		EstimatedMaxGCE:     3100,
+		EstimatedMaxAWS:     3600,
+		EstimatedMaxAzure:   3600,
+		ExpirationLeases:    true,
+		Clouds:              registry.AllClouds,
+		Suites:              registry.Suites(registry.Nightly),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
 		CPUs:  16,
 
-		LoadWarehousesGCE: 11500,
-		LoadWarehousesAWS: 11500,
-		EstimatedMaxGCE:   10000,
-		EstimatedMaxAWS:   10000,
-		ExpirationLeases:  true,
+		LoadWarehousesGCE:   11500,
+		LoadWarehousesAWS:   11500,
+		LoadWarehousesAzure: 11500,
+		EstimatedMaxGCE:     10000,
+		EstimatedMaxAWS:     10000,
+		EstimatedMaxAzure:   10000,
+		ExpirationLeases:    true,
 
-		Clouds: registry.AllExceptAWS,
+		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Weekly),
 	})
 }
 
-func gceOrAws(cloud string, gce, aws int) int {
+func valueForCloud(cloud string, gce, aws, azure int) int {
 	switch cloud {
 	case spec.AWS:
 		return aws
 	case spec.GCE:
 		return gce
+	case spec.Azure:
+		return azure
 	default:
 		panic(fmt.Sprintf("unknown cloud %s", cloud))
 	}
@@ -1181,15 +1217,17 @@ type tpccBenchSpec struct {
 	// The number of warehouses to load into the cluster before beginning
 	// benchmarking. Should be larger than EstimatedMax and should be a
 	// value that is unlikely to be achievable.
-	LoadWarehousesGCE int
-	LoadWarehousesAWS int
+	LoadWarehousesGCE   int
+	LoadWarehousesAWS   int
+	LoadWarehousesAzure int
 	// An estimate of the maximum number of warehouses achievable in the
 	// cluster config. The closer this is to the actual max achievable
 	// warehouse count, the faster the benchmark will be in producing a
 	// result. This can be adjusted over time as performance characteristics
 	// change (i.e. CockroachDB gets faster!).
-	EstimatedMaxGCE int
-	EstimatedMaxAWS int
+	EstimatedMaxGCE   int
+	EstimatedMaxAWS   int
+	EstimatedMaxAzure int
 
 	Clouds registry.CloudSet
 	Suites registry.SuiteSet
@@ -1205,11 +1243,11 @@ type tpccBenchSpec struct {
 }
 
 func (s tpccBenchSpec) EstimatedMax(cloud string) int {
-	return gceOrAws(cloud, s.EstimatedMaxGCE, s.EstimatedMaxAWS)
+	return valueForCloud(cloud, s.EstimatedMaxGCE, s.EstimatedMaxAWS, s.EstimatedMaxAzure)
 }
 
 func (s tpccBenchSpec) LoadWarehouses(cloud string) int {
-	return gceOrAws(cloud, s.LoadWarehousesGCE, s.LoadWarehousesAWS)
+	return valueForCloud(cloud, s.LoadWarehousesGCE, s.LoadWarehousesAWS, s.LoadWarehousesAzure)
 }
 
 // partitions returns the number of partitions specified to the load generator.
