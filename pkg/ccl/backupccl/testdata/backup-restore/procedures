@@ -351,9 +351,10 @@ WITH to_json AS (
       system.descriptor
     WHERE id = $defaultdb_sc1_db
 )
-SELECT d->'schema'->>'functions'::string FROM to_json;
+-- Remove ID from the result, since it isn't stable.
+SELECT json_set(d, '{schema,functions,p,signatures,0,id}', '0')->'schema'->>'functions'::string FROM to_json;
 ----
-{"p": {"signatures": [{"id": 111, "isProcedure": true, "returnType": {"family": "VoidFamily", "oid": 2278}}]}}
+{"p": {"signatures": [{"id": 0, "isProcedure": true, "returnType": {"family": "VoidFamily", "oid": 2278}}]}}
 
 exec-sql
 BACKUP TABLE sc1.t INTO 'nodelocal://1/test/'
