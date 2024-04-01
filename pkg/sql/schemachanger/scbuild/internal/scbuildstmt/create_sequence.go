@@ -11,6 +11,7 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -55,6 +56,28 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		}
 		panic(sqlerrors.NewRelationAlreadyExistsError(n.Name.FQString()))
 	}
+
+	if n.Persistence.IsTemporary() {
+		if !b.SessionData().TempTablesEnabled {
+			panic(errors.WithTelemetry(
+				pgerror.WithCandidateCode(
+					errors.WithHint(
+						errors.WithIssueLink(
+							errors.Newf("temporary tables are only supported experimentally"),
+							errors.IssueLink{IssueURL: build.MakeIssueURL(46260)},
+						),
+						"You can enable temporary tables by running `SET experimental_enable_temp_tables = 'on'`.",
+					),
+					pgcode.ExperimentalFeature,
+				),
+				"sql.schema.temp_tables_disabled",
+			))
+		}
+
+		panic(scerrors.NotImplementedErrorf(n, "temporary sequences are not yet "+
+			"implemented in the declarative schema changer"))
+	}
+
 	// Sanity check for duplication options on the sequence.
 	optionsSeen := map[string]bool{}
 	var sequenceOwnedBy *tree.ColumnItem
