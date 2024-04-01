@@ -3939,7 +3939,8 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	array_to_string(proargnames, ',') AS args
 FROM
 	functions
-	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000);`)
+	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000)
+	WHERE (descriptor->'state')::STRING <> 'DROPPED'::STRING;`)
 	enums, err := Collect(ctx, og, tx, pgx.RowToMap, enumQuery)
 	if err != nil {
 		return nil, err
