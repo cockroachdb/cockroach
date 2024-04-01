@@ -122,11 +122,22 @@ type Config struct {
 // SetDefaults initializes unset fields in Config to values
 // suitable for use by a Processor.
 func (sc *Config) SetDefaults() {
-	if sc.PushTxnsInterval == 0 {
-		sc.PushTxnsInterval = DefaultPushTxnsInterval
-	}
-	if sc.PushTxnsAge == 0 {
-		sc.PushTxnsAge = defaultPushTxnsAge
+	// Some tests don't set the TxnPusher, so we avoid setting a default push txn
+	// interval in such cases #121429.
+	if sc.TxnPusher == nil {
+		if sc.PushTxnsInterval != 0 {
+			panic("nil TxnPusher with non-zero PushTxnsInterval")
+		}
+		if sc.PushTxnsAge != 0 {
+			panic("nil TxnPusher with non-zero PushTxnsAge")
+		}
+	} else {
+		if sc.PushTxnsInterval == 0 {
+			sc.PushTxnsInterval = DefaultPushTxnsInterval
+		}
+		if sc.PushTxnsAge == 0 {
+			sc.PushTxnsAge = defaultPushTxnsAge
+		}
 	}
 }
 
