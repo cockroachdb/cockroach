@@ -272,24 +272,7 @@ COMMIT;`}
 		// Wait for the span configs to propagate. After we know they have
 		// propagated, we'll shut down the tenant and wait for them to get
 		// applied.
-		tdb.Exec(t, "CREATE TABLE after AS SELECT now() AS after")
-		tdb.CheckQueryResultsRetry(t, `
-  WITH progress AS (
-                    SELECT crdb_internal.pb_to_json(
-                            'progress',
-                            progress
-                           )->'AutoSpanConfigReconciliation' AS p
-                      FROM crdb_internal.system_jobs
-                     WHERE status = 'running'
-                ),
-       checkpoint AS (
-                    SELECT (p->'checkpoint'->>'wallTime')::FLOAT8 / 1e9 AS checkpoint
-                      FROM progress
-                     WHERE p IS NOT NULL
-                  )
-SELECT checkpoint > extract(epoch from after)
-  FROM checkpoint, after`,
-			[][]string{{"true"}})
+		sqlutils.WaitForSpanConfigReconciliation(t, tdb)
 		tenant.AppStopper().Stop(ctx)
 	}
 
