@@ -379,6 +379,33 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	// Disallow renaming if this rename operation will break other UDF's invoking
+	// this one.
+	var dependentFuncs []string
+	for _, dep := range fnDesc.GetDependedOnBy() {
+		desc, err := params.p.Descriptors().ByID(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
+		if err != nil {
+			return err
+		}
+		_, ok := desc.(catalog.FunctionDescriptor)
+		if !ok {
+			continue
+		}
+		fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
+		if err != nil {
+			return err
+		}
+		dependentFuncs = append(dependentFuncs, fullyResolvedName.FQString())
+	}
+	if len(dependentFuncs) > 0 {
+		return errors.UnimplementedErrorf(
+			errors.IssueLink{
+				IssueURL: "https://github.com/cockroachdb/cockroach/issues/83233",
+				Detail:   "renames are disallowed because references are by name",
+			},
+			"cannot set schema for function %q because other functions ([%v]) still depend on it",
+			fnDesc.Name, strings.Join(dependentFuncs, ", "))
+	}
 
 	switch sc.SchemaKind() {
 	case catalog.SchemaTemporary:
