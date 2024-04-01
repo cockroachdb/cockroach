@@ -168,6 +168,14 @@ func (e logicalAvroExec) createAvroDataFromDatums(
 	return importer.CreateAvroData(t, e.name, avroField, avroRows), nil
 }
 
+// roundtripStringer pretty prints the datum's value as string, allowing the
+// parser in certain decoders to work.
+func roundtripStringer(d tree.Datum) string {
+	fmtCtx := tree.NewFmtCtx(tree.FmtBareStrings)
+	d.Format(fmtCtx)
+	return fmtCtx.CloseAndGetString()
+}
+
 // TestImportAvroLogicalType tests that an avro file with logical avro types
 // populates a CRL table identically to an avro file with the same data encoded
 // as strings. Here's the high level approach of this test:
@@ -304,7 +312,7 @@ func TestImportAvroLogicalTypes(t *testing.T) {
 	execParams := []logicalAvroExec{{
 		name: "stringed",
 		encoder: func(datum tree.Datum, avroTypes string) (interface{}, error) {
-			val := importer.RoundtripStringer(datum)
+			val := roundtripStringer(datum)
 			if val == "NULL" {
 				return nil, nil
 			}
