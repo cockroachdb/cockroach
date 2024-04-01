@@ -454,28 +454,32 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	"crdb_internal.kv_node_status": {
 		// `env` column can contain sensitive node environment variable values,
 		// such as AWS_ACCESS_KEY.
-		nonSensitiveCols: NonSensitiveColumns{
-			"node_id",
-			"network",
-			"address",
-			"attrs",
-			"locality",
-			"server_version",
-			"go_version",
-			"tag",
-			"time",
-			"revision",
-			"cgo_compiler",
-			"platform",
-			"distribution",
-			"type",
-			"dependencies",
-			"started_at",
-			"updated_at",
-			"metrics",
-			"args",
-			"activity",
-		},
+		// Some fields are marked as `<redacted>` because we want to redact hostname, ip address and other sensitive fields
+		// in the db dump files contained in debugzip
+		customQueryRedacted: `SELECT 
+				"node_id",
+				"network",
+				'<redacted>' as address,
+				"attrs",
+				"locality",
+				"server_version",
+				"go_version",
+				"tag",
+				"time",
+				"revision",
+				"cgo_compiler",
+				"platform",
+				"distribution",
+				"type",
+				"dependencies",
+				"started_at",
+				"updated_at",
+				"metrics",
+				'<redacted>' as args,
+				'<redacted>' as env,
+				"activity"
+			FROM crdb_internal.kv_node_status
+		`,
 	},
 	"crdb_internal.kv_store_status": {
 		nonSensitiveCols: NonSensitiveColumns{
@@ -672,10 +676,25 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 	"crdb_internal.gossip_nodes": {
 		// `cluster_name` is hashed as we only care to see whether values are
 		// identical across nodes.
+		// Some fields are marked as `<redacted>` because we want to redact hostname, ip address and other sensitive fields
+		// in the db dump files contained in debugzip
 		customQueryRedacted: `SELECT 
-			node_id, network, address, advertise_address, sql_network, sql_address, 
-			advertise_sql_address, attrs, locality, fnv32(cluster_name) as cluster_name,
-			server_version, build_tag, started_at, is_live, ranges, leases
+				node_id, 
+				network, 
+				'<redacted>' as address, 
+				'<redacted>' as advertise_address, 
+				sql_network, 
+				'<redacted>' as sql_address, 
+				'<redacted>' as advertise_sql_address, 
+				attrs, 
+				'<redacted>' as locality, 
+				fnv32(cluster_name) as cluster_name,
+				server_version, 
+				build_tag, 
+				started_at, 
+				is_live, 
+				ranges,
+				leases
 			FROM crdb_internal.gossip_nodes`,
 	},
 	"crdb_internal.leases": {
@@ -801,12 +820,24 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.node_runtime_info": {
-		nonSensitiveCols: NonSensitiveColumns{
-			"node_id",
-			"component",
-			"field",
-			"value",
-		},
+		// Some fields are marked as `<redacted>` because we want to redact hostname, ip address and other sensitive fields
+		// in the db dump files contained in debugzip
+		customQueryRedacted: `SELECT * FROM (
+			SELECT
+				"node_id",
+				"component",
+				"field",
+				"value"
+			FROM crdb_internal.node_runtime_info 
+      WHERE field NOT IN ('URL', 'Host', 'URI') UNION
+    		SELECT
+					"node_id",
+					"component",
+					"field",
+					'<redacted>' AS value
+				FROM crdb_internal.node_runtime_info
+				WHERE field IN ('URL', 'Host', 'URI')
+      ) ORDER BY node_id`,
 	},
 	"crdb_internal.node_sessions": {
 		// `client_address` contains unredacted client IP addresses.
@@ -1027,17 +1058,17 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 
 /**
  * NB: The following system tables explicitly forbidden:
- * 	- system.users: avoid downloading passwords.
- * 	- system.web_sessions: avoid downloading active session tokens.
- * 	- system.join_tokens: avoid downloading secret join keys.
- * 	- system.comments: avoid downloading noise from SQL schema.
- * 	- system.ui: avoid downloading noise from UI customizations.
- * 	- system.zones: the contents of crdb_internal.zones is easier to use.
- * 	- system.statement_bundle_chunks: avoid downloading a large table that's
+ *     - system.users: avoid downloading passwords.
+ *     - system.web_sessions: avoid downloading active session tokens.
+ *     - system.join_tokens: avoid downloading secret join keys.
+ *     - system.comments: avoid downloading noise from SQL schema.
+ *     - system.ui: avoid downloading noise from UI customizations.
+ *     - system.zones: the contents of crdb_internal.zones is easier to use.
+ *     - system.statement_bundle_chunks: avoid downloading a large table that's
  *    hard to interpret currently.
- * 	- system.statement_statistics: historical data, usually too much to
+ *     - system.statement_statistics: historical data, usually too much to
  *    download.
- * 	- system.transaction_statistics: ditto
+ *     - system.transaction_statistics: ditto
  *  - system.statement_activity: ditto
  *  - system.transaction_activity: ditto
  *
@@ -1253,15 +1284,15 @@ var zipSystemTables = DebugZipTableRegistry{
 	"system.settings": {
 		customQueryUnredacted: `SELECT * FROM system.settings`,
 		customQueryRedacted: `SELECT * FROM (
-    		SELECT *
-    		FROM system.settings
-			WHERE "valueType" <> 's'
+				SELECT *
+				FROM system.settings
+				WHERE "valueType" <> 's'
     	) UNION (
-			SELECT name, '<redacted>' as value,
-			"lastUpdated",
-			"valueType"
-			FROM system.settings
-			WHERE "valueType"  = 's'
+				SELECT name, '<redacted>' as value,
+				"lastUpdated",
+				"valueType"
+				FROM system.settings
+				WHERE "valueType"  = 's'
     	)`,
 	},
 	"system.span_configurations": {
@@ -1278,12 +1309,16 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.sql_instances": {
-		nonSensitiveCols: NonSensitiveColumns{
+		// Some fields are marked as `<redacted>` because we want to redact hostname, ip address and other sensitive fields
+		// in the db dump files contained in debugzip
+		customQueryRedacted: `SELECT 
 			"id",
-			"addr",
+			'<redacted>' as addr,
 			"session_id",
-			"locality",
-		},
+			'<redacted>' as locality,
+			'<redacted>' as sql_addr
+			FROM system.sql_instances
+		`,
 	},
 	// system.sql_stats_cardinality shows row counts for all of the system tables related to the SQL Stats
 	// system, grouped by aggregated timestamp. None of this information is sensitive. It aids in escalations
