@@ -721,7 +721,7 @@ func resolveMemberOfWithAdminOption(
 			isAdmin bool
 		}
 		memberToRoles := make(map[username.SQLUsername][]membership)
-		if err := forEachRoleMembership(ctx, txn, func(role, member username.SQLUsername, isAdmin bool) error {
+		if err := forEachRoleMembership(ctx, txn, func(ctx context.Context, role, member username.SQLUsername, isAdmin bool) error {
 			memberToRoles[member] = append(memberToRoles[member], membership{role, isAdmin})
 			return nil
 		}); err != nil {
