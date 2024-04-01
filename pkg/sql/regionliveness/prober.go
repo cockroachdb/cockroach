@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -342,6 +343,7 @@ func (l *livenessProber) GetProbeTimeout() (bool, time.Duration) {
 func IsQueryTimeoutErr(err error) bool {
 	return pgerror.GetPGCode(err) == pgcode.QueryCanceled ||
 		errors.HasType(err, (*timeutil.TimeoutError)(nil)) ||
+		startup.IsRetryableReplicaError(err) ||
 		errors.Is(err, context.DeadlineExceeded)
 }
 
