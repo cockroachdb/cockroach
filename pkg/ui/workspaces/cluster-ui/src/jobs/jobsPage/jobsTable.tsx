@@ -26,7 +26,7 @@ import {
   pauseJob,
   resumeJob,
 } from "src/util/docs";
-import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT } from "src/util/format";
+import { DATE_WITH_SECONDS_FORMAT } from "src/util/format";
 
 import { HighwaterTimestamp, JobStatusCell } from "../util";
 import { JobDescriptionCell } from "./jobDescriptionCell";
@@ -171,7 +171,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
       cell: job => (
         <Timestamp
           time={TimestampToMoment(job?.created, null)}
-          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
+          format={DATE_WITH_SECONDS_FORMAT}
         />
       ),
       sort: job => TimestampToMoment(job?.created).valueOf(),
@@ -193,7 +193,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
       cell: job => (
         <Timestamp
           time={TimestampToMoment(job?.modified, null)}
-          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
+          format={DATE_WITH_SECONDS_FORMAT}
         />
       ),
       sort: job => TimestampToMoment(job?.modified).valueOf(),
@@ -219,7 +219,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
       cell: job => (
         <Timestamp
           time={TimestampToMoment(job?.finished, null)}
-          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
+          format={DATE_WITH_SECONDS_FORMAT}
         />
       ),
       sort: job => TimestampToMoment(job?.finished).valueOf(),

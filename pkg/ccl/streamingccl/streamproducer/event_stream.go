@@ -133,6 +133,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithOnSSTable(s.onSSTable),
 		rangefeed.WithOnDeleteRange(s.onDeleteRange),
 		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
+		rangefeed.WithOnValues(s.onValues),
 	}
 
 	initialTimestamp := s.spec.InitialScanTimestamp
@@ -215,6 +216,20 @@ func (s *eventStream) Close(ctx context.Context) {
 func (s *eventStream) onInitialScanDone(ctx context.Context) {
 	// We no longer expect concurrent onValue calls so we can remove the mu.
 	s.addMu = nil
+}
+
+func (s *eventStream) onValues(ctx context.Context, values []kv.KeyValue) {
+	// During initial-scan we expect concurrent onValue calls from the parallel
+	// scan workers, but once the initial scan ends the mu will be nilled out and
+	// we can avoid the locking overhead here.
+	if s.addMu != nil {
+		s.addMu.Lock()
+		defer s.addMu.Unlock()
+	}
+	for _, i := range values {
+		s.seb.addKV(roachpb.KeyValue{Key: i.Key, Value: *i.Value})
+	}
+	s.setErr(s.maybeFlushBatch(ctx))
 }
 
 func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {

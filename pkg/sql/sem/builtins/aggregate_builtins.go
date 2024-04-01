@@ -5356,8 +5356,8 @@ func (a *jsonObjectAggregate) Add(
 
 	// If the key datum is NULL, return an error.
 	if datum == tree.DNull {
-		return pgerror.New(pgcode.InvalidParameterValue,
-			"field name must not be null")
+		return pgerror.New(pgcode.NullValueNotAllowed,
+			"null value not allowed for object key")
 	}
 
 	key, err := asJSONBuildObjectKey(
