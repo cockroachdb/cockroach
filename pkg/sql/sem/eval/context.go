@@ -41,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -288,10 +290,68 @@ type Context struct {
 	RoutineSender DeferredRoutineSender
 
 	// ULIDEntropy is the entropy source for ULID generation.
+	// TODO(yuzefovich): consider making its allocation lazy, similar to how
+	// RNG is done, or use the RNG somehow.
 	ULIDEntropy ulid.MonotonicReader
 
-	// RNG is the random number generator use for the "random" built-in function.
-	RNG *rand.Rand
+	// RNG provides the random number generator to use for the random() builtin
+	// function.
+	RNG struct {
+		// mu synchronizes initialization and usage of the rand.Rand. It is
+		// initialized the first time the RNG is accessed.
+		mu *syncutil.Mutex
+		// Factory, if set, provides the random number generator to use for the
+		// random() builtin function.
+		Factory *RNGFactory
+		// internal is used if Factory is not set. This allows us to only
+		// initialize Factory on the main code path.
+		internal *rand.Rand
+	}
+}
+
+// RNGFactory is a utility struct that allows for lazy allocation of the RNG.
+type RNGFactory struct {
+	rng *rand.Rand
+}
+
+func (ec *Context) ensureRNGMu() {
+	// TODO(yuzefovich): this initialization can be racy, but fixing it will
+	// likely require lots of plumbing because storing any synchronization
+	// primitive inside the Context by value would prohibit copying or returning
+	// the Context by value which we do in many places.
+	if ec.RNG.mu == nil {
+		ec.RNG.mu = &syncutil.Mutex{}
+	}
+}
+
+func (ec *Context) getOrCreateRNG() *rand.Rand {
+	ec.RNG.mu.AssertHeld()
+	if ec.RNG.Factory != nil {
+		if ec.RNG.Factory.rng == nil {
+			ec.RNG.Factory.rng, _ = randutil.NewPseudoRand()
+		}
+		return ec.RNG.Factory.rng
+	}
+	if ec.RNG.internal == nil {
+		ec.RNG.internal, _ = randutil.NewPseudoRand()
+	}
+	return ec.RNG.internal
+}
+
+// RandFloat64 returns the next random float64 from the session's RNG.
+func (ec *Context) RandFloat64() float64 {
+	ec.ensureRNGMu()
+	ec.RNG.mu.Lock()
+	defer ec.RNG.mu.Unlock()
+	return ec.getOrCreateRNG().Float64()
+}
+
+// RandSeed updates the session's RNG to the provided seed.
+func (ec *Context) RandSeed(seed int64) {
+	ec.ensureRNGMu()
+	ec.RNG.mu.Lock()
+	defer ec.RNG.mu.Unlock()
+	ec.getOrCreateRNG().Seed(seed)
 }
 
 // JobsProfiler is the interface used to fetch job specific execution details

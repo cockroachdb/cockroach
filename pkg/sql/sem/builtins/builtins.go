@@ -2090,7 +2090,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDFloat(tree.DFloat(evalCtx.RNG.Float64())), nil
+				return tree.NewDFloat(tree.DFloat(evalCtx.RandFloat64())), nil
 			},
 			Info: "Returns a random floating-point number between 0 (inclusive) and 1 (exclusive). " +
 				"Note that the value contains at most 53 bits of randomness.",
@@ -2108,7 +2108,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				if seed < -1.0 || seed > 1.0 {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "setseed parameter %f is out of allowed range [-1,1]", seed)
 				}
-				evalCtx.RNG.Seed(int64(math.Float64bits(float64(seed))))
+				evalCtx.RandSeed(int64(math.Float64bits(float64(seed))))
 				return tree.DVoidDatum, nil
 			},
 			Info: "Sets the seed for subsequent random() calls in this session (value between -1.0 and 1.0, inclusive). " +
