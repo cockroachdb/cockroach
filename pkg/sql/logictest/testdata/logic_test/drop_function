@@ -278,11 +278,13 @@ DROP FUNCTION f_called_by_b;
 statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other objects \(\[test.public.f_called_by_b2\]\) still depend on it
 DROP FUNCTION f_called_by_b;
 
-statement ok
-CREATE TABLE t1_with_b_2_ref(j int default f_called_by_b() CHECK (f_called_by_b() > 0));
-CREATE SCHEMA altSchema;
 
 statement ok
+CREATE SCHEMA altSchema;
+CREATE FUNCTION altSchema.f_called_by_b() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE TABLE t1_with_b_2_ref(j int default altSchema.f_called_by_b() CHECK (altSchema.f_called_by_b() > 0));
+
+statement error pgcode 0A000 cannot set schema for function \"f_called_by_b\" because other functions \(\[test.public.f_called_by_b2\]\) still depend on it
 ALTER FUNCTION f_called_by_b SET SCHEMA altSchema;
 
 skipif config local-legacy-schema-changer
@@ -290,11 +292,10 @@ statement ok
 DROP SCHEMA altSchema CASCADE;
 
 onlyif config local-legacy-schema-changer
-statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other object \(\[test.public.f_called_by_b2, test.public.t1_with_b_2_ref\]\) still depend on it
+statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other object \(\[test.public.t1_with_b_2_ref\]\) still depend on it
 DROP SCHEMA altSchema CASCADE;
 
-skipif config local-legacy-schema-changer
-statement error pgcode 42883 unknown function: f_called_by_b2()
+statement ok
 SELECT * FROM  f_called_by_b2();
 
 skipif config local-legacy-schema-changer
