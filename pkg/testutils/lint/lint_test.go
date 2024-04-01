@@ -2285,7 +2285,7 @@ func TestLint(t *testing.T) {
 			if path == "" {
 				continue
 			}
-			gcassertPaths = append(gcassertPaths, filepath.Join(crdbDir, "pkg", path))
+			gcassertPaths = append(gcassertPaths, fmt.Sprintf("./pkg/%s", path))
 		}
 
 		// Ensure that all packages that have '//gcassert' or '// gcassert'
@@ -2319,7 +2319,7 @@ func TestLint(t *testing.T) {
 				// and we want to extract the package path.
 				filePath := s[:strings.Index(s, ":")]                  // up to the line number
 				pkgPath := filePath[:strings.LastIndex(filePath, "/")] // up to the file name
-				gcassertPath := filepath.Join(crdbDir, "pkg", pkgPath)
+				gcassertPath := fmt.Sprintf("./pkg/%s", pkgPath)
 				for i := range gcassertPaths {
 					if gcassertPath == gcassertPaths[i] {
 						return
@@ -2338,10 +2338,10 @@ func TestLint(t *testing.T) {
 		})
 
 		var buf strings.Builder
-		output := buf.String()
 		if err := gcassert.GCAssertCwd(&buf, crdbDir, gcassertPaths...); err != nil {
 			t.Fatalf("failed gcassert (%+v):\n%s", err, buf.String())
 		}
+		output := buf.String()
 		if len(output) > 0 {
 			t.Fatalf("failed gcassert:\n%s", output)
 		}

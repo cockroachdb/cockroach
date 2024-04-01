@@ -5271,10 +5271,10 @@ def go_deps():
         name = "com_github_jordanlewis_gcassert",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jordanlewis/gcassert",
-        sha256 = "b5fa1cbfe72d124fd9b62877256b7e90920f4c046d3de34a7e602cda27d71ae7",
-        strip_prefix = "github.com/jordanlewis/gcassert@v0.0.0-20240302143610-f3d7b199b629",
+        sha256 = "6e545deff1a580bfc31b2fae0b755a35e2b9c4c7e285ff4fe3eddc725a3ee101",
+        strip_prefix = "github.com/jordanlewis/gcassert@v0.0.0-20240401195008-3141cbd028c0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jordanlewis/gcassert/com_github_jordanlewis_gcassert-v0.0.0-20240302143610-f3d7b199b629.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jordanlewis/gcassert/com_github_jordanlewis_gcassert-v0.0.0-20240401195008-3141cbd028c0.zip",
         ],
     )
     go_repository(
