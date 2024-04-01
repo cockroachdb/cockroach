@@ -143,7 +143,9 @@ func (lm lockingSpec) get() opt.Locking {
 	return l
 }
 
-// lockingContext holds the locking information for the current scope.
+// lockingContext holds the locking information for the current scope. It is
+// passed down into subexpressions by value so that it automatically "pops" back
+// to its previous value on return.
 type lockingContext struct {
 	// lockScope is the stack of locking items that are currently in scope. This
 	// might include locking items that do not currently apply because they have
@@ -160,6 +162,12 @@ type lockingContext struct {
 	// return an error if the locking is set when we are building a table scan and
 	// isNullExtended is true.
 	isNullExtended bool
+
+	// safeUpdate is set to true if this lockingContext is being passed down from
+	// a select statement with either a WHERE clause or a LIMIT clause. This is
+	// needed so that we can return an error if we're locking without a WHERE
+	// clause or LIMIT clause and sql_safe_updates is true.
+	safeUpdate bool
 }
 
 // noLocking indicates that no row-level locking has been specified.
