@@ -174,6 +174,7 @@ func distRestore(
 			HighWater:                   md.spanFilter.highWaterMark,
 			UserProto:                   execCtx.User().EncodeProto(),
 			TargetSize:                  md.spanFilter.targetSize,
+			MaxFileCount:                int64(md.spanFilter.maxFileCount),
 			ChunkSize:                   int64(chunkSize),
 			NumEntries:                  int64(md.numImportSpans),
 			NumNodes:                    int64(numNodes),
