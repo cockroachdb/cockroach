@@ -476,6 +476,10 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 	if len(specs) > 1 {
 		opSpec = &specs[rand.Intn(len(specs))]
 		l.Printf("more than one operation found for filter %s, randomly selected %s to run", filter, opSpec.Name)
+	} else if len(specs) == 1 {
+		opSpec = &specs[0]
+	} else {
+		return errors.Errorf("no operations found for filter %s", filter)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
