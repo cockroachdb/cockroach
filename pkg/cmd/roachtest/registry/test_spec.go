@@ -193,13 +193,19 @@ var AllExceptLocal = AllClouds.NoLocal()
 // AllExceptAWS contains all clouds except AWS.
 var AllExceptAWS = AllClouds.NoAWS()
 
+// AllExceptAzure contains all clouds except Azure.
+var AllExceptAzure = AllClouds.NoAzure()
+
 // OnlyAWS contains only the AWS cloud.
 var OnlyAWS = Clouds(spec.AWS)
 
 // OnlyGCE contains only the GCE cloud.
 var OnlyGCE = Clouds(spec.GCE)
 
-// OnlyLocal contains only the GCE cloud.
+// OnlyAzure contains only the Azure cloud.
+var OnlyAzure = Clouds(spec.Azure)
+
+// OnlyLocal contains only the Local cloud.
 var OnlyLocal = Clouds(spec.Local)
 
 // Clouds creates a CloudSet for the given clouds. Cloud names must be one of:
