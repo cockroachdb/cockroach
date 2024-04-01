@@ -413,6 +413,7 @@ func (b *Builder) buildRoutine(
 				CalledOnNullInput:  o.CalledOnNullInput,
 				MultiColDataSource: isMultiColDataSource,
 				RoutineType:        o.Type,
+				RoutineLang:        o.Language,
 				Body:               body,
 				BodyProps:          bodyProps,
 				BodyStmts:          bodyStmts,

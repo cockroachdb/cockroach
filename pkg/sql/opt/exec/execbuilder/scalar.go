@@ -953,6 +953,14 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		b.initRoutineExceptionHandler(blockState, udf.Def.ExceptionBlock)
 	}
 
+	// Execution expects there to be more than one body statement if a cursor is
+	// opened.
+	if udf.Def.CursorDeclaration != nil && len(udf.Def.Body) <= 1 {
+		panic(errors.AssertionFailedf(
+			"expected more than one body statement for a routine that opens a cursor",
+		))
+	}
+
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
 	// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
 	planGen := b.buildRoutinePlanGenerator(
@@ -969,6 +977,10 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	// statements.
 	enableStepping := udf.Def.Volatility == volatility.Volatile
 
+	// The calling routine, if any, will have already determined whether this
+	// routine is in tail-call position.
+	_, tailCall := b.tailCalls[udf]
+
 	return tree.NewTypedRoutineExpr(
 		udf.Def.Name,
 		args,
@@ -978,7 +990,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.CalledOnNullInput,
 		udf.Def.MultiColDataSource,
 		udf.Def.SetReturning,
-		udf.TailCall,
+		tailCall,
 		false, /* procedure */
 		blockState,
 		udf.Def.CursorDeclaration,
@@ -1173,12 +1185,23 @@ func (b *Builder) buildRoutinePlanGenerator(
 				return err
 			}
 
+			// Identify nested routines that are in tail-call position, and cache them
+			// in the Builder. When a nested routine is evaluated, this information
+			// may be used to enable tail-call optimization.
+			isFinalPlan := i == len(stmts)-1
+			var tailCalls map[*memo.UDFCallExpr]struct{}
+			if isFinalPlan {
+				tailCalls = make(map[*memo.UDFCallExpr]struct{})
+				memo.ExtractTailCalls(optimizedExpr, tailCalls)
+			}
+
 			// Build the memo into a plan.
 			ef := ref.(exec.Factory)
 			eb := New(ctx, ef, &o, f.Memo(), b.catalog, optimizedExpr, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
+			eb.tailCalls = tailCalls
 			plan, err := eb.Build()
 			if err != nil {
 				if errors.IsAssertionFailure(err) {
@@ -1194,7 +1217,6 @@ func (b *Builder) buildRoutinePlanGenerator(
 			if len(eb.subqueries) > 0 {
 				return expectedLazyRoutineError("subquery")
 			}
-			isFinalPlan := i == len(stmts)-1
 			var stmtForDistSQLDiagram string
 			if i < len(stmtStr) {
 				stmtForDistSQLDiagram = stmtStr[i]
