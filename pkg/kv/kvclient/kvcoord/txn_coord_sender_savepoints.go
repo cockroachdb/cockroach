@@ -39,13 +39,7 @@ type savepoint struct {
 
 	// seqNum represents the write seq num at the time the savepoint was created.
 	// On rollback, it configures the txn to ignore all seqnums from this value
-	// until the most recent seqnum.
-	// TODO(nvanbenschoten): this field is currently defined to be an exclusive
-	// lower bound, with the assumption that any writes performed after the
-	// savepoint is established will use a higher sequence number. This probably
-	// isn't working correctly with shared and exclusive lock acquisition, which
-	// don't increment the writeSeq. We should increment the writeSeq when a
-	// savepoint is established and then consider this an inclusive lower bound.
+	// (inclusive) until the most recent seqnum (inclusive).
 	seqNum enginepb.TxnSeq
 
 	// txnSpanRefresher fields.
@@ -88,6 +82,14 @@ func (tc *TxnCoordSender) CreateSavepoint(ctx context.Context) (kv.SavepointToke
 		// Return a preallocated savepoint for the common case of savepoints placed
 		// at the beginning of transactions.
 		return &initialSavepoint, nil
+	}
+
+	// If the transaction has acquired any locks, increment the write sequence on
+	// savepoint creation and assign this sequence to the savepoint. This allows
+	// us to distinguish between all operations (writes and locking reads) that
+	// happened before the savepoint and those that happened after.
+	if tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() {
+		tc.interceptorAlloc.txnSeqNumAllocator.stepWriteSeqLocked()
 	}
 
 	s := &savepoint{
@@ -142,13 +144,17 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 		reqInt.rollbackToSavepointLocked(ctx, *sp)
 	}
 
-	// If there's been any more writes since the savepoint was created, they'll
-	// need to be ignored.
-	if sp.seqNum < tc.interceptorAlloc.txnSeqNumAllocator.writeSeq {
+	// If the transaction has acquired any locks (before or after the savepoint),
+	// ignore all seqnums from the beginning of the savepoint (inclusive) until
+	// the most recent seqnum (inclusive). Then increment the write sequence to
+	// differentiate all future operations from this ignored sequence number
+	// range.
+	if tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() {
 		tc.mu.txn.AddIgnoredSeqNumRange(
 			enginepb.IgnoredSeqNumRange{
-				Start: sp.seqNum + 1, End: tc.interceptorAlloc.txnSeqNumAllocator.writeSeq,
+				Start: sp.seqNum, End: tc.interceptorAlloc.txnSeqNumAllocator.writeSeq,
 			})
+		tc.interceptorAlloc.txnSeqNumAllocator.stepWriteSeqLocked()
 	}
 
 	return nil
