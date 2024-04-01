@@ -891,7 +891,7 @@ func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoi
 	var writesToDelete []*inFlightWrite
 	needCollecting := !s.Initial()
 	tp.ifWrites.ascend(func(w *inFlightWrite) {
-		if w.Sequence > s.seqNum {
+		if w.Sequence >= s.seqNum {
 			tp.lockFootprint.insert(roachpb.Span{Key: w.Key})
 			if needCollecting {
 				writesToDelete = append(writesToDelete, w)

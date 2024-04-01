@@ -62,7 +62,7 @@ type txnSeqNumAllocator struct {
 
 	// writeSeq is the current write seqnum, i.e. the value last assigned
 	// to a write operation in a batch. It remains at 0 until the first
-	// write operation is encountered.
+	// write or savepoint operation is encountered.
 	writeSeq enginepb.TxnSeq
 
 	// readSeq is the sequence number at which to perform read-only operations.
@@ -99,7 +99,7 @@ func (s *txnSeqNumAllocator) SendLocked(
 		// Notably, this includes Get/Scan/ReverseScan requests that acquire
 		// replicated locks, even though they go through raft.
 		if kvpb.IsIntentWrite(req) || req.Method() == kvpb.EndTxn {
-			s.writeSeq++
+			s.stepWriteSeqLocked()
 			if err := s.maybeAutoStepReadSeqLocked(ctx); err != nil {
 				return nil, kvpb.NewError(err)
 			}
@@ -171,6 +171,11 @@ func (s *txnSeqNumAllocator) stepReadSeqLocked(ctx context.Context) error {
 	return nil
 }
 
+// stepWriteSeqLocked increments the write seqnum.
+func (s *txnSeqNumAllocator) stepWriteSeqLocked() {
+	s.writeSeq++
+}
+
 // configureSteppingLocked configures the stepping mode.
 //
 // When enabling stepping from the non-enabled state, the read seqnum
@@ -205,9 +210,11 @@ func (s *txnSeqNumAllocator) createSavepointLocked(ctx context.Context, sp *save
 }
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
-func (*txnSeqNumAllocator) rollbackToSavepointLocked(context.Context, savepoint) {
+func (s *txnSeqNumAllocator) rollbackToSavepointLocked(context.Context, savepoint) {
 	// Nothing to restore. The seq nums keep increasing. The TxnCoordSender has
-	// added a range of sequence numbers to the ignored list.
+	// added a range of sequence numbers to the ignored list. It may have also
+	// manually stepped the write seqnum to distinguish the ignored range from
+	// any future operations.
 }
 
 // closeLocked is part of the txnInterceptor interface.

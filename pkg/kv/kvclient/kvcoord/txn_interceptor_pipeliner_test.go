@@ -1725,12 +1725,12 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	tp.ifWrites.insert(roachpb.Key("c"), 12)
 	require.Equal(t, 3, tp.ifWrites.len())
 
-	s := savepoint{seqNum: enginepb.TxnSeq(12), active: true}
+	s := savepoint{seqNum: enginepb.TxnSeq(13), active: true}
 	tp.createSavepointLocked(ctx, &s)
 
 	// Some more writes after the savepoint.
-	tp.ifWrites.insert(roachpb.Key("c"), 13)
-	tp.ifWrites.insert(roachpb.Key("d"), 14)
+	tp.ifWrites.insert(roachpb.Key("c"), 14)
+	tp.ifWrites.insert(roachpb.Key("d"), 15)
 	require.Equal(t, 5, tp.ifWrites.len())
 	require.Empty(t, tp.lockFootprint.asSlice())
 
