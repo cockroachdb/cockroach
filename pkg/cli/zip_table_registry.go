@@ -454,28 +454,52 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	"crdb_internal.kv_node_status": {
 		// `env` column can contain sensitive node environment variable values,
 		// such as AWS_ACCESS_KEY.
-		nonSensitiveCols: NonSensitiveColumns{
-			"node_id",
-			"network",
-			"address",
-			"attrs",
-			"locality",
-			"server_version",
-			"go_version",
-			"tag",
-			"time",
-			"revision",
-			"cgo_compiler",
-			"platform",
-			"distribution",
-			"type",
-			"dependencies",
-			"started_at",
-			"updated_at",
-			"metrics",
-			"args",
-			"activity",
-		},
+		customQueryUnredacted: `SELECT 
+				"node_id",
+				"network",
+				"address",
+				"attrs",
+				"locality",
+				"server_version",
+				"go_version",
+				"tag",
+				"time",
+				"revision",
+				"cgo_compiler",
+				"platform",
+				"distribution",
+				"type",
+				"dependencies",
+				"started_at",
+				"updated_at",
+				"metrics",
+				"args",
+				"activity"
+			FROM crdb_internal.kv_node_status
+		`,
+		customQueryRedacted: `SELECT 
+				"node_id",
+				"network",
+				'<redacted>' as address,
+				"attrs",
+				"locality",
+				"server_version",
+				"go_version",
+				"tag",
+				"time",
+				"revision",
+				"cgo_compiler",
+				"platform",
+				"distribution",
+				"type",
+				"dependencies",
+				"started_at",
+				"updated_at",
+				"metrics",
+				'<redacted>' as args,
+				"activity"
+			FROM crdb_internal.kv_node_status
+		`,
 	},
 	"crdb_internal.kv_store_status": {
 		nonSensitiveCols: NonSensitiveColumns{
@@ -673,9 +697,21 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		// `cluster_name` is hashed as we only care to see whether values are
 		// identical across nodes.
 		customQueryRedacted: `SELECT 
-			node_id, network, address, advertise_address, sql_network, sql_address, 
-			advertise_sql_address, attrs, locality, fnv32(cluster_name) as cluster_name,
-			server_version, build_tag, started_at, is_live, ranges, leases
+				node_id, 
+				network, 
+				'<redacted>' as address, 
+				'<redacted>' as advertise_address, 
+				sql_network, 
+				'<redacted>' as sql_address, 
+				'<redacted>' as advertise_sql_address, 
+				attrs, 
+				'<redacted>' as locality, 
+				fnv32(cluster_name) as cluster_name,
+				server_version, 
+				build_tag, 
+				started_at, 
+				is_live, 
+				ranges, leases
 			FROM crdb_internal.gossip_nodes`,
 	},
 	"crdb_internal.leases": {
@@ -801,12 +837,22 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.node_runtime_info": {
-		nonSensitiveCols: NonSensitiveColumns{
-			"node_id",
-			"component",
-			"field",
-			"value",
-		},
+		customQueryRedacted: `SELECT * FROM (
+			SELECT
+				"node_id",
+				"component",
+				"field",
+				"value"
+			FROM crdb_internal.node_runtime_info 
+      WHERE field NOT IN ('URL', 'Host', 'URI') UNION
+    		SELECT
+					"node_id",
+					"component",
+					"field",
+					'<redacted>' AS value
+				FROM crdb_internal.node_runtime_info
+				WHERE field IN ('URL', 'Host', 'URI')
+      ) ORDER BY node_id`,
 	},
 	"crdb_internal.node_sessions": {
 		// `client_address` contains unredacted client IP addresses.
@@ -1278,12 +1324,20 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.sql_instances": {
-		nonSensitiveCols: NonSensitiveColumns{
-			"id",
-			"addr",
-			"session_id",
-			"locality",
-		},
+		customQueryUnredacted: `SELECT 
+				"id",
+				"addr",
+				"session_id",
+				"locality"
+			FROM system.sql_instances
+		`,
+		customQueryRedacted: `SELECT 
+				"id",
+				'<redacted>' as addr,
+				"session_id",
+				'<redacted>' as locality
+			FROM system.sql_instances
+		`,
 	},
 	// system.sql_stats_cardinality shows row counts for all of the system tables related to the SQL Stats
 	// system, grouped by aggregated timestamp. None of this information is sensitive. It aids in escalations
