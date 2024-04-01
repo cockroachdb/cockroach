@@ -13,6 +13,7 @@ distribution: local
 vectorized: true
 ·
 • call
+  estimated row count: 0
   procedure: foo(0)
 
 query T
@@ -23,7 +24,7 @@ vectorized: true
 ·
 • call
   columns: ()
-  estimated row count: 10 (missing stats)
+  estimated row count: 0
   procedure: foo(1)
 
 query T
@@ -46,9 +47,10 @@ query T
 EXPLAIN (OPT, VERBOSE) CALL foo(3);
 ----
 call
+ ├── cardinality: [0 - 0]
  ├── volatile
- ├── stats: [rows=10]
- ├── cost: 0.02
+ ├── stats: [rows=0]
+ ├── cost: 0.01
  ├── distribution: test
  └── procedure: foo
       ├── args
@@ -81,9 +83,10 @@ query T
 EXPLAIN (OPT, TYPES) CALL foo(3);
 ----
 call
+ ├── cardinality: [0 - 0]
  ├── volatile
- ├── stats: [rows=10]
- ├── cost: 0.02
+ ├── stats: [rows=0]
+ ├── cost: 0.01
  ├── distribution: test
  └── procedure: foo [type=void]
       ├── args
@@ -122,6 +125,7 @@ distribution: local
 vectorized: true
 ·
 • call
+  estimated row count: 0
   procedure: foo(3)
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj0FL-0AQxe__TxHeqYXt3wRveyvWQyDWansQJMi6mdbFbSbubKhS8t0liUURD53DwLx5M7-ZI-TNQ-P6YVXM82UyWeTrzfqumCZX86JImvbZO_t_yzy5nEKh5oqWZk8C_YgMpUIT2JIIh146Doa8eodOFVzdtLGXSwXLgaCPiC56goZna3xijfdJepFCoaJonB_cnQK38XtWotkRdPYDli-g006dz7snabgWOouU_iLNsq5UoGpH45PCbbC0CmwH71jeDosGoSKJYzcbi7w-tSQGMvvx_FJh6_nw5CpopF8x-yOdAv2A2Un_2PqFD8PazUfTn7U1XkjhxrzSgiKFvaudRGehY2ip6_59BgAA__9oSZu_
@@ -144,6 +148,7 @@ quality of service: regular
   nodes: <hidden>
   regions: <hidden>
   actual row count: 0
+  estimated row count: 0
   procedure: foo(3)
 
 query T
@@ -164,6 +169,7 @@ quality of service: regular
   nodes: <hidden>
   regions: <hidden>
   actual row count: 0
+  estimated row count: 0
   procedure: foo(3)
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUMtq40AQvO9XiDrtwnhXYm9zW9YXg_MgyS2IMB617SEjtTLdwg5Gn5UfyJcFSTY4IYH0YaCqu6tq-gB5irD4_2-5zNpuFYP_vWb--fcXDBqu6NLVJLD3KFAatIk9iXAaqMM4sKj2sLlBaNpOB7o08JwI9gANGgkWkb2LmXcxZvmfHAYVqQtx1KU9-U4DN5mGmmyWv74IDFZO_ZYk407bTm02bCXenRNlbzCho62o2xBscZZzMYfNe_P9qDckLTdC70J-5ZR_cJoVfWlA1Yam-wh3ydN1Yj_OTvBqFBqJikSnbjGBRXNqiSZy9RS_NFhH3j2EChb5sWafPKfCsOA2Mnzsdsu7UfbuuR1irV0UMrhwjzQnpVSHJogGD6upo77_8RYAAP__9m6rjw==

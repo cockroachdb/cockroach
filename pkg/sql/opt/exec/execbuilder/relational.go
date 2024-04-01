@@ -3401,7 +3401,13 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	return ep, colOrdMap{}, nil
+
+	// Renumber the columns.
+	outputCols = b.colOrdsAlloc.Alloc()
+	for i, col := range c.Columns {
+		outputCols.Set(col, i)
+	}
+	return ep, outputCols, nil
 }
 
 func (b *Builder) resultColumn(id opt.ColumnID) colinfo.ResultColumn {
