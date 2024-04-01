@@ -261,11 +261,17 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 				es := err.Error()
 				if strings.Contains(es, "internal error") {
 					var expectedError bool
-					for _, exp := range []string{
-						// Optimizer panic-injection surfaces as an internal error.
-						"injected panic in optimizer",
-					} {
-						expectedError = expectedError || strings.Contains(es, exp)
+					switch {
+					case strings.Contains(es, "injected panic in optimizer"):
+						// Optimizer panic-injection surfaces as an internal
+						// error.
+						expectedError = true
+					case strings.Contains(es, "Failed generating a query") &&
+						strings.Contains(es, "injected panic in "):
+						// Vectorized panic was injected when sqlsmith itself
+						// issued a query to generate another query (for
+						// example, in getDatabaseRegions).
+						expectedError = true
 					}
 					if !expectedError {
 						logStmt(stmt)
