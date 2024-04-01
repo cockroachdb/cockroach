@@ -215,7 +215,7 @@ export function DurationCheckSample(nanoseconds: number): string {
 export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
 export const DATE_WITH_SECONDS_FORMAT = "MMM DD, YYYY [at] H:mm:ss";
 export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT =
-  "MMM DD, YYYY [at] H:mm:ss:ms";
+  "MMM DD, YYYY [at] H:mm:ss.ms";
 
 /**
  * Alternate 24 hour formats
@@ -223,7 +223,7 @@ export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT =
 export const DATE_FORMAT_24_TZ = "MMM DD, YYYY [at] H:mm z";
 export const DATE_WITH_SECONDS_FORMAT_24_TZ = "MMM DD, YYYY [at] H:mm:ss z";
 export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ =
-  "MMM DD, YYYY [at] H:mm:ss:ms z";
+  "MMM DD, YYYY [at] H:mm:ss.ms z";
 
 export function FormatWithTimezone(
   m: moment.Moment,
