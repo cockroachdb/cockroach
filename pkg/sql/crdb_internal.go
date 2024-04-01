@@ -3539,7 +3539,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 )
 `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTypeDesc(ctx, p, db, func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
+		return forEachTypeDesc(ctx, p, db, func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
 			_, err := writeCreateTypeDescRow(ctx, db, sc, p.semaCtx.TypeResolver, typeDesc, addRow)
 			return err
 		})
