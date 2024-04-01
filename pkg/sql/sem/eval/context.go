@@ -290,8 +290,13 @@ type Context struct {
 	// ULIDEntropy is the entropy source for ULID generation.
 	ULIDEntropy ulid.MonotonicReader
 
-	// RNG is the random number generator use for the "random" built-in function.
-	RNG *rand.Rand
+	// GetSessionRNG returns the random number generator to use for the random()
+	// builtin function.
+	GetSessionRNG func() *rand.Rand
+
+	// SetSessionRNGSeed updates the RNG used for random() builtin to use the
+	// specified seed.
+	SetSessionRNGSeed func(int64)
 }
 
 // JobsProfiler is the interface used to fetch job specific execution details

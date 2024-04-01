@@ -13,6 +13,7 @@ package scbuild
 import (
 	"context"
 	crypto_rand "crypto/rand"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
@@ -49,6 +50,7 @@ func (b buildCtx) EvalCtx() *eval.Context {
 }
 
 func newEvalCtx(ctx context.Context, d Dependencies) *eval.Context {
+	var rng *rand.Rand
 	evalCtx := &eval.Context{
 		ClusterID:            d.ClusterID(),
 		SessionDataStack:     sessiondata.NewStack(d.SessionData()),
@@ -64,9 +66,19 @@ func newEvalCtx(ctx context.Context, d Dependencies) *eval.Context {
 		Codec:                d.Codec(),
 		DescIDGenerator:      d.DescIDGenerator(),
 		ULIDEntropy:          ulid.Monotonic(crypto_rand.Reader, 0),
+		GetSessionRNG: func() *rand.Rand {
+			if rng == nil {
+				rng, _ = randutil.NewPseudoRand()
+			}
+			return rng
+		},
+		SetSessionRNGSeed: func(seed int64) {
+			if rng == nil {
+				rng, _ = randutil.NewPseudoRand()
+			}
+			rng.Seed(seed)
+		},
 	}
-	rng, _ := randutil.NewPseudoRand()
-	evalCtx.RNG = rng
 	evalCtx.SetDeprecatedContext(ctx)
 	return evalCtx
 }

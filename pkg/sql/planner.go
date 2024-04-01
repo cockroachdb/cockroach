@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	crypto_rand "crypto/rand"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -533,6 +534,7 @@ func internalExtendedEvalCtx(
 			sqlStatsProvider = &persistedsqlstats.PersistedSQLStats{}
 		}
 	}
+	var rng *rand.Rand
 	ret := extendedEvalContext{
 		Context: eval.Context{
 			Txn:                            txn,
@@ -550,6 +552,18 @@ func internalExtendedEvalCtx(
 			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
 			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
 			ULIDEntropy:                    ulid.Monotonic(crypto_rand.Reader, 0),
+			GetSessionRNG: func() *rand.Rand {
+				if rng == nil {
+					rng, _ = randutil.NewPseudoRand()
+				}
+				return rng
+			},
+			SetSessionRNGSeed: func(seed int64) {
+				if rng == nil {
+					rng, _ = randutil.NewPseudoRand()
+				}
+				rng.Seed(seed)
+			},
 		},
 		Tracing:         &SessionTracing{},
 		Descs:           tables,
@@ -557,8 +571,6 @@ func internalExtendedEvalCtx(
 		statsProvider:   sqlStatsProvider,
 		jobs:            newTxnJobsCollection(),
 	}
-	rng, _ := randutil.NewPseudoRand()
-	ret.RNG = rng
 	ret.SetDeprecatedContext(ctx)
 	ret.copyFromExecCfg(execCfg)
 	return ret

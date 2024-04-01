@@ -14,6 +14,7 @@ import (
 	"context"
 	crypto_rand "crypto/rand"
 	"io"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -335,6 +336,7 @@ func (ds *ServerImpl) setupFlow(
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		var rng *rand.Rand
 		evalCtx = &eval.Context{
 			Settings:                  ds.ServerConfig.Settings,
 			SessionDataStack:          sessiondata.NewStack(sd),
@@ -362,9 +364,19 @@ func (ds *ServerImpl) setupFlow(
 			IndexUsageStatsController: ds.ServerConfig.IndexUsageStatsController,
 			RangeStatsFetcher:         ds.ServerConfig.RangeStatsFetcher,
 			ULIDEntropy:               ulid.Monotonic(crypto_rand.Reader, 0),
+			GetSessionRNG: func() *rand.Rand {
+				if rng == nil {
+					rng, _ = randutil.NewPseudoRand()
+				}
+				return rng
+			},
+			SetSessionRNGSeed: func(seed int64) {
+				if rng == nil {
+					rng, _ = randutil.NewPseudoRand()
+				}
+				rng.Seed(seed)
+			},
 		}
-		rng, _ := randutil.NewPseudoRand()
-		evalCtx.RNG = rng
 		// Most processors will override this Context with their own context in
 		// ProcessorBase. StartInternal().
 		evalCtx.SetDeprecatedContext(ctx)

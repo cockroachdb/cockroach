@@ -1093,7 +1093,6 @@ func (s *Server) newConnExecutor(
 		// it here so that an early call to close() doesn't panic.
 		ctxHolder:                 ctxHolder{connCtx: ctx, goroutineID: goid.Get()},
 		phaseTimes:                sessionphase.NewTimes(),
-		rng:                       rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
@@ -1103,6 +1102,7 @@ func (s *Server) newConnExecutor(
 		txnFingerprintIDCache:     NewTxnFingerprintIDCache(ctx, s.cfg.Settings, &txnFingerprintIDCacheAcc),
 		txnFingerprintIDAcc:       &txnFingerprintIDCacheAcc,
 	}
+	ex.rng.internal = rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
 
@@ -1175,7 +1175,7 @@ func (s *Server) newConnExecutor(
 		mode:   ex.sessionData().NewSchemaChangerMode,
 		memAcc: ex.sessionMon.MakeBoundAccount(),
 	}
-	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
+	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng.internal, ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
 	ex.mu.ActiveQueries = make(map[clusterunique.ID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
@@ -1682,9 +1682,16 @@ type connExecutor struct {
 	// statement.
 	phaseTimes *sessionphase.Times
 
-	// rng is used to generate random numbers. An example usage is to determine
-	// whether to sample execution stats.
-	rng *rand.Rand
+	// rng contains random number generators for this session.
+	rng struct {
+		// internal is used for internal operations like determining the query
+		// cancel key and whether sampling execution stats should be performed.
+		internal *rand.Rand
+		// external is used to power random() builtin. It might be nil since it
+		// is initialized whenever either random() or setseed() is called for
+		// the first time.
+		external *rand.Rand
+	}
 
 	// mu contains of all elements of the struct that can be changed
 	// after initialization, and may be accessed from another thread.
@@ -3700,6 +3707,20 @@ func (ex *connExecutor) omitInRangefeeds() bool {
 	return ex.sessionData().DisableChangefeedReplication
 }
 
+func (ex *connExecutor) getSessionRNG() *rand.Rand {
+	if ex.rng.external == nil {
+		ex.rng.external, _ = randutil.NewPseudoRand()
+	}
+	return ex.rng.external
+}
+
+func (ex *connExecutor) setSessionRNGSeed(seed int64) {
+	if ex.rng.external == nil {
+		ex.rng.external, _ = randutil.NewPseudoRand()
+	}
+	ex.rng.external.Seed(seed)
+}
+
 // initEvalCtx initializes the fields of an extendedEvalContext that stay the
 // same across multiple statements. resetEvalCtx must also be called before each
 // statement, to reinitialize other fields.
@@ -3732,6 +3753,8 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			RangeStatsFetcher:              p.execCfg.RangeStatsFetcher,
 			JobsProfiler:                   p,
 			ULIDEntropy:                    ulid.Monotonic(crypto_rand.Reader, 0),
+			GetSessionRNG:                  ex.getSessionRNG,
+			SetSessionRNGSeed:              ex.setSessionRNGSeed,
 		},
 		Tracing:              &ex.sessionTracing,
 		MemMetrics:           &ex.memMetrics,
@@ -3743,8 +3766,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
 	}
-	rng, _ := randutil.NewPseudoRand()
-	evalCtx.RNG = rng
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }
 

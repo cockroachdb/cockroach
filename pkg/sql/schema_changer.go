@@ -15,6 +15,7 @@ import (
 	crypto_rand "crypto/rand"
 	"fmt"
 	"math"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -2619,6 +2620,7 @@ func createSchemaChangeEvalCtx(
 	ts hlc.Timestamp,
 	descriptors *descs.Collection,
 ) extendedEvalContext {
+	var rng *rand.Rand
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
 		// because it sets "enabled: false" and thus none of the
@@ -2646,10 +2648,20 @@ func createSchemaChangeEvalCtx(
 			OriginalLocality:     execCfg.Locality,
 			Tracer:               execCfg.AmbientCtx.Tracer,
 			ULIDEntropy:          ulid.Monotonic(crypto_rand.Reader, 0),
+			GetSessionRNG: func() *rand.Rand {
+				if rng == nil {
+					rng, _ = randutil.NewPseudoRand()
+				}
+				return rng
+			},
+			SetSessionRNGSeed: func(seed int64) {
+				if rng == nil {
+					rng, _ = randutil.NewPseudoRand()
+				}
+				rng.Seed(seed)
+			},
 		},
 	}
-	rng, _ := randutil.NewPseudoRand()
-	evalCtx.RNG = rng
 	// TODO(andrei): This is wrong (just like on the main code path on
 	// setupFlow). Each processor should override Ctx with its own context.
 	evalCtx.SetDeprecatedContext(ctx)
