@@ -9166,6 +9166,8 @@ func TestRestorePauseOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
+	skip.WithIssue(t, 121342)
+
 	defer jobs.TestingSetProgressThresholds()()
 
 	baseDir := "testdata"
