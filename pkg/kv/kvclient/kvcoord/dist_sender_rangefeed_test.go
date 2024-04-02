@@ -143,18 +143,15 @@ func makeTransportFactory(
 	rfStreamEnabled bool, counts *internalClientCounts, wrapFn wrapRangeFeedClientFn,
 ) func(kvcoord.TransportFactory) kvcoord.TransportFactory {
 	return func(factory kvcoord.TransportFactory) kvcoord.TransportFactory {
-		return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
-			transport, err := factory(options, slice)
-			if err != nil {
-				return nil, err
-			}
+		return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) kvcoord.Transport {
+			transport := factory(options, slice)
 			countingTransport := &countConnectionsTransport{
 				Transport:           transport,
 				rfStreamEnabled:     rfStreamEnabled,
 				counts:              counts,
 				wrapRangeFeedClient: wrapFn,
 			}
-			return countingTransport, nil
+			return countingTransport
 		}
 	}
 }

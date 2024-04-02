@@ -2538,10 +2538,7 @@ func (ds *DistSender) sendToReplicas(
 		metrics:                &ds.metrics,
 		dontConsiderConnHealth: ds.dontConsiderConnHealth,
 	}
-	transport, err := ds.transportFactory(opts, replicas)
-	if err != nil {
-		return nil, err
-	}
+	transport := ds.transportFactory(opts, replicas)
 	defer transport.Release()
 
 	// inTransferRetry is used to slow down retries in cases where an ongoing

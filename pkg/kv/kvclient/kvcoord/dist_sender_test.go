@@ -146,11 +146,11 @@ func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 	return func(
 		_ SendOptions,
 		replicas ReplicaSlice,
-	) (Transport, error) {
+	) Transport {
 		return &simpleTransportAdapter{
 			fn:       fn,
 			replicas: replicas.Descriptors(),
-		}, nil
+		}
 	}
 }
 
@@ -268,23 +268,19 @@ func TestSendRPCOrder(t *testing.T) {
 	type replicaTypeMap = map[roachpb.NodeID]roachpb.ReplicaType
 
 	// Gets filled below to identify the replica by its address.
-	makeVerifier := func(expNodes []roachpb.NodeID) func(SendOptions, []roachpb.ReplicaDescriptor) error {
-		return func(o SendOptions, replicas []roachpb.ReplicaDescriptor) error {
+	makeVerifier := func(t *testing.T, expNodes []roachpb.NodeID) func(SendOptions, []roachpb.ReplicaDescriptor) {
+		return func(o SendOptions, replicas []roachpb.ReplicaDescriptor) {
 			var actualAddrs []roachpb.NodeID
 			for i, r := range replicas {
-				if len(expNodes) <= i {
-					return errors.Errorf("got unexpected replica: %s", r)
-				}
+				require.Greater(t, len(expNodes), i)
+
 				if expNodes[i] == 0 {
 					actualAddrs = append(actualAddrs, 0)
 				} else {
 					actualAddrs = append(actualAddrs, r.NodeID)
 				}
 			}
-			if !reflect.DeepEqual(expNodes, actualAddrs) {
-				return errors.Errorf("expected %d, but found %d", expNodes, actualAddrs)
-			}
-			return nil
+			require.Equal(t, expNodes, actualAddrs)
 		}
 	}
 
@@ -420,15 +416,13 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	// Stub to be changed in each test case.
-	var verifyCall func(SendOptions, []roachpb.ReplicaDescriptor) error
+	var verifyCall func(SendOptions, []roachpb.ReplicaDescriptor)
 
 	var transportFactory TransportFactory = func(
 		opts SendOptions, replicas ReplicaSlice,
-	) (Transport, error) {
+	) Transport {
 		reps := replicas.Descriptors()
-		if err := verifyCall(opts, reps); err != nil {
-			return nil, err
-		}
+		verifyCall(opts, reps)
 		return adaptSimpleTransport(
 			func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 				return ba.CreateReply(), nil
@@ -462,7 +456,7 @@ func TestSendRPCOrder(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			verifyCall = makeVerifier(tc.expReplica)
+			verifyCall = makeVerifier(t, tc.expReplica)
 
 			g.NodeID.Reset(6)
 			cfg.Locality = roachpb.Locality{
@@ -3491,7 +3485,7 @@ func TestCountRanges(t *testing.T) {
 func TestSenderTransport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	transport, err := SenderTransportFactory(
+	transport := SenderTransportFactory(
 		tracing.NewTracer(),
 		kv.SenderFunc(
 			func(
@@ -3501,10 +3495,7 @@ func TestSenderTransport(t *testing.T) {
 				return
 			},
 		))(SendOptions{}, ReplicaSlice{{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = transport.SendNext(context.Background(), &kvpb.BatchRequest{})
+	_, err := transport.SendNext(context.Background(), &kvpb.BatchRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4334,7 +4325,7 @@ func TestConnectionClass(t *testing.T) {
 	// class will capture the connection class used for the last transport
 	// created.
 	var class rpc.ConnectionClass
-	var transportFactory TransportFactory = func(opts SendOptions, replicas ReplicaSlice) (Transport, error) {
+	var transportFactory TransportFactory = func(opts SendOptions, replicas ReplicaSlice) Transport {
 		class = opts.class
 		return adaptSimpleTransport(
 			func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
@@ -5619,9 +5610,9 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 				tc.cfg.Stopper = stopper
 				tc.cfg.RangeDescriptorDB = rddb
 				tc.cfg.Settings = st
-				tc.cfg.TransportFactory = func(SendOptions, ReplicaSlice) (Transport, error) {
+				tc.cfg.TransportFactory = func(SendOptions, ReplicaSlice) Transport {
 					assert.Fail(t, "test should not try and use the transport factory")
-					return nil, nil
+					return nil
 				}
 				ds := NewDistSender(*tc.cfg)
 

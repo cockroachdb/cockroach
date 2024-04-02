@@ -246,11 +246,11 @@ func TestComplexScenarios(t *testing.T) {
 			func(
 				_ SendOptions,
 				replicas ReplicaSlice,
-			) (Transport, error) {
+			) Transport {
 				return &firstNErrorTransport{
 					replicas:  replicas,
 					numErrors: test.numErrors,
-				}, nil
+				}
 			},
 			serverAddrs,
 			rpcContext,
