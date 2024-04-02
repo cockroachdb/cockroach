@@ -29,7 +29,7 @@ const (
 	OperationRequiresNodes OperationDependency = iota
 	OperationRequiresPopulatedDatabase
 	OperationRequiresZeroUnavailableRanges
-	OperationRequiresZeroLaggingRanges
+	OperationRequiresZeroUnderreplicatedRanges
 )
 
 // OperationCleanup specifies an operation that
@@ -60,8 +60,6 @@ type OperationSpec struct {
 	// operation to work. This will be used in filtering eligible operations to
 	// run. Multiple dependencies could be specified, and any schedulers will take
 	// care of ensuring those dependencies are met before running Run().
-	//
-	// TODO(bilal): Unused.
 	Dependencies []OperationDependency
 
 	// CanRunConcurrently specifies whether this operation is safe to run
