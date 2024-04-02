@@ -359,7 +359,7 @@ CREATE TABLE crdb_internal.databases (
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
-			func(db catalog.DatabaseDescriptor) error {
+			func(ctx context.Context, db catalog.DatabaseDescriptor) error {
 				var survivalGoal = tree.DNull
 				var primaryRegion = tree.DNull
 				var secondaryRegion = tree.DNull
@@ -443,7 +443,7 @@ CREATE TABLE crdb_internal.super_regions (
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
-			func(db catalog.DatabaseDescriptor) error {
+			func(ctx context.Context, db catalog.DatabaseDescriptor) error {
 				if !db.IsMultiRegion() {
 					return nil
 				}
@@ -791,7 +791,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
 		// Walk over all available tables and show row count for each of them
 		// using collected statistics.
 		return forEachTableDescAll(ctx, p, db, virtualMany,
-			func(db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+			func(ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				tableID := tree.DInt(table.GetID())
 				rowCount := tree.DNull
 				// For Virtual Tables report NULL row count.
@@ -3587,7 +3587,7 @@ CREATE TABLE crdb_internal.create_schema_statements (
 			dbDescs = append(dbDescs, db)
 		}
 		for _, db := range dbDescs {
-			return forEachSchema(ctx, p, db, true /* requiresPrivileges */, func(schemaDesc catalog.SchemaDescriptor) error {
+			return forEachSchema(ctx, p, db, true /* requiresPrivileges */, func(ctx context.Context, schemaDesc catalog.SchemaDescriptor) error {
 				switch schemaDesc.SchemaKind() {
 				case catalog.SchemaUserDefined:
 					node := &tree.CreateSchema{
@@ -3633,7 +3633,7 @@ func createRoutinePopulate(
 		fnIDToDBName := make(map[descpb.ID]string)
 		fnIDToDBID := make(map[descpb.ID]descpb.ID)
 		for _, curDB := range dbDescs {
-			err := forEachSchema(ctx, p, curDB, true /* requiresPrivileges */, func(sc catalog.SchemaDescriptor) error {
+			err := forEachSchema(ctx, p, curDB, true /* requiresPrivileges */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
 				return sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
 					fnIDs = append(fnIDs, sig.ID)
 					fnIDToScName[sig.ID] = sc.GetName()
@@ -3929,7 +3929,7 @@ CREATE TABLE crdb_internal.table_columns (
 		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+				func(ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
 					columns := table.PublicColumns()
@@ -3999,7 +3999,7 @@ CREATE TABLE crdb_internal.table_indexes (
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			alloc := &tree.DatumAlloc{}
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+				func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
 					// We report the primary index of non-physical tables here. These
@@ -4113,7 +4113,7 @@ CREATE TABLE crdb_internal.index_columns (
 		}
 
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(parent catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+			func(ctx context.Context, parent catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				parentName := parent.GetName()
 				tableName := tree.NewDString(table.GetName())
@@ -4229,7 +4229,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 		sequenceDep := tree.NewDString("sequence")
 
 		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual, func(
-			db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor, tableLookup tableLookupFn,
+			ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor, tableLookup tableLookupFn,
 		) error {
 			tableID := tree.NewDInt(tree.DInt(table.GetID()))
 			tableName := tree.NewDString(table.GetName())
@@ -4363,7 +4363,7 @@ CREATE TABLE crdb_internal.forward_dependencies (
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no backward/forward dependencies*/
-			func(db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+			func(ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				tableName := tree.NewDString(table.GetName())
 				for _, fk := range table.InboundForeignKeys() {
@@ -5475,7 +5475,7 @@ CREATE TABLE crdb_internal.partitions (
 		}
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
-				func(db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+				func(ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 					return catalog.ForEachIndex(table, catalog.IndexOpts{
 						AddMutations: true,
 					}, func(index catalog.Index) error {
@@ -6162,7 +6162,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 			)
 		}
 
-		doDescriptorValidationErrors := func(descriptor catalog.Descriptor, lCtx tableLookupFn) (err error) {
+		doDescriptorValidationErrors := func(ctx context.Context, descriptor catalog.Descriptor, lCtx tableLookupFn) (err error) {
 			if descriptor == nil {
 				return nil
 			}
@@ -6184,9 +6184,9 @@ CREATE TABLE crdb_internal.invalid_objects (
 		const allowAdding = true
 		if err := forEachTableDescWithTableLookupInternalFromDescriptors(
 			ctx, p, dbContext, hideVirtual, allowAdding, c, func(
-				_ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, descriptor catalog.TableDescriptor, lCtx tableLookupFn,
+				ctx context.Context, _ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, descriptor catalog.TableDescriptor, lCtx tableLookupFn,
 			) error {
-				return doDescriptorValidationErrors(descriptor, lCtx)
+				return doDescriptorValidationErrors(ctx, descriptor, lCtx)
 			}); err != nil {
 			return err
 		}
@@ -6194,9 +6194,9 @@ CREATE TABLE crdb_internal.invalid_objects (
 		// Validate type descriptors.
 		if err := forEachTypeDescWithTableLookupInternalFromDescriptors(
 			ctx, p, dbContext, allowAdding, c, func(
-				_ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, descriptor catalog.TypeDescriptor, lCtx tableLookupFn,
+				ctx context.Context, _ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, descriptor catalog.TypeDescriptor, lCtx tableLookupFn,
 			) error {
-				return doDescriptorValidationErrors(descriptor, lCtx)
+				return doDescriptorValidationErrors(ctx, descriptor, lCtx)
 			}); err != nil {
 			return err
 		}
@@ -6222,7 +6222,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 				default:
 					return nil
 				}
-				return doDescriptorValidationErrors(desc, lCtx)
+				return doDescriptorValidationErrors(ctx, desc, lCtx)
 			}); err != nil {
 				return err
 			}
@@ -6281,7 +6281,7 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 					called = true
 					return addRow(datum...)
 				},
-			)(dbDesc); err != nil {
+			)(ctx, dbDesc); err != nil {
 				return false, err
 			}
 			return called, nil
@@ -6291,8 +6291,8 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 
 func makeClusterDatabasePrivilegesFromDescriptor(
 	ctx context.Context, p *planner, addRow func(...tree.Datum) error,
-) func(catalog.DatabaseDescriptor) error {
-	return func(db catalog.DatabaseDescriptor) error {
+) func(context.Context, catalog.DatabaseDescriptor) error {
+	return func(ctx context.Context, db catalog.DatabaseDescriptor) error {
 		privs, err := db.GetPrivileges().Show(privilege.Database, true /* showImplicitOwnerPrivs */)
 		if err != nil {
 			return err
@@ -6346,7 +6346,7 @@ CREATE TABLE crdb_internal.cross_db_references (
 );`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
-			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookupFn tableLookupFn) error {
+			func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookupFn tableLookupFn) error {
 				// For tables detect if foreign key references point at a different
 				// database. Additionally, check if any of the columns have sequence
 				// references to a different database.
@@ -6669,7 +6669,7 @@ CREATE TABLE crdb_internal.default_privileges (
 
 		// Cache roles ahead of time to avoid role lookup inside loop.
 		var roles []catpb.DefaultPrivilegesRole
-		if err := forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+		if err := forEachRole(ctx, p, func(ctx context.Context, userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
 			// Skip the internal node user, since it can't be modified and just adds noise.
 			if userName.IsNodeUser() {
 				return nil
@@ -6687,7 +6687,7 @@ CREATE TABLE crdb_internal.default_privileges (
 		})
 
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
-			func(databaseDesc catalog.DatabaseDescriptor) error {
+			func(ctx context.Context, databaseDesc catalog.DatabaseDescriptor) error {
 				database := tree.NewDString(databaseDesc.GetName())
 				addRowsForSchema := func(defaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor, schema tree.Datum) error {
 					for _, role := range roles {
@@ -6789,7 +6789,7 @@ CREATE TABLE crdb_internal.default_privileges (
 					return err
 				}
 
-				return forEachSchema(ctx, p, databaseDesc, true /* requiresPrivileges */, func(schema catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, databaseDesc, true /* requiresPrivileges */, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
 					return addRowsForSchema(schema.GetDefaultPrivilegeDescriptor(), tree.NewDString(schema.GetName()))
 				})
 			})
@@ -6820,7 +6820,7 @@ CREATE TABLE crdb_internal.index_usage_statistics (
 		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+				func(ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 					tableID := table.GetID()
 					return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(idx catalog.Index) error {
 						indexID := idx.GetID()
@@ -7740,7 +7740,7 @@ CREATE TABLE crdb_internal.index_spans (
 	},
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescAll(ctx, p, db, hideVirtual,
-			func(_ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+			func(ctx context.Context, _ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				return generateIndexSpans(ctx, p, table, addRow)
 			})
 	},
@@ -7792,7 +7792,7 @@ CREATE TABLE crdb_internal.table_spans (
 	},
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescAll(ctx, p, db, hideVirtual,
-			func(_ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+			func(ctx context.Context, _ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				return generateTableSpan(ctx, p, table, addRow)
 			})
 	},
@@ -8682,7 +8682,7 @@ CREATE TABLE crdb_internal.kv_inherited_role_members (
 		// explicitly a member of `b`. The role `c` is also a member of `a`,
 		// but not explicitly, because it inherits the membership through `b`.
 		explicitMemberships := make(map[username.SQLUsername]map[username.SQLUsername]bool)
-		if err := forEachRoleMembership(ctx, p.InternalSQLTxn(), func(role, member username.SQLUsername, isAdmin bool) error {
+		if err := forEachRoleMembership(ctx, p.InternalSQLTxn(), func(ctx context.Context, role, member username.SQLUsername, isAdmin bool) error {
 			if _, found := explicitMemberships[member]; !found {
 				explicitMemberships[member] = make(map[username.SQLUsername]bool)
 			}
