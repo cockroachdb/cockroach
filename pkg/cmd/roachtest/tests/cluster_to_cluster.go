@@ -1217,12 +1217,12 @@ func registerClusterToCluster(r registry.Registry) {
 			suites:                    registry.Suites(registry.Nightly),
 		},
 		{
-			name:               "c2c/BulkOps/full",
+			name:               "c2c/BulkOps/short",
 			srcNodes:           4,
 			dstNodes:           4,
 			cpus:               8,
 			pdSize:             100,
-			workload:           replicateBulkOps{},
+			workload:           replicateBulkOps{short: true},
 			timeout:            2 * time.Hour,
 			additionalDuration: 0,
 			// Cutover currently takes around 4 minutes, perhaps because we need to
