@@ -9314,9 +9314,9 @@ var (
 )
 
 var (
-	errJSONObjectNotEvenNumberOfElements = pgerror.New(pgcode.InvalidParameterValue,
+	errJSONObjectNotEvenNumberOfElements = pgerror.New(pgcode.ArraySubscript,
 		"array must have even number of elements")
-	errJSONObjectNullValueForKey = pgerror.New(pgcode.InvalidParameterValue,
+	errJSONObjectNullValueForKey = pgerror.New(pgcode.NullValueNotAllowed,
 		"null value not allowed for object key")
 	errJSONObjectMismatchedArrayDim = pgerror.New(pgcode.InvalidParameterValue,
 		"mismatched array dimensions")
@@ -9548,8 +9548,7 @@ var jsonBuildObjectImpl = tree.Overload{
 		builder := json.NewObjectBuilder(len(args) / 2)
 		for i := 0; i < len(args); i += 2 {
 			if args[i] == tree.DNull {
-				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-					"argument %d cannot be null", i+1)
+				return nil, errJSONObjectNullValueForKey
 			}
 
 			key, err := asJSONBuildObjectKey(
@@ -11136,7 +11135,7 @@ func asJSONBuildObjectKey(
 	switch t := d.(type) {
 	case *tree.DArray, *tree.DJSON, *tree.DTuple:
 		return "", pgerror.New(pgcode.InvalidParameterValue,
-			"key value must be scalar, not array, tuple, or json")
+			"key value must be scalar, not array, composite, or json")
 	case *tree.DCollatedString:
 		return t.Contents, nil
 	case *tree.DString:
