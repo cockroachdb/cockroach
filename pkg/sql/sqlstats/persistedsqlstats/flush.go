@@ -30,9 +30,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Flush flushes in-memory sql stats into a system table. Any errors encountered
-// during the flush will be logged as warning.
-func (s *PersistedSQLStats) Flush(ctx context.Context) {
+// Flush flushes in-memory sql stats into a system table, returning true if the flush
+// was attempted. Any errors encountered will be logged as warning. We may return
+// without attempting to flush any sql stats if any of the following are true:
+// 1. The flush is disabled by the cluster setting `sql.stats.flush.enabled`.
+// 2. The flush is called too soon after the last flush (`sql.stats.flush.minimum_interval`).
+// 3. We have reached the limit of the number of rows in the system table.
+func (s *PersistedSQLStats) Flush(ctx context.Context) bool {
 	now := s.getTimeNow()
 
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)
@@ -59,13 +63,13 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 
 	// Handle early abortion of the flush.
 	if !enabled {
-		return
+		return false
 	}
 
 	if flushingTooSoon {
 		log.Infof(ctx, "flush aborted due to high flush frequency. "+
 			"The minimum interval between flushes is %s", minimumFlushInterval.String())
-		return
+		return false
 	}
 
 	log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
@@ -87,22 +91,24 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 	}
 	if limitReached {
 		log.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
-	} else {
-		var wg sync.WaitGroup
-		wg.Add(2)
-
-		go func() {
-			defer wg.Done()
-			s.flushStmtStats(ctx, aggregatedTs)
-		}()
-
-		go func() {
-			defer wg.Done()
-			s.flushTxnStats(ctx, aggregatedTs)
-		}()
-
-		wg.Wait()
+		return false
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		s.flushStmtStats(ctx, aggregatedTs)
+	}()
+
+	go func() {
+		defer wg.Done()
+		s.flushTxnStats(ctx, aggregatedTs)
+	}()
+
+	wg.Wait()
+	return true
 }
 
 func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, error) {

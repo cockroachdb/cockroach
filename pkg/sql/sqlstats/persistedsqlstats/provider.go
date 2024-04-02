@@ -192,7 +192,12 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 				return
 			}
 
-			s.Flush(ctx)
+			flushed := s.Flush(ctx)
+
+			if !flushed {
+				// If the flush did not do any work, don't signal flush completion.
+				continue
+			}
 
 			// Tell the local activity translator job, if any, that we've
 			// performed a round of flush.
@@ -211,7 +216,9 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 					// Don't block the flush loop if the sql activity update job is not
 					// ready to receive. We should at least continue to collect and flush
 					// stats for this node.
-					log.Warning(ctx, "sql-stats-worker: unable to signal flush completion")
+					if log.V(1) {
+						log.Warning(ctx, "sql-stats-worker: unable to signal flush completion")
+					}
 				}
 			}
 		}
