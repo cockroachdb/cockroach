@@ -774,11 +774,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 			metrics:                &r.d.metrics,
 			dontConsiderConnHealth: true,
 		}
-		transport, err := r.d.transportFactory(opts, replicas)
-		if err != nil {
-			log.Errorf(ctx, "failed to launch probe: %s", err)
-			return
-		}
+		transport := r.d.transportFactory(opts, replicas)
 		defer transport.Release()
 
 		// Start the write grace timer. Unlike reads, writes can't automatically be

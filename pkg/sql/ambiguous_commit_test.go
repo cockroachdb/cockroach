@@ -93,8 +93,8 @@ func TestAmbiguousCommit(t *testing.T) {
 
 		params.Knobs.KVClient = &kvcoord.ClientTestingKnobs{
 			TransportFactory: func(factory kvcoord.TransportFactory) kvcoord.TransportFactory {
-				return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
-					transport, err := factory(options, slice)
+				return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) kvcoord.Transport {
+					transport := factory(options, slice)
 					return &interceptingTransport{
 						Transport: transport,
 						sendNext: func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
@@ -124,7 +124,7 @@ func TestAmbiguousCommit(t *testing.T) {
 								return transport.SendNext(ctx, ba)
 							}
 						},
-					}, err
+					}
 				}
 			},
 		}
