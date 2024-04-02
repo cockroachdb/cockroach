@@ -47,6 +47,18 @@ package eventagg
 // plugin should be easy enough that an engineer feels empowered to build their own (if one doesn't already
 // exist for their use case).
 //
+// ## Flushing Map/Reduce Aggregations
+// Users of the eventagg package have the ability to use various implementations of the FlushTrigger interface.
+// FlushTrigger is used each time an event is passed to a MapReduceAggregator, to determine whether a flush should
+// be performed of the currently buffered data before aggregating the next event.
+//
+// As an example, a WindowedFlush implementation is provided, which aligns aggregation intervals to truncated
+// time intervals [startTime, endTime). The downside of this approach is that it relies on event consumption to
+// trigger a flush, meaning an arbitrary amount of time may pass beyond the intended end time of the aggregation
+// window until things are flushed. In an environment where events are expected to have a regular frequency, this
+// should not be too burdensome. The ability to create solutions for this is possible via new FlushTrigger
+// implementations, but we punt this for now to avoid slowing prototyping progress.
+//
 // ## Wish List & Unsolved Challenges
 // Through the exercise of building this proof of concept, I came across some wishlist items that require
 // further thinking.
@@ -58,9 +70,7 @@ package eventagg
 //		 fed a single element at a time using a Visitor() pattern. I'd like to find a way to have both here -
 //		 the ability for consumers to be fed the raw data structure used in the previous aggregation, and the
 //		 ability to somehow chain together consumers regardless of the type of that data structure.
-//	2. Code generation via struct tags, to handle implementing the methods of the Mergeable[K, V] interface.
-// 	3. The ability to customize the "flush trigger" of a MapReduceAggregator via plugins. Users should be able
-//		 to configure the flush trigger(s) at initialization, and not have to worry about them beyond that.
+//	2. Code generation via struct tags, to handle implementing the methods of the Mergeable[K, T] interface.
 //
 // Additionally, while the POC in its current state is still focusing on core interfaces, there are some
 // challenges that we're punting until later that are worth enumerating here.
