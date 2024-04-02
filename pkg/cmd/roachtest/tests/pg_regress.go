@@ -1009,28 +1009,6 @@ index d29e98d2ac..b3184dfb63 100644
      continent        text not null
  );
  `},
-	// CRDB does not support setseed, so random is not deterministic.
-	{"random.sql", `diff --git a/src/test/regress/sql/random.sql b/src/test/regress/sql/random.sql
-index 14cc76bc3c..6f9a70dce6 100644
---- a/src/test/regress/sql/random.sql
-+++ b/src/test/regress/sql/random.sql
-@@ -104,12 +104,12 @@ SELECT ks_test_normal_random() OR
- 
- SELECT setseed(0.5);
- 
--SELECT random() FROM generate_series(1, 10);
-+-- SELECT random() FROM generate_series(1, 10);
- 
- -- Likewise for random_normal(); however, since its implementation relies
- -- on libm functions that have different roundoff behaviors on different
- -- machines, we have to round off the results a bit to get consistent output.
- SET extra_float_digits = -1;
- 
--SELECT random_normal() FROM generate_series(1, 10);
--SELECT random_normal(mean => 1, stddev => 0.1) r FROM generate_series(1, 10);
-+-- SELECT random_normal() FROM generate_series(1, 10);
-+-- SELECT random_normal(mean => 1, stddev => 0.1) r FROM generate_series(1, 10);
-`},
 	// Add order to some statements so that CRDB output is deterministic.
 	{"aggregates.sql", `diff --git a/src/test/regress/sql/aggregates.sql b/src/test/regress/sql/aggregates.sql
 index 75c78be640..00b543bf45 100644
