@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
 )
 
@@ -71,6 +72,7 @@ func NewStmtStatsAggregator(
 				ServiceLatency: metric.ManualWindowHistogram{}, // TODO: legitimate construction of histogram.
 			}
 		},
+		eventagg.NewWindowedFlush(10*time.Minute, timeutil.Now),
 		eventagg.NewLogWriteConsumer[appstatspb.StmtFingerprintID, *StmtStatistics](), // We'd like to log all the aggregated results, as-is.
 	)
 }
