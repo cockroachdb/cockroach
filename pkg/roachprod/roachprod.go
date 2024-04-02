@@ -2442,18 +2442,41 @@ func CreateLoadBalancer(
 		return err
 	}
 
+	// If virtualClusterName is not provided, use the system interface name.
+	if virtualClusterName == "" {
+		virtualClusterName = install.SystemInterfaceName
+	}
+
 	// Find the SQL ports for the service on all nodes.
-	serviceDesc, err := c.DiscoverService(ctx, c.TargetNodes()[0], virtualClusterName, install.ServiceTypeSQL, sqlInstance)
+	services, err := c.DiscoverServices(
+		ctx, virtualClusterName, install.ServiceTypeSQL,
+		install.ServiceNodePredicate(c.TargetNodes()...), install.ServiceInstancePredicate(sqlInstance),
+	)
 	if err != nil {
 		return err
 	}
 
+	port := config.DefaultSQLPort
+	if len(services) == 0 {
+		l.Errorf("WARNING: %s SQL service not found on cluster %s, using default SQL port %d",
+			virtualClusterName, clusterName, port)
+	} else {
+		port = services[0].Port
+		// Confirm that the service has the same port on all nodes.
+		for _, service := range services[1:] {
+			if port != service.Port {
+				return errors.Errorf("service %s must share the same port on all nodes, different ports found %d and %d",
+					virtualClusterName, port, service.Port)
+			}
+		}
+	}
+
 	// Create a load balancer for the service's port.
 	err = vm.FanOut(c.VMs, func(provider vm.Provider, vms vm.List) error {
-		createErr := provider.CreateLoadBalancer(l, vms, serviceDesc.Port)
+		createErr := provider.CreateLoadBalancer(l, vms, port)
 		if createErr != nil {
 			l.Errorf("Cleaning up partially-created load balancer (prev err: %s)", createErr)
-			cleanupErr := provider.DeleteLoadBalancer(l, vms, serviceDesc.Port)
+			cleanupErr := provider.DeleteLoadBalancer(l, vms, port)
 			if cleanupErr != nil {
 				l.Errorf("Error while cleaning up partially-created load balancer: %s", cleanupErr)
 			} else {
