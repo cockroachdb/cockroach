@@ -487,6 +487,11 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
+	// Disable stats collection so that the descriptor isn't modified.
+	if _, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false"); err != nil {
+		t.Fatal(err)
+	}
+
 	// Populate the name cache.
 	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
 		t.Fatal(err)
