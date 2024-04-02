@@ -454,29 +454,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	"crdb_internal.kv_node_status": {
 		// `env` column can contain sensitive node environment variable values,
 		// such as AWS_ACCESS_KEY.
-		customQueryUnredacted: `SELECT 
-				"node_id",
-				"network",
-				"address",
-				"attrs",
-				"locality",
-				"server_version",
-				"go_version",
-				"tag",
-				"time",
-				"revision",
-				"cgo_compiler",
-				"platform",
-				"distribution",
-				"type",
-				"dependencies",
-				"started_at",
-				"updated_at",
-				"metrics",
-				"args",
-				"activity"
-			FROM crdb_internal.kv_node_status
-		`,
+		// Some fields are marked as `<redacted>` because we want to redact hostname, ip address and other sensitive fields
+		// in the db dump files contained in debugzip
 		customQueryRedacted: `SELECT 
 				"node_id",
 				"network",
@@ -497,6 +476,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 				"updated_at",
 				"metrics",
 				'<redacted>' as args,
+				'<redacted>' as env,
 				"activity"
 			FROM crdb_internal.kv_node_status
 		`,
@@ -696,6 +676,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 	"crdb_internal.gossip_nodes": {
 		// `cluster_name` is hashed as we only care to see whether values are
 		// identical across nodes.
+		// Some fields are marked as `<redacted>` because we want to redact hostname, ip address and other sensitive fields
+		// in the db dump files contained in debugzip
 		customQueryRedacted: `SELECT 
 				node_id, 
 				network, 
@@ -837,6 +819,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.node_runtime_info": {
+		// Some fields are marked as `<redacted>` because we want to redact hostname, ip address and other sensitive fields
+		// in the db dump files contained in debugzip
 		customQueryRedacted: `SELECT * FROM (
 			SELECT
 				"node_id",
@@ -1324,18 +1308,14 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.sql_instances": {
-		customQueryUnredacted: `SELECT 
-				"id",
-				"addr",
-				"session_id",
-				"locality"
-			FROM system.sql_instances
-		`,
+		// Some fields are marked as `<redacted>` because we want to redact hostname, ip address and other sensitive fields
+		// in the db dump files contained in debugzip
 		customQueryRedacted: `SELECT 
-				"id",
-				'<redacted>' as addr,
-				"session_id",
-				'<redacted>' as locality
+			"id",
+			'<redacted>' as addr,
+			"session_id",
+			'<redacted>' as locality,
+			'<redacted>' as sql_addr
 			FROM system.sql_instances
 		`,
 	},
