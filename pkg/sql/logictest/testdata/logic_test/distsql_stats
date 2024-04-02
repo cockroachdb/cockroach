@@ -2794,16 +2794,58 @@ statement ok
 INSERT INTO mno (m, n) SELECT i, i % 50 FROM generate_series(0, 999) s(i)
 
 statement ok
-ANALYZE mno
+CREATE STATISTICS virt FROM mno
 
-query TTIIB
+query TTIIB colnames
 SELECT statistics_name, column_names, row_count, distinct_count, histogram_id IS NOT NULL AS has_histogram
 FROM [SHOW STATISTICS FOR TABLE mno]
 ORDER BY statistics_name, column_names::STRING
 ----
-NULL  {m}  1000  1000  true
-NULL  {n}  1000  50    true
-NULL  {o}  1000  33    true
+statistics_name  column_names  row_count  distinct_count  has_histogram
+virt             {m}           1000       1000            true
+virt             {n}           1000       50              true
+virt             {o}           1000       33              true
+
+let $hist_o
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE mno]
+WHERE statistics_name = 'virt' AND column_names = ARRAY['o']
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_o
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+0            0           0                    1
+2            2           1                    4
+3            0           0                    6
+4            0           0                    8
+5            0           0                    10
+6            0           0                    12
+7            0           0                    14
+8            0           0                    16
+9            0           0                    18
+10           0           0                    20
+11           0           0                    22
+12           0           0                    24
+13           0           0                    26
+14           0           0                    28
+15           0           0                    30
+16           0           0                    32
+17           0           0                    34
+18           0           0                    36
+19           0           0                    38
+20           0           0                    40
+21           0           0                    42
+22           0           0                    44
+23           0           0                    46
+24           0           0                    48
+25           0           0                    50
+26           0           0                    52
+27           0           0                    54
+28           0           0                    56
+29           0           0                    58
+30           0           0                    60
+31           0           0                    62
+32           0           0                    7
 
 query T
 EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9
