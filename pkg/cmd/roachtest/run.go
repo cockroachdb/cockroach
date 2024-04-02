@@ -441,14 +441,19 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 	//lint:ignore SA1019 deprecated
 	rand.Seed(roachtestflags.GlobalSeed)
 	r := makeTestRegistry()
-
-	register(&r)
-	ctx := context.Background()
 	// NB: root logger with no path always tees to Stdout.
 	l, err := logger.RootLogger("", logger.NoTee)
 	if err != nil {
 		return err
 	}
+	// Install goroutine leak checker and run it at the end of the entire operation
+	// run. This is good hygiene for operations, as operations can one day be
+	// called from roachtests as well.
+	defer leaktest.AfterTest(l)()
+
+	register(&r)
+	ctx := context.Background()
+
 	// TODO(bilal): This is excessive for just getting the number of nodes in the
 	// cluster. We should expose a roachprod.Nodes method or so.
 	nodes, err := roachprod.PgURL(ctx, l, clusterName, roachtestflags.CertsDir, roachprod.PGURLOptions{})
@@ -486,10 +491,6 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 	defer cancel()
 	// Cancel this context if we get an interrupt.
 	CtrlC(ctx, l, cancel, nil /* registry */)
-	// Install goroutine leak checker and run it at the end of the entire operation
-	// run. This is good hygiene for operations, as operations can one day be
-	// called from roachtests as well.
-	defer leaktest.AfterTest(l)()
 
 	op := &operationImpl{
 		spec:      opSpec,
@@ -497,6 +498,16 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 		l:         l,
 	}
 	op.mu.cancel = cancel
+	op.Status(fmt.Sprintf("checking if operation %s dependencies are met", opSpec.Name))
+
+	if ok, err := checkDependencies(ctx, c, l, opSpec); !ok || err != nil {
+		if err != nil {
+			op.Fatalf("error checking dependencies: %s", err)
+		}
+		op.Status("operation dependencies not met")
+		return nil
+	}
+
 	var cleanup registry.OperationCleanup
 	func() {
 		ctx, cancel := context.WithTimeout(ctx, opSpec.Timeout)
