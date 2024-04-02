@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "doc.go",
         "event_agg.go",
+        "flush.go",
         "flush_consumer.go",
         "map_reduce.go",
     ],
@@ -18,13 +19,18 @@ go_library(
 
 go_test(
     name = "eventagg_test",
-    srcs = ["map_reduce_test.go"],
+    srcs = [
+        "flush_test.go",
+        "map_reduce_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":eventagg"],
     deps = [
         "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
