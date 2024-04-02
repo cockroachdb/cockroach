@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/spf13/cobra"
+	"golang.org/x/exp/maps"
 	"golang.org/x/term"
 )
 
@@ -54,6 +55,7 @@ var (
 	tag                   string
 	external              = false
 	pgurlCertsDir         string
+	authMode              string
 	adminurlPath          = ""
 	adminurlIPs           = false
 	urlOpen               = false
@@ -86,6 +88,12 @@ var (
 	grafanaTags         []string
 	grafanaDashboardUID string
 	grafanaTimeRange    []int64
+
+	pgAuthModes = map[string]install.PGAuthMode{
+		"root":          install.AuthRootCert,
+		"user-password": install.AuthUserPassword,
+		"user-cert":     install.AuthUserCert,
+	}
 )
 
 func initFlags() {
@@ -173,7 +181,8 @@ func initFlags() {
 		"external", false, "return pgurls for external connections")
 	pgurlCmd.Flags().StringVar(&pgurlCertsDir,
 		"certs-dir", install.CockroachNodeCertsDir, "cert dir to use for secure connections")
-
+	pgurlCmd.Flags().StringVar(&authMode,
+		"auth-mode", "root", fmt.Sprintf("form of authentication to use, valid auth-modes: %v", maps.Keys(pgAuthModes)))
 	pprofCmd.Flags().DurationVar(&pprofOpts.Duration,
 		"duration", 30*time.Second, "Duration of profile to capture")
 	pprofCmd.Flags().BoolVar(&pprofOpts.Heap,

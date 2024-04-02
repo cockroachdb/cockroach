@@ -342,6 +342,8 @@ func (l *livenessProber) GetProbeTimeout() (bool, time.Duration) {
 func IsQueryTimeoutErr(err error) bool {
 	return pgerror.GetPGCode(err) == pgcode.QueryCanceled ||
 		errors.HasType(err, (*timeutil.TimeoutError)(nil)) ||
+		errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil)) ||
+		pgerror.GetPGCode(err) == pgcode.RangeUnavailable ||
 		errors.Is(err, context.DeadlineExceeded)
 }
 

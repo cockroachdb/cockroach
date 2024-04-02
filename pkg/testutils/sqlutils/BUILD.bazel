@@ -12,6 +12,7 @@ go_library(
         "sql_runner.go",
         "table_gen.go",
         "table_id.go",
+        "util_mutiltregion.go",
         "zone.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/sqlutils",
