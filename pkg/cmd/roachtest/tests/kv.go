@@ -1012,6 +1012,11 @@ func registerKVRestartImpact(r registry.Registry) {
 
 			// Begin the monitoring goroutine to track QPS every 5 seconds.
 			m.Go(func(ctx context.Context) error {
+				// Wait until 10s after the workload began to begin asserting on QPS.
+				if dur := timeutil.Since(workloadStartTime); dur < 10*time.Second {
+					time.Sleep(10*time.Second - dur)
+				}
+
 				t.Status(fmt.Sprintf("verify QPS is at least %d during the test, expecting %d", int(passingQPS), int(expectedQPS)))
 				lastPrint := timeutil.Now()
 				defer t.WorkerStatus()
