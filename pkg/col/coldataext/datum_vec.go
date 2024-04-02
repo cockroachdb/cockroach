@@ -239,3 +239,8 @@ func convertToDatum(v coldata.Datum) tree.Datum {
 func (dv *datumVec) SetEvalCtx(evalCtx interface{}) {
 	dv.evalCtx = evalCtx.(*eval.Context)
 }
+
+// SetType implements coldata.DatumVec interface.
+func (dv *datumVec) SetType(t interface{}) {
+	dv.t = t.(*types.T)
+}

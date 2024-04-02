@@ -47,16 +47,25 @@ type Nulls struct {
 
 // NewNulls returns a new nulls vector, initialized with a length.
 func NewNulls(len int) Nulls {
-	if len > 0 {
-		n := Nulls{
-			nulls: make([]byte, (len-1)/8+1),
-		}
-		n.UnsetNulls()
-		return n
+	return newNulls(make([]byte, nullsStorageCap(len)))
+}
+
+//gcassert:inline
+func newNulls(nulls []byte) Nulls {
+	n := Nulls{nulls: nulls}
+	n.UnsetNulls()
+	return n
+}
+
+// nullsStorageCap returns the length of the byte slice that is needed to
+// maintain the Nulls bitmap for n elements.
+//
+//gcassert:inline
+func nullsStorageCap(n int) int {
+	if n <= 0 {
+		return 0
 	}
-	return Nulls{
-		nulls: make([]byte, 0),
-	}
+	return (n-1)/8 + 1
 }
 
 // MaybeHasNulls returns true if the column possibly has any null values, and
