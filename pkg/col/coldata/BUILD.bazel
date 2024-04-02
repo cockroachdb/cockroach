@@ -42,6 +42,7 @@ go_test(
     ],
     embed = [":coldata"],
     deps = [
+        "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
         "//pkg/sql/colconv",
         "//pkg/sql/types",

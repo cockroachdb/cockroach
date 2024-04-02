@@ -11,11 +11,13 @@
 package coldata_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -183,5 +185,41 @@ func TestBatchString(t *testing.T) {
 		copy(b.Selection(), tc.sel)
 		b.SetLength(tc.length)
 		assert.Equal(t, getExpected(tc.length, tc.sel), b.String())
+	}
+}
+
+func BenchmarkNewMemBatchWithCapacity(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+
+	getAllTypes := func(numRepeats int) []*types.T {
+		allTypes := []*types.T{
+			types.Bool, types.Bytes, types.Int2, types.Int4, types.Int,
+			types.Float, types.Decimal, types.TimestampTZ, types.Interval,
+			types.Json, types.TSQuery,
+		}
+		var res []*types.T
+		for i := 0; i < numRepeats; i++ {
+			res = append(res, allTypes...)
+		}
+		return res
+	}
+
+	factory := coldataext.NewExtendedColumnFactoryNoEvalCtx()
+	for _, length := range []int{1, 32, coldata.DefaultColdataBatchSize} {
+		for _, tc := range []struct {
+			name string
+			typs []*types.T
+		}{
+			{"oneInt", types.OneIntCol},
+			{"threeInts", types.ThreeIntCols},
+			{"allOnce", getAllTypes(1)},
+			{"allThrice", getAllTypes(3)},
+		} {
+			b.Run(fmt.Sprintf("%s/len=%d", tc.name, length), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					_ = coldata.NewMemBatchWithCapacity(tc.typs, length, factory)
+				}
+			})
+		}
 	}
 }
