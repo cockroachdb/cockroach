@@ -74,18 +74,6 @@ RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key a
     google-cloud-cli-gke-gcloud-auth-plugin \
     && apt-get clean
 
-# chrome is needed for UI tests. Unfortunately it is only distributed for x86_64
-# and not for ARM. Chrome shouldn't need to be installed when we migrate away
-# from Karma for UI testing.
-RUN case ${TARGETPLATFORM} in \
-    "linux/amd64") \
-      curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-      && echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list \
-      && apt-get update \
-      && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      google-chrome-stable ;; \
-    esac
-
 RUN apt-get purge -y \
     apt-transport-https \
     flex \
