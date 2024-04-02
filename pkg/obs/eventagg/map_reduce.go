@@ -44,17 +44,19 @@ type MapReduceAggregator[E any, K comparable, Agg any] struct {
 	mergeFn func(e E, agg Agg)
 	mu      struct {
 		syncutil.Mutex
-		cache map[K]Agg
+		cache        map[K]Agg
+		flushTrigger FlushTrigger
 	}
 	consumers []flushConsumer[K, Agg]
 }
 
-// NewMapReduceAggregator returns a new MapReduceAggregator[Agg].
+// NewMapReduceAggregator returns a new MapReduceAggregator[E, K, Agg].
 func NewMapReduceAggregator[E any, K comparable, Agg any](
 	stopper *stop.Stopper,
 	newFn func() Agg,
 	keyFn func(e E) K,
 	mergeFn func(e E, agg Agg),
+	flushTrigger FlushTrigger,
 	flushConsumers ...flushConsumer[K, Agg],
 ) *MapReduceAggregator[E, K, Agg] {
 	m := &MapReduceAggregator[E, K, Agg]{
@@ -65,17 +67,28 @@ func NewMapReduceAggregator[E any, K comparable, Agg any](
 		consumers: flushConsumers,
 	}
 	m.mu.cache = make(map[K]Agg)
+	m.mu.flushTrigger = flushTrigger
 	return m
 }
 
 // Add processes the provided event e, aggregating it based on the provided keyFn and mergeFn.
-func (m *MapReduceAggregator[E, K, Agg]) Add(_ context.Context, e E) {
+//
+// Add may trigger an asynchronous flush of the current batch of aggregated data *prior to*
+// consuming the given event, meaning the event will be aggregated into a fresh aggregation
+// window. This flush criteria is determined by the FlushTrigger provided at construction.
+func (m *MapReduceAggregator[E, K, Agg]) Add(ctx context.Context, e E) {
 	if !envEnableStructuredEvents {
 		return
 	}
 	k := m.keyFn(e)
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// If it's time to flush, do so async before processing the event.
+	// This will reset the cache, meaning our event will be added to
+	// a fresh aggregation window.
+	if m.mu.flushTrigger.shouldFlush() {
+		m.flushAsync(ctx, m.getAndResetCacheLocked())
+	}
 	v, ok := m.mu.cache[k]
 	if !ok {
 		v = m.newFn()
@@ -84,20 +97,12 @@ func (m *MapReduceAggregator[E, K, Agg]) Add(_ context.Context, e E) {
 	m.mergeFn(e, v)
 }
 
-// Flush triggers a flush of the in-memory aggregate data, which resets the
+// flushAsync triggers an asynchronous flush of the provided aggregate data, which resets the
 // underlying cache for a new aggregation window.
 //
 // The flushed data will be passed to each of the configured flushConsumer's
 // provided at construction for further processing.
-// TODO(abarganier): implement more robust flush mechanism, with configurable triggers.
-func (m *MapReduceAggregator[E, K, Agg]) Flush(ctx context.Context) {
-	flushed := func() map[K]Agg {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		flushed := m.mu.cache
-		m.mu.cache = make(map[K]Agg)
-		return flushed
-	}()
+func (m *MapReduceAggregator[E, K, Agg]) flushAsync(ctx context.Context, flushed map[K]Agg) {
 	if err := m.stopper.RunAsyncTask(ctx, "map-reduce-flush", func(ctx context.Context) {
 		for _, c := range m.consumers {
 			c.onFlush(ctx, flushed)
@@ -105,4 +110,10 @@ func (m *MapReduceAggregator[E, K, Agg]) Flush(ctx context.Context) {
 	}); err != nil {
 		log.Errorf(ctx, "a problem occurred attempting to flush an aggregation: %v", err)
 	}
+}
+
+func (m *MapReduceAggregator[E, K, V]) getAndResetCacheLocked() map[K]V {
+	flushed := m.mu.cache
+	m.mu.cache = make(map[K]V)
+	return flushed
 }
