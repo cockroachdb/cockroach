@@ -726,7 +726,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.metrics.incErrored(info.Priority)
 		deadline, _ := ctx.Deadline()
 		return true,
-			errors.Newf("work %s deadline already expired: deadline: %v, now: %v",
+			errors.Wrapf(ctx.Err(), "work %s context canceled before queueing: deadline: %v, now: %v",
 				q.workKind, deadline, startTime)
 	}
 	// Push onto heap(s).
