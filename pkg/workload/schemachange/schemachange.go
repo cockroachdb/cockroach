@@ -224,7 +224,13 @@ func (s *schemaChange) Ops(
 	// dog connections. There is a danger of the pool emptying on
 	// termination (since we will cancel schema changes).
 	cfg.MaxConnsPerPool *= 2
-	cfg.MaxTotalConnections *= 2
+	// Do not enforce a global limit on the total number of connections across
+	// all the pools. Previously, we could get a deadlock between a watch dog
+	// and worker sharing the same connection pool, since a connection cannot
+	// be released before a watch dog terminates. The watch dogs main loop needs
+	// a connection for a monitoring cycle before it can check for its termination
+	// channel.
+	cfg.MaxTotalConnections = len(urls) * cfg.MaxConnsPerPool
 	// Disallow connection lifetime jittering and allow long
 	// life times for this test. Schema changes can drag for
 	// a long time on this workload and we have our own health
@@ -529,7 +535,8 @@ func (w *schemaChangeWorker) runInTxn(
 }
 
 func (w *schemaChangeWorker) run(ctx context.Context) error {
-	conn, err := w.pool.Get().Acquire(ctx)
+	connPool := w.pool.Get()
+	conn, err := connPool.Acquire(ctx)
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection")
 	}
@@ -564,7 +571,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 			return errors.Wrap(err, "cannot to get active")
 		}
 		if !cannotEnableSchemaChanges {
-			_, err = w.pool.Get().Exec(ctx, `SET CLUSTER SETTING sql.schema.force_declarative_statements="+CREATE SCHEMA, +CREATE SEQUENCE"`)
+			_, err = connPool.Exec(ctx, `SET CLUSTER SETTING sql.schema.force_declarative_statements="+CREATE SCHEMA, +CREATE SEQUENCE"`)
 			if err != nil {
 				return errors.Wrap(err, "cannot enable extra schema changes")
 			}
@@ -576,7 +583,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	defer w.releaseLocksIfHeld()
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
-	watchDog := newSchemaChangeWatchDog(w.pool.Get(), w.logger)
+	watchDog := newSchemaChangeWatchDog(connPool, w.logger)
 	if err := watchDog.Start(ctx, tx); err != nil {
 		return errors.Wrapf(err, "unable to start watch dog")
 	}
