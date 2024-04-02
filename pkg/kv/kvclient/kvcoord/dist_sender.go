@@ -2979,7 +2979,14 @@ func (ds *DistSender) sendToReplicas(
 					// get out of possibly infinite loops.
 					if (!lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit) && !leaseholderUnavailable {
 						moved := transport.MoveToFront(*lh)
+						// If our transport doesn't support this leaseholder, then our transport is stale and needs to be refreshed.
 						if !moved {
+							// The previous transport was no longer valid but we
+							// know we could create a new transport with the
+							// updated information we just received that would
+							// be valid.  Recreate a new transport based on the
+							// updated routing information and keep retrying.
+							//
 							// The transport always includes the client's view of the
 							// leaseholder when it's constructed. If the leaseholder can't
 							// be found on the transport then it must be the case that the
@@ -2990,17 +2997,19 @@ func (ds *DistSender) sendToReplicas(
 							// regress. As such, advancing through each replica on the
 							// transport until it's exhausted is unlikely to achieve much.
 							//
-							// We bail early by returning the best error we have
-							// seen so far. The expectation is for the client to
-							// retry with a fresher eviction token if possible.
-							log.VEventf(
-								ctx, 2, "transport incompatible with updated routing; bailing early",
-							)
-							return nil, selectBestError(
-								ambiguousError,
-								replicaUnavailableError,
-								newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error")),
-							)
+							transport, err = ds.createTransport(ctx, ba, routing)
+							// If we can no longer construct a transport, we
+							// need to bail out and evict our descriptor.
+							if err != nil {
+								log.VErrEventf(ctx, 2, "unable to transport after descriptor change: %v", err)
+								return nil, selectBestError(
+									ambiguousError,
+									replicaUnavailableError,
+									newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error")),
+								)
+							}
+
+							log.VEventf(ctx, 2, "reset transport after descriptor change to %v", routing)
 						}
 					}
 					// Check whether the request was intentionally sent to a follower
