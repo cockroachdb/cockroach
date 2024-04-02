@@ -1261,3 +1261,35 @@ func TestSQLStatsFlushDoesntWaitForFlushSigReceiver(t *testing.T) {
 		return nil
 	})
 }
+
+// TestSQLStatsFlushWorkerDoesntSignalJobOnAbort asserts that the flush
+// worker does not signal the sql activity job if the flush was aborted.
+func TestSQLStatsFlushWorkerDoesntSignalJobOnAbort(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: sqlStatsKnobs,
+		},
+	})
+
+	ctx := context.Background()
+	defer ts.Stopper().Stop(ctx)
+
+	ss := ts.ApplicationLayer().SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	flushDoneCh := make(chan struct{})
+	ss.SetFlushDoneSignalCh(flushDoneCh)
+
+	persistedsqlstats.SQLStatsFlushEnabled.Override(ctx, &ts.ClusterSettings().SV, false)
+	persistedsqlstats.SQLStatsFlushInterval.Override(ctx, &ts.ClusterSettings().SV, 50*time.Millisecond)
+	// The flush is disabled so the operation should finish very quickly.
+	// Sleeping for this amount should trigger at least a few flushes.
+	time.Sleep(250 * time.Millisecond)
+	select {
+	case <-flushDoneCh:
+		t.Fatal("flush signal should not have been received")
+	default:
+	}
+}
