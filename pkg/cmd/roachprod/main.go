@@ -469,7 +469,7 @@ destroyed:
 }
 
 var loadBalanceCmd = &cobra.Command{
-	Use:   "load-balance <cluster> [virtual-cluster-name]",
+	Use:   "load-balance <cluster>",
 	Short: "create a load balancer for a cluster",
 	Long: `Create a load balancer for a specific service (port), system by default, for the given cluster.
 
@@ -480,14 +480,10 @@ components that include backend services, health checks and forwarding rules.
 These resources will automatically be destroyed when the cluster is destroyed.
 `,
 
-	Args: cobra.RangeArgs(1, 2),
+	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		serviceName := install.SystemInterfaceName
-		if len(args) == 2 {
-			serviceName = args[1]
-		}
 		return roachprod.CreateLoadBalancer(context.Background(), config.Logger,
-			args[0], secure, serviceName, sqlInstance,
+			args[0], secure, virtualClusterName, sqlInstance,
 		)
 	}),
 }
