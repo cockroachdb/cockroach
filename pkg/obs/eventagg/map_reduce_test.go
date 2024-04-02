@@ -24,9 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
+
+var dummyTestEvent = &testEvent{Key: "XYZ", Count: 1}
 
 func TestMapReduceAggregator_Add(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -51,16 +54,18 @@ func TestMapReduceAggregator_Add(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		consumer := newTestFlushConsumer[string, *aggTestEvent]()
+		trigger := &testFlushTrigger{}
 		mapReduce := NewMapReduceAggregator[*testEvent, string, *aggTestEvent](
 			stopper,
 			func() *aggTestEvent { return &aggTestEvent{} },
 			mapTestEvent,
 			mergeTestEvent,
+			trigger,
 			consumer)
 		for _, e := range testArgs {
 			mapReduce.Add(ctx, e)
 		}
-		mapReduce.Flush(ctx)
+		triggerTestFlush(ctx, mapReduce, trigger, dummyTestEvent)
 		select {
 		case <-time.After(10 * time.Second):
 			t.Fatalf("flush timed out")
@@ -96,6 +101,9 @@ func TestMapReduceAggregator_Flush(t *testing.T) {
 	defer func() {
 		envEnableStructuredEvents = false
 	}()
+	keyA := "A"
+	keyB := "B"
+	keyC := "C"
 
 	// verifyFlush verifies all elements in expected match those in actual.
 	verifyFlush := func(expected map[string]*aggTestEvent, actual map[string]*aggTestEvent) {
@@ -114,15 +122,14 @@ func TestMapReduceAggregator_Flush(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		consumer := newTestFlushConsumer[string, *aggTestEvent]()
+		trigger := &testFlushTrigger{}
 		mapReduce := NewMapReduceAggregator[*testEvent, string, *aggTestEvent](
 			stopper,
 			func() *aggTestEvent { return &aggTestEvent{} },
 			mapTestEvent,
 			mergeTestEvent,
+			trigger,
 			consumer)
-		keyA := "A"
-		keyB := "B"
-		keyC := "C"
 		postFlushEvents := []*testEvent{
 			{Key: keyA, Count: 5},
 			{Key: keyA, Count: 3},
@@ -136,18 +143,21 @@ func TestMapReduceAggregator_Flush(t *testing.T) {
 			keyC: aggWithCount(9),
 		}
 		// Create initial state within the aggregation cache, which
-		// we expect to clear after Flush().
+		// we expect to clear after the first flush.
 		mapReduce.Add(ctx, &testEvent{Key: keyA, Count: 5})
 		mapReduce.Add(ctx, &testEvent{Key: keyB, Count: 5})
 		mapReduce.Add(ctx, &testEvent{Key: keyC, Count: 5})
-		mapReduce.Flush(ctx)
+		// We start by triggering the flush of the previous state with the 1st
+		// of the new events.
+		triggerTestFlush(ctx, mapReduce, trigger, postFlushEvents[0])
 		<-consumer.consumedCh()
 		// Now, send a new batch of events and verify that the previously
 		// flushed data has no impact on the new aggregation window.
-		for _, e := range postFlushEvents {
+		for _, e := range postFlushEvents[1:] {
 			mapReduce.Add(ctx, e)
 		}
-		mapReduce.Flush(ctx)
+		// Trigger a final flush with a dummy event, so we can validate what's flushed.
+		triggerTestFlush(ctx, mapReduce, trigger, dummyTestEvent)
 		<-consumer.consumedCh()
 		verifyFlush(expectedFlush, consumer.flushed)
 	})
@@ -161,20 +171,20 @@ func TestMapReduceAggregator_Flush(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		consumer := newTestFlushConsumer[string, *aggTestEvent]()
+		trigger := &testFlushTrigger{}
 		mapReduce := NewMapReduceAggregator[*testEvent, string, *aggTestEvent](
 			stopper,
 			func() *aggTestEvent { return &aggTestEvent{} },
 			mapTestEvent,
 			mergeTestEvent,
+			trigger,
 			consumer)
-		keyA := "A"
-		keyB := "B"
-		keyC := "C"
 		// Create initial state within the aggregation cache, which
-		// we expect to clear after Flush(). Then, trigger a Flush but
+		// we expect to clear after the first flush. Then, trigger a flush but
 		// delay listening on the consumer's channel via consumedCh()
-		// to simulate a hanging Flush(). We can then push new events to the
-		// MapReduceAggregator and verify they're included in a new window.
+		// to simulate a hanging flushConsumer. We can then push new events to the
+		// MapReduceAggregator and verify they're included in a new window, and that
+		// they don't block on the hanging flush.
 		mapReduce.Add(ctx, &testEvent{Key: keyA, Count: 5})
 		expectedFlush1 := map[string]*aggTestEvent{
 			keyA: aggWithCount(5),
@@ -199,19 +209,20 @@ func TestMapReduceAggregator_Flush(t *testing.T) {
 			time.AfterFunc(100*time.Millisecond, func() {
 				// Now, send a new batch of events and verify that the previously
 				// flushed data has no impact on the new aggregation window.
-				for _, e := range postFlushEvents {
+				for _, e := range postFlushEvents[1:] {
 					mapReduce.Add(ctx, e)
 				}
 				done <- struct{}{}
 			})
-			mapReduce.Flush(ctx) // Should hang
+			// Trigger a flush of the previous window with the first event of the new window.
+			triggerTestFlush(ctx, mapReduce, trigger, postFlushEvents[0])
 		}()
 		<-done
-		// This will unblock the first Flush() call
+		// This will unblock the first flush.
 		<-consumer.consumedCh()
 		verifyFlush(expectedFlush1, consumer.flushed)
-		// Now, perform the final flush and assert it to be correct.
-		mapReduce.Flush(ctx)
+		// Now, trigger the final flush and assert it to be correct.
+		triggerTestFlush(ctx, mapReduce, trigger, dummyTestEvent)
 		<-consumer.consumedCh()
 		verifyFlush(expectedFlush2, consumer.flushed)
 	})
@@ -272,4 +283,45 @@ type aggTestEvent struct {
 
 func aggWithCount(count int) *aggTestEvent {
 	return &aggTestEvent{count: count}
+}
+
+// testFlushTrigger is a FlushTrigger for use in tests that stores a bool indicating whether
+// it should flush. Use setShouldFlush to configure.
+type testFlushTrigger struct {
+	mu struct {
+		syncutil.Mutex
+		flush bool
+	}
+}
+
+var _ FlushTrigger = (*testFlushTrigger)(nil)
+
+// shouldFlush implements the FlushTrigger interface.
+func (t *testFlushTrigger) shouldFlush() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.mu.flush
+}
+
+func (t *testFlushTrigger) setShouldFlush(to bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.flush = to
+}
+
+// When an event is passed to the MapReduceAggregator via `.Add()`, it checks if we should flush *first*, before
+// aggregating the event. So, to trigger a flush, we indicate via the trigger that a flush should occur, call `.Add()`
+// with the event, and then reset the trigger.
+//
+// The events aggregated prior to our call to `.Add()` will be flushed, and the event we pass to `.Add()` will be
+// aggregated into the new window.
+func triggerTestFlush(
+	ctx context.Context,
+	mr *MapReduceAggregator[*testEvent, string, *aggTestEvent],
+	trigger *testFlushTrigger,
+	e *testEvent,
+) {
+	trigger.setShouldFlush(true)
+	mr.Add(ctx, e)
+	trigger.setShouldFlush(false)
 }
