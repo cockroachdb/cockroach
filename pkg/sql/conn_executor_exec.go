@@ -1755,6 +1755,9 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		if err := ex.state.mu.txn.PrepareForPartialRetry(ctx); err != nil {
 			return err
 		}
+		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
+			return err
+		}
 		ex.state.mu.autoRetryCounter++
 		ex.state.mu.autoRetryReason = txnRetryErr
 	}
