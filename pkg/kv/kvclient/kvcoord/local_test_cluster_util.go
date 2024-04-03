@@ -90,12 +90,9 @@ func NewDistSenderForLocalTestCluster(
 		Stopper:            stopper,
 		RPCRetryOptions:    &retryOpts,
 		FirstRangeProvider: g,
-		TransportFactory: func(opts SendOptions, replicas ReplicaSlice) (Transport, error) {
-			transport, err := senderTransportFactory(opts, replicas)
-			if err != nil {
-				return nil, err
-			}
-			return &localTestClusterTransport{transport, latency}, nil
+		TransportFactory: func(opts SendOptions, replicas ReplicaSlice) Transport {
+			transport := senderTransportFactory(opts, replicas)
+			return &localTestClusterTransport{transport, latency}
 		},
 	})
 }
