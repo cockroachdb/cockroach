@@ -29,7 +29,7 @@ const (
 	OwnerKV               Owner = `kv`
 	OwnerReplication      Owner = `replication`
 	OwnerAdmissionControl Owner = `admission-control`
-	OwnerObsInf           Owner = `obs-inf-prs`
+	OwnerObservability    Owner = `obs-prs`
 	OwnerServer           Owner = `server` // not currently staffed
 	OwnerSQLFoundations   Owner = `sql-foundations`
 	OwnerMigrations       Owner = `migrations`
@@ -37,7 +37,6 @@ const (
 	OwnerStorage          Owner = `storage`
 	OwnerTestEng          Owner = `test-eng`
 	OwnerDevInf           Owner = `dev-inf`
-	OwnerClusterObs       Owner = `cluster-observability`
 )
 
 // IsValid returns true if the owner is valid, i.e. it has a corresponding team
