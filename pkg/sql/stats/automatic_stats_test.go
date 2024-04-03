@@ -280,9 +280,8 @@ func BenchmarkEnsureAllTables(b *testing.B) {
 
 	for _, numTables := range []int{10, 100, 1000} {
 		b.Run(fmt.Sprintf("numTables=%d", numTables), func(b *testing.B) {
-			srv, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
-			defer srv.Stopper().Stop(ctx)
-			s := srv.ApplicationLayer()
+			s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
 			codec, st := s.Codec(), s.ClusterSettings()
 			AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
 			AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, true)

@@ -637,37 +637,38 @@ func (r *Refresher) Start(
 
 const (
 	getAllTablesTemplateSQL = `
-SELECT
-	tbl.table_id
-FROM
-	crdb_internal.tables AS tbl
-	INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
-		AS OF SYSTEM TIME '-%s'
+WITH descs AS (
+  SELECT
+    d.id AS id,
+    crdb_internal.pb_to_json('desc', d.descriptor, false) AS descriptor_json,
+    (n."parentID" = 1) AS is_system_table
+  FROM system.descriptor AS d
+  INNER JOIN system.namespace AS n ON d.id = n.id
+	WHERE n."parentSchemaID" != 0
+)
+SELECT descs.id
+FROM descs
+AS OF SYSTEM TIME '-%s'
 WHERE
-	tbl.database_name IS NOT NULL
-	AND tbl.table_id NOT IN (%d, %d, %d)  -- excluded system tables
-	AND tbl.drop_time IS NULL
-	AND (
-			crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor, false)->'table'->>'viewQuery'
-		) IS NULL
+	id NOT IN (%d, %d, %d)  -- excluded system tables
+  AND descriptor_json ? 'table'
+	AND NOT descriptor_json->'table' ? 'viewQuery'
+	AND NOT descriptor_json->'table' ? 'dropTime'
 	%s
 	%s`
 
 	explicitlyEnabledTablesPredicate = `AND
-	(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
-		d.descriptor, false)->'table'->'autoStatsSettings' ->> 'enabled' = 'true'
-	)`
+	(descriptor_json->'table'->'autoStatsSettings' ->> 'enabled' = 'true')`
 
 	autoStatsEnabledOrNotSpecifiedPredicate = `AND
-	(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
-		d.descriptor, false)->'table'->'autoStatsSettings'->'enabled' IS NULL
-	 OR crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
-		d.descriptor, false)->'table'->'autoStatsSettings' ->> 'enabled' = 'true'
+	(
+    descriptor_json->'table'->'autoStatsSettings'->'enabled' IS NULL
+	  OR descriptor_json->'table'->'autoStatsSettings' ->> 'enabled' = 'true'
 	)`
 
 	autoStatsOnSystemTablesEnabledPredicate = `AND TRUE`
 
-	autoStatsOnSystemTablesDisabledPredicate = `AND tbl.database_name != 'system'`
+	autoStatsOnSystemTablesDisabledPredicate = `AND NOT is_system_table`
 )
 
 func (r *Refresher) getApplicableTables(
