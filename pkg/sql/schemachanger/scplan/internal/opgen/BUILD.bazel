@@ -35,7 +35,6 @@ go_library(
         "opgen_function_leakproof.go",
         "opgen_function_name.go",
         "opgen_function_null_input.go",
-        "opgen_function_param_default.go",
         "opgen_function_volatility.go",
         "opgen_index_column.go",
         "opgen_index_comment.go",
