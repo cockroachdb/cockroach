@@ -143,7 +143,7 @@ func makeTransportFactory(
 	rfStreamEnabled bool, counts *internalClientCounts, wrapFn wrapRangeFeedClientFn,
 ) func(kvcoord.TransportFactory) kvcoord.TransportFactory {
 	return func(factory kvcoord.TransportFactory) kvcoord.TransportFactory {
-		return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
+		return func(options kvcoord.SendOptions, slice roachpb.ReplicaSet) (kvcoord.Transport, error) {
 			transport, err := factory(options, slice)
 			if err != nil {
 				return nil, err

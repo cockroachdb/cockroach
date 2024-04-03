@@ -47,6 +47,10 @@ func (d ReplicaSet) String() string {
 	return redact.StringWithoutMarkers(d)
 }
 
+func (d ReplicaSet) First() ReplicaDescriptor {
+	return d.wrapped[0]
+}
+
 // Descriptors returns every replica descriptor in the set, including both voter
 // replicas and learner replicas. Voter replicas are ordered first in the
 // returned slice.
