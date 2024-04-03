@@ -1653,8 +1653,7 @@ tar cvf %[5]s %[2]s
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("init-certs"))
 		},
 	); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		exit.WithCode(exit.UnspecifiedError())
+		return err
 	}
 
 	tarfile, cleanup, err := c.getFileFromFirstNode(ctx, l, certsTarName)
