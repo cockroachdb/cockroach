@@ -192,9 +192,13 @@ enum Channel {
   // ranges.
   KV_DISTRIBUTION = 13;
 
+  // STRUCTURED_EVENTS is used to send log events with messages containing structured
+  // JSON, which can be consumed externally to power o11y features.
+  STRUCTURED_EVENTS = 14;
+
   // CHANNEL_MAX is the maximum allocated channel number so far.
   // This should be increased every time a new channel is added.
-  CHANNEL_MAX = 14;
+  CHANNEL_MAX = 15;
 }
 
 // Entry represents a cockroach log entry in the following two cases:
