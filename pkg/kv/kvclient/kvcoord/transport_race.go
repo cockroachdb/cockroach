@@ -92,7 +92,7 @@ func (tr raceTransport) SendNext(
 // a) the server doesn't hold on to any memory, and
 // b) the server doesn't mutate the request
 func GRPCTransportFactory(nodeDialer *nodedialer.Dialer) TransportFactory {
-	return func(opts SendOptions, replicas ReplicaSlice) (Transport, error) {
+	return func(opts SendOptions, replicas ReplicaSlice) Transport {
 		if atomic.AddInt32(&running, 1) <= 1 {
 			if err := nodeDialer.Stopper().RunAsyncTask(
 				context.TODO(), "transport racer", func(ctx context.Context) {
@@ -147,10 +147,7 @@ func GRPCTransportFactory(nodeDialer *nodedialer.Dialer) TransportFactory {
 			}
 		}
 
-		t, err := grpcTransportFactoryImpl(opts, nodeDialer, replicas)
-		if err != nil {
-			return nil, err
-		}
-		return &raceTransport{Transport: t}, nil
+		t := grpcTransportFactoryImpl(opts, nodeDialer, replicas)
+		return &raceTransport{Transport: t}
 	}
 }
