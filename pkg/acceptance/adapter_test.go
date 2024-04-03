@@ -15,7 +15,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -61,21 +60,6 @@ func TestDockerJava(t *testing.T) {
 	})
 	t.Run("Fail", func(t *testing.T) {
 		testDockerFail(ctx, t, "java", []string{"sh", "-c", "cd /mnt/data/java && mvn -o foobar"})
-	})
-}
-
-func TestDockerElixir(t *testing.T) {
-	skip.IgnoreLint(t, "Elixir requires network to run, which can flake. When attempting to update this (#52341), the new Elixir version does not work with CRDB/TLS.")
-
-	s := log.Scope(t)
-	defer s.Close(t)
-
-	ctx := context.Background()
-	t.Run("Success", func(t *testing.T) {
-		testDockerSuccess(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && psql -c 'CREATE DATABASE IF NOT EXISTS testdb' && mix test"})
-	})
-	t.Run("Fail", func(t *testing.T) {
-		testDockerFail(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && mix thisshouldfail"})
 	})
 }
 
