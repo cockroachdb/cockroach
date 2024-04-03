@@ -163,8 +163,8 @@ type Builder struct {
 	trackSchemaDeps bool
 
 	schemaDeps         opt.SchemaDeps
-	schemaFunctionDeps opt.SchemaFunctionDeps
 	schemaTypeDeps     opt.SchemaTypeDeps
+	schemaFunctionDeps opt.SchemaFunctionDeps
 
 	// If set, the data source names in the AST are rewritten to the fully
 	// qualified version (after resolution). Used to construct the strings for

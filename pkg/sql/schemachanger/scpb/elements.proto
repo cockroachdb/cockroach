@@ -670,6 +670,9 @@ message Function {
     string name = 1;
     cockroach.sql.catalog.catpb.FunctionParamClass class = 2 [(gogoproto.nullable) = false];
     TypeT type = 3 [(gogoproto.nullable) = false];
+    // TODO(100962): should we use a separate FunctionParamDefaultExpression
+    // proto rather than embed the default expr here?
+    string default_expr = 4;
   }
 
   uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
