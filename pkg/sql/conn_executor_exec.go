@@ -3295,7 +3295,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.rowsWrittenLogged = false
 	ex.extraTxnState.rowsReadLogged = false
 	if txnExecStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); txnExecStatsSampleRate > 0 {
-		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
+		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.internal.Float64()
 	}
 
 	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
