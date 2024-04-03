@@ -851,7 +851,6 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 		Body:        fnDesc.GetFunctionBody(),
 		Lang:        catpb.FunctionLanguage{Lang: fnDesc.GetLanguage()},
 		UsesTypeIDs: fnDesc.GetDependsOnTypes(),
-		// TODO(chengxiong): add UsesFunctionIDs when UDF usage is allowed.
 	}
 	dedupeColIDs := func(colIDs []catid.ColumnID) []catid.ColumnID {
 		ret := catalog.MakeTableColSet()

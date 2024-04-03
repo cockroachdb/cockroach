@@ -557,3 +557,294 @@ CALL p_udt(NULL);
 ----
 param
 (1,2)
+
+statement error pgcode 2BP01 cannot drop type "typ" because other objects \(\[test.public.p_udt\]\) still depend on it
+DROP TYPE typ;
+
+statement ok
+DROP PROCEDURE p_udt;
+
+statement ok
+CREATE TYPE greeting AS ENUM('hello', 'hi', 'yo');
+CREATE PROCEDURE p_enum(OUT greeting greeting) AS $$ BEGIN greeting := 'hi'::greeting; END; $$ LANGUAGE PLpgSQL;
+
+query T colnames
+CALL p_enum(NULL)
+----
+greeting
+hi
+
+statement error pgcode 2BP01 cannot drop type "greeting" because other objects \(\[test.public.p_enum\]\) still depend on it
+DROP TYPE greeting;
+
+statement ok
+DROP PROCEDURE p_enum;
+
+subtest default_exprs
+
+statement error pgcode 22P02 could not parse "a" as type int
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, c INT DEFAULT 'a') AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, c INT) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, INOUT c INT) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 only input parameters can have default values
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, OUT c INT = 3) AS $$ BEGIN SELECT a + b INTO c; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42703 column "b" does not exist
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT, c INT = b + 1) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42703 column "b" does not exist
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT = 2, c INT = b + 1) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42703 column "d" does not exist
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT = 2, c INT = d + 1) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 argument of DEFAULT must be type int, not type bool
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT true) AS $$ BEGIN SELECT a + b INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT, c INT) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT = 1, b INT, c INT = 3) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+# Adding a default expression to a parameter is ok.
+statement ok
+CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, c INT = 3) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+# But removing an existing default expression is not ok.
+statement error pgcode 42P13 cannot remove parameter defaults from existing function
+CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT, b INT, c INT = 3) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22P02 could not parse "a" as type int
+CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT = 'a', b INT DEFAULT 2, c INT = 3) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+query I
+CALL my_sum(NULL, 1);
+----
+6
+
+query I
+CALL my_sum(NULL, 1, 1);
+----
+5
+
+query I
+CALL my_sum(NULL, 1, 1, 1);
+----
+3
+
+statement error pgcode 42883 procedure my_sum\(unknown\) does not exist
+CALL my_sum(NULL);
+
+statement error pgcode 42883 procedure my_sum\(unknown, int, int, int, int\) does not exist
+CALL my_sum(NULL, 1, 1, 1, 1);
+
+# Same as above, but the default value needs to be coerced from numeric to int
+# (becoming 4).
+statement ok
+CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, c INT = 3.5) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+query I
+CALL my_sum(NULL, 1);
+----
+7
+
+query I
+CALL my_sum(NULL, 1, 1);
+----
+6
+
+# Add another overload that creates ambiguity for some number of input
+# arguments.
+statement ok
+CREATE PROCEDURE my_sum(OUT o INT, a INT) AS $$ BEGIN SELECT a INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42725 procedure my_sum\(unknown, int\) is not unique
+CALL my_sum(NULL, 1);
+
+statement ok
+DROP PROCEDURE my_sum(INT);
+
+statement ok
+DROP PROCEDURE my_sum;
+
+statement ok
+CREATE PROCEDURE my_sum(OUT sum INT, INOUT a INT, INOUT b INT = 3) AS $$ BEGIN SELECT a + b INTO sum; END; $$ LANGUAGE PLpgSQL;
+
+query III
+CALL my_sum(NULL, 1);
+----
+4  1  3
+
+query III
+CALL my_sum(NULL, 1, 1);
+----
+2  1  1
+
+statement ok
+DROP PROCEDURE my_sum;
+
+statement ok
+CREATE PROCEDURE my_sum(OUT a_plus_one INT, INOUT a INT, INOUT INT = 3) AS $$ BEGIN SELECT a + 1 INTO a_plus_one; END; $$ LANGUAGE PLpgSQL;
+
+# TODO(121251): this should return (2,1,3).
+query III
+CALL my_sum(NULL, 1);
+----
+2  1  NULL
+
+# TODO(121251): this should return (2,1,1).
+query III
+CALL my_sum(NULL, 1, 1);
+----
+2  1  NULL
+
+statement ok
+DROP PROCEDURE my_sum;
+
+# Test for a narrowing type coercion.
+statement ok
+CREATE PROCEDURE f(OUT o CHAR, x CHAR DEFAULT 'foo') AS $$ BEGIN SELECT x INTO o; END; $$ LANGUAGE PLpgSQL;
+
+# Note that postgres doesn't actually truncate the value and returns 'foo' here
+# (this difference is tracked by #115385).
+query T
+CALL f(NULL);
+----
+f
+
+statement ok
+DROP PROCEDURE f;
+
+# Test case when DEFAULT expression uses a UDF.
+
+statement ok
+CREATE FUNCTION f1(a INT, b INT = 2) RETURNS INT AS $$ BEGIN RETURN a + b; END; $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE PROCEDURE p2(OUT o INT, a INT, b INT = f1(1)) AS $$ BEGIN SELECT a + b INTO o; END; $$ LANGUAGE PLpgSQL;
+
+query I
+CALL p2(NULL, 1);
+----
+4
+
+query I
+CALL p2(NULL, 1, 1);
+----
+2
+
+statement ok
+CREATE OR REPLACE FUNCTION f1(a INT, b INT = 2) RETURNS INT AS $$ BEGIN RETURN a * b; END; $$ LANGUAGE PLpgSQL;
+
+query I
+CALL p2(NULL, 1);
+----
+3
+
+query I
+CALL p2(NULL, 1, 1);
+----
+2
+
+statement error pgcode 2BP01 cannot drop function "f1" because other objects \(\[test.public.p2\]\) still depend on it
+DROP FUNCTION f1;
+
+statement ok
+DROP PROCEDURE p2;
+
+statement ok
+DROP FUNCTION f1;
+
+# Test that dropping UDTs or enum members used in the DEFAULT expression is not
+# allowed.
+
+statement ok
+CREATE PROCEDURE p(p1 typ DEFAULT (1, 2), p2 greeting = 'yo') AS $$ BEGIN NULL; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 2BP01 cannot drop type "typ" because other objects \(\[test.public.p\]\) still depend on it
+DROP TYPE typ;
+
+statement error pgcode 2BP01 could not remove enum value "yo" as it is being used in a routine "p"
+ALTER TYPE greeting DROP VALUE 'yo';
+
+# Dropping enum value not used in the DEFAULT expression should be ok.
+statement ok
+ALTER TYPE greeting DROP VALUE 'hello';
+
+# Using a different enum value in the DEFAULT expression should allow us to drop
+# the original enum value.
+statement ok
+CREATE OR REPLACE PROCEDURE p(p1 typ DEFAULT (1, 2), p2 greeting = 'hi') AS $$ BEGIN NULL; END; $$ LANGUAGE PLpgSQL;
+
+statement ok
+ALTER TYPE greeting DROP VALUE 'yo';
+
+statement error pgcode 2BP01 could not remove enum value "hi" as it is being used in a routine "p"
+ALTER TYPE greeting DROP VALUE 'hi';
+
+statement ok
+DROP PROCEDURE p;
+
+# Test having sequences in the DEFAULT expression.
+
+statement ok
+CREATE SEQUENCE seq;
+
+statement ok
+CREATE PROCEDURE p(OUT o INT, a INT = nextval('seq')) AS $$ BEGIN SELECT a INTO o; END; $$ LANGUAGE PLpgSQL;
+
+query I
+CALL p(NULL);
+----
+1
+
+query I
+CALL p(NULL, 1);
+----
+1
+
+query I
+CALL p(NULL);
+----
+2
+
+statement error pgcode 2BP01 cannot drop sequence seq because other objects depend on it
+DROP SEQUENCE seq;
+
+statement ok
+CREATE OR REPLACE PROCEDURE p(OUT o INT, a INT = 3) AS $$ BEGIN o := a; END; $$ LANGUAGE PLpgSQL;
+
+# DEFAULT expression no longer uses the sequence.
+statement ok
+DROP SEQUENCE seq;
+
+statement ok
+DROP PROCEDURE p;
+
+# Try doing the same when the sequence is added in the replacement.
+
+statement ok
+CREATE SEQUENCE seq;
+
+statement ok
+CREATE OR REPLACE PROCEDURE p(OUT o INT, a INT = 3) AS $$ BEGIN o := a; END; $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE OR REPLACE PROCEDURE p(OUT o INT, a INT = nextval('seq')) AS $$ BEGIN SELECT a INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 2BP01 cannot drop sequence seq because other objects depend on it
+DROP SEQUENCE seq;
+
+statement ok
+DROP PROCEDURE p;
+
+statement ok
+DROP SEQUENCE seq;
+
+subtest end

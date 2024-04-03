@@ -577,12 +577,12 @@ CREATE TABLE t4(id int, enum_val e5 DEFAULT 'usage'::e5 ON UPDATE 'update expr':
 		{
 			`ALTER TYPE e1 DROP VALUE 'check'`,
 			false,
-			"could not remove enum value \"check\" as it is being used in a UDF \"f1\"",
+			"could not remove enum value \"check\" as it is being used in a routine \"f1\"",
 		},
 		{
 			`ALTER TYPE e1 DROP VALUE 'enum'`,
 			false,
-			"could not remove enum value \"enum\" as it is being used in a UDF \"f2\"",
+			"could not remove enum value \"enum\" as it is being used in a routine \"f2\"",
 		},
 		{
 			`ALTER TYPE e1 DROP VALUE 'unused value'`,
@@ -602,17 +602,17 @@ CREATE TABLE t4(id int, enum_val e5 DEFAULT 'usage'::e5 ON UPDATE 'update expr':
 		{
 			`ALTER TYPE e2 DROP VALUE 'check'`,
 			false,
-			"could not remove enum value \"check\" as it is being used in a UDF \"f3\"",
+			"could not remove enum value \"check\" as it is being used in a routine \"f3\"",
 		},
 		{
 			`ALTER TYPE e2 DROP VALUE 'usage'`,
 			false,
-			"could not remove enum value \"usage\" as it is being used in a UDF \"f4\"",
+			"could not remove enum value \"usage\" as it is being used in a routine \"f4\"",
 		},
 		{
 			`ALTER TYPE e2 DROP VALUE 'within'`,
 			false,
-			"could not remove enum value \"within\" as it is being used in a UDF \"f5\"",
+			"could not remove enum value \"within\" as it is being used in a routine \"f5\"",
 		},
 		{
 			`ALTER TYPE e2 DROP VALUE 'unused value'`,

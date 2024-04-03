@@ -90,6 +90,10 @@ func (*UnaryOp) outParamInfo() (RoutineType, []int32, TypeList) {
 	return BuiltinRoutine, nil, nil
 }
 
+func (op *UnaryOp) defaultExprs() Exprs {
+	return nil
+}
+
 func unaryOpFixups(
 	ops map[UnaryOperatorSymbol]*UnaryOpOverloads,
 ) map[UnaryOperatorSymbol]*UnaryOpOverloads {
@@ -266,6 +270,10 @@ func (op *BinOp) preferred() bool {
 
 func (op *BinOp) outParamInfo() (RoutineType, []int32, TypeList) {
 	return BuiltinRoutine, nil, nil
+}
+
+func (op *BinOp) defaultExprs() Exprs {
+	return nil
 }
 
 // AppendToMaybeNullArray appends an element to an array. If the first
@@ -1412,6 +1420,10 @@ func (op *CmpOp) preferred() bool {
 
 func (op *CmpOp) outParamInfo() (RoutineType, []int32, TypeList) {
 	return BuiltinRoutine, nil, nil
+}
+
+func (op *CmpOp) defaultExprs() Exprs {
+	return nil
 }
 
 func cmpOpFixups(

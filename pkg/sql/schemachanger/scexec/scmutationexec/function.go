@@ -30,6 +30,9 @@ func (i *immediateVisitor) CreateFunctionDescriptor(
 			Name:  param.Name,
 			Type:  param.Type.Type,
 		}
+		if param.DefaultExpr != "" {
+			params[i].DefaultExpr = &param.DefaultExpr
+		}
 	}
 
 	mut := funcdesc.NewMutableFunctionDescriptor(
