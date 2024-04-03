@@ -104,8 +104,6 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	}
 	fn.Params = make([]scpb.Function_Parameter, len(n.Params))
 	for i, param := range n.Params {
-		// TODO(chengxiong): create `FunctionParamDefaultExpression` element when
-		// default parameter default expression is enabled.
 		if param.DefaultVal != nil {
 			panic(unimplemented.NewWithIssue(100962, "default value"))
 		}
