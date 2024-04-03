@@ -145,7 +145,6 @@ message ElementProto {
     FunctionLeakProof function_leak_proof = 162 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionNullInputBehavior function_null_input_behavior = 163 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionBody function_body = 164 [(gogoproto.moretags) = "parent:\"Function\""];
-    FunctionParamDefaultExpression function_param_default_expression = 165 [(gogoproto.moretags) = "parent:\"Function\""];
 
     // Next element group start id: 180
   }
@@ -670,6 +669,7 @@ message Function {
     string name = 1;
     cockroach.sql.catalog.catpb.FunctionParamClass class = 2 [(gogoproto.nullable) = false];
     TypeT type = 3 [(gogoproto.nullable) = false];
+    string default_expr = 4;
   }
 
   uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
@@ -721,15 +721,6 @@ message FunctionBody {
   repeated uint32 uses_sequence_ids = 6 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_type_ids = 7 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_function_ids = 8   [(gogoproto.customname) = "UsesFunctionIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-}
-
-message FunctionParamDefaultExpression {
-  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  // This is the 0-indexed ordinal of the function parameter in function
-  // signatures. With this we'd be able to tell which parameter this expression
-  // belongs to.
-  uint32 ordinal = 2;
-  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 message ElementCreationMetadata {

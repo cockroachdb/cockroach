@@ -820,11 +820,7 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 			if err != nil {
 				panic(err)
 			}
-			w.ev(scpb.Status_PUBLIC, &scpb.FunctionParamDefaultExpression{
-				FunctionID: fnDesc.GetID(),
-				Ordinal:    uint32(i),
-				Expression: *expr,
-			})
+			fn.Params[i].DefaultExpr = string(expr.Expr)
 		}
 	}
 

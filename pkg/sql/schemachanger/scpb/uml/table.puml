@@ -198,12 +198,6 @@ object FunctionNullInputBehavior
 FunctionNullInputBehavior :  FunctionID
 FunctionNullInputBehavior :  NullInputBehavior
 
-object FunctionParamDefaultExpression
-
-FunctionParamDefaultExpression :  FunctionID
-FunctionParamDefaultExpression :  Ordinal
-FunctionParamDefaultExpression :  Expression
-
 object FunctionVolatility
 
 FunctionVolatility :  FunctionID
@@ -438,7 +432,6 @@ Function <|-- FunctionBody
 Function <|-- FunctionLeakProof
 Function <|-- FunctionName
 Function <|-- FunctionNullInputBehavior
-Function <|-- FunctionParamDefaultExpression
 Function <|-- FunctionVolatility
 PrimaryIndex <|-- IndexColumn
 SecondaryIndex <|-- IndexColumn
