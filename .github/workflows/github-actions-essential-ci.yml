@@ -2,7 +2,23 @@ name: GitHub Actions Essential CI
 on:
   pull_request:
     types: [ opened, reopened, synchronize, edited ]
-    branches: [ master ]
+    branches:
+      - 'master'
+      - 'release-*'
+      - '!release-1.0*'
+      - '!release-1.1*'
+      - '!release-2.0*'
+      - '!release-2.1*'
+      - '!release-19.1*'
+      - '!release-19.2*'
+      - '!release-20.1*'
+      - '!release-20.2*'
+      - '!release-21.1*'
+      - '!release-21.2*'
+      - '!release-22.1*'
+      - '!release-22.2*'
+      - '!release-23.1*'
+      - '!release-23.2*'
   push:
     branches:
       - 'master'
