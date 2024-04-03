@@ -69,6 +69,13 @@ describe("Create index name", () => {
       expected:
         "CREATE INDEX IF NOT EXISTS t_expr_storing_rec_idx ON t ((i + l)), (j + k), a) STORING (k)",
     },
+    {
+      name: "handles table names containing quotes, doesn't include quotes in idx name",
+      query:
+        'CREATE INDEX ON defaultdb.public."offers"."startdate" (n) STORING (b);',
+      expected:
+        'CREATE INDEX IF NOT EXISTS startdate_n_storing_rec_idx ON defaultdb.public."offers"."startdate" (n) STORING (b);',
+    },
   ];
 
   for (let i = 0; i < testCases.length; i++) {
