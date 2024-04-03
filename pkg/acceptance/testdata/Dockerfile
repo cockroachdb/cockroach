@@ -43,11 +43,9 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d
  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc > /etc/apt/trusted.gpg.d/microsoft.asc \
  && echo "deb https://packages.microsoft.com/repos/microsoft-ubuntu-bionic-prod/ bionic main" > /etc/apt/sources.list.d/microsoft.list \
  && apt-get install --yes --no-install-recommends gnupg \
- && curl https://packages.erlang-solutions.com/erlang-solutions_2.0_all.deb > erlang-solutions_2.0_all.deb && dpkg -i erlang-solutions_2.0_all.deb \
  && apt-get update \
  && apt-get install --yes --no-install-recommends \
     expect \
-    esl-erlang \
     libc6-dev \
     libcurl4 \
     libpq-dev \
