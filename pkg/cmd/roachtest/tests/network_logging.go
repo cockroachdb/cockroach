@@ -111,7 +111,7 @@ func registerNetworkLogging(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:             "network_logging",
-		Owner:            registry.OwnerObsInf,
+		Owner:            registry.OwnerObservability,
 		Cluster:          r.MakeClusterSpec(numNodesNetworkLogging),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
