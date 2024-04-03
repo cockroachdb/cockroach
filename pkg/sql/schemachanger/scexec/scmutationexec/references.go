@@ -609,17 +609,16 @@ func updateBackReferencesInRelation(
 }
 
 func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObjectParentID) error {
-	sc, err := i.checkOutSchema(ctx, op.ObjParent.SchemaID)
-	if err != nil {
-		return err
-	}
-
 	obj, err := i.checkOutDescriptor(ctx, op.ObjParent.ChildObjectID)
 	if err != nil {
 		return err
 	}
 	switch t := obj.(type) {
 	case *funcdesc.Mutable:
+		sc, err := i.checkOutSchema(ctx, op.ObjParent.SchemaID)
+		if err != nil {
+			return err
+		}
 		if t.ParentSchemaID != descpb.InvalidID {
 			sc.RemoveFunction(t.GetName(), t.GetID())
 		}

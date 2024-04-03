@@ -874,6 +874,9 @@ func executeSchemaChangeTxn(
 			_, err = conn.ExecContext(
 				ctx, "SET use_declarative_schema_changer = 'unsafe_always'",
 			)
+			_, err = conn.ExecContext(
+				ctx, "SET experimental_enable_temp_tables=true",
+			)
 			if err != nil {
 				return err
 			}

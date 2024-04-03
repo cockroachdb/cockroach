@@ -65,6 +65,7 @@ func NewExecutorDependencies(
 	validator scexec.Validator,
 	clock scmutationexec.Clock,
 	metadataUpdater scexec.DescriptorMetadataUpdater,
+	temporarySchemaCreator scexec.TemporarySchemaCreator,
 	statsRefresher scexec.StatsRefresher,
 	testingKnobs *scexec.TestingKnobs,
 	kvTrace bool,
@@ -95,6 +96,7 @@ func NewExecutorDependencies(
 		sessionData:             sessionData,
 		clock:                   clock,
 		testingKnobs:            testingKnobs,
+		temporarySchemaCreator:  temporarySchemaCreator,
 	}
 }
 
@@ -137,6 +139,10 @@ func (d *txnDeps) UpdateSchemaChangeJob(
 }
 
 var _ scexec.Catalog = (*txnDeps)(nil)
+
+func (d *txnDeps) InsertTemporarySchema(schemaName string, id descpb.ID, databaseID descpb.ID) {
+	panic("unimplemented")
+}
 
 // MustReadImmutableDescriptors implements the scexec.Catalog interface.
 func (d *txnDeps) MustReadImmutableDescriptors(
@@ -332,6 +338,7 @@ type execDeps struct {
 	statements              []string
 	user                    username.SQLUsername
 	sessionData             *sessiondata.SessionData
+	temporarySchemaCreator  scexec.TemporarySchemaCreator
 	testingKnobs            *scexec.TestingKnobs
 }
 
@@ -427,6 +434,10 @@ func (d *execDeps) Telemetry() scexec.Telemetry {
 // IncrementSchemaChangeErrorType implemented the scexec.Telemetry interface.
 func (d *execDeps) IncrementSchemaChangeErrorType(typ string) {
 	telemetry.Inc(sqltelemetry.SchemaChangeErrorCounter(typ))
+}
+
+func (d *execDeps) InsertTemporarySchema(schemaName string, id descpb.ID, databaseID descpb.ID) {
+	d.temporarySchemaCreator.InsertTemporarySchema(schemaName, id, databaseID)
 }
 
 // NewNoOpBackfillerTracker constructs a backfill tracker which does not do

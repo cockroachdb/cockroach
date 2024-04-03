@@ -237,8 +237,6 @@ upsert descriptor #108
   +    start: "32"
   +  unexposedParentSchemaId: 106
   +  version: "1"
-upsert descriptor #106
-  ...
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
