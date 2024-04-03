@@ -14,26 +14,34 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
-func dropPayloadProgressFromSystemJobs(
+func hidePayloadProgressFromSystemJobs(
 	ctx context.Context, cv clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
-	_, err := deps.InternalExecutor.ExecEx(ctx, "drop-payload-payload", nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride, `
-ALTER TABLE system.jobs DROP COLUMN IF EXISTS payload;
-`)
-	if err != nil {
-		return err
-	}
-
-	_, err = deps.InternalExecutor.ExecEx(ctx, "drop-payload-progress", nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride, `
-ALTER TABLE system.jobs DROP COLUMN IF EXISTS progress;
-`)
-	if err != nil {
+	if err := deps.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		// No idempotent RENAME … IF EXISTS, so use a txn and check the catalog.
+		if rows, err := txn.QueryRow(ctx, "check-payload-exists", txn.KV(),
+			`SELECT table_name, column_name FROM system.information_schema.columns WHERE table_name = 'jobs' AND column_name = 'payload'`,
+		); err != nil || rows == nil {
+			return err
+		}
+		for _, stmt := range []string{
+			`ALTER TABLE system.jobs RENAME COLUMN payload TO dropped_payload`,
+			`ALTER TABLE system.jobs RENAME COLUMN progress TO dropped_progress`,
+			`ALTER TABLE system.jobs ALTER COLUMN dropped_payload SET NOT VISIBLE, ALTER COLUMN dropped_progress SET NOT VISIBLE`,
+		} {
+			if _, err := txn.ExecEx(ctx, "hide-legacy-payload-progress", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride, stmt,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 

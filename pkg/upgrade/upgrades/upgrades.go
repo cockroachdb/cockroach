@@ -98,10 +98,10 @@ var upgrades = []upgradebase.Upgrade{
 	newFirstUpgrade(clusterversion.V24_1Start.Version()),
 
 	upgrade.NewTenantUpgrade(
-		"drop unused payload and progress columns from system.jobs table",
+		"hide unused payload and progress columns from system.jobs table",
 		clusterversion.V24_1_DropPayloadAndProgressFromSystemJobsTable.Version(),
 		upgrade.NoPrecondition,
-		dropPayloadProgressFromSystemJobs,
+		hidePayloadProgressFromSystemJobs,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.jobs table"),
 	),
 
