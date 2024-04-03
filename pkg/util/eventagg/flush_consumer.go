@@ -10,50 +10,58 @@
 
 package eventagg
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
 
 // flushConsumer is the interface type used to define a post-processing consumer of
 // the aggregations flushed by a MapReduceAggregator.
 type flushConsumer[K comparable, V any] interface {
-	// TODO(abarganier): It'd be better if we didn't pass down the reduceContainer and instead
-	// provided the unwrapped values, but for now I'd rather copying over to a new map.
-	onFlush(ctx context.Context, m map[K]V)
+	onFlush(ctx context.Context, flushMeta FlushMeta, m map[K]V)
 }
 
 // LogWriteConsumer is an example flushConsumer, which provides an easy plug-and-play
 // method of logging all the values V flushed by a MapReduceAggregator[V].
-type LogWriteConsumer[K comparable, V any] struct{}
-
-// NewLogWriteConsumer returns a new *LogWriteConsumer[V] instance.
-func NewLogWriteConsumer[K comparable, V any]() *LogWriteConsumer[K, V] {
-	return &LogWriteConsumer[K, V]{}
+type LogWriteConsumer[K comparable, V any] struct {
+	EventType log.EventType
+	TestKnobs struct {
+		LogInterceptorFn func(ctx context.Context, meta log.StructuredMeta, payload any)
+	}
 }
 
-// TODO(abarganier): The values flushed out of a MapReduceAggregator ideally should be able
-// to be provided to log.StructuredEvent(), or a similar facility, without transformation.
-//
-// For now, we punt this problem until we have the lower level interfaces fleshed out. Currently,
-// log.StructuredEvent() requires a protobuf format, which may be cumbersome & something we'd like
-// to avoid if possible within this system.
-//
-// One option would be to expand the API of pkg/util/log to enable direct JSON logging, e.g.:
-//
-//	log.Structured(ctx, eventMetadata, eventJSON)
-//
-// This would allow us to construct a single metadata object that can be applied to every flushed
-// value V.
-func (l LogWriteConsumer[K, V]) onFlush(ctx context.Context, m map[K]V) {
-	//metadata := &logmeta.EventMetadata{
-	//  EventType: ...,
-	//  EventTimestamp: timeutil.Now().UnixNano(),
-	//  NodeDetails: logmeta.GetNodeDetails(ctx),
-	//	...,
-	//}
-	//for _, v := range m {
-	//	marshalled, err := json.Marshal(v)
-	//	if err != nil {
-	//		log.Errorf(ctx, "failed to marshal JSON for event: %v", v)
-	//  }
-	//	log.Structured(ctx, metadata, marshalled)
-	//}
+// KeyValueLog is the type logged to log.Structured via the LogWriteConsumer.
+// It wraps the flush metadata, key, and value flushed from the associated
+// aggregator.
+type KeyValueLog struct {
+	Metadata FlushMeta `json:"metadata"`
+	Key      any       `json:"key"`
+	Value    any       `json:"value"`
+}
+
+// NewLogWriteConsumer returns a new *LogWriteConsumer[K, V] instance.
+func NewLogWriteConsumer[K comparable, V any](eventType log.EventType) *LogWriteConsumer[K, V] {
+	return &LogWriteConsumer[K, V]{
+		EventType: eventType,
+	}
+}
+
+// onFlush emits all events in the provided map as logs via log.Structured
+func (l LogWriteConsumer[K, V]) onFlush(ctx context.Context, flushMeta FlushMeta, m map[K]V) {
+	metadata := log.StructuredMeta{
+		EventType: l.EventType,
+	}
+	for k, v := range m {
+		KVLog := KeyValueLog{
+			Metadata: flushMeta,
+			Key:      k,
+			Value:    v,
+		}
+		if l.TestKnobs.LogInterceptorFn != nil {
+			l.TestKnobs.LogInterceptorFn(ctx, metadata, KVLog)
+		} else {
+			log.Structured(ctx, metadata, KVLog)
+		}
+	}
 }

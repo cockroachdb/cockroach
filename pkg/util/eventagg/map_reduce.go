@@ -59,8 +59,8 @@ func (m *MapReduceAggregator[E, K, V]) Add(ctx context.Context, e E) {
 	// If it's time to flush, do so async before processing the event.
 	// This will reset the cache, meaning our event will be added to
 	// a fresh aggregation window.
-	if m.mu.flushTrigger.shouldFlush() {
-		m.flushAsync(ctx, m.getAndResetCacheLocked())
+	if shouldFlush, flushMeta := m.mu.flushTrigger.shouldFlush(); shouldFlush {
+		m.flushAsync(ctx, flushMeta, m.getAndResetCacheLocked())
 	}
 	v, ok := m.mu.cache[k]
 	if !ok {
@@ -75,12 +75,14 @@ func (m *MapReduceAggregator[E, K, V]) Add(ctx context.Context, e E) {
 //
 // The flushed data will be passed to each of the configured flushConsumer's
 // provided at construction for further processing.
-func (m *MapReduceAggregator[E, K, V]) flushAsync(ctx context.Context, flushed map[K]V) {
+func (m *MapReduceAggregator[E, K, V]) flushAsync(
+	ctx context.Context, flushMeta FlushMeta, flushed map[K]V,
+) {
 	// TODO(abarganier): We should probably use a stopper async task here.
 	// TODO(abarganier): Should we make whether this is done async configurable?
 	go func() {
 		for _, c := range m.consumers {
-			c.onFlush(ctx, flushed)
+			c.onFlush(ctx, flushMeta, flushed)
 		}
 	}()
 }

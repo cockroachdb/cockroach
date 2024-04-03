@@ -221,6 +221,11 @@ func (ex *connExecutor) recordStatementSummary(
 
 	stmtFingerprintID, err :=
 		ex.statsCollector.RecordStatement(ctx, recordedStmtStatsKey, recordedStmtStats)
+	ex.server.sqlStatsAggregator.Add(ctx, &sqlstats.Stmt{
+		StmtFingerprintID: stmtFingerprintID,
+		Statement:         stmt.StmtNoConstants,
+		ServiceLatency:    svcLatRaw,
+	})
 
 	if err != nil {
 		if log.V(1) {
