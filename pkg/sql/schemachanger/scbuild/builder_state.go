@@ -678,7 +678,7 @@ func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scp
 			// Determine the parent database ID, since cross database references are
 			// disallowed.
 			_, _, parentNamespace := scpb.FindNamespace(b.QueryByID(tableID))
-			if desc.GetParentID() != parentNamespace.DatabaseID {
+			if parentNamespace != nil && desc.GetParentID() != parentNamespace.DatabaseID {
 				typeName := tree.MakeTypeNameWithPrefix(b.descCache[id].prefix, desc.GetName())
 				panic(pgerror.Newf(
 					pgcode.FeatureNotSupported,
@@ -1301,7 +1301,8 @@ func (b *builderState) ResolveRoutine(
 	}
 
 	ol, err := fd.MatchOverload(
-		b.ctx, b.cr, routineObj, b.semaCtx.SearchPath, routineType, p.InDropContext,
+		b.ctx, b.cr, routineObj, b.semaCtx.SearchPath,
+		routineType, p.InDropContext, false, /* tryDefaultExprs */
 	)
 	if err != nil {
 		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {

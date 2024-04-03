@@ -182,7 +182,10 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		return err
 	}
 
-	maybeExistingFuncObj := fnDesc.ToRoutineObj()
+	maybeExistingFuncObj, err := fnDesc.ToRoutineObj()
+	if err != nil {
+		return err
+	}
 	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
 	existing, err := params.p.matchRoutine(
 		params.ctx, maybeExistingFuncObj, false, /* required */
@@ -406,7 +409,10 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	}
 
 	// Check if there is a conflicting function exists.
-	maybeExistingFuncObj := fnDesc.ToRoutineObj()
+	maybeExistingFuncObj, err := fnDesc.ToRoutineObj()
+	if err != nil {
+		return err
+	}
 	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(targetSc.GetName())
 	maybeExistingFuncObj.FuncName.ExplicitSchema = true
 	existing, err := params.p.matchRoutine(
@@ -506,6 +512,9 @@ func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor
 		if class == tree.RoutineParamOut {
 			ret.OutParamOrdinals = append(ret.OutParamOrdinals, int32(paramIdx))
 			ret.OutParamTypes = append(ret.OutParamTypes, param.Type)
+		}
+		if param.DefaultExpr != nil {
+			ret.DefaultExprs = append(ret.DefaultExprs, *param.DefaultExpr)
 		}
 	}
 	return ret

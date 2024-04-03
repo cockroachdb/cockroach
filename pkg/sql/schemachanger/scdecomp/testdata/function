@@ -30,6 +30,7 @@ ElementState:
     params:
     - class:
         class: DEFAULT
+      defaultExpr: ""
       name: a
       type:
         closedTypeIds:
