@@ -28,14 +28,14 @@ import (
 // mutations are applied, or the order of any returned rows (i.e. it won't
 // become a physical property required of the Delete operator).
 func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope) {
-	// UX friendliness safeguard.
-	if del.Where == nil && b.evalCtx.SessionData().SafeUpdates {
-		panic(pgerror.DangerousStatementf("DELETE without WHERE clause"))
-	}
-
 	if del.OrderBy != nil && del.Limit == nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"DELETE statement requires LIMIT when ORDER BY is used"))
+	}
+
+	// UX friendliness safeguard.
+	if del.Where == nil && del.Limit == nil && b.evalCtx.SessionData().SafeUpdates {
+		panic(pgerror.DangerousStatementf("DELETE without WHERE or LIMIT clause"))
 	}
 
 	batch := del.Batch
