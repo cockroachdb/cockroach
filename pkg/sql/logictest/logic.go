@@ -3736,16 +3736,6 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		return errors.Newf("expected empty result, found %d rows\n%v", rowCount, actualResults)
 	}
 
-	if rowCount > 1 && !allDuplicateRows && query.sorter == nil && !query.noSort &&
-		!query.kvtrace && !orderRE.MatchString(query.sql) && !explainRE.MatchString(query.sql) &&
-		!showTraceRE.MatchString(query.sql) {
-		return fmt.Errorf("to prevent flakes in queries that return multiple rows, " +
-			"add the rowsort option, the valuesort option, the partialsort option, " +
-			"or an ORDER BY clause. If you are certain that your test will not flake " +
-			"due to a non-deterministic ordering of rows, you can add the nosort option " +
-			"to ignore this error")
-	}
-
 	if query.sorter != nil {
 		query.sorter(len(query.colTypes), actualResults)
 		query.sorter(len(query.colTypes), query.expectedResults)
@@ -3882,23 +3872,36 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 				t.emit(remainder.Text())
 			}
 		}
-		return nil
-	}
+	} else {
+		// Not rewriting, check that results match.
 
-	if query.checkResults {
-		if err := resultsMatch(); err != nil {
-			return err
+		if query.checkResults {
+			if err := resultsMatch(); err != nil {
+				return err
+			}
+		}
+
+		if query.label != "" {
+			if prevHash, ok := t.labelMap[query.label]; ok && prevHash != hash {
+				t.Errorf(
+					"%s: error in input: previous values for label %s (hash %s) do not match (hash %s)",
+					query.pos, query.label, prevHash, hash,
+				)
+			}
+			t.labelMap[query.label] = hash
 		}
 	}
 
-	if query.label != "" {
-		if prevHash, ok := t.labelMap[query.label]; ok && prevHash != hash {
-			t.Errorf(
-				"%s: error in input: previous values for label %s (hash %s) do not match (hash %s)",
-				query.pos, query.label, prevHash, hash,
-			)
-		}
-		t.labelMap[query.label] = hash
+	// If all results have matched, check that we haven't gotten lucky with an
+	// unsorted multi-row result set.
+	if rowCount > 1 && !allDuplicateRows && query.sorter == nil && !query.noSort &&
+		!query.kvtrace && !orderRE.MatchString(query.sql) && !explainRE.MatchString(query.sql) &&
+		!showTraceRE.MatchString(query.sql) {
+		return fmt.Errorf("to prevent flakes in queries that return multiple rows, " +
+			"add the rowsort option, the valuesort option, the partialsort option, " +
+			"or an ORDER BY clause. If you are certain that your test will not flake " +
+			"due to a non-deterministic ordering of rows, you can add the nosort option " +
+			"to ignore this error")
 	}
 
 	t.finishOne("OK")
