@@ -12,6 +12,25 @@ package eventagg
 
 import "time"
 
+// FlushKind is the type of FlushTrigger used, which communicates aggregation strategy.
+type FlushKind string
+
+// Windowed is a FlushTrigger type that enforces windowed flush periods, containing a
+// window start and end time.
+const Windowed FlushKind = "WINDOWED"
+
+// AggInfo is a type used to communicate metadata from a FlushTrigger to the
+// targets of the flush about the aggregation type period. For example, the type
+// of flush, and associated timestamps.
+type AggInfo struct {
+	// Kind is the FlushKind used in the FlushTrigger.
+	Kind FlushKind `json:"kind"`
+	// StartTime is the primary timestamp for the flushed data.
+	StartTime int64 `json:"start_time"`
+	// EndTime, if present, represents the end timestamp of the flush interval.
+	EndTime int64 `json:"end_time"`
+}
+
 // FlushTrigger defines the interface used by aggregators, such as MapReduceAggregator,
 // to determine when a flush of the current aggregation should be triggered.
 //
@@ -19,7 +38,7 @@ import "time"
 // but *before* the event itself is aggregated.
 type FlushTrigger interface {
 	// shouldFlush returns true if this FlushTrigger has been tripped.
-	shouldFlush() bool
+	shouldFlush() (bool, AggInfo)
 }
 
 // WindowedFlush is a FlushTrigger which triggers flushes on a wall clock aligned
@@ -55,11 +74,16 @@ func (w *WindowedFlush) newWindowEnd() time.Time {
 	return w.nowFn().Truncate(w.window).Add(w.window)
 }
 
-func (w *WindowedFlush) shouldFlush() bool {
+func (w *WindowedFlush) shouldFlush() (bool, AggInfo) {
 	t := w.nowFn()
 	if t.Equal(w.curWindowEnd) || t.After(w.curWindowEnd) {
+		meta := AggInfo{
+			Kind:      Windowed,
+			StartTime: w.curWindowEnd.Add(-w.window).UnixNano(),
+			EndTime:   w.curWindowEnd.UnixNano(),
+		}
 		w.curWindowEnd = w.newWindowEnd()
-		return true
+		return true, meta
 	}
-	return false
+	return false, AggInfo{}
 }

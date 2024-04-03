@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/obs/eventagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/redact"
 )
 
 type Stmt struct {
@@ -28,7 +28,7 @@ type Stmt struct {
 	// problem to avoid slowing down the prototyping process.
 	StmtFingerprintID appstatspb.StmtFingerprintID
 	// Statement is the redactable statement string.
-	Statement redact.RedactableString
+	Statement string
 	// ServiceLatency is the latency of serving the query, excluding miscellaneous
 	// sources of the overhead (e.g. internal retries).
 	ServiceLatency time.Duration
@@ -53,7 +53,7 @@ type StmtStatistics struct {
 	ExecCount int
 	// ServiceLatency is a histogram used to aggregate service latencies of the
 	// various Stmt's recorded into this StmtStatistics instance.
-	ServiceLatency metric.ManualWindowHistogram
+	ServiceLatency *metric.ManualWindowHistogram
 }
 
 // NewStmtStatsAggregator leverages the generic MapReduceAggregator to instantiate
@@ -65,10 +65,18 @@ func NewStmtStatsAggregator() *eventagg.MapReduceAggregator[*Stmt, appstatspb.St
 	return eventagg.NewMapReduceAggregator[*Stmt, appstatspb.StmtFingerprintID, *StmtStatistics](
 		func() *StmtStatistics {
 			return &StmtStatistics{
-				ServiceLatency: metric.ManualWindowHistogram{}, // TODO: legitimate construction of histogram.
+				ServiceLatency: metric.NewManualWindowHistogram(
+					metric.Metadata{
+						Name:        "stmt.svc.latency",
+						Measurement: "Aggregate service latency of statement executions",
+						Unit:        metric.Unit_NANOSECONDS,
+					},
+					metric.IOLatencyBuckets.GetBucketsFromBucketConfig(),
+					true,
+				),
 			}
 		},
-		eventagg.NewWindowedFlush(10*time.Minute, timeutil.Now),
-		eventagg.NewLogWriteConsumer[appstatspb.StmtFingerprintID, *StmtStatistics](), // We'd like to log all the aggregated results, as-is.
+		eventagg.NewWindowedFlush(10*time.Second, timeutil.Now),
+		eventagg.NewLogWriteConsumer[appstatspb.StmtFingerprintID, *StmtStatistics](log.STATEMENT_STATS), // We'd like to log all the aggregated results, as-is.
 	)
 }

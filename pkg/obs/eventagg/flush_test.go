@@ -29,12 +29,22 @@ func TestWindowedFlush(t *testing.T) {
 		return now
 	})
 	// Initially, we should be within the current window.
-	require.False(t, flush.shouldFlush())
+	shouldFlush, meta := flush.shouldFlush()
+	require.False(t, shouldFlush)
+	require.Equal(t, AggInfo{}, meta)
 	// If we fast-forward to the beginning of the next window, we expect
 	// a flush to be triggered.
 	now = now.Add(window).Truncate(window)
-	require.True(t, flush.shouldFlush())
+	shouldFlush, meta = flush.shouldFlush()
+	require.True(t, shouldFlush)
+	require.Equal(t, AggInfo{
+		Kind:      Windowed,
+		StartTime: now.Add(-window).Truncate(window).UnixNano(),
+		EndTime:   now.UnixNano(),
+	}, meta)
 	// Times occurring before the current window's end should not trigger a flush.
 	now = now.Add(1 * time.Minute)
-	require.False(t, flush.shouldFlush())
+	shouldFlush, meta = flush.shouldFlush()
+	require.False(t, shouldFlush)
+	require.Equal(t, AggInfo{}, meta)
 }
