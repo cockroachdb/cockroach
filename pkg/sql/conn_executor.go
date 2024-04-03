@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
+	"github.com/cockroachdb/cockroach/pkg/obs/eventagg"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -322,6 +323,8 @@ type Server struct {
 	// node. Newly collected statistics flow into sqlStats.
 	sqlStats *persistedsqlstats.PersistedSQLStats
 
+	sqlStatsAggregator *eventagg.MapReduceAggregator[*sqlstats.Stmt, appstatspb.StmtFingerprintID, *sqlstats.StmtStatistics]
+
 	// sqlStatsController is the control-plane interface for sqlStats.
 	sqlStatsController *persistedsqlstats.Controller
 
@@ -496,6 +499,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
+	s.sqlStatsAggregator = sqlstats.NewStmtStatsAggregator()
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
 	schemaTelemetryIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
 	schemaTelemetryIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
