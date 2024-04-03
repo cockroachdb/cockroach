@@ -245,6 +245,23 @@ func (c *SyncedCluster) DiscoverService(
 	return services[0], err
 }
 
+// ListLoadBalancers returns a list of load balancers from all providers, for
+// the cluster.
+func (c *SyncedCluster) ListLoadBalancers(l *logger.Logger) ([]vm.ServiceAddress, error) {
+	lock := syncutil.Mutex{}
+	allAddresses := make([]vm.ServiceAddress, 0)
+	err := vm.FanOut(c.VMs, func(provider vm.Provider, vms vm.List) error {
+		addresses, listErr := provider.ListLoadBalancers(l, vms)
+		if listErr != nil {
+			return listErr
+		}
+		defer lock.Lock()
+		allAddresses = append(allAddresses, addresses...)
+		return nil
+	})
+	return allAddresses, err
+}
+
 // MapServices discovers all service types for a given virtual cluster
 // and instance and maps it by node and service type.
 func (c *SyncedCluster) MapServices(
