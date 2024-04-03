@@ -255,7 +255,7 @@ func (t *testFlushConsumer[K, V]) consumedCh() <-chan struct{} {
 }
 
 // onFlush implements the flushConsumer interface.
-func (t *testFlushConsumer[K, V]) onFlush(_ context.Context, flushed map[K]V) {
+func (t *testFlushConsumer[K, V]) onFlush(_ context.Context, _ AggInfo, flushed map[K]V) {
 	t.flushed = flushed
 	t.consumed <- struct{}{}
 }
@@ -297,10 +297,10 @@ type testFlushTrigger struct {
 var _ FlushTrigger = (*testFlushTrigger)(nil)
 
 // shouldFlush implements the FlushTrigger interface.
-func (t *testFlushTrigger) shouldFlush() bool {
+func (t *testFlushTrigger) shouldFlush() (bool, AggInfo) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.mu.flush
+	return t.mu.flush, AggInfo{}
 }
 
 func (t *testFlushTrigger) setShouldFlush(to bool) {

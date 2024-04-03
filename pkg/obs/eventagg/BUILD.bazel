@@ -20,19 +20,24 @@ go_library(
 go_test(
     name = "eventagg_test",
     srcs = [
+        "flush_consumer_test.go",
         "flush_test.go",
         "map_reduce_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":eventagg"],
     deps = [
+        "//pkg/obs/logstream",
+        "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/log/logpb",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
