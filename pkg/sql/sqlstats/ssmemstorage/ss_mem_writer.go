@@ -105,73 +105,71 @@ func (s *Container) RecordStatement(
 	}
 
 	// Collect the per-statement statisticstats.
-	func() {
-		stats.mu.Lock()
-		defer stats.mu.Unlock()
+	stats.mu.Lock()
+	defer stats.mu.Unlock()
 
-		stats.mu.data.Count++
-		if value.Failed {
-			stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
-			stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
-			stats.mu.data.FailureCount++
-		}
-		// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
-		if value.Plan != nil {
-			stats.mu.data.SensitiveInfo.MostRecentPlanDescription = *value.Plan
-			stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = s.getTimeNow()
-			s.setLogicalPlanLastSampled(statementKey.sampledPlanKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
-		}
-		if value.AutoRetryCount == 0 {
-			stats.mu.data.FirstAttemptCount++
-		} else if int64(value.AutoRetryCount) > stats.mu.data.MaxRetries {
-			stats.mu.data.MaxRetries = int64(value.AutoRetryCount)
-		}
+	stats.mu.data.Count++
+	if value.Failed {
+		stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
+		stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
+		stats.mu.data.FailureCount++
+	}
+	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
+	if value.Plan != nil {
+		stats.mu.data.SensitiveInfo.MostRecentPlanDescription = *value.Plan
+		stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = s.getTimeNow()
+		s.setLogicalPlanLastSampled(statementKey.sampledPlanKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
+	}
+	if value.AutoRetryCount == 0 {
+		stats.mu.data.FirstAttemptCount++
+	} else if int64(value.AutoRetryCount) > stats.mu.data.MaxRetries {
+		stats.mu.data.MaxRetries = int64(value.AutoRetryCount)
+	}
 
-		stats.mu.data.SQLType = value.StatementType.String()
-		stats.mu.data.NumRows.Record(stats.mu.data.Count, float64(value.RowsAffected))
-		stats.mu.data.IdleLat.Record(stats.mu.data.Count, value.IdleLatencySec)
-		stats.mu.data.ParseLat.Record(stats.mu.data.Count, value.ParseLatencySec)
-		stats.mu.data.PlanLat.Record(stats.mu.data.Count, value.PlanLatencySec)
-		stats.mu.data.RunLat.Record(stats.mu.data.Count, value.RunLatencySec)
-		stats.mu.data.ServiceLat.Record(stats.mu.data.Count, value.ServiceLatencySec)
-		stats.mu.data.OverheadLat.Record(stats.mu.data.Count, value.OverheadLatencySec)
-		stats.mu.data.BytesRead.Record(stats.mu.data.Count, float64(value.BytesRead))
-		stats.mu.data.RowsRead.Record(stats.mu.data.Count, float64(value.RowsRead))
-		stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
-		stats.mu.data.LastExecTimestamp = s.getTimeNow()
-		stats.mu.data.Nodes = util.CombineUnique(stats.mu.data.Nodes, value.Nodes)
-		if value.ExecStats != nil {
-			stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.ExecStats.Regions)
-		}
-		stats.mu.data.PlanGists = util.CombineUnique(stats.mu.data.PlanGists, []string{value.PlanGist})
-		stats.mu.data.IndexRecommendations = value.IndexRecommendations
-		stats.mu.data.Indexes = util.CombineUnique(stats.mu.data.Indexes, value.Indexes)
+	stats.mu.data.SQLType = value.StatementType.String()
+	stats.mu.data.NumRows.Record(stats.mu.data.Count, float64(value.RowsAffected))
+	stats.mu.data.IdleLat.Record(stats.mu.data.Count, value.IdleLatencySec)
+	stats.mu.data.ParseLat.Record(stats.mu.data.Count, value.ParseLatencySec)
+	stats.mu.data.PlanLat.Record(stats.mu.data.Count, value.PlanLatencySec)
+	stats.mu.data.RunLat.Record(stats.mu.data.Count, value.RunLatencySec)
+	stats.mu.data.ServiceLat.Record(stats.mu.data.Count, value.ServiceLatencySec)
+	stats.mu.data.OverheadLat.Record(stats.mu.data.Count, value.OverheadLatencySec)
+	stats.mu.data.BytesRead.Record(stats.mu.data.Count, float64(value.BytesRead))
+	stats.mu.data.RowsRead.Record(stats.mu.data.Count, float64(value.RowsRead))
+	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
+	stats.mu.data.LastExecTimestamp = s.getTimeNow()
+	stats.mu.data.Nodes = util.CombineUnique(stats.mu.data.Nodes, value.Nodes)
+	if value.ExecStats != nil {
+		stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.ExecStats.Regions)
+	}
+	stats.mu.data.PlanGists = util.CombineUnique(stats.mu.data.PlanGists, []string{value.PlanGist})
+	stats.mu.data.IndexRecommendations = value.IndexRecommendations
+	stats.mu.data.Indexes = util.CombineUnique(stats.mu.data.Indexes, value.Indexes)
 
-		// Percentile latencies are only being sampled if the latency was above the
-		// AnomalyDetectionLatencyThreshold.
-		// The Insights detector already does a flush when detecting for anomaly latency,
-		// so there is no need to force a flush when retrieving the data during this step.
-		latencies := s.latencyInformation.GetPercentileValues(stmtFingerprintID, false)
-		latencyInfo := appstatspb.LatencyInfo{
-			Min: value.ServiceLatencySec,
-			Max: value.ServiceLatencySec,
-			P50: latencies.P50,
-			P90: latencies.P90,
-			P99: latencies.P99,
-		}
-		stats.mu.data.LatencyInfo.Add(latencyInfo)
+	// Percentile latencies are only being sampled if the latency was above the
+	// AnomalyDetectionLatencyThreshold.
+	// The Insights detector already does a flush when detecting for anomaly latency,
+	// so there is no need to force a flush when retrieving the data during this step.
+	latencies := s.latencyInformation.GetPercentileValues(stmtFingerprintID, false)
+	latencyInfo := appstatspb.LatencyInfo{
+		Min: value.ServiceLatencySec,
+		Max: value.ServiceLatencySec,
+		P50: latencies.P50,
+		P90: latencies.P90,
+		P99: latencies.P99,
+	}
+	stats.mu.data.LatencyInfo.Add(latencyInfo)
 
-		// Note that some fields derived from tracing statements (such as
-		// BytesSentOverNetwork) are not updated here because they are collected
-		// on-demand.
-		// TODO(asubiotto): Record the aforementioned fields here when always-on
-		//  tracing is a thing.
-		stats.mu.vectorized = key.Vec
-		stats.mu.distSQLUsed = key.DistSQL
-		stats.mu.fullScan = key.FullScan
-		stats.mu.database = key.Database
-		stats.mu.querySummary = key.QuerySummary
-	}()
+	// Note that some fields derived from tracing statements (such as
+	// BytesSentOverNetwork) are not updated here because they are collected
+	// on-demand.
+	// TODO(asubiotto): Record the aforementioned fields here when always-on
+	//  tracing is a thing.
+	stats.mu.vectorized = key.Vec
+	stats.mu.distSQLUsed = key.DistSQL
+	stats.mu.fullScan = key.FullScan
+	stats.mu.database = key.Database
+	stats.mu.querySummary = key.QuerySummary
 
 	if created {
 		// stats size + stmtKey size + hash of the statementKey
@@ -180,24 +178,19 @@ func (s *Container) RecordStatement(
 		// We also account for the memory used for s.sampledPlanMetadataCache.
 		// timestamp size + key size + hash.
 		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
-		if done, retID, err := func() (done bool, _ appstatspb.StmtFingerprintID, _ error) {
-			s.mu.Lock()
-			defer s.mu.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 
-			// If the monitor is nil, we do not track memory usage.
-			if s.mu.acc.Monitor() == nil {
-				return true, stats.ID, nil
-			}
+		// If the monitor is nil, we do not track memory usage.
+		if s.mu.acc.Monitor() == nil {
+			return stats.ID, nil
+		}
 
-			// We attempt to account for all the memory we used. If we have exceeded our
-			// memory budget, delete the entry that we just created and report the error.
-			if err := s.mu.acc.Grow(ctx, estimatedMemoryAllocBytes); err != nil {
-				delete(s.mu.stmts, statementKey)
-				return true, stats.ID, ErrMemoryPressure
-			}
-			return false, stats.ID, nil
-		}(); done {
-			return retID, err
+		// We attempt to account for all the memory we used. If we have exceeded our
+		// memory budget, delete the entry that we just created and report the error.
+		if err := s.mu.acc.Grow(ctx, estimatedMemoryAllocBytes); err != nil {
+			delete(s.mu.stmts, statementKey)
+			return stats.ID, ErrMemoryPressure
 		}
 	}
 
@@ -315,6 +308,10 @@ func (s *Container) RecordTransaction(
 		return ErrFingerprintLimitReached
 	}
 
+	// Collect the per-transaction statistics.
+	stats.mu.Lock()
+	defer stats.mu.Unlock()
+
 	// If we have created a new entry successfully, we check if we have reached
 	// the memory limit. If we have, then we delete the newly created entry and
 	// return the memory allocation error.
@@ -340,49 +337,43 @@ func (s *Container) RecordTransaction(
 		}
 	}
 
-	// Collect the per-transaction statistics.
-	func() {
-		stats.mu.Lock()
-		defer stats.mu.Unlock()
+	stats.mu.data.Count++
 
-		stats.mu.data.Count++
+	stats.mu.data.NumRows.Record(stats.mu.data.Count, float64(value.RowsAffected))
+	stats.mu.data.ServiceLat.Record(stats.mu.data.Count, value.ServiceLatency.Seconds())
+	stats.mu.data.RetryLat.Record(stats.mu.data.Count, value.RetryLatency.Seconds())
+	stats.mu.data.CommitLat.Record(stats.mu.data.Count, value.CommitLatency.Seconds())
+	stats.mu.data.IdleLat.Record(stats.mu.data.Count, value.IdleLatency.Seconds())
+	if value.RetryCount > stats.mu.data.MaxRetries {
+		stats.mu.data.MaxRetries = value.RetryCount
+	}
+	stats.mu.data.RowsRead.Record(stats.mu.data.Count, float64(value.RowsRead))
+	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
+	stats.mu.data.BytesRead.Record(stats.mu.data.Count, float64(value.BytesRead))
 
-		stats.mu.data.NumRows.Record(stats.mu.data.Count, float64(value.RowsAffected))
-		stats.mu.data.ServiceLat.Record(stats.mu.data.Count, value.ServiceLatency.Seconds())
-		stats.mu.data.RetryLat.Record(stats.mu.data.Count, value.RetryLatency.Seconds())
-		stats.mu.data.CommitLat.Record(stats.mu.data.Count, value.CommitLatency.Seconds())
-		stats.mu.data.IdleLat.Record(stats.mu.data.Count, value.IdleLatency.Seconds())
-		if value.RetryCount > stats.mu.data.MaxRetries {
-			stats.mu.data.MaxRetries = value.RetryCount
-		}
-		stats.mu.data.RowsRead.Record(stats.mu.data.Count, float64(value.RowsRead))
-		stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
-		stats.mu.data.BytesRead.Record(stats.mu.data.Count, float64(value.BytesRead))
+	if value.CollectedExecStats {
+		stats.mu.data.ExecStats.Count++
+		stats.mu.data.ExecStats.NetworkBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.NetworkBytesSent))
+		stats.mu.data.ExecStats.MaxMemUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxMemUsage))
+		stats.mu.data.ExecStats.ContentionTime.Record(stats.mu.data.ExecStats.Count, value.ExecStats.ContentionTime.Seconds())
+		stats.mu.data.ExecStats.NetworkMessages.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.NetworkMessages))
+		stats.mu.data.ExecStats.MaxDiskUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxDiskUsage))
+		stats.mu.data.ExecStats.CPUSQLNanos.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.CPUTime.Nanoseconds()))
 
-		if value.CollectedExecStats {
-			stats.mu.data.ExecStats.Count++
-			stats.mu.data.ExecStats.NetworkBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.NetworkBytesSent))
-			stats.mu.data.ExecStats.MaxMemUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxMemUsage))
-			stats.mu.data.ExecStats.ContentionTime.Record(stats.mu.data.ExecStats.Count, value.ExecStats.ContentionTime.Seconds())
-			stats.mu.data.ExecStats.NetworkMessages.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.NetworkMessages))
-			stats.mu.data.ExecStats.MaxDiskUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxDiskUsage))
-			stats.mu.data.ExecStats.CPUSQLNanos.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.CPUTime.Nanoseconds()))
-
-			stats.mu.data.ExecStats.MVCCIteratorStats.StepCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSteps))
-			stats.mu.data.ExecStats.MVCCIteratorStats.StepCountInternal.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccStepsInternal))
-			stats.mu.data.ExecStats.MVCCIteratorStats.SeekCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSeeks))
-			stats.mu.data.ExecStats.MVCCIteratorStats.SeekCountInternal.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSeeksInternal))
-			stats.mu.data.ExecStats.MVCCIteratorStats.BlockBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccBlockBytes))
-			stats.mu.data.ExecStats.MVCCIteratorStats.BlockBytesInCache.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccBlockBytesInCache))
-			stats.mu.data.ExecStats.MVCCIteratorStats.KeyBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccKeyBytes))
-			stats.mu.data.ExecStats.MVCCIteratorStats.ValueBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccValueBytes))
-			stats.mu.data.ExecStats.MVCCIteratorStats.PointCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccPointCount))
-			stats.mu.data.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccPointsCoveredByRangeTombstones))
-			stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeyCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeyCount))
-			stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeyContainedPoints))
-			stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeySkippedPoints))
-		}
-	}()
+		stats.mu.data.ExecStats.MVCCIteratorStats.StepCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSteps))
+		stats.mu.data.ExecStats.MVCCIteratorStats.StepCountInternal.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccStepsInternal))
+		stats.mu.data.ExecStats.MVCCIteratorStats.SeekCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSeeks))
+		stats.mu.data.ExecStats.MVCCIteratorStats.SeekCountInternal.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSeeksInternal))
+		stats.mu.data.ExecStats.MVCCIteratorStats.BlockBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccBlockBytes))
+		stats.mu.data.ExecStats.MVCCIteratorStats.BlockBytesInCache.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccBlockBytesInCache))
+		stats.mu.data.ExecStats.MVCCIteratorStats.KeyBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccKeyBytes))
+		stats.mu.data.ExecStats.MVCCIteratorStats.ValueBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccValueBytes))
+		stats.mu.data.ExecStats.MVCCIteratorStats.PointCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccPointCount))
+		stats.mu.data.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccPointsCoveredByRangeTombstones))
+		stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeyCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeyCount))
+		stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeyContainedPoints))
+		stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeySkippedPoints))
+	}
 
 	var retryReason string
 	if value.AutoRetryReason != nil {
