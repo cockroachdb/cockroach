@@ -14,9 +14,9 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -75,7 +76,7 @@ for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
 # if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
 # then the disks will be selected for RAID'ing. If there are both Local SSDs and Persistent disks,
 # RAID'ing in this case can cause performance differences. So, to avoid this, local SSDs are ignored.
-# Scenarios: 
+# Scenarios:
 #   (local SSD = 0, Persistent Disk - 1) - no RAID'ing and Persistent Disk mounted
 #   (local SSD = 1, Persistent Disk - 0) - no RAID'ing and local SSD mounted
 #   (local SSD >= 1, Persistent Disk = 1) - no RAID'ing and Persistent Disk mounted
@@ -341,14 +342,73 @@ func SyncDNS(l *logger.Logger, vms vm.List) error {
 	return errors.Wrapf(err, "Command: %s\nOutput: %s\nZone file contents:\n%s", cmd, output, zoneBuilder.String())
 }
 
+type AuthorizedKey struct {
+	User    string
+	Key     ssh.PublicKey
+	Comment string
+}
+
+// Format formats an authorized key for display. When `maxLen` is 0,
+// we return the entire key, truncating it to that length
+// otherwise. The comment associated with the key, if available, is
+// always displayed.
+func (k AuthorizedKey) Format(maxLen int) string {
+	formatted := string(ssh.MarshalAuthorizedKey(k.Key))
+	// Drop new line character if present. We add it when formatting a
+	// set of keys in `AsSSSH` or `AsProjectMetadata`.
+	formatted = strings.TrimSuffix(formatted, "\n")
+
+	if maxLen > 0 {
+		formatted = formatted[:maxLen] + "..."
+	}
+
+	var comment string
+	if k.Comment != "" {
+		comment = fmt.Sprintf(" %s", k.Comment)
+	}
+
+	return fmt.Sprintf("%s%s", formatted, comment)
+}
+
+func (k AuthorizedKey) String() string {
+	return k.Format(0)
+}
+
+type AuthorizedKeys []AuthorizedKey
+
+// AsSSH returns a marshaled version of the authorized keys in a
+// format that can be used as SSH's `authorized_keys` file.
+func (ak AuthorizedKeys) AsSSH() []byte {
+	var buf bytes.Buffer
+
+	for _, k := range ak {
+		buf.WriteString(k.String() + "\n")
+	}
+
+	return buf.Bytes()
+}
+
+// AsProjectMetadata returns a marshaled version of the authorized
+// keys in a format that can be pushed to GCE's project metadata
+// storage.
+func (ak AuthorizedKeys) AsProjectMetadata() []byte {
+	var buf bytes.Buffer
+
+	for _, k := range ak {
+		buf.WriteString(fmt.Sprintf("%s:%s\n", k.User, k.String()))
+	}
+
+	return buf.Bytes()
+}
+
 // GetUserAuthorizedKeys retrieves reads a list of user public keys from the
 // gcloud cockroach-ephemeral project and returns them formatted for use in
 // an authorized_keys file.
-func GetUserAuthorizedKeys(l *logger.Logger) (authorizedKeys []byte, err error) {
+func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 	var outBuf bytes.Buffer
 	// The below command will return a stream of user:pubkey as text.
 	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
-		"--project=cockroach-ephemeral",
+		fmt.Sprintf("--project=%s", DefaultProject()),
 		"--format=value(commonInstanceMetadata.ssh-keys)")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = &outBuf
@@ -356,36 +416,99 @@ func GetUserAuthorizedKeys(l *logger.Logger) (authorizedKeys []byte, err error) 
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}
-	// Initialize a bufio.Reader with a large enough buffer that we will never
-	// expect a line prefix when processing lines and can return an error if a
-	// call to ReadLine ever returns a prefix.
-	var pubKeyBuf bytes.Buffer
-	r := bufio.NewReaderSize(&outBuf, 1<<16 /* 64 kB */)
-	for {
-		line, isPrefix, err := r.ReadLine()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if isPrefix {
-			return nil, fmt.Errorf("unexpectedly failed to read public key line")
-		}
-		if len(line) == 0 {
+
+	var authorizedKeys AuthorizedKeys
+	scanner := bufio.NewScanner(&outBuf)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
 			continue
 		}
-		colonIdx := bytes.IndexRune(line, ':')
+		colonIdx := strings.IndexRune(line, ':')
 		if colonIdx == -1 {
-			return nil, fmt.Errorf("malformed public key line %q", string(line))
+			return nil, fmt.Errorf("malformed public key line %q", line)
 		}
-		// Skip users named "root" or "ubuntu" which don't correspond to humans
-		// and should be removed from the gcloud project.
-		if name := string(line[:colonIdx]); name == "root" || name == "ubuntu" {
+
+		user := line[:colonIdx]
+		key := line[colonIdx+1:]
+
+		if !isValidSSHUser(user) {
 			continue
 		}
-		pubKeyBuf.Write(line[colonIdx+1:])
-		pubKeyBuf.WriteRune('\n')
+
+		pubKey, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(key))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse public key in project metadata: %w\n%s", err, key)
+		}
+		authorizedKeys = append(authorizedKeys, AuthorizedKey{User: user, Key: pubKey, Comment: comment})
 	}
-	return pubKeyBuf.Bytes(), nil
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read public keys from project metadata: %w", err)
+	}
+
+	// For consistency, return keys sorted by username.
+	sort.Slice(authorizedKeys, func(i, j int) bool {
+		return authorizedKeys[i].User < authorizedKeys[j].User
+	})
+
+	return authorizedKeys, nil
+}
+
+// AddUserAuthorizedKey adds the authorized key provided to the set of
+// keys installed on clusters managed by roachprod. Currently, these
+// keys are stored in the project metadata for the roachprod's
+// `DefaultProject`.
+func AddUserAuthorizedKey(ak AuthorizedKey) error {
+	existingKeys, err := GetUserAuthorizedKeys()
+	if err != nil {
+		return err
+	}
+
+	if !isValidSSHUser(ak.User) {
+		return fmt.Errorf("invalid SSH key username: %s", ak.User)
+	}
+
+	newKeys := append(existingKeys, ak)
+	return SetUserAuthorizedKeys(newKeys)
+}
+
+// SetUserAuthorizedKeys updates the default project metadata with the
+// keys provided. Note that this overwrites any existing keys -- all
+// existing keys need to be passed in the `keys` list provided in
+// order for them to continue to exist after this function is called.
+func SetUserAuthorizedKeys(keys AuthorizedKeys) (retErr error) {
+	tmpFile, err := os.CreateTemp("", "ssh-keys-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer func() {
+		retErr = errors.CombineErrors(retErr, os.Remove(tmpFile.Name()))
+	}()
+
+	if err := os.WriteFile(tmpFile.Name(), keys.AsProjectMetadata(), 0444); err != nil {
+		return fmt.Errorf("failed to write to temp file: %w", err)
+	}
+
+	cmd := exec.Command("gcloud", "compute", "project-info", "add-metadata",
+		fmt.Sprintf("--project=%s", DefaultProject()),
+		fmt.Sprintf("--metadata-from-file=ssh-keys=%s", tmpFile.Name()),
+	)
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error running `gcloud` command (output above): %w", err)
+	}
+
+	return nil
+}
+
+// isValidSSHUser returns whether the username provided is a valid
+// username for the purposes of the shared pool of SSH public keys to
+// be added to clusters. We don't add public keys to the root user or
+// the shared user (the shared user's `authorized_keys` is managed by
+// roachprod).
+func isValidSSHUser(user string) bool {
+	return user != config.RootUser && user != config.SharedUser
 }
