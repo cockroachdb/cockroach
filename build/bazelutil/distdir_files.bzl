@@ -680,7 +680,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/joho/godotenv/com_github_joho_godotenv-v1.3.0.zip": "acef5a394fbd1193f52d0d19690b0bfe82728d18dd3bf67730dc5031c22d563f",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jonboulle/clockwork/com_github_jonboulle_clockwork-v0.1.0.zip": "930d355d1ced60a668bcbca6154bb5671120ba11a34119505d1c0677f7bbbf97",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jordan-wright/email/com_github_jordan_wright_email-v4.0.1-0.20210109023952-943e75fe5223+incompatible.zip": "6d35fa83ea02cfacd0e1ba9c9061381b963215cef84c8bf83ad5944cb304c390",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jordanlewis/gcassert/com_github_jordanlewis_gcassert-v0.0.0-20240302143610-f3d7b199b629.zip": "b5fa1cbfe72d124fd9b62877256b7e90920f4c046d3de34a7e602cda27d71ae7",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jordanlewis/gcassert/com_github_jordanlewis_gcassert-v0.0.0-20240401195008-3141cbd028c0.zip": "6e545deff1a580bfc31b2fae0b755a35e2b9c4c7e285ff4fe3eddc725a3ee101",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/josharian/intern/com_github_josharian_intern-v1.0.0.zip": "5679bfd11c14adccdb45bd1a0f9cf4b445b95caeed6fb507ba96ecced11c248d",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jpillora/backoff/com_github_jpillora_backoff-v1.0.0.zip": "f856692c725143c49b9cceabfbca8bc93d3dbde84a0aaa53fb26ed3774c220cc",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/json-iterator/go/com_github_json_iterator_go-v1.1.12.zip": "d001ea57081afd0e378467c8f4a9b6a51259996bb8bb763f78107eaf12f99501",
