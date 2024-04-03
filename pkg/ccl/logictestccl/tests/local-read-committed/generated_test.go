@@ -161,6 +161,13 @@ func TestReadCommittedLogicCCL_plpgsql_block(
 	runCCLLogicTest(t, "plpgsql_block")
 }
 
+func TestReadCommittedLogicCCL_plpgsql_call(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_call")
+}
+
 func TestReadCommittedLogicCCL_plpgsql_cursor(
 	t *testing.T,
 ) {

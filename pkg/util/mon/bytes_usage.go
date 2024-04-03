@@ -16,6 +16,7 @@ import (
 	"math"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -292,10 +293,19 @@ func init() {
 	}
 }
 
-// enableMonitorTreeTracking indicates whether tracking of all children of a
-// BytesMonitor (which is what powers TraverseTree) is enabled.
-var enableMonitorTreeTracking = envutil.EnvOrDefaultBool(
+// enableMonitorTreeTrackingEnvVar indicates whether tracking of all children of
+// a BytesMonitor (which is what powers TraverseTree) is enabled.
+var enableMonitorTreeTrackingEnvVar = envutil.EnvOrDefaultBool(
 	"COCKROACH_ENABLE_MONITOR_TREE", true)
+
+// enableMonitorTreeTrackingSetting indicates whether tracking of all children
+// of a BytesMonitor (which is what powers TraverseTree) is enabled.
+var enableMonitorTreeTrackingSetting = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"diagnostics.memory_monitor_tree.enabled",
+	"enable tracking of memory monitor tree",
+	true,
+)
 
 // MonitorState describes the current state of a single monitor.
 type MonitorState struct {
@@ -514,7 +524,9 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 
 	var effectiveLimit int64
 	if pool != nil {
-		if enableMonitorTreeTracking {
+		// mm.settings can be nil in tests in which case we use the default
+		// value of enableMonitorTreeTrackingSetting cluster setting (true).
+		if enableMonitorTreeTrackingEnvVar && (mm.settings == nil || enableMonitorTreeTrackingSetting.Get(&mm.settings.SV)) {
 			// If we have a "parent" monitor, then register mm as its child by
 			// making it the head of the doubly-linked list.
 			func() {

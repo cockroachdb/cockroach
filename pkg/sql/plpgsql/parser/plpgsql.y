@@ -335,7 +335,7 @@ func (u *plpgsqlSymUnion) sqlStatement() tree.Statement {
 %type <plpgsqltree.Statement>	proc_stmt
 %type <plpgsqltree.Statement>	stmt_assign stmt_if stmt_loop stmt_while stmt_exit stmt_continue
 %type <plpgsqltree.Statement>	stmt_return stmt_raise stmt_assert stmt_execsql
-%type <plpgsqltree.Statement>	stmt_dynexecute stmt_for stmt_perform stmt_call stmt_getdiag
+%type <plpgsqltree.Statement>	stmt_dynexecute stmt_for stmt_perform stmt_call stmt_do stmt_getdiag
 %type <plpgsqltree.Statement>	stmt_open stmt_fetch stmt_move stmt_close stmt_null
 %type <plpgsqltree.Statement>	stmt_commit stmt_rollback
 %type <plpgsqltree.Statement>	stmt_case stmt_foreach_a
@@ -702,6 +702,10 @@ proc_stmt:pl_block ';'
   {
     $$.val = $1.statement()
   }
+| stmt_do
+  {
+    $$.val = $1.statement()
+  }
 | stmt_getdiag
   { }
 | stmt_open
@@ -740,22 +744,27 @@ stmt_perform: PERFORM stmt_until_semi ';'
   }
 ;
 
-stmt_call: CALL call_cmd ';'
+stmt_call: CALL expr_until_semi ';'
   {
-    $$.val = &plpgsqltree.Call{IsCall: true}
-  }
-| DO call_cmd ';'
-  {
-    $$.val = &plpgsqltree.Call{IsCall: false}
-  }
-;
-
-call_cmd:
-  {
-    _, _, err := plpgsqllex.(*lexer).ReadSqlExpr(';')
+    expr, err := plpgsqllex.(*lexer).ParseExpr($2)
     if err != nil {
       return setErr(plpgsqllex, err)
     }
+    proc, ok := expr.(*tree.FuncExpr)
+    if !ok {
+      return setErr(plpgsqllex,
+        errors.New("CALL statement target must be a stored procedure"),
+      )
+    }
+    // Set the InCall flag to true to indicate that this is a CALL statement.
+    proc.InCall = true
+    $$.val = &plpgsqltree.Call{Proc: proc}
+  }
+;
+
+stmt_do: DO expr_until_semi ';'
+  {
+    return unimplemented(plpgsqllex, "do")
   }
 ;
 

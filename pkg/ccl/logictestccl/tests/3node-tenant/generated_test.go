@@ -2650,6 +2650,13 @@ func TestTenantLogicCCL_plpgsql_block(
 	runCCLLogicTest(t, "plpgsql_block")
 }
 
+func TestTenantLogicCCL_plpgsql_call(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_call")
+}
+
 func TestTenantLogicCCL_plpgsql_cursor(
 	t *testing.T,
 ) {
