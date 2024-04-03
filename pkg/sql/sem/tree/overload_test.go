@@ -117,6 +117,10 @@ func (to *testOverload) outParamInfo() (RoutineType, []int32, TypeList) {
 	return BuiltinRoutine, nil, nil
 }
 
+func (to *testOverload) defaultExprs() Exprs {
+	return nil
+}
+
 func (to testOverload) withPreferred(pref bool) *testOverload {
 	to.pref = pref
 	return &to

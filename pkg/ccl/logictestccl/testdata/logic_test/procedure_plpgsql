@@ -612,7 +612,7 @@ BEGIN
   COMMIT;
 END; $$ LANGUAGE PLpgSQL;
 
-# TODO(120521): this should return 42 instead of NULL. We currently cannot
+# TODO(121251): this should return 42 instead of NULL. We currently cannot
 # reference the unnamed parameter to get its input expression.
 query I colnames
 CALL p(42);
