@@ -1403,3 +1403,25 @@ func getNameEntryDescriptorType(parentID, parentSchemaID descpb.ID) string {
 func (s *TestState) InitializeSequence(id descpb.ID, startVal int64) {
 	s.LogSideEffectf("initializing sequence %d with starting value of %d", id, startVal)
 }
+
+// TemporarySchemaName is part of scbuild.TemporarySchemaProvider interface.
+func (s *TestState) TemporarySchemaName() string {
+	return fmt.Sprintf("pg_temp_%d_%d", 123, 456)
+}
+
+// InsertTemporarySchema is part of scexec.TemporarySchemaCreator interface.
+func (s *TestState) InsertTemporarySchema(
+	tempSchemaName string, databaseID descpb.ID, schemaID descpb.ID,
+) {
+	// Setup the session data and insert a temporary schema descriptor.
+	s.sessionData.TemporarySchemaName = tempSchemaName
+	if s.sessionData.DatabaseIDToTempSchemaID == nil {
+		s.sessionData.DatabaseIDToTempSchemaID = make(map[uint32]uint32)
+	}
+	s.sessionData.DatabaseIDToTempSchemaID[uint32(databaseID)] = uint32(schemaID)
+	s.uncommittedInStorage.UpsertDescriptor(schemadesc.NewTemporarySchema(tempSchemaName, schemaID, databaseID))
+}
+
+func (s *TestState) TemporarySchemaProvider() scbuild.TemporarySchemaProvider {
+	return s
+}
