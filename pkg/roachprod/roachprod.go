@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"golang.org/x/sys/unix"
 )
 
 // verifyClusterName ensures that the given name conforms to
@@ -2419,6 +2420,88 @@ func createAttachMountVolumes(
 			return err
 		}
 		l.Printf("Successfully mounted volume to %s", cVM.ProviderID)
+	}
+	return nil
+}
+
+// CreateLoadBalancer creates a load balancer for the SQL service on the given
+// cluster. Currently only supports GCE.
+func CreateLoadBalancer(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	secure bool,
+	virtualClusterName string,
+	sqlInstance int,
+) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName, install.SecureOption(secure))
+	if err != nil {
+		return err
+	}
+
+	// If virtualClusterName is not provided, use the system interface name.
+	if virtualClusterName == "" {
+		virtualClusterName = install.SystemInterfaceName
+	}
+
+	// Find the SQL ports for the service on all nodes.
+	services, err := c.DiscoverServices(
+		ctx, virtualClusterName, install.ServiceTypeSQL,
+		install.ServiceNodePredicate(c.TargetNodes()...), install.ServiceInstancePredicate(sqlInstance),
+	)
+	if err != nil {
+		return err
+	}
+
+	port := config.DefaultSQLPort
+	if len(services) == 0 {
+		l.Errorf("WARNING: %s SQL service not found on cluster %s, using default SQL port %d",
+			virtualClusterName, clusterName, port)
+	} else {
+		port = services[0].Port
+		// Confirm that the service has the same port on all nodes.
+		for _, service := range services[1:] {
+			if port != service.Port {
+				return errors.Errorf("service %s must share the same port on all nodes, different ports found %d and %d",
+					virtualClusterName, port, service.Port)
+			}
+		}
+	}
+
+	// Create a load balancer for the service's port.
+	err = vm.FanOut(c.VMs, func(provider vm.Provider, vms vm.List) error {
+		createErr := provider.CreateLoadBalancer(l, vms, port)
+		if createErr != nil {
+			l.Errorf("Cleaning up partially-created load balancer (prev err: %s)", createErr)
+			cleanupErr := provider.DeleteLoadBalancer(l, vms, port)
+			if cleanupErr != nil {
+				l.Errorf("Error while cleaning up partially-created load balancer: %s", cleanupErr)
+			} else {
+				l.Printf("Cleaned up partially-created load balancer")
+			}
+			return errors.CombineErrors(createErr, cleanupErr)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// For secure clusters, the load balancer IP needs to be added to the
+	// cluster's certificate.
+	if secure {
+		err = c.RedistributeNodeCert(ctx, l)
+		if err != nil {
+			return err
+		}
+		// Send a SIGHUP to the nodes to reload the certificates.
+		err = c.Signal(ctx, l, int(unix.SIGHUP))
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

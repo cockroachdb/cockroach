@@ -426,6 +426,12 @@ type PreemptedVM struct {
 	PreemptedAt time.Time
 }
 
+// ServiceAddress stores the IP and port of a service.
+type ServiceAddress struct {
+	IP   string
+	Port int
+}
+
 // A Provider is a source of virtual machines running on some hosting platform.
 type Provider interface {
 	CreateProviderOpts() ProviderOpts
@@ -486,6 +492,17 @@ type Provider interface {
 	// GetPreemptedSpotVMs returns a list of Spot VMs that were preempted since the time specified.
 	// Returns nil, nil when SupportsSpotVMs() is false.
 	GetPreemptedSpotVMs(l *logger.Logger, vms List, since time.Time) ([]PreemptedVM, error)
+
+	// CreateLoadBalancer creates a load balancer, for a specific port, that
+	// delegates to the given cluster.
+	CreateLoadBalancer(l *logger.Logger, vms List, port int) error
+
+	// DeleteLoadBalancer deletes a load balancers created for a specific port.
+	DeleteLoadBalancer(l *logger.Logger, vms List, port int) error
+
+	// ListLoadBalancers returns a list of load balancer IPs and ports that are currently
+	// routing to services for the given VMs.
+	ListLoadBalancers(l *logger.Logger, vms List) ([]ServiceAddress, error)
 }
 
 // DeleteCluster is an optional capability for a Provider which can
