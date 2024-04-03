@@ -49,10 +49,6 @@ CREATE FUNCTION err(b BOOL) RETURNS INT LANGUAGE SQL AS 'SELECT b'
 statement error pgcode 42P13 return type mismatch in function declared to return bool\nDETAIL: Actual return type is int
 CREATE FUNCTION err(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i - j'
 
-# TODO(#100962): Add support for default parameters.
-statement error pgcode 0A000 unimplemented: default value
-CREATE FUNCTION err(i INT, j INT DEFAULT 2) RETURNS INT LANGUAGE SQL AS 'SELECT i - j'
-
 # Make sure using table name as tuple type name works properly.
 # It should pass the return type validation and stored as a tuple type.
 statement ok

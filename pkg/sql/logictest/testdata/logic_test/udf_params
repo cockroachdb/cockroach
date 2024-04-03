@@ -568,7 +568,7 @@ subtest end
 
 statement ok
 CREATE TYPE typ AS (a INT, b INT);
-CREATE FUNCTION f_udt() RETURNS typ LANGUAGE SQL AS $$ SELECT 1 AS x, 2 AS y; $$;
+CREATE FUNCTION f_udt(OUT typ) LANGUAGE SQL AS $$ SELECT 1 AS x, 2 AS y; $$;
 
 query T colnames
 SELECT f_udt()
@@ -593,3 +593,225 @@ SELECT b FROM f_udt()
 ----
 b
 2
+
+statement error pgcode 2BP01 cannot drop type "typ" because other objects \(\[test.public.f_udt\]\) still depend on it
+DROP TYPE typ;
+
+statement ok
+DROP FUNCTION f_udt;
+
+statement ok
+CREATE TYPE greeting AS ENUM('hello', 'hi', 'yo');
+CREATE FUNCTION f_enum(OUT greeting greeting) LANGUAGE SQL AS $$ SELECT 'hi'::greeting; $$;
+
+query T colnames
+SELECT * FROM f_enum()
+----
+greeting
+hi
+
+statement error pgcode 2BP01 cannot drop type "greeting" because other objects \(\[test.public.f_enum\]\) still depend on it
+DROP TYPE greeting;
+
+statement ok
+DROP FUNCTION f_enum;
+
+subtest default_exprs
+
+statement error pgcode 22P02 could not parse "a" as type int
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT DEFAULT 'a') RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, INOUT c INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 only input parameters can have default values
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, OUT c INT = 3) LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement error pgcode 42703 column "b" does not exist
+CREATE FUNCTION my_sum(a INT, b INT, c INT = b + 1) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42703 column "b" does not exist
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT = b + 1) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42703 column "d" does not exist
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT = d + 1) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42804 argument of DEFAULT must be type int, not type bool
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT true) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement ok
+CREATE FUNCTION my_sum(a INT, b INT, c INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE OR REPLACE FUNCTION my_sum(a INT = 1, b INT, c INT = 3) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+# Adding a default expression to a parameter is ok.
+statement ok
+CREATE OR REPLACE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT = 3) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+# But removing an existing default expression is not ok.
+statement error pgcode 42P13 cannot remove parameter defaults from existing function
+CREATE OR REPLACE FUNCTION my_sum(a INT, b INT, c INT = 3) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 22P02 could not parse "a" as type int
+CREATE OR REPLACE FUNCTION my_sum(a INT = 'a', b INT DEFAULT 2, c INT = 3) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+query I
+SELECT my_sum(1);
+----
+6
+
+query I
+SELECT my_sum(1, 1);
+----
+5
+
+query I
+SELECT my_sum(1, 1, 1);
+----
+3
+
+# Note that postgres returns "function my_sum() does not exist".
+statement error pgcode 42883 unknown signature: public.my_sum\(\)
+SELECT my_sum();
+
+# Note that postgres returns "function my_sum(int, int, int, int) does not exist".
+statement error pgcode 42883 unknown signature: public.my_sum\(int, int, int, int\)
+SELECT my_sum(1, 1, 1, 1);
+
+# Same as above, but the default value needs to be coerced from numeric to int
+# (becoming 4).
+statement ok
+CREATE OR REPLACE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT = 3.5) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+query I
+SELECT my_sum(1);
+----
+7
+
+query I
+SELECT my_sum(1, 1);
+----
+6
+
+# Add another overload that creates ambiguity for some number of input
+# arguments.
+statement ok
+CREATE FUNCTION my_sum(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a; $$;
+
+statement error pgcode 42725 function name "my_sum" is not unique
+SELECT my_sum(1);
+
+statement ok
+DROP FUNCTION my_sum(INT);
+
+statement ok
+DROP FUNCTION my_sum;
+
+# Create a new function with the same name as the one we just dropped and then
+# invoke in the same way as above - the optimizer should realize that the cached
+# memo is stale.
+statement ok
+CREATE FUNCTION my_sum(OUT sum INT, INOUT a INT, INOUT b INT = 3) AS $$ SELECT (a + b, a, b); $$ LANGUAGE SQL;
+
+query T
+SELECT my_sum(1);
+----
+(4,1,3)
+
+query III
+SELECT * FROM my_sum(1);
+----
+4  1  3
+
+query T
+SELECT my_sum(1, 1);
+----
+(2,1,1)
+
+query III
+SELECT * FROM my_sum(1, 1);
+----
+2  1  1
+
+statement ok
+DROP FUNCTION my_sum;
+
+# Test for a narrowing type coercion.
+statement ok
+CREATE FUNCTION f(x CHAR DEFAULT 'foo') RETURNS CHAR LANGUAGE SQL AS $$ SELECT x; $$;
+
+# Note that postgres doesn't actually truncate the value and returns 'foo' here
+# (this difference is tracked by #115385).
+query T
+SELECT f();
+----
+f
+
+statement ok
+DROP FUNCTION f;
+
+# Test case when DEFAULT expression uses a UDF.
+
+statement ok
+CREATE FUNCTION f1(a INT, b INT = 2) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement ok
+CREATE FUNCTION f2(a INT, b INT = f1(1)) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+query III
+SELECT f1(1), f2(1), f2(1, 1);
+----
+3  4  2
+
+statement ok
+CREATE OR REPLACE FUNCTION f1 (a INT, b INT = 2) RETURNS INT LANGUAGE SQL AS $$ SELECT a * b; $$;
+
+query III
+SELECT f1(1), f2(1), f2(1, 1);
+----
+2  3  2
+
+statement error pgcode 2BP01 cannot drop function "f1" because other objects \(\[test.public.f2\]\) still depend on it
+DROP FUNCTION f1;
+
+statement ok
+DROP FUNCTION f2;
+
+statement ok
+DROP FUNCTION f1;
+
+# Test that dropping UDTs or enum members used in the DEFAULT expression is not
+# allowed.
+
+statement ok
+CREATE FUNCTION f(p1 typ DEFAULT (1, 2), p2 greeting = 'yo') RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement error pgcode 2BP01 cannot drop type "typ" because other objects \(\[test.public.f\]\) still depend on it
+DROP TYPE typ;
+
+statement error pgcode 2BP01 could not remove enum value "yo" as it is being used in a routine "f"
+ALTER TYPE greeting DROP VALUE 'yo';
+
+# Dropping enum value not used in the DEFAULT expression should be ok.
+statement ok
+ALTER TYPE greeting DROP VALUE 'hello';
+
+# Using a different enum value in the DEFAULT expression should allow us to drop
+# the original enum value.
+statement ok
+CREATE OR REPLACE FUNCTION f(p1 typ DEFAULT (1, 2), p2 greeting = 'hi') RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+ALTER TYPE greeting DROP VALUE 'yo';
+
+statement error pgcode 2BP01 could not remove enum value "hi" as it is being used in a routine "f"
+ALTER TYPE greeting DROP VALUE 'hi';
+
+statement ok
+DROP FUNCTION f;
+
+subtest end
