@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats/insights",
+        "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
