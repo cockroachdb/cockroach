@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/obs/eventagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -72,7 +73,7 @@ func NewStmtStatsAggregator(
 		},
 		mapStmt,
 		mergeStmt,
-		eventagg.NewWindowedFlush(10*time.Second, timeutil.Now),                       // Let's limit our aggregation windows to clock-aligned 10-second intervals.
-		eventagg.NewLogWriteConsumer[appstatspb.StmtFingerprintID, *StmtStatistics](), // We'd like to log all the aggregated results, as-is.
+		eventagg.NewWindowedFlush(10*time.Second, timeutil.Now),                                          // Let's limit our aggregation windows to clock-aligned 10-second intervals.
+		eventagg.NewLogWriteConsumer[appstatspb.StmtFingerprintID, *StmtStatistics](log.STATEMENT_STATS), // We'd like to log all the aggregated results, as-is.
 	)
 }
