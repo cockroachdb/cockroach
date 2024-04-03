@@ -135,7 +135,7 @@ func registerKV(r registry.Registry) {
 			if opts.duration == 0 {
 				opts.duration = 30 * time.Minute
 			}
-			duration := " --duration=" + ifLocal(c, "10s", opts.duration.String())
+			duration := " --duration=" + ifLocal(c, "1h", opts.duration.String())
 			var readPercent string
 			if opts.spanReads {
 				// SFU makes sense only if we repeat writes to the same key. Here

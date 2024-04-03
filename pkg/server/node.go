@@ -35,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness/dme_livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -415,6 +417,9 @@ type Node struct {
 		updateCh       chan struct{}
 	}
 	proxySender kv.Sender
+
+	dmeManager     dme_liveness.Manager
+	metricRegistry *metric.Registry
 }
 
 var _ kvpb.InternalServer = &Node{}
@@ -586,6 +591,7 @@ func NewNode(
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
 		proxySender:           proxySender,
+		metricRegistry:        reg,
 	}
 	n.versionUpdateMu.updateCh = make(chan struct{})
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
@@ -650,6 +656,18 @@ func (n *Node) start(
 		StartedAt:       n.startedAt,
 		HTTPAddress:     util.MakeUnresolvedAddr(httpAddr.Network(), httpAddr.String()),
 	}
+	dmeOptions := dme_liveness.Options{
+		NodeID: state.nodeID,
+		Clock:  n.storeCfg.Clock,
+		LivenessExpiryInterval: func() time.Duration {
+			return n.storeCfg.RangeLeaseDuration
+		},
+		MetricRegistry: n.metricRegistry,
+	}
+	n.dmeManager = dme_liveness.NewManager(dmeOptions)
+	n.stopper.AddCloser(n.dmeManager)
+	n.storeCfg.DMEManager = n.dmeManager
+	_ = makeDMELivenessRemoteStoreProvider(n.storeCfg.Gossip, state.nodeID, n.dmeManager)
 
 	// Track changes to the version setting to inform the tenant connector.
 	n.storeCfg.Settings.Version.SetOnChange(n.notifyClusterVersionChange)
@@ -2711,4 +2729,73 @@ func (n *Node) GetRangeDescriptors(
 	return stream.Send(&kvpb.GetRangeDescriptorsResponse{
 		RangeDescriptors: rangeDescriptors,
 	})
+}
+
+func (n *Node) Heartbeat(
+	ctx context.Context, msg *dme_livenesspb.HeartbeatRequest,
+) (*dme_livenesspb.HeartbeatResponse, error) {
+	ack, err := n.dmeManager.HandleHeartbeat(msg.Header, msg.Heartbeat)
+	if err != nil {
+		return nil, err
+	}
+	return &dme_livenesspb.HeartbeatResponse{
+		HeartbeatAck:  ack,
+		ResponderTime: n.storeCfg.Clock.NowAsClockTimestamp(),
+	}, nil
+}
+
+func (n *Node) SupportState(
+	ctx context.Context, msg *dme_livenesspb.SupportStateRequest,
+) (*dme_livenesspb.SupportStateResponse, error) {
+	err := n.dmeManager.HandleSupportState(msg.Header, msg.SupportStateLocal)
+	if err != nil {
+		return nil, err
+	}
+	return &dme_livenesspb.SupportStateResponse{}, nil
+}
+
+type DMELivenessRemoteStoreProvider struct {
+	nodeID roachpb.NodeID
+	m      dme_liveness.Manager
+	mu     struct {
+		syncutil.Mutex
+		remoteStores map[dme_livenesspb.StoreIdentifier]struct{}
+	}
+}
+
+func makeDMELivenessRemoteStoreProvider(
+	g *gossip.Gossip, nodeID roachpb.NodeID, m dme_liveness.Manager,
+) *DMELivenessRemoteStoreProvider {
+	p := &DMELivenessRemoteStoreProvider{
+		nodeID: nodeID,
+		m:      m,
+	}
+	p.mu.remoteStores = map[dme_livenesspb.StoreIdentifier]struct{}{}
+	storeRegex := gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix)
+	g.RegisterCallback(storeRegex, p.storeGossipUpdate)
+	return p
+}
+
+func (p *DMELivenessRemoteStoreProvider) storeGossipUpdate(_ string, content roachpb.Value) {
+	var storeDesc roachpb.StoreDescriptor
+	if err := content.GetProto(&storeDesc); err != nil {
+		log.Errorf(context.Background(), "%v", err)
+		return
+	}
+	if storeDesc.Node.NodeID == p.nodeID {
+		return
+	}
+	id := dme_livenesspb.StoreIdentifier{NodeID: storeDesc.Node.NodeID, StoreID: storeDesc.StoreID}
+	var found bool
+	func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		_, found = p.mu.remoteStores[id]
+		if !found {
+			p.mu.remoteStores[id] = struct{}{}
+		}
+	}()
+	if !found {
+		p.m.AddRemoteStore(id)
+	}
 }

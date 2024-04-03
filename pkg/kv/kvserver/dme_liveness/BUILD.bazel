@@ -1,12 +1,47 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "dme_liveness",
-    srcs = ["liveness.go"],
+    srcs = [
+        "liveness.go",
+        "manager.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/dme_liveness/dme_livenesspb",
         "//pkg/roachpb",
+        "//pkg/storage",
         "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "dme_liveness_test",
+    srcs = ["manager_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":dme_liveness"],
+    deps = [
+        "//pkg/kv/kvserver/dme_liveness/dme_livenesspb",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig/spanconfigtestutils",
+        "//pkg/storage",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )

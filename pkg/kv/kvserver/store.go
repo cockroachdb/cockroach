@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -39,6 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness/dme_livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
@@ -1289,6 +1292,9 @@ type StoreConfig struct {
 	// RangeCount is populated by the node and represents the total number of
 	// ranges this node has.
 	RangeCount *atomic.Int64
+
+	// Hack. Initialized in Node.Start.
+	DMEManager dme_liveness.Manager
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
@@ -2051,6 +2057,15 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 
+	err = s.cfg.DMEManager.AddLocalStore(dme_liveness.LocalStore{
+		StoreID: s.StoreID(),
+		StorageProvider: &dme_liveness.StorageProviderForDMELiveness{
+			AmbientCtx: s.cfg.AmbientCtx, Engine: s.TODOEngine()},
+		MessageSender: makeMessageSenderForDMELiveness(s, s.cfg.RangeLeaseDuration),
+	})
+	if err != nil {
+		return err
+	}
 	{
 		m := rangefeed.NewSchedulerMetrics(s.cfg.HistogramWindowInterval)
 		rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
@@ -3159,6 +3174,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		leaseHolderCount               int64
 		leaseExpirationCount           int64
 		leaseEpochCount                int64
+		leaseDMECount                  int64
 		leaseLivenessCount             int64
 		leaseViolatingPreferencesCount int64
 		leaseLessPreferredCount        int64
@@ -3231,6 +3247,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 				leaseExpirationCount++
 			case roachpb.LeaseEpoch:
 				leaseEpochCount++
+			case roachpb.LeaseDistributedMultiEpoch:
+				leaseDMECount++
 			}
 			if metrics.LivenessLease {
 				leaseLivenessCount++
@@ -3300,6 +3318,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
+	s.metrics.LeaseDMECount.Update(leaseDMECount)
 	s.metrics.LeaseViolatingPreferencesCount.Update(leaseViolatingPreferencesCount)
 	s.metrics.LeaseLessPreferredCount.Update(leaseLessPreferredCount)
 	s.metrics.LeaseLivenessCount.Update(leaseLivenessCount)
@@ -3981,4 +4000,167 @@ func (s *storeForTruncatorImpl) getEngine() storage.Engine {
 
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
+}
+
+type messageSenderForDMELiveness struct {
+	ctx            context.Context
+	storeID        dme_livenesspb.StoreIdentifier
+	dialer         *nodedialer.Dialer
+	repeatInterval time.Duration
+	stopper        *stop.Stopper
+
+	mu syncutil.RWMutex
+	// Protected by mu
+	remoteStores []dme_livenesspb.StoreIdentifier
+
+	ssProvider dme_liveness.SupportStateForPropagationProvider
+	hhri       dme_liveness.HandleHeartbeatResponseInterface
+	ssSoon     chan struct{}
+	logEvery   log.EveryN
+}
+
+var _ dme_liveness.MessageSender = &messageSenderForDMELiveness{}
+
+func makeMessageSenderForDMELiveness(
+	store *Store, repeatInterval time.Duration,
+) *messageSenderForDMELiveness {
+	ctx := store.AnnotateCtx(context.Background())
+	return &messageSenderForDMELiveness{
+		ctx: ctx,
+		storeID: dme_livenesspb.StoreIdentifier{
+			NodeID:  store.NodeID(),
+			StoreID: store.StoreID(),
+		},
+		dialer:         store.cfg.NodeDialer,
+		repeatInterval: repeatInterval,
+		stopper:        store.stopper,
+		ssSoon:         make(chan struct{}, 1),
+		logEvery:       log.Every(time.Second),
+	}
+}
+
+func (s *messageSenderForDMELiveness) SetSupportStateProvider(
+	ssProvider dme_liveness.SupportStateForPropagationProvider,
+) {
+	s.mu.Lock()
+	s.ssProvider = ssProvider
+	s.mu.Unlock()
+	err := s.stopper.RunAsyncTask(s.ctx, "dme_liveness.suppport_propagation", func(ctx context.Context) {
+		var remoteStores []dme_livenesspb.StoreIdentifier
+		sendSSToAll := func() {
+			ss := ssProvider.LocalSupportState()
+			s.mu.RLock()
+			remoteStores = append(remoteStores[:0], s.remoteStores...)
+			s.mu.RUnlock()
+			for _, remoteStoreID := range remoteStores {
+				conn, err := s.dialer.Dial(ctx, remoteStoreID.NodeID, rpc.DefaultClass)
+				if err != nil && s.logEvery.ShouldLog() {
+					log.Errorf(s.ctx, "%s", err)
+					continue
+				}
+				if conn == nil {
+					// TODO: why?
+					// panic("conn is nil")
+					continue
+				}
+				client := dme_livenesspb.NewDMELivenessClient(conn)
+				req := &dme_livenesspb.SupportStateRequest{
+					Header: dme_livenesspb.Header{
+						From: s.storeID,
+						To:   remoteStoreID,
+					},
+					SupportStateLocal: ss,
+				}
+				_, err = client.SupportState(ctx, req)
+				if err != nil && s.logEvery.ShouldLog() {
+					log.Errorf(s.ctx, "%s", err)
+				}
+			}
+		}
+		// TODO(sumeer): this is a temporary hack. Normally we will not send
+		// anything until PropagateLocalSupportStateSoon triggers sending, and
+		// then only repeat sending to those stores where the send does not
+		// succeed (or rely on gossip to reach them).
+		ticker := time.NewTicker(s.repeatInterval)
+		for {
+			select {
+			case <-ticker.C:
+				sendSSToAll()
+			case <-s.ssSoon:
+				sendSSToAll()
+			case <-s.stopper.ShouldQuiesce():
+				ticker.Stop()
+				return
+			}
+		}
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (s *messageSenderForDMELiveness) SetHandleHeartbeatResponseInterface(
+	hhri dme_liveness.HandleHeartbeatResponseInterface,
+) {
+	s.mu.Lock()
+	s.hhri = hhri
+	s.mu.Unlock()
+}
+
+func (s *messageSenderForDMELiveness) SendHeartbeat(
+	header dme_livenesspb.Header, msg dme_livenesspb.Heartbeat,
+) {
+	conn, err := s.dialer.Dial(s.ctx, header.To.NodeID, rpc.DefaultClass)
+	if err != nil && s.logEvery.ShouldLog() {
+		log.Errorf(s.ctx, "%s", err)
+		return
+	}
+	if conn == nil {
+		// TODO: why?
+		// panic("conn is nil")
+		return
+	}
+	client := dme_livenesspb.NewDMELivenessClient(conn)
+	req := &dme_livenesspb.HeartbeatRequest{
+		Header:    header,
+		Heartbeat: msg,
+	}
+	res, err := client.Heartbeat(s.ctx, req)
+	if err != nil && s.logEvery.ShouldLog() {
+		log.Errorf(s.ctx, "%s", err)
+		return
+	}
+	if res == nil {
+		// TODO: why?
+		return
+	}
+	var hhri dme_liveness.HandleHeartbeatResponseInterface
+	s.mu.RLock()
+	hhri = s.hhri
+	s.mu.RUnlock()
+	err = hhri.HandleHeartbeatResponse(header.To, msg, res.ResponderTime, res.HeartbeatAck)
+	if err != nil && s.logEvery.ShouldLog() {
+		log.Errorf(s.ctx, "%s", err)
+	}
+}
+
+func (s *messageSenderForDMELiveness) PropagateLocalSupportStateSoon() {
+	select {
+	case s.ssSoon <- struct{}{}:
+	default:
+	}
+}
+
+func (s *messageSenderForDMELiveness) AddRemoteStore(store dme_livenesspb.StoreIdentifier) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.remoteStores = append(s.remoteStores, store)
+}
+
+func (s *messageSenderForDMELiveness) RemoveRemoteStore(store dme_livenesspb.StoreIdentifier) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.remoteStores = slices.DeleteFunc(s.remoteStores, func(a dme_livenesspb.StoreIdentifier) bool {
+		return a == store
+	})
 }

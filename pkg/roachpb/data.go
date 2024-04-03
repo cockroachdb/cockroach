@@ -1840,14 +1840,18 @@ func (l Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.SafeString("<empty>")
 		return
 	}
+	propTSStr := "<nil>"
+	if l.ProposedTS != nil {
+		propTSStr = l.ProposedTS.String()
+	}
 	if l.Type() == LeaseExpiration {
-		w.Printf("repl=%s seq=%d start=%s exp=%s", l.Replica, l.Sequence, l.Start, l.Expiration)
+		w.Printf("repl=%s seq=%d start=%s exp=%s prop-ts=%s", l.Replica, l.Sequence, l.Start, l.Expiration, propTSStr)
 	} else if l.Type() == LeaseEpoch {
-		w.Printf("repl=%s seq=%d start=%s epo=%d", l.Replica, l.Sequence, l.Start, l.Epoch)
+		w.Printf("repl=%s seq=%d start=%s epo=%d prop-ts=%s", l.Replica, l.Sequence, l.Start, l.Epoch, propTSStr)
 	} else if l.Type() == LeaseDistributedMultiEpoch {
 		dmeLease := l.DMELease
-		w.Printf("repl=%s seq=%d start=%s dme-epo=%d dme-range-gen=%s prev-lease=(%d,%s)",
-			l.Replica, l.Sequence, l.Start, dmeLease.Epoch, dmeLease.RangeGeneration, dmeLease.PrevLeaseSequence,
+		w.Printf("repl=%s seq=%d start=%s prop-ts=%s dme-epo=%d dme-range-gen=%s prev-lease=(seq=%d,prop-ts=%s)",
+			l.Replica, l.Sequence, l.Start, propTSStr, dmeLease.Epoch, dmeLease.RangeGeneration, dmeLease.PrevLeaseSequence,
 			dmeLease.PrevLeaseProposal)
 		if dmeLease.MinExpiration != (hlc.Timestamp{}) {
 			w.Printf(" min-exp=%s", dmeLease.MinExpiration)
@@ -1950,6 +1954,35 @@ func (l Lease) Speculative() bool {
 // leaseholder may continue acting as one based on an old lease, while the
 // other replica has stepped up as leaseholder.
 func (l Lease) Equivalent(newL Lease, expToEpochOrDMEEquiv bool) bool {
+	if l.Type() == LeaseDistributedMultiEpoch && newL.Type() == LeaseDistributedMultiEpoch {
+		// The new lease should not be regressing the lease epoch.
+		if l.Replica == newL.Replica && l.DMELease.Epoch <= newL.DMELease.Epoch {
+			// Do some additional sanity checks, which should never fail, unless we
+			// have a bug somewhere. We do these here, before the later code starts
+			// altering l and newL.
+			//
+			// TODO(sumeer): I am unsure this is a bug, since stale proposals may
+			// be able to get through all the way to application, and be rejected
+			// in CheckForcedErr, that also calls this method. For now, we've
+			// lifted the checks for stale proposals before the call to this
+			// method, but we should make this less fragile.
+			if l.DMELease.RangeGeneration > newL.DMELease.RangeGeneration {
+				panic(errors.AssertionFailedf("dme-based lease extension is regressing range generation: old %+v new %+v",
+					*l.DMELease, *newL.DMELease))
+			}
+			if newL.DMELease.PrevLeaseSequence != l.Sequence || newL.DMELease.PrevLeaseProposal != *l.ProposedTS {
+				// Odd. The leaseholder did not know about its own previous lease. Did
+				// it think the lease proposal was not successful and tried again?
+				// Maybe that can happen? Ignore this if the two leases are actually
+				// the same.
+				if !(*newL.ProposedTS == *l.ProposedTS && newL.Sequence == l.Sequence && newL.Start == l.Start &&
+					*newL.DMELease == *l.DMELease) {
+					panic(errors.AssertionFailedf("dme-bases lease extension %s has incorrect prev lease %s",
+						newL, l))
+				}
+			}
+		}
+	}
 	// Ignore proposed timestamp & deprecated start stasis.
 	l.ProposedTS, newL.ProposedTS = nil, nil
 	l.DeprecatedStartStasis, newL.DeprecatedStartStasis = nil, nil
@@ -2052,25 +2085,8 @@ func (l Lease) Equivalent(newL Lease, expToEpochOrDMEEquiv bool) bool {
 		case LeaseDistributedMultiEpoch:
 			// The new lease should not be regressing the lease epoch.
 			if l.Replica == newL.Replica && l.DMELease.Epoch <= newL.DMELease.Epoch {
-				// Do some additional sanity checks, which should never fail, unless
-				// we have a bug somewhere.
-				//
-				// TODO(sumeer): I am unsure this is a bug, since stale proposals may
-				// be able to get through all the way to application, and be rejected
-				// in CheckForcedErr, that also calls this method. For now, we've
-				// lifted the checks for stale proposals before the call to this
-				// method, but we should make this less fragile.
-				if l.DMELease.RangeGeneration > newL.DMELease.RangeGeneration {
-					panic(errors.AssertionFailedf("dme-based lease extension is regressing range generation: old %+v new %+v",
-						*l.DMELease, *newL.DMELease))
-				}
-				if newL.DMELease.PrevLeaseSequence != l.Sequence || newL.DMELease.PrevLeaseProposal != *l.ProposedTS {
-					// Odd. The leaseholder did not know about its own previous lease.
-					// Did it think the lease proposal was not successful and tried
-					// again? Maybe that can happen?
-					panic(errors.AssertionFailedf("dme-bases lease extension %s has incorrect prev lease %s",
-						newL, l))
-				}
+				// We already did some sanity checks and panicked at the beginning of
+				// this method.
 				l.DMELease, newL.DMELease = nil, nil
 			}
 			// Else, different replica, or same replica is regressing the lease
@@ -2161,7 +2177,7 @@ func (l *Lease) Equal(that interface{}) bool {
 		return false
 	} else if l.DMELease != nil && that1.DMELease == nil {
 		return false
-	} else if l.DMELease != nil && that1.DMELease != nil && l.DMELease != that1.DMELease {
+	} else if l.DMELease != nil && that1.DMELease != nil && (*l.DMELease) != (*that1.DMELease) {
 		return false
 	}
 	return true

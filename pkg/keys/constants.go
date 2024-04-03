@@ -218,7 +218,9 @@ var (
 	// refreshed on all stores for a running node; the intention of this value
 	// is to allow a restarting node to discover approximately how long it has
 	// been down without needing to retrieve liveness records from the cluster.
-	localStoreLastUpSuffix = []byte("uptm")
+	localStoreLastUpSuffix     = []byte("uptm")
+	localStoreDMEEpoch         = []byte("uqde")
+	localStoreDMESupportBySelf = []byte("uqds")
 	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent
 	// reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")

@@ -33,6 +33,15 @@ func (st LeaseStatus) Expiration() hlc.Timestamp {
 		return st.Lease.GetExpiration()
 	case roachpb.LeaseEpoch:
 		return st.Liveness.Expiration.ToTimestamp()
+	case roachpb.LeaseDistributedMultiEpoch:
+		if st.IsValid() {
+			// TODO(sumeer): this is probably acceptable for the closed timestamp
+			// bumping, because the closed timestamp must be in the past? What about
+			// other cases?
+			return hlc.Timestamp(st.Now)
+		} else {
+			return hlc.Timestamp{}
+		}
 	default:
 		panic("unexpected")
 	}

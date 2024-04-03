@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness/dme_livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -91,7 +92,8 @@ var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	// false by default. Metamorphically enabled in tests, but not in deadlock
 	// builds because TestClusters are usually so slow that they're unable
 	// to maintain leases/leadership/liveness.
-	!syncutil.DeadlockEnabled &&
+	false &&
+		!syncutil.DeadlockEnabled &&
 		util.ConstantWithMetamorphicTestBool("kv.expiration_leases_only.enabled", false),
 )
 
@@ -377,8 +379,8 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// extension at the leaseholder, or a lease transfer by the leaseholder,
 		// when a descriptor change is pending will fail.
 		desc := status.Descriptors[0]
-		leaseEpoch, err := dme_liveness.RangeLeaseSupportProviderSingleton.EpochAndSupportForLeaseProposal(
-			reqLease.Start, dme_liveness.StoreIdentifier{
+		adjustedStart, leaseEpoch, err := p.repl.store.cfg.DMEManager.EpochAndSupportForLeaseProposal(
+			reqLease.Start, dme_livenesspb.StoreIdentifier{
 				NodeID:  reqLease.Replica.NodeID,
 				StoreID: reqLease.Replica.StoreID,
 			}, desc)
@@ -405,6 +407,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 				minExpiration = status.Lease.DMELease.MinExpiration
 			}
 		}
+		reqLease.Start = adjustedStart
 		reqLease.DMELease = &roachpb.DistributedMultiEpochLease{
 			Epoch:             leaseEpoch,
 			MinExpiration:     minExpiration,
@@ -864,10 +867,10 @@ func (r *Replica) leaseStatus(
 		if !expiration.IsEmpty() && hlc.Timestamp(now).Less(expiration) {
 			// Valid
 		} else {
-			var support dme_liveness.SupportState
+			var supportStatus dme_liveness.SupportStatus
 			var err error
-			support, expiration, err = dme_liveness.RangeLeaseSupportProviderSingleton.HasSupport(
-				now, dme_liveness.StoreIdentifier{
+			supportStatus, expiration, err = r.store.cfg.DMEManager.HasSupport(
+				now, dme_livenesspb.StoreIdentifier{
 					NodeID:  lease.Replica.NodeID,
 					StoreID: lease.Replica.StoreID,
 				}, lease.DMELease.Epoch, status.Descriptors)
@@ -876,11 +879,11 @@ func (r *Replica) leaseStatus(
 				status.ErrInfo = err.Error()
 				return status
 			}
-			if support == dme_liveness.SupportWithdrawn ||
-				(ownedLocally && support == dme_liveness.CurrentlyUnsupported) {
+			if supportStatus == dme_liveness.SupportWithdrawn ||
+				(ownedLocally && supportStatus == dme_liveness.CurrentlyUnsupported) {
 				status.State = kvserverpb.LeaseState_EXPIRED
 				return status
-			} else if support == dme_liveness.Supported {
+			} else if supportStatus == dme_liveness.Supported {
 				// Two cases:
 				//
 				// - At leaseholder: The expiration value can only be optimistic if
@@ -1271,6 +1274,8 @@ func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Time
 	} else {
 		_, leaseRenewal = r.store.cfg.NodeLivenessDurations()
 	}
+	// TODO(sumeer): consider dme-based leases
+
 	leaseRenewalMinusStasis := leaseRenewal - r.store.Clock().MaxOffset()
 	if leaseRenewalMinusStasis < 0 {
 		// If maxOffset > leaseRenewal, such that present time operations risk
@@ -1730,8 +1735,21 @@ func (r *Replica) HasCorrectLeaseType(lease roachpb.Lease) bool {
 }
 
 func (r *Replica) hasCorrectLeaseTypeRLocked(lease roachpb.Lease) bool {
-	hasExpirationLease := lease.Type() == roachpb.LeaseExpiration
-	return hasExpirationLease == r.shouldUseExpirationLeaseRLocked()
+	if lease.Type() == roachpb.LeaseNone {
+		return true
+	}
+	shouldUseExpirationLease := r.shouldUseExpirationLeaseRLocked()
+	preferDMEOverEpoch := r.preferDMEBasedLeaseOverEpochBasedLease()
+	switch lease.Type() {
+	case roachpb.LeaseExpiration:
+		return shouldUseExpirationLease
+	case roachpb.LeaseEpoch:
+		return !shouldUseExpirationLease && !preferDMEOverEpoch
+	case roachpb.LeaseDistributedMultiEpoch:
+		return !shouldUseExpirationLease && preferDMEOverEpoch
+	default:
+		panic("unknown lease")
+	}
 }
 
 // LeasePreferencesStatus represents the state of satisfying lease preferences.

@@ -220,6 +220,8 @@ var _ = [...]interface{}{
 	StoreNodeTombstoneKey,            // "ntmb"
 	StoreCachedSettingsKey,           // "stng"
 	StoreLastUpKey,                   // "uptm"
+	StoreDMEEpochKey,                 // "uqde"
+	StoreDMESupportBySelfKey,         // "uqds"
 
 	//   5. Range lock keys for all replicated locks. All range locks share
 	//   LocalRangeLockTablePrefix. Locks can be acquired on global keys and on

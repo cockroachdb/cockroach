@@ -1,0 +1,441 @@
+print-persistent-state
+----
+epoch: 1
+supports:
+
+descriptor name=n1_voter
+voters=[n1]
+----
+r0:{-} [(n1,s1):1, next=0, gen=0]
+
+has-support now-milli=1000 node-id=1 store-id=1 epoch=1 descriptors=(n1_voter)
+----
+support: supported, expiration: 9223372036.854775807,2147483647, err: <nil>
+
+lease-proposal start-milli=1000 node-id=1 store-id=1 descriptor=n1_voter
+----
+adjusted-ts: 1.000000000,1, epoch: 1, err: <nil>
+
+add-remote-store node-id=2 store-id=2
+----
+message-sender:
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2}}, {Epoch:1 SenderTime:1.000000000,2 EndTime:2.000000000,4} response: ack=true rt=0,0
+ AddRemoteStore: {NodeID:2 StoreID:2}
+ PLSSS: t=1.000000000,3
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:2.000000000,4}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:0 EndTime:0,0}
+
+descriptor name=n1_voter-n2_non_voter
+voters=[n1]
+non-voters=[n2]
+----
+r0:{-} [(n1,s1):1, (n2,s2):2NON_VOTER, next=0, gen=0]
+
+has-support now-milli=1000 node-id=1 store-id=1 epoch=1 descriptors=(n1_voter-n2_non_voter)
+----
+support: supported, expiration: 9223372036.854775807,2147483647, err: <nil>
+
+lease-proposal start-milli=1000 node-id=1 store-id=1 descriptor=n1_voter-n2_non_voter
+----
+adjusted-ts: 1.000000000,5, epoch: 1, err: <nil>
+
+descriptor name=n1_voter-n2_voter
+voters=[n1,n2]
+----
+r0:{-} [(n1,s1):1, (n2,s2):2, next=0, gen=0]
+
+has-support now-milli=1000 node-id=1 store-id=1 epoch=1 descriptors=(n1_voter-n2_voter)
+----
+support: supported, expiration: 2.000000000,4, err: <nil>
+
+lease-proposal start-milli=1000 node-id=1 store-id=1 descriptor=n1_voter-n2_voter
+----
+adjusted-ts: 1.000000000,7, epoch: 1, err: <nil>
+
+set-next-response node-id=3 store-id=3 do-not-respond=true
+----
+{NodeID:3 StoreID:3}: {doNotRespond:true numNacks:0 responderTime:{WallTime:0 Logical:0}}
+
+set-next-response node-id=4 store-id=4 do-not-respond=true
+----
+{NodeID:4 StoreID:4}: {doNotRespond:true numNacks:0 responderTime:{WallTime:0 Logical:0}}
+
+add-remote-store node-id=3 store-id=3
+----
+message-sender:
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:3 StoreID:3}}, {Epoch:1 SenderTime:1.000000000,8 EndTime:2.000000000,16}
+ AddRemoteStore: {NodeID:3 StoreID:3}
+ PLSSS: t=1.000000000,9
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:2.000000000,4}
+  by: {NodeID:3 StoreID:3} support: {Epoch:1 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:0 EndTime:0,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:0 EndTime:0,0}
+
+add-remote-store node-id=4 store-id=4
+----
+message-sender:
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:4 StoreID:4}}, {Epoch:1 SenderTime:1.000000000,10 EndTime:2.000000000,20}
+ AddRemoteStore: {NodeID:4 StoreID:4}
+ PLSSS: t=1.000000000,11
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:2.000000000,4}
+  by: {NodeID:3 StoreID:3} support: {Epoch:1 EndTime:0,0}
+  by: {NodeID:4 StoreID:4} support: {Epoch:1 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:0 EndTime:0,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:0 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+
+descriptor name=n12voter_n34_incoming
+voters=[n1,n2]
+voters-incoming=[n3,n4]
+----
+r0:{-} [(n1,s1):1, (n2,s2):2, (n3,s3):3VOTER_INCOMING, (n4,s4):4VOTER_INCOMING, next=0, gen=0]
+
+has-support now-milli=1000 node-id=1 store-id=1 epoch=1 descriptors=(n12voter_n34_incoming)
+----
+message-sender:
+ PLSSS: t=1.000000000,12
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:2.000000000,4}
+  by: {NodeID:3 StoreID:3} support: {Epoch:3 EndTime:0,0}
+  by: {NodeID:4 StoreID:4} support: {Epoch:2 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:0 EndTime:0,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:0 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+support: currently-unsupported, expiration: 0,0, err: <nil>
+
+lease-proposal start-milli=1000 node-id=1 store-id=1 descriptor=n12voter_n34_incoming
+----
+adjusted-ts: 0,0, epoch: 0, err: cannot construct lease proposal since not Supported {supportStatus:0 endTime:{WallTime:0 Logical:0} suggestedEpoch:0}
+
+print-persistent-state
+----
+epoch: 3
+supports:
+
+lease-proposal start-milli=1000 node-id=1 store-id=1 descriptor=n1_voter-n2_voter
+----
+adjusted-ts: 1.000000000,15, epoch: 3, err: <nil>
+
+set-time now-milli=4000
+----
+message-sender:
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2}}, {Epoch:1 SenderTime:4.000000000,0 EndTime:5.000000000,0} response: ack=true rt=0,0
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:3 StoreID:3}}, {Epoch:3 SenderTime:4.000000000,1 EndTime:5.000000000,2}
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:4 StoreID:4}}, {Epoch:2 SenderTime:4.000000000,2 EndTime:5.000000000,4}
+hlc: 4.000000000,3
+
+lease-proposal start-milli=1000 node-id=1 store-id=1 descriptor=n1_voter-n2_voter
+----
+adjusted-ts: 4.000000000,4, epoch: 3, err: <nil>
+
+descriptor name=n123_voter
+voters=[n1,n2,n3]
+----
+r0:{-} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=0, gen=0]
+
+lease-proposal start-milli=1000 node-id=1 store-id=1 descriptor=n123_voter
+----
+adjusted-ts: 4.000000000,5, epoch: 3, err: <nil>
+
+set-next-response node-id=3 store-id=3 time-milli=6100
+----
+{NodeID:3 StoreID:3}: {doNotRespond:false numNacks:0 responderTime:{WallTime:6100000000 Logical:0}}
+
+set-time now-milli=6000
+----
+message-sender:
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2}}, {Epoch:1 SenderTime:6.000000000,0 EndTime:7.000000000,0} response: ack=true rt=0,0
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:3 StoreID:3}}, {Epoch:3 SenderTime:6.000000000,1 EndTime:7.000000000,2} response: ack=true rt=6.100000000,0
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:4 StoreID:4}}, {Epoch:2 SenderTime:6.100000000,1 EndTime:7.100000000,2}
+hlc: 6.100000000,2
+
+lease-proposal start-milli=1000 node-id=1 store-id=1 descriptor=n123_voter
+----
+adjusted-ts: 6.100000000,3, epoch: 3, err: <nil>
+
+has-support now-milli=6000 node-id=1 store-id=1 epoch=1 descriptors=(n12voter_n34_incoming)
+----
+support: support-withdrawn, expiration: 0,0, err: <nil>
+
+# currently-unsupported since epoch 2 is currently unsupported by s4. But s1
+# will increment s1=>s4 after this.
+has-support now-milli=6000 node-id=1 store-id=1 epoch=2 descriptors=(n12voter_n34_incoming)
+----
+message-sender:
+ PLSSS: t=6.100000000,5
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:7.000000000,0}
+  by: {NodeID:3 StoreID:3} support: {Epoch:3 EndTime:7.000000000,2}
+  by: {NodeID:4 StoreID:4} support: {Epoch:4 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:0 EndTime:0,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:0 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+support: currently-unsupported, expiration: 0,0, err: <nil>
+
+print-persistent-state
+----
+epoch: 4
+supports:
+
+# Now suppport-withdrawn because of the unilateral increment.
+has-support now-milli=6000 node-id=1 store-id=1 epoch=2 descriptors=(n12voter_n34_incoming)
+----
+support: support-withdrawn, expiration: 0,0, err: <nil>
+
+lease-proposal start-milli=6000 node-id=1 store-id=1 descriptor=n12voter_n34_incoming
+----
+adjusted-ts: 6.100000000,8, epoch: 4, err: <nil>
+
+has-support now-milli=6000 node-id=1 store-id=1 epoch=3 descriptors=(n12voter_n34_incoming)
+----
+support: supported, expiration: 7.000000000,0, err: <nil>
+
+set-time now-milli=6100
+----
+hlc: 6.100000000,10
+
+handle-heartbeat node-id=2 store-id=2 epoch=1 sender-milli=5000 end-milli=6000
+----
+message-sender:
+ PLSSS: t=6.100000000,11
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:7.000000000,0}
+  by: {NodeID:3 StoreID:3} support: {Epoch:3 EndTime:7.000000000,2}
+  by: {NodeID:4 StoreID:4} support: {Epoch:4 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:2 EndTime:0,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:0 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+heartbeat: ack false err <nil>
+
+print-persistent-state
+----
+epoch: 4
+supports:
+ {NodeID:2 StoreID:2}: {Epoch:2 EndTime:0,0}
+
+handle-heartbeat node-id=2 store-id=2 epoch=1 sender-milli=6000 end-milli=7000
+----
+heartbeat: ack false err <nil>
+
+print-persistent-state
+----
+epoch: 4
+supports:
+ {NodeID:2 StoreID:2}: {Epoch:2 EndTime:0,0}
+
+handle-heartbeat node-id=2 store-id=2 epoch=2 sender-milli=6200 end-milli=7200
+----
+heartbeat: ack true err <nil>
+
+print-persistent-state
+----
+epoch: 4
+supports:
+ {NodeID:2 StoreID:2}: {Epoch:2 EndTime:7.200000000,0}
+
+has-support now-milli=6500 node-id=2 store-id=2 epoch=1 descriptors=(n1_voter-n2_voter)
+----
+support: support-withdrawn, expiration: 0,0, err: <nil>
+
+has-support now-milli=6500 node-id=2 store-id=2 epoch=2 descriptors=(n1_voter-n2_voter)
+----
+support: supported, expiration: 7.200000000,0, err: <nil>
+
+lease-proposal start-milli=6000 node-id=2 store-id=2 descriptor=n1_voter-n2_voter
+----
+adjusted-ts: 6.200000000,3, epoch: 2, err: <nil>
+
+handle-heartbeat node-id=2 store-id=2 epoch=3 sender-milli=6400 end-milli=6800
+----
+message-sender:
+ PLSSS: t=6.400000000,1
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:7.000000000,0}
+  by: {NodeID:3 StoreID:3} support: {Epoch:3 EndTime:7.000000000,2}
+  by: {NodeID:4 StoreID:4} support: {Epoch:4 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:3 EndTime:6.800000000,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:0 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+heartbeat: ack true err <nil>
+
+print-persistent-state
+----
+epoch: 4
+supports:
+ {NodeID:2 StoreID:2}: {Epoch:3 EndTime:6.800000000,0}
+
+has-support now-milli=6300 node-id=2 store-id=2 epoch=2 descriptors=(n1_voter-n2_voter)
+----
+support: support-withdrawn, expiration: 0,0, err: <nil>
+
+lease-proposal start-milli=6300 node-id=2 store-id=2 descriptor=n1_voter-n2_voter
+----
+adjusted-ts: 6.400000000,3, epoch: 3, err: <nil>
+
+lease-proposal start-milli=6300 node-id=2 store-id=2 descriptor=n123_voter
+----
+adjusted-ts: 6.400000000,4, epoch: 3, err: <nil>
+
+has-support now-milli=6300 node-id=3 store-id=3 epoch=1 descriptors=(n123_voter)
+----
+message-sender:
+ PLSSS: t=6.400000000,5
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:7.000000000,0}
+  by: {NodeID:3 StoreID:3} support: {Epoch:3 EndTime:7.000000000,2}
+  by: {NodeID:4 StoreID:4} support: {Epoch:4 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:3 EndTime:6.800000000,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:2 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+support: currently-unsupported, expiration: 0,0, err: <nil>
+
+print-persistent-state
+----
+epoch: 4
+supports:
+ {NodeID:2 StoreID:2}: {Epoch:3 EndTime:6.800000000,0}
+ {NodeID:3 StoreID:3}: {Epoch:2 EndTime:0,0}
+
+has-support now-milli=6300 node-id=3 store-id=3 epoch=1 descriptors=(n123_voter)
+----
+support: currently-unsupported, expiration: 0,0, err: <nil>
+
+set-time now-milli=7500
+----
+message-sender:
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2}}, {Epoch:1 SenderTime:7.500000000,0 EndTime:8.500000000,0} response: ack=true rt=0,0
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:3 StoreID:3}}, {Epoch:3 SenderTime:7.500000000,1 EndTime:8.500000000,2} response: ack=true rt=6.100000000,0
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:4 StoreID:4}}, {Epoch:4 SenderTime:7.500000000,2 EndTime:8.500000000,4}
+ PLSSS: t=7.500000000,3
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:8.500000000,0}
+  by: {NodeID:3 StoreID:3} support: {Epoch:3 EndTime:8.500000000,2}
+  by: {NodeID:4 StoreID:4} support: {Epoch:4 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:4 EndTime:0,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:2 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+hlc: 7.500000000,4
+
+print-persistent-state
+----
+epoch: 4
+supports:
+ {NodeID:2 StoreID:2}: {Epoch:4 EndTime:0,0}
+ {NodeID:3 StoreID:3}: {Epoch:2 EndTime:0,0}
+
+handle-support-state node-id=2 store-id=2 epoch=3 time-milli=7200
+by node-id=3 store-id=3 epoch=2 end-milli=8000
+by node-id=1 store-id=1 epoch=1 end-milli=0
+----
+support-state:
+  state_time:<wall_time:7200000000 > for_other_by:<for:<node_id:2 store_id:2 > > by_other_for:<by:<node_id:2 store_id:2 > support:<for:<node_id:3 store_id:3 > support:<epoch:2 end_time:<wall_time:8000000000 > > > support:<for:<node_id:1 store_id:1 > support:<epoch:1 end_time:<> > > > 
+
+has-support now-milli=7500 node-id=3 store-id=3 epoch=1 descriptors=(n123_voter)
+----
+support: support-withdrawn, expiration: 0,0, err: <nil>
+
+has-support now-milli=6300 node-id=3 store-id=3 epoch=2 descriptors=(n123_voter)
+----
+message-sender:
+ PLSSS: t=7.500000000,6
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:8.500000000,0}
+  by: {NodeID:3 StoreID:3} support: {Epoch:3 EndTime:8.500000000,2}
+  by: {NodeID:4 StoreID:4} support: {Epoch:4 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:4 EndTime:0,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:3 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+support: supported, expiration: 8.000000000,0, err: <nil>
+
+has-support now-milli=6300 node-id=3 store-id=3 epoch=3 descriptors=(n123_voter)
+----
+message-sender:
+ PLSSS: t=7.500000000,8
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:8.500000000,0}
+  by: {NodeID:3 StoreID:3} support: {Epoch:3 EndTime:8.500000000,2}
+  by: {NodeID:4 StoreID:4} support: {Epoch:4 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:4 EndTime:0,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:4 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+support: supported, expiration: 8.000000000,0, err: <nil>
+
+set-time now-milli=8100
+----
+message-sender:
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2}}, {Epoch:1 SenderTime:8.100000000,0 EndTime:9.100000000,0} response: ack=true rt=0,0
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:3 StoreID:3}}, {Epoch:3 SenderTime:8.100000000,1 EndTime:9.100000000,2} response: ack=true rt=6.100000000,0
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:4 StoreID:4}}, {Epoch:4 SenderTime:8.100000000,2 EndTime:9.100000000,4}
+hlc: 8.100000000,3
+
+has-support now-milli=6300 node-id=3 store-id=3 epoch=3 descriptors=(n123_voter)
+----
+support: currently-unsupported, expiration: 0,0, err: <nil>
+
+handle-support-state node-id=2 store-id=2 epoch=3 time-milli=8200
+for node-id=3 store-id=3 epoch=5 end-milli=0
+by node-id=3 store-id=3 epoch=6 end-milli=8000
+by node-id=1 store-id=1 epoch=1 end-milli=0
+----
+message-sender:
+ PLSSS: t=8.200000000,1
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:9.100000000,0}
+  by: {NodeID:3 StoreID:3} support: {Epoch:3 EndTime:9.100000000,2}
+  by: {NodeID:4 StoreID:4} support: {Epoch:4 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:5 EndTime:0,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:6 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+support-state:
+  state_time:<wall_time:8200000000 > for_other_by:<for:<node_id:2 store_id:2 > support:<by:<node_id:3 store_id:3 > support:<epoch:5 end_time:<> > > > by_other_for:<by:<node_id:2 store_id:2 > support:<for:<node_id:3 store_id:3 > support:<epoch:6 end_time:<wall_time:8000000000 > > > support:<for:<node_id:1 store_id:1 > support:<epoch:1 end_time:<> > > > 
+
+set-next-response node-id=3 store-id=3 num-nacks=2 time-milli=9300
+----
+{NodeID:3 StoreID:3}: {doNotRespond:false numNacks:2 responderTime:{WallTime:9300000000 Logical:0}}
+
+set-time now-milli=9200
+----
+message-sender:
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2}}, {Epoch:1 SenderTime:9.200000000,0 EndTime:10.200000000,0} response: ack=true rt=0,0
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:3 StoreID:3}}, {Epoch:3 SenderTime:9.200000000,1 EndTime:10.200000000,2} response: ack=false rt=9.300000000,0
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:3 StoreID:3}}, {Epoch:5 SenderTime:9.300000000,1 EndTime:10.300000000,2} response: ack=false rt=9.300000000,0
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:3 StoreID:3}}, {Epoch:6 SenderTime:9.300000000,2 EndTime:10.300000000,4} response: ack=true rt=9.300000000,0
+ PLSSS: t=9.300000000,3
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:10.200000000,0}
+  by: {NodeID:3 StoreID:3} support: {Epoch:6 EndTime:10.300000000,4}
+  by: {NodeID:4 StoreID:4} support: {Epoch:4 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:5 EndTime:0,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:6 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+ PLSSS: t=9.300000000,4
+ for-self-by: {NodeID:1 StoreID:1}
+  by: {NodeID:2 StoreID:2} support: {Epoch:1 EndTime:10.200000000,0}
+  by: {NodeID:3 StoreID:3} support: {Epoch:6 EndTime:10.300000000,4}
+  by: {NodeID:4 StoreID:4} support: {Epoch:4 EndTime:0,0}
+ by-self-for: {NodeID:1 StoreID:1}
+  for: {NodeID:2 StoreID:2} support: {Epoch:5 EndTime:0,0}
+  for: {NodeID:3 StoreID:3} support: {Epoch:6 EndTime:0,0}
+  for: {NodeID:4 StoreID:4} support: {Epoch:0 EndTime:0,0}
+ SendHeartbeat: {From:{NodeID:1 StoreID:1} To:{NodeID:4 StoreID:4}}, {Epoch:4 SenderTime:9.300000000,5 EndTime:10.300000000,10}
+hlc: 9.300000000,6
+
+lease-proposal start-milli=8300 node-id=1 store-id=1 descriptor=n123_voter
+----
+adjusted-ts: 9.300000000,7, epoch: 6, err: <nil>

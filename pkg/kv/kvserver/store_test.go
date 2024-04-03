@@ -38,6 +38,7 @@ import (
 	aload "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -245,7 +246,14 @@ func createTestStoreWithoutStart(
 		NoopRaftTransportDisconnectListener{},
 		nil, /* knobs */
 	)
-
+	cfg.DMEManager = dme_liveness.NewManager(dme_liveness.Options{
+		NodeID: 1,
+		Clock:  cfg.Clock,
+		LivenessExpiryInterval: func() time.Duration {
+			return cfg.RangeLeaseDuration
+		},
+	})
+	stopper.AddCloser(cfg.DMEManager)
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 
