@@ -1,0 +1,7 @@
+setup
+SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled=true;
+----
+
+test
+CREATE TEMPORARY SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+----

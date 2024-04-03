@@ -85,6 +85,13 @@ type ImmediateMutationStateUpdater interface {
 	// Reset schedules a reset of the in-txn catalog state
 	// to undo the modifications from earlier stages.
 	Reset()
+
+	// AddTemporarySchema adds the temporary schema in the current session.
+	AddTemporarySchema(id descpb.ID)
+
+	// AddTemporarySchemaParent registers the parent database for an added
+	// temporary schema.
+	AddTemporarySchemaParent(id descpb.ID, databaseID descpb.ID)
 }
 
 type DeferredMutationStateUpdater interface {

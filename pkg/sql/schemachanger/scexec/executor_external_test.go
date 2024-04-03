@@ -78,6 +78,7 @@ func (ti testInfra) newExecDeps(txn descs.Txn) scexec.Dependencies {
 		noopValidator{},
 		scdeps.NewConstantClock(timeutil.Now()),
 		noopMetadataUpdater{},
+		noopTemporarySchemaCreator{},
 		noopStatsReferesher{},
 		&scexec.TestingKnobs{},
 		kvTrace,
@@ -529,4 +530,15 @@ func (noopMetadataUpdater) UpdateTTLScheduleLabel(
 	ctx context.Context, tbl *tabledesc.Mutable,
 ) error {
 	return nil
+}
+
+type noopTemporarySchemaCreator struct{}
+
+var _ scexec.TemporarySchemaCreator = noopTemporarySchemaCreator{}
+
+// InsertTemporarySchema implements scexec.TemporarySchemaCreator.
+func (noopTemporarySchemaCreator) InsertTemporarySchema(
+	tempSchemaName string, databaseID descpb.ID, schemaID descpb.ID,
+) {
+
 }

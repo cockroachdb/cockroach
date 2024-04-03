@@ -1375,3 +1375,14 @@ SELECT database_name, schema_name, grantee, privilege_type FROM [SHOW GRANTS ON 
 should_not_have_create  public  public  USAGE
 
 subtest end
+
+
+subtest schema_with_temp_in_name
+
+statement ok
+CREATE SCHEMA my_pg_temp_123_123;
+
+statement ok
+DROP SCHEMA  my_pg_temp_123_123;
+
+subtest end

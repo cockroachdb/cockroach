@@ -73,9 +73,9 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 				"sql.schema.temp_tables_disabled",
 			))
 		}
-
-		panic(scerrors.NotImplementedErrorf(n, "temporary sequences are not yet "+
-			"implemented in the declarative schema changer"))
+		// Resolve the temporary schema element.
+		scElts = MaybeCreateOrResolveTemporarySchema(b)
+		schemaElem = scElts.FilterSchema().MustGetOneElement()
 	}
 
 	// Sanity check for duplication options on the sequence.
@@ -123,7 +123,7 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 	sequenceID := b.GenerateUniqueDescID()
 	sequenceElem := &scpb.Sequence{
 		SequenceID:  sequenceID,
-		IsTemporary: false,
+		IsTemporary: n.Persistence.IsTemporary(),
 	}
 	if restartWith != nil {
 		sequenceElem.RestartWith = *restartWith

@@ -72,6 +72,7 @@ func WithBuilderDependenciesFromTestServer(
 		scbuild.AuthorizationAccessor
 		scbuild.AstFormatter
 		scbuild.FeatureChecker
+		scbuild.TemporarySchemaProvider
 	})
 
 	refProviderFactory, refCleanup := sql.NewReferenceProviderFactoryForTest(
@@ -100,6 +101,7 @@ func WithBuilderDependenciesFromTestServer(
 		sql.NewSchemaChangerBuildEventLogger(planner.InternalSQLTxn(), &execCfg),
 		refProviderFactory,
 		descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB()),
+		planner,
 	))
 }
 

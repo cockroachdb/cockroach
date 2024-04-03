@@ -23,14 +23,20 @@ import (
 )
 
 type immediateState struct {
-	modifiedDescriptors nstree.IDMap
-	drainedNames        map[descpb.ID][]descpb.NameInfo
-	descriptorsToDelete catalog.DescriptorIDSet
-	commentsToUpdate    []commentToUpdate
-	newDescriptors      map[descpb.ID]catalog.MutableDescriptor
-	addedNames          map[descpb.ID]descpb.NameInfo
-	withReset           bool
-	sequencesToInit     []sequenceToInit
+	modifiedDescriptors        nstree.IDMap
+	drainedNames               map[descpb.ID][]descpb.NameInfo
+	descriptorsToDelete        catalog.DescriptorIDSet
+	commentsToUpdate           []commentToUpdate
+	newDescriptors             map[descpb.ID]catalog.MutableDescriptor
+	addedNames                 map[descpb.ID]descpb.NameInfo
+	withReset                  bool
+	sequencesToInit            []sequenceToInit
+	temporarySchemasToRegister map[descpb.ID]*temporarySchemaToRegister
+}
+
+type temporarySchemaToRegister struct {
+	parentID   descpb.ID
+	schemaName string
 }
 
 type commentToUpdate struct {
@@ -166,6 +172,9 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 		if err := c.AddName(ctx, name, id); err != nil {
 			return err
 		}
+		if tempIdx := s.temporarySchemasToRegister[id]; tempIdx != nil {
+			tempIdx.schemaName = name.Name
+		}
 	}
 	for _, u := range s.commentsToUpdate {
 		k := catalogkeys.MakeCommentKey(uint32(u.id), uint32(u.subID), u.commentType)
@@ -182,7 +191,21 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 	for _, s := range s.sequencesToInit {
 		c.InitializeSequence(s.id, s.startVal)
 	}
+	for tempIdxId, tempIdxToRegister := range s.temporarySchemasToRegister {
+		c.InsertTemporarySchema(tempIdxToRegister.schemaName, tempIdxToRegister.parentID, tempIdxId)
+	}
 	return c.Validate(ctx)
+}
+
+func (s *immediateState) AddTemporarySchema(id descpb.ID) {
+	if s.temporarySchemasToRegister == nil {
+		s.temporarySchemasToRegister = make(map[descpb.ID]*temporarySchemaToRegister)
+	}
+	s.temporarySchemasToRegister[id] = &temporarySchemaToRegister{}
+}
+
+func (s *immediateState) AddTemporarySchemaParent(id descpb.ID, databaseID descpb.ID) {
+	s.temporarySchemasToRegister[id].parentID = databaseID
 }
 
 // getOrderedNewDescriptorIDs returns ids in `newDescriptors` in ascending order.

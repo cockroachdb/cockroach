@@ -113,6 +113,7 @@ func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuil
 		NewSchemaChangerBuildEventLogger(p.InternalSQLTxn(), p.ExecCfg()),
 		NewReferenceProviderFactory(p),
 		p.EvalContext().DescIDGenerator,
+		p,
 	)
 }
 
@@ -293,6 +294,7 @@ func newSchemaChangerTxnRunDependencies(
 		execCfg.Validator,
 		scdeps.NewConstantClock(evalContext.GetTxnTimestamp(time.Microsecond).Time),
 		metaDataUpdater,
+		evalContext.Planner,
 		execCfg.StatsRefresher,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		kvTrace,

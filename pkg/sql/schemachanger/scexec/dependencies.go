@@ -57,6 +57,7 @@ type Dependencies interface {
 type Catalog interface {
 	scmutationexec.NameResolver
 	scmutationexec.DescriptorReader
+	TemporarySchemaCreator
 
 	// CreateOrUpdateDescriptor upserts a descriptor.
 	CreateOrUpdateDescriptor(ctx context.Context, desc catalog.MutableDescriptor) error
@@ -349,6 +350,14 @@ type DescriptorMetadataUpdater interface {
 	// UpdateTTLScheduleLabel updates the schedule_name for the TTL Scheduled Job
 	// of the given table.
 	UpdateTTLScheduleLabel(ctx context.Context, tbl *tabledesc.Mutable) error
+}
+
+type TemporarySchemaCreator interface {
+	// InsertTemporarySchema inserts a temporary schema into the current session
+	// data.
+	InsertTemporarySchema(
+		tempSchemaName string, databaseID descpb.ID, schemaID descpb.ID,
+	)
 }
 
 // StatsRefreshQueue queues table for stats refreshes.
