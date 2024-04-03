@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -363,8 +362,6 @@ func (ds *ServerImpl) setupFlow(
 			RangeStatsFetcher:         ds.ServerConfig.RangeStatsFetcher,
 			ULIDEntropy:               ulid.Monotonic(crypto_rand.Reader, 0),
 		}
-		rng, _ := randutil.NewPseudoRand()
-		evalCtx.RNG = rng
 		// Most processors will override this Context with their own context in
 		// ProcessorBase. StartInternal().
 		evalCtx.SetDeprecatedContext(ctx)
