@@ -210,6 +210,25 @@ statement ok
 ALTER SEQUENCE renamed RENAME TO seq;
 
 statement ok
+CREATE FUNCTION f_nested(x INT, y weekday) RETURNS INT AS $$
+  BEGIN
+    IF x > 0 THEN
+      RAISE NOTICE 'x: %, y: %', x, y;
+    END IF;
+    RETURN x * 2;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE PROCEDURE p_nested(x INT, y weekday, OUT z weekday) AS $$
+  BEGIN
+    IF x > 0 THEN
+      RAISE NOTICE 'x: %, y: %', x, y;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
 DROP FUNCTION f_rewrite();
 
 statement ok
@@ -223,6 +242,8 @@ $$
   BEGIN
     RAISE NOTICE USING MESSAGE = format('val: %d','wednesday'::weekday);
     RAISE NOTICE 'val1: %, val2: %', 'wednesday'::weekday, 'thursday'::weekday;
+    SELECT f_nested(1, 'wednesday'::weekday);
+    CALL p_nested(1, 'wednesday'::weekday, day);
     DECLARE
       yesterday weekday := 'wednesday'::weekday;
     BEGIN
@@ -259,7 +280,7 @@ $$ LANGUAGE PLPGSQL;
 query T
 SELECT get_body_str('f_rewrite');
 ----
-"DECLARE\nday @100107 := b'\\x80':::@100107;\ntoday @100107 := b'\\xa0':::@100107;\ncurs REFCURSOR := b' ':::@100107::STRING;\ncurs2 CURSOR FOR SELECT b'@':::@100107;\nBEGIN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nRAISE NOTICE 'val1: %, val2: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nDECLARE\nyesterday @100107 := b'\\x80':::@100107;\nBEGIN\nRAISE NOTICE 'val3: %, val4: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nIF yesterday IS NOT NULL THEN\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEXCEPTION\nWHEN division_by_zero THEN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nWHEN not_null_violation THEN\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'val: %', b'\\x80':::@100107;\nEND;\nWHILE day != b'\\x80':::@100107 LOOP\nday := b'\\xc0':::@100107;\nSELECT b'\\x80':::@100107;\nIF day = b'\\x80':::@100107 THEN\n\tday := b'\\xa0':::@100107;\n\tSELECT b'@':::@100107;\n\tCONTINUE;\nELSIF day = b' ':::@100107 THEN\n\tSELECT b'@':::@100107 INTO day;\nELSIF day = b'@':::@100107 THEN\n\tSELECT b'\\x80':::@100107 INTO day;\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEND LOOP;\nOPEN curs FOR SELECT b'\\x80':::@100107;\nRETURN b'\\x80':::@100107;\nEND;\n"
+"DECLARE\nday @100107 := b'\\x80':::@100107;\ntoday @100107 := b'\\xa0':::@100107;\ncurs REFCURSOR := b' ':::@100107::STRING;\ncurs2 CURSOR FOR SELECT b'@':::@100107;\nBEGIN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nRAISE NOTICE 'val1: %, val2: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nSELECT public.f_nested(1:::INT8, b'\\x80':::@100107);\nCALL public.p_nested(1, b'\\x80':::@100107, day);\nDECLARE\nyesterday @100107 := b'\\x80':::@100107;\nBEGIN\nRAISE NOTICE 'val3: %, val4: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nIF yesterday IS NOT NULL THEN\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEXCEPTION\nWHEN division_by_zero THEN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nWHEN not_null_violation THEN\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'val: %', b'\\x80':::@100107;\nEND;\nWHILE day != b'\\x80':::@100107 LOOP\nday := b'\\xc0':::@100107;\nSELECT b'\\x80':::@100107;\nIF day = b'\\x80':::@100107 THEN\n\tday := b'\\xa0':::@100107;\n\tSELECT b'@':::@100107;\n\tCONTINUE;\nELSIF day = b' ':::@100107 THEN\n\tSELECT b'@':::@100107 INTO day;\nELSIF day = b'@':::@100107 THEN\n\tSELECT b'\\x80':::@100107 INTO day;\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEND LOOP;\nOPEN curs FOR SELECT b'\\x80':::@100107;\nRETURN b'\\x80':::@100107;\nEND;\n"
 
 query TT
 SHOW CREATE FUNCTION f_rewrite;
@@ -280,6 +301,8 @@ f_rewrite  CREATE FUNCTION public.f_rewrite()
              RAISE NOTICE
              USING MESSAGE = format('val: %d':::STRING, 'wednesday':::test.public.weekday);
              RAISE NOTICE 'val1: %, val2: %', 'wednesday':::test.public.weekday, 'thursday':::test.public.weekday;
+             SELECT public.f_nested(1:::INT8, 'wednesday':::test.public.weekday);
+             CALL public.p_nested(1, 'wednesday':::test.public.weekday, day);
              DECLARE
              yesterday test.public.weekday := 'wednesday':::test.public.weekday;
              BEGIN
@@ -323,7 +346,7 @@ ALTER TYPE weekday RENAME TO workday;
 query T
 SELECT get_body_str('f_rewrite');
 ----
-"DECLARE\nday @100107 := b'\\x80':::@100107;\ntoday @100107 := b'\\xa0':::@100107;\ncurs REFCURSOR := b' ':::@100107::STRING;\ncurs2 CURSOR FOR SELECT b'@':::@100107;\nBEGIN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nRAISE NOTICE 'val1: %, val2: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nDECLARE\nyesterday @100107 := b'\\x80':::@100107;\nBEGIN\nRAISE NOTICE 'val3: %, val4: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nIF yesterday IS NOT NULL THEN\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEXCEPTION\nWHEN division_by_zero THEN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nWHEN not_null_violation THEN\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'val: %', b'\\x80':::@100107;\nEND;\nWHILE day != b'\\x80':::@100107 LOOP\nday := b'\\xc0':::@100107;\nSELECT b'\\x80':::@100107;\nIF day = b'\\x80':::@100107 THEN\n\tday := b'\\xa0':::@100107;\n\tSELECT b'@':::@100107;\n\tCONTINUE;\nELSIF day = b' ':::@100107 THEN\n\tSELECT b'@':::@100107 INTO day;\nELSIF day = b'@':::@100107 THEN\n\tSELECT b'\\x80':::@100107 INTO day;\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEND LOOP;\nOPEN curs FOR SELECT b'\\x80':::@100107;\nRETURN b'\\x80':::@100107;\nEND;\n"
+"DECLARE\nday @100107 := b'\\x80':::@100107;\ntoday @100107 := b'\\xa0':::@100107;\ncurs REFCURSOR := b' ':::@100107::STRING;\ncurs2 CURSOR FOR SELECT b'@':::@100107;\nBEGIN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nRAISE NOTICE 'val1: %, val2: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nSELECT public.f_nested(1:::INT8, b'\\x80':::@100107);\nCALL public.p_nested(1, b'\\x80':::@100107, day);\nDECLARE\nyesterday @100107 := b'\\x80':::@100107;\nBEGIN\nRAISE NOTICE 'val3: %, val4: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nIF yesterday IS NOT NULL THEN\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEXCEPTION\nWHEN division_by_zero THEN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nWHEN not_null_violation THEN\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'val: %', b'\\x80':::@100107;\nEND;\nWHILE day != b'\\x80':::@100107 LOOP\nday := b'\\xc0':::@100107;\nSELECT b'\\x80':::@100107;\nIF day = b'\\x80':::@100107 THEN\n\tday := b'\\xa0':::@100107;\n\tSELECT b'@':::@100107;\n\tCONTINUE;\nELSIF day = b' ':::@100107 THEN\n\tSELECT b'@':::@100107 INTO day;\nELSIF day = b'@':::@100107 THEN\n\tSELECT b'\\x80':::@100107 INTO day;\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEND LOOP;\nOPEN curs FOR SELECT b'\\x80':::@100107;\nRETURN b'\\x80':::@100107;\nEND;\n"
 
 query TT
 SHOW CREATE FUNCTION f_rewrite;
@@ -344,6 +367,8 @@ f_rewrite  CREATE FUNCTION public.f_rewrite()
              RAISE NOTICE
              USING MESSAGE = format('val: %d':::STRING, 'humpday':::test.public.workday);
              RAISE NOTICE 'val1: %, val2: %', 'humpday':::test.public.workday, 'thursday':::test.public.workday;
+             SELECT public.f_nested(1:::INT8, 'humpday':::test.public.workday);
+             CALL public.p_nested(1, 'humpday':::test.public.workday, day);
              DECLARE
              yesterday test.public.workday := 'humpday':::test.public.workday;
              BEGIN
