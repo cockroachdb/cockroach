@@ -209,7 +209,7 @@ func (t *testFlushConsumer[K, V]) awaitConsumption() {
 }
 
 // onFlush implements the flushConsumer interface.
-func (t *testFlushConsumer[K, V]) onFlush(_ context.Context, flushed map[K]V) {
+func (t *testFlushConsumer[K, V]) onFlush(_ context.Context, _ FlushMeta, flushed map[K]V) {
 	t.flushed = flushed
 	t.consumed <- struct{}{}
 }
@@ -250,8 +250,8 @@ type testFlushTrigger struct {
 var _ FlushTrigger = (*testFlushTrigger)(nil)
 
 // shouldFlush implements the FlushTrigger interface.
-func (t *testFlushTrigger) shouldFlush() bool {
-	return t.flush
+func (t *testFlushTrigger) shouldFlush() (bool, FlushMeta) {
+	return t.flush, FlushMeta{}
 }
 
 func (t *testFlushTrigger) setShouldFlush(to bool) {

@@ -76,15 +76,9 @@ package eventagg
 // challenges that we're punting until later that are worth enumerating here.
 //
 // Unsolved Challenges:
-//	1. What do the details of the structured logging API look like that the eventagg package will use?
-//		 Current telemetry logging requires protobuf messages which can be unwieldy and require us to either
-//		 use protobuf types within the eventagg system (undesirable) or transform aggregation results into
-//		 a protobuf type (duplicative). Some early ideas on how to solve this are discussed in comments within
-//		 pkg/util/eventagg/flush_consumer.go, within (*LogWriteConsumer[V]).onFlush(). For now, we punt this
-//		 problem until the broader eventagg interfaces are agreed upon.
-// 	2. Memory accounting as well as observability into the aggregations themselves are required to make
+// 	1. Memory accounting as well as observability into the aggregations themselves are required to make
 //	   eventagg safe to use and easy to debug. For now, we punt this problem.
-// 	3. What kinds of concurrency, if any, should be used within the eventagg package? If the goal is for
+// 	2. What kinds of concurrency, if any, should be used within the eventagg package? If the goal is for
 //		 eventagg to be easy for developers to use, then making a Map/Reduce operation concurrent is
 //	 	 should also be easy if there's a need for it. We punt whether this is a requirement, and the details
 //		 of the problem if it *is* a requirement, until later.

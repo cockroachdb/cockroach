@@ -20,10 +20,10 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats/insights",
         "//pkg/util/eventagg",
+        "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
-        "@com_github_cockroachdb_redact//:redact",
     ],
 )
