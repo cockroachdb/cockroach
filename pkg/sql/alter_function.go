@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -378,6 +379,34 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	sc, err := params.p.Descriptors().ByName(params.p.txn).Get().Schema(params.ctx, db, string(n.n.NewSchemaName))
 	if err != nil {
 		return err
+	}
+	// Disallow renaming if this rename operation will break other UDF's invoking
+	// this one.
+	var dependentFuncs []string
+	for _, dep := range fnDesc.GetDependedOnBy() {
+		desc, err := params.p.Descriptors().ByID(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
+		if err != nil {
+			return err
+		}
+		_, ok := desc.(catalog.FunctionDescriptor)
+		if !ok {
+			continue
+		}
+		fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
+		if err != nil {
+			return err
+		}
+		dependentFuncs = append(dependentFuncs, fullyResolvedName.FQString())
+	}
+	if len(dependentFuncs) > 0 {
+		return errors.UnimplementedErrorf(
+			errors.IssueLink{
+				IssueURL: build.MakeIssueURL(83233),
+				Detail: "set schema is disallowed because there are references from " +
+					"other objects by name",
+			},
+			"cannot set schema for function %q because other functions ([%v]) still depend on it",
+			fnDesc.Name, strings.Join(dependentFuncs, ", "))
 	}
 
 	switch sc.SchemaKind() {
