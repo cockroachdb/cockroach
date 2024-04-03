@@ -236,6 +236,10 @@ func (s *schemaChange) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
+	watchDogPool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
 	if err := s.setClusterSettings(ctx, pool); err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -266,6 +270,7 @@ func (s *schemaChange) Ops(
 			defer cancel()
 
 			pool.Close()
+			watchDogPool.Close()
 
 			closeErr := s.closeJSONLogFile()
 			shutdownErr := tracerProvider.Shutdown(ctx)
@@ -321,6 +326,7 @@ func (s *schemaChange) Ops(
 			dryRun:          s.dryRun,
 			maxOpsPerWorker: s.maxOpsPerWorker,
 			pool:            pool,
+			watchDogPool:    watchDogPool,
 			hists:           reg.GetHandle(),
 			opGen:           makeOperationGenerator(&opGeneratorParams),
 			logger: &logger{
@@ -397,6 +403,7 @@ type schemaChangeWorker struct {
 	dryRun              bool
 	maxOpsPerWorker     int
 	pool                *workload.MultiConnPool
+	watchDogPool        *workload.MultiConnPool
 	hists               *histogram.Histograms
 	opGen               *operationGenerator
 	isHoldingEntryLocks bool
@@ -529,7 +536,8 @@ func (w *schemaChangeWorker) runInTxn(
 }
 
 func (w *schemaChangeWorker) run(ctx context.Context) error {
-	conn, err := w.pool.Get().Acquire(ctx)
+	connPool := w.pool.Get()
+	conn, err := connPool.Acquire(ctx)
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection")
 	}
@@ -564,9 +572,20 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 			return errors.Wrap(err, "cannot to get active")
 		}
 		if !cannotEnableSchemaChanges {
-			_, err = w.pool.Get().Exec(ctx, `SET CLUSTER SETTING sql.schema.force_declarative_statements="+CREATE SCHEMA, +CREATE SEQUENCE"`)
+			// Transaction confirmed we are on a new enough version, so set the
+			// cluster setting.
+			err := tx.Rollback(ctx)
+			if err != nil {
+				return errors.Wrap(err, "could not rollback before cluster setting")
+			}
+			_, err = conn.Exec(ctx, `SET CLUSTER SETTING sql.schema.force_declarative_statements="+CREATE SCHEMA, +CREATE SEQUENCE"`)
 			if err != nil {
 				return errors.Wrap(err, "cannot enable extra schema changes")
+			}
+			// Restart the txn after the update.
+			tx, err = conn.Begin(ctx)
+			if err != nil {
+				return errors.Wrap(err, "cannot get a connection and begin a txn")
 			}
 			w.workload.declarativeStatementsEnabled.Store(true)
 		}
@@ -576,7 +595,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	defer w.releaseLocksIfHeld()
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
-	watchDog := newSchemaChangeWatchDog(w.pool.Get(), w.logger)
+	watchDog := newSchemaChangeWatchDog(w.watchDogPool.Get(), w.logger)
 	if err := watchDog.Start(ctx, tx); err != nil {
 		return errors.Wrapf(err, "unable to start watch dog")
 	}
