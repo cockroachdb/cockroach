@@ -78,6 +78,8 @@ func TestBatchIsCompleteTransaction(t *testing.T) {
 
 func TestBatchSplit(t *testing.T) {
 	get := &GetRequest{}
+	ulget := &GetRequest{KeyLockingStrength: lock.Exclusive, KeyLockingDurability: lock.Unreplicated}
+	rlget := &GetRequest{KeyLockingStrength: lock.Exclusive, KeyLockingDurability: lock.Replicated}
 	scan := &ScanRequest{}
 	put := &PutRequest{}
 	spl := &AdminSplitRequest{}
@@ -91,6 +93,8 @@ func TestBatchSplit(t *testing.T) {
 		canSplitET bool
 	}{
 		{[]Request{get, put}, []int{1, 1}, true},
+		{[]Request{ulget, put}, []int{1, 1}, true},
+		{[]Request{rlget, put}, []int{2}, true},
 		{[]Request{put, et}, []int{1, 1}, true},
 		{[]Request{get, get, get, put, put, get, get}, []int{3, 2, 2}, true},
 		{[]Request{spl, get, scan, spl, get}, []int{1, 2, 1, 1}, true},
@@ -112,6 +116,9 @@ func TestBatchSplit(t *testing.T) {
 		// request that follows.
 		{[]Request{get, qi, put}, []int{1, 2}, true},
 		{[]Request{get, qi, qi, qi, qi, put}, []int{1, 5}, true},
+		{[]Request{qi, get, qi, put}, []int{2, 2}, true},
+		{[]Request{qi, ulget, qi, put}, []int{2, 2}, true},
+		{[]Request{qi, rlget, qi, put}, []int{4}, true},
 		{[]Request{qi, get, qi, get, qi, get, qi, put, qi, put, qi, get, qi, get}, []int{6, 4, 4}, true},
 		{[]Request{qi, spl, qi, get, scan, qi, qi, spl, qi, get}, []int{1, 1, 5, 1, 2}, true},
 		{[]Request{scan, qi, qi, qi, et}, []int{4, 1}, true},

@@ -387,6 +387,14 @@ func NewStreamer(
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
 	}
+	if lockDurability == lock.Replicated {
+		// Replicated lock durability is not supported by the Streamer. If we want
+		// to support it in the future, we'll need to make sure we're not re-using
+		// request memory after the request has been sent. This is because
+		// replicated lock pipelining retains references to requests even after
+		// their response has been returned.
+		panic(errors.AssertionFailedf("Replicated lock durability is given to the Streamer"))
+	}
 	// sd can be nil in tests.
 	headOfLineOnlyFraction := 0.8
 	if sd != nil {

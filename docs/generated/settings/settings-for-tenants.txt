@@ -66,6 +66,10 @@ kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don'
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions	application
 kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions	application
 kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed	application
+kv.transaction.write_pipelining.locking_reads.enabled	boolean	true	if enabled, transactional locking reads are pipelined through Raft consensus	application
+kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, transactional ranged writes are pipelined through Raft consensus	application
+kv.transaction.write_pipelining.enabled	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
+kv.transaction.write_pipelining.max_batch_size	integer	128	if non-zero, defines that maximum size batch that will be pipelined through Raft consensus	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
 security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	application
 security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable	application

@@ -641,6 +641,8 @@ message SequencedWrite {
   // The sequence number of the request that created the write.
   int32 sequence = 2 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+  // The strength with which the lock was acquired at.
+  kv.kvserver.concurrency.lock.Strength strength = 3;
 }
 
 // LeaseAcquisitionType indicates the type of lease acquisition event that

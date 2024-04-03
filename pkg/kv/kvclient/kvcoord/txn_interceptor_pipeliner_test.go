@@ -14,10 +14,12 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -122,8 +125,9 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
 	scanArgs := kvpb.ScanRequest{
-		RequestHeader:      kvpb.RequestHeader{Key: keyA, EndKey: keyB},
-		KeyLockingStrength: lock.Exclusive,
+		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB},
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Replicated,
 	}
 	ba.Add(&scanArgs)
 	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
@@ -151,7 +155,7 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 		}
 		require.Equal(t, expLocks, etReq.LockSpans)
 		expInFlight := []roachpb.SequencedWrite{
-			{Key: keyA, Sequence: 1},
+			{Key: keyA, Sequence: 1, Strength: lock.Intent},
 		}
 		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
@@ -205,7 +209,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	require.Equal(t, putArgs.Key, w.Key)
 	require.Equal(t, putArgs.Sequence, w.Sequence)
 
-	// More writes, one that replaces the other's sequence number.
+	// More writes, one to the same key as the previous in-flight write.
 	keyB, keyC := roachpb.Key("b"), roachpb.Key("c")
 	ba.Requests = nil
 	cputArgs := kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
@@ -237,6 +241,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		require.Equal(t, txn.ID, qiReq.Txn.ID)
 		require.Equal(t, txn.WriteTimestamp, qiReq.Txn.WriteTimestamp)
 		require.Equal(t, enginepb.TxnSeq(1), qiReq.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq.Strength)
 		require.True(t, qiReq.ErrorIfMissing)
 
 		// No in-flight writes have been proved yet.
@@ -298,15 +303,19 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(3), qiReq2.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(4), qiReq3.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(5), qiReq4.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq1.Strength)
+		require.Equal(t, lock.Intent, qiReq2.Strength)
+		require.Equal(t, lock.Intent, qiReq3.Strength)
+		require.Equal(t, lock.Intent, qiReq4.Strength)
 
 		etReq := ba.Requests[5].GetEndTxn()
 		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.LockSpans)
 		expInFlight := []roachpb.SequencedWrite{
-			{Key: keyA, Sequence: 2},
-			{Key: keyB, Sequence: 3},
-			{Key: keyC, Sequence: 4},
-			{Key: keyC, Sequence: 5},
-			{Key: keyD, Sequence: 6},
+			{Key: keyA, Sequence: 2, Strength: lock.Intent},
+			{Key: keyB, Sequence: 3, Strength: lock.Intent},
+			{Key: keyC, Sequence: 4, Strength: lock.Intent},
+			{Key: keyC, Sequence: 5, Strength: lock.Intent},
+			{Key: keyD, Sequence: 6, Strength: lock.Intent},
 		}
 		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
@@ -394,9 +403,11 @@ func TestTxnPipelinerTrackInFlightWritesPaginatedResponse(t *testing.T) {
 		qiReq1 := ba.Requests[0].GetQueryIntent()
 		require.Equal(t, keyA, qiReq1.Key)
 		require.Equal(t, enginepb.TxnSeq(1), qiReq1.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq1.Strength)
 		qiReq2 := ba.Requests[1].GetQueryIntent()
 		require.Equal(t, keyB, qiReq2.Key)
 		require.Equal(t, enginepb.TxnSeq(2), qiReq2.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq2.Strength)
 
 		// Assume a range split at key "b". DistSender will split this batch into
 		// two partial batches:
@@ -426,21 +437,40 @@ func TestTxnPipelinerTrackInFlightWritesPaginatedResponse(t *testing.T) {
 }
 
 // TestTxnPipelinerReads tests that txnPipeliner will never instruct batches
-// with reads in them to use async consensus. It also tests that these reading
-// batches will still chain on to in-flight writes, if necessary.
+// with non-locking reads in them to use async consensus. It also tests that
+// these reading batches will still chain on to in-flight writes, if necessary.
+//
+// It also performs the same test for unreplicated locking reads, which are
+// handled the same by the txnPipeliner.
 func TestTxnPipelinerReads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	testutils.RunTrueAndFalse(t, "unreplicated-locking", testTxnPipelinerReads)
+}
+
+func testTxnPipelinerReads(t *testing.T, unreplLocking bool) {
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
 
 	txn := makeTxnProto()
 	keyA, keyC := roachpb.Key("a"), roachpb.Key("c")
 
+	var str lock.Strength
+	var dur lock.Durability
+	if unreplLocking {
+		str = lock.Exclusive
+		dur = lock.Unreplicated
+	}
+	getArgs := kvpb.GetRequest{
+		RequestHeader:        kvpb.RequestHeader{Key: keyA},
+		KeyLockingStrength:   str,
+		KeyLockingDurability: dur,
+	}
+
 	// Read-only.
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
-	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&getArgs)
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
@@ -458,7 +488,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 
 	// Read before write.
 	ba.Requests = nil
-	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&getArgs)
 	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyC}})
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -479,7 +509,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 	// Read after write.
 	ba.Requests = nil
 	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyC}})
-	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&getArgs)
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
@@ -497,12 +527,12 @@ func TestTxnPipelinerReads(t *testing.T) {
 	require.NotNil(t, br)
 
 	// Add a key into the in-flight writes set.
-	tp.ifWrites.insert(keyA, 10)
+	tp.ifWrites.insert(keyA, 10, lock.Intent)
 	require.Equal(t, 1, tp.ifWrites.len())
 
 	// Read-only with conflicting in-flight write.
 	ba.Requests = nil
-	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&getArgs)
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
@@ -513,6 +543,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 		qiReq := ba.Requests[0].GetQueryIntent()
 		require.Equal(t, keyA, qiReq.Key)
 		require.Equal(t, enginepb.TxnSeq(10), qiReq.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq.Strength)
 
 		// No in-flight writes have been proved yet.
 		require.Equal(t, 1, tp.ifWrites.len())
@@ -527,6 +558,314 @@ func TestTxnPipelinerReads(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 	require.Equal(t, 0, tp.ifWrites.len())
+}
+
+// TestTxnPipelinerReplicatedLockingReads tests that txnPipeliner permits
+// batches with replicated locking reads in them to use async consensus. It also
+// tests that these locking reads are proved as requests are chained onto them.
+// Finally, it tests that EndTxn requests chain on to all existing requests.
+func TestTxnPipelinerReplicatedLockingReads(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
+
+	txn := makeTxnProto()
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+	keyD, keyE, keyF := roachpb.Key("d"), roachpb.Key("e"), roachpb.Key("f")
+
+	// Unreplicated locking read-only.
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.GetRequest{
+		RequestHeader:        kvpb.RequestHeader{Key: keyA},
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Unreplicated,
+	})
+
+	// No keys are locked.
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr := tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 0, tp.ifWrites.len())
+	require.Equal(t, 0, len(tp.lockFootprint.asSlice()))
+
+	// Replicated locking read-only: Get, Scan, and ReverseScan.
+	ba.Requests = nil
+	ba.Add(&kvpb.GetRequest{
+		RequestHeader:        kvpb.RequestHeader{Key: keyA},
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Replicated,
+	})
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader:        kvpb.RequestHeader{Key: keyB, EndKey: keyD},
+		KeyLockingStrength:   lock.Shared,
+		KeyLockingDurability: lock.Replicated,
+	})
+	ba.Add(&kvpb.ReverseScanRequest{
+		RequestHeader:        kvpb.RequestHeader{Key: keyF, EndKey: keyB},
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Replicated,
+	})
+
+	// The first time it is sent, no keys are locked.
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 3)
+		require.True(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.ReverseScanRequest{}, ba.Requests[2].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		// No keys locked, no keys returned.
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 0, tp.ifWrites.len())
+	require.Equal(t, 0, len(tp.lockFootprint.asSlice()))
+
+	// The second time it is sent, 6 keys are locked.
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 3)
+		require.True(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.ReverseScanRequest{}, ba.Requests[2].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		// 6 keys locked, 6 keys returned.
+		br.Responses[0].GetGet().Value = &roachpb.Value{}
+		br.Responses[1].GetScan().Rows = []roachpb.KeyValue{{Key: keyB}, {Key: keyC}}
+		br.Responses[2].GetReverseScan().Rows = []roachpb.KeyValue{{Key: keyF}, {Key: keyE}, {Key: keyC}}
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 6, tp.ifWrites.len())
+	require.Equal(t, 0, len(tp.lockFootprint.asSlice()))
+
+	// Check that the tracked inflight writes were updated correctly.
+	var ifWrites []inFlightWrite
+	tp.ifWrites.ascend(func(w *inFlightWrite) {
+		ifWrites = append(ifWrites, *w)
+	})
+	expIfWrites := []inFlightWrite{
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyA, Sequence: 0, Strength: lock.Exclusive}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyB, Sequence: 0, Strength: lock.Shared}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyC, Sequence: 0, Strength: lock.Shared}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyC, Sequence: 0, Strength: lock.Exclusive}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyE, Sequence: 0, Strength: lock.Exclusive}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyF, Sequence: 0, Strength: lock.Exclusive}},
+	}
+	require.Equal(t, expIfWrites, ifWrites)
+
+	// Replicated locking read before write. Some existing in-flight replicated
+	// lock writes are queried. The batch is permitted to use async consensus.
+	ba.Requests = nil
+	ba.Add(&kvpb.GetRequest{
+		RequestHeader:        kvpb.RequestHeader{Key: keyA},
+		KeyLockingStrength:   lock.Shared,
+		KeyLockingDurability: lock.Replicated,
+	})
+	ba.Add(&kvpb.PutRequest{
+		RequestHeader: kvpb.RequestHeader{Key: keyC, Sequence: 1},
+	})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 5)
+		require.True(t, ba.AsyncConsensus)
+		require.Len(t, ba.Split(false /* canSplitET */), 1)
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[3].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[4].GetInner())
+
+		qiReq1 := ba.Requests[0].GetQueryIntent()
+		qiReq2 := ba.Requests[2].GetQueryIntent()
+		qiReq3 := ba.Requests[3].GetQueryIntent()
+		require.Equal(t, keyA, qiReq1.Key)
+		require.Equal(t, keyC, qiReq2.Key)
+		require.Equal(t, keyC, qiReq3.Key)
+		require.Equal(t, enginepb.TxnSeq(0), qiReq1.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(0), qiReq2.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(0), qiReq3.Txn.Sequence)
+		require.Equal(t, lock.Exclusive, qiReq1.Strength)
+		require.Equal(t, lock.Shared, qiReq2.Strength)
+		require.Equal(t, lock.Exclusive, qiReq3.Strength)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetQueryIntent().FoundIntent = true
+		br.Responses[1].GetGet().Value = &roachpb.Value{}
+		br.Responses[2].GetQueryIntent().FoundIntent = true
+		br.Responses[3].GetQueryIntent().FoundIntent = true
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 2) // QueryIntent responses stripped
+	require.Equal(t, 5, tp.ifWrites.len())
+	require.Equal(t, 3, len(tp.lockFootprint.asSlice()))
+
+	// Check that the tracked inflight writes were updated correctly.
+	ifWrites = nil
+	tp.ifWrites.ascend(func(w *inFlightWrite) {
+		ifWrites = append(ifWrites, *w)
+	})
+	expIfWrites = []inFlightWrite{
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyA, Sequence: 0, Strength: lock.Shared}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyB, Sequence: 0, Strength: lock.Shared}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyC, Sequence: 1, Strength: lock.Intent}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyE, Sequence: 0, Strength: lock.Exclusive}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyF, Sequence: 0, Strength: lock.Exclusive}},
+	}
+	require.Equal(t, expIfWrites, ifWrites)
+
+	// Replicated locking read after write. Some existing in-flight replicated
+	// lock writes are queried. The batch is permitted to use async consensus.
+	ba.Requests = nil
+	ba.Add(&kvpb.PutRequest{
+		RequestHeader: kvpb.RequestHeader{Key: keyD, Sequence: 2},
+	})
+	ba.Add(&kvpb.GetRequest{
+		RequestHeader:        kvpb.RequestHeader{Key: keyC, Sequence: 2},
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Replicated,
+	})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 3)
+		require.True(t, ba.AsyncConsensus)
+		require.Len(t, ba.Split(false /* canSplitET */), 1)
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[2].GetInner())
+
+		qiReq1 := ba.Requests[1].GetQueryIntent()
+		require.Equal(t, keyC, qiReq1.Key)
+		require.Equal(t, enginepb.TxnSeq(1), qiReq1.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq1.Strength)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[1].GetQueryIntent().FoundIntent = true
+		br.Responses[2].GetGet().Value = &roachpb.Value{}
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 2) // QueryIntent response stripped
+	require.Equal(t, 6, tp.ifWrites.len())
+	require.Equal(t, 4, len(tp.lockFootprint.asSlice()))
+
+	// Check that the tracked inflight writes were updated correctly.
+	ifWrites = nil
+	tp.ifWrites.ascend(func(w *inFlightWrite) {
+		ifWrites = append(ifWrites, *w)
+	})
+	expIfWrites = []inFlightWrite{
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyA, Sequence: 0, Strength: lock.Shared}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyB, Sequence: 0, Strength: lock.Shared}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyC, Sequence: 2, Strength: lock.Exclusive}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyD, Sequence: 2, Strength: lock.Intent}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyE, Sequence: 0, Strength: lock.Exclusive}},
+		{SequencedWrite: roachpb.SequencedWrite{Key: keyF, Sequence: 0, Strength: lock.Exclusive}},
+	}
+	require.Equal(t, expIfWrites, ifWrites)
+
+	// Send a final replicated locking read, along with an EndTxn request. Should
+	// attempt to prove all in-flight writes. Should NOT use async consensus.
+	ba.Requests = nil
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader:        kvpb.RequestHeader{Key: keyB, EndKey: keyD, Sequence: 2},
+		KeyLockingStrength:   lock.Shared,
+		KeyLockingDurability: lock.Replicated,
+	})
+	ba.Add(&kvpb.EndTxnRequest{
+		RequestHeader: kvpb.RequestHeader{Key: keyA, Sequence: 3},
+		Commit:        true,
+	})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 8)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[3].GetInner())
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[4].GetInner())
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[5].GetInner())
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[6].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[7].GetInner())
+
+		qiReqs := [6]*kvpb.QueryIntentRequest{
+			// NOTE: re-ordered because Scan overlaps 2 in-flight writes which need to
+			// be proven first.
+			ba.Requests[3].GetQueryIntent(),
+			ba.Requests[0].GetQueryIntent(),
+			ba.Requests[1].GetQueryIntent(),
+			ba.Requests[4].GetQueryIntent(),
+			ba.Requests[5].GetQueryIntent(),
+			ba.Requests[6].GetQueryIntent(),
+		}
+		require.Equal(t, len(expIfWrites), len(qiReqs))
+		for i, qiReq := range qiReqs {
+			expIfWrite := expIfWrites[i]
+			require.Equal(t, expIfWrite.Key, qiReq.Key)
+			require.Equal(t, expIfWrite.Sequence, qiReq.Txn.Sequence)
+			require.Equal(t, expIfWrite.Strength, qiReq.Strength)
+		}
+
+		etReq := ba.Requests[7].GetEndTxn()
+		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB, EndKey: keyD}}, etReq.LockSpans)
+		var expETIfWrites []roachpb.SequencedWrite
+		for _, ifWrite := range expIfWrites {
+			expETIfWrites = append(expETIfWrites, ifWrite.SequencedWrite)
+		}
+		sort.Sort(roachpb.SequencedWriteBySeq(expETIfWrites))
+		require.Equal(t, expETIfWrites, etReq.InFlightWrites)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Txn.Status = roachpb.COMMITTED
+		br.Responses[0].GetQueryIntent().FoundIntent = true
+		br.Responses[1].GetQueryIntent().FoundIntent = true
+		br.Responses[2].GetScan().Rows = []roachpb.KeyValue{{Key: keyB}, {Key: keyC}}
+		br.Responses[3].GetQueryIntent().FoundIntent = true
+		br.Responses[4].GetQueryIntent().FoundIntent = true
+		br.Responses[5].GetQueryIntent().FoundIntent = true
+		br.Responses[6].GetQueryIntent().FoundIntent = true
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 2) // QueryIntent responses stripped
+	require.Equal(t, 0, tp.ifWrites.len())
+	require.Equal(t, 4, len(tp.lockFootprint.asSlice()))
 }
 
 // TestTxnPipelinerRangedWrites tests that the txnPipeliner can perform some
@@ -574,11 +913,11 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 	// request. Send the batch again and assert that the Put chains onto the
 	// first in-flight write and the DeleteRange chains onto the second and
 	// third in-flight write.
-	tp.ifWrites.insert(roachpb.Key("a"), 10)
-	tp.ifWrites.insert(roachpb.Key("b"), 11)
-	tp.ifWrites.insert(roachpb.Key("c"), 12)
-	tp.ifWrites.insert(roachpb.Key("d"), 13)
-	tp.ifWrites.insert(roachpb.Key("e"), 13)
+	tp.ifWrites.insert(roachpb.Key("a"), 10, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("b"), 11, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("c"), 12, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("d"), 13, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("e"), 13, lock.Intent)
 	require.Equal(t, 5, tp.ifWrites.len())
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -602,6 +941,9 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(10), qiReq1.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(11), qiReq2.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(12), qiReq3.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq1.Strength)
+		require.Equal(t, lock.Intent, qiReq2.Strength)
+		require.Equal(t, lock.Intent, qiReq3.Strength)
 
 		// No in-flight writes have been proved yet.
 		require.Equal(t, 5, tp.ifWrites.len())
@@ -777,6 +1119,7 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 				require.Equal(t, key, qiReq.Key)
 				require.Equal(t, txn.ID, qiReq.Txn.ID)
 				require.Equal(t, makeSeq(i), qiReq.Txn.Sequence)
+				require.Equal(t, lock.Intent, qiReq.Strength)
 
 				getReq := ba.Requests[i+1].GetGet()
 				require.Equal(t, key, getReq.Key)
@@ -858,7 +1201,10 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 
 		etReq := ba.Requests[0].GetEndTxn()
 		require.Len(t, etReq.LockSpans, 0)
-		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
+		expInFlight := []roachpb.SequencedWrite{
+			{Key: keyA, Sequence: 1, Strength: lock.Intent},
+		}
+		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -886,7 +1232,10 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 
 		etReq := ba.Requests[0].GetEndTxn()
 		require.Len(t, etReq.LockSpans, 0)
-		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
+		expInFlight := []roachpb.SequencedWrite{
+			{Key: keyA, Sequence: 1, Strength: lock.Intent},
+		}
+		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -908,8 +1257,8 @@ func TestTxnPipelinerEpochIncrement(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tp, _ := makeMockTxnPipeliner(nil /* iter */)
 
-	tp.ifWrites.insert(roachpb.Key("b"), 10)
-	tp.ifWrites.insert(roachpb.Key("d"), 11)
+	tp.ifWrites.insert(roachpb.Key("b"), 10, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("d"), 11, lock.Intent)
 	require.Equal(t, 2, tp.ifWrites.len())
 	require.Equal(t, 0, len(tp.lockFootprint.asSlice()))
 
@@ -939,10 +1288,10 @@ func TestTxnPipelinerIntentMissingError(t *testing.T) {
 
 	// Insert in-flight writes into the in-flight write set so that each request
 	// will need to chain on with a QueryIntent.
-	tp.ifWrites.insert(keyA, 1)
-	tp.ifWrites.insert(keyB, 2)
-	tp.ifWrites.insert(keyC, 3)
-	tp.ifWrites.insert(keyD, 4)
+	tp.ifWrites.insert(keyA, 1, lock.Intent)
+	tp.ifWrites.insert(keyB, 2, lock.Intent)
+	tp.ifWrites.insert(keyC, 3, lock.Intent)
+	tp.ifWrites.insert(keyD, 4, lock.Intent)
 
 	for errIdx, resErrIdx := range map[int32]int32{
 		0: 0, // intent on key "a" missing
@@ -1041,13 +1390,16 @@ func TestTxnPipelinerDeleteRangeRequests(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(7), qiReq1.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(7), qiReq2.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(7), qiReq3.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq1.Strength)
+		require.Equal(t, lock.Intent, qiReq2.Strength)
+		require.Equal(t, lock.Intent, qiReq3.Strength)
 
 		etReq := ba.Requests[4].GetEndTxn()
 		require.Equal(t, []roachpb.Span{{Key: keyC, EndKey: keyE}}, etReq.LockSpans)
 		expInFlight := []roachpb.SequencedWrite{
-			{Key: keyA, Sequence: 7},
-			{Key: keyB, Sequence: 7},
-			{Key: keyD, Sequence: 7},
+			{Key: keyA, Sequence: 7, Strength: lock.Intent},
+			{Key: keyB, Sequence: 7, Strength: lock.Intent},
+			{Key: keyD, Sequence: 7, Strength: lock.Intent},
 		}
 		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
@@ -1150,6 +1502,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 		qiReq := ba.Requests[0].GetQueryIntent()
 		require.Equal(t, keyA, qiReq.Key)
 		require.Equal(t, enginepb.TxnSeq(2), qiReq.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq.Strength)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1178,10 +1531,14 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 		qiReq := ba.Requests[0].GetQueryIntent()
 		require.Equal(t, keyC, qiReq.Key)
 		require.Equal(t, enginepb.TxnSeq(3), qiReq.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq.Strength)
 
 		etReq := ba.Requests[1].GetEndTxn()
 		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.LockSpans)
-		require.Equal(t, []roachpb.SequencedWrite{{Key: keyC, Sequence: 3}}, etReq.InFlightWrites)
+		expInFlight := []roachpb.SequencedWrite{
+			{Key: keyC, Sequence: 3, Strength: lock.Intent},
+		}
+		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1194,6 +1551,183 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 	require.Equal(t, 0, tp.ifWrites.len())
+}
+
+// TestTxnPipelinerDisableRangedWrites tests that the txnPipeliner behaves
+// correctly if pipelining for ranged writes is disabled.
+func TestTxnPipelinerDisableRangedWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
+
+	// Start with pipelining disabled. Should NOT use async consensus.
+	pipelinedRangedWritesEnabled.Override(ctx, &tp.st.SV, false)
+
+	txn := makeTxnProto()
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: 1}})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[0].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetDeleteRange().Keys = []roachpb.Key{keyA, keyB}
+		return br, nil
+	})
+
+	br, pErr := tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 0, tp.ifWrites.len())
+
+	// Enable pipelining. Should use async consensus.
+	pipelinedRangedWritesEnabled.Override(ctx, &tp.st.SV, true)
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.True(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[0].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetDeleteRange().Keys = []roachpb.Key{keyA, keyB}
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 2, tp.ifWrites.len())
+}
+
+// TestTxnPipelinerDisableLockingReads tests that the txnPipeliner behaves
+// correctly if pipelining for locking reads is disabled.
+func TestTxnPipelinerDisableLockingReads(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
+
+	// Start with pipelining disabled. Should NOT use async consensus.
+	pipelinedLockingReadsEnabled.Override(ctx, &tp.st.SV, false)
+
+	txn := makeTxnProto()
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyC},
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Replicated,
+	})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetScan().Rows = []roachpb.KeyValue{{Key: keyA}, {Key: keyB}}
+		return br, nil
+	})
+
+	br, pErr := tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 0, tp.ifWrites.len())
+
+	// Enable pipelining. Should use async consensus.
+	pipelinedLockingReadsEnabled.Override(ctx, &tp.st.SV, true)
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.True(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetScan().Rows = []roachpb.KeyValue{{Key: keyA}, {Key: keyB}}
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 2, tp.ifWrites.len())
+}
+
+// TestTxnPipelinerMixedVersionLockingReads tests that the txnPipeliner behaves
+// correctly if in a mixed-version cluster when locking reads are not supported.
+func TestTxnPipelinerMixedVersionLockingReads(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
+
+	// Start in a mixed-version cluster. Should NOT use async consensus.
+	tp.st = cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.Latest.Version(),
+		clusterversion.MinSupported.Version(),
+		false, // initializeVersion
+	)
+	require.NoError(t, clusterversion.Initialize(
+		ctx, clusterversion.MinSupported.Version(), &tp.st.SV))
+
+	txn := makeTxnProto()
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyC},
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Replicated,
+	})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetScan().Rows = []roachpb.KeyValue{{Key: keyA}, {Key: keyB}}
+		return br, nil
+	})
+
+	br, pErr := tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 0, tp.ifWrites.len())
+
+	// Upgrade to the latest version. Should use async consensus.
+	require.NoError(t, clusterversion.Initialize(
+		ctx, clusterversion.Latest.Version(), &tp.st.SV))
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.True(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetScan().Rows = []roachpb.KeyValue{{Key: keyA}, {Key: keyB}}
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 2, tp.ifWrites.len())
 }
 
 // TestTxnPipelinerMaxInFlightSize tests that batches are not pipelined if doing
@@ -1710,7 +2244,9 @@ func TestTxnPipelinerIgnoresLocksOnUnambiguousFailure(t *testing.T) {
 	require.Equal(t, expLocks, tp.lockFootprint.asSlice())
 }
 
-// Test that the pipeliners knows how to save and restore its state.
+// TestTxnPipelinerSavepoints tests that the txnPipeliner knows how to save and
+// restore its state on savepoints creation and rollback, respectively. It also
+// attaches this savepoint-related state to QueryIntent requests that it sends.
 func TestTxnPipelinerSavepoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1720,17 +2256,17 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	initialSavepoint := savepoint{}
 	tp.createSavepointLocked(ctx, &initialSavepoint)
 
-	tp.ifWrites.insert(roachpb.Key("a"), 10)
-	tp.ifWrites.insert(roachpb.Key("b"), 11)
-	tp.ifWrites.insert(roachpb.Key("c"), 12)
+	tp.ifWrites.insert(roachpb.Key("a"), 10, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("b"), 11, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("c"), 12, lock.Intent)
 	require.Equal(t, 3, tp.ifWrites.len())
 
 	s := savepoint{seqNum: enginepb.TxnSeq(13), active: true}
 	tp.createSavepointLocked(ctx, &s)
 
 	// Some more writes after the savepoint.
-	tp.ifWrites.insert(roachpb.Key("c"), 14)
-	tp.ifWrites.insert(roachpb.Key("d"), 15)
+	tp.ifWrites.insert(roachpb.Key("c"), 14, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("d"), 15, lock.Intent)
 	require.Equal(t, 5, tp.ifWrites.len())
 	require.Empty(t, tp.lockFootprint.asSlice())
 
@@ -1740,6 +2276,7 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("a")}})
+
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
 		require.False(t, ba.AsyncConsensus)
@@ -1749,12 +2286,15 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 		qiReq := ba.Requests[0].GetQueryIntent()
 		require.Equal(t, roachpb.Key("a"), qiReq.Key)
 		require.Equal(t, enginepb.TxnSeq(10), qiReq.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq.Strength)
+		require.Nil(t, qiReq.IgnoredSeqNums)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Responses[0].GetQueryIntent().FoundIntent = true
 		return br, nil
 	})
+
 	br, pErr := tp.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
@@ -1764,6 +2304,7 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	// Now restore the savepoint and check that the in-flight write state has been restored
 	// and all rolled-back writes were moved to the lock footprint.
 	tp.rollbackToSavepointLocked(ctx, s)
+	txn.AddIgnoredSeqNumRange(enginepb.IgnoredSeqNumRange{Start: 13, End: 15})
 
 	// Check that the tracked inflight writes were updated correctly. The key that
 	// had been verified ("a") should have been taken out of the savepoint.
@@ -1773,8 +2314,8 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	})
 	require.Equal(t,
 		[]inFlightWrite{
-			{SequencedWrite: roachpb.SequencedWrite{Key: roachpb.Key("b"), Sequence: 11}},
-			{SequencedWrite: roachpb.SequencedWrite{Key: roachpb.Key("c"), Sequence: 12}},
+			{SequencedWrite: roachpb.SequencedWrite{Key: roachpb.Key("b"), Sequence: 11, Strength: lock.Intent}},
+			{SequencedWrite: roachpb.SequencedWrite{Key: roachpb.Key("c"), Sequence: 12, Strength: lock.Intent}},
 		},
 		ifWrites)
 
@@ -1789,9 +2330,40 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 		},
 		tp.lockFootprint.asSlice())
 
-	// Now rollback to the initial savepoint and check that all in-flight writes are gone.
+	// Verify another one of the writes. Verify that the new set of IgnoredSeqNums
+	// are attached.
+	ba.Requests = nil
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("c")}})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 2)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[1].GetInner())
+
+		qiReq := ba.Requests[0].GetQueryIntent()
+		require.Equal(t, roachpb.Key("c"), qiReq.Key)
+		require.Equal(t, enginepb.TxnSeq(12), qiReq.Txn.Sequence)
+		require.Equal(t, lock.Intent, qiReq.Strength)
+		require.Equal(t, []enginepb.IgnoredSeqNumRange{{Start: 13, End: 15}}, qiReq.IgnoredSeqNums)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetQueryIntent().FoundIntent = true
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 1, tp.ifWrites.len())
+	require.Equal(t, 4, len(tp.lockFootprint.asSlice()))
+
+	// Now rollback to the initial savepoint and check that all in-flight writes
+	// are gone.
 	tp.rollbackToSavepointLocked(ctx, initialSavepoint)
 	require.Empty(t, tp.ifWrites.len())
+	require.Equal(t, 4, len(tp.lockFootprint.asSlice()))
 }
 
 // TestTxnPipelinerCondenseLockSpans2 verifies that lock spans are condensed
@@ -1878,7 +2450,7 @@ func TestTxnPipelinerCondenseLockSpans2(t *testing.T) {
 			}
 
 			for _, k := range tc.ifWrites {
-				tp.ifWrites.insert(roachpb.Key(k), 1)
+				tp.ifWrites.insert(roachpb.Key(k), 1, lock.Intent)
 			}
 
 			txn := makeTxnProto()
