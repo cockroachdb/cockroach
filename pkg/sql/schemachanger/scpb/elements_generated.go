@@ -1125,43 +1125,6 @@ func (c *ElementCollection[E]) FilterFunctionNullInputBehavior() *ElementCollect
 	return (*ElementCollection[*FunctionNullInputBehavior])(ret)
 }
 
-func (e FunctionParamDefaultExpression) element() {}
-
-// Element implements ElementGetter.
-func (e * ElementProto_FunctionParamDefaultExpression) Element() Element {
-	return e.FunctionParamDefaultExpression
-}
-
-// ForEachFunctionParamDefaultExpression iterates over elements of type FunctionParamDefaultExpression.
-// Deprecated
-func ForEachFunctionParamDefaultExpression(
-	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionParamDefaultExpression),
-) {
-  c.FilterFunctionParamDefaultExpression().ForEach(fn)
-}
-
-// FindFunctionParamDefaultExpression finds the first element of type FunctionParamDefaultExpression.
-// Deprecated
-func FindFunctionParamDefaultExpression(
-	c *ElementCollection[Element],
-) (current Status, target TargetStatus, element *FunctionParamDefaultExpression) {
-	if tc := c.FilterFunctionParamDefaultExpression(); !tc.IsEmpty() {
-		var e Element
-		current, target, e = tc.Get(0)
-		element = e.(*FunctionParamDefaultExpression)
-	}
-	return current, target, element
-}
-
-// FunctionParamDefaultExpressionElements filters elements of type FunctionParamDefaultExpression.
-func (c *ElementCollection[E]) FilterFunctionParamDefaultExpression() *ElementCollection[*FunctionParamDefaultExpression] {
-	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
-		_, ok := e.(*FunctionParamDefaultExpression)
-		return ok
-	})
-	return (*ElementCollection[*FunctionParamDefaultExpression])(ret)
-}
-
 func (e FunctionVolatility) element() {}
 
 // Element implements ElementGetter.
@@ -2522,8 +2485,6 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_FunctionName{ FunctionName: t}
 		case *FunctionNullInputBehavior:
 			e.ElementOneOf = &ElementProto_FunctionNullInputBehavior{ FunctionNullInputBehavior: t}
-		case *FunctionParamDefaultExpression:
-			e.ElementOneOf = &ElementProto_FunctionParamDefaultExpression{ FunctionParamDefaultExpression: t}
 		case *FunctionVolatility:
 			e.ElementOneOf = &ElementProto_FunctionVolatility{ FunctionVolatility: t}
 		case *IndexColumn:
@@ -2630,7 +2591,6 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_FunctionLeakProof)(nil)),
 	((*ElementProto_FunctionName)(nil)),
 	((*ElementProto_FunctionNullInputBehavior)(nil)),
-	((*ElementProto_FunctionParamDefaultExpression)(nil)),
 	((*ElementProto_FunctionVolatility)(nil)),
 	((*ElementProto_IndexColumn)(nil)),
 	((*ElementProto_IndexComment)(nil)),
@@ -2703,7 +2663,6 @@ func GetElementTypes() []interface{} {
 	((*FunctionLeakProof)(nil)),
 	((*FunctionName)(nil)),
 	((*FunctionNullInputBehavior)(nil)),
-	((*FunctionParamDefaultExpression)(nil)),
 	((*FunctionVolatility)(nil)),
 	((*IndexColumn)(nil)),
 	((*IndexComment)(nil)),
