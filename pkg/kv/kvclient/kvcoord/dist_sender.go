@@ -2378,13 +2378,13 @@ func maybeSetResumeSpan(
 	}
 }
 
-// noMoreReplicasErr produces the error to be returned from sendToReplicas when
+// selectBestError produces the error to be returned from sendToReplicas when
 // the transport is exhausted.
 //
 // ambiguousErr, if not nil, is the error we got from the first attempt when the
 // success of the request cannot be ruled out by the error. lastAttemptErr is
 // the error that the last attempt to execute the request returned.
-func noMoreReplicasErr(ambiguousErr, replicaUnavailableErr, lastAttemptErr error) error {
+func selectBestError(ambiguousErr, replicaUnavailableErr, lastAttemptErr error) error {
 	if ambiguousErr != nil {
 		return kvpb.NewAmbiguousResultErrorf("error=%v [exhausted] (last error: %v)",
 			ambiguousErr, lastAttemptErr)
@@ -2403,7 +2403,7 @@ func noMoreReplicasErr(ambiguousErr, replicaUnavailableErr, lastAttemptErr error
 	// one to return; we may want to remember the "best" error we've seen (for
 	// example, a NotLeaseHolderError conveys more information than a
 	// RangeNotFound).
-	return newSendError(errors.Wrap(lastAttemptErr, "sending to all replicas failed; last error"))
+	return newSendError(lastAttemptErr)
 }
 
 // slowDistSenderRangeThreshold is a latency threshold for logging slow
@@ -3043,12 +3043,17 @@ func (ds *DistSender) sendToReplicas(
 							// regress. As such, advancing through each replica on the
 							// transport until it's exhausted is unlikely to achieve much.
 							//
-							// We bail early by returning a sendError. The expectation is
-							// for the client to retry with a fresher eviction token.
+							// We bail early by returning the best error we have
+							// seen so far. The expectation is for the client to
+							// retry with a fresher eviction token if possible.
 							log.VEventf(
 								ctx, 2, "transport incompatible with updated routing; bailing early",
 							)
-							return nil, newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error"))
+							return nil, selectBestError(
+								ambiguousError,
+								replicaUnavailableError,
+								errors.Wrap(tErr, "leaseholder not found in transport; last error"),
+							)
 						}
 					}
 					// Check whether the request was intentionally sent to a follower
@@ -3317,7 +3322,7 @@ func skipStaleReplicas(
 	// RangeKeyMismatchError if there's even a replica. We'll bubble up an
 	// error and try with a new descriptor.
 	if !routing.Valid() {
-		return noMoreReplicasErr(
+		return selectBestError(
 			ambiguousError,
 			nil, // ignore the replicaUnavailableError, retry with new routing info
 			errors.Wrap(lastErr, "routing information detected to be stale"))
@@ -3325,7 +3330,11 @@ func skipStaleReplicas(
 
 	for {
 		if transport.IsExhausted() {
-			return noMoreReplicasErr(ambiguousError, replicaUnavailableError, lastErr)
+			return selectBestError(
+				ambiguousError,
+				replicaUnavailableError,
+				errors.Wrap(lastErr, "sending to all replicas failed; last error"),
+			)
 		}
 
 		if _, ok := routing.Desc().GetReplicaDescriptorByID(transport.NextReplica().ReplicaID); ok {
