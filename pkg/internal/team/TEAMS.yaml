@@ -85,37 +85,9 @@ cockroachdb/server:
     cockroachdb/cli-prs: other
     cockroachdb/server-prs: other
   triage_column_id: 2521812
-<<<<<<< HEAD
-cockroachdb/admin-ui:
-  aliases:
-    cockroachdb/admin-ui-prs: other
-  triage_column_id: 6598672
-  label: T-observability-inf
-cockroachdb/obs-inf-prs:
-  aliases:
-    cockroachdb/http-api-prs: other
-  triage_column_id: 14196277
-  label: T-observability-inf
-cockroachdb/multi-tenant:
-  # Multi-tenant team uses GH projects v2, which doesn't have a REST API, so no triage column ID
-  # see .github/workflows/add-issues-to-project.yml
-  label: T-multitenant
-||||||| parent of 092062155c2 (codeowners: update all obs links to use `obs-prs`)
-cockroachdb/admin-ui:
-  aliases:
-    cockroachdb/admin-ui-prs: other
-  triage_column_id: 6598672
-  label: T-observability-inf
-cockroachdb/obs-inf-prs:
-  aliases:
-    cockroachdb/http-api-prs: other
-  triage_column_id: 14196277
-  label: T-observability-inf
-=======
 cockroachdb/obs-prs:
   # The observability team uses Jira for managing issues. So there is no triage column ID.
   label: T-observability
->>>>>>> 092062155c2 (codeowners: update all obs links to use `obs-prs`)
 cockroachdb/jobs:
   aliases:
     cockroachdb/jobs-prs: other

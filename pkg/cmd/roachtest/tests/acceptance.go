@@ -48,6 +48,7 @@ func registerAcceptance(r registry.Registry) {
 			{name: "cluster-init", fn: runClusterInit},
 			{name: "rapid-restart", fn: runRapidRestart},
 		},
+<<<<<<< HEAD
 		registry.OwnerMultiTenant: {
 			{
 				name: "multitenant",
@@ -55,6 +56,11 @@ func registerAcceptance(r registry.Registry) {
 			},
 		},
 		registry.OwnerObsInf: {
+||||||| parent of 092062155c2 (codeowners: update all obs links to use `obs-prs`)
+		registry.OwnerObsInf: {
+=======
+		registry.OwnerObservability: {
+>>>>>>> 092062155c2 (codeowners: update all obs links to use `obs-prs`)
 			{name: "status-server", fn: runStatusServer},
 		},
 		registry.OwnerDevInf: {

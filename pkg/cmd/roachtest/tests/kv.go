@@ -213,9 +213,15 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 8, readPercent: 0, sharedProcessMT: true},
 		{nodes: 3, cpus: 8, readPercent: 95},
 		{nodes: 3, cpus: 8, readPercent: 95, sharedProcessMT: true},
+<<<<<<< HEAD
 		{nodes: 3, cpus: 8, readPercent: 95, tracing: true, owner: registry.OwnerObsInf},
 		{nodes: 3, cpus: 8, readPercent: 0, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 8, readPercent: 95, splits: -1 /* no splits */},
+||||||| parent of 092062155c2 (codeowners: update all obs links to use `obs-prs`)
+		{nodes: 3, cpus: 8, readPercent: 95, tracing: true, owner: registry.OwnerObsInf},
+=======
+		{nodes: 3, cpus: 8, readPercent: 95, tracing: true, owner: registry.OwnerObservability},
+>>>>>>> 092062155c2 (codeowners: update all obs links to use `obs-prs`)
 		{nodes: 3, cpus: 32, readPercent: 0},
 		{nodes: 3, cpus: 32, readPercent: 0, sharedProcessMT: true},
 		{nodes: 3, cpus: 32, readPercent: 95},
