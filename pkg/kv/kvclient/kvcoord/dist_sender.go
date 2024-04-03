@@ -3046,12 +3046,17 @@ func (ds *DistSender) sendToReplicas(
 							// regress. As such, advancing through each replica on the
 							// transport until it's exhausted is unlikely to achieve much.
 							//
-							// We bail early by returning a sendError. The expectation is
-							// for the client to retry with a fresher eviction token.
+							// We bail early by returning the best error we have
+							// seen so far. The expectation is for the client to
+							// retry with a fresher eviction token if possible.
 							log.VEventf(
 								ctx, 2, "transport incompatible with updated routing; bailing early",
 							)
-							return nil, newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error"))
+							return nil, noMoreReplicasErr(
+								ambiguousError,
+								replicaUnavailableError,
+								errors.Wrap(tErr, "leaseholder not found in transport; last error"),
+							)
 						}
 					}
 					// Check whether the request was intentionally sent to a follower
