@@ -206,7 +206,7 @@ func setTestClusterDefaults(params *base.TestClusterArgs, dataDir string, useDat
 }
 
 // VerifyBackupRestoreStatementResult conducts a Backup or Restore and verifies
-// it was properly written to the jobs table
+// it was properly written to the jobs table. Note, does not verify online restores
 func VerifyBackupRestoreStatementResult(
 	t *testing.T, sqlDB *sqlutils.SQLRunner, query string, args ...interface{},
 ) error {
@@ -217,7 +217,7 @@ func VerifyBackupRestoreStatementResult(
 	if err != nil {
 		return err
 	}
-	if e, a := columns, []string{
+	if a, e := columns, []string{
 		"job_id", "status", "fraction_completed", "rows", "index_entries", "bytes",
 	}; !reflect.DeepEqual(e, a) {
 		return errors.Errorf("unexpected columns:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
