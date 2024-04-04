@@ -271,6 +271,46 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 	}
 }
 
+// BenchmarkEnsureAllTables was added since this operation appeared as a major
+// source of memory usage in https://github.com/cockroachlabs/support/issues/2870.
+func BenchmarkEnsureAllTables(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	for _, numTables := range []int{10, 100, 1000} {
+		b.Run(fmt.Sprintf("numTables=%d", numTables), func(b *testing.B) {
+			srv, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+			defer srv.Stopper().Stop(ctx)
+			s := srv.ApplicationLayer()
+			codec, st := s.Codec(), s.ClusterSettings()
+			AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
+			AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, true)
+
+			sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+			sqlRun.Exec(b, `CREATE DATABASE t;`)
+
+			for i := 0; i < numTables; i++ {
+				sqlRun.Exec(b, fmt.Sprintf(`CREATE TABLE t.a%d (k INT PRIMARY KEY);`, i))
+			}
+
+			executor := s.InternalExecutor().(isql.Executor)
+			cache := NewTableStatisticsCache(
+				10, /* cacheSize */
+				s.ClusterSettings(),
+				s.InternalDB().(descs.DB),
+			)
+			require.NoError(b, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+			r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				r.ensureAllTables(ctx, &st.SV, time.Microsecond)
+			}
+		})
+	}
+}
+
 func checkAllTablesCount(ctx context.Context, systemTables bool, expected int, r *Refresher) error {
 	const collectionDelay = time.Microsecond
 	systemTablesPredicate := autoStatsOnSystemTablesEnabledPredicate
