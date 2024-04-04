@@ -2460,6 +2460,42 @@ const defaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
 // latter because aborting is idempotent). If withCommit is true, any errors
 // that do not definitively rule out the possibility that the batch could have
 // succeeded are transformed into AmbiguousResultErrors.
+//
+// sendToReplicas is intended to return in two specific cases:
+// 1) It has a response to return to the client (success or failure).
+// 2) Retrying internally will fail unless routing information is updated.
+// TODO(baptist): This error handling is messy and easy to get wrong.
+//
+// There are five exits from this method:
+// 1) A non-error BatchResponse (BatchResponse.Error == nil).
+// 2) A BatchResponse with a retriable BatchResponse.Error.
+// 3) A BatchResponse with a non-retriable BatchResponse.Error.
+// 4) A nil BatchResponse with a retriable error (SendError).
+// 5) A nil BatchResponse with a non-retriable error (any other).
+//
+// Case 1 is the success case, and the response is returned to the caller and
+// treated as a success.
+//
+// Case 2 only happens if the server returns a RangeKeyMismatchError. This
+// occurs after a split or merge changed the range boundaries. Handling this
+// error requires updating the range cache and possibly splitting the request up
+// differently before retries and can't be handled within sendToReplicas.
+//
+// Case 3 occurs when the request was processed and retries would also fail.
+// This is passed all the way back to the caller. However callers don't looking
+// into the BatchResponse.Error, so sendPartialBatch moves this error out of the
+// BatchRequest and return it as a kvpb.Error to match the method contract. An
+// example of this type of error is a TransactionRetryError.
+//
+// Case 4 occurs when we failed when attempting to execute the request, but we
+// know that it didn't hasn't modified any state. while attempting and may
+// indicate bad routing information, but we're not sure. The caller should Evict
+// stale routing information and retry this request.
+//
+// Case 5 signifies that sending this request failed, but the caller can not
+// retry. Some common cases are a broken network connection between sending and
+// receiving a response, a tripped circuit breakers, authentication errors on
+// all replicas or a cancelled context.
 func (ds *DistSender) sendToReplicas(
 	ctx context.Context, ba *kvpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*kvpb.BatchResponse, error) {
