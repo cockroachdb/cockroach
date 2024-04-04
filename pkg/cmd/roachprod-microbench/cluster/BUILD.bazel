@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/cluster",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachprod",
+        "//pkg/roachprod/errors",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/util/timeutil",
