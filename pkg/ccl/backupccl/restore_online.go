@@ -94,7 +94,7 @@ func sendAddRemoteSSTs(
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, kr, fromSystemTenant, &approxRows, &approxDataSize))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, *kr, fromSystemTenant, &approxRows, &approxDataSize))
 	}
 
 	if err := grp.Wait(); err != nil {
@@ -145,7 +145,7 @@ func sendAddRemoteSSTWorker(
 	execCtx sql.JobExecContext,
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
 	requestFinishedCh chan<- struct{},
-	kr *KeyRewriter,
+	kr KeyRewriter,
 	fromSystemTenant bool,
 	approxRows *int64,
 	approxDataSize *int64,
@@ -222,7 +222,7 @@ func sendAddRemoteSSTWorker(
 				}
 				// Clone the key because rewriteSpan could modify the keys in place, but
 				// we reuse backup files across restore span entries.
-				restoringSubspan, err = rewriteSpan(kr, restoringSubspan.Clone(), entry.ElidedPrefix)
+				restoringSubspan, err = rewriteSpan(&kr, restoringSubspan.Clone(), entry.ElidedPrefix)
 				if err != nil {
 					return err
 				}
