@@ -25,11 +25,10 @@ COMMENT ON TABLE public.t1 IS 'This comment better get restored from the backed 
 
 # drop and create defaultDB to ensure it has a higher ID than by default. We will check that when
 # this cluster is restored, the default db with the higher id was also restored
-# by default, default db has an id of 100.
-query-sql
+# by default.
+let $d_id
 SELECT id FROM system.namespace WHERE name = 'defaultdb'
 ----
-100
 
 exec-sql
 DROP DATABASE defaultdb;
@@ -37,7 +36,7 @@ CREATE DATABASE defaultdb;
 ----
 
 query-sql
-SELECT count(*) FROM system.namespace WHERE name = 'defaultdb' AND id > 100
+SELECT count(*) FROM system.namespace WHERE name = 'defaultdb' AND id > $d_id
 ----
 1
 
@@ -110,7 +109,7 @@ COMMENT ON TABLE public.t1 IS 'This comment better get restored from the backed 
 
 # Ensure the defaultdb from the backed up cluster was restored.
 query-sql
-SELECT count(*) FROM system.namespace WHERE name = 'defaultdb' AND id > 100
+SELECT count(*) FROM system.namespace WHERE name = 'defaultdb' AND id > $d_id
 ----
 1
 
