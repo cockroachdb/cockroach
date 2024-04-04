@@ -206,7 +206,7 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 	currentStepSeqNum := s.writeSeq
 
 	ba := &kvpb.BatchRequest{}
-	ba.Requests = nil
+	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
