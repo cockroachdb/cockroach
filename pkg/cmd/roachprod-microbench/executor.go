@@ -141,12 +141,12 @@ func defaultExecutorConfig() executorConfig {
 		outputDir:    "artifacts/roachprod-microbench",
 		libDir:       "bin/lib",
 		remoteDir:    "/mnt/data1/microbench",
-		timeout:      "20m",
+		timeout:      "10m",
 		shellCommand: "COCKROACH_RANDOM_SEED=1",
 		iterations:   1,
 		copyBinaries: true,
 		lenient:      true,
-		affinity:     true,
+		affinity:     false,
 		quiet:        false,
 	}
 }
