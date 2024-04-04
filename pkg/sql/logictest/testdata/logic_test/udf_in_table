@@ -1,5 +1,5 @@
 statement ok
-CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION f1() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
 statement ok
 CREATE VIEW v_col_fn_ids AS
@@ -19,6 +19,20 @@ json_array_elements(
     false
   )->'table'->'columns'
 )->'defaultExpr' as default_expr,
+json_array_elements(
+  crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor',
+    descriptor,
+    false
+  )->'table'->'columns'
+)->'onUpdateExpr' as on_update_expr,
+json_array_elements(
+  crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor',
+    descriptor,
+    false
+  )->'table'->'columns'
+)->'computeExpr' as compute_expr,
 json_array_elements(
   crdb_internal.pb_to_json(
     'cockroach.sql.sqlbase.Descriptor',
@@ -59,14 +73,16 @@ AS $$
   WHERE id = function_id
 $$;
 
-# Make sure that column DEFAULT expression is properly serialized and
-# deserialized.
+# Make sure that column DEFAULT and ON UPDATE expressions are properly serialized
+# and deserialized.
 statement ok
 CREATE TABLE t1(
   a INT PRIMARY KEY,
   b INT DEFAULT f1(),
   c INT,
-  FAMILY fam_0 (a, b, c)
+  d INT NULL ON UPDATE public.f1(),
+  e INT,
+  FAMILY fam_0 (a, b, c, d, e)
 );
 
 let $tbl_id
@@ -75,9 +91,11 @@ SELECT id FROM system.namespace WHERE name = 't1';
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,"""[FUNCTION 100106]()""",[106])
-(111,3,,)
+(111,1,,,,)
+(111,2,"""[FUNCTION 100106]()""",,,[106])
+(111,3,,,,)
+(111,4,,"""[FUNCTION 100106]()""",,[106])
+(111,5,,,,)
 
 skipif config local-schema-locked
 query T
@@ -87,8 +105,10 @@ CREATE TABLE public.t1 (
   a INT8 NOT NULL,
   b INT8 NULL DEFAULT public.f1(),
   c INT8 NULL,
+  d INT8 NULL ON UPDATE public.f1(),
+  e INT8 NULL,
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
-  FAMILY fam_0 (a, b, c)
+  FAMILY fam_0 (a, b, c, d, e)
 );
 
 onlyif config local-schema-locked
@@ -113,7 +133,8 @@ SELECT get_fn_depended_on_by($fn_id)
 [
     {
         "columnIds": [
-            2
+            2,
+            4
         ],
         "id": 111
     }
@@ -126,9 +147,11 @@ ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,"""[FUNCTION 100106]()""",[106])
-(111,3,"""[FUNCTION 100106]()""",[106])
+(111,1,,,,)
+(111,2,"""[FUNCTION 100106]()""",,,[106])
+(111,3,"""[FUNCTION 100106]()""",,,[106])
+(111,4,,"""[FUNCTION 100106]()""",,[106])
+(111,5,,,,)
 
 skipif config local-schema-locked
 query T
@@ -138,8 +161,10 @@ CREATE TABLE public.t1 (
   a INT8 NOT NULL,
   b INT8 NULL DEFAULT public.f1(),
   c INT8 NULL DEFAULT public.f1(),
+  d INT8 NULL ON UPDATE public.f1(),
+  e INT8 NULL,
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
-  FAMILY fam_0 (a, b, c)
+  FAMILY fam_0 (a, b, c, d, e)
 );
 
 skipif config local-schema-locked
@@ -150,8 +175,10 @@ CREATE TABLE public.t1 (
   a INT8 NOT NULL,
   b INT8 NULL DEFAULT public.f1(),
   c INT8 NULL DEFAULT public.f1(),
+  d INT8 NULL ON UPDATE public.f1(),
+  e INT8 NULL,
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
-  FAMILY fam_0 (a, b, c)
+  FAMILY fam_0 (a, b, c, d, e)
 );
 
 query T
@@ -161,11 +188,39 @@ SELECT get_fn_depended_on_by($fn_id)
     {
         "columnIds": [
             2,
-            3
+            3,
+            4
         ],
         "id": 111
     }
 ]
+
+# Make sure SET ON UPDATE sets cross references properly.
+statement ok
+ALTER TABLE t1 ALTER COLUMN e SET ON UPDATE f1();
+
+query T rowsort
+SELECT get_col_fn_ids($tbl_id);
+----
+(111,1,,,,)
+(111,2,"""[FUNCTION 100106]()""",,,[106])
+(111,3,"""[FUNCTION 100106]()""",,,[106])
+(111,4,,"""[FUNCTION 100106]()""",,[106])
+(111,5,,"""[FUNCTION 100106]()""",,[106])
+
+skipif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t1];
+----
+CREATE TABLE public.t1 (
+  a INT8 NOT NULL,
+  b INT8 NULL DEFAULT public.f1(),
+  c INT8 NULL DEFAULT public.f1(),
+  d INT8 NULL ON UPDATE public.f1(),
+  e INT8 NULL ON UPDATE public.f1(),
+  CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
+  FAMILY fam_0 (a, b, c, d, e)
+);
 
 # Make sure cross references are properly removed with SET DEFAULT.
 statement ok
@@ -174,9 +229,11 @@ ALTER TABLE t1 ALTER COLUMN c SET DEFAULT NULL;
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,"""[FUNCTION 100106]()""",[106])
-(111,3,,)
+(111,1,,,,)
+(111,2,"""[FUNCTION 100106]()""",,,[106])
+(111,3,,,,)
+(111,4,,"""[FUNCTION 100106]()""",,[106])
+(111,5,,"""[FUNCTION 100106]()""",,[106])
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -184,37 +241,89 @@ SELECT get_fn_depended_on_by($fn_id)
 [
     {
         "columnIds": [
-            2
+            2,
+            4,
+            5
         ],
         "id": 111
     }
 ]
 
+# Make sure cross references are properly removed with SET ON UPDATE.
 statement ok
-ALTER TABLE t1 ALTER COLUMN b SET DEFAULT NULL;
+ALTER TABLE t1 ALTER COLUMN e SET ON UPDATE NULL;
 
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,,)
-(111,3,,)
+(111,1,,,,)
+(111,2,"""[FUNCTION 100106]()""",,,[106])
+(111,3,,,,)
+(111,4,,"""[FUNCTION 100106]()""",,[106])
+(111,5,,"""NULL""",,)
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            2,
+            4
+        ],
+        "id": 111
+    }
+]
+
+# Make sure cross references are properly removed with DROP DEFAULT.
+statement ok
+ALTER TABLE t1 ALTER COLUMN b DROP DEFAULT;
+
+query T rowsort
+SELECT get_col_fn_ids($tbl_id);
+----
+(111,1,,,,)
+(111,2,,,,)
+(111,3,,,,)
+(111,4,,"""[FUNCTION 100106]()""",,[106])
+(111,5,,"""NULL""",,)
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            4
+        ],
+        "id": 111
+    }
+]
+
+# Make sure cross references are properly removed with DROP ON UPDATE.
+statement ok
+ALTER TABLE t1 ALTER COLUMN d DROP ON UPDATE;
+
+query T rowsort
+SELECT get_col_fn_ids($tbl_id);
+----
+(111,1,,,,)
+(111,2,,,,)
+(111,3,,,,)
+(111,4,,,,)
+(111,5,,"""NULL""",,)
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
 ----
 NULL
 
-# Make sure cross references are properly removed with DROP COLUMN
+# Re-add references for the next test.
 statement ok
-ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
+ALTER TABLE t1 ALTER COLUMN b SET DEFAULT f1();
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
-----
-(111,1,,)
-(111,2,,)
-(111,3,"""[FUNCTION 100106]()""",[106])
+statement ok
+ALTER TABLE t1 ALTER COLUMN d SET ON UPDATE f1();
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -222,7 +331,35 @@ SELECT get_fn_depended_on_by($fn_id)
 [
     {
         "columnIds": [
-            3
+            2,
+            4
+        ],
+        "id": 111
+    }
+]
+
+# Make sure cross references are properly removed with DROP COLUMN.
+statement ok
+ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
+
+query T rowsort
+SELECT get_col_fn_ids($tbl_id);
+----
+(111,1,,,,)
+(111,2,"""[FUNCTION 100106]()""",,,[106])
+(111,3,"""[FUNCTION 100106]()""",,,[106])
+(111,4,,"""[FUNCTION 100106]()""",,[106])
+(111,5,,"""NULL""",,)
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            2,
+            3,
+            4
         ],
         "id": 111
     }
@@ -234,13 +371,62 @@ ALTER TABLE t1 DROP COLUMN c;
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,,)
+(111,1,,,,)
+(111,2,"""[FUNCTION 100106]()""",,,[106])
+(111,4,,"""[FUNCTION 100106]()""",,[106])
+(111,5,,"""NULL""",,)
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
 ----
-NULL
+[
+    {
+        "columnIds": [
+            2,
+            4
+        ],
+        "id": 111
+    }
+]
+
+# Make sure adding a computed column, column with DEFAULT, and column with
+# ON UPDATE updates function references.
+statement ok
+ALTER TABLE t1 ADD COLUMN f int AS (f1()) VIRTUAL;
+
+statement ok
+ALTER TABLE t1 ADD COLUMN g int DEFAULT (f1());
+
+statement ok
+ALTER TABLE t1 ADD COLUMN h int ON UPDATE (f1());
+
+query T rowsort
+SELECT get_col_fn_ids($tbl_id);
+----
+(111,1,,,,)
+(111,2,"""[FUNCTION 100106]()""",,,[106])
+(111,4,,"""[FUNCTION 100106]()""",,[106])
+(111,5,,"""NULL""",,)
+(111,6,,,"""[FUNCTION 100106]()""",[106])
+(111,7,"""[FUNCTION 100106]()""",,,[106])
+(111,8,,"""[FUNCTION 100106]()""",,[106])
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            2,
+            4,
+            6,
+            7,
+            8
+        ],
+        "id": 111
+    }
+]
+
 
 # Make sure that cross references are properly remove with DROP TABLE.
 statement ok
@@ -249,8 +435,13 @@ ALTER TABLE t1 ALTER COLUMN b SET DEFAULT f1();
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,"""[FUNCTION 100106]()""",[106])
+(111,1,,,,)
+(111,2,"""[FUNCTION 100106]()""",,,[106])
+(111,4,,"""[FUNCTION 100106]()""",,[106])
+(111,5,,"""NULL""",,)
+(111,6,,,"""[FUNCTION 100106]()""",[106])
+(111,7,"""[FUNCTION 100106]()""",,,[106])
+(111,8,,"""[FUNCTION 100106]()""",,[106])
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -258,7 +449,11 @@ SELECT get_fn_depended_on_by($fn_id)
 [
     {
         "columnIds": [
-            2
+            2,
+            4,
+            6,
+            7,
+            8
         ],
         "id": 111
     }
@@ -325,7 +520,7 @@ statement ok
 CREATE TABLE t1(
   a INT PRIMARY KEY,
   b INT DEFAULT f1(),
-  c INT DEFAULT f2(),
+  c INT ON UPDATE f2(),
   FAMILY fam_0 (a, b, c)
 );
 
@@ -411,8 +606,8 @@ SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(119,1,,)
-(119,2,"""[FUNCTION 100118]()""",[118])
+(119,1,,,,)
+(119,2,"""[FUNCTION 100118]()""",,,[118])
 
 query T
 SELECT get_fn_depended_on_by($fn_id);
@@ -453,8 +648,8 @@ SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(120,1,,)
-(120,2,"""[FUNCTION 100121]()""",[121])
+(120,1,,,,)
+(120,2,"""[FUNCTION 100121]()""",,,[121])
 
 query T
 SELECT get_fn_depended_on_by($fn_id);
@@ -538,6 +733,142 @@ SELECT * FROM t1 ORDER BY a;
 1  1
 2  1
 3  1
+
+# Test UDFs in computed columns.
+statement ok
+CREATE FUNCTION f_compute(x INT) RETURNS INT LANGUAGE SQL AS $$ SELECT x * 2 $$ IMMUTABLE;
+
+statement ok
+CREATE TABLE t_computed(
+  a INT PRIMARY KEY,
+  b INT,
+  c INT AS (f_compute(a)) STORED,
+  d INT AS (f_compute(b)) VIRTUAL
+);
+
+let $tbl_computed_id
+SELECT id FROM system.namespace WHERE name = 't_computed';
+
+# Check that computed column expressions track function usage.
+query T rowsort
+SELECT get_col_fn_ids($tbl_computed_id);
+----
+(125,1,,,,)
+(125,2,,,,)
+(125,3,,,"""[FUNCTION 100124](a)""",[124])
+(125,4,,,"""[FUNCTION 100124](b)""",[124])
+
+# Check function back references include computed columns.
+let $fn_compute_id
+SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f_compute';
+
+query T
+SELECT get_fn_depended_on_by($fn_compute_id)
+----
+[
+    {
+        "columnIds": [
+            3,
+            4
+        ],
+        "id": 125
+    }
+]
+
+# Test dropping computed column removes function references.
+statement ok
+ALTER TABLE t_computed DROP COLUMN c;
+
+query T rowsort
+SELECT get_col_fn_ids($tbl_computed_id);
+----
+(125,1,,,,)
+(125,2,,,,)
+(125,4,,,"""[FUNCTION 100124](b)""",[124])
+
+query T
+SELECT get_fn_depended_on_by($fn_compute_id)
+----
+[
+    {
+        "columnIds": [
+            4
+        ],
+        "id": 125
+    }
+]
+
+# Test dropping table removes all function references.
+statement ok
+DROP TABLE t_computed;
+
+query T
+SELECT get_fn_depended_on_by($fn_compute_id)
+----
+NULL
+
+# Test computed column with multiple function references.
+statement ok
+CREATE FUNCTION f_add(x INT, y INT) RETURNS INT LANGUAGE SQL AS $$ SELECT x + y $$ IMMUTABLE;
+
+statement ok
+CREATE TABLE t_multi_fn(
+  a INT PRIMARY KEY,
+  b INT,
+  c INT AS (f_compute(a) + f_add(a, b)) STORED
+);
+
+# Verify we can use the table.
+statement ok
+INSERT INTO t_multi_fn (a, b) VALUES (1, 2), (3, 4), (5, 6);
+
+query III
+SELECT * FROM t_multi_fn ORDER BY a;
+----
+1  2  5
+3  4  13
+5  6  21
+
+let $tbl_multi_fn_id
+SELECT id FROM system.namespace WHERE name = 't_multi_fn';
+
+let $fn_add_id
+SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f_add';
+
+# Check that computed column tracks multiple function references.
+query T rowsort
+SELECT get_col_fn_ids($tbl_multi_fn_id);
+----
+(127,1,,,,)
+(127,2,,,,)
+(127,3,,,"""[FUNCTION 100124](a) + [FUNCTION 100126](a, b)""","[124, 126]")
+
+query T
+SELECT get_fn_depended_on_by($fn_compute_id)
+----
+[
+    {
+        "columnIds": [
+            3
+        ],
+        "id": 127
+    }
+]
+
+query T
+SELECT get_fn_depended_on_by($fn_add_id)
+----
+[
+    {
+        "columnIds": [
+            3
+        ],
+        "id": 127
+    }
+]
+
+statement ok
+DROP TABLE t_multi_fn;
 
 # Make sure dependency circle is not allowed.
 statement ok

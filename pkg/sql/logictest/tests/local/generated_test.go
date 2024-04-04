@@ -2565,18 +2565,18 @@ func TestLogic_udf_fk(
 	runLogicTest(t, "udf_fk")
 }
 
-func TestLogic_udf_in_column_defaults(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_in_column_defaults")
-}
-
 func TestLogic_udf_in_constraints(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_in_constraints")
+}
+
+func TestLogic_udf_in_table(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_in_table")
 }
 
 func TestLogic_udf_insert(

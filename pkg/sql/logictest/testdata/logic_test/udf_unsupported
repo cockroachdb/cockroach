@@ -4,12 +4,6 @@ statement ok
 CREATE FUNCTION test_tbl_f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
 statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
-CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT ON UPDATE (test_tbl_f() + 1));
-
-statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
-CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT AS (test_tbl_f() + 1) STORED);
-
-statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
 CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT, INDEX idx_b(test_tbl_f()));
 
 statement ok

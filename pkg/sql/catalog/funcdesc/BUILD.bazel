@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "func_desc.go",
         "func_desc_builder.go",
-        "helpers.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc",
     visibility = ["//visibility:public"],
@@ -27,7 +26,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
-        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/protoutil",

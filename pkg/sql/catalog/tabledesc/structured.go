@@ -518,18 +518,26 @@ func (desc *wrapper) GetAllReferencedFunctionIDsInColumnExprs(
 	}
 
 	var ret catalog.DescriptorIDSet
-	// TODO(chengxiong): add support for computed columns when UDFs are allowed in
-	// them.
-	if !col.IsComputed() {
-		if col.HasDefault() {
-			ids, err := schemaexpr.GetUDFIDsFromExprStr(col.GetDefaultExpr())
-			if err != nil {
-				return catalog.DescriptorIDSet{}, err
-			}
-			ret = ret.Union(ids)
+	if col.IsComputed() {
+		ids, err := schemaexpr.GetUDFIDsFromExprStr(col.GetComputeExpr())
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
 		}
-		// TODO(chengxiong): add support for ON UPDATE expressions when UDFs are
-		// allowed in them.
+		ret = ret.Union(ids)
+	}
+	if col.HasDefault() {
+		ids, err := schemaexpr.GetUDFIDsFromExprStr(col.GetDefaultExpr())
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		ret = ret.Union(ids)
+	}
+	if col.HasOnUpdate() {
+		ids, err := schemaexpr.GetUDFIDsFromExprStr(col.GetOnUpdateExpr())
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		ret = ret.Union(ids)
 	}
 
 	return ret, nil
