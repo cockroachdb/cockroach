@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,13 +33,11 @@ func TestRangeLookupPrefetchFiltering(t *testing.T) {
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		// Avovid additional splits (outside those below) by disabling the split
+		// queue via the replication manual mode.
+		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					DisableMergeQueue: true,
-				},
-			},
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
