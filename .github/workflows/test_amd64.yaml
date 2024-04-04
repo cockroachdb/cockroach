@@ -22,5 +22,5 @@ jobs:
         run: echo "goversion=$(cat .go-version)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22.1"
+          go-version: "1.22.2"
       - run: make test
