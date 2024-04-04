@@ -9171,8 +9171,6 @@ func TestRestorePauseOnError(t *testing.T) {
 
 	defer jobs.TestingSetProgressThresholds()()
 
-	skip.WithIssue(t, 121336)
-
 	baseDir := "testdata"
 	args := base.TestServerArgs{
 		ExternalIODir: baseDir,
