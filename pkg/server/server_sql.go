@@ -1108,15 +1108,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.ExternalConnectionTestingKnobs = externalConnKnobs.(*externalconn.TestingKnobs)
 	}
 
-	statsRefresher := stats.MakeRefresher(
-		cfg.AmbientCtx,
-		cfg.Settings,
-		cfg.circularInternalExecutor,
-		execCfg.TableStatsCache,
-		stats.DefaultAsOfTime,
-	)
-	execCfg.StatsRefresher = statsRefresher
-
 	// Set up internal memory metrics for use by internal SQL executors.
 	// Don't add them to the registry now because it will be added as part of pgServer metrics.
 	sqlMemMetrics := sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
@@ -1136,7 +1127,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	distSQLServer.ServerConfig.SQLStatsController = pgServer.SQLServer.GetSQLStatsController()
 	distSQLServer.ServerConfig.SchemaTelemetryController = pgServer.SQLServer.GetSchemaTelemetryController()
 	distSQLServer.ServerConfig.IndexUsageStatsController = pgServer.SQLServer.GetIndexUsageStatsController()
-	distSQLServer.ServerConfig.StatsRefresher = statsRefresher
 
 	// We use one BytesMonitor for all Executor's created by the
 	// internalDB.
@@ -1163,6 +1153,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 	*cfg.internalDB = *internalDB
 	execCfg.InternalDB = internalDB
+
+	statsRefresher := stats.MakeRefresher(
+		cfg.AmbientCtx,
+		cfg.Settings,
+		internalDB,
+		execCfg.TableStatsCache,
+		stats.DefaultAsOfTime,
+	)
+	execCfg.StatsRefresher = statsRefresher
+	distSQLServer.ServerConfig.StatsRefresher = statsRefresher
+
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
 	execCfg.IndexSpanSplitter = sql.NewIndexSplitAndScatter(execCfg)
 	execCfg.IndexMerger = sql.NewIndexBackfillerMergePlanner(execCfg)

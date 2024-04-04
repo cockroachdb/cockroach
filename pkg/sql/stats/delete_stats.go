@@ -127,8 +127,8 @@ func DeleteOldStatsForOtherColumns(
 
 // deleteStatsForDroppedTables deletes all statistics for at most 'limit' number
 // of dropped tables.
-func deleteStatsForDroppedTables(ctx context.Context, ex isql.Executor, limit int64) error {
-	_, err := ex.Exec(
+func deleteStatsForDroppedTables(ctx context.Context, db isql.DB, limit int64) error {
+	_, err := db.Executor().Exec(
 		ctx, "delete-statistics-for-dropped-tables", nil, /* txn */
 		fmt.Sprintf(`DELETE FROM system.table_statistics
                             WHERE "tableID" NOT IN (SELECT table_id FROM crdb_internal.tables)
