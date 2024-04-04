@@ -91,7 +91,9 @@ func (tc *TxnCoordSender) CreateSavepoint(ctx context.Context) (kv.SavepointToke
 	// TODO(nvanbenschoten): once #113765 is resolved, we should make this
 	// unconditional and push it into txnSeqNumAllocator.createSavepointLocked.
 	if tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() {
-		tc.interceptorAlloc.txnSeqNumAllocator.stepWriteSeqLocked()
+		if err := tc.interceptorAlloc.txnSeqNumAllocator.stepWriteSeqLocked(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	s := &savepoint{
@@ -159,7 +161,9 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 			enginepb.IgnoredSeqNumRange{
 				Start: sp.seqNum, End: tc.interceptorAlloc.txnSeqNumAllocator.writeSeq,
 			})
-		tc.interceptorAlloc.txnSeqNumAllocator.stepWriteSeqLocked()
+		if err := tc.interceptorAlloc.txnSeqNumAllocator.stepWriteSeqLocked(ctx); err != nil {
+			return err
+		}
 	}
 
 	return nil
