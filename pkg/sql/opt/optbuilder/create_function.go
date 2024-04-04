@@ -202,7 +202,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 		// The parameter type must be supported by the current cluster version.
 		checkUnsupportedType(b.ctx, b.semaCtx, typ)
-		if types.IsRecordType(typ) {
+		if typ.Identical(types.AnyTuple) {
 			if language == tree.RoutineLangSQL {
 				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
 					"SQL functions cannot have arguments of type record"))
@@ -478,15 +478,15 @@ func validateReturnType(
 
 	// If return type is RECORD and the tuple content types unspecified by OUT
 	// parameters, any column types are valid. This is the case when we have
-	// RETURNS RECORD without OUT params - we don't need to check the types
+	// RETURNS RECORD without OUT-params - we don't need to check the types
 	// below.
-	if types.IsRecordType(expected) && types.IsWildcardTupleType(expected) {
+	if expected.Identical(types.AnyTuple) {
 		return nil
 	}
 
 	if len(cols) == 1 {
 		typeToCheck := expected
-		if isSQLProcedure && types.IsRecordType(expected) && len(expected.TupleContents()) == 1 {
+		if isSQLProcedure && len(expected.TupleContents()) == 1 {
 			// For SQL procedures with output parameters we get a record type
 			// even with a single column.
 			typeToCheck = expected.TupleContents()[0]
