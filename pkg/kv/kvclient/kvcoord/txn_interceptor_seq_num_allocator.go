@@ -83,6 +83,10 @@ type txnSeqNumAllocator struct {
 func (s *txnSeqNumAllocator) SendLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
+	if err := s.checkReadSeqNotIgnoredLocked(ba); err != nil {
+		return nil, kvpb.NewError(err)
+	}
+
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
 		oldHeader := req.Header()
@@ -99,8 +103,7 @@ func (s *txnSeqNumAllocator) SendLocked(
 		// Notably, this includes Get/Scan/ReverseScan requests that acquire
 		// replicated locks, even though they go through raft.
 		if kvpb.IsIntentWrite(req) || req.Method() == kvpb.EndTxn {
-			s.stepWriteSeqLocked()
-			if err := s.maybeAutoStepReadSeqLocked(ctx); err != nil {
+			if err := s.stepWriteSeqLocked(ctx); err != nil {
 				return nil, kvpb.NewError(err)
 			}
 			oldHeader.Sequence = s.writeSeq
@@ -172,8 +175,20 @@ func (s *txnSeqNumAllocator) stepReadSeqLocked(ctx context.Context) error {
 }
 
 // stepWriteSeqLocked increments the write seqnum.
-func (s *txnSeqNumAllocator) stepWriteSeqLocked() {
+func (s *txnSeqNumAllocator) stepWriteSeqLocked(ctx context.Context) error {
 	s.writeSeq++
+	return s.maybeAutoStepReadSeqLocked(ctx)
+}
+
+// checkReadSeqNotIgnoredLocked verifies that the read seqnum is not in the
+// ignored seqnum list of the provided batch request.
+func (s *txnSeqNumAllocator) checkReadSeqNotIgnoredLocked(ba *kvpb.BatchRequest) error {
+	if enginepb.TxnSeqIsIgnored(s.readSeq, ba.Txn.IgnoredSeqNums) {
+		return errors.AssertionFailedf(
+			"read sequence number %d but sequence number is ignored %v after savepoint rollback",
+			s.readSeq, ba.Txn.IgnoredSeqNums)
+	}
+	return nil
 }
 
 // configureSteppingLocked configures the stepping mode.
