@@ -19,15 +19,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -218,10 +215,10 @@ const (
 // sent.
 type Refresher struct {
 	log.AmbientContext
-	st      *cluster.Settings
-	ex      isql.Executor
-	cache   *TableStatisticsCache
-	randGen autoStatsRand
+	st         *cluster.Settings
+	internalDB descs.DB
+	cache      *TableStatisticsCache
+	randGen    autoStatsRand
 
 	// mutations is the buffered channel used to pass messages containing
 	// metadata about SQL mutations to the background Refresher thread.
@@ -284,7 +281,7 @@ type settingOverride struct {
 func MakeRefresher(
 	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
-	ex isql.Executor,
+	internalDB descs.DB,
 	cache *TableStatisticsCache,
 	asOfTime time.Duration,
 ) *Refresher {
@@ -293,7 +290,7 @@ func MakeRefresher(
 	return &Refresher{
 		AmbientContext:   ambientCtx,
 		st:               st,
-		ex:               ex,
+		internalDB:       internalDB,
 		cache:            cache,
 		randGen:          makeAutoStatsRand(randSource),
 		mutations:        make(chan mutation, refreshChanBufferLen),
@@ -431,7 +428,7 @@ func (r *Refresher) Start(
 		for {
 			select {
 			case <-initialTableCollection:
-				r.ensureAllTables(ctx, &r.st.SV, initialTableCollectionDelay)
+				r.ensureAllTables(ctx, initialTableCollectionDelay)
 				if len(r.mutationCounts) > 0 {
 					ensuringAllTables = true
 				}
@@ -608,7 +605,7 @@ func (r *Refresher) Start(
 				log.Infof(ctx, "quiescing stats garbage collector")
 				return
 			}
-			if err := deleteStatsForDroppedTables(ctx, r.ex, statsGarbageCollectionLimit.Get(&r.st.SV)); err != nil {
+			if err := deleteStatsForDroppedTables(ctx, r.internalDB, statsGarbageCollectionLimit.Get(&r.st.SV)); err != nil {
 				log.Warningf(ctx, "stats-garbage-collector encountered an error when deleting stats: %v", err)
 			}
 		}
@@ -619,69 +616,44 @@ func (r *Refresher) Start(
 	return nil
 }
 
-const (
-	getAllTablesTemplateSQL = `
-WITH descs AS (
-  SELECT
-    d.id AS id,
-    crdb_internal.pb_to_json('desc', d.descriptor, false) AS descriptor_json,
-    (n."parentID" = 1) AS is_system_table
-  FROM system.descriptor AS d
-  INNER JOIN system.namespace AS n ON d.id = n.id
-	WHERE n."parentSchemaID" != 0
-)
-SELECT descs.id
-FROM descs
-AS OF SYSTEM TIME '-%s'
-WHERE
-	id NOT IN (%d, %d, %d)  -- excluded system tables
-  AND descriptor_json ? 'table'
-	AND NOT descriptor_json->'table' ? 'viewQuery'
-	AND NOT descriptor_json->'table' ? 'dropTime'
-	%s
-	%s`
-
-	explicitlyEnabledTablesPredicate = `AND
-	(descriptor_json->'table'->'autoStatsSettings' ->> 'enabled' = 'true')`
-
-	autoStatsEnabledOrNotSpecifiedPredicate = `AND
-	(
-    descriptor_json->'table'->'autoStatsSettings'->'enabled' IS NULL
-	  OR descriptor_json->'table'->'autoStatsSettings' ->> 'enabled' = 'true'
-	)`
-
-	autoStatsOnSystemTablesEnabledPredicate = `AND TRUE`
-
-	autoStatsOnSystemTablesDisabledPredicate = `AND NOT is_system_table`
-)
-
 func (r *Refresher) getApplicableTables(
-	ctx context.Context, stmt string, opname string, forTesting bool,
+	ctx context.Context, initialTableCollectionDelay time.Duration, forTesting bool,
 ) {
 	if forTesting {
 		r.numTablesEnsured = 0
 	}
-	it, err := r.ex.QueryIterator(
-		ctx,
-		opname,
-		nil, /* txn */
-		stmt,
-	)
-	if err == nil {
-		var ok bool
-		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-			row := it.Cur()
-			tableID := descpb.ID(*row[0].(*tree.DInt))
-			// Don't create statistics for virtual tables.
-			// The query already excludes views and system tables.
-			if !descpb.IsVirtualTable(tableID) {
-				r.mutationCounts[tableID] += 0
-				if forTesting {
-					r.numTablesEnsured++
+	err := r.internalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		fixedTs := r.internalDB.KV().Clock().Now().AddDuration(-initialTableCollectionDelay)
+		if err := txn.KV().SetFixedTimestamp(ctx, fixedTs); err != nil {
+			return err
+		}
+		all, err := txn.Descriptors().GetAll(ctx, txn.KV())
+		if err != nil {
+			return err
+		}
+		return all.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			tableDesc, isTable := desc.(catalog.TableDescriptor)
+			if !isTable {
+				return nil
+			}
+			if !autostatsCollectionAllowed(tableDesc, r.st) {
+				return nil
+			}
+			switch tableDesc.AutoStatsCollectionEnabled() {
+			case catpb.AutoStatsCollectionDisabled:
+				return nil
+			case catpb.AutoStatsCollectionNotSet:
+				if !AutomaticStatisticsClusterMode.Get(&r.st.SV) {
+					return nil
 				}
 			}
-		}
-	}
+			r.mutationCounts[tableDesc.GetID()] += 0
+			if forTesting {
+				r.numTablesEnsured++
+			}
+			return nil
+		})
+	})
 	if err != nil {
 		// Note that it is ok if the iterator returned partial results before
 		// encountering an error - in that case we added entries to
@@ -696,29 +668,9 @@ func (r *Refresher) getApplicableTables(
 // table in the database which has auto stats enabled, either explicitly via
 // a table-level setting, or implicitly via the cluster setting.
 func (r *Refresher) ensureAllTables(
-	ctx context.Context, settings *settings.Values, initialTableCollectionDelay time.Duration,
+	ctx context.Context, initialTableCollectionDelay time.Duration,
 ) {
-	// A table-level setting of sql_stats_automatic_collection_enabled of null,
-	// meaning not set, or true qualifies rows we're interested in.
-	autoStatsPredicate := autoStatsEnabledOrNotSpecifiedPredicate
-	if !AutomaticStatisticsClusterMode.Get(settings) {
-		autoStatsPredicate = explicitlyEnabledTablesPredicate
-	}
-
-	systemTablesPredicate := autoStatsOnSystemTablesEnabledPredicate
-	if !AutomaticStatisticsOnSystemTables.Get(settings) {
-		systemTablesPredicate = autoStatsOnSystemTablesDisabledPredicate
-	}
-
-	// Use a historical read so as to disable txn contention resolution.
-	getAllTablesQuery := fmt.Sprintf(
-		getAllTablesTemplateSQL,
-		initialTableCollectionDelay,
-		keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID,
-		autoStatsPredicate, systemTablesPredicate,
-	)
-	r.getApplicableTables(ctx, getAllTablesQuery,
-		"get-tables", false)
+	r.getApplicableTables(ctx, initialTableCollectionDelay, false)
 }
 
 // NotifyMutation is called by SQL mutation operations to signal to the
@@ -893,7 +845,7 @@ func (r *Refresher) refreshStats(ctx context.Context, tableID descpb.ID, asOf ti
 		asOf.String(),
 	)
 	log.Infof(ctx, "automatically executing %q", stmt)
-	_ /* rows */, err := r.ex.Exec(
+	_ /* rows */, err := r.internalDB.Executor().Exec(
 		ctx,
 		"create-stats",
 		nil, /* txn */
