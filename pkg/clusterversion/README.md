@@ -97,6 +97,8 @@ gates - right before the final RC at the latest.
   cluster version key, associated with a "final" (`Internal=0`) version (e.g.
   `24.1`)
 - [ ] Set `finalVersion` constant to the key (e.g. `V24_1`)
+- [ ] Set `systemschema.SystemDatabaseSchemaBootstrapVersion` to the final
+  version key (e.g. `V24_1`) and regenerate output for the relevant tests
 - [ ] Update `pkg/build/version.txt` to the final version (e.g. `24.1.0`)
 - [ ] Regenerate docs (`./dev gen docs`)
 - [ ] Regenerate expected test data results as needed

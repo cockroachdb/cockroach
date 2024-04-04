@@ -1208,6 +1208,9 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // SystemDatabaseSchemaBootstrapVersion is the system database schema version
 // that should be used during bootstrap. It should be bumped up alongside any
 // upgrade that creates or modifies the schema of a system table.
+//
+// When a final release is minted, the system database schema version should
+// match the final version.
 var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database

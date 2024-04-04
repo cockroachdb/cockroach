@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "systemschema",
@@ -22,4 +22,11 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/log",
     ],
+)
+
+go_test(
+    name = "systemschema_test",
+    srcs = ["system_test.go"],
+    embed = [":systemschema"],
+    deps = ["//pkg/clusterversion"],
 )
