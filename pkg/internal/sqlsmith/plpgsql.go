@@ -60,7 +60,7 @@ func (s *Smither) makePLpgSQLDeclarations(
 			varName = s.name("decl")
 		}
 		varTyp := s.randType()
-		for types.IsRecordType(varTyp) || varTyp.Family() == types.CollatedStringFamily {
+		for varTyp.Identical(types.AnyTuple) || varTyp.Family() == types.CollatedStringFamily {
 			// TODO(#114874): allow record types here when they are supported.
 			// TODO(#105245): allow collated strings when they are supported.
 			varTyp = s.randType()
