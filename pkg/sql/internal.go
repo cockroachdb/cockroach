@@ -1025,7 +1025,7 @@ func (ie *InternalExecutor) execInternal(
 		return nil, err
 	}
 
-	ctx = logtags.AddTag(ctx, opNameKey, opName)
+	ctx = logtags.AddTag(ctx, opNameKey, log.SafeOperational(opName))
 
 	var sd *sessiondata.SessionData
 	if ie.sessionDataStack != nil {

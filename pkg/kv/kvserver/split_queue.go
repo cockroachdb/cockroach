@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errbase"
 	"github.com/cockroachdb/redact"
 )
 
@@ -216,6 +217,11 @@ func (sq *splitQueue) shouldQueue(
 // unsplittableRangeError indicates that a split attempt failed because a no
 // suitable split key could be found.
 type unsplittableRangeError struct{}
+
+func (e unsplittableRangeError) SafeFormatError(p errbase.Printer) (next error) {
+	p.Print(e.Error())
+	return nil
+}
 
 func (unsplittableRangeError) Error() string         { return "could not find valid split key" }
 func (unsplittableRangeError) PurgatoryErrorMarker() {}

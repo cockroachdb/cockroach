@@ -116,6 +116,7 @@ func makeRateLimitedTimeoutFuncByPermittedSlowdown(
 type PurgatoryError interface {
 	error
 	PurgatoryErrorMarker() // dummy method for unique interface
+	errors.SafeFormatter
 }
 
 // processCallback is a hook that is called when a replica finishes processing.
@@ -1271,9 +1272,9 @@ func (bq *baseQueue) addToPurgatoryLocked(
 			case <-ticker.C:
 				// Report purgatory status.
 				bq.mu.Lock()
-				errMap := map[string]int{}
+				errMap := map[redact.RedactableString]int{}
 				for _, err := range bq.mu.purgatory {
-					errMap[err.Error()]++
+					errMap[redact.Sprint(err)]++
 				}
 				bq.mu.Unlock()
 				for errStr, count := range errMap {

@@ -264,7 +264,7 @@ func loadParameter(ctx context.Context, key, value string, args *sql.SessionArgs
 			counter := sqltelemetry.UnimplementedClientStatusParameterCounter(key)
 			telemetry.Inc(counter)
 		}
-		log.Warningf(ctx, "unknown configuration parameter: %q", key)
+		log.Warningf(ctx, "unknown configuration parameter: %q", log.SafeOperational(key))
 
 	case !configurable:
 		return pgerror.Newf(pgcode.CantChangeRuntimeParam,

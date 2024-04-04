@@ -891,7 +891,7 @@ func (r *Refresher) refreshStats(ctx context.Context, tableID descpb.ID, asOf ti
 		AutomaticStatisticsMaxIdleTime.Get(&r.st.SV),
 		asOf.String(),
 	)
-	log.Infof(ctx, "automatically executing %q", stmt)
+	log.Infof(ctx, "automatically executing %q", log.SafeOperational(stmt))
 	_ /* rows */, err := r.ex.Exec(
 		ctx,
 		"create-stats",

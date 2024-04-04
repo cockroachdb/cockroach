@@ -169,7 +169,7 @@ func (s *PersistedSQLStats) doFlush(ctx context.Context, workFn func() error, er
 	defer func() {
 		if err != nil {
 			s.cfg.FlushesFailed.Inc(1)
-			log.Warningf(ctx, "%s: %s", errMsg, err)
+			log.Warningf(ctx, "%s: %s", log.SafeOperational(errMsg), err)
 		} else {
 			s.cfg.FlushesSuccessful.Inc(1)
 		}
