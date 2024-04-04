@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cluster",
@@ -11,5 +11,19 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "cluster_test",
+    srcs = ["executor_test.go"],
+    embed = [":cluster"],
+    deps = [
+        "//pkg/roachprod/errors",
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
