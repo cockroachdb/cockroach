@@ -796,9 +796,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		})
 	}
 	ret.ReturnType = tree.FixedReturnType(desc.ReturnType.Type)
-	// TODO(yuzefovich): we should not be setting ReturnsRecordType to 'true'
-	// when the return type is based on output parameters.
-	ret.ReturnsRecordType = types.IsRecordType(desc.ReturnType.Type)
+	ret.ReturnsRecordType = desc.ReturnType.Type.Identical(types.AnyTuple)
 	ret.Types = signatureTypes
 	ret.Volatility, err = desc.getOverloadVolatility()
 	if err != nil {

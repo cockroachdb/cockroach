@@ -227,7 +227,7 @@ func (b *Builder) buildRoutine(
 	// be concrete in order to decode them correctly. We can determine the types
 	// from the result columns or tuple of the last statement.
 	finishResolveType := func(lastStmtScope *scope) {
-		if types.IsWildcardTupleType(rtyp) {
+		if rtyp.Identical(types.AnyTuple) {
 			if len(lastStmtScope.cols) == 1 &&
 				lastStmtScope.cols[0].typ.Family() == types.TupleFamily {
 				// When the final statement returns a single tuple, we can use
@@ -434,6 +434,10 @@ func (b *Builder) finishBuildLastStmt(
 	expr, physProps = stmtScope.expr, stmtScope.makePhysicalProps()
 	rtyp := f.ResolvedType()
 
+	// Note: since the final return type has already been resolved by this point,
+	// we can't check if this is a RECORD-returning routine by examining rTyp.
+	isRecordReturning := f.ResolvedOverload().ReturnsRecordType
+
 	// Add a LIMIT 1 to the last statement if the UDF is not
 	// set-returning. This is valid because any other rows after the
 	// first can simply be ignored. The limit could be beneficial
@@ -474,21 +478,32 @@ func (b *Builder) finishBuildLastStmt(
 			expr = b.constructProject(expr, elems)
 			physProps = stmtScope.makePhysicalProps()
 		}
-	} else if len(cols) > 1 || (types.IsRecordType(rtyp) && !isSingleTupleResult) {
-		// Only a single column can be returned from a UDF, unless it is used as a
-		// data source (see comment above). If there are multiple columns, combine
-		// them into a tuple. If the last statement is already returning a tuple
-		// and the function has a record return type, then do not wrap the
-		// output in another tuple.
-		elems := make(memo.ScalarListExpr, len(cols))
-		for i := range cols {
-			elems[i] = b.factory.ConstructVariable(cols[i].ID)
+	} else {
+		// Only a single column can be returned from a routine, unless it is a UDF
+		// used as a data source (see comment above). There are three cases in which
+		// we must wrap the column(s) from the last statement into a single tuple:
+		//   1. The last statement has multiple result columns.
+		//   2. The routine returns RECORD, and the last statement does not already
+		//      return a tuple column.
+		//   3. The routine is a stored procedure that returns a non-VOID type, and
+		//      the last statement does not already return a tuple column.
+		overload := f.ResolvedOverload()
+		mustWrapColsInTuple := len(cols) > 1
+		if len(cols) == 1 && !isSingleTupleResult {
+			mustWrapColsInTuple = mustWrapColsInTuple || isRecordReturning ||
+				(rtyp.Family() != types.VoidFamily && overload.Type == tree.ProcedureRoutine)
 		}
-		tup := b.factory.ConstructTuple(elems, rtyp)
-		stmtScope = bodyScope.push()
-		col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, tup)
-		expr = b.constructProject(expr, []scopeColumn{*col})
-		physProps = stmtScope.makePhysicalProps()
+		if mustWrapColsInTuple {
+			elems := make(memo.ScalarListExpr, len(cols))
+			for i := range cols {
+				elems[i] = b.factory.ConstructVariable(cols[i].ID)
+			}
+			tup := b.factory.ConstructTuple(elems, rtyp)
+			stmtScope = bodyScope.push()
+			col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, tup)
+			expr = b.constructProject(expr, []scopeColumn{*col})
+			physProps = stmtScope.makePhysicalProps()
+		}
 	}
 
 	// We must preserve the presentation of columns as physical
@@ -501,17 +516,18 @@ func (b *Builder) finishBuildLastStmt(
 	if len(cols) > 0 {
 		returnCol := physProps.Presentation[0].ID
 		returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
-		if !types.IsRecordType(rtyp) && !isMultiColDataSource && !returnColMeta.Type.Identical(rtyp) {
+		if !isRecordReturning && !isMultiColDataSource &&
+			!returnColMeta.Type.Identical(rtyp) {
 			if !cast.ValidCast(returnColMeta.Type, rtyp, cast.ContextAssignment) {
 				panic(sqlerrors.NewInvalidAssignmentCastError(
 					returnColMeta.Type, rtyp, returnColMeta.Alias))
 			}
-			cast := b.factory.ConstructAssignmentCast(
+			assignCast := b.factory.ConstructAssignmentCast(
 				b.factory.ConstructVariable(physProps.Presentation[0].ID),
 				rtyp,
 			)
 			stmtScope = bodyScope.push()
-			col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, cast)
+			col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, assignCast)
 			expr = b.constructProject(expr, []scopeColumn{*col})
 			physProps = stmtScope.makePhysicalProps()
 		}

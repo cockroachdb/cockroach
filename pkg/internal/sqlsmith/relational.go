@@ -960,7 +960,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 		// TODO(#105713): lift the RECORD-type restriction.
 		ptyp := s.randType()
 		for ptyp.Family() == types.CollatedStringFamily ||
-			(lang == tree.RoutineLangPLpgSQL && types.IsRecordType(ptyp)) {
+			(lang == tree.RoutineLangPLpgSQL && ptyp.Identical(types.AnyTuple)) {
 			ptyp = s.randType()
 		}
 		pname := fmt.Sprintf("p%d", i)

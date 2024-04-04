@@ -176,7 +176,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		OutParamOrdinals:  outParamOrdinals,
 		OutParamTypes:     outParams,
 	}
-	overload.ReturnsRecordType = types.IsRecordType(retType)
+	overload.ReturnsRecordType = retType.Identical(types.AnyTuple)
 	if c.ReturnType != nil && c.ReturnType.SetOf {
 		overload.Class = tree.GeneratorClass
 	}
