@@ -22,67 +22,6 @@ import (
 )
 
 var installCmds = map[string]string{
-	"cassandra": `
-echo "deb http://www.apache.org/dist/cassandra/debian 311x main" | \
-	sudo tee -a /etc/apt/sources.list.d/cassandra.sources.list;
-curl https://www.apache.org/dist/cassandra/KEYS | sudo apt-key add -;
-sudo apt-get update;
-sudo apt-get install -y cassandra;
-sudo service cassandra stop;
-`,
-
-	"charybdefs": `
-  thrift_dir="/opt/thrift"
-
-  if [ ! -f "/usr/bin/thrift" ]; then
-	sudo apt-get update;
-	sudo apt-get install -qy automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config python-setuptools libglib2.0-dev python2 python-six
-
-    sudo mkdir -p "${thrift_dir}"
-    sudo chmod 777 "${thrift_dir}"
-    cd "${thrift_dir}"
-    curl "https://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz" | sudo tar xvz --strip-components 1
-    sudo ./configure --prefix=/usr
-    sudo make -j$(nproc)
-    sudo make install
-    (cd "${thrift_dir}/lib/py" && sudo python2 setup.py install)
-  fi
-
-  charybde_dir="/opt/charybdefs"
-  nemesis_path="${charybde_dir}/charybdefs-nemesis"
-
-  if [ ! -f "${nemesis_path}" ]; then
-    sudo apt-get install -qy build-essential cmake libfuse-dev fuse
-    sudo rm -rf "${charybde_dir}" "${nemesis_path}" /usr/local/bin/charybdefs{,-nemesis}
-    sudo mkdir -p "${charybde_dir}"
-    sudo chmod 777 "${charybde_dir}"
-    git clone --depth 1 --branch crl "https://github.com/cockroachdb/charybdefs.git" "${charybde_dir}"
-
-    cd "${charybde_dir}"
-    thrift -r --gen cpp server.thrift
-    cmake CMakeLists.txt
-    make -j$(nproc)
-
-    sudo modprobe fuse
-    sudo ln -s "${charybde_dir}/charybdefs" /usr/local/bin/charybdefs
-    cat > "${nemesis_path}" <<EOF
-#!/bin/bash
-cd /opt/charybdefs/cookbook
-./recipes "\$@"
-EOF
-    chmod +x "${nemesis_path}"
-	sudo ln -s "${nemesis_path}" /usr/local/bin/charybdefs-nemesis
-fi
-`,
-
-	"confluent": `
-sudo apt-get update;
-sudo apt-get install -y default-jdk-headless;
-curl https://packages.confluent.io/archive/5.0/confluent-oss-5.0.0-2.11.tar.gz | sudo tar -C /usr/local -xz;
-sudo ln -s /usr/local/confluent-5.0.0 /usr/local/confluent;
-`,
-
-	// Docker installation steps are lifted from https://docs.docker.com/engine/install/ubuntu/
 	"docker": `
 # Add Docker's official GPG key:
 sudo apt-get update;
@@ -133,18 +72,6 @@ sudo apt-get install -y \
 	"sysbench": `
 sudo apt-get update;
 sudo apt-get install -y sysbench;
-`,
-
-	"tools": `
-sudo apt-get update;
-sudo apt-get install -y \
-  fio \
-  iftop \
-  iotop \
-  sysstat \
-  linux-tools-common \
-  linux-tools-4.10.0-35-generic \
-  linux-cloud-tools-4.10.0-35-generic;
 `,
 
 	"zfs": `
