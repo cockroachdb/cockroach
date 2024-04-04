@@ -1358,12 +1358,16 @@ func (crr *RevertRangeResponse) ShallowCopy() Response {
 // ShallowCopy implements the Response interface.
 func (sr *ScanResponse) ShallowCopy() Response {
 	shallowCopy := *sr
+	shallowCopy.BatchResponses = append([][]byte(nil), sr.BatchResponses...)
+	shallowCopy.ColBatches.ColBatches = append([]coldata.Batch(nil), sr.ColBatches.ColBatches...)
 	return &shallowCopy
 }
 
 // ShallowCopy implements the Response interface.
 func (rsr *ReverseScanResponse) ShallowCopy() Response {
 	shallowCopy := *rsr
+	shallowCopy.BatchResponses = append([][]byte(nil), rsr.BatchResponses...)
+	shallowCopy.ColBatches.ColBatches = append([]coldata.Batch(nil), rsr.ColBatches.ColBatches...)
 	return &shallowCopy
 }
 
