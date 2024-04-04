@@ -761,12 +761,13 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	// lookup this id will result in the resolver potentially missing the event.
 	txnIDCache := tc.ApplicationLayer(0).SQLServer().(*sql.Server).GetTxnIDCache()
 	txnIDCache.DrainWriteBuffer()
+	var expectedWaitingTxnFingerprintID appstatspb.TransactionFingerprintID
 	testutils.SucceedsSoon(t, func() error {
 		waitingTxnFingerprintID, ok := txnIDCache.Lookup(waitingTxnID)
 		if !ok || waitingTxnFingerprintID == appstatspb.InvalidTransactionFingerprintID {
 			return fmt.Errorf("waiting txn fingerprint not found in cache")
 		}
-
+		expectedWaitingTxnFingerprintID = waitingTxnFingerprintID
 		return nil
 	})
 
@@ -795,11 +796,12 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 		// at least 1 row matches the one we're looking for.
 		foundRow := false
 		var lastErr error
+		rowsCount := 0
 		for rows.Next() {
 			if err != nil {
 				return err
 			}
-
+			rowsCount++
 			var totalContentionFromQueryMs, contentionFromEventMs float64
 			var queryText, schemaName, dbName, tableName, indexName, waitingTxnFingerprintID string
 			err = rows.Scan(&queryText, &totalContentionFromQueryMs, &contentionFromEventMs, &schemaName, &dbName, &tableName, &indexName, &waitingTxnFingerprintID)
@@ -843,7 +845,7 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 			}
 
 			if waitingTxnFingerprintID == "0000000000000000" || waitingTxnFingerprintID == "" {
-				lastErr = fmt.Errorf("waitingTxnFingerprintID is default value\n%s", prettyPrintRow)
+				lastErr = fmt.Errorf("expected waitingTxnFingerprintID to be %d, but got %s. \nScanned row: \n%s", expectedWaitingTxnFingerprintID, waitingTxnFingerprintID, prettyPrintRow)
 				continue
 			}
 
@@ -852,6 +854,8 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 		}
 
 		if !foundRow && lastErr != nil {
+			t.Logf("rowsCount = %d", rowsCount)
+			t.Logf("ContentionRegistry: \n%s", tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.String())
 			return lastErr
 		}
 
