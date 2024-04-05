@@ -24,6 +24,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var testLogMeta = log.StructuredLogMeta{
+	EventType: "dummy",
+	Version:   "1.9",
+}
+
 func TestRegisterProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -36,16 +41,16 @@ func TestRegisterProcessor(t *testing.T) {
 		appTenantP1 := &dummyTestProcessor{}
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		RegisterProcessor(ctx, stopper, "dummy", appTenantP1)
+		RegisterProcessor(ctx, stopper, testLogMeta, appTenantP1)
 		assertProcessorRegistered(t, appTenantID, "dummy", appTenantP1)
 
 		appTenantP2 := &dummyTestProcessor{}
-		RegisterProcessor(ctx, stopper, "dummy", appTenantP2)
+		RegisterProcessor(ctx, stopper, testLogMeta, appTenantP2)
 		assertProcessorRegistered(t, appTenantID, "dummy", appTenantP2)
 
 		sysTenantP1 := &dummyTestProcessor{}
 		ctx := roachpb.ContextWithClientTenant(ctx, roachpb.SystemTenantID)
-		RegisterProcessor(ctx, stopper, "dummy", sysTenantP1)
+		RegisterProcessor(ctx, stopper, testLogMeta, sysTenantP1)
 		assertProcessorRegistered(t, roachpb.SystemTenantID, "dummy", sysTenantP1)
 	})
 
@@ -55,7 +60,7 @@ func TestRegisterProcessor(t *testing.T) {
 		ctxWithoutTenantID, cancelTestCtx := context.WithCancel(context.Background())
 		defer cancelTestCtx()
 		processor := &dummyTestProcessor{}
-		RegisterProcessor(ctxWithoutTenantID, stopper, "dummy", processor)
+		RegisterProcessor(ctxWithoutTenantID, stopper, testLogMeta, processor)
 		assertProcessorRegistered(t, roachpb.SystemTenantID, "dummy", processor)
 	})
 }
@@ -102,8 +107,8 @@ func TestProcess(t *testing.T) {
 
 		event1 := makeTypedEvent(type1, "test_event")
 		event2 := makeTypedEvent(type1, "test_event_2")
-		mockAppProcessor.EXPECT().process(gomock.Any(), event1.event)
-		mockAppProcessor.EXPECT().process(gomock.Any(), event2.event)
+		mockAppProcessor.EXPECT().Process(gomock.Any(), event1.event)
+		mockAppProcessor.EXPECT().Process(gomock.Any(), event2.event)
 		controller.Process(ctxApp, event1.eventType, event1.event)
 		controller.Process(ctxApp, event2.eventType, event2.event)
 	})
@@ -134,7 +139,7 @@ type dummyTestProcessor struct {
 
 var _ Processor = (*dummyTestProcessor)(nil)
 
-func (d *dummyTestProcessor) process(_ context.Context, _ any) error {
+func (d *dummyTestProcessor) Process(_ context.Context, _ any) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.mu.callCount++
