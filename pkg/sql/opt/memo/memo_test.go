@@ -448,6 +448,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization = false
 	notStale()
 
+	// Stale pg_trgm.similarity_threshold.
+	evalCtx.SessionData().TrigramSimilarityThreshold = 0.5
+	stale()
+	evalCtx.SessionData().TrigramSimilarityThreshold = 0
+	notStale()
+
 	// Stale opt_split_scan_limit.
 	evalCtx.SessionData().OptSplitScanLimit = 100
 	stale()
