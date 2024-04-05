@@ -734,7 +734,24 @@ func (s *systemStatusServer) Gossip(
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
-	return status.Gossip(ctx, req)
+	gossipData, err := status.Gossip(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if req.Redacted {
+		gossipData = s.redactGossipResponse(gossipData)
+	}
+
+	return gossipData, err
+}
+
+func (s *statusServer) redactGossipResponse(resp *gossip.InfoStatus) *gossip.InfoStatus {
+	for i := range resp.Server.ConnStatus {
+		resp.Server.ConnStatus[i].Address = "<redacted>"
+	}
+
+	return resp
 }
 
 func (s *systemStatusServer) EngineStats(
@@ -1151,7 +1168,16 @@ func (s *statusServer) Details(
 		if err != nil {
 			return nil, srverrors.ServerError(ctx, err)
 		}
-		return status.Details(ctx, req)
+		detailsResponse, err := status.Details(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+
+		if req.Redacted {
+			detailsResponse = s.redactDetailsResponse(detailsResponse)
+		}
+
+		return detailsResponse, err
 	}
 
 	remoteNodeID := roachpb.NodeID(s.serverIterator.getID())
@@ -1167,7 +1193,17 @@ func (s *statusServer) Details(
 		resp.SQLAddress = *addr
 	}
 
+	if req.Redacted {
+		resp = s.redactDetailsResponse(resp)
+	}
+
 	return resp, nil
+}
+
+func (s *statusServer) redactDetailsResponse(resp *serverpb.DetailsResponse) *serverpb.DetailsResponse {
+	resp.SQLAddress.AddressField = "<redacted>"
+	resp.Address.AddressField = "<redacted>"
+	return resp
 }
 
 // GetFiles returns a list of files of type defined in the request.
@@ -1734,7 +1770,7 @@ func (s *systemStatusServer) Regions(
 
 // NodesList returns a list of nodes with their corresponding addresses.
 func (s *statusServer) NodesList(
-	ctx context.Context, _ *serverpb.NodesListRequest,
+	ctx context.Context, request *serverpb.NodesListRequest,
 ) (*serverpb.NodesListResponse, error) {
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
@@ -1746,7 +1782,26 @@ func (s *statusServer) NodesList(
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
-	return s.serverIterator.nodesList(ctx)
+	nodeListResponse, err := s.serverIterator.nodesList(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if request.Redacted {
+		nodeListResponse = s.redactNodeListResponse(nodeListResponse)
+	}
+
+	return nodeListResponse, nil
+}
+
+func (s *statusServer) redactNodeListResponse(nodeListResponse *serverpb.NodesListResponse) *serverpb.NodesListResponse {
+	for i := range nodeListResponse.Nodes {
+		nodeListResponse.Nodes[i].Address.AddressField = "<redacted>"
+		nodeListResponse.Nodes[i].SQLAddress.AddressField = "<redacted>"
+	}
+
+	return nodeListResponse
 }
 
 // Nodes returns all node statuses.
@@ -1775,7 +1830,40 @@ func (s *systemStatusServer) Nodes(
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
+
+	if req.Redacted {
+		resp = s.redactNodesResponse(resp)
+	}
+
 	return resp, nil
+}
+
+func (s *statusServer) redactNodesResponse(resp *serverpb.NodesResponse) *serverpb.NodesResponse {
+	for i := range resp.Nodes {
+		resp.Nodes[i].Desc.Address.AddressField = "<redacted>"
+		resp.Nodes[i].Desc.SQLAddress.AddressField = "<redacted>"
+		resp.Nodes[i].Desc.HTTPAddress.AddressField = "<redacted>"
+
+		for j := range resp.Nodes[i].Desc.Locality.Tiers {
+			if resp.Nodes[i].Desc.Locality.Tiers[i].Key == "dns" {
+				resp.Nodes[0].Desc.Locality.Tiers[j].Value = "<redacted>"
+			}
+		}
+
+		for j := range resp.Nodes[i].StoreStatuses {
+			resp.Nodes[i].StoreStatuses[j].Desc.Node.Address.AddressField = "<redacted>"
+			resp.Nodes[i].StoreStatuses[j].Desc.Node.SQLAddress.AddressField = "<redacted>"
+			resp.Nodes[i].StoreStatuses[j].Desc.Node.HTTPAddress.AddressField = "<redacted>"
+
+			for k := range resp.Nodes[i].StoreStatuses[j].Desc.Node.Locality.Tiers {
+				if resp.Nodes[i].StoreStatuses[j].Desc.Node.Locality.Tiers[k].Key == "dns" {
+					resp.Nodes[i].StoreStatuses[j].Desc.Node.Locality.Tiers[k].Value = "<redacted>"
+				}
+			}
+		}
+	}
+
+	return resp
 }
 
 // NodesUI on the tenant, delegates to the storage layer's endpoint after
@@ -1954,7 +2042,18 @@ func (s *statusServer) nodeStatus(
 		err = errors.Wrapf(err, "could not unmarshal NodeStatus from %s", key)
 		return nil, srverrors.ServerError(ctx, err)
 	}
+
+	if req.Redacted {
+		nodeStatus = *s.redactNodeStatusResponse(&nodeStatus)
+	}
+
 	return &nodeStatus, nil
+}
+
+func (s *statusServer) redactNodeStatusResponse(nodeStatus *statuspb.NodeStatus) *statuspb.NodeStatus {
+	nodeStatus.Desc.SQLAddress.AddressField = "<redacted>"
+	nodeStatus.Desc.Address.AddressField = "<redacted>"
+	return nodeStatus
 }
 
 func (s *statusServer) NodeUI(
@@ -2235,7 +2334,24 @@ func (s *systemStatusServer) Ranges(
 	if resp != nil {
 		resp.Next = int32(next)
 	}
+
+	if req.Redacted {
+		resp = s.redactRangesResponse(resp)
+	}
+
 	return resp, err
+}
+
+func (s *statusServer) redactRangesResponse(resp *serverpb.RangesResponse) *serverpb.RangesResponse {
+	for i := range resp.Ranges {
+		for j := range resp.Ranges[i].Locality.Tiers {
+			if resp.Ranges[i].Locality.Tiers[j].Key == "dns" {
+				resp.Ranges[i].Locality.Tiers[j].Value = "<redacted>"
+			}
+		}
+	}
+
+	return resp
 }
 
 // Ranges returns range info for the specified node.

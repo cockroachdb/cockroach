@@ -98,6 +98,7 @@ Note: this does *not* check readiness. Use the Health RPC for that purpose.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.DetailsRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
+| redacted | [bool](#cockroach.server.serverpb.DetailsRequest-bool) |  |  | [reserved](#support-status) |
 
 
 
@@ -229,6 +230,10 @@ The nodes are SQL instances in case of multi-tenant
 clusters.
 
 
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| redacted | [bool](#cockroach.server.serverpb.NodesListRequest-bool) |  |  | [reserved](#support-status) |
+
 
 
 
@@ -297,6 +302,10 @@ Support status: [alpha](#support-status)
 NodesRequest requests a copy of the node information as known to gossip
 and the KV layer.
 
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| redacted | [bool](#cockroach.server.serverpb.NodesRequest-bool) |  |  | [reserved](#support-status) |
 
 
 
@@ -463,6 +472,7 @@ Support status: [alpha](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.NodeRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
+| redacted | [bool](#cockroach.server.serverpb.NodeRequest-bool) |  |  | [reserved](#support-status) |
 
 
 
@@ -598,6 +608,10 @@ Support status: [reserved](#support-status)
 NodesRequest requests a copy of the node information as known to gossip
 and the KV layer.
 
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| redacted | [bool](#cockroach.server.serverpb.NodesRequest-bool) |  |  | [reserved](#support-status) |
 
 
 
@@ -870,6 +884,7 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.NodeRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
+| redacted | [bool](#cockroach.server.serverpb.NodeRequest-bool) |  |  | [reserved](#support-status) |
 
 
 
@@ -1417,6 +1432,7 @@ Support status: [reserved](#support-status)
 | range_ids | [int64](#cockroach.server.serverpb.RangesRequest-int64) | repeated |  | [reserved](#support-status) |
 | limit | [int32](#cockroach.server.serverpb.RangesRequest-int32) |  | The pagination limit to use, if set. NB: Pagination is based on ascending RangeID. | [reserved](#support-status) |
 | offset | [int32](#cockroach.server.serverpb.RangesRequest-int32) |  | The pagination offset to use, if set. NB: Pagination is based on ascending RangeID. | [reserved](#support-status) |
+| redacted | [bool](#cockroach.server.serverpb.RangesRequest-bool) |  |  | [reserved](#support-status) |
 
 
 
@@ -1907,6 +1923,7 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.GossipRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
+| redacted | [bool](#cockroach.server.serverpb.GossipRequest-bool) |  |  | [reserved](#support-status) |
 
 
 

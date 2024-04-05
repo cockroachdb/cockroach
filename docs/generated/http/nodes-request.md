@@ -9,4 +9,8 @@ and the KV layer.
 Support status: [alpha](#support-status)
 
 
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| redacted | [bool](#bool) |  |  | [reserved](#support-status) |
+
 
