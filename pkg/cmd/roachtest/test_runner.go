@@ -1021,7 +1021,7 @@ func (r *testRunner) runTest(
 				failureMsg := t.failureMsg()
 				preemptedVMNames := getPreemptedVMNames(ctx, c, l)
 				if preemptedVMNames != "" {
-					failureMsg = fmt.Sprintf("VMs preempted during the test run : %s\n\n**Other Failure**\n%s", preemptedVMNames, failureMsg)
+					failureMsg = fmt.Sprintf("VMs preempted during the test run: %s\n\n**Other Failures:**\n%s", preemptedVMNames, failureMsg)
 					// Reset failures in the test so that the VM preemption
 					// error is the one that is taken into account when
 					// reporting the failure. Note any other failures that
@@ -1225,22 +1225,33 @@ func (r *testRunner) runTest(
 	}
 }
 
-// getPreemptedVMNames returns a comma separated list of preempted VM names - if any.
+// getPreemptedVMNames returns a comma separated list of preempted VM
+// names, or an empty string if no VM was preempted or an error was found.
 func getPreemptedVMNames(ctx context.Context, c *clusterImpl, l *logger.Logger) string {
 	preemptedVMs, err := c.GetPreemptedVMs(ctx, l)
-	var preemptedVMNames string
 	if err != nil {
 		l.Printf("failed to check preempted VMs: %s", err)
-	} else if len(preemptedVMs) > 0 {
-		for _, item := range preemptedVMs {
-			if preemptedVMNames != "" {
-				preemptedVMNames += ", " + item.Name
-			} else {
-				preemptedVMNames = item.Name
-			}
+		return ""
+	}
+
+	var preemptedVMNames []string
+	for _, item := range preemptedVMs {
+		// Expected format: projects/{project}/zones/{zone}/instances/{name}
+		parts := strings.Split(item.Name, "/")
+
+		// If the instance name is in the expected format, only include
+		// the VM name and the zone, to make it easier to for a human
+		// reading the output.
+		if len(parts) == 6 {
+			instanceName := parts[5]
+			zone := parts[3]
+			preemptedVMNames = append(preemptedVMNames, fmt.Sprintf("%s (%s)", instanceName, zone))
+		} else {
+			preemptedVMNames = append(preemptedVMNames, item.Name)
 		}
 	}
-	return preemptedVMNames
+
+	return strings.Join(preemptedVMNames, ", ")
 }
 
 // The assertions here are executed after each test, and may result in a test failure. Test authors
