@@ -1,20 +1,29 @@
 # LogicTest: 3node-tenant-multiregion
 
+user host-cluster-root
+
+statement ok
+ALTER TENANT [10] GRANT CAPABILITY can_admin_relocate_range=true
+
+user root
+
 # Create a table on the secondary tenant.
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT, FAMILY (k, v));
 INSERT INTO t SELECT i, i FROM generate_series(1, 6) AS g(i)
 
+# Upreplicate the table's range.
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1, 2, 3], 0)
+
 # Split the ranges in the table.
 statement ok
 ALTER TABLE t SPLIT AT SELECT generate_series(1, 6)
 
-# Relocate ranges in the admin tenant so that
+# Relocate ranges so that
 # - [1-2) and [2-3) are on node 2
 # - [3-4) and [4-5) are on node 3
 # - [5-6) and [6-7) are on node 1.
-user host-cluster-root
-
 statement ok
 ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%1';
 ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%2';
@@ -22,8 +31,6 @@ ALTER RANGE RELOCATE LEASE TO 3 FOR SELECT range_id FROM crdb_internal.ranges WH
 ALTER RANGE RELOCATE LEASE TO 3 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%4';
 ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%5';
 ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%6';
-
-user root
 
 # Populate the range cache.
 statement ok
