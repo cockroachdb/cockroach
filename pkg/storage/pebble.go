@@ -743,7 +743,7 @@ var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{
 // Cockroach code relies on unconditionally (like range keys). New stores are by
 // default created with this version. It should correspond to the minimum
 // supported binary version.
-const MinimumSupportedFormatVersion = pebble.FormatFlushableIngest
+const MinimumSupportedFormatVersion = pebble.FormatVirtualSSTables
 
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
@@ -2390,10 +2390,8 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
-	clusterversion.V23_1: pebble.FormatFlushableIngest,
-	clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete: pebble.FormatDeleteSizedAndObsolete,
-	clusterversion.V23_2_PebbleFormatVirtualSSTables:        pebble.FormatVirtualSSTables,
-	clusterversion.V24_1_PebbleFormatSyntheticPrefixSuffix:  pebble.FormatSyntheticPrefixSuffix,
+	clusterversion.V23_2: pebble.FormatVirtualSSTables,
+	clusterversion.V24_1_PebbleFormatSyntheticPrefixSuffix: pebble.FormatSyntheticPrefixSuffix,
 }
 
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
