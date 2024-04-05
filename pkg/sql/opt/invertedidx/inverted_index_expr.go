@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 )
 
 // NewDatumsToInvertedExpr returns a new DatumsToInvertedExpr.
@@ -176,6 +178,161 @@ func TryFilterInvertedIndex(
 	}
 
 	return spanExpr, constraint, remainingFilters, pfState, true
+}
+
+// TryFilterInvertedIndexBySimilarity attempts to constrain an inverted trigram
+// index using a similarity filter. It returns the constraint and the set of
+// remaining filters which are not "tight" in the constraint.  If no constraint
+// can be generated, then ok=false is returned.
+func TryFilterInvertedIndexBySimilarity(
+	evalCtx *eval.Context,
+	f *norm.Factory,
+	filters memo.FiltersExpr,
+	optionalFilters memo.FiltersExpr,
+	tabID opt.TableID,
+	index cat.Index,
+	computedColumns map[opt.ColumnID]opt.ScalarExpr,
+	checkCancellation func(),
+) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
+	md := f.Metadata()
+	tabMeta := md.TableMeta(tabID)
+	columnCount := index.ExplicitColumnCount()
+	prefixColumnCount := index.NonInvertedPrefixColumnCount()
+	ps := tabMeta.IndexPartitionLocality(index.Ordinal())
+
+	// The indexed column must be of a string-like type.
+	srcColOrd := index.InvertedColumn().InvertedSourceColumnOrdinal()
+	if md.Table(tabID).Column(srcColOrd).DatumType().Family() != types.StringFamily {
+		return nil, nil, false
+	}
+
+	cols := make([]opt.OrderingColumn, columnCount)
+	var notNullCols opt.ColSet
+	for i := range cols {
+		col := index.Column(i)
+		colID := tabID.ColumnID(col.Ordinal())
+		cols[i] = opt.MakeOrderingColumn(colID, col.Descending)
+		if !col.IsNullable() {
+			notNullCols.Add(colID)
+		}
+	}
+
+	// First, we attempt to build a constraint from a  similarity filter on the
+	// inverted column. We search for expressions of the form `s % 'foo'` or
+	// `'foo' % s`, where s is the indexed column.
+	var con *constraint.Constraint
+	for i := range filters {
+		sim, ok := filters[i].Condition.(*memo.ModExpr)
+		if !ok {
+			continue
+		}
+
+		var constStr opt.ScalarExpr
+		switch {
+		case isIndexColumn(tabID, index, sim.Left, computedColumns):
+			constStr = sim.Right
+		case isIndexColumn(tabID, index, sim.Right, computedColumns):
+			constStr = sim.Left
+		default:
+			continue
+		}
+
+		s, ok := extractConstStringDatum(constStr)
+		if !ok {
+			continue
+		}
+
+		// Generate trigrams for the string.
+		// TODO(mgartner): Determine the minimum number of trigrams needed to
+		// match and use it to reduce the number of trigram spans.
+		trgms := trigram.MakeTrigrams(s, true /* pad */)
+
+		var keyCtx constraint.KeyContext
+		keyCtx.EvalCtx = evalCtx
+		keyCtx.Columns.Init(cols[prefixColumnCount:])
+
+		var spans constraint.Spans
+		spans.Alloc(len(trgms))
+		for j := range trgms {
+			// Create a key for the trigram. The trigram is encoded so that it
+			// can be correctly compared to histogram upper bounds, which are
+			// also encoded. The byte slice is pre-sized to hold the trigram
+			// plus two extra bytes for the prefix and terminator.
+			k := make([]byte, 0, len(trgms[j])+2)
+			k = encoding.EncodeStringAscending(k, trgms[j])
+			key := constraint.MakeKey(tree.NewDEncodedKey(tree.DEncodedKey(k)))
+
+			var span constraint.Span
+			span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+			spans.Append(&span)
+		}
+
+		con = &constraint.Constraint{}
+		con.Init(&keyCtx, &spans)
+		break
+	}
+
+	if con == nil {
+		return nil, nil, false
+	}
+
+	// If the index is a single-column index, then we are done.
+	if columnCount == 1 {
+		return con, filters, true
+	}
+
+	// If the index is a multi-column index, then we need to constrain the
+	// prefix columns.
+	//
+	// Consolidation of a constraint converts contiguous spans into a single
+	// span. By definition, the consolidated span would have different start and
+	// end keys and could not be used for multi-column inverted index scans.
+	// Therefore, we only generate and check the unconsolidated constraint,
+	// allowing the optimizer to plan multi-column inverted index scans in more
+	// cases.
+	//
+	// For example, the consolidated constraint for (x IN (1, 2, 3)) is:
+	//
+	//   /x: [/1 - /3]
+	//   Prefix: 0
+	//
+	// The unconsolidated constraint for the same expression is:
+	//
+	//   /x: [/1 - /1] [/2 - /2] [/3 - /3]
+	//   Prefix: 1
+	//
+	var prefixConstraint *constraint.Constraint
+	var ic idxconstraint.Instance
+	ic.Init(
+		filters, optionalFilters,
+		cols, notNullCols, tabMeta.ComputedCols,
+		tabMeta.ColsInComputedColsExpressions,
+		false, /* consolidate */
+		evalCtx, f, ps, checkCancellation,
+	)
+	prefixConstraint = ic.UnconsolidatedConstraint()
+	if prefixConstraint.Prefix(evalCtx) != prefixColumnCount {
+		// The prefix columns must be constrained to single values.
+		return nil, nil, false
+	}
+
+	// The constraint is a pointer to a field of ic. Make a copy of the
+	// constraint so that we no longer reference ic and it can be GC'd.
+	prefixConstraintCopy := *prefixConstraint
+
+	// Combine the prefix constraint and the inverted column constraint.
+	prefixConstraintCopy.Combine(evalCtx, con, checkCancellation)
+	remainingFilters = ic.RemainingFilters()
+	return &prefixConstraintCopy, remainingFilters, true
+}
+
+func extractConstStringDatum(expr opt.ScalarExpr) (string, bool) {
+	if !memo.CanExtractConstDatum(expr) {
+		return "", false
+	}
+	d := memo.ExtractConstDatum(expr)
+	ds, ok := d.(*tree.DString)
+	return string(*ds), ok
 }
 
 // TryJoinInvertedIndex tries to create an inverted join with the given input
