@@ -11,10 +11,16 @@
 package sqlstats
 
 import (
+	"context"
+	"encoding/hex"
+	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/obs/eventagg"
+	"github.com/cockroachdb/cockroach/pkg/obs/logstream"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -44,12 +50,13 @@ type StmtStatistics struct {
 	ExecCount int
 	// ServiceLatency is a histogram used to aggregate service latencies of the
 	// various Stmt's recorded into this StmtStatistics instance.
-	ServiceLatency metric.ManualWindowHistogram
+	ServiceLatency    metric.IHistogram
+	ServiceLatencyP99 float64
 }
 
 func mergeStmt(s *Stmt, stats *StmtStatistics) {
 	stats.ExecCount++
-	stats.ServiceLatency.RecordValue(float64(s.ServiceLatency.Nanoseconds()))
+	stats.ServiceLatency.RecordValue(s.ServiceLatency.Nanoseconds())
 }
 
 func mapStmt(s *Stmt) appstatspb.StmtFingerprintID {
@@ -68,7 +75,15 @@ func NewStmtStatsAggregator(
 		stopper,
 		func() *StmtStatistics {
 			return &StmtStatistics{
-				ServiceLatency: metric.ManualWindowHistogram{}, // TODO: legitimate construction of histogram.
+				ServiceLatency: metric.NewHistogram(metric.HistogramOptions{
+					Metadata: metric.Metadata{
+						Name:        "stmt.svc.latency",
+						Measurement: "Aggregate service latency of statement executions",
+						Unit:        metric.Unit_NANOSECONDS,
+					},
+					Duration:     base.DefaultHistogramWindowInterval(),
+					BucketConfig: metric.IOLatencyBuckets,
+				}),
 			}
 		},
 		mapStmt,
@@ -76,4 +91,34 @@ func NewStmtStatsAggregator(
 		eventagg.NewWindowedFlush(10*time.Second, timeutil.Now),                                          // Let's limit our aggregation windows to clock-aligned 10-second intervals.
 		eventagg.NewLogWriteConsumer[appstatspb.StmtFingerprintID, *StmtStatistics](log.STATEMENT_STATS), // We'd like to log all the aggregated results, as-is.
 	)
+}
+
+// SQLStatsLogProcessor is an example logstream.LogProcessor implementation.
+type SQLStatsLogProcessor struct {
+	// LogProcessors can be stateful! This is why we opt for using interface implementations as
+	// opposed to anonymous functions when instantiating a logstream.StructuredLogProcessor
+}
+
+// Process implements the logstream.LogProcessor interface.
+func (S SQLStatsLogProcessor) Process(
+	ctx context.Context, e eventagg.KeyValueLog[appstatspb.StmtFingerprintID, *StmtStatistics],
+) error {
+	fmt.Printf("FingerprintID: '%s'\tExec Count: %d\tP99 Latency (ms): %f\tStart: %s End %s\n",
+		hex.EncodeToString(sqlstatsutil.EncodeUint64ToBytes(uint64(e.Key))),
+		e.Value.ExecCount,
+		e.Value.ServiceLatencyP99/1000000,
+		timeutil.Unix(0, e.AggInfo.StartTime).UTC().String(),
+		timeutil.Unix(0, e.AggInfo.EndTime).UTC().String())
+	return nil
+}
+
+var _ logstream.LogProcessor[eventagg.KeyValueLog[appstatspb.StmtFingerprintID, *StmtStatistics]] = (*SQLStatsLogProcessor)(nil)
+
+// InitStmtStatsProcessor initializes & registers a new logstream.processor for the processing of statement statistics
+// for the tenant associated with the given ctx.
+//
+// It consumes streams of events flushed & logged from NewStmtStatsAggregator instances belonging to the same tenant.
+func InitStmtStatsProcessor(ctx context.Context, stopper *stop.Stopper) {
+	processor := logstream.NewStructuredLogProcessor[eventagg.KeyValueLog[appstatspb.StmtFingerprintID, *StmtStatistics]](&SQLStatsLogProcessor{})
+	logstream.RegisterProcessor(ctx, stopper, log.STATEMENT_STATS, processor)
 }
