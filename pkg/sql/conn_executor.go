@@ -500,6 +500,8 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 
 	s.sqlStats = persistedSQLStats
 	s.sqlStatsAggregator = sqlstats.NewStmtStatsAggregator()
+	// TODO(abarganier): Can we get a legitimate context this early in the startup process?
+	sqlstats.InitStmtStatsProcessor(context.Background())
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
 	schemaTelemetryIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
 	schemaTelemetryIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())

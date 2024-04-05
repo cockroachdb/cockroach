@@ -1,0 +1,55 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "logstream",
+    srcs = [
+        "processor.go",
+        "processor_buffer.go",
+        "registration.go",
+        "router.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/logstream",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "logstream_test",
+    srcs = [
+        "processor_buffer_test.go",
+        "registration_test.go",
+        "router_test.go",
+        ":mock_processor",  # keep
+    ],
+    embed = [":logstream"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_mock//gomock",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+gomock(
+    name = "mock_processor",
+    out = "mocks_generated_test.go",
+    interfaces = [
+        "Processor",
+    ],
+    library = ":logstream",
+    mock_names = {"TestingProcessor": "MockProcessor"},
+    package = "logstream",
+    self_package = "github.com/cockroachdb/cockroach/pkg/util/logstream",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
