@@ -14,9 +14,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -26,12 +28,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1384,4 +1389,68 @@ func TestTxnRetryWithLatchesDroppedEarly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestTxnUpdateFromTxnRecordOverwritesField reproduces a bug where a field in
+// the Transaction proto, that is not present in TransactionRecord, can be
+// accidentally overwritten by Update().
+// OmitInRangefeeds and AdmissionPriority are two such fields.
+func TestTxnUpdateFromTxnRecordOverwritesField(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	keyA := roachpb.Key("a")
+	var storeKnobs kvserver.StoreTestingKnobs
+	var foundNormalPri = atomic.Bool{}
+	foundNormalPri.Store(false)
+	storeKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
+		if args.Req.Txn != nil && args.Req.Txn.Name == "txn" {
+			if args.Req.Txn.AdmissionPriority == int32(admissionpb.NormalPri) {
+				foundNormalPri.Store(true)
+			}
+		}
+		return nil
+	}
+
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{Store: &storeKnobs},
+	})
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	// Start a transaction with high admission priority.
+	txn := kv.NewTxnWithAdmissionControl(
+		ctx, kvDB, 0, kvpb.AdmissionHeader_ROOT_KV, admissionpb.UserHighPri)
+	// Set OmitInRangefeeds to true.
+	txn.SetOmitInRangefeeds()
+	txn.SetDebugName("txn")
+	require.NoError(t, txn.Put(ctx, keyA, "a"))
+
+	hbRequest := &kvpb.HeartbeatTxnRequest{
+		RequestHeader: kvpb.RequestHeader{Key: keyA},
+		Now:           txn.ReadTimestamp(),
+	}
+
+	// The first txn heartbeat writes the TransactionRecord to disk.
+	// OmitInRangefeeds and AdmissionPriority are not present on the
+	// TransactionRecord proto, so they are not written to disk.
+	b := txn.NewBatch()
+	b.AddRawRequest(hbRequest)
+	require.NoError(t, txn.Run(ctx, b))
+
+	// The second txn heartbeat reads the TransactionRecord from disk, writes an
+	// updated one, and returns it.
+	// As part of command evaluation, the Transaction proto is updated with the
+	// new TransactionRecord. OmitInRangefeeds and AdmissionPriority are dropped
+	// in the process because they are not present in the TransactionRecord.
+	b = txn.NewBatch()
+	b.AddRawRequest(hbRequest)
+	require.NoError(t, txn.Run(ctx, b))
+
+	require.NoError(t, txn.Commit(ctx))
+
+	// OmitInRangefeeds is now false.
+	require.False(t, txn.GetOmitInRangefeeds())
+	// There was at least one request with the default normal admission priority.
+	require.True(t, foundNormalPri.Load())
 }
