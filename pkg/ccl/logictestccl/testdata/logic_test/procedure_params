@@ -689,20 +689,21 @@ CALL my_sum(NULL, 1, 1);
 statement ok
 DROP PROCEDURE my_sum;
 
-statement ok
+statement error pgcode 0A000 unnamed INOUT parameters are not yet supported
 CREATE PROCEDURE my_sum(OUT a_plus_one INT, INOUT a INT, INOUT INT = 3) AS $$ BEGIN SELECT a + 1 INTO a_plus_one; END; $$ LANGUAGE PLpgSQL;
 
-# TODO(121251): this should return (2,1,3).
+statement ok
+CREATE PROCEDURE my_sum(OUT a_plus_one INT, INOUT a INT, INOUT b INT = 3) AS $$ BEGIN SELECT a + 1 INTO a_plus_one; END; $$ LANGUAGE PLpgSQL;
+
 query III
 CALL my_sum(NULL, 1);
 ----
-2  1  NULL
+2  1  3
 
-# TODO(121251): this should return (2,1,1).
 query III
 CALL my_sum(NULL, 1, 1);
 ----
-2  1  NULL
+2  1  1
 
 statement ok
 DROP PROCEDURE my_sum;
