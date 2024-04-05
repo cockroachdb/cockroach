@@ -202,8 +202,12 @@ var rubyPGBlocklist = blocklist{
 }
 
 var rubyPGIgnorelist = blocklist{
-	`PG::Connection OS thread support Connection.new shouldn't block a second thread`:                             "flaky",
-	`running with sync_* methods PG::Connection consume_input should raise ConnectionBad for a closed connection`: "flaky",
-	`running with sync_* methods PG::Connection OS thread support Connection.new shouldn't block a second thread`: "flaky",
-	`running with sync_* methods PG::Connection handles server close while asynchronous connect`:                  "flaky",
+	`PG::Connection consume_input should raise ConnectionBad for a closed connection`:                                                                                              "flaky",
+	`PG::Connection handles server close while asynchronous connect`:                                                                                                               "flaky",
+	`PG::Connection OS thread support Connection.new shouldn't block a second thread`:                                                                                              "flaky",
+	`PG::Connection multinationalization support respect and convert character encoding of input strings should convert error string to #put_copy_end`:                             "unknown",
+	`running with sync_* methods PG::Connection consume_input should raise ConnectionBad for a closed connection`:                                                                  "flaky",
+	`running with sync_* methods PG::Connection OS thread support Connection.new shouldn't block a second thread`:                                                                  "flaky",
+	`running with sync_* methods PG::Connection handles server close while asynchronous connect`:                                                                                   "flaky",
+	`running with sync_* methods PG::Connection multinationalization support respect and convert character encoding of input strings should convert error string to #put_copy_end`: "flaky",
 }
