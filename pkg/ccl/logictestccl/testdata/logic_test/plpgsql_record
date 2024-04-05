@@ -82,11 +82,10 @@ CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-# TODO(drewk): Postgres returns NULL, not a tuple with a NULL element.
 query T
 SELECT f();
 ----
-()
+NULL
 
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
