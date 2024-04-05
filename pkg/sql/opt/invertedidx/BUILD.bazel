@@ -48,12 +48,13 @@ go_test(
     size = "small",
     srcs = [
         "geo_test.go",
+        "inverted_index_expr_test.go",
         "json_array_test.go",
         "trigram_test.go",
         "tsearch_test.go",
     ],
+    embed = [":invertedidx"],
     deps = [
-        ":invertedidx",
         "//pkg/geo",
         "//pkg/geo/geoindex",
         "//pkg/geo/geopb",

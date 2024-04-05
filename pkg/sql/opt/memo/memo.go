@@ -190,6 +190,7 @@ type Memo struct {
 	plpgsqlUseStrictInto                       bool
 	useVirtualComputedColumnStats              bool
 	useTrigramSimilarityOptimization           bool
+	trigramSimilarityThreshold                 float64
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -266,6 +267,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		plpgsqlUseStrictInto:                       evalCtx.SessionData().PLpgSQLUseStrictInto,
 		useVirtualComputedColumnStats:              evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats,
 		useTrigramSimilarityOptimization:           evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization,
+		trigramSimilarityThreshold:                 evalCtx.SessionData().TrigramSimilarityThreshold,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -420,6 +422,7 @@ func (m *Memo) IsStale(
 		m.plpgsqlUseStrictInto != evalCtx.SessionData().PLpgSQLUseStrictInto ||
 		m.useVirtualComputedColumnStats != evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats ||
 		m.useTrigramSimilarityOptimization != evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization ||
+		m.trigramSimilarityThreshold != evalCtx.SessionData().TrigramSimilarityThreshold ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
