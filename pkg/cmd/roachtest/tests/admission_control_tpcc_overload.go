@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 // tpccOlapQuery is a contrived query that seems to do serious damage to a
@@ -179,39 +180,60 @@ func registerTPCCOverload(r registry.Registry) {
 // This test begins a ramping TPCC workload that will overwhelm the CRDB nodes.
 // There is no way to "pass" this test since the 6 nodes can't possibly handle
 // 10K warehouses. If they could handle this load, then the test should be
-// changed to increase that count. The purpose of the test is to make sure that
-// the nodes don't fail under unsustainable overload. As of today (v22.2), the
-// CRDB nodes will eventually OOM around 3-4 hours through the ramp period.
+// changed to increase that count. The purpose of the test is twofold. First, to
+// ensure nodes don't crash under unsustainable overload, but instead do
+// something more reasonable. Second, to check that the throughput of the system
+// stays close to the max rate even under high overload conditions. Without the
+// custom setting to limit the number of open transactions per gateway, CRDB
+// nodes will eventually OOM around 3-4 hours through the ramp period.
 func registerTPCCSevereOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:      "admission-control/tpcc-severe-overload",
-		Owner:     registry.OwnerAdmissionControl,
-		Benchmark: true,
-		// TODO(abaptist): This test will require a lot of admission control work
-		// to pass. Just putting it here to make easy to run at any time.
-		Skip:             "#89142",
+		Name:             "admission-control/tpcc-severe-overload",
+		Owner:            registry.OwnerAdmissionControl,
+		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(7, spec.CPU(8)),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Weekly),
+		Timeout:          5 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			roachNodes := c.Range(1, c.Spec().NodeCount-1)
 			workloadNode := c.Spec().NodeCount
+			warehouseCount := 10000
+			rampTime := 4 * time.Hour
+			if c.IsLocal() {
+				warehouseCount = 10
+				rampTime = 4 * time.Minute
+			}
 
-			c.Start(
-				ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule),
-				install.MakeClusterSettings(), roachNodes,
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+			t.Status("initializing (~30m)")
+			cmd := fmt.Sprintf(
+				"./cockroach workload fixtures import tpcc --checks=false --warehouses=%d {pgurl:1}",
+				warehouseCount,
 			)
+			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), cmd)
 
-			t.Status("initializing (~1h)")
-			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload fixtures import tpcc --checks=false --warehouses=10000 {pgurl:1}")
+			db := c.Conn(ctx, t.L(), 1)
+			defer db.Close()
+			_, err := db.Exec(`SET CLUSTER SETTING server.max_open_transactions_per_gateway = 100`)
+			require.NoError(t, err)
+			// Drop admin privileges, server.max_open_transactions_per_gateway
+			// does not apply to admin users.
+			_, err = db.Exec("REVOKE admin FROM roachprod")
+			require.NoError(t, err)
 
-			// This run passes through 4 "phases"
+			// Without the cluster setting, this test run passes through 4 "phases"
 			// 1) No admission control, low latencies (up to ~1500 warehouses).
 			// 2) Admission control delays, growing latencies (up to ~3000 warehouses).
 			// 3) High latencies (100s+), queues building (up to ~4500 warehouse).
 			// 4) Memory and goroutine unbounded growth with eventual node crashes (up to ~6000 warehouse).
-			t.Status("running workload (fails in ~3-4 hours)")
-			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload run tpcc --ramp=6h --tolerate-errors --warehouses=10000 '{pgurl:1-6}'")
+			t.Status("running workload (fails in ~1 hours)")
+			cmd = fmt.Sprintf(
+				"./cockroach workload run tpcc --duration=1s --ramp=%s --tolerate-errors --warehouses=%d {pgurl:1-6}",
+				rampTime,
+				warehouseCount,
+			)
+			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), cmd)
 		},
 	})
 }
