@@ -26,21 +26,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var (
-	maxProfiles = settings.RegisterIntSetting(
-		settings.ApplicationLevel,
-		"server.mem_profile.max_profiles",
-		"maximum number of profiles to be kept per ramp-up of memory usage. "+
-			"A ramp-up is defined as a sequence of profiles with increasing usage.",
-		5,
-	)
-
-	maxCombinedFileSize = settings.RegisterByteSizeSetting(
-		settings.ApplicationLevel,
-		"server.mem_profile.total_dump_size_limit",
-		"maximum combined disk size of preserved memory profiles",
-		256<<20, // 256MiB
-	)
+var maxProfiles = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"server.mem_profile.max_profiles",
+	"maximum number of profiles to be kept per ramp-up of memory usage. "+
+		"A ramp-up is defined as a sequence of profiles with increasing usage.",
+	5,
 )
 
 func init() {
@@ -48,14 +39,6 @@ func init() {
 		settings.ApplicationLevel,
 		"server.heap_profile.max_profiles", "use server.mem_profile.max_profiles instead", 5,
 		settings.Retired)
-
-	_ = settings.RegisterByteSizeSetting(
-		settings.ApplicationLevel,
-		"server.heap_profile.total_dump_size_limit",
-		"use server.mem_profile.total_dump_size_limit instead",
-		256<<20, // 256MiB
-		settings.Retired,
-	)
 }
 
 // profileStore represents the directory where heap profiles are stored.
