@@ -31,7 +31,7 @@ const numOfWorkers = 128
 
 type deprecatedPubsubClient interface {
 	init() error
-	closeTopics()
+	close() error
 	flushTopics()
 	sendMessage(content []byte, topic string, key string) error
 	sendMessageToAllTopics(content []byte) error
@@ -278,7 +278,6 @@ func (p *deprecatedPubsubSink) flush(ctx context.Context) error {
 
 // Close closes all the channels and shutdowns the topic
 func (p *deprecatedPubsubSink) Close() error {
-	p.client.closeTopics()
 	p.exitWorkers()
 	_ = p.workerGroup.Wait()
 	if p.errChan != nil {
@@ -291,6 +290,9 @@ func (p *deprecatedPubsubSink) Close() error {
 		if p.eventsChans[i] != nil {
 			close(p.eventsChans[i])
 		}
+	}
+	if err := p.client.close(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -496,11 +498,17 @@ func (p *deprecatedGcpPubsubClient) openTopic(topicName string) (*pubsub.Topic, 
 	return t, nil
 }
 
-func (p *deprecatedGcpPubsubClient) closeTopics() {
+func (p *deprecatedGcpPubsubClient) close() error {
 	_ = p.forEachTopic(func(_ string, t *pubsub.Topic) error {
 		t.Stop()
 		return nil
 	})
+	if p.client != nil {
+		// Close the client to release resources held by the client to avoid memory
+		// leaks.
+		return p.client.Close()
+	}
+	return nil
 }
 
 // sendMessage sends a message to the topic
