@@ -8327,7 +8327,14 @@ opt expect-not=GenerateInvertedIndexScans format=hide-all
 SELECT * FROM trgm WHERE s % 'foo'
 ----
 select
- ├── scan trgm
+ ├── index-join trgm
+ │    └── distinct-on
+ │         └── scan trgm@s_idx
+ │              └── constraint: /5
+ │                   ├── [/'\x122020660001' - /'\x122020660001']
+ │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
+ │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
+ │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
  └── filters
       └── s % 'foo'
 
