@@ -53,3 +53,31 @@ query I
 SELECT f();
 ----
 -1
+
+# Regression test for #121316 - nested routines in a data source.
+statement ok
+CREATE TYPE typ AS (x INT, y INT);
+
+statement ok
+CREATE FUNCTION f_nested(a INT) RETURNS typ AS $$
+  BEGIN
+    RETURN ROW(1, 2)::typ;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f(a INT) RETURNS INT AS $$
+  BEGIN
+    RETURN (f_nested(a)).y;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(2);
+----
+2
+
+query I
+SELECT * FROM f(2);
+----
+2

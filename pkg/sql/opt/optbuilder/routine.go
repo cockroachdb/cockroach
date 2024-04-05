@@ -115,19 +115,48 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	b.DisableMemoReuse = true
 	outScope := inScope.push()
 
+	// Type check and resolve the procedure.
+	proc, def := b.resolveProcedureDefinition(inScope, c.Proc)
+
+	// Synthesize output columns for OUT parameters. We can use the return type
+	// to synthesize the columns, since it's based on the OUT parameters.
+	if rTyp := proc.ResolvedType(); rTyp.Family() != types.VoidFamily {
+		if len(rTyp.TupleContents()) == 0 {
+			panic(errors.AssertionFailedf("expected procedure to return a record"))
+		}
+		for i := range rTyp.TupleContents() {
+			colName := scopeColName(tree.Name(rTyp.TupleLabels()[i]))
+			b.synthesizeColumn(outScope, colName, rTyp.TupleContents()[i], proc, nil /* scalar */)
+		}
+	}
+
+	// Build the routine.
+	routine, _ := b.buildRoutine(proc, def, inScope, outScope, nil /* colRefs */)
+	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
+		nil /* outScope */, nil /* outCol */)
+
+	// Build a call expression.
+	callPrivate := &memo.CallPrivate{Columns: outScope.colList()}
+	outScope.expr = b.factory.ConstructCall(routine, callPrivate)
+	return outScope
+}
+
+// resolveProcedureDefinition type-checks and resolves the given procedure
+// reference, and checks its privileges.
+func (b *Builder) resolveProcedureDefinition(
+	inScope *scope, proc *tree.FuncExpr,
+) (f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition) {
 	// Type-check the procedure and its arguments. Subqueries are disallowed in
 	// arguments. Note that we don't use defer to reset semaCtx.Properties
 	// because it must be reset before the call to buildRoutine below, or else
 	// subqueries would be disallowed in the body of procedures.
 	originalProps := b.semaCtx.Properties
 	b.semaCtx.Properties.Require("CALL argument", tree.RejectSubqueries)
-	typedExpr := inScope.resolveType(c.Proc, types.Any)
+	typedExpr := inScope.resolveType(proc, types.Any)
 	b.semaCtx.Properties = originalProps
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
-		panic(pgerror.Newf(pgcode.WrongObjectType,
-			"%s is not a procedure", c.Proc.Func.String(),
-		))
+		panic(pgerror.Newf(pgcode.WrongObjectType, "%s is not a procedure", proc.Func.String()))
 	}
 
 	// Resolve the procedure reference.
@@ -160,32 +189,11 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 		}
 	}
 
-	// Synthesize output columns for OUT parameters. We can use the return type
-	// to synthesize the columns, since it's based on the OUT parameters.
-	if rTyp := f.ResolvedType(); rTyp.Family() != types.VoidFamily {
-		if len(rTyp.TupleContents()) == 0 {
-			panic(errors.AssertionFailedf("expected procedure to return a record"))
-		}
-		for i := range rTyp.TupleContents() {
-			colName := scopeColName(tree.Name(rTyp.TupleLabels()[i]))
-			b.synthesizeColumn(outScope, colName, rTyp.TupleContents()[i], f, nil /* scalar */)
-		}
-	}
-
 	// Check for execution privileges.
 	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid); err != nil {
 		panic(err)
 	}
-
-	// Build the routine.
-	routine, _ := b.buildRoutine(f, def, inScope, outScope, nil /* colRefs */)
-	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
-		nil /* outScope */, nil /* outCol */)
-
-	// Build a call expression.
-	callPrivate := &memo.CallPrivate{Columns: outScope.colList()}
-	outScope.expr = b.factory.ConstructCall(routine, callPrivate)
-	return outScope
+	return f, def
 }
 
 // buildRoutine returns an expression representing the invocation of a
@@ -301,14 +309,15 @@ func (b *Builder) buildRoutine(
 	}
 	// Do not track any other routine invocations inside this routine, since
 	// for the schema changer we only need depth 1. Also keep track of when
-	// we have are executing inside a UDF (this could be nested so we need to
-	// track the previous state).
-	oldTrackingSchemaDeps := b.trackSchemaDeps
-	oldInsideUDF := b.insideUDF
-	defer func() {
-		b.trackSchemaDeps = oldTrackingSchemaDeps
-		b.insideUDF = oldInsideUDF
-	}()
+	// we have are executing inside a UDF, and whether the routine is used as a
+	// data source (this could be nested, so we need to track the previous state).
+	defer func(trackSchemaDeps, insideUDF, insideDataSource bool) {
+		b.trackSchemaDeps = trackSchemaDeps
+		b.insideUDF = insideUDF
+		b.insideDataSource = insideDataSource
+	}(b.trackSchemaDeps, b.insideUDF, b.insideDataSource)
+	oldInsideDataSource := b.insideDataSource
+	b.insideDataSource = false
 	b.trackSchemaDeps = false
 	b.insideUDF = true
 	isSetReturning := o.Class == tree.GeneratorClass
@@ -352,7 +361,7 @@ func (b *Builder) buildRoutine(
 				if i == len(stmts)-1 {
 					finishResolveType(stmtScope)
 					expr, physProps, isMultiColDataSource =
-						b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
+						b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, oldInsideDataSource, f)
 				}
 				body[i] = expr
 				bodyProps[i] = physProps
@@ -392,7 +401,7 @@ func (b *Builder) buildRoutine(
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		finishResolveType(stmtScope)
 		expr, physProps, isMultiColDataSource =
-			b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
+			b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, oldInsideDataSource, f)
 		body = []memo.RelExpr{expr}
 		bodyProps = []*physical.Required{physProps}
 		if b.verboseTracing {
@@ -428,8 +437,12 @@ func (b *Builder) buildRoutine(
 // UDF. Depending on the context and return type of the UDF, this may mean
 // expanding a tuple into multiple columns, or combining multiple columns into
 // a tuple.
+//
+// insideDataSource indicates whether the routine is used as a data source. It
+// is passed in rather than using b.insideDataSource because b.insideDataSource
+// is reset while building the body of the routine.
 func (b *Builder) finishBuildLastStmt(
-	stmtScope *scope, bodyScope *scope, isSetReturning bool, f *tree.FuncExpr,
+	stmtScope *scope, bodyScope *scope, isSetReturning, insideDataSource bool, f *tree.FuncExpr,
 ) (expr memo.RelExpr, physProps *physical.Required, isMultiColDataSource bool) {
 	expr, physProps = stmtScope.expr, stmtScope.makePhysicalProps()
 	rtyp := f.ResolvedType()
@@ -457,7 +470,7 @@ func (b *Builder) finishBuildLastStmt(
 	cols := physProps.Presentation
 	isSingleTupleResult := len(stmtScope.cols) == 1 &&
 		stmtScope.cols[0].typ.Family() == types.TupleFamily
-	if b.insideDataSource && rtyp.Family() == types.TupleFamily {
+	if insideDataSource && rtyp.Family() == types.TupleFamily {
 		// When the UDF is used as a data source and expects to output a tuple
 		// type, its output needs to be a row of columns instead of the usual
 		// tuple. If the last statement output a tuple, we need to expand the
