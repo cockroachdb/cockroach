@@ -58,7 +58,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 			// See: https://github.com/cockroachdb/cockroach/issues/112111.
 			// Once this issue is fixed we should remove this Ubuntu Version override.
 			Cluster:             r.MakeClusterSpec(4, spec.ReuseNone(), spec.DisableLocalSSD(), spec.UbuntuVersion(vm.FocalFossa)),
-			CompatibleClouds:    registry.AllExceptAWS,
+			CompatibleClouds:    registry.OnlyGCE,
 			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,
 			SkipPostValidations: registry.PostValidationNoDeadNodes,

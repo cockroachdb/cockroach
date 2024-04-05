@@ -77,7 +77,7 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Timeout:             60 * time.Minute,
 				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.DisableLocalSSD(), spec.ReuseNone()), // uses disk stalls
-				CompatibleClouds:    registry.AllExceptAWS,
+				CompatibleClouds:    registry.OnlyGCE,                                                             // dmsetup only configured for gce
 				Suites:              registry.Suites(registry.Nightly),
 				Leases:              leases,
 				SkipPostValidations: registry.PostValidationNoDeadNodes, // cleanup kills nodes
@@ -128,6 +128,7 @@ func registerFailover(r registry.Registry) {
 
 			clusterOpts := make([]spec.Option, 0)
 			clusterOpts = append(clusterOpts, spec.CPU(2))
+			clouds := registry.AllExceptAWS
 
 			var postValidation registry.PostValidation
 			if failureMode == failureModeDiskStall {
@@ -138,6 +139,8 @@ func registerFailover(r registry.Registry) {
 				// spurious flakes from previous runs. See #107865
 				clusterOpts = append(clusterOpts, spec.ReuseNone())
 				postValidation = registry.PostValidationNoDeadNodes
+				// dmsetup is currently only configured for gce.
+				clouds = registry.OnlyGCE
 			}
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/non-system/%s%s", failureMode, suffix),
@@ -145,7 +148,7 @@ func registerFailover(r registry.Registry) {
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
 				Cluster:             r.MakeClusterSpec(7, clusterOpts...),
-				CompatibleClouds:    registry.AllExceptAWS,
+				CompatibleClouds:    clouds,
 				Suites:              registry.Suites(registry.Nightly),
 				Leases:              leases,
 				SkipPostValidations: postValidation,
