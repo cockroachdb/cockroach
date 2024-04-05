@@ -1585,14 +1585,26 @@ func (d *DBytes) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
-	v, ok := ctx.UnwrapDatum(other).(*DBytes)
-	if !ok {
+	var o string
+	switch t := ctx.UnwrapDatum(other).(type) {
+	case *DBytes:
+		o = string(*t)
+	case *DEncodedKey:
+		// Allow comparison with DEncodedKeys. This is required for now because
+		// histogram upper-bound values in table statistics are DBytes, but
+		// constraints with DEncodedKeys are built. When row count estimates are
+		// computed, values of these two types are compared.
+		//
+		// TODO(mgartner): We should use DEncodedKeys for histogram
+		// upper-bounds, then we can remove this case.
+		o = string(*t)
+	default:
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
-	if *d < *v {
+	if string(*d) < o {
 		return -1, nil
 	}
-	if *d > *v {
+	if string(*d) > o {
 		return 1, nil
 	}
 	return 0, nil
@@ -1694,12 +1706,42 @@ func (*DEncodedKey) ResolvedType() *types.T {
 
 // Compare implements the Datum interface.
 func (d *DEncodedKey) Compare(ctx CompareContext, other Datum) int {
-	panic(errors.AssertionFailedf("not implemented"))
+	res, err := d.CompareError(ctx, other)
+	if err != nil {
+		panic(err)
+	}
+	return res
 }
 
 // CompareError implements the Datum interface.
 func (d *DEncodedKey) CompareError(ctx CompareContext, other Datum) (int, error) {
-	panic(errors.AssertionFailedf("not implemented"))
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1, nil
+	}
+	var o string
+	switch t := ctx.UnwrapDatum(other).(type) {
+	case *DBytes:
+		// Allow comparison with DBytes. This is required for now because
+		// histogram upper-bound values in table statistics are DBytes, but
+		// constraints with DEncodedKeys are built. When row count estimates are
+		// computed, values of these two types are compared.
+		//
+		// TODO(mgartner): We should use DEncodedKeys for histogram
+		// upper-bounds, then we can remove this case.
+		o = string(*t)
+	case *DEncodedKey:
+		o = string(*t)
+	default:
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	if string(*d) < o {
+		return -1, nil
+	}
+	if string(*d) > o {
+		return 1, nil
+	}
+	return 0, nil
 }
 
 // Prev implements the Datum interface.
