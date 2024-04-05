@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql/appstatspb",
@@ -19,8 +20,10 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats/insights",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/util/eventagg",
         "//pkg/util/log",
+        "//pkg/util/log/logstream",
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/timeutil",

@@ -38,7 +38,7 @@ type structured struct {
 	Event    any            `json:"event"`
 }
 
-// Structured emits a structured JSON payload to the STRUCTURED_EVENTS channel.
+// Structured emits a structured JSON payload to the STRUCTURED_EVENTS channel, along with the included metadata.
 // TODO(abarganier): Redaction is not considered here yet. Enable redaction via struct tags.
 // TODO(abarganier): StructuredEvent() is a similar API. We should consider how to reconcile or perhaps
 // combine the two.
@@ -65,4 +65,5 @@ func Structured(ctx context.Context, meta StructuredMeta, payload any) {
 
 	logger := logging.getLogger(entry.ch)
 	logger.outputLogEntry(entry)
+	logging.processStructured(ctx, meta.EventType, payload)
 }
