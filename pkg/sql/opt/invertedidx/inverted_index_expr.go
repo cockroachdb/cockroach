@@ -13,6 +13,9 @@ package invertedidx
 import (
 	"context"
 	"fmt"
+	"math"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
@@ -184,6 +187,11 @@ func TryFilterInvertedIndex(
 // index using a similarity filter. It returns the constraint and the set of
 // remaining filters which are not "tight" in the constraint.  If no constraint
 // can be generated, then ok=false is returned.
+//
+// The returned constraint includes spans over the minimum number of trigrams in
+// a and b that must match in order to satisfy the similarity filter. This
+// optimization allows us to avoid scanning over all trigrams of the constant
+// string. See similarityTrigramsToScan for more details.
 func TryFilterInvertedIndexBySimilarity(
 	evalCtx *eval.Context,
 	f *norm.Factory,
@@ -242,10 +250,8 @@ func TryFilterInvertedIndexBySimilarity(
 			continue
 		}
 
-		// Generate trigrams for the string.
-		// TODO(mgartner): Determine the minimum number of trigrams needed to
-		// match and use it to reduce the number of trigram spans.
-		trgms := trigram.MakeTrigrams(s, true /* pad */)
+		// Generate trigrams to scan.
+		trgms := similarityTrigramsToScan(s, evalCtx.SessionData().TrigramSimilarityThreshold)
 
 		var keyCtx constraint.KeyContext
 		keyCtx.EvalCtx = evalCtx
@@ -333,6 +339,105 @@ func extractConstStringDatum(expr opt.ScalarExpr) (string, bool) {
 	d := memo.ExtractConstDatum(expr)
 	ds, ok := d.(*tree.DString)
 	return string(*ds), ok
+}
+
+// similarityTrigramsToScan returns a minimum set of trigrams that must be
+// scanned in an inverted index to find all rows where `a % s` is true, where
+// `a` is the indexed column. The returned trigrams are sorted.
+//
+// A similarity filter `a % b` returns true if the ratio between the
+// cardinalities of the intersection and the union of trigrams of a and b is
+// greater than or equal to pg_trgm.similarity_threshold. Expressed as a formula
+// where T(a) and T(b) are the sets of trigrams of a and b, respectively:
+//
+// |T(a) ∩ T(b)|
+// -------------- >= pg_trgm.similarity_threshold
+// |T(a) ∪ T(b)|
+//
+// Observe that the denominator on the LHS is greater than or equal |T(b)|.
+// Therefore, the numerator, or the number of matching trigrams of a and b, must
+// be at least ⌈pg_trgm.similarity_threshold * |T(b)|⌉ for the expression to be
+// true.
+//
+// This realization allows us to reduce the number of trigrams scanned while
+// still guaranteeing that we scan at least one trigram for each row where the
+// similarity filter is true. The minimum number of trigrams to scan is:
+//
+// |T(b)| - (⌈pg_trgm.similarity_threshold * |T(b)|⌉ - 1)
+//
+// As a concrete example, consider the filter `a % 'xyz'` and
+// pg_trgm.similarity_threshold set to its default value of 0.3. The four
+// trigrams of "xyz" are "  x", " xy", "xyz", and "yz ". The minimum number of
+// matching trigrams of a and "xyz" required to satisfy the filter is 2=⌈0.3*4⌉.
+// If we scan 3=4-(2-1) trigrams of "xyz", then we are guaranteed to find
+// all rows that have at least 2 matching trigrams.
+//
+// Any of the trigrams can be discarded, as long as we include at least this
+// minimum number to scan. We prefer to discard trigrams with spaces because
+// they should always be more common than trigrams without spaces, e.g., all
+// words that start with "a" share the trigram "  a".
+func similarityTrigramsToScan(s string, similarityThreshold float64) []string {
+	trgms := trigram.MakeTrigrams(s, true /* pad */)
+
+	// Determine the minimum number of trigrams of s that need to match the
+	// trigrams of an arbitrary string in order to satisfy the similarity
+	// threshold.
+	minMatchingTrigrams := int(math.Ceil(similarityThreshold * float64(len(trgms))))
+	if minMatchingTrigrams < 1 {
+		// Ensure that minMatchingTrigrams is at least one.
+		minMatchingTrigrams = 1
+	}
+	if minMatchingTrigrams > len(trgms) {
+		// Ensure that minMatchingTrigrams is no more than the original number
+		// of trigrams.
+		minMatchingTrigrams = len(trgms)
+	}
+
+	// The minimum number of trigrams to scan is:
+	//
+	//   len(trgms) - (minMatchingTrigrams - 1)
+	//
+	// So we can remove:
+	//
+	//   len(trgms) - [len(trgms) - (minMatchingTrigrams - 1)]
+	//   => minMatchingTrigrams - 1
+	//
+	toRemove := minMatchingTrigrams - 1
+	switch toRemove {
+	case 0, 1, 2:
+		// Remove up to the first two trigrams which should always have leading
+		// spaces.
+		return trgms[toRemove:]
+
+	default:
+		// Remove the first two trigrams which should always have leading
+		// spaces.
+		trgms = trgms[2:]
+		toRemove -= 2
+
+		// Remove other trigrams containing spaces.
+		for i := 0; i < len(trgms) && toRemove > 0; {
+			if strings.ContainsRune(trgms[i], ' ') {
+				trgms[i] = trgms[len(trgms)-1]
+				trgms = trgms[:len(trgms)-1]
+				toRemove--
+				continue
+			}
+			i++
+		}
+
+		// If there are still trigrams to remove, remove trigrams as the end of
+		// the slice.
+		if toRemove > 0 {
+			trgms = trgms[:len(trgms)-toRemove]
+		}
+
+		// Sort the trigrams because they may have been re-ordered when trigrams
+		// with spaces were removed.
+		sort.Strings(trgms)
+
+		return trgms
+	}
 }
 
 // TryJoinInvertedIndex tries to create an inverted join with the given input
