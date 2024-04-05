@@ -627,6 +627,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 
 	s.insights.Start(ctx, stopper)
 	s.sqlStats.Start(ctx, stopper)
+	sqlstats.InitStmtStatsProcessor(ctx, stopper)
 
 	s.schemaTelemetryController.Start(ctx, stopper)
 
