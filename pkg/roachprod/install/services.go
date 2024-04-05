@@ -499,3 +499,23 @@ func (c *SyncedCluster) TargetDNSName(node Node) string {
 	// Targets always end with a period as per SRV record convention.
 	return fmt.Sprintf("%s.%s", cVM.PublicDNS, postfix)
 }
+
+// FindLoadBalancer returns the first load balancer address that matches the
+// given port. If the port is 0, the first load balancer is returned.
+func (c *SyncedCluster) FindLoadBalancer(l *logger.Logger, port int) (*vm.ServiceAddress, error) {
+	addresses, err := c.ListLoadBalancers(l)
+	if err != nil {
+		return nil, err
+	}
+	// If the port is 0, return the first load balancer.
+	if port == 0 && len(addresses) > 0 {
+		return &addresses[0], nil
+	}
+	// Otherwise, find the load balancer with the matching port.
+	for _, a := range addresses {
+		if a.Port == port {
+			return &a, nil
+		}
+	}
+	return nil, nil
+}
