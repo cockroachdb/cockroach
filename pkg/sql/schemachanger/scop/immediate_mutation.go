@@ -801,11 +801,6 @@ type SetFunctionBody struct {
 	Body scpb.FunctionBody
 }
 
-type SetFunctionParamDefaultExpr struct {
-	immediateMutationOp
-	Expr scpb.FunctionParamDefaultExpression
-}
-
 type UpdateFunctionTypeReferences struct {
 	immediateMutationOp
 	FunctionID descpb.ID

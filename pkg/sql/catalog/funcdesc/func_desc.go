@@ -731,7 +731,7 @@ func (desc *Mutable) RemoveReference(id descpb.ID) {
 
 // ToRoutineObj converts the descriptor to a tree.RoutineObj. Note that not all
 // fields are set.
-func (desc *immutable) ToRoutineObj() *tree.RoutineObj {
+func (desc *immutable) ToRoutineObj() (*tree.RoutineObj, error) {
 	ret := &tree.RoutineObj{
 		FuncName: tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
 		Params:   make(tree.RoutineParams, len(desc.Params)),
@@ -741,8 +741,15 @@ func (desc *immutable) ToRoutineObj() *tree.RoutineObj {
 			Type:  p.Type,
 			Class: ToTreeRoutineParamClass(p.Class),
 		}
+		if p.DefaultExpr != nil {
+			var err error
+			ret.Params[i].DefaultVal, err = parser.ParseExpr(*p.DefaultExpr)
+			if err != nil {
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "DEFAULT expr for param %s", p.Name)
+			}
+		}
 	}
-	return ret
+	return ret, nil
 }
 
 // GetObjectType implements the Object interface.
@@ -788,12 +795,18 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		if tree.IsInParamClass(class) {
 			signatureTypes = append(signatureTypes, tree.ParamType{Name: param.Name, Typ: param.Type})
 		}
-		ret.RoutineParams = append(ret.RoutineParams, tree.RoutineParam{
+		routineParam := tree.RoutineParam{
 			Name:  tree.Name(param.Name),
 			Type:  param.Type,
 			Class: class,
-			// TODO(100962): populate DefaultVal.
-		})
+		}
+		if param.DefaultExpr != nil {
+			routineParam.DefaultVal, err = parser.ParseExpr(*param.DefaultExpr)
+			if err != nil {
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "DEFAULT expr for param %s", param.Name)
+			}
+		}
+		ret.RoutineParams = append(ret.RoutineParams, routineParam)
 	}
 	ret.ReturnType = tree.FixedReturnType(desc.ReturnType.Type)
 	// TODO(yuzefovich): we should not be setting ReturnsRecordType to 'true'

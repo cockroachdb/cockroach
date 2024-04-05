@@ -259,6 +259,10 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 // schema. If routineObj.Params is not nil, an error with ErrRoutineUndefined
 // cause is returned if not matches found. Overloads that don't match the types
 // in routineType are ignored.
+//
+// If tryDefaultExprs is true, then routineObj.Params might specify the prefix
+// of the input types with remaining input types provided by the overload's
+// DEFAULT expressions.
 func (fd *ResolvedFunctionDefinition) MatchOverload(
 	ctx context.Context,
 	typeRes TypeReferenceResolver,
@@ -266,6 +270,7 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	searchPath SearchPath,
 	routineType RoutineType,
 	inDropContext bool,
+	tryDefaultExprs bool,
 ) (QualifiedOverload, error) {
 	// includeAll indicates whether all parameters, regardless of the class,
 	// should be included into the signature.
@@ -303,47 +308,60 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	// match.
 	var firstMatchParamTypes []*types.T
 	matched := func(ol QualifiedOverload, schema string) bool {
-		if ol.Type == ProcedureRoutine {
-			if schema != ol.Schema || paramTypes == nil {
-				// Fast-path for the simple case when we have a schema mismatch
-				// or all signatures are accepted.
-				return schema == ol.Schema && paramTypes == nil
-			}
-			// First, apply regular postgres resolution approach of using only
-			// the input types.
-			if ol.params().MatchIdentical(paramTypes) {
-				return true
-			}
-			// Check whether SQL-compliant resolution matches this overload
-			// (only applicable in the DROP context when no parameters have the
-			// parameter class specified).
-			if !inDropContext || !onlyDefaultParamClass {
-				return false
-			}
-			_, outParamOrdinals, outParamTypes := ol.outParamInfo()
-			if ol.Types.Length()+len(outParamOrdinals) != len(allParamTypes) {
-				return false
-			}
-			allParams := make(ParamTypes, len(allParamTypes))
-			var outParamsSeen int
-			for i := 0; i < len(allParams); i++ {
-				if outParamsSeen < len(outParamOrdinals) && outParamOrdinals[outParamsSeen] == int32(i) {
-					allParams[i] = ParamType{Typ: outParamTypes.GetAt(outParamsSeen)}
-					outParamsSeen++
-				} else {
-					allParams[i] = ParamType{Typ: ol.Types.GetAt(i - outParamsSeen)}
+		if schema != ol.Schema || paramTypes == nil {
+			// Fast-path for the simple case when we have a schema mismatch or
+			// all signatures are accepted.
+			return schema == ol.Schema && paramTypes == nil
+		}
+		if ol.Type != UDFRoutine && ol.Type != ProcedureRoutine {
+			return ol.params().Match(paramTypes)
+		}
+		// Special handling of routines.
+		//
+		// First, apply regular postgres resolution approach of using only
+		// the input types.
+		if ol.params().MatchIdentical(paramTypes) {
+			return true
+		}
+		if tryDefaultExprs && len(ol.defaultExprs()) > 0 {
+			// Check whether any of the input arguments might have been omitted.
+			// TODO(88947): this logic might need to change to support VARIADIC.
+			if inputTypes, ok := ol.Types.(ParamTypes); ok {
+				numOmittedExprs := len(inputTypes) - len(paramTypes)
+				if numOmittedExprs > 0 && numOmittedExprs <= len(inputTypes) {
+					inputTypes = inputTypes[:len(inputTypes)-numOmittedExprs]
+					if inputTypes.MatchIdentical(paramTypes) {
+						return true
+					}
 				}
 			}
-			match := allParams.MatchIdentical(allParamTypes)
-			if firstMatchParamTypes == nil && match {
-				firstMatchParamTypes = allParamTypes
+		}
+		// If we're not in a special code path for DROP PROCEDURE, it's not a
+		// match.
+		if ol.Type == UDFRoutine || !inDropContext || !onlyDefaultParamClass {
+			return false
+		}
+		// Special handling of SQL-compliant resolution logic for DROP
+		// PROCEDURE.
+		_, outParamOrdinals, outParamTypes := ol.outParamInfo()
+		if ol.Types.Length()+len(outParamOrdinals) != len(allParamTypes) {
+			return false
+		}
+		allParams := make(ParamTypes, len(allParamTypes))
+		var outParamsSeen int
+		for i := 0; i < len(allParams); i++ {
+			if outParamsSeen < len(outParamOrdinals) && outParamOrdinals[outParamsSeen] == int32(i) {
+				allParams[i] = ParamType{Typ: outParamTypes.GetAt(outParamsSeen)}
+				outParamsSeen++
+			} else {
+				allParams[i] = ParamType{Typ: ol.Types.GetAt(i - outParamsSeen)}
 			}
-			return match
 		}
-		if ol.Type == UDFRoutine {
-			return schema == ol.Schema && (paramTypes == nil || ol.params().MatchIdentical(paramTypes))
+		match := allParams.MatchIdentical(allParamTypes)
+		if firstMatchParamTypes == nil && match {
+			firstMatchParamTypes = allParamTypes
 		}
-		return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))
+		return match
 	}
 	typeNames := func(paramTypes []*types.T) string {
 		ns := make([]string, len(paramTypes))

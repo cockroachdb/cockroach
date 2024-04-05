@@ -820,11 +820,7 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 			if err != nil {
 				panic(err)
 			}
-			w.ev(scpb.Status_PUBLIC, &scpb.FunctionParamDefaultExpression{
-				FunctionID: fnDesc.GetID(),
-				Ordinal:    uint32(i),
-				Expression: *expr,
-			})
+			fn.Params[i].DefaultExpr = string(expr.Expr)
 		}
 	}
 
@@ -855,7 +851,6 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 		Body:        fnDesc.GetFunctionBody(),
 		Lang:        catpb.FunctionLanguage{Lang: fnDesc.GetLanguage()},
 		UsesTypeIDs: fnDesc.GetDependsOnTypes(),
-		// TODO(chengxiong): add UsesFunctionIDs when UDF usage is allowed.
 	}
 	dedupeColIDs := func(colIDs []catid.ColumnID) []catid.ColumnID {
 		ret := catalog.MakeTableColSet()

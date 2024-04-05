@@ -30,6 +30,9 @@ func (i *immediateVisitor) CreateFunctionDescriptor(
 			Name:  param.Name,
 			Type:  param.Type.Type,
 		}
+		if param.DefaultExpr != "" {
+			params[i].DefaultExpr = &param.DefaultExpr
+		}
 	}
 
 	mut := funcdesc.NewMutableFunctionDescriptor(
@@ -98,14 +101,5 @@ func (i *immediateVisitor) SetFunctionBody(ctx context.Context, op scop.SetFunct
 	fn.SetFuncBody(op.Body.Body)
 	fn.SetLang(op.Body.Lang.Lang)
 
-	return nil
-}
-
-func (i *immediateVisitor) SetFunctionParamDefaultExpr(
-	ctx context.Context, op scop.SetFunctionParamDefaultExpr,
-) error {
-	// TODO(chengxiong): when default parameter value is supported, we need to
-	// address references here because functions, types and sequences can be used
-	// with a default value expression.
 	return nil
 }

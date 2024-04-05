@@ -87,6 +87,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	var outParams tree.ParamTypes
 	var outParamTypes []*types.T
 	var outParamNames []string
+	var defaultExprs []tree.Expr
 	for i := range c.Params {
 		param := &c.Params[i]
 		typ, err := tree.ResolveType(context.Background(), param.Type, tc)
@@ -110,6 +111,9 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 				paramName = fmt.Sprintf("column%d", len(outParamTypes))
 			}
 			outParamNames = append(outParamNames, paramName)
+		}
+		if param.DefaultVal != nil {
+			defaultExprs = append(defaultExprs, param.DefaultVal)
 		}
 	}
 
@@ -175,6 +179,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		RoutineParams:     c.Params,
 		OutParamOrdinals:  outParamOrdinals,
 		OutParamTypes:     outParams,
+		DefaultExprs:      defaultExprs,
 	}
 	overload.ReturnsRecordType = types.IsRecordType(retType)
 	if c.ReturnType != nil && c.ReturnType.SetOf {
@@ -270,7 +275,7 @@ func collectFuncOptions(
 	return body, v, calledOnNullInput, language
 }
 
-// formatFunction nicely formats a function definition creating in the opt test
+// formatFunction nicely formats a function definition created in the opt test
 // catalog using a treeprinter for debugging and testing.
 func formatFunction(fn *tree.ResolvedFunctionDefinition) string {
 	if len(fn.Overloads) != 1 {
@@ -283,8 +288,9 @@ func formatFunction(fn *tree.ResolvedFunctionDefinition) string {
 		nullStr = ", called-on-null-input=false"
 	}
 	child := tp.Childf(
-		"FUNCTION %s%s [%s%s]",
-		fn.Name, o.Signature(false /* simplify */), o.Volatility, nullStr,
+		"FUNCTION %s%s [%s%s]", fn.Name,
+		o.SignatureWithDefaults(false /* simplify */, true /* includeDefaults */),
+		o.Volatility, nullStr,
 	)
 	child.Child(o.Body)
 	return tp.String()
