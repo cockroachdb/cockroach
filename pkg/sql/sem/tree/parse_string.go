@@ -141,7 +141,8 @@ func ParseDOidAsInt(s string) (*DOid, error) {
 	if err != nil {
 		return nil, MakeParseError(s, types.Oid, err)
 	}
-	return IntToOid(DInt(i))
+	o, err := IntToOid(DInt(i))
+	return NewDOid(o), err
 }
 
 // FormatBitArrayToType formats bit arrays such that they fill the total width

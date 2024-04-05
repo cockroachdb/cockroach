@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -179,4 +180,20 @@ func (fcc *testTimestampCompareContext) GetLocation() *time.Location {
 
 func (fcc *testTimestampCompareContext) UnwrapDatum(d Datum) Datum {
 	return d
+}
+
+func BenchmarkDatumCompare(b *testing.B) {
+	compareCtx := &testTimestampCompareContext{}
+	for _, tc := range []struct {
+		name     string
+		d, other Datum
+	}{
+		{name: "DIntToDOid", d: DZero, other: NewDOid(oid.Oid(0))},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, _ = tc.d.CompareError(compareCtx, tc.other)
+			}
+		})
+	}
 }

@@ -17,7 +17,7 @@ INSERT INTO testing (k,v) VALUES (5, 'c');
 INSERT INTO unrelated(x) VALUES (1);
 
 
-statement error pgcode XXA00 violates unique constraint.*\n.*\n.*\n.*\n.*issues/42061
+statement error pgcode XXA00 violates unique constraint.*\n.*\n.*\n.*\n.*issue.*42061
 COMMIT
 
 # oops!

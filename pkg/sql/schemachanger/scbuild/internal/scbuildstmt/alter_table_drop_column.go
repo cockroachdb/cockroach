@@ -11,6 +11,7 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -57,7 +58,7 @@ func checkSafeUpdatesForDropColumn(b BuildCtx) {
 		"remove all data in that column and drop any indexes that reference that column")
 	if !b.EvalCtx().TxnIsSingleStmt {
 		err = errors.WithIssueLink(err, errors.IssueLink{
-			IssueURL: "https://github.com/cockroachdb/cockroach/issues/46541",
+			IssueURL: build.MakeIssueURL(46541),
 			Detail: "when used in an explicit transaction combined with other " +
 				"schema changes to the same table, DROP COLUMN can result in data " +
 				"loss if one of the other schema change fails or is canceled",
