@@ -160,15 +160,6 @@ func (s *profileStore) parseFileName(
 		// Not for us. Silently ignore.
 		return
 	}
-	if len(parts[2]) < 3 {
-		// At some point in the v20.2 cycle the timestamps were generated
-		// with format .999, which caused the trailing zeroes to be
-		// omitted. During parsing, they must be present, so re-add them
-		// here.
-		//
-		// TODO(knz): Remove this code in v21.1.
-		parts[2] += "000"[:3-len(parts[2])]
-	}
 	maybeTimestamp := parts[1] + "." + parts[2]
 	var err error
 	timestamp, err = time.Parse(timestampFormat, maybeTimestamp)

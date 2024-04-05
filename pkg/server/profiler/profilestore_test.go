@@ -58,10 +58,6 @@ func TestParseFileName(t *testing.T) {
 
 		// New format.
 		{"memprof.2020-06-15T13_19_19.543.123456", time.Date(2020, 6, 15, 13, 19, 19, 543000000, time.UTC), 123456, false},
-		// v20.2 transition formats.
-		// TODO(knz): Remove in v21.1.
-		{"memprof.2020-06-15T13_19_19.54.123456", time.Date(2020, 6, 15, 13, 19, 19, 540000000, time.UTC), 123456, false},
-		{"memprof.2020-06-15T13_19_19.5.123456", time.Date(2020, 6, 15, 13, 19, 19, 500000000, time.UTC), 123456, false},
 	}
 
 	s := profileStore{prefix: heapFileNamePrefix}
