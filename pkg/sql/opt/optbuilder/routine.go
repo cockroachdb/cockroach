@@ -497,6 +497,7 @@ func (b *Builder) finishBuildLastStmt(
 	// the result column type(s).
 	b.finalizeRoutineReturnType(f, stmtScope, inScope, insideDataSource)
 	expr, physProps = stmtScope.expr, stmtScope.makePhysicalProps()
+	rTyp := f.ResolvedType()
 
 	// Add a LIMIT 1 to the last statement if the UDF is not
 	// set-returning. This is valid because any other rows after the
@@ -521,7 +522,7 @@ func (b *Builder) finishBuildLastStmt(
 		// The UDF is a data source. If it returns a composite type and the last
 		// statement returns a single tuple column, the elements of the column
 		// should be expanded into individual columns.
-		if f.ResolvedType().Family() == types.TupleFamily && isSingleTupleResult {
+		if rTyp.Family() == types.TupleFamily && isSingleTupleResult {
 			expr, physProps = b.expandRoutineTupleIntoCols(cols[0].ID, bodyScope.push(), expr)
 		}
 	} else {
@@ -529,25 +530,13 @@ func (b *Builder) finishBuildLastStmt(
 		// used as a data source (see comment above). There are three cases in which
 		// we must wrap the column(s) from the last statement into a single tuple:
 		//   1. The last statement has multiple result columns.
-		//   2. The routine returns RECORD, and the last statement does not already
-		//      return a tuple column.
-		//   3. The routine is a stored procedure that returns a non-VOID type, and
-		//      the last statement does not already return a tuple column.
-		overload := f.ResolvedOverload()
-		mustWrapColsInTuple := len(cols) > 1
-		if len(cols) == 1 && !isSingleTupleResult {
-			mustWrapColsInTuple = mustWrapColsInTuple || overload.ReturnsRecordType ||
-				(f.ResolvedType().Family() != types.VoidFamily && overload.Type == tree.ProcedureRoutine)
-		}
-		if mustWrapColsInTuple {
+		//   2. The routine returns RECORD, and the (single) result column cannot
+		//      be coerced to the return type. Note that a procedure with OUT-params
+		//      always wraps the OUT-param types in a record.
+		if len(cols) > 1 || (rTyp.Family() == types.TupleFamily && !scopeCols[0].typ.Equivalent(rTyp) &&
+			!cast.ValidCast(scopeCols[0].typ, rTyp, cast.ContextAssignment)) {
 			expr, physProps = b.combineRoutineColsIntoTuple(cols, bodyScope.push(), expr)
 		}
-	}
-
-	if b.insideFuncDef {
-		// During function creation, the number and types of columns will be checked
-		// later, so don't add casts here.
-		return expr, physProps
 	}
 
 	// We must preserve the presentation of columns as physical properties to
@@ -555,9 +544,7 @@ func (b *Builder) finishBuildLastStmt(
 	// add an assignment cast to the result column(s) so that its type matches the
 	// function return type.
 	cols = physProps.Presentation
-	return b.maybeAddRoutineAssignmentCasts(
-		cols, bodyScope, f.ResolvedType(), expr, physProps, insideDataSource,
-	)
+	return b.maybeAddRoutineAssignmentCasts(cols, bodyScope, rTyp, expr, physProps, insideDataSource)
 }
 
 // finalizeRoutineReturnType updates the routine's return type, taking into
