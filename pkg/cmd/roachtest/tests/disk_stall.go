@@ -38,7 +38,7 @@ func registerDiskStalledWALFailover(r registry.Registry) {
 		Name:                "disk-stalled/wal-failover/among-stores",
 		Owner:               registry.OwnerStorage,
 		Cluster:             r.MakeClusterSpec(4, spec.CPU(16), spec.ReuseNone(), spec.SSD(2)),
-		CompatibleClouds:    registry.AllExceptAWS,
+		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),
 		Timeout:             3 * time.Hour,
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
@@ -211,7 +211,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 			// Use PDs in an attempt to work around flakes encountered when using SSDs.
 			// See #97968.
 			Cluster:             r.MakeClusterSpec(4, spec.ReuseNone(), spec.DisableLocalSSD()),
-			CompatibleClouds:    registry.AllExceptAWS,
+			CompatibleClouds:    registry.OnlyGCE,
 			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,
 			SkipPostValidations: registry.PostValidationNoDeadNodes,
