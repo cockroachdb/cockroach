@@ -412,8 +412,8 @@ func (expr *NumVal) ResolveAsType(
 		if err != nil {
 			return nil, err
 		}
-		dInt := MustBeDInt(d)
-		return IntToOid(dInt)
+		o, err := IntToOid(MustBeDInt(d))
+		return NewDOid(o), err
 	default:
 		return nil, errors.AssertionFailedf("could not resolve %T %v into a %s", expr, expr, typ.SQLStringForError())
 	}

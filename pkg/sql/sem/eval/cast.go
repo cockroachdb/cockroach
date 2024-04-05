@@ -1004,11 +1004,10 @@ func performIntToOidCast(
 	// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 	// store OIDs as signed 32-bit integers, so we implement the cast
 	// by converting to a uint32 first. This matches Postgres behavior.
-	dOid, err := tree.IntToOid(v)
+	o, err := tree.IntToOid(v)
 	if err != nil {
 		return nil, err
 	}
-	o := dOid.Oid
 	switch t.Oid() {
 	case oid.T_oid:
 		return tree.NewDOidWithType(o, t), nil

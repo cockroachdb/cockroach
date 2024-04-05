@@ -765,7 +765,7 @@ func (d *DInt) CompareError(ctx CompareContext, other Datum) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		thisInt = DInt(o.Oid)
+		thisInt = DInt(o)
 		v = DInt(t.Oid)
 	default:
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -5545,15 +5545,15 @@ type DOid struct {
 	name string
 }
 
-// IntToOid is a helper that turns a DInt into a *DOid and checks that the value
-// is in range.
-func IntToOid(i DInt) (*DOid, error) {
+// IntToOid is a helper that turns a DInt into an oid.Oid and checks that the
+// value is in range.
+func IntToOid(i DInt) (oid.Oid, error) {
 	if intIsOutOfOIDRange(i) {
-		return nil, pgerror.Newf(
+		return 0, pgerror.Newf(
 			pgcode.NumericValueOutOfRange, "OID out of range: %d", i,
 		)
 	}
-	return NewDOid(oid.Oid(i)), nil
+	return oid.Oid(i), nil
 }
 
 func intIsOutOfOIDRange(i DInt) bool {
@@ -5653,11 +5653,11 @@ func (d *DOid) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 		// compare OIDs to signed 32-bit integers, so we implement the comparison
 		// by converting to a uint32 first. This matches Postgres behavior.
-		o, err := IntToOid(*t)
+		var err error
+		v, err = IntToOid(*t)
 		if err != nil {
 			return 0, err
 		}
-		v = o.Oid
 	default:
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
