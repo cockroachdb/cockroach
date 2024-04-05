@@ -64,6 +64,37 @@ func TestNodeSetAddAndRemoveNode(t *testing.T) {
 	}
 }
 
+func TestNodeSetDuplicateNodeInsert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	nodes := makeNodeSet(2, metric.NewGauge(metric.Metadata{Name: ""}))
+	node0 := roachpb.NodeID(1)
+	nodes.addNode(node0)
+	nodes.addNode(node0)
+	if !nodes.hasNode(node0) {
+		t.Error("failed to locate added nodes", nodes)
+	}
+	if s := nodes.asSlice(); len(s) != 1 || s[0] != node0 {
+		t.Error("node0 not present in slice after being added twice", nodes, s)
+	}
+	if nodes.len() != 2 || nodes.hasSpace() {
+		t.Error("unexpected number of nodes", nodes)
+	}
+	nodes.removeNode(node0)
+	if !nodes.hasNode(node0) {
+		t.Error("node0 not present after removal of duplicate", nodes)
+	}
+	if nodes.len() != 1 || !nodes.hasSpace() {
+		t.Error("unexpected number of nodes", nodes)
+	}
+	if s := nodes.asSlice(); len(s) != 1 && s[0] != node0 {
+		t.Error("node0 not present in slice after removal of duplicate", nodes, s)
+	}
+	nodes.removeNode(node0)
+	if nodes.hasNode(node0) {
+		t.Error("failed to fully remove node0", nodes)
+	}
+}
+
 func TestNodeSetFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	nodes1 := makeNodeSet(2, metric.NewGauge(metric.Metadata{Name: ""}))

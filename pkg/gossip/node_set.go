@@ -21,15 +21,18 @@ import (
 // A nodeSet keeps a set of nodes and provides simple node-matched
 // management functions. nodeSet is not thread safe.
 type nodeSet struct {
-	nodes        map[roachpb.NodeID]struct{} // Set of roachpb.NodeID
-	placeholders int                         // Number of nodes whose ID we don't know yet.
-	maxSize      int                         // Maximum size of set
-	gauge        *metric.Gauge               // Gauge for the number of nodes in the set.
+	// Account for duplicates by tracking a count for each node ID rather than
+	// just a hash set. We try to avoid duplicate gossip connections, but don't
+	// guarantee that they never occur so it pays to actually track them.
+	nodes        map[roachpb.NodeID]int // Count of connections to each node
+	placeholders int                    // Number of nodes whose ID we don't know yet.
+	maxSize      int                    // Maximum size of set
+	gauge        *metric.Gauge          // Gauge for the number of nodes in the set.
 }
 
 func makeNodeSet(maxSize int, gauge *metric.Gauge) nodeSet {
 	return nodeSet{
-		nodes:   make(map[roachpb.NodeID]struct{}),
+		nodes:   make(map[roachpb.NodeID]int),
 		maxSize: maxSize,
 		gauge:   gauge,
 	}
@@ -43,10 +46,15 @@ func (as nodeSet) hasSpace() bool {
 
 // len returns the number of nodes in the set.
 func (as nodeSet) len() int {
-	return len(as.nodes) + as.placeholders
+	totalNodes := 0
+	for _, count := range as.nodes {
+		totalNodes += count
+	}
+	return totalNodes + as.placeholders
 }
 
-// asSlice returns the nodes as a slice.
+// asSlice returns the nodes as a slice (excluding any placeholders that
+// haven't yet resolved to an ID).
 func (as nodeSet) asSlice() []roachpb.NodeID {
 	slice := make([]roachpb.NodeID, 0, len(as.nodes))
 	for node := range as.nodes {
@@ -62,9 +70,11 @@ func (as nodeSet) asSlice() []roachpb.NodeID {
 func (as nodeSet) filter(filterFn func(node roachpb.NodeID) bool) nodeSet {
 	avail := makeNodeSet(as.maxSize,
 		metric.NewGauge(metric.Metadata{Name: "TODO(marc)", Help: "TODO(marc)"}))
-	for node := range as.nodes {
-		if filterFn(node) {
-			avail.addNode(node)
+	for node, count := range as.nodes {
+		for i := 0; i < count; i++ {
+			if filterFn(node) {
+				avail.addNode(node)
+			}
 		}
 	}
 	return avail
@@ -84,23 +94,20 @@ func (as *nodeSet) setMaxSize(maxSize int) {
 
 // addNode adds the node to the nodes set.
 func (as *nodeSet) addNode(node roachpb.NodeID) {
-	// Account for duplicates by including them in the placeholders tally.
-	// We try to avoid duplicate gossip connections, but don't guarantee that
-	// they never occur.
-	if !as.hasNode(node) {
-		as.nodes[node] = struct{}{}
-	} else {
-		as.placeholders++
-	}
+	as.nodes[node]++
 	as.updateGauge()
 }
 
 // removeNode removes the node from the nodes set.
 func (as *nodeSet) removeNode(node roachpb.NodeID) {
-	// Parallel the logic in addNode. If we've already removed the given
-	// node ID, it's because we had more than one of them.
-	if as.hasNode(node) {
-		delete(as.nodes, node)
+	// It shouldn't ever be the case that we're missing a node from the map, but
+	// be defensive and treat it as a placeholder if we do.
+	if count, ok := as.nodes[node]; ok {
+		if count == 1 {
+			delete(as.nodes, node)
+		} else {
+			as.nodes[node]--
+		}
 	} else {
 		as.placeholders--
 	}
