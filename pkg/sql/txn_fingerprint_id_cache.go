@@ -11,14 +11,10 @@
 package sql
 
 import (
-	"context"
-	"unsafe"
-
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -40,22 +36,13 @@ type TxnFingerprintIDCache struct {
 
 	mu struct {
 		syncutil.RWMutex
-		acc   *mon.BoundAccount
 		cache *cache.UnorderedCache
 	}
 }
 
-const (
-	cacheEntrySize       = int64(unsafe.Sizeof(cache.Entry{}))
-	txnFingerprintIDSize = int64(unsafe.Sizeof(appstatspb.TransactionFingerprintID(0)))
-)
-
 // NewTxnFingerprintIDCache returns a new TxnFingerprintIDCache.
-func NewTxnFingerprintIDCache(
-	ctx context.Context, st *cluster.Settings, acc *mon.BoundAccount,
-) *TxnFingerprintIDCache {
+func NewTxnFingerprintIDCache(st *cluster.Settings) *TxnFingerprintIDCache {
 	b := &TxnFingerprintIDCache{st: st}
-	b.mu.acc = acc
 	b.mu.cache = cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheFIFO,
 		ShouldEvict: func(size int, _, _ interface{}) bool {
@@ -66,28 +53,18 @@ func NewTxnFingerprintIDCache(
 			capacity := TxnFingerprintIDCacheCapacity.Get(&st.SV)
 			return int64(size) > capacity
 		},
-		OnEvictedEntry: func(entry *cache.Entry) {
-			// We must be holding the mutex already because this callback is
-			// executed during Cache.Add which we surround with the lock.
-			b.mu.AssertHeld()
-			b.mu.acc.Shrink(ctx, cacheEntrySize+txnFingerprintIDSize)
-		},
 	})
 	return b
 }
 
 // Add adds a TxnFingerprintID to the cache, truncating the cache to the cache's
 // capacity if necessary.
-func (b *TxnFingerprintIDCache) Add(
-	ctx context.Context, id appstatspb.TransactionFingerprintID,
-) error {
+func (b *TxnFingerprintIDCache) Add(id appstatspb.TransactionFingerprintID) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if err := b.mu.acc.Grow(ctx, cacheEntrySize+txnFingerprintIDSize); err != nil {
-		return err
-	}
+	// TODO(yuzefovich): we should perform memory accounting for this. Note that
+	// it can be quite tricky to get right - see #121844.
 	b.mu.cache.Add(id, nil /* value */)
-	return nil
 }
 
 // GetAllTxnFingerprintIDs returns a slice of all TxnFingerprintIDs in the cache.
