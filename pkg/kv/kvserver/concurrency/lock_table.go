@@ -2293,19 +2293,56 @@ func (kl *keyLocks) isLocked() bool {
 // clearLockHeldBy removes the lock, if held, by the transaction referenced by
 // the supplied ID. It is a no-op if the lock isn't held by the transaction.
 //
+// A boolean indicating whether the lock was held by the transaction or not is
+// also returned.
+//
+// TODO(arul): this method may leave the requests' notion of isPromoting in an
+// incorrect state. As such, it shouldn't be called directly -- replace all
+// usages with releaseLock, and pull this into a closure there instead.
+//
 // REQUIRES: kl.mu to be locked.
-func (kl *keyLocks) clearLockHeldBy(ID uuid.UUID) {
+func (kl *keyLocks) clearLockHeldBy(ID uuid.UUID) bool {
 	e, held := kl.heldBy[ID]
 	if !held {
-		return // nothing to do
+		return false // nothing to do
 	}
 	kl.holders.Remove(e)
 	delete(kl.heldBy, ID)
+	return true
 }
 
 func (kl *keyLocks) clearAllLockHolders() {
 	kl.holders.Init()
 	kl.heldBy = nil
+}
+
+// releaseLock releases the lock, if held, by the supplied transaction.
+//
+// REQUIRES: kl.mu to be locked.
+func (kl *keyLocks) releaseLock(txn *enginepb.TxnMeta) {
+	cleared := kl.clearLockHeldBy(txn.ID)
+	if cleared {
+		// There may be requests in the wait queue that belong to the supplied
+		// transaction. They were considered promoters while the lock was held, but
+		// that's no longer the case. As such, their queueOrder.isPromoting flag is
+		// incorrect, and so is their spot in the lock's wait queue. We can fix this
+		// in two different ways:
+		// 1. Recompute queueOrder.isPromoting for waiting requests that belong to
+		// the transaction that just released its lock and then reorder the wait
+		// queue (if needed).
+		// 2. Release any locking requests that belong to the transaction that just
+		// released its lock. They'll re-scan, re-determine whether they're
+		// promoting or not, and be inserted in the correct spot.
+		//
+		// We choose option 2.
+		//
+		// TODO(arul): Option 1, where we push this complexity into
+		// recomputeWaitQueues, is better. We should switch to that, and in doing
+		// so, get rid of all calls to releaseLockingRequestsFromTxn and replace
+		// them with recomputeWaitQueues. Notably, this includes the call to that
+		// method in the lock acquisition path as well.
+		kl.releaseLockingRequestsFromTxn(txn)
+	}
 }
 
 // lockAcquiredOrDiscovered is called when the supplied lock is successfully
@@ -3152,33 +3189,12 @@ func (kl *keyLocks) tryUpdateLockLocked(
 		return false, false
 	}
 	if up.Status.IsFinalized() {
-		kl.clearLockHeldBy(up.Txn.ID)
+		kl.releaseLock(&up.Txn)
 		if !kl.isLocked() {
 			// The lock transitioned from held to unheld as a result of this lock
 			// update.
 			gc = kl.releaseWaitersOnKeyUnlocked()
 		} else {
-			// In some rare cases (such as replays), there may be requests belonging
-			// to the transaction that just released its lock in the lock's wait
-			// queue. These must be requests that are promoting their lock to
-			// something stronger, as otherwise they wouldn't be in the wait queue
-			// to begin with. However, now that the lock has been released, the
-			// queueOrder.isPromoting determination changes as well. We could handle
-			// this two different ways:
-			// 1. Recompute queueOrder.isPromoting for waiting requests that belong to
-			// the transaction that just released the lock and reorder the wait queue
-			// (if needed).
-			// 2. Release any locking requests that belong to the transaction that
-			// just released its lock. They'll re-scan, re-determine whether they're
-			// promoting or not, and get inserted in the correct spot. We choose the
-			// latter option.
-			//
-			// TODO(arul): The former option, where we push this complexity into
-			// recomputeWaitQueues, is better. We should switch to that, and in doing
-			// so, get rid of all calls to releaseLockingRequestsFromTxn and replace
-			// them with recomputeWaitQueues. Notably, this includes the call to that
-			// method in the lock acquisition path as well.
-			kl.releaseLockingRequestsFromTxn(&up.Txn)
 			// If we're in this branch, it must be the case that there were multiple
 			// shared locks held on this key.
 			//
@@ -3281,7 +3297,7 @@ func (kl *keyLocks) tryUpdateLockLocked(
 	}
 
 	if !isLocked {
-		kl.clearLockHeldBy(txn.ID)
+		kl.releaseLock(txn)
 		if !kl.isLocked() {
 			gc = kl.releaseWaitersOnKeyUnlocked()
 		} else {
@@ -3289,7 +3305,6 @@ func (kl *keyLocks) tryUpdateLockLocked(
 			// above for an explanation. Releasing a lock due to ignored sequence
 			// numbers is no different than releasing a lock because the holder's
 			// transaction has been finalized.
-			kl.releaseLockingRequestsFromTxn(&up.Txn)
 			if kl.holders.Len() == 1 {
 				kl.recomputeWaitQueues(st)
 			} else {
@@ -3600,6 +3615,7 @@ func (kl *keyLocks) tryFreeLockOnReplicatedAcquire(
 		return false /* freed */, false /* mustGC */
 	}
 
+	// TODO(arul): this should call releaseLock as well.
 	kl.clearLockHeldBy(acq.Txn.ID)
 	if kl.isLocked() {
 		return true /* freed */, false /* mustGC */
