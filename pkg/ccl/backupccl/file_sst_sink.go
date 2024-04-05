@@ -286,6 +286,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 	} else {
 		f := resp.metadata
 		f.Path = s.outName
+		f.Span.EndKey = span.EndKey
 		s.flushedFiles = append(s.flushedFiles, f)
 	}
 	s.flushedRevStart.Forward(resp.revStart)
@@ -442,7 +443,7 @@ func (s *fileSSTSink) copyRangeKeys(dataSST []byte) (roachpb.Key, error) {
 		rangeKeys := iter.RangeKeys()
 		for _, v := range rangeKeys.Versions {
 			rk := rangeKeys.AsRangeKey(v)
-			if rk.EndKey.Compare(maxKey) > 1 {
+			if rk.EndKey.Compare(maxKey) > 0 {
 				maxKey = append(maxKey[:0], rk.EndKey...)
 			}
 			var ok bool
