@@ -1184,3 +1184,235 @@ num=1
    queued locking requests:
     active: false req: 47, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 46, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+# ------------------------------------------------------------------------------
+# Regression test for https://github.com/cockroachdb/cockroach/issues/121428.
+# Tests a scenario where there's a mismatch between the lock holder information
+# and requests' notion of their promotion status. This can lead to a deadlock
+# between requests.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req48 txn=txn1 ts=10 spans=exclusive@b
+----
+
+scan r=req48
+----
+start-waiting: false
+
+acquire r=req48 k=b durability=u strength=exclusive
+----
+num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req49 txn=txn1 ts=10 spans=intent@a+intent@b
+----
+
+scan r=req49
+----
+start-waiting: false
+
+new-request r=req50 txn=txn2 ts=10 spans=exclusive@a
+----
+
+# For this scenario to be realistic, req49 above must have waited at a different
+# key and dropped its latches. We don't show that as it's not critical to the
+# setup -- we'll simply re-scan with req49 further down the line.
+scan r=req50
+----
+start-waiting: false
+
+acquire r=req50 k=a durability=u strength=exclusive
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 49, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+
+new-request r=req51 txn=txn2 ts=10 spans=intent@a+intent@b
+----
+
+scan r=req51
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 51, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 49, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 51, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+scan r=req49
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 51, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 49, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 49, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 51, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+# Both transactions get aborted and release their locks.
+release txn=txn2 span=a
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 51, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 49, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 49, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 51, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+release txn=txn1 span=b
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 51, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 49, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued locking requests:
+    active: false req: 49, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 51, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+# Deadlock.
+
+# ------------------------------------------------------------------------------
+# Very similar to the test above, however, instead of releasing the locks by
+# aborting the transaction, we'll instead roll back sequence numbers.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req52 txn=txn1 ts=10 spans=exclusive@b
+----
+
+scan r=req52
+----
+start-waiting: false
+
+acquire r=req52 k=b durability=u strength=exclusive
+----
+num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req53 txn=txn1 ts=10 spans=intent@a+intent@b
+----
+
+scan r=req53
+----
+start-waiting: false
+
+new-request r=req54 txn=txn2 ts=10 spans=exclusive@a
+----
+
+# For this scenario to be realistic, req53 above must have waited at a different
+# key and dropped its latches. We don't show that as it's not critical to the
+# setup -- we'll simply re-scan with req53 further down the line.
+scan r=req54
+----
+start-waiting: false
+
+acquire r=req54 k=a durability=u strength=exclusive
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 53, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+
+new-request r=req55 txn=txn2 ts=10 spans=intent@a+intent@b
+----
+
+scan r=req55
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 55, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 53, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 55, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+scan r=req53
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 55, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 53, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 53, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 55, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+# Both transactions release their locks by rolling back their sequence numbers.
+update txn=txn2 ts=10 epoch=1 span=a ignored-seqs=0
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 55, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 53, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 53, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 55, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+update txn=txn1 ts=10 epoch=1 span=b ignored-seqs=0
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 55, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 53, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued locking requests:
+    active: false req: 53, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 55, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+# Deadlock.
