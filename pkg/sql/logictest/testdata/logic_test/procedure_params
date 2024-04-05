@@ -138,7 +138,7 @@ statement ok
 DROP PROCEDURE p;
 
 statement ok
-CREATE PROCEDURE p(IN INT, INOUT INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+CREATE PROCEDURE p(IN INT, INOUT a INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
 
 # Argument expressions for IN and INOUT parameters are evaluated.
 statement error pgcode 22012 division by zero

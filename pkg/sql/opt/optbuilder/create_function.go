@@ -189,6 +189,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if err != nil {
 			panic(err)
 		}
+		if param.Class == tree.RoutineParamInOut && param.Name == "" {
+			panic(unimplemented.NewWithIssue(121251, "unnamed INOUT parameters are not yet supported"))
+		}
 		if param.IsOutParam() {
 			outParamTypes = append(outParamTypes, typ)
 			paramName := string(param.Name)

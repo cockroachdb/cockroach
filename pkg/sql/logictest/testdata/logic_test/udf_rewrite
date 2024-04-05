@@ -108,7 +108,7 @@ statement ok
 DROP FUNCTION f_rewrite();
 
 statement ok
-CREATE FUNCTION f_rewrite(INOUT weekday) AS
+CREATE FUNCTION f_rewrite(INOUT a weekday) AS
 $$
   SELECT 'thursday'::weekday;
 $$ LANGUAGE SQL
@@ -168,7 +168,7 @@ statement ok
 DROP PROCEDURE p_rewrite();
 
 statement ok
-CREATE PROCEDURE p_rewrite(INOUT weekday) AS
+CREATE PROCEDURE p_rewrite(INOUT a weekday) AS
 $$
   SELECT 'thursday'::weekday;
 $$ LANGUAGE SQL
