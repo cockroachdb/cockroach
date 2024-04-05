@@ -1392,6 +1392,15 @@ func (rp *replicaProposer) leaderStatus(
 	leaderKnown := leader != raft.None
 	var leaderEligibleForLease bool
 	rangeDesc := r.descRLocked()
+	// In the special case of RF=1, even if we don't know the leader, assume it is or soon will be the only Replica.
+	if len(rangeDesc.InternalReplicas) == 1 {
+		return rangeLeaderInfo{
+			iAmTheLeader:           true,
+			leader:                 rangeDesc.InternalReplicas[0].ReplicaID,
+			leaderEligibleForLease: true,
+		}
+	}
+
 	if leaderKnown {
 		// Figure out if the leader is eligible for getting a lease.
 		leaderRep, ok := rangeDesc.GetReplicaDescriptorByID(roachpb.ReplicaID(leader))
