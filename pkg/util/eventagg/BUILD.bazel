@@ -7,6 +7,7 @@ go_library(
         "event_agg.go",
         "flush.go",
         "flush_consumer.go",
+        "kv_processor.go",
         "map_reduce.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/eventagg",
@@ -14,7 +15,9 @@ go_library(
     deps = [
         "//pkg/util/envutil",
         "//pkg/util/log",
+        "//pkg/util/log/logstream",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

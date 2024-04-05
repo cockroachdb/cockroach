@@ -10,5 +10,6 @@ GOMOCK_SRCS = [
     "//pkg/rpc:mocks_generated_test.go",
     "//pkg/security/certmgr:mocks_generated_test.go",
     "//pkg/sql/schemachanger/scexec:mocks_generated_test.go",
+    "//pkg/util/log/logstream:mocks_generated_test.go",
     "//pkg/util/log:mocks_generated_test.go",
 ]
