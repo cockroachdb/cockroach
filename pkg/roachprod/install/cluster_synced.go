@@ -2654,6 +2654,33 @@ func (c *SyncedCluster) pghosts(
 	return m, nil
 }
 
+// resolveLoadBalancerURL resolves the load balancer postgres URL for the given
+// virtual cluster and SQL instance. Returns an empty string if a load balancer
+// is not found.
+func (c *SyncedCluster) loadBalancerURL(
+	ctx context.Context, l *logger.Logger, virtualClusterName string, sqlInstance int,
+) (string, error) {
+	services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL)
+	if err != nil {
+		return "", err
+	}
+	port := 0
+	serviceMode := ServiceModeShared
+	for _, service := range services {
+		if service.VirtualClusterName == virtualClusterName && service.Instance == sqlInstance {
+			serviceMode = service.ServiceMode
+			port = service.Port
+			break
+		}
+	}
+	address, err := c.FindLoadBalancer(l, port)
+	if err != nil || address == nil {
+		return "", err
+	}
+	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, serviceMode, AuthRootCert)
+	return loadBalancerURL, nil
+}
+
 // SSH creates an interactive shell connecting the caller to the first
 // node on the cluster (or to all nodes in an iterm2 split screen if
 // supported).
