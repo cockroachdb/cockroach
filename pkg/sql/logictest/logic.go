@@ -1489,16 +1489,6 @@ func (t *logicTest) newCluster(
 	setSQLTestingKnobs(&params.ServerArgs.Knobs)
 
 	cfg := t.cfg
-	if cfg.UseSecondaryTenant == logictestbase.Always {
-		// In the tenant case we need to enable replication in order to split and
-		// relocate ranges correctly.
-		//
-		// TODO(#76378): This condition is faulty. In the case where the
-		// profile is configured with "Random", we want to set the
-		// replication mode as well when a test tenant is effectively
-		// created. This currently is not happening.
-		params.ReplicationMode = base.ReplicationAuto
-	}
 	if cfg.BootstrapVersion != clusterversion.Key(0) {
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
