@@ -407,6 +407,8 @@ CREATE PROCEDURE pv() AS 'SELECT 1' STRICT LANGUAGE SQL;
 
 subtest end
 
+subtest not_proc
+
 statement error pgcode 42809 sum is not a procedure
 CALL sum(1);
 
@@ -422,6 +424,8 @@ SELECT oid FROM pg_proc WHERE proname = 'count_rows';
 statement error pgcode 42809 count_rows is not a procedure
 CALL [ FUNCTION $funcOID ] ();
 
+subtest nested_call
+
 statement ok
 CREATE PROCEDURE p_inner(OUT param INTEGER) AS $$ SELECT 1; $$ LANGUAGE SQL;
 
@@ -435,3 +439,89 @@ CREATE PROCEDURE p_outer(OUT param INTEGER) AS $$ CALL p_inner(NULL); $$ LANGUAG
 
 statement ok
 DROP PROCEDURE p_inner;
+
+# Test type-coercion rules for composite return types.
+subtest return_tuple
+
+statement ok
+CREATE TYPE one_typ AS (x INT);
+CREATE TYPE two_typ AS (x INT, y INT);
+
+statement ok
+DROP PROCEDURE p(INT);
+DROP PROCEDURE p;
+
+# Test a procedure returning a composite type with one element.
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+CREATE PROCEDURE p(OUT foo one_typ) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CREATE PROCEDURE p(OUT foo one_typ) LANGUAGE SQL AS $$ SELECT ROW(1); $$;
+
+query T
+CALL p(NULL);
+----
+(1)
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(OUT foo one_typ) LANGUAGE SQL AS $$ SELECT ROW(ROW(1)); $$;
+
+query T
+CALL p(NULL);
+----
+(1)
+
+# Test a procedure returning a composite type with two elements.
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+CREATE PROCEDURE p(OUT foo two_typ) LANGUAGE SQL AS $$ SELECT 1, 2; $$;
+
+query T
+CALL p(NULL);
+----
+(1)
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(OUT foo two_typ) LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
+
+query T
+CALL p(NULL);
+----
+(1,2)
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(OUT foo two_typ) LANGUAGE SQL AS $$ SELECT ROW(ROW(1, 2)); $$;
+
+query T
+CALL p(NULL);
+----
+(1,2)
+
+# Test a procedure with two OUT-parameters.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(OUT x INT, OUT y INT) LANGUAGE SQL AS $$ SELECT 1, 2; $$;
+
+query II
+CALL p(NULL, NULL);
+----
+1  2
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(OUT x INT, OUT y INT) LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
+
+query II
+CALL p(NULL, NULL);
+----
+1  2
+
+statement ok
+DROP PROCEDURE p;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+CREATE PROCEDURE p(OUT x INT, OUT y INT) LANGUAGE SQL AS $$ SELECT ROW(ROW(1, 2)); $$;
+
+subtest end

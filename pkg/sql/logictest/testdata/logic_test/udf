@@ -784,13 +784,124 @@ FROM purchase
 1.00   BHD
 10.00  GBP
 
-subtest end
+subtest regression_113186
 
 statement ok
 CREATE FUNCTION f113186() RETURNS RECORD AS $$ SELECT 1.99; $$ LANGUAGE SQL;
 
-# Until #113186 is resolved, the internal error is expected.
 query I
 SELECT * FROM f113186() AS foo(x INT);
 ----
 2
+
+# Test type-coercion rules for composite return types.
+subtest return_tuple
+
+statement ok
+CREATE TYPE one_typ AS (x INT);
+CREATE TYPE two_typ AS (x INT, y INT);
+
+# Test a function returning a composite type with one element.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS one_typ LANGUAGE SQL AS $$ SELECT 1; $$;
+
+query T
+SELECT f();
+----
+(1)
+
+query I
+SELECT * FROM f();
+----
+1
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS one_typ LANGUAGE SQL AS $$ SELECT ROW(1); $$;
+
+query T
+SELECT f();
+----
+(1)
+
+query I
+SELECT * FROM f();
+----
+1
+
+statement ok
+DROP FUNCTION f;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return one_typ
+CREATE FUNCTION f() RETURNS one_typ LANGUAGE SQL AS $$ SELECT ROW(ROW(1)); $$;
+
+# Test a function returning a composite type with two elements.
+statement ok
+CREATE FUNCTION f() RETURNS two_typ LANGUAGE SQL AS $$ SELECT 1, 2; $$;
+
+query T
+SELECT f();
+----
+(1,2)
+
+query II
+SELECT * FROM f();
+----
+1  2
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS two_typ LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
+
+query T
+SELECT f();
+----
+(1,2)
+
+query II
+SELECT * FROM f();
+----
+1  2
+
+statement ok
+DROP FUNCTION f;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return two_typ
+CREATE FUNCTION f() RETURNS two_typ LANGUAGE SQL AS $$ SELECT ROW(ROW(1, 2)); $$;
+
+# Test a function with two OUT-parameters.
+statement ok
+CREATE FUNCTION f(OUT x INT, OUT y INT) LANGUAGE SQL AS $$ SELECT 1, 2; $$;
+
+query T
+SELECT f();
+----
+(1,2)
+
+query II
+SELECT * FROM f();
+----
+1  2
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(OUT x INT, OUT y INT) LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
+
+query T
+SELECT f();
+----
+(1,2)
+
+query II
+SELECT * FROM f();
+----
+1  2
+
+statement ok
+DROP FUNCTION f;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+CREATE FUNCTION f(OUT x INT, OUT y INT) LANGUAGE SQL AS $$ SELECT ROW(ROW(1, 2)); $$;
+
+subtest end

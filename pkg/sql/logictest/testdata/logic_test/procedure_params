@@ -501,9 +501,8 @@ CREATE TYPE typ AS (a INT, b INT);
 statement ok
 CREATE PROCEDURE p_udt(OUT typ) AS $$ SELECT (1, 2); $$ LANGUAGE SQL;
 
-# TODO(120942): this currently results in an internal error.
-# query T colnames
-# CALL p_udt(NULL);
-# ----
-# column1
-# (1,2)
+query T colnames
+CALL p_udt(NULL);
+----
+column1
+(1,2)
