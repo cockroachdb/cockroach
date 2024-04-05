@@ -858,6 +858,28 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 		return
 	}
 
+	// Inverted indexes can have more tuples than logical rows in the table, so
+	// set the row count accordingly. Currently, we only make this adjustment if
+	// there is no inverted constraint. If there is an inverted constraint, the
+	// row count is adjusted in constrainScan.
+	if scan.IsInvertedScan(sb.md) && scan.InvertedConstraint == nil {
+		idx := sb.md.Table(scan.Table).Index(scan.Index)
+		invertedConstrainedCol := scan.Table.ColumnID(idx.InvertedColumn().Ordinal())
+		// TODO(mgartner): Set distinctCount to something correct. See the
+		// related TODO in constrainScan.
+		const distinctCount = math.MaxFloat64
+		colSet := opt.MakeColSet(invertedConstrainedCol)
+		sb.ensureColStat(colSet, distinctCount, scan, s)
+		inputStat, _ := sb.colStatFromInput(colSet, scan)
+		if inputHist := inputStat.Histogram; inputHist != nil {
+			// If we have a histogram, set the row count to its total,
+			// unfiltered count. This is needed because s.RowCount is currently
+			// the row count of the table, but should instead reflect the number
+			// of inverted index entries.
+			s.RowCount = max(inputHist.ValuesCount(), 1)
+		}
+	}
+
 	// If the constraint is nil or it has a single span, apply the constraint
 	// selectivity, the inverted constraint selectivity, and the partial index
 	// predicate (if they exist) to the underlying table stats.
@@ -876,7 +898,6 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	//
 	// If we didn't split the spans, the selectivity of column b would be
 	// completely ignored, and the calculated row count would be too high.
-
 	var spanStats, spanStatsUnion props.Statistics
 	var c constraint.Constraint
 	keyCtx := constraint.KeyContext{EvalCtx: sb.evalCtx, Columns: scan.Constraint.Columns}
