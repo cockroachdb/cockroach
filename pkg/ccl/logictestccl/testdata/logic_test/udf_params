@@ -69,29 +69,28 @@ SELECT f(3);
 ----
 NOTICE: 2
 
-# TODO(120942): figure out why this causes an internal error.
-# query II colnames
-# SELECT * FROM f(3);
-# ----
-# param1 param2
-# 3 2
+query II colnames
+SELECT * FROM f(3);
+----
+param1 param2
+3 2
 
-# query T noticetrace
-# SELECT * FROM f(3);
-# ----
-# NOTICE: 2
+query T noticetrace
+SELECT * FROM f(3);
+----
+NOTICE: 2
 
-# query I colnames
-# SELECT param1 FROM f(3);
-# ----
-# param1
-# 3
+query I colnames
+SELECT param1 FROM f(3);
+----
+param1
+3
 
-# query I colnames
-# SELECT param2 FROM f(3);
-# ----
-# param2
-# 2
+query I colnames
+SELECT param2 FROM f(3);
+----
+param2
+2
 
 statement ok
 DROP FUNCTION f;
@@ -129,19 +128,18 @@ NOTICE: 1 <NULL>
 NOTICE: 3 <NULL>
 NOTICE: 3 4
 
-# TODO(120942): figure this out.
-# query II colnames
-# SELECT * FROM f(1);
-# ----
-# param1 param2
-# 3 4
+query II colnames
+SELECT * FROM f(1);
+----
+param1 param2
+3 4
 
-# query T noticetrace
-# SELECT * FROM f(1);
-# ----
-# NOTICE: 1 <NULL>
-# NOTICE: 3 <NULL>
-# NOTICE: 3 4
+query T noticetrace
+SELECT * FROM f(1);
+----
+NOTICE: 1 <NULL>
+NOTICE: 3 <NULL>
+NOTICE: 3 4
 
 statement ok
 DROP FUNCTION f;
