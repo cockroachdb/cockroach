@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1391,23 +1390,21 @@ func TestTxnRetryWithLatchesDroppedEarly(t *testing.T) {
 	}
 }
 
-// TestTxnUpdateFromTxnRecordOverwritesField reproduces a bug where a field in
-// the Transaction proto, that is not present in TransactionRecord, can be
+// TestTxnUpdateFromTxnRecordOverwritesField tests that any field in
+// the Transaction proto, that is not present in TransactionRecord, is not
 // accidentally overwritten by Update().
 // OmitInRangefeeds and AdmissionPriority are two such fields.
-func TestTxnUpdateFromTxnRecordOverwritesField(t *testing.T) {
+func TestTxnUpdateFromTxnRecordDoesNotOverwriteFields(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	keyA := roachpb.Key("a")
 	var storeKnobs kvserver.StoreTestingKnobs
-	var foundNormalPri = atomic.Bool{}
-	foundNormalPri.Store(false)
 	storeKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 		if args.Req.Txn != nil && args.Req.Txn.Name == "txn" {
-			if args.Req.Txn.AdmissionPriority == int32(admissionpb.NormalPri) {
-				foundNormalPri.Store(true)
-			}
+			// Ensure all requests by the transaction use the right admission
+			// priority.
+			require.Equal(t, int32(admissionpb.UserHighPri), args.Req.Txn.AdmissionPriority)
 		}
 		return nil
 	}
@@ -1441,16 +1438,15 @@ func TestTxnUpdateFromTxnRecordOverwritesField(t *testing.T) {
 	// The second txn heartbeat reads the TransactionRecord from disk, writes an
 	// updated one, and returns it.
 	// As part of command evaluation, the Transaction proto is updated with the
-	// new TransactionRecord. OmitInRangefeeds and AdmissionPriority are dropped
-	// in the process because they are not present in the TransactionRecord.
+	// new TransactionRecord. OmitInRangefeeds and AdmissionPriority are not
+	// dropped in the process because they can be updated only if they were not
+	// set previously.
 	b = txn.NewBatch()
 	b.AddRawRequest(hbRequest)
 	require.NoError(t, txn.Run(ctx, b))
 
 	require.NoError(t, txn.Commit(ctx))
 
-	// OmitInRangefeeds is now false.
-	require.False(t, txn.GetOmitInRangefeeds())
-	// There was at least one request with the default normal admission priority.
-	require.True(t, foundNormalPri.Load())
+	// OmitInRangefeeds is still true.
+	require.True(t, txn.GetOmitInRangefeeds())
 }

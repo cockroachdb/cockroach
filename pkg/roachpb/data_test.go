@@ -808,6 +808,17 @@ func TestTransactionUpdateAbortedOldEpoch(t *testing.T) {
 	}
 }
 
+// TestTransactionUpdateFromRecord tests that converting a transaction from a
+// Transaction proto, to a TransactionRecord proto, and back to a Transaction
+// proto, does not overwrite non-zero fields in the original Transaction.
+func TestTransactionUpdateFromRecord(t *testing.T) {
+	txn := nonZeroTxn
+	txnRecord := txn.AsRecord()
+	txnFromRecord := txnRecord.AsTransaction()
+	txn.Update(&txnFromRecord)
+	require.Equal(t, nonZeroTxn, txn)
+}
+
 func TestTransactionClone(t *testing.T) {
 	txnPtr := nonZeroTxn.Clone()
 	txn := *txnPtr
