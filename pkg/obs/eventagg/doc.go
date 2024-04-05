@@ -39,7 +39,7 @@ package eventagg
 // aggregation will operate on, and an interface that effectively allows us to perform Map/Reduce-like
 // operations on those types.
 //
-// ## Map/Reduce Consumer Plugins
+// ## Map/Reduce EmittedKVProcessor Plugins
 // Users of the eventagg package should have a library of Map/Reduce output consumers available to make
 // things easy to use. For example, after aggregating some data, I want to calculate the TopK elements
 // based on some field. That should be as easy for engineers as instantiating a plugin and defining the
