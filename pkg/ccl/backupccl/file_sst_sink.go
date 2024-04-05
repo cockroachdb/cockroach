@@ -286,6 +286,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 	} else {
 		f := resp.metadata
 		f.Path = s.outName
+		f.Span.EndKey = span.EndKey
 		s.flushedFiles = append(s.flushedFiles, f)
 	}
 	s.flushedRevStart.Forward(resp.revStart)
@@ -306,6 +307,12 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 	return resp.resumeKey, err
 }
 
+// adjustFileEndKey checks if the export respsonse end key can be used as a
+// split point during restore. If the end key is not splitable (i.e. it splits
+// two column families in the same row), the function will attempt to adjust the
+// endkey to become splitable. The function returns the potentially adjusted
+// end key and whether this end key is mid row/unsplitable (i.e. splits a 2
+// column families or mvcc versions).
 func adjustFileEndKey(endKey, maxPointKey, maxRangeEnd roachpb.Key) (roachpb.Key, bool) {
 	maxKey := maxPointKey
 	if maxKey.Compare(maxRangeEnd) < 0 {
@@ -442,7 +449,7 @@ func (s *fileSSTSink) copyRangeKeys(dataSST []byte) (roachpb.Key, error) {
 		rangeKeys := iter.RangeKeys()
 		for _, v := range rangeKeys.Versions {
 			rk := rangeKeys.AsRangeKey(v)
-			if rk.EndKey.Compare(maxKey) > 1 {
+			if rk.EndKey.Compare(maxKey) > 0 {
 				maxKey = append(maxKey[:0], rk.EndKey...)
 			}
 			var ok bool

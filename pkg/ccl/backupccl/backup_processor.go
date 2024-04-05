@@ -721,8 +721,10 @@ func runBackupProcessor(
 								ret.completedSpans = completedSpans
 							}
 
-							resumeSpan.span.Key, err = sink.write(ctx, ret)
-							if err != nil {
+							// Cannot set the error to err, which is shared across workers.
+							var writeErr error
+							resumeSpan.span.Key, writeErr = sink.write(ctx, ret)
+							if writeErr != nil {
 								return err
 							}
 						}
