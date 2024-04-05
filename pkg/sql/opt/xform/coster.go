@@ -773,7 +773,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		}
 	}
 
-	if scan.Flags.ForceInvertedIndex && !scan.IsInvertedScan() {
+	if scan.Flags.ForceInvertedIndex && !scan.IsInvertedScan(c.mem.Metadata()) {
 		return hugeCost
 	}
 
