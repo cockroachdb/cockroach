@@ -16,6 +16,7 @@ import (
 	"runtime/pprof"
 
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -38,6 +39,23 @@ const heapFileNamePrefix = "memprof"
 
 // heapFileNameSuffix is the suffix of files containing pprof data.
 const heapFileNameSuffix = ".pprof"
+
+var maxCombinedFileSize = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"server.mem_profile.total_dump_size_limit",
+	"maximum combined disk size of preserved memory profiles",
+	256<<20, // 256MiB
+)
+
+func init() {
+	_ = settings.RegisterByteSizeSetting(
+		settings.ApplicationLevel,
+		"server.heap_profile.total_dump_size_limit",
+		"use server.mem_profile.total_dump_size_limit instead",
+		256<<20, // 256MiB
+		settings.Retired,
+	)
+}
 
 // NewHeapProfiler creates a HeapProfiler. dir is the directory in which
 // profiles are to be stored.

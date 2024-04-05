@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -42,6 +43,8 @@ func TestMakeFileName(t *testing.T) {
 }
 
 func TestParseFileName(t *testing.T) {
+	defer log.Scope(t).Close(t)
+
 	z := time.Time{}
 	testData := []struct {
 		f         string
@@ -73,6 +76,8 @@ func TestParseFileName(t *testing.T) {
 }
 
 func TestCleanupLastRampup(t *testing.T) {
+	defer log.Scope(t).Close(t)
+
 	testData := []struct {
 		startFiles []string
 		maxP       int64
