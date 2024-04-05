@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -573,12 +574,6 @@ func (s *Stopper) IsStopped() <-chan struct{} {
 // Quiesce moves the stopper to state quiescing and waits until all
 // tasks complete. This is used from Stop() and unittests.
 func (s *Stopper) Quiesce(ctx context.Context) {
-	defer time.AfterFunc(5*time.Second, func() {
-		log.Infof(ctx, "quiescing...")
-	}).Stop()
-	defer time.AfterFunc(2*time.Minute, func() {
-		log.DumpStacks(ctx, "slow quiesce")
-	}).Stop()
 	defer s.recover(ctx)
 
 	func() {
@@ -600,7 +595,18 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 		}
 	}()
 
+	start := timeutil.Now()
+	var loggedQuiescing, loggedSlowQuiescing bool
 	for s.NumTasks() > 0 {
+		since := timeutil.Since(start)
+		if !loggedQuiescing && since > 5*time.Second {
+			log.Infof(ctx, "quiescing...")
+			loggedQuiescing = true
+		}
+		if !loggedSlowQuiescing && since > 2*time.Minute {
+			log.DumpStacks(ctx, "slow quiesce")
+			loggedSlowQuiescing = true
+		}
 		time.Sleep(5 * time.Millisecond)
 	}
 }
