@@ -939,7 +939,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 // ` (Select
 // `   (IndexJoin
 // `     (DistinctOn
-// `       (Scan [/'  f' - /'  f'] [/' fo' - /' fo'] [/'foo' - /'foo'] ...)
+// `       (Scan [/' fo' - /' fo'] [/'foo' - /'foo'] [/'oo' - /'oo')
 // `       (GroupingCols pkCols)
 // `      )
 // `   )

@@ -33,7 +33,6 @@ project
       │         └── scan trgm@s_idx
       │              ├── columns: k:1!null
       │              └── constraint: /7
-      │                   ├── [/'\x122020660001' - /'\x122020660001']
       │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
       │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
       │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
@@ -59,10 +58,33 @@ select
  │         └── scan trgm@s_idx
  │              ├── columns: k:1!null
  │              └── constraint: /7
- │                   ├── [/'\x122020660001' - /'\x122020660001']
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
  │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
  │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
+ └── filters
+      └── s:4 % 'foo' [outer=(4), stable]
+
+# TODO(#122225): The distinct-on expression is not necessary because a single
+# value is scanned, so the primary key is already unique in the scan.
+opt expect=GenerateTrigramSimilarityInvertedIndexScans set=(pg_trgm.similarity_threshold=1) set=(optimizer_use_trigram_similarity_optimization=on)
+SELECT * FROM trgm WHERE s % 'foo'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx
+ │              ├── columns: k:1!null
+ │              └── constraint: /7: [/'\x12666f6f0001' - /'\x12666f6f0001']
  └── filters
       └── s:4 % 'foo' [outer=(4), stable]
 
@@ -85,7 +107,6 @@ select
  │         └── scan trgm@s_idx
  │              ├── columns: k:1!null
  │              └── constraint: /7
- │                   ├── [/'\x122020660001' - /'\x122020660001']
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
  │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
  │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
@@ -111,7 +132,6 @@ select
  │         └── scan trgm@s_idx
  │              ├── columns: k:1!null
  │              └── constraint: /7
- │                   ├── [/'\x122020660001' - /'\x122020660001']
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
  │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
  │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
@@ -137,7 +157,6 @@ select
  │         └── scan trgm@s_idx
  │              ├── columns: k:1!null
  │              └── constraint: /7
- │                   ├── [/'\x122020660001' - /'\x122020660001']
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
  │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
  │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
@@ -164,8 +183,6 @@ select
  │         └── scan trgm@s_idx
  │              ├── columns: k:1!null
  │              └── constraint: /7
- │                   ├── [/'\x122020660001' - /'\x122020660001']
- │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
  │                   ├── [/'\x126172200001' - /'\x126172200001']
  │                   ├── [/'\x126261720001' - /'\x126261720001']
  │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
@@ -193,15 +210,12 @@ select
  │         └── scan trgm@i_j_s_idx
  │              ├── columns: k:1!null
  │              └── constraint: /2/3/8
- │                   ├── [/1/10/'\x122020660001' - /1/10/'\x122020660001']
  │                   ├── [/1/10/'\x1220666f0001' - /1/10/'\x1220666f0001']
  │                   ├── [/1/10/'\x12666f6f0001' - /1/10/'\x12666f6f0001']
  │                   ├── [/1/10/'\x126f6f200001' - /1/10/'\x126f6f200001']
- │                   ├── [/2/10/'\x122020660001' - /2/10/'\x122020660001']
  │                   ├── [/2/10/'\x1220666f0001' - /2/10/'\x1220666f0001']
  │                   ├── [/2/10/'\x12666f6f0001' - /2/10/'\x12666f6f0001']
  │                   ├── [/2/10/'\x126f6f200001' - /2/10/'\x126f6f200001']
- │                   ├── [/3/10/'\x122020660001' - /3/10/'\x122020660001']
  │                   ├── [/3/10/'\x1220666f0001' - /3/10/'\x1220666f0001']
  │                   ├── [/3/10/'\x12666f6f0001' - /3/10/'\x12666f6f0001']
  │                   └── [/3/10/'\x126f6f200001' - /3/10/'\x126f6f200001']
@@ -227,27 +241,21 @@ select
  │         └── scan trgm@i_j_s_idx
  │              ├── columns: k:1!null
  │              └── constraint: /2/3/8
- │                   ├── [/1/10/'\x122020660001' - /1/10/'\x122020660001']
  │                   ├── [/1/10/'\x1220666f0001' - /1/10/'\x1220666f0001']
  │                   ├── [/1/10/'\x12666f6f0001' - /1/10/'\x12666f6f0001']
  │                   ├── [/1/10/'\x126f6f200001' - /1/10/'\x126f6f200001']
- │                   ├── [/1/20/'\x122020660001' - /1/20/'\x122020660001']
  │                   ├── [/1/20/'\x1220666f0001' - /1/20/'\x1220666f0001']
  │                   ├── [/1/20/'\x12666f6f0001' - /1/20/'\x12666f6f0001']
  │                   ├── [/1/20/'\x126f6f200001' - /1/20/'\x126f6f200001']
- │                   ├── [/2/10/'\x122020660001' - /2/10/'\x122020660001']
  │                   ├── [/2/10/'\x1220666f0001' - /2/10/'\x1220666f0001']
  │                   ├── [/2/10/'\x12666f6f0001' - /2/10/'\x12666f6f0001']
  │                   ├── [/2/10/'\x126f6f200001' - /2/10/'\x126f6f200001']
- │                   ├── [/2/20/'\x122020660001' - /2/20/'\x122020660001']
  │                   ├── [/2/20/'\x1220666f0001' - /2/20/'\x1220666f0001']
  │                   ├── [/2/20/'\x12666f6f0001' - /2/20/'\x12666f6f0001']
  │                   ├── [/2/20/'\x126f6f200001' - /2/20/'\x126f6f200001']
- │                   ├── [/3/10/'\x122020660001' - /3/10/'\x122020660001']
  │                   ├── [/3/10/'\x1220666f0001' - /3/10/'\x1220666f0001']
  │                   ├── [/3/10/'\x12666f6f0001' - /3/10/'\x12666f6f0001']
  │                   ├── [/3/10/'\x126f6f200001' - /3/10/'\x126f6f200001']
- │                   ├── [/3/20/'\x122020660001' - /3/20/'\x122020660001']
  │                   ├── [/3/20/'\x1220666f0001' - /3/20/'\x1220666f0001']
  │                   ├── [/3/20/'\x12666f6f0001' - /3/20/'\x12666f6f0001']
  │                   └── [/3/20/'\x126f6f200001' - /3/20/'\x126f6f200001']
@@ -277,6 +285,40 @@ select
       └── mod [outer=(4), stable]
            ├── variable: s:4
            └── null
+
+opt expect-not=GenerateTrigramSimilarityInvertedIndexScans set=(pg_trgm.similarity_threshold=0) set=(optimizer_use_trigram_similarity_optimization=on)
+SELECT * FROM trgm WHERE s % 'foo'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── check constraint expressions
+ │    │    └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── s:4 % 'foo' [outer=(4), stable]
+
+opt expect-not=GenerateTrigramSimilarityInvertedIndexScans set=(optimizer_use_trigram_similarity_optimization=on)
+SELECT * FROM trgm WHERE s % ''
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── check constraint expressions
+ │    │    └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── s:4 % '' [outer=(4), stable]
 
 opt expect-not=GenerateTrigramSimilarityInvertedIndexScans format=hide-all
 SELECT k FROM trgm WHERE s % 'foo'
