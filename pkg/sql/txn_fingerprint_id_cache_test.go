@@ -45,7 +45,7 @@ func TestTxnFingerprintIDCacheDataDriven(t *testing.T) {
 				d.ScanArgs(t, "capacity", &capacity)
 
 				st := cluster.MakeTestingClusterSettings()
-				txnFingerprintIDCache = NewTxnFingerprintIDCache(ctx, st, nil /* acc */)
+				txnFingerprintIDCache = NewTxnFingerprintIDCache(st)
 
 				TxnFingerprintIDCacheCapacity.Override(ctx, &st.SV, int64(capacity))
 
@@ -66,9 +66,7 @@ func TestTxnFingerprintIDCacheDataDriven(t *testing.T) {
 				require.NoError(t, err)
 				txnFingerprintID := appstatspb.TransactionFingerprintID(id)
 
-				err = txnFingerprintIDCache.Add(ctx, txnFingerprintID)
-				require.NoError(t, err)
-
+				txnFingerprintIDCache.Add(txnFingerprintID)
 				return fmt.Sprintf("size: %d", txnFingerprintIDCache.size())
 
 			case "show":
