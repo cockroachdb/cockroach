@@ -110,6 +110,7 @@ type loggingT struct {
 	allSinkInfos sinkInfoRegistry
 	allLoggers   loggerRegistry
 	metrics      LogMetrics
+	processor    StructuredLogProcessor
 }
 
 // SetLogMetrics injects an initialized implementation of
@@ -122,6 +123,13 @@ type loggingT struct {
 // LogMetrics during server startups.
 func SetLogMetrics(m LogMetrics) {
 	logging.metrics = m
+}
+
+func SetStructuredLogProcessor(p StructuredLogProcessor) {
+	if logging.processor != nil {
+		panic(errors.AssertionFailedf("log package's StructuredLogProcessor has already been set"))
+	}
+	logging.processor = p
 }
 
 func init() {
@@ -252,6 +260,15 @@ func (l *loggingT) hasManagedRedactionPolicy() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.mu.redactionPolicyManaged
+}
+
+func (l *loggingT) processStructured(ctx context.Context, eventType EventType, e any) {
+	// TODO(abarganier): I'm not sure how possible this is, need to examine further (we use dependency injection).
+	// For now, panic.
+	if l.processor == nil {
+		panic(errors.AssertionFailedf("attempted to process a structured record before processor initialized"))
+	}
+	l.processor.Process(ctx, eventType, e)
 }
 
 // outputLogEntry marshals a log entry proto into bytes, and writes
