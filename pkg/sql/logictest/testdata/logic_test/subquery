@@ -922,7 +922,7 @@ SELECT * FROM ab WHERE (a, b) IN (SELECT x+1, y+1 FROM xy);
 # The outer ROW(ROW(a, b)) is already a tuple, so shouldn't be wrapped in
 # another tuple before comparison. But the comparison should fail due to
 # mismatched types.
-query error pgcode 22023 unsupported binary operator: <int> \+ <int> \(desired <tuple\{int, int\}>\)
+query error pgcode 22023 unsupported binary operator: <int> \+ <int> \(returning <tuple\{int, int\}>\)
 SELECT * FROM ab WHERE ROW(ROW(a, b)) IN (SELECT x+1 FROM xy);
 
 # The outer ROW(ROW(a, b)) is already a tuple, so shouldn't be wrapped in
@@ -959,7 +959,7 @@ true
 # The outer ((2, 2), (3, 3)) is already a tuple, so shouldn't be wrapped in
 # another tuple before comparison. But the comparison should fail due to
 # mismatched types.
-query error pgcode 22023 unsupported binary operator: <int> \+ <int> \(desired \<tuple\{int\, int\}>\)
+query error pgcode 22023 unsupported binary operator: <int> \+ <int> \(returning \<tuple\{int\, int\}>\)
 SELECT (SELECT (2, 2), (3, 3)) IN (SELECT x+1, y+1 FROM xy)
 
 # Outer scalar is a tuple with 2 elements. Subquery has only 1 column.
