@@ -109,7 +109,7 @@ statement ok
 CREATE FUNCTION foo(i INT) RETURNS VOID LANGUAGE SQL AS ''
 
 # This is similar to the test above, but with a non-matching function signature.
-statement error pgcode 42883 unknown signature: public.foo\(\) \(desired <int>\)
+statement error pgcode 42883 unknown signature: public.foo\(\) \(returning <int>\)
 CALL p(foo())
 
 statement error pgcode 42723 function "p" already exists with same argument types
