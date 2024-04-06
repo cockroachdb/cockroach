@@ -1970,7 +1970,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 //   - test for race in gc'ing lock that has since become non-empty or new
 //     non-empty one has been inserted.
 
-func TestLockStateSafeFormat(t *testing.T) {
+func TestKeyLocksSafeFormat(t *testing.T) {
 	l := &keyLocks{
 		id:     1,
 		key:    []byte("KEY"),
@@ -1994,9 +1994,9 @@ func TestLockStateSafeFormat(t *testing.T) {
 		redact.Sprint(l).Redact())
 }
 
-// TestLockStateSafeFormatMultipleLockHolders ensures multiple lock holders on
+// TestKeyLocksSafeFormatMultipleLockHolders ensures multiple lock holders on
 // a single key are correctly formatted.
-func TestLockStateSafeFormatMultipleLockHolders(t *testing.T) {
+func TestKeyLocksSafeFormatMultipleLockHolders(t *testing.T) {
 	kl := &keyLocks{
 		id:     1,
 		key:    []byte("KEY"),
