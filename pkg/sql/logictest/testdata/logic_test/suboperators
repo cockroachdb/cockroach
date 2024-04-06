@@ -122,7 +122,7 @@ SELECT 1 = ANY(ARRAY['foo'] || 'bar'::string)
 # Note that this relatively poor error message is caused by the fact that
 # strings are constant castable to string arrays. Postgres also makes this
 # same minor mistake in error generation.
-query error unsupported binary operator: <string\[\]> || <string> (desired <int\[\]>)
+query error unsupported binary operator: <string\[\]> || <string> (returning <int\[\]>)
 SELECT 1 = ANY(ARRAY['foo'] || 'bar')
 
 # ANY/SOME with subqueries.
