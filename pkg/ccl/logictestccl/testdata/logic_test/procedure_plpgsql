@@ -605,20 +605,25 @@ SELECT * FROM temp;
 statement ok
 DROP PROCEDURE p(INOUT int);
 
-statement ok
+statement error pgcode 0A000 unnamed INOUT parameters are not yet supported
 CREATE PROCEDURE p(INOUT INT) AS $$
 BEGIN
   INSERT INTO temp VALUES(1);
   COMMIT;
 END; $$ LANGUAGE PLpgSQL;
 
-# TODO(121251): this should return 42 instead of NULL. We currently cannot
-# reference the unnamed parameter to get its input expression.
+statement ok
+CREATE PROCEDURE p(INOUT a INT) AS $$
+BEGIN
+  INSERT INTO temp VALUES(1);
+  COMMIT;
+END; $$ LANGUAGE PLpgSQL;
+
 query I colnames
 CALL p(42);
 ----
-column1
-NULL
+a
+42
 
 query I rowsort
 SELECT * FROM temp;
