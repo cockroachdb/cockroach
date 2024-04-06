@@ -45,7 +45,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
-    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 2 promoting: true, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 # Replicated lock acquisition will cause us to forget the unreplicated lock.
 acquire r=req2 k=a durability=r strength=intent
@@ -53,7 +53,7 @@ acquire r=req2 k=a durability=r strength=intent
 num=1
  lock: "a"
    queued locking requests:
-    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 2 promoting: true, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req2
 ----
@@ -99,7 +99,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
-    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 5 promoting: true, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
 
 # For good measure, create a new request from txn3 that comes after req5, and
@@ -118,7 +118,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
-    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 5 promoting: true, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
 
@@ -141,8 +141,8 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
-    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
-    active: false req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 5 promoting: true, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 7 promoting: true, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
 
@@ -181,7 +181,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 9, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 9 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 acquire r=req9 k=a durability=u strength=exclusive
 ----
@@ -189,7 +189,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0), (str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 9, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 9 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req9
 ----
@@ -240,7 +240,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 12, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 12 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 11, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
 
 acquire r=req12 k=a durability=u strength=exclusive
@@ -249,7 +249,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0), (str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 12, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 12 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 11, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
 
 dequeue r=req12
@@ -310,7 +310,7 @@ num=1
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: true req: 15, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 15 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req15
 ----
@@ -322,7 +322,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 15, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 15 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 # ------------------------------------------------------------------------------
 # Test for lock promotion from Shared -> Exclusive when there are 3 shared locks
@@ -390,7 +390,7 @@ num=1
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: true req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 19 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req19
 ----
@@ -403,7 +403,7 @@ num=1
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: true req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 19 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req19
 ----
@@ -415,7 +415,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 19 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req19
 ----
@@ -432,7 +432,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 19 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 acquire r=req19 k=a durability=u strength=exclusive
 ----
@@ -440,7 +440,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0), (str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 19 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req19
 ----
@@ -563,7 +563,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 26, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 26 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 25, strength: Intent, txn: none
 
 acquire r=req26 k=a durability=u strength=exclusive
@@ -572,7 +572,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0), (str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 26, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 26 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 25, strength: Intent, txn: none
 
 dequeue r=req26
@@ -711,8 +711,8 @@ num=1
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: true req: 30, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
-    active: true req: 31, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 30 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 31 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
 
 guard-state r=req30
 ----
@@ -877,7 +877,7 @@ num=2
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 35, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 35 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: false req: 34, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 36, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
@@ -891,7 +891,7 @@ num=2
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0), (str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 35, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 35 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: false req: 34, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 36, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
@@ -1000,7 +1000,7 @@ num=1
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: true req: 39, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 39 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req39
 ----
@@ -1012,7 +1012,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 39, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 39 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 # ------------------------------------------------------------------------------
 # Test that when a request transitions from promoting to non-promoting (because
@@ -1072,8 +1072,8 @@ num=1
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: true req: 42, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
-    active: true req: 43, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 42 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 43 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
 
 update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=0
 ----
@@ -1081,7 +1081,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 43, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 43 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
 
 scan r=req42
 ----
@@ -1097,7 +1097,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 43, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 43 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 42, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
 # ------------------------------------------------------------------------------
@@ -1157,8 +1157,8 @@ num=1
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: true req: 46, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
-    active: true req: 47, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 46 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 47 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
 
 release txn=txn1 span=a
 ----
@@ -1166,7 +1166,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 47, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 47 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
 
 scan r=req46
 ----
@@ -1182,5 +1182,5 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 1, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: false req: 47, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 47 promoting: true, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 46, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
