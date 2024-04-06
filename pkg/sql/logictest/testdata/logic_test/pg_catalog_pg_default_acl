@@ -399,3 +399,20 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 2709666228  2264919399  0                T              {foo=U*/,testuser=U*/}
 2709666228  2264919399  0                n              {foo=C*U*/}
 2709666228  2264919399  0                f              {foo=X*/,=X/}
+
+statement ok
+ALTER DEFAULT PRIVILEGES IN SCHEMA PUBLIC GRANT SELECT,UPDATE,INSERT,DELETE ON TABLES TO foo;
+ALTER DEFAULT PRIVILEGES IN SCHEMA PUBLIC GRANT ALL ON SEQUENCES TO foo;
+ALTER DEFAULT PRIVILEGES IN SCHEMA PUBLIC GRANT ALL ON TYPES TO foo;
+ALTER DEFAULT PRIVILEGES IN SCHEMA PUBLIC GRANT ALL ON FUNCTIONS TO foo;
+
+# Ensure that the empty arrays are populated with the default privileges
+# for foo.
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL WHERE defaclnamespace != 0
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+3426387245  2264919399  105              r              {foo=adrw/}
+3426387245  2264919399  105              S              {foo=CUadrw/}
+3426387245  2264919399  105              T              {foo=U/}
+3426387245  2264919399  105              f              {foo=X/}
