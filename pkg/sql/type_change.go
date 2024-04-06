@@ -738,16 +738,18 @@ func findUsagesOfEnumValueInViewQuery(
 	return foundUsage, nil
 }
 
-// canRemoveEnumValueFromUDF checks if the enum value is being used
-// within the function body. As of today, CockroachDB does not support
-// default values for input arguments. However, when we add that support,
-// we should augment this method to also check if the enum value is being
-// used within the function input arguments.
+// canRemoveEnumValueFromUDF checks if the enum value is being used within the
+// function body or within DEFAULT expressions for input arguments.
 func (t *typeSchemaChanger) canRemoveEnumValueFromUDF(
 	typeDesc *typedesc.Mutable,
 	member *descpb.TypeDescriptor_EnumMember,
 	udfDesc catalog.FunctionDescriptor,
 ) error {
+	makeError := func() error {
+		return pgerror.Newf(pgcode.DependentObjectsStillExist,
+			"could not remove enum value %q as it is being used in a routine %q",
+			member.LogicalRepresentation, udfDesc.GetName())
+	}
 	var foundUsage, foundUsageInCurrentWalk bool
 	visitFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		foundUsageInCurrentWalk, recurse, newExpr, err = visitExprToCheckEnumValueUsage(expr, typeDesc.ID, member)
@@ -764,28 +766,43 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromUDF(
 		for _, stmt := range parsedStmts {
 			_, err = tree.SimpleStmtVisit(stmt.AST, visitFunc)
 			if err != nil {
-				return errors.Wrapf(err, "failed to parse UDF %s", udfDesc.GetName())
+				return errors.Wrapf(err, "failed to parse routine %s", udfDesc.GetName())
 			}
 			if foundUsage {
-				return pgerror.Newf(pgcode.DependentObjectsStillExist,
-					"could not remove enum value %q as it is being used in a UDF %q",
-					member.LogicalRepresentation, udfDesc.GetName())
+				return makeError()
 			}
 		}
 	case catpb.Function_PLPGSQL:
 		stmt, err := plpgsql.Parse(udfDesc.GetFunctionBody())
 		if err != nil {
-			return errors.Wrapf(err, "failed to parse UDF %s", udfDesc.GetName())
+			return errors.Wrapf(err, "failed to parse routine %s", udfDesc.GetName())
 		}
 		v := utils.SQLStmtVisitor{Fn: visitFunc}
 		plpgsqltree.Walk(&v, stmt.AST)
 		if v.Err != nil {
-			return errors.Wrapf(v.Err, "failed to parse UDF %s", udfDesc.GetName())
+			return errors.NewAssertionErrorWithWrappedErrf(v.Err, "failed to parse routine %s", udfDesc.GetName())
 		}
 		if foundUsage {
-			return pgerror.Newf(pgcode.DependentObjectsStillExist,
-				"could not remove enum value %q as it is being used in a UDF %q",
-				member.LogicalRepresentation, udfDesc.GetName())
+			return makeError()
+		}
+	}
+	for _, param := range udfDesc.GetParams() {
+		if param.DefaultExpr != nil {
+			expr, err := parser.ParseExpr(*param.DefaultExpr)
+			if err != nil {
+				return errors.NewAssertionErrorWithWrappedErrf(
+					err, "when parsing DEFAULT expression for parameter %q of routine %s",
+					param.Name, udfDesc.GetName())
+			}
+			_, err = tree.SimpleVisit(expr, visitFunc)
+			if err != nil {
+				return errors.NewAssertionErrorWithWrappedErrf(
+					err, "failed to parse DEFAULT expression for parameter %q of routine %s",
+					param.Name, udfDesc.GetName())
+			}
+			if foundUsage {
+				return makeError()
+			}
 		}
 	}
 	return nil

@@ -145,7 +145,9 @@ func (p *planner) matchRoutine(
 		return nil, err
 	}
 
-	ol, err := fnDef.MatchOverload(ctx, p, routineObj, &path, routineType, inDropContext)
+	ol, err := fnDef.MatchOverload(
+		ctx, p, routineObj, &path, routineType, inDropContext, false, /* tryDefaultExprs */
+	)
 	if err != nil {
 		if !required && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil, nil
