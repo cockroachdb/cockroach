@@ -1970,7 +1970,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 //   - test for race in gc'ing lock that has since become non-empty or new
 //     non-empty one has been inserted.
 
-func TestLockStateSafeFormat(t *testing.T) {
+func TestKeyLocksSafeFormat(t *testing.T) {
 	l := &keyLocks{
 		id:     1,
 		key:    []byte("KEY"),
@@ -1994,9 +1994,9 @@ func TestLockStateSafeFormat(t *testing.T) {
 		redact.Sprint(l).Redact())
 }
 
-// TestLockStateSafeFormatMultipleLockHolders ensures multiple lock holders on
+// TestKeyLocksSafeFormatMultipleLockHolders ensures multiple lock holders on
 // a single key are correctly formatted.
-func TestLockStateSafeFormatMultipleLockHolders(t *testing.T) {
+func TestKeyLocksSafeFormatMultipleLockHolders(t *testing.T) {
 	kl := &keyLocks{
 		id:     1,
 		key:    []byte("KEY"),
@@ -2023,6 +2023,44 @@ func TestLockStateSafeFormatMultipleLockHolders(t *testing.T) {
 		" lock: ‹×›\n"+
 			"  holders: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 3)]\n"+
 			"           txn: 6ba7b811-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 6)]\n",
+		redact.Sprint(kl).Redact())
+}
+
+// TestLockStateSafeFormatWaitQueue ensures requests waiting in a lock's wait
+// queue are formatted correctly.
+func TestKeyLocksSafeFormatWaitQueue(t *testing.T) {
+	kl := &keyLocks{
+		id:     1,
+		key:    []byte("KEY"),
+		endKey: []byte("END"),
+	}
+	holder := &txnLock{}
+	kl.holders.PushBack(holder)
+	holder.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
+	holder.unreplicatedInfo.init()
+	holder.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 7}
+	require.NoError(t, holder.unreplicatedInfo.acquire(lock.Shared, 3))
+	waiter := queuedGuard{
+		guard:  newLockTableGuardImpl(),
+		active: true,
+		order:  queueOrder{isPromoting: true, reqSeqNum: 11},
+		mode:   lock.MakeModeIntent(hlc.Timestamp{WallTime: 123, Logical: 7}),
+	}
+	waiter.guard.txn = &roachpb.Transaction{
+		TxnMeta: enginepb.TxnMeta{ID: uuid.NamespaceDNS},
+	}
+	kl.queuedLockingRequests.PushBack(&waiter)
+	require.EqualValues(t,
+		" lock: ‹\"KEY\"›\n"+
+			"  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 3)]\n"+
+			"   queued locking requests:\n"+
+			"    active: true req: 11 promoting: true, strength: Intent, txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\n",
+		redact.Sprint(kl))
+	require.EqualValues(t,
+		" lock: ‹×›\n"+
+			"  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 3)]\n"+
+			"   queued locking requests:\n"+
+			"    active: true req: 11 promoting: true, strength: Intent, txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\n",
 		redact.Sprint(kl).Redact())
 }
 
