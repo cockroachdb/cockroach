@@ -447,14 +447,14 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	// entirely easy to cause given the current implementation details.
 
 	var (
-		// trapRead is set, atomically, once the test wants to block a read on the
-		// first node.
-		trapRead    int64
-		blockedRead struct {
+		// We will want to block exactly one read to the first node.
+		blockOneRead atomic.Bool
+		blockedRead  struct {
 			syncutil.Mutex
 			unblockCond   *sync.Cond
 			shouldUnblock bool
 		}
+		endKeyToBlock string
 	)
 
 	blockedRead.unblockCond = sync.NewCond(&blockedRead.Mutex)
@@ -470,7 +470,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
 							TestingRequestFilter: func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-								if atomic.LoadInt64(&trapRead) == 0 {
+								if !blockOneRead.Load() {
 									return nil
 								}
 								// We're going to trap a read for the rows [1,5].
@@ -478,23 +478,28 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 								if !ok {
 									return nil
 								}
-								key := req.(*kvpb.ScanRequest).Key.String()
 								endKey := req.(*kvpb.ScanRequest).EndKey.String()
-								if strings.Contains(key, "/1") && strings.Contains(endKey, "/6") {
-									blockedRead.Lock()
-									for !blockedRead.shouldUnblock {
-										blockedRead.unblockCond.Wait()
-									}
-									blockedRead.Unlock()
-									return kvpb.NewError(
-										kvpb.NewReadWithinUncertaintyIntervalError(
-											ba.Timestamp,           /* readTs */
-											hlc.ClockTimestamp{},   /* localUncertaintyLimit */
-											ba.Txn,                 /* txn */
-											ba.Timestamp.Add(1, 0), /* valueTS */
-											hlc.ClockTimestamp{} /* localTS */))
+								if !strings.Contains(endKey, endKeyToBlock) {
+									// Either a request for a different table or
+									// for a different part of the target table.
+									return nil
 								}
-								return nil
+								// Since we're blocking this read, the caller
+								// must set it again if it wants to block
+								// another read.
+								blockOneRead.Store(false)
+								blockedRead.Lock()
+								for !blockedRead.shouldUnblock {
+									blockedRead.unblockCond.Wait()
+								}
+								blockedRead.Unlock()
+								return kvpb.NewError(
+									kvpb.NewReadWithinUncertaintyIntervalError(
+										ba.Timestamp,           /* readTs */
+										hlc.ClockTimestamp{},   /* localUncertaintyLimit */
+										ba.Txn,                 /* txn */
+										ba.Timestamp.Add(1, 0), /* valueTS */
+										hlc.ClockTimestamp{} /* localTS */))
 							},
 						},
 					},
@@ -510,6 +515,15 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 		"x INT PRIMARY KEY",
 		10, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	row := origDB0.QueryRow("SELECT 't'::regclass::oid")
+	var tableID int
+	require.NoError(t, row.Scan(&tableID))
+	// Request that we want to block is of the form
+	//   Scan /Table/105/1{-/6}
+	// so it'll have the end key like
+	//   /Table/105/1/6.
+	endKeyToBlock = fmt.Sprintf("/Table/%d/1/6", tableID)
 
 	// Split the table and move half of the rows to the 2nd node. We'll block the
 	// read on the first node, and so the rows we're going to be expecting are the
@@ -528,8 +542,6 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).AdvSQLAddr())
 	defer cleanup()
 
-	atomic.StoreInt64(&trapRead, 1)
-
 	// Run with the vectorize off and on.
 	testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
 		// We're going to run the test twice in each vectorize configuration. Once
@@ -537,6 +549,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 		// by increasing the limit from 5 to 6 and checking that we get the injected
 		// error in that case.
 		testutils.RunTrueAndFalse(t, "dummy", func(t *testing.T, dummy bool) {
+			blockOneRead.Store(true)
 			// Reset the blocking condition.
 			blockedRead.Lock()
 			blockedRead.shouldUnblock = false
