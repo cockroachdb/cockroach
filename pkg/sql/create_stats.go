@@ -390,8 +390,9 @@ func createStatsDefaultColumns(
 		if err != nil {
 			return nil, err
 		}
+		var distSQLVisitor distSQLExprCheckVisitor
 		for i, col := range desc.PublicColumns() {
-			cannotDistribute[i] = col.IsVirtual() && checkExprForDistSQL(exprs[i]) != nil
+			cannotDistribute[i] = col.IsVirtual() && checkExprForDistSQL(exprs[i], &distSQLVisitor) != nil
 		}
 	}
 
