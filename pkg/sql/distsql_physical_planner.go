@@ -378,13 +378,19 @@ func hasOidType(t *types.T) bool {
 
 // checkExprForDistSQL verifies that an expression doesn't contain things that
 // are not yet supported by distSQL, like distSQL-blocklisted functions.
-func checkExprForDistSQL(expr tree.Expr) error {
+//
+// distSQLVisitor argument is optional.
+func checkExprForDistSQL(expr tree.Expr, distSQLVisitor *distSQLExprCheckVisitor) error {
 	if expr == nil {
 		return nil
 	}
-	v := distSQLExprCheckVisitor{}
-	tree.WalkExprConst(&v, expr)
-	return v.err
+	if distSQLVisitor != nil {
+		*distSQLVisitor = distSQLExprCheckVisitor{}
+	} else {
+		distSQLVisitor = &distSQLExprCheckVisitor{}
+	}
+	tree.WalkExprConst(distSQLVisitor, expr)
+	return distSQLVisitor.err
 }
 
 type distRecommendation int
@@ -509,7 +515,9 @@ func mustWrapValuesNode(planCtx *PlanningCtx, specifiedInQuery bool) bool {
 // The error doesn't indicate complete failure - it's instead the reason that
 // this plan couldn't be distributed.
 // TODO(radu): add tests for this.
-func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
+func checkSupportForPlanNode(
+	node planNode, distSQLVisitor *distSQLExprCheckVisitor,
+) (distRecommendation, error) {
 	switch n := node.(type) {
 	// Keep these cases alphabetized, please!
 	case *createStatsNode:
@@ -519,19 +527,19 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return shouldDistribute, nil
 
 	case *distinctNode:
-		return checkSupportForPlanNode(n.plan)
+		return checkSupportForPlanNode(n.plan, distSQLVisitor)
 
 	case *exportNode:
-		return checkSupportForPlanNode(n.source)
+		return checkSupportForPlanNode(n.source, distSQLVisitor)
 
 	case *filterNode:
-		if err := checkExprForDistSQL(n.filter); err != nil {
+		if err := checkExprForDistSQL(n.filter, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		return checkSupportForPlanNode(n.source.plan)
+		return checkSupportForPlanNode(n.source.plan, distSQLVisitor)
 
 	case *groupNode:
-		rec, err := checkSupportForPlanNode(n.plan)
+		rec, err := checkSupportForPlanNode(n.plan, distSQLVisitor)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -553,13 +561,13 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 		// n.table doesn't have meaningful spans, but we need to check support (e.g.
 		// for any filtering expression).
-		if _, err := checkSupportForPlanNode(n.table); err != nil {
+		if _, err := checkSupportForPlanNode(n.table, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		return checkSupportForPlanNode(n.input)
+		return checkSupportForPlanNode(n.input, distSQLVisitor)
 
 	case *invertedFilterNode:
-		return checkSupportForInvertedFilterNode(n)
+		return checkSupportForInvertedFilterNode(n, distSQLVisitor)
 
 	case *invertedJoinNode:
 		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -569,24 +577,24 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 			// TODO(nvanbenschoten): lift this restriction.
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
-		if err := checkExprForDistSQL(n.onExpr); err != nil {
+		if err := checkExprForDistSQL(n.onExpr, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		rec, err := checkSupportForPlanNode(n.input)
+		rec, err := checkSupportForPlanNode(n.input, distSQLVisitor)
 		if err != nil {
 			return cannotDistribute, err
 		}
 		return rec.compose(shouldDistribute), nil
 
 	case *joinNode:
-		if err := checkExprForDistSQL(n.pred.onCond); err != nil {
+		if err := checkExprForDistSQL(n.pred.onCond, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		recLeft, err := checkSupportForPlanNode(n.left.plan)
+		recLeft, err := checkSupportForPlanNode(n.left.plan, distSQLVisitor)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := checkSupportForPlanNode(n.right.plan)
+		recRight, err := checkSupportForPlanNode(n.right.plan, distSQLVisitor)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -603,7 +611,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		// Note that we don't need to check whether we support distribution of
 		// n.countExpr or n.offsetExpr because those expressions are evaluated
 		// locally, during the physical planning.
-		return checkSupportForPlanNode(n.plan)
+		return checkSupportForPlanNode(n.plan, distSQLVisitor)
 
 	case *lookupJoinNode:
 		if n.remoteLookupExpr != nil || n.remoteOnlyLookups {
@@ -618,16 +626,16 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
 
-		if err := checkExprForDistSQL(n.lookupExpr); err != nil {
+		if err := checkExprForDistSQL(n.lookupExpr, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		if err := checkExprForDistSQL(n.remoteLookupExpr); err != nil {
+		if err := checkExprForDistSQL(n.remoteLookupExpr, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		if err := checkExprForDistSQL(n.onCond); err != nil {
+		if err := checkExprForDistSQL(n.onCond, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		rec, err := checkSupportForPlanNode(n.input)
+		rec, err := checkSupportForPlanNode(n.input, distSQLVisitor)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -640,19 +648,19 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 
 	case *projectSetNode:
 		for i := range n.exprs {
-			if err := checkExprForDistSQL(n.exprs[i]); err != nil {
+			if err := checkExprForDistSQL(n.exprs[i], distSQLVisitor); err != nil {
 				return cannotDistribute, err
 			}
 		}
-		return checkSupportForPlanNode(n.source)
+		return checkSupportForPlanNode(n.source, distSQLVisitor)
 
 	case *renderNode:
 		for _, e := range n.render {
-			if err := checkExprForDistSQL(e); err != nil {
+			if err := checkExprForDistSQL(e, distSQLVisitor); err != nil {
 				return cannotDistribute, err
 			}
 		}
-		return checkSupportForPlanNode(n.source.plan)
+		return checkSupportForPlanNode(n.source.plan, distSQLVisitor)
 
 	case *scanNode:
 		if n.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -681,14 +689,14 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 
 	case *sortNode:
-		rec, err := checkSupportForPlanNode(n.plan)
+		rec, err := checkSupportForPlanNode(n.plan, distSQLVisitor)
 		if err != nil {
 			return cannotDistribute, err
 		}
 		return rec.compose(shouldDistribute), nil
 
 	case *topKNode:
-		rec, err := checkSupportForPlanNode(n.plan)
+		rec, err := checkSupportForPlanNode(n.plan, distSQLVisitor)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -699,11 +707,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return canDistribute, nil
 
 	case *unionNode:
-		recLeft, err := checkSupportForPlanNode(n.left)
+		recLeft, err := checkSupportForPlanNode(n.left, distSQLVisitor)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := checkSupportForPlanNode(n.right)
+		recRight, err := checkSupportForPlanNode(n.right, distSQLVisitor)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -719,7 +727,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 
 		for _, tuple := range n.tuples {
 			for _, expr := range tuple {
-				if err := checkExprForDistSQL(expr); err != nil {
+				if err := checkExprForDistSQL(expr, distSQLVisitor); err != nil {
 					return cannotDistribute, err
 				}
 			}
@@ -727,7 +735,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return canDistribute, nil
 
 	case *windowNode:
-		rec, err := checkSupportForPlanNode(n.plan)
+		rec, err := checkSupportForPlanNode(n.plan, distSQLVisitor)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -753,7 +761,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 				return cannotDistribute, cannotDistributeRowLevelLockingErr
 			}
 		}
-		if err := checkExprForDistSQL(n.onCond); err != nil {
+		if err := checkExprForDistSQL(n.onCond, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
 		return shouldDistribute, nil
@@ -765,8 +773,10 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 	}
 }
 
-func checkSupportForInvertedFilterNode(n *invertedFilterNode) (distRecommendation, error) {
-	rec, err := checkSupportForPlanNode(n.input)
+func checkSupportForInvertedFilterNode(
+	n *invertedFilterNode, distSQLVisitor *distSQLExprCheckVisitor,
+) (distRecommendation, error) {
+	rec, err := checkSupportForPlanNode(n.input, distSQLVisitor)
 	if err != nil {
 		return cannotDistribute, err
 	}

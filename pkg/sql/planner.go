@@ -286,6 +286,8 @@ type planner struct {
 	trackDependency map[catid.DescID]bool
 
 	reducedAuditConfig *auditlogging.ReducedAuditConfig
+
+	distSQLVisitor distSQLExprCheckVisitor
 }
 
 // hasFlowForPausablePortal returns true if the planner is for re-executing a
