@@ -25,6 +25,7 @@ func genSelectIn(inputFileContents string, wr io.Writer) error {
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
+		"_GOTYPE_UPCAST_INT", `{{if or (eq .VecMethod "Int16") (eq .VecMethod "Int32")}}int64{{else}}{{.GoType}}{{end}}`,
 		"_GOTYPE", "{{.GoType}}",
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
