@@ -1966,7 +1966,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	distributePlan := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
-		distSQLMode, planner.curPlan.main,
+		distSQLMode, planner.curPlan.main, &planner.distSQLVisitor,
 	)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
