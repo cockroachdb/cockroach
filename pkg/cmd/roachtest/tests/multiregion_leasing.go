@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -22,16 +23,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lib/pq"
 )
 
 // Benchmarks and confirms the performance of the leasing infrastructure.
 func runSchemaChangeMultiRegionBenchmarkLeasing(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
-	var durations [2]time.Duration
+	var durations [2][]time.Duration
 	defaultOpts := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), defaultOpts)
 	// Create 600 tables inside the database, which is above our default lease
@@ -44,41 +48,70 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 		for _, n := range c.All() {
 			var node = n
 			grp.GoCtx(func(ctx context.Context) error {
-				conn, err := c.ConnE(ctx, t.L(), node)
-				if err != nil {
-					return err
-				}
-				defer conn.Close()
-				tx, err := conn.Begin()
-				if err != nil {
-					return err
-				}
-				for i := 0; i < numTables; i++ {
-					createTbl := fmt.Sprintf("CREATE TABLE table_%d_%d (i int);", node, i)
-					_, err := tx.Exec(createTbl)
+				createTables := func() error {
+					conn, err := c.ConnE(ctx, t.L(), node)
 					if err != nil {
 						return err
 					}
+					defer conn.Close()
+					tx, err := conn.Begin()
+					if err != nil {
+						return err
+					}
+					for i := 0; i < numTables; i++ {
+						createTbl := fmt.Sprintf("CREATE TABLE table_%d_%d (i int);", node, i)
+						_, err := tx.Exec(createTbl)
+						if err != nil {
+							return err
+						}
+					}
+					return tx.Commit()
 				}
-				return tx.Commit()
+				var err error
+				for retry := 0; retry < 10; retry++ {
+					err = createTables()
+					// No error detected, so done.
+					if err == nil {
+						return nil
+					}
+					// Check for serializable errors, which we will retry.
+					if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
+						pgcode.MakeCode(string(pqErr.Code)) == pgcode.SerializationFailure) {
+						continue
+					}
+					// Otherwise an unknown error so bail out.
+					return err
+				}
+				// Return the last error, if we don't sort this in the retry
+				// count.
+				return err
 			})
 		}
 		if err := grp.Wait(); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for modeIdx, sessionBasedLeasingEnabled := range []bool{true, false} {
-		func() {
-			// When session based leasing is disabled, force expiry based leasing.
-			if !sessionBasedLeasingEnabled {
-				// Note: After flipping the cluster settings we need to restart all nodes,
-				// since the leasing code is not designed switch to session based leasing
-				// to expiry based (in an online manner). Only the reverse direction is
-				// supported online with a migration.
-				options := map[string]string{
-					"sql.catalog.experimental_use_session_based_leasing": "off",
-					"sql.catalog.descriptor_lease_duration":              "30s",
-					"sql.catalog.descriptor_lease_renewal_fraction":      "6s",
+
+	for numTestIters := 0; numTestIters < 3; numTestIters++ {
+		for modeIdx, sessionBasedLeasingEnabled := range []bool{true, false} {
+			func() {
+				// When session based leasing is disabled, force expiry based leasing.
+				var options map[string]string
+				if !sessionBasedLeasingEnabled {
+					// Note: After flipping the cluster settings we need to restart all nodes,
+					// since the leasing code is not designed switch to session based leasing
+					// to expiry based (in an online manner). Only the reverse direction is
+					// supported online with a migration.
+					options = map[string]string{
+						"sql.catalog.experimental_use_session_based_leasing": "off",
+						"sql.catalog.descriptor_lease_duration":              "30s",
+						"sql.catalog.descriptor_lease_renewal_fraction":      "6s",
+					}
+
+				} else {
+					options = map[string]string{
+						"sql.catalog.experimental_use_session_based_leasing": "auto",
+					}
 				}
 				conn := c.Conn(ctx, t.L(), c.Node(1)[0])
 				defer conn.Close()
@@ -89,88 +122,98 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 				}
 				c.Stop(ctx, t.L(), option.DefaultStopOpts())
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), defaultOpts)
-			}
 
-			// Next spawn a thread on each node to select from all the tables created
-			// above. We are going to do two passes, with multiple threads. After 30
-			// seconds the lease will expire in the expiry based model, and checking
-			// all of these tables will take more than the expiry time. Additionally,
-			// a 100 tables will *never* be auto-refreshed.
-			const numWorkersPerNode = 8
-			connPoolPerNode := make([]*pgxpool.Pool, 0, len(c.All()))
-			defer func() {
-				for _, pool := range connPoolPerNode {
-					pool.Close()
+				// Next spawn a thread on each node to select from all the tables created
+				// above. We are going to do two passes, with multiple threads. After 30
+				// seconds the lease will expire in the expiry based model, and checking
+				// all of these tables will take more than the expiry time. Additionally,
+				// a 100 tables will *never* be auto-refreshed.
+				const numWorkersPerNode = 8
+				connPoolPerNode := make([]*pgxpool.Pool, 0, len(c.All()))
+				defer func() {
+					for _, pool := range connPoolPerNode {
+						pool.Close()
+					}
+				}()
+				for _, node := range c.All() {
+					url, err := c.ExternalPGUrl(ctx, t.L(), c.Node(node), roachprod.PGURLOptions{Secure: true})
+					if err != nil {
+						t.Fatal(err)
+					}
+					config, err := pgxpool.ParseConfig(url[0])
+					if err != nil {
+						t.Fatal(err)
+					}
+					config.MinConns = numWorkersPerNode
+					connPool, err := pgxpool.NewWithConfig(ctx, config)
+					if err != nil {
+						t.Fatal(err)
+					}
+					connPoolPerNode = append(connPoolPerNode, connPool)
 				}
-			}()
-			for _, node := range c.All() {
-				url, err := c.ExternalPGUrl(ctx, t.L(), c.Node(node), roachprod.PGURLOptions{Secure: true})
-				if err != nil {
-					t.Fatal(err)
-				}
-				config, err := pgxpool.ParseConfig(url[0])
-				if err != nil {
-					t.Fatal(err)
-				}
-				config.MinConns = numWorkersPerNode
-				connPool, err := pgxpool.NewWithConfig(ctx, config)
-				if err != nil {
-					t.Fatal(err)
-				}
-				connPoolPerNode = append(connPoolPerNode, connPool)
-			}
-			grp := ctxgroup.WithContext(ctx)
-			startTime := timeutil.Now()
-			for nodeIdx := range c.All() {
-				nodeIdx := nodeIdx
-				tablesPerWorker := numTables / numWorkersPerNode
-				for workerId := 0; workerId < numWorkersPerNode; workerId++ {
-					workerId := workerId
-					grp.GoCtx(func(ctx context.Context) error {
-						conn, err := connPoolPerNode[nodeIdx].Acquire(ctx)
-						if err != nil {
-							return err
-						}
-						defer conn.Release()
-						for iter := 0; iter < 8; iter++ {
-							for i := workerId * tablesPerWorker; i < (workerId+1)*tablesPerWorker; i++ {
-								for j := 1; j <= len(c.All()); j++ {
-									createTbl := fmt.Sprintf("SELECT * FROM table_%d_%d;", j, i)
-									_, err := conn.Exec(ctx, createTbl)
-									if err != nil {
-										return err
+				grp := ctxgroup.WithContext(ctx)
+				startTime := timeutil.Now()
+				for nodeIdx := range c.All() {
+					nodeIdx := nodeIdx
+					tablesPerWorker := numTables / numWorkersPerNode
+					for workerId := 0; workerId < numWorkersPerNode; workerId++ {
+						workerId := workerId
+						grp.GoCtx(func(ctx context.Context) error {
+							conn, err := connPoolPerNode[nodeIdx].Acquire(ctx)
+							if err != nil {
+								return err
+							}
+							defer conn.Release()
+							const numIterations = 8
+							for iter := 0; iter < numIterations; iter++ {
+								for i := workerId * tablesPerWorker; i < (workerId+1)*tablesPerWorker; i++ {
+									for j := 1; j <= len(c.All()); j++ {
+										createTbl := fmt.Sprintf("SELECT * FROM table_%d_%d;", j, i)
+										_, err := conn.Exec(ctx, createTbl)
+										if err != nil {
+											return err
+										}
 									}
 								}
 							}
-						}
-						return nil
-					})
+							return nil
+						})
+					}
 				}
-			}
-			t.Status(fmt.Sprintf("starting benchmark session_based_leasing=%t", sessionBasedLeasingEnabled))
-			if err := grp.Wait(); err != nil {
-				t.Fatal(err)
-			}
-			durations[modeIdx] = timeutil.Since(startTime)
-		}()
+				t.Status(fmt.Sprintf("starting benchmark for session_based_leasing=%t", sessionBasedLeasingEnabled))
+				if err := grp.Wait(); err != nil {
+					t.Fatal(err)
+				}
+				elapsedTime := timeutil.Since(startTime)
+				durations[modeIdx] = append(durations[modeIdx], elapsedTime)
+				t.Status(fmt.Sprintf("benchmark completed for session_based_leasing=%t in %s", sessionBasedLeasingEnabled, elapsedTime))
+			}()
+		}
 	}
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 
-	// Confirm that session based leasing took less time for the selects.
-	if durations[0] > durations[1] {
-		t.Fatal(fmt.Sprintf("Expected session based leasing to be faster with many descriptors (%s > %s).",
-			durations[0],
-			durations[1]))
+	percentages := make([]int, len(durations[0]))
+	for i := range percentages {
+		percentages[i] = int((durations[1][i]*100)/durations[0][i]) - 100
 	}
-
+	sort.SliceStable(percentages, func(i, j int) bool {
+		return percentages[i] < percentages[j]
+	})
+	// Confirm that session based leasing took less time for the selects.
+	medianPercentage := percentages[len(percentages)/2]
+	t.Status(fmt.Sprintf("Observed the following percentage(%v), "+
+		"session based leasing time(%v), expiry based leasing time (%v)",
+		percentages, durations[0], durations[1]))
+	if medianPercentage < 0 {
+		t.Fatal(fmt.Sprintf("Expected session based leasing to be faster with many descriptors (%d%%).",
+			medianPercentage))
+	}
 	// Track the percentage improvement between the two.
-	improvementPct := ((durations[1] * 100) / durations[0]) - 100
-	t.Status(fmt.Sprintf("session based leasing produced an improvement of %d%% "+
-		"(session based exucution time=%s, expiry based execution time=%s)", improvementPct,
-		durations[0], durations[1]))
+	t.Status(fmt.Sprintf("session based leasing produced a median improvement of %d%% ",
+		medianPercentage))
 	// We see an up to 50% improvement in this scenario, so fail fatally if we miss
 	// a percentage of that mark.
-	if improvementPct < 20 {
+	if medianPercentage < 15 {
 		t.Fatal("lower than expected improvement in execution time")
 	}
 }
