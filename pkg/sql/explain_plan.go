@@ -64,7 +64,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		// created).
 		distribution := getPlanDistribution(
 			params.ctx, params.p.Descriptors().HasUncommittedTypes(),
-			params.extendedEvalCtx.SessionData().DistSQLMode, plan.main,
+			params.extendedEvalCtx.SessionData().DistSQLMode, plan.main, &params.p.distSQLVisitor,
 		)
 
 		outerSubqueries := params.p.curPlan.subqueryPlans

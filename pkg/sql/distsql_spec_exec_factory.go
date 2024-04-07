@@ -44,6 +44,7 @@ type distSQLSpecExecFactory struct {
 	singleTenant         bool
 	planningMode         distSQLPlanningMode
 	gatewaySQLInstanceID base.SQLInstanceID
+	distSQLVisitor       distSQLExprCheckVisitor
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
@@ -314,7 +315,7 @@ func (e *distSQLSpecExecFactory) checkExprsAndMaybeMergeLastStage(
 		recommendation = cannotDistribute
 	}
 	for _, expr := range exprs {
-		if err := checkExprForDistSQL(expr); err != nil {
+		if err := checkExprForDistSQL(expr, &e.distSQLVisitor); err != nil {
 			recommendation = cannotDistribute
 			if physPlan != nil {
 				// The filter expression cannot be distributed, so we need to
