@@ -150,7 +150,7 @@ func QueryIntent(
 			log.VEventf(ctx, 2, "found no intent")
 		}
 	} else {
-		found, err := storage.VerifyLock(
+		found, err := storage.MVCCVerifyLock(
 			ctx, reader, &args.Txn, args.Strength, args.Key, args.IgnoredSeqNums,
 		)
 		if err != nil {
