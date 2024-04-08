@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -270,6 +271,17 @@ func (desc *immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulato
 	}
 }
 
+// The SystemDatabaseSchemaBootstrapVersion for each release does not match the
+// final cluster version for that release; instead it matches the internal
+// version for the last upgrade which modified the system schema.
+// Note that these versions must not include dev offsets.
+var systemDatabaseSchemaVersions = map[clusterversion.Key]roachpb.Version{
+	// Unfortunately, due to an incomplete upgrade step, the system database
+	// schema version on 23.2 is either 23.1-20 or 23.1-32, depending on whether
+	// cluster was upgraded from 23.1 or created on 23.2 (respectively).
+	clusterversion.V23_2: {Major: 23, Minor: 1, Internal: 20},
+}
+
 func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
 	vea catalog.ValidationErrorAccumulator,
 ) {
@@ -286,20 +298,32 @@ func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
 		))
 	}
 
-	binaryMinSupportedVersion := clusterversion.RemoveDevOffset(clusterversion.MinSupported.Version())
-	if !binaryMinSupportedVersion.LessEq(sv) {
+	for release, sysSchemaVer := range systemDatabaseSchemaVersions {
+		if sv == sysSchemaVer {
+			sv = release.Version()
+			break
+		}
+	}
+
+	minSupportedVersion, ok := systemDatabaseSchemaVersions[clusterversion.MinSupported]
+	if !ok {
+		panic(errors.AssertionFailedf("MinSupported not in systemDatabaseSchemaVersions map"))
+	}
+
+	if sv.Less(minSupportedVersion) {
 		vea.Report(errors.AssertionFailedf(
-			`attempting to set system database schema version to version lower than binary min supported version (%#v): %#v`,
-			binaryMinSupportedVersion,
+			`attempting to set system database schema version to version lower than the minimum supported version (%#v): %#v`,
+			minSupportedVersion,
 			sv,
 		))
 	}
 
-	binaryVersion := clusterversion.RemoveDevOffset(clusterversion.Latest.Version())
-	if !sv.LessEq(binaryVersion) {
+	// TODO(radu): this should really be SystemDatabaseSchemaBootstrapVersion.
+	latestVersion := clusterversion.RemoveDevOffset(clusterversion.Latest.Version())
+	if latestVersion.Less(sv) {
 		vea.Report(errors.AssertionFailedf(
-			`attempting to set system database schema version to version higher than binary version (%#v): %#v`,
-			binaryVersion,
+			`attempting to set system database schema version to version higher than the latest version (%#v): %#v`,
+			latestVersion,
 			sv,
 		))
 	}
