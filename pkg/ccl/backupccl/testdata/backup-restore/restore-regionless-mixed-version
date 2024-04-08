@@ -1,4 +1,4 @@
-new-cluster name=s1 beforeVersion=23_2_Start disable-tenant localities=us-east-1,us-west-1,eu-central-1
+new-cluster name=s1 before-version=previous-release disable-tenant localities=us-east-1,us-west-1,eu-central-1
 ----
 
 exec-sql
@@ -28,17 +28,17 @@ exec-sql
 BACKUP INTO 'nodelocal://1/cluster_backup/';
 ----
 
-new-cluster name=s2 beforeVersion=23_2_Start share-io-dir=s1 disable-tenant
+new-cluster name=s2 before-version=previous-release share-io-dir=s1 disable-tenant
 ----
 
-# restore fails when cluster is in mixed version state while upgrading to 23.2
-exec-sql expect-error-regex=(cluster version must be >= *)
+# restore fails when cluster is in mixed version state while upgrading
+exec-sql expect-error-regex=(cluster restore not supported during major version upgrade)
 RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
 ----
 regex matches error
 
 # upgrade cluster
-upgrade-cluster version=23_2
+upgrade-cluster version=latest
 ----
 
 exec-sql

@@ -82,8 +82,8 @@ var localityCfgs = map[string]roachpb.Locality{
 }
 
 var clusterVersionKeys = map[string]clusterversion.Key{
-	"23_2_Start": clusterversion.V23_2Start,
-	"23_2":       clusterversion.V23_2,
+	"latest":           clusterversion.Latest,
+	"previous-release": clusterversion.PreviousRelease,
 }
 
 type sqlDBKey struct {
@@ -177,7 +177,6 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 		if !ok {
 			t.Fatalf("clusterVersion %s does not exist in data driven global map", cfg.beforeVersion)
 		}
-		beforeKey--
 		params.ServerArgs.Knobs.Server = &server.TestingKnobs{
 			BinaryVersionOverride:          beforeKey.Version(),
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -562,11 +561,11 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			if d.HasArg("splits") {
 				d.ScanArgs(t, "splits", &splits)
 			}
-			if d.HasArg("beforeVersion") {
-				d.ScanArgs(t, "beforeVersion", &beforeVersion)
+			if d.HasArg("before-version") {
+				d.ScanArgs(t, "before-version", &beforeVersion)
 				if !d.HasArg("disable-tenant") {
 					// TODO(msbutler): figure out why test tenants don't mix with version testing
-					t.Fatal("tests that use beforeVersion must use disable-tenant")
+					t.Fatal("tests that use before-version must use disable-tenant")
 				}
 			}
 			if d.HasArg("testingKnobCfg") {
