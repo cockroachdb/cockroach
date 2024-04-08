@@ -2495,20 +2495,20 @@ substring  4294967104    pg_catalog  NULL      12       NULL     NULL     0
 substring  4294967104    pg_catalog  NULL      12       NULL     NULL     0
 substring  4294967104    pg_catalog  NULL      12       NULL     NULL     0
 
-query TTBBBB colnames,rowsort
-SELECT proname, protransform, proisagg, proiswindow, prosecdef, proleakproof
+query TTBB colnames,rowsort
+SELECT proname, prokind, prosecdef, proleakproof
 FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
-proname    protransform  proisagg  proiswindow  prosecdef  proleakproof
-substring  NULL          false     false        false      false
-substring  NULL          false     false        false      false
-substring  NULL          false     false        false      false
-substring  NULL          false     false        false      false
-substring  NULL          false     false        false      false
-substring  NULL          false     false        false      false
-substring  NULL          false     false        false      false
-substring  NULL          false     false        false      false
+proname    prokind  prosecdef  proleakproof
+substring  f        false      false
+substring  f        false      false
+substring  f        false      false
+substring  f        false      false
+substring  f        false      false
+substring  f        false      false
+substring  f        false      false
+substring  f        false      false
 
 query TBBTT colnames,rowsort
 SELECT proname, proisstrict, proretset, provolatile, proparallel
@@ -3559,7 +3559,7 @@ objoid  classoid  provider  label
 subtest pg_catalog.pg_aggregate
 
 query O colnames
-SELECT oid::REGPROC FROM pg_proc WHERE proisagg = true EXCEPT SELECT aggfnoid FROM pg_aggregate
+SELECT oid::REGPROC FROM pg_proc WHERE prokind = 'a' EXCEPT SELECT aggfnoid FROM pg_aggregate
 ----
 oid
 
