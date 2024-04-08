@@ -6107,12 +6107,12 @@ func validateLockAcquisitionStrength(str lock.Strength) error {
 	return nil
 }
 
-// VerifyLock returns true if the supplied transaction holds a lock that offers
-// equal to or greater protection[1] than the supplied lock strength.
+// MVCCVerifyLock returns true if the supplied transaction holds a lock that
+// offers equal to or greater protection[1] than the supplied lock strength.
 //
 // [1] Locks that were acquired at sequence numbers that have since been ignored
 // aren't considered, as they may be rolled back in the future.
-func VerifyLock(
+func MVCCVerifyLock(
 	ctx context.Context,
 	reader Reader,
 	txn *enginepb.TxnMeta,
@@ -6172,8 +6172,8 @@ func VerifyLock(
 			// providing the required protection.
 			//
 			// This is not just an optimization. It is necessary for the correctness
-			// of VerifyLock because MVCCAcquireLock will skip lock acquisition if it
-			// finds a non-rolled back intent in the intent history.
+			// of MVCCVerifyLock because MVCCAcquireLock will skip lock acquisition if
+			// it finds a non-rolled back intent in the intent history.
 			inHistoryNotRolledBack := false
 			for _, e := range foundLock.IntentHistory {
 				if !enginepb.TxnSeqIsIgnored(e.Sequence, ignoredSeqNums) {
