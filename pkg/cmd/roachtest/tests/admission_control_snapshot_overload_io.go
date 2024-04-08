@@ -91,14 +91,14 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			// Initialize the kv database,
 			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", time.Minute))
 			c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
-				"./cockroach workload init kv --drop --splits=1000 --insert-count=50000000 "+
+				"./cockroach workload init kv --drop --splits=1000 --insert-count=100000000 "+
 					"--max-block-bytes=4096 --min-block-bytes=4096 {pgurl:1}")
 
 			t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 			m.Go(func(ctx context.Context) error {
 				c.Run(ctx, option.WithNodes(c.Node(crdbNodes+1)),
-					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --histograms=%s/stats.json --read-percent=50 --max-rate 500 --concurrency=256 {pgurl:1-%d}",
+					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --histograms=%s/stats.json --read-percent=50 --max-block-bytes=4096 --min-block-bytes=4096 --concurrency=256 {pgurl:1-%d}",
 						t.PerfArtifactsDir(), crdbNodes))
 				return nil
 			})
