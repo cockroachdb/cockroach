@@ -2192,10 +2192,12 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
 		sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 1000)`)
 
-		// Ensure Scan Requests are always small enough that we receive multiple
-		// resolved events during a backfill
+		// MaxSpanRequestKeys was chosen arbitrarily to ensure that scan requests
+		// are always small enough that we receive multiple resolved events during a
+		// backfill but also large enough to prevent initial scans from taking too
+		// long and causing a timeout.
 		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
-			b.Header.MaxSpanRequestKeys = 10
+			b.Header.MaxSpanRequestKeys = 120
 			return nil
 		}
 
