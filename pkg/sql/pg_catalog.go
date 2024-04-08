@@ -2521,13 +2521,11 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 		dName := tree.NewDName(name)
 		dSrc := tree.NewDString(name)
 
-		isAggregate := builtin.Class == tree.AggregateClass
-		isWindow := builtin.Class == tree.WindowClass
 		var kind tree.Datum
 		switch {
-		case isAggregate:
+		case builtin.Class == tree.AggregateClass:
 			kind = tree.NewDString("a")
-		case isWindow:
+		case builtin.Class == tree.WindowClass:
 			kind = tree.NewDString("w")
 		default:
 			kind = tree.NewDString("f")
@@ -2603,9 +2601,8 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 			tree.DNull,                               // procost
 			tree.DNull,                               // prorows
 			variadicType,                             // provariadic
-			tree.DNull,                               // protransform
-			tree.MakeDBool(tree.DBool(isAggregate)),  // proisagg
-			tree.MakeDBool(tree.DBool(isWindow)),     // proiswindow
+			tree.DNull,                               // prosupport
+			kind,                                     // prokind
 			tree.DBoolFalse,                          // prosecdef
 			tree.MakeDBool(tree.DBool(proleakproof)), // proleakproof
 			tree.MakeDBool(tree.DBool(proisstrict)),  // proisstrict
@@ -2623,11 +2620,9 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 			tree.DNull,                                      // protrftypes
 			dSrc,                                            // prosrc
 			tree.DNull,                                      // probin
+			tree.DNull,                                      // prosqlbody
 			tree.DNull,                                      // proconfig
 			tree.DNull,                                      // proacl
-			kind,                                            // prokind
-			// These columns were automatically created by pg_catalog_test's missing column generator.
-			tree.DNull, // prosupport
 		)
 		if err != nil {
 			return err
@@ -2688,9 +2683,8 @@ func addPgProcUDFRow(
 		tree.DNull,      // procost
 		tree.DNull,      // prorows
 		oidZero,         // provariadic
-		tree.DNull,      // protransform
-		tree.DBoolFalse, // proisagg
-		tree.DBoolFalse, // proiswindow
+		tree.DNull,      // prosupport
+		kind,            // prokind
 		tree.DBoolFalse, // prosecdef
 		tree.MakeDBool(tree.DBool(fnDesc.GetLeakProof())),            // proleakproof
 		tree.MakeDBool(tree.DBool(isStrict)),                         // proisstrict
@@ -2708,17 +2702,15 @@ func addPgProcUDFRow(
 		tree.DNull,                                       // protrftypes
 		tree.NewDString(fnDesc.GetFunctionBody()),        // prosrc
 		tree.DNull,                                       // probin
+		tree.DNull,                                       // prosqlbody
 		tree.DNull,                                       // proconfig
 		tree.DNull,                                       // proacl
-		kind,                                             // prokind
-		// These columns were automatically created by pg_catalog_test's missing column generator.
-		tree.DNull, // prosupport
 	)
 }
 
 var pgCatalogProcTable = virtualSchemaTable{
 	comment: `built-in functions (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
+https://www.postgresql.org/docs/16/catalog-pg-proc.html`,
 	schema: vtable.PGCatalogProc,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
