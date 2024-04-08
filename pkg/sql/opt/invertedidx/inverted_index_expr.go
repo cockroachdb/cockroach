@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 
@@ -228,65 +229,45 @@ func TryFilterInvertedIndexBySimilarity(
 		}
 	}
 
-	// First, we attempt to build a constraint from a similarity filter on the
-	// inverted column. We search for expressions of the form `s % 'foo'` or
-	// `'foo' % s`, where s is the indexed column.
-	var con *constraint.Constraint
+	// First, search for expressions of the form `s % 'foo'` and collect the
+	// trigrams to scan.
+	var trgms []string
 	for i := range filters {
-		sim, isSim := filters[i].Condition.(*memo.ModExpr)
-		if !isSim {
-			continue
+		trgms, ok = trigramsToScan(
+			filters[i].Condition, evalCtx, tabID, index, computedColumns,
+		)
+		if ok {
+			break
 		}
-
-		var constStr opt.ScalarExpr
-		switch {
-		case isIndexColumn(tabID, index, sim.Left, computedColumns):
-			constStr = sim.Right
-		case isIndexColumn(tabID, index, sim.Right, computedColumns):
-			constStr = sim.Left
-		default:
-			continue
-		}
-
-		s, ok := extractConstStringDatum(constStr)
-		if !ok {
-			continue
-		}
-
-		// Generate trigrams to scan.
-		trgms := similarityTrigramsToScan(s, evalCtx.SessionData().TrigramSimilarityThreshold)
-		if len(trgms) == 0 {
-			continue
-		}
-
-		var keyCtx constraint.KeyContext
-		keyCtx.EvalCtx = evalCtx
-		keyCtx.Columns.Init(cols[prefixColumnCount:])
-
-		var spans constraint.Spans
-		spans.Alloc(len(trgms))
-		for j := range trgms {
-			// Create a key for the trigram. The trigram is encoded so that it
-			// can be correctly compared to histogram upper bounds, which are
-			// also encoded. The byte slice is pre-sized to hold the trigram
-			// plus two extra bytes for the prefix and terminator.
-			k := make([]byte, 0, len(trgms[j])+2)
-			k = encoding.EncodeStringAscending(k, trgms[j])
-			key := constraint.MakeKey(tree.NewDEncodedKey(tree.DEncodedKey(k)))
-
-			var span constraint.Span
-			span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
-			spans.Append(&span)
-		}
-
-		con = &constraint.Constraint{}
-		con.Init(&keyCtx, &spans)
-		break
 	}
 
-	if con == nil {
+	if len(trgms) == 0 {
 		return nil, nil, false
 	}
+
+	// Next, build a constraint based on the trigrams.
+	var keyCtx constraint.KeyContext
+	keyCtx.EvalCtx = evalCtx
+	keyCtx.Columns.Init(cols[prefixColumnCount:])
+
+	var spans constraint.Spans
+	spans.Alloc(len(trgms))
+	for i := range trgms {
+		// Create a key for the trigram. The trigram is encoded so that it
+		// can be correctly compared to histogram upper bounds, which are
+		// also encoded. The byte slice is pre-sized to hold the trigram
+		// plus two extra bytes for the prefix and terminator.
+		k := make([]byte, 0, len(trgms[i])+2)
+		k = encoding.EncodeStringAscending(k, trgms[i])
+		key := constraint.MakeKey(tree.NewDEncodedKey(tree.DEncodedKey(k)))
+
+		var span constraint.Span
+		span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+		spans.Append(&span)
+	}
+
+	con := &constraint.Constraint{}
+	con.Init(&keyCtx, &spans)
 
 	// If the index is a single-column index, then we are done.
 	if columnCount == 1 {
@@ -305,6 +286,70 @@ func TryFilterInvertedIndexBySimilarity(
 	}
 	prefixConstraint.Combine(evalCtx, con, checkCancellation)
 	return prefixConstraint, remainingFilters, true
+}
+
+// trigramsToScan searches the expression for similarity operators in the
+// form `s % 'foo'`, where s is the inverted index column. If one or more is
+// found, it returns the trigrams that must be scanned in an inverted index to
+// find all rows where the filter is true. Trigrams are collected from all
+// similarity filters that are adjacent to each other via disjunctions.
+func trigramsToScan(
+	e opt.ScalarExpr,
+	evalCtx *eval.Context,
+	tabID opt.TableID,
+	index cat.Index,
+	computedColumns map[opt.ColumnID]opt.ScalarExpr,
+) (_ []string, ok bool) {
+	var trgms []string
+	var collect func(e opt.ScalarExpr) (ok bool)
+	collect = func(e opt.ScalarExpr) (ok bool) {
+		switch t := e.(type) {
+		case *memo.ModExpr:
+			var constStr opt.ScalarExpr
+			switch {
+			case isIndexColumn(tabID, index, t.Left, computedColumns):
+				constStr = t.Right
+			case isIndexColumn(tabID, index, t.Right, computedColumns):
+				constStr = t.Left
+			default:
+				return
+			}
+
+			s, ok := extractConstStringDatum(constStr)
+			if !ok {
+				return false
+			}
+
+			trgmsLocal := similarityTrigramsToScan(s, evalCtx.SessionData().TrigramSimilarityThreshold)
+			if len(trgmsLocal) == 0 {
+				return false
+			}
+
+			if trgms == nil {
+				trgms = trgmsLocal
+			} else {
+				trgms = append(trgms, trgmsLocal...)
+			}
+			return true
+
+		case *memo.OrExpr:
+			if !collect(t.Left) {
+				return false
+			}
+			return collect(t.Right)
+
+		default:
+			return false
+		}
+	}
+
+	if collect(e) {
+		// Sort and de-duplicate the trigrams.
+		slices.Sort(trgms)
+		trgms = slices.Compact(trgms)
+		return trgms, true
+	}
+	return nil, false
 }
 
 func extractConstStringDatum(expr opt.ScalarExpr) (string, bool) {
