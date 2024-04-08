@@ -112,19 +112,22 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 	kvs := br.Responses[0].GetInner().(*kvpb.ScanResponse).Rows
 	log.VEventf(ctx, 2, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
 	for _, kv := range kvs {
-		var kvLiveness, gossipLiveness livenesspb.Liveness
+		// Parse the value to both confirm it's well-formatted and to extract the
+		// node ID from it. We could instead derive the node ID from the key and
+		// skip unmarshaling the value at all, which would be (marginally) faster,
+		// but that would be a greater change from how this code has historically
+		// worked and it's not likely to be a huge difference.
+		var kvLiveness livenesspb.Liveness
 		if err := kv.Value.GetProto(&kvLiveness); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal liveness value %s", kv.Key)
 		}
 		key := gossip.MakeNodeLivenessKey(kvLiveness.NodeID)
-		// Look up liveness from gossip; skip gossiping anew if unchanged.
-		if err := r.store.Gossip().GetInfoProto(key, &gossipLiveness); err == nil {
-			if gossipLiveness == kvLiveness && r.store.Gossip().InfoOriginatedHere(key) {
-				continue
-			}
+		valBytes, err := kv.Value.GetBytes()
+		if err != nil {
+			return errors.Wrapf(err, "failed to GetBytes to gossip node liveness for %s", kv.Key)
 		}
-		if err := r.store.Gossip().AddInfoProto(key, &kvLiveness, 0); err != nil {
-			return errors.Wrapf(err, "failed to gossip node liveness (%+v)", kvLiveness)
+		if err := r.store.Gossip().AddInfoIfNotRedundant(key, valBytes); err != nil {
+			return errors.Wrapf(err, "failed to gossip node liveness for %s", kv.Key)
 		}
 	}
 	return nil
