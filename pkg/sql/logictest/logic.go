@@ -1322,8 +1322,20 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 		}
 	}
 
-	// During config initialization, NumNodes is required to be 3.
+	var envVars []string
+	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
+		// If we're using a cockroach-short binary, that means it was
+		// locally built, so we need to opt-out of version offsetting to
+		// better simulate a real upgrade path.
+		envVars = append(envVars, "COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true")
+		// The build is made during testing, so it has metamorphic constants.
+		// We disable them here so that the test is more stable.
+		envVars = append(envVars, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true")
+	}
+	envVars = append(envVars, "COCKROACH_ALLOW_VERSION_SKIPPING=true")
+
 	opts := []testserver.TestServerOpt{
+		// During config initialization, NumNodes is required to be 3.
 		testserver.ThreeNodeOpt(),
 		testserver.StoreOnDiskOpt(),
 		testserver.CacheSizeOpt(0.1),
@@ -1331,17 +1343,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 		testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
 		testserver.PollListenURLTimeoutOpt(120),
 		testserver.CockroachLogsDirOpt(logsDir),
-	}
-	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
-		opts = append(opts, testserver.EnvVarOpt([]string{
-			// If we're using a cockroach-short binary, that means it was
-			// locally built, so we need to opt-out of version offsetting to
-			// better simulate a real upgrade path.
-			"COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true",
-			// The build is made during testing, so it has metamorphic constants.
-			// We disable them here so that the test is more stable.
-			"COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true",
-		}))
+		testserver.EnvVarOpt(envVars),
 	}
 
 	ts, err := testserver.NewTestServer(opts...)

@@ -15,7 +15,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/require"
@@ -89,11 +88,8 @@ func TestNewActiveQueryProfiler(t *testing.T) {
 func TestShouldDump(t *testing.T) {
 	ctx := context.Background()
 	createSettingFn := func(settingEnabled bool) *cluster.Settings {
-		s := &cluster.Settings{}
-		sv := &s.SV
-		s.Version = clusterversion.MakeVersionHandle(sv)
-		sv.Init(ctx, s.Version)
-		ActiveQueryDumpsEnabled.Override(ctx, sv, settingEnabled)
+		s := cluster.MakeClusterSettings()
+		ActiveQueryDumpsEnabled.Override(ctx, &s.SV, settingEnabled)
 		return s
 	}
 
