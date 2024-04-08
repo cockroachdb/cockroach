@@ -374,7 +374,7 @@ func splitAndScatterWorker(
 	spans []roachpb.Span, rekeyer *backupccl.KeyRewriter, splitter splitAndScatterer,
 ) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
-		for _, span := range spans {
+		for spanNum, span := range spans {
 			startKey := span.Key.Clone()
 			splitKey, _, err := rekeyer.RewriteKey(startKey, 0 /* walltimeForImportElision */)
 			if err != nil {
@@ -402,7 +402,15 @@ func splitAndScatterWorker(
 			// 	splitKey = newSplitKey
 			// }
 			//
-			if err := splitAndScatter(ctx, splitKey, splitter); err != nil {
+
+			// Spans are filled from left to right during the initial scan meaning the
+			// gaps between splits towards the end of spans will be filled later than
+			// between the earlier spans. To avoid these alter splits being merged
+			// away before we fill those gaps, we add extra time to the TTL on those
+			// later span splits. A "span" here could be 10+ ranges merged by the call
+			// to PartitionSpans, we add a generous 5min/span.
+			addedExpiration := time.Duration(spanNum) * time.Minute * 5
+			if err := splitAndScatter(ctx, splitKey, splitter, addedExpiration); err != nil {
 				return err
 			}
 
@@ -411,13 +419,13 @@ func splitAndScatterWorker(
 	}
 }
 
-var splitAndScatterSitckyBitDuration = time.Hour
+const baseSplitExpiration = time.Hour * 2
 
 func splitAndScatter(
-	ctx context.Context, splitAndScatterKey roachpb.Key, s splitAndScatterer,
+	ctx context.Context, splitAndScatterKey roachpb.Key, s splitAndScatterer, extra time.Duration,
 ) error {
 	log.VInfof(ctx, 1, "splitting and scattering at %s", splitAndScatterKey)
-	expirationTime := s.now().AddDuration(splitAndScatterSitckyBitDuration)
+	expirationTime := s.now().AddDuration(min(baseSplitExpiration+extra, time.Hour*24*7))
 	if err := s.split(ctx, splitAndScatterKey, expirationTime); err != nil {
 		return err
 	}
