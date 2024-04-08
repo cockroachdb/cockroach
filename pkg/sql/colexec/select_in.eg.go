@@ -1039,7 +1039,7 @@ func (pi *projectInOpDecimal) Next() coldata.Batch {
 
 type selectInOpInt16 struct {
 	colexecop.OneInputHelper
-	filterRow []int16
+	filterRow []int64
 	colIdx    int
 	hasNulls  bool
 	negate    bool
@@ -1050,7 +1050,7 @@ var _ colexecop.Operator = &selectInOpInt16{}
 type projectInOpInt16 struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
-	filterRow []int16
+	filterRow []int64
 	colIdx    int
 	outputIdx int
 	hasNulls  bool
@@ -1061,19 +1061,20 @@ var _ colexecop.Operator = &projectInOpInt16{}
 
 func fillDatumRowInt16(
 	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
-) ([]int16, bool) {
+) ([]int64, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
-	var result []int16
+	// Ensure that we always upcast all integer types.
+	conv := colconv.GetDatumToPhysicalFn(types.Int)
+	var result []int64
 	hasNulls := false
 	for _, d := range datumTuple.D {
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
 			convRaw := conv(d)
-			converted := convRaw.(int16)
+			converted := convRaw.(int64)
 			result = append(result, converted)
 		}
 	}
@@ -1081,7 +1082,7 @@ func fillDatumRowInt16(
 }
 
 func cmpInInt16(
-	targetElem int16, targetCol coldata.Int16s, filterRow []int16, hasNulls bool,
+	targetElem int16, targetCol coldata.Int16s, filterRow []int64, hasNulls bool,
 ) comparisonResult {
 	// Filter row input was already sorted in fillDatumRowInt16, so we can
 	// perform a binary search.
@@ -1276,7 +1277,7 @@ func (pi *projectInOpInt16) Next() coldata.Batch {
 
 type selectInOpInt32 struct {
 	colexecop.OneInputHelper
-	filterRow []int32
+	filterRow []int64
 	colIdx    int
 	hasNulls  bool
 	negate    bool
@@ -1287,7 +1288,7 @@ var _ colexecop.Operator = &selectInOpInt32{}
 type projectInOpInt32 struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
-	filterRow []int32
+	filterRow []int64
 	colIdx    int
 	outputIdx int
 	hasNulls  bool
@@ -1298,19 +1299,20 @@ var _ colexecop.Operator = &projectInOpInt32{}
 
 func fillDatumRowInt32(
 	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
-) ([]int32, bool) {
+) ([]int64, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
-	var result []int32
+	// Ensure that we always upcast all integer types.
+	conv := colconv.GetDatumToPhysicalFn(types.Int)
+	var result []int64
 	hasNulls := false
 	for _, d := range datumTuple.D {
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
 			convRaw := conv(d)
-			converted := convRaw.(int32)
+			converted := convRaw.(int64)
 			result = append(result, converted)
 		}
 	}
@@ -1318,7 +1320,7 @@ func fillDatumRowInt32(
 }
 
 func cmpInInt32(
-	targetElem int32, targetCol coldata.Int32s, filterRow []int32, hasNulls bool,
+	targetElem int32, targetCol coldata.Int32s, filterRow []int64, hasNulls bool,
 ) comparisonResult {
 	// Filter row input was already sorted in fillDatumRowInt32, so we can
 	// perform a binary search.
