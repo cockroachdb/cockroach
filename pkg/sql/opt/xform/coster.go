@@ -768,7 +768,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		// NO_FULL_SCAN hint (isUnfiltered is false for partial indexes), but if the
 		// user has explicitly forced the partial index *and* used NO_FULL_SCAN, we
 		// disallow the full index scan.
-		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan(c.mem.Metadata())) {
+		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan()) {
 			return hugeCost
 		}
 	}
