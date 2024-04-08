@@ -699,6 +699,11 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'WHERE'")},
 	},
 	{
+		name:    "cancel_all_jobs",
+		stmt:    "cancel_all_jobs_stmt",
+		replace: map[string]string{"name": "( 'BACKUP' | 'CHANGEFEED' | 'RESTORE' | 'IMPORT')"},
+	},
+	{
 		name:    "cancel_job",
 		stmt:    "cancel_jobs_stmt",
 		replace: map[string]string{"a_expr": "job_id"},
@@ -1173,9 +1178,15 @@ var specs = []stmtSpec{
 		inline: []string{"storage_parameter_list"},
 	},
 	{
+		name:    "pause_all_jobs",
+		stmt:    "pause_all_jobs_stmt",
+		replace: map[string]string{"name": "( 'BACKUP' | 'CHANGEFEED' | 'RESTORE' | 'IMPORT')"},
+	},
+	{
 		name:    "pause_job",
 		stmt:    "pause_jobs_stmt",
 		replace: map[string]string{"a_expr": "job_id"},
+		inline:  []string{"for_schedules_clause"},
 		unlink:  []string{"job_id"},
 	},
 	{
@@ -1256,6 +1267,11 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'REPLICATION' 'STREAM' 'FROM'"),
 		},
+	},
+	{
+		name:    "resume_all_jobs",
+		stmt:    "resume_all_jobs_stmt",
+		replace: map[string]string{"name": "( 'BACKUP' | 'CHANGEFEED' | 'RESTORE' | 'IMPORT')"},
 	},
 	{
 		name:    "resume_job",
