@@ -193,8 +193,9 @@ func (jsonVM *jsonVM) toVM(
 		remoteUser = config.OSUser.Username
 	}
 
-	var persistentVolumes []vm.Volume
+	var volumes []vm.Volume
 	var localDisks []vm.Volume
+	var bootVolume vm.Volume
 
 	parseDiskSize := func(size string) int {
 		if val, err := strconv.Atoi(size); err == nil {
@@ -214,49 +215,65 @@ func (jsonVM *jsonVM) toVM(
 			})
 			continue
 		}
-		// Find a persistent volume (detailedDisk) matching the attached non-boot disk.
-		for _, detailedDisk := range disks {
-			if detailedDisk.SelfLink == jsonVMDisk.Source {
-				vol := vm.Volume{
-					// NB: See TODO in toDescribeVolumeCommandResponse. We
-					// should be able to "just" use detailedDisk.Name here,
-					// but we're abusing that field elsewhere, and
-					// incorrectly. Using SelfLink is correct.
-					ProviderResourceID: lastComponent(detailedDisk.SelfLink),
-					ProviderVolumeType: detailedDisk.Type,
-					Zone:               lastComponent(detailedDisk.Zone),
-					Name:               detailedDisk.Name,
-					Labels:             detailedDisk.Labels,
-					Size:               parseDiskSize(detailedDisk.SizeGB),
+		if !jsonVMDisk.Boot {
+			// Find a persistent volume (detailedDisk) matching the attached non-boot disk.
+			for _, detailedDisk := range disks {
+				if detailedDisk.SelfLink == jsonVMDisk.Source {
+					vol := vm.Volume{
+						// NB: See TODO in toDescribeVolumeCommandResponse. We
+						// should be able to "just" use detailedDisk.Name here,
+						// but we're abusing that field elsewhere, and
+						// incorrectly. Using SelfLink is correct.
+						ProviderResourceID: lastComponent(detailedDisk.SelfLink),
+						ProviderVolumeType: detailedDisk.Type,
+						Zone:               lastComponent(detailedDisk.Zone),
+						Name:               detailedDisk.Name,
+						Labels:             detailedDisk.Labels,
+						Size:               parseDiskSize(detailedDisk.SizeGB),
+					}
+					volumes = append(volumes, vol)
 				}
-				persistentVolumes = append(persistentVolumes, vol)
+			}
+		} else {
+			for _, detailedDisk := range disks {
+				if detailedDisk.SelfLink == jsonVMDisk.Source {
+					bootVolume = vm.Volume{
+						ProviderResourceID: lastComponent(detailedDisk.SelfLink),
+						ProviderVolumeType: detailedDisk.Type,
+						Zone:               lastComponent(detailedDisk.Zone),
+						Name:               detailedDisk.Name,
+						Labels:             detailedDisk.Labels,
+						Size:               parseDiskSize(detailedDisk.SizeGB),
+					}
+				}
 			}
 		}
 	}
 
 	return &vm.VM{
-		Name:              jsonVM.Name,
-		CreatedAt:         jsonVM.CreationTimestamp,
-		Errors:            vmErrors,
-		DNS:               fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
-		Lifetime:          lifetime,
-		Preemptible:       jsonVM.Scheduling.Preemptible,
-		Labels:            jsonVM.Labels,
-		PrivateIP:         privateIP,
-		Provider:          ProviderName,
-		DNSProvider:       ProviderName,
-		ProviderID:        jsonVM.Name,
-		PublicIP:          publicIP,
-		PublicDNS:         fmt.Sprintf("%s.%s", jsonVM.Name, Subdomain),
-		RemoteUser:        remoteUser,
-		VPC:               vpc,
-		MachineType:       machineType,
-		CPUArch:           vm.ParseArch(cpuPlatform),
-		CPUFamily:         strings.Replace(strings.ToLower(cpuPlatform), "intel ", "", 1),
-		Zone:              zone,
-		Project:           project,
-		PersistentVolumes: persistentVolumes,
-		LocalDisks:        localDisks,
+		Name:                   jsonVM.Name,
+		CreatedAt:              jsonVM.CreationTimestamp,
+		Errors:                 vmErrors,
+		DNS:                    fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
+		Lifetime:               lifetime,
+		Preemptible:            jsonVM.Scheduling.Preemptible,
+		Labels:                 jsonVM.Labels,
+		PrivateIP:              privateIP,
+		Provider:               ProviderName,
+		DNSProvider:            ProviderName,
+		ProviderID:             jsonVM.Name,
+		PublicIP:               publicIP,
+		PublicDNS:              fmt.Sprintf("%s.%s", jsonVM.Name, Subdomain),
+		RemoteUser:             remoteUser,
+		VPC:                    vpc,
+		MachineType:            machineType,
+		CPUArch:                vm.ParseArch(cpuPlatform),
+		CPUFamily:              strings.Replace(strings.ToLower(cpuPlatform), "intel ", "", 1),
+		Zone:                   zone,
+		Project:                project,
+		NonBootAttachedVolumes: volumes,
+		BootVolume:             bootVolume,
+		LocalDisks:             localDisks,
 	}
 }
 
@@ -745,7 +762,7 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 		})
 	}
 
-	// TODO(irfansharif): Update v.PersistentVolumes? It's awkward to have
+	// TODO(irfansharif): Update v.NonBootAttachedVolumes? It's awkward to have
 	// that field at all.
 	return volumes, nil
 }
@@ -2128,7 +2145,7 @@ func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 					},
 				}
 			}
-			for _, v := range vm.PersistentVolumes {
+			for _, v := range vm.NonBootAttachedVolumes {
 				workload.ComputeVmWorkload.PersistentDisks = append(workload.ComputeVmWorkload.PersistentDisks, &cloudbilling.PersistentDisk{
 					DiskSize: &cloudbilling.Usage{
 						UsageRateTimeline: &cloudbilling.UsageRateTimeline{
@@ -2144,6 +2161,22 @@ func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 					Scope:    "SCOPE_ZONAL",
 				})
 			}
+			// Add the root partition to the workload
+			rootDisk := &cloudbilling.PersistentDisk{
+				DiskSize: &cloudbilling.Usage{
+					UsageRateTimeline: &cloudbilling.UsageRateTimeline{
+						Unit: "GiBy",
+						UsageRateTimelineEntries: []*cloudbilling.UsageRateTimelineEntry{
+							{
+								UsageRate: float64(vm.BootVolume.Size),
+							},
+						},
+					},
+				},
+				DiskType: vm.BootVolume.ProviderVolumeType,
+				Scope:    "SCOPE_ZONAL",
+			}
+			workload.ComputeVmWorkload.PersistentDisks = append(workload.ComputeVmWorkload.PersistentDisks, rootDisk)
 			scenario.CostScenario.Workloads = append(scenario.CostScenario.Workloads, &workload)
 		}
 		estimate, err := beta.EstimateCostScenario(&scenario).Do()

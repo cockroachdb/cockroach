@@ -1024,23 +1024,23 @@ func (p *Provider) listRegion(
 			}
 
 			m := vm.VM{
-				CreatedAt:         createdAt,
-				DNS:               in.PrivateDNSName,
-				Name:              tagMap["Name"],
-				Errors:            errs,
-				Lifetime:          lifetime,
-				Labels:            tagMap,
-				PrivateIP:         in.PrivateIPAddress,
-				Provider:          ProviderName,
-				ProviderID:        in.InstanceID,
-				PublicIP:          in.PublicIPAddress,
-				RemoteUser:        opts.RemoteUserName,
-				VPC:               in.VpcID,
-				MachineType:       in.InstanceType,
-				CPUArch:           vm.ParseArch(in.Architecture),
-				Zone:              in.Placement.AvailabilityZone,
-				PersistentVolumes: nonBootableVolumes,
-				Preemptible:       in.InstanceLifecycle == "spot",
+				CreatedAt:              createdAt,
+				DNS:                    in.PrivateDNSName,
+				Name:                   tagMap["Name"],
+				Errors:                 errs,
+				Lifetime:               lifetime,
+				Labels:                 tagMap,
+				PrivateIP:              in.PrivateIPAddress,
+				Provider:               ProviderName,
+				ProviderID:             in.InstanceID,
+				PublicIP:               in.PublicIPAddress,
+				RemoteUser:             opts.RemoteUserName,
+				VPC:                    in.VpcID,
+				MachineType:            in.InstanceType,
+				CPUArch:                vm.ParseArch(in.Architecture),
+				Zone:                   in.Placement.AvailabilityZone,
+				NonBootAttachedVolumes: nonBootableVolumes,
+				Preemptible:            in.InstanceLifecycle == "spot",
 			}
 			ret = append(ret, m)
 		}
@@ -1554,7 +1554,7 @@ func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) e
 }
 
 func (p *Provider) ListVolumes(l *logger.Logger, vm *vm.VM) ([]vm.Volume, error) {
-	return vm.PersistentVolumes, nil
+	return vm.NonBootAttachedVolumes, nil
 }
 
 type snapshotOutput struct {
