@@ -303,8 +303,8 @@ func TestEndToEndFrontierExecutionDetailFile(t *testing.T) {
 	ctx := context.Background()
 
 	// First, let's persist some partitions specs.
-	streamIngestionsSpecs := map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec{
-		1: {
+	streamIngestionsSpecs := map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec{
+		1: {{
 			PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
 				"1": {
 					SrcInstanceID:  2,
@@ -314,8 +314,8 @@ func TestEndToEndFrontierExecutionDetailFile(t *testing.T) {
 					},
 				},
 			},
-		},
-		2: {
+		}},
+		2: {{
 			PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
 				"1": {
 					SrcInstanceID:  1,
@@ -325,8 +325,8 @@ func TestEndToEndFrontierExecutionDetailFile(t *testing.T) {
 					},
 				},
 			},
-		},
-		3: {
+		}},
+		3: {{
 			PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
 				"1": {
 					SrcInstanceID:  3,
@@ -336,7 +336,7 @@ func TestEndToEndFrontierExecutionDetailFile(t *testing.T) {
 					},
 				},
 			},
-		},
+		}},
 	}
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
