@@ -132,7 +132,7 @@ func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) e
 }
 
 func (p *Provider) ListVolumes(l *logger.Logger, vm *vm.VM) ([]vm.Volume, error) {
-	return vm.PersistentVolumes, nil
+	return vm.NonBootAttachedVolumes, nil
 }
 
 func (p *Provider) AttachVolume(*logger.Logger, vm.Volume, *vm.VM) (string, error) {
