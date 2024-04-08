@@ -2288,7 +2288,7 @@ func printNodeToVolumeMapping(c *install.SyncedCluster) {
 	nodes := c.TargetNodes()
 	for _, n := range nodes {
 		cVM := c.VMs[n-1]
-		for _, volume := range cVM.NonBootAttachedVolumes {
+		for _, volume := range cVM.PersistentVolumes {
 			if isWorkloadCollectorVolume(volume) {
 				fmt.Printf("Node ID: %d (Name: %s) -> Volume Name: %s (ID: %s)\n", n, cVM.Name, volume.Name, volume.ProviderResourceID)
 			}
@@ -2386,7 +2386,7 @@ func createAttachMountVolumes(
 		cVM := &c.VMs[n-1]
 		err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
 			opts.Name = fmt.Sprintf("%s-n%d", c.Name, n)
-			for _, vol := range cVM.NonBootAttachedVolumes {
+			for _, vol := range cVM.PersistentVolumes {
 				if vol.Name == opts.Name {
 					l.Printf(
 						"A volume (%s) is already attached to node %d skipping volume creation", vol.ProviderResourceID, n)
