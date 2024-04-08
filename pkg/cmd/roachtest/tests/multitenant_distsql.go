@@ -40,7 +40,7 @@ func registerMultiTenantDistSQL(r registry.Registry) {
 				Name:             fmt.Sprintf("multitenant/distsql/instances=%d/bundle=%s/timeout=%d", numInstances, b, to),
 				Owner:            registry.OwnerSQLQueries,
 				Cluster:          r.MakeClusterSpec(4),
-				CompatibleClouds: registry.AllExceptAWS,
+				CompatibleClouds: registry.CloudsWithServiceRegistration,
 				Suites:           registry.Suites(registry.Nightly),
 				Leases:           registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

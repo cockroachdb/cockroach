@@ -252,7 +252,7 @@ func registerActiveRecord(r registry.Registry) {
 		Timeout:          5 * time.Hour,
 		Cluster:          r.MakeClusterSpec(1),
 		NativeLibs:       registry.LibGEOS,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Run:              runActiveRecord,
 		Leases:           registry.MetamorphicLeases,
