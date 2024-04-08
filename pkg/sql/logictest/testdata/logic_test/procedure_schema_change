@@ -111,21 +111,21 @@ CREATE PROCEDURE sc.p() LANGUAGE SQL AS 'SELECT 3'
 
 # Create a helper function to use in tests below.
 statement ok
-CREATE FUNCTION get_function_id(namespace STRING, name STRING, argmodes STRING[]) RETURNS INT AS $$
+CREATE FUNCTION get_function_id(namespace STRING, name STRING, nargs INT) RETURNS INT AS $$
   SELECT oid::INT8 - 100000 FROM pg_proc
   WHERE proname = name
     AND pronamespace = namespace::REGNAMESPACE
-    AND proargmodes = argmodes
+    AND pronargs = nargs
 $$ LANGUAGE SQL
 
 let $public_p
-SELECT get_function_id('public', 'p', ARRAY[]:::STRING[])
+SELECT get_function_id('public', 'p', 0)
 
 let $public_p_int
-SELECT get_function_id('public', 'p', ARRAY['i'])
+SELECT get_function_id('public', 'p', 1)
 
 let $sc_p
-SELECT get_function_id('sc', 'p', ARRAY[]:::STRING[])
+SELECT get_function_id('sc', 'p', 0)
 
 query TTT
 SELECT oid, proname, prosrc

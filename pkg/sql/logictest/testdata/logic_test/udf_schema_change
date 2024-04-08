@@ -147,7 +147,7 @@ CREATE SCHEMA test_alter_sc;
 CREATE FUNCTION test_alter_sc.f_test_sc() RETURNS INT LANGUAGE SQL AS $$ SELECT 3 $$;
 
 statement ok
-CREATE FUNCTION get_function_id(namespace STRING, name STRING, argmodes STRING[])
+CREATE FUNCTION get_function_id(namespace STRING, name STRING, nargs INT)
   RETURNS INT
   LANGUAGE SQL
   AS $$
@@ -155,17 +155,17 @@ SELECT oid::INT8 - 100000
   FROM pg_proc
  WHERE proname = name
    AND pronamespace = namespace::REGNAMESPACE
-   AND proargmodes = argmodes
+   AND pronargs = nargs
 $$
 
 let $public_f_test_sc
-SELECT get_function_id('public', 'f_test_sc', ARRAY[]:::STRING[]);
+SELECT get_function_id('public', 'f_test_sc', 0);
 
 let $public_f_test_sc_int
-SELECT get_function_id('public', 'f_test_sc', ARRAY['i']);
+SELECT get_function_id('public', 'f_test_sc', 1);
 
 let $test_alter_sc_f_test_sc
-SELECT get_function_id('test_alter_sc', 'f_test_sc', ARRAY[]:::STRING[]);
+SELECT get_function_id('test_alter_sc', 'f_test_sc', 0);
 
 skipif config local-mixed-23.1
 query TTT

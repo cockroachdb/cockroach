@@ -957,7 +957,7 @@ type FunctionDescriptor interface {
 	// GetFunctionBody returns the function body string.
 	GetFunctionBody() string
 
-	// GetParams returns a list of argument definition from the function.
+	// GetParams returns a list of all parameters of the function.
 	GetParams() []descpb.FunctionDescriptor_Parameter
 
 	// GetDependsOn returns a list of IDs of the relation this function depends on.
