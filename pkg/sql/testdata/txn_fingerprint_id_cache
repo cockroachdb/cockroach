@@ -25,6 +25,30 @@ show
 ----
 [8 7 6 5]
 
+# Each cache entry takes up 56 bytes.
+accounting
+----
+224 bytes
+
+# Attempt to add ids that are already present in the cache. Neither the cache
+# nor the accounting should change.
+
+enqueue id=05
+----
+size: 4
+
+enqueue id=07
+----
+size: 4
+
+show
+----
+[8 7 6 5]
+
+accounting
+----
+224 bytes
+
 enqueue id=09
 ----
 size: 5
@@ -36,6 +60,10 @@ size: 6
 show
 ----
 [10 9 8 7 6 5]
+
+accounting
+----
+336 bytes
 
 # Decrease the TxnFingerprintIDCacheCapacity cluster setting to below current size.
 override capacity=3
@@ -51,6 +79,10 @@ size: 3
 show
 ----
 [11 10 9]
+
+accounting
+----
+168 bytes
 
 # Check that retrieving IDs also properly truncates the cache when the capacity has
 # been changed.
@@ -75,3 +107,7 @@ TxnFingerprintIDCacheCapacity: 2
 show
 ----
 [13 12]
+
+accounting
+----
+112 bytes
