@@ -311,6 +311,23 @@ func buildReplicationStreamSpec(
 		return nil, err
 	}
 
+	const repartitionFactor, repartitionedMin = 4, 16
+
+	repartitioned := make([]sql.SpanPartition, 0, len(spanPartitions)*repartitionFactor)
+	for _, sp := range spanPartitions {
+		l := len(sp.Spans) / repartitionFactor
+		if l < repartitionedMin {
+			repartitioned = append(repartitioned, sp)
+			continue
+		}
+		remaining := sp.Spans
+		for i := 0; i < repartitionFactor; i++ {
+			sp.Spans, remaining = remaining[:l], remaining[l:]
+			repartitioned = append(repartitioned, sp)
+		}
+	}
+	spanPartitions = repartitioned
+
 	var spanConfigsStreamID streampb.StreamID
 	if forSpanConfigs {
 		spanConfigsStreamID = streampb.StreamID(builtins.GenerateUniqueInt(builtins.ProcessUniqueID(evalCtx.NodeID.SQLInstanceID())))
