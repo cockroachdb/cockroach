@@ -229,6 +229,8 @@ $$ LANGUAGE PLpgSQL;
 statement ok
 DROP FUNCTION f_rewrite();
 
+skipif config local-mixed-23.2
+skipif config local-mixed-23.1
 statement ok
 CREATE FUNCTION f_rewrite() RETURNS weekday AS
 $$
@@ -275,11 +277,15 @@ $$
   END
 $$ LANGUAGE PLPGSQL;
 
+skipif config local-mixed-23.2
+skipif config local-mixed-23.1
 query T
 SELECT get_body_str('f_rewrite');
 ----
 "DECLARE\nday @100107 := b'\\x80':::@100107;\ntoday @100107 := b'\\xa0':::@100107;\ncurs REFCURSOR := b' ':::@100107::STRING;\ncurs2 CURSOR FOR SELECT b'@':::@100107;\nBEGIN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nRAISE NOTICE 'val1: %, val2: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nSELECT public.f_nested(1:::INT8, b'\\x80':::@100107);\nCALL public.p_nested(1, b'\\x80':::@100107, day);\nDECLARE\nyesterday @100107 := b'\\x80':::@100107;\nBEGIN\nRAISE NOTICE 'val3: %, val4: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nIF yesterday IS NOT NULL THEN\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEXCEPTION\nWHEN division_by_zero THEN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nWHEN not_null_violation THEN\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'val: %', b'\\x80':::@100107;\nEND;\nWHILE day != b'\\x80':::@100107 LOOP\nday := b'\\xc0':::@100107;\nSELECT b'\\x80':::@100107;\nIF day = b'\\x80':::@100107 THEN\n\tday := b'\\xa0':::@100107;\n\tSELECT b'@':::@100107;\n\tCONTINUE;\nELSIF day = b' ':::@100107 THEN\n\tSELECT b'@':::@100107 INTO day;\nELSIF day = b'@':::@100107 THEN\n\tSELECT b'\\x80':::@100107 INTO day;\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEND LOOP;\nOPEN curs FOR SELECT b'\\x80':::@100107;\nRETURN b'\\x80':::@100107;\nEND;\n"
 
+skipif config local-mixed-23.2
+skipif config local-mixed-23.1
 query TT
 SHOW CREATE FUNCTION f_rewrite;
 ----
@@ -341,11 +347,15 @@ ALTER TYPE weekday RENAME VALUE 'wednesday' TO 'humpday';
 statement ok
 ALTER TYPE weekday RENAME TO workday;
 
+skipif config local-mixed-23.2
+skipif config local-mixed-23.1
 query T
 SELECT get_body_str('f_rewrite');
 ----
 "DECLARE\nday @100107 := b'\\x80':::@100107;\ntoday @100107 := b'\\xa0':::@100107;\ncurs REFCURSOR := b' ':::@100107::STRING;\ncurs2 CURSOR FOR SELECT b'@':::@100107;\nBEGIN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nRAISE NOTICE 'val1: %, val2: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nSELECT public.f_nested(1:::INT8, b'\\x80':::@100107);\nCALL public.p_nested(1, b'\\x80':::@100107, day);\nDECLARE\nyesterday @100107 := b'\\x80':::@100107;\nBEGIN\nRAISE NOTICE 'val3: %, val4: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nIF yesterday IS NOT NULL THEN\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEXCEPTION\nWHEN division_by_zero THEN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nWHEN not_null_violation THEN\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'val: %', b'\\x80':::@100107;\nEND;\nWHILE day != b'\\x80':::@100107 LOOP\nday := b'\\xc0':::@100107;\nSELECT b'\\x80':::@100107;\nIF day = b'\\x80':::@100107 THEN\n\tday := b'\\xa0':::@100107;\n\tSELECT b'@':::@100107;\n\tCONTINUE;\nELSIF day = b' ':::@100107 THEN\n\tSELECT b'@':::@100107 INTO day;\nELSIF day = b'@':::@100107 THEN\n\tSELECT b'\\x80':::@100107 INTO day;\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEND LOOP;\nOPEN curs FOR SELECT b'\\x80':::@100107;\nRETURN b'\\x80':::@100107;\nEND;\n"
 
+skipif config local-mixed-23.2
+skipif config local-mixed-23.1
 query TT
 SHOW CREATE FUNCTION f_rewrite;
 ----
@@ -408,6 +418,8 @@ ALTER TYPE workday RENAME TO weekday;
 statement ok
 ALTER TYPE weekday RENAME VALUE 'humpday' TO 'wednesday';
 
+skipif config local-mixed-23.2
+skipif config local-mixed-23.1
 statement ok
 DROP FUNCTION f_rewrite();
 
