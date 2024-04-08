@@ -208,6 +208,9 @@ var OnlyAzure = Clouds(spec.Azure)
 // OnlyLocal contains only the Local cloud.
 var OnlyLocal = Clouds(spec.Local)
 
+// CloudsWithServiceRegistration contains clouds that support service registration.
+var CloudsWithServiceRegistration = Clouds(spec.Local, spec.GCE)
+
 // Clouds creates a CloudSet for the given clouds. Cloud names must be one of:
 // spec.Local, spec.GCE, spec.AWS, spec.Azure.
 func Clouds(clouds ...string) CloudSet {
@@ -228,6 +231,17 @@ func (cs CloudSet) NoAWS() CloudSet {
 // NoAzure removes the Azure cloud and returns the new set.
 func (cs CloudSet) NoAzure() CloudSet {
 	return CloudSet{m: removeFromSet(cs.m, spec.Azure)}
+}
+
+// Remove removes all clouds passed in and returns the new set.
+func (cs CloudSet) Remove(clouds ...string) CloudSet {
+	assertValidValues(allClouds, clouds...)
+	copyCs := CloudSet{m: cs.m}
+	for _, c := range clouds {
+		copyCs.m = removeFromSet(copyCs.m, c)
+	}
+
+	return copyCs
 }
 
 // Contains returns true if the set contains the given cloud.
