@@ -113,11 +113,11 @@ func TestIndexDoesNotStorePrimaryKeyColumnMixedVersion(t *testing.T) {
 		tdb.QueryStr(t, "SELECT obj_name, error FROM crdb_internal.invalid_objects;"))
 
 	// Assert cluster version upgrade is blocked.
-	require.Equal(t, [][]string{{"1000023.1"}}, tdb.QueryStr(t, "SHOW CLUSTER SETTING version;"))
+	require.Equal(t, [][]string{{clusterversion.MinSupported.String()}}, tdb.QueryStr(t, "SHOW CLUSTER SETTING version;"))
 	// disable AOST for upgrade precondition check to ensure it sees the injected, corrupt descriptor.
 	defer upgrades.TestingSetFirstUpgradePreconditionAOST(false)()
 	_, err := sqlDB.Exec(`SET CLUSTER SETTING version = $1`, clusterversion.Latest.String())
-	require.ErrorContains(t, err, `verifying precondition for version 1000023.1-upgrading-to-1000023.2-step-002: "".crdb_internal.invalid_objects is not empty`)
+	require.Regexp(t, `verifying precondition for version .*: "".crdb_internal.invalid_objects is not empty`, err.Error())
 }
 
 // mustInsertDescToDB decode a table descriptor from a hex-encoded string and insert
