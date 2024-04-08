@@ -1782,7 +1782,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 ) error {
 	distributeSubquery := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
-		planner.SessionData().DistSQLMode, subqueryPlan.plan,
+		planner.SessionData().DistSQLMode, subqueryPlan.plan, &planner.distSQLVisitor,
 	).WillDistribute()
 	distribute := DistributionType(LocalDistribution)
 	if distributeSubquery {
@@ -2278,7 +2278,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 ) error {
 	distributePostquery := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
-		planner.SessionData().DistSQLMode, postqueryPlan,
+		planner.SessionData().DistSQLMode, postqueryPlan, &planner.distSQLVisitor,
 	).WillDistribute()
 	distribute := DistributionType(LocalDistribution)
 	if distributePostquery {
