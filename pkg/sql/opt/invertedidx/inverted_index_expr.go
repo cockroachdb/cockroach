@@ -446,11 +446,7 @@ func constrainPrefixColumns(
 		return nil, nil, false
 	}
 
-	// Make a copy of constraint so that the idxconstraint.Instance is not
-	// referenced.
-	copy := *constraint
-	remainingFilters = ic.RemainingFilters()
-	return &copy, remainingFilters, true
+	return constraint, ic.RemainingFilters(), true
 }
 
 type invertedFilterPlanner interface {

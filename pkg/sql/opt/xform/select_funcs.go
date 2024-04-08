@@ -958,12 +958,7 @@ func (c *CustomFuncs) tryConstrainIndex(
 		return nil, nil, false
 	}
 
-	// Return 0 if no remaining filter.
-	remaining := ic.RemainingFilters()
-
-	// Make copy of constraint so that idxconstraint instance is not referenced.
-	copy := *constraint
-	return &copy, remaining, true
+	return constraint, ic.RemainingFilters(), true
 }
 
 // canMaybeConstrainNonInvertedIndex returns true if we should try to constrain
