@@ -1885,8 +1885,12 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 			qg := e.Value
 			g := qg.guard
-			sb.Printf("    active: %t req: %d, strength: %s, txn: ",
-				redact.Safe(qg.active), redact.Safe(qg.guard.seqNum), redact.Safe(qg.mode.Strength),
+			optPromotingMsg := redact.SafeString("")
+			if qg.order.isPromoting {
+				optPromotingMsg = " promoting: true"
+			}
+			sb.Printf("    active: %t req: %d%s, strength: %s, txn: ",
+				qg.active, qg.order.reqSeqNum, optPromotingMsg, qg.mode.Strength,
 			)
 			if g.txn == nil {
 				sb.SafeString("none\n")
