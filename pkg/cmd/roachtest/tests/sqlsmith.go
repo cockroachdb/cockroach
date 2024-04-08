@@ -247,11 +247,24 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 				if strings.Contains(es, "internal error") {
 					logStmt(stmt)
 					t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
-				} else if strings.Contains(es, "Empty statement returned by generate") ||
-					stmt == "" {
-					// Either were unable to generate a statement or
-					// we panicked making one.
-					t.Fatalf("Failed generating a query %s", err)
+				} else {
+					if strings.Contains(es, "Empty statement returned by generate") {
+						// We were unable to generate a statement - this is
+						// never expected.
+						t.Fatalf("Failed generating a query %s", err)
+					}
+					if stmt == "" {
+						// We panicked when generating a statement.
+						//
+						// The panic might be expected if it was a vectorized
+						// panic that was injected when sqlsmith itself issued a
+						// query to generate another query (for example, in
+						// getDatabaseRegions).
+						expectedError := strings.Contains(es, "injected panic in ")
+						if !expectedError {
+							t.Fatalf("Panicked when generating a query %s", err)
+						}
+					}
 				}
 				// Ignore other errors because they happen so
 				// frequently (due to sqlsmith not crafting
