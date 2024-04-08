@@ -15,11 +15,14 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -163,4 +166,32 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 		t.Fatal(err)
 	}
 	require.Zero(t, metrics.TxnsWithCondensedIntentsGauge.Value())
+}
+
+// TestTxnPipelinerLockValidationConsultsIntentHistory is a regression test for
+// #121920. The unit test verifies that an intent's intent history is consulted
+// during pipelined lock validation.
+func TestTxnPipelinerLockValidationConsultsIntentHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	db := tc.Server(0).DB()
+
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		require.NoError(t, txn.SetIsoLevel(isolation.ReadCommitted))
+		key := roachpb.Key("a")
+		require.NoError(t, txn.Put(ctx, key, "val"))
+		sp, err := txn.CreateSavepoint(ctx)
+		require.NoError(t, err)
+		_, err = txn.Del(ctx, key)
+		require.NoError(t, err)
+		require.NoError(t, txn.RollbackToSavepoint(ctx, sp))
+		_, err = txn.GetForUpdate(ctx, key, kvpb.GuaranteedDurability)
+		require.NoError(t, err)
+		_, err = txn.Get(ctx, key)
+		return err
+	}))
 }
