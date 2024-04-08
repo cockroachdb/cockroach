@@ -215,36 +215,25 @@ func (jsonVM *jsonVM) toVM(
 			})
 			continue
 		}
-		if !jsonVMDisk.Boot {
-			// Find a persistent volume (detailedDisk) matching the attached non-boot disk.
-			for _, detailedDisk := range disks {
-				if detailedDisk.SelfLink == jsonVMDisk.Source {
-					vol := vm.Volume{
-						// NB: See TODO in toDescribeVolumeCommandResponse. We
-						// should be able to "just" use detailedDisk.Name here,
-						// but we're abusing that field elsewhere, and
-						// incorrectly. Using SelfLink is correct.
-						ProviderResourceID: lastComponent(detailedDisk.SelfLink),
-						ProviderVolumeType: detailedDisk.Type,
-						Zone:               lastComponent(detailedDisk.Zone),
-						Name:               detailedDisk.Name,
-						Labels:             detailedDisk.Labels,
-						Size:               parseDiskSize(detailedDisk.SizeGB),
-					}
-					volumes = append(volumes, vol)
+		// Find a persistent volume (detailedDisk) matching the attached non-boot disk.
+		for _, detailedDisk := range disks {
+			if detailedDisk.SelfLink == jsonVMDisk.Source {
+				vol := vm.Volume{
+					// NB: See TODO in toDescribeVolumeCommandResponse. We
+					// should be able to "just" use detailedDisk.Name here,
+					// but we're abusing that field elsewhere, and
+					// incorrectly. Using SelfLink is correct.
+					ProviderResourceID: lastComponent(detailedDisk.SelfLink),
+					ProviderVolumeType: detailedDisk.Type,
+					Zone:               lastComponent(detailedDisk.Zone),
+					Name:               detailedDisk.Name,
+					Labels:             detailedDisk.Labels,
+					Size:               parseDiskSize(detailedDisk.SizeGB),
 				}
-			}
-		} else {
-			for _, detailedDisk := range disks {
-				if detailedDisk.SelfLink == jsonVMDisk.Source {
-					bootVolume = vm.Volume{
-						ProviderResourceID: lastComponent(detailedDisk.SelfLink),
-						ProviderVolumeType: detailedDisk.Type,
-						Zone:               lastComponent(detailedDisk.Zone),
-						Name:               detailedDisk.Name,
-						Labels:             detailedDisk.Labels,
-						Size:               parseDiskSize(detailedDisk.SizeGB),
-					}
+				if !jsonVMDisk.Boot {
+					volumes = append(volumes, vol)
+				} else {
+					bootVolume = vol
 				}
 			}
 		}
@@ -2057,9 +2046,8 @@ func toDescribeVolumeCommandResponse(
 // using a basic estimation method.
 //  1. Compute and attached disks are estimated at the list prices, ignoring
 //     all discounts, but including any automatically applied credits.
-//  2. Boot disk costs are completely ignored.
-//  3. Network egress costs are completely ignored.
-//  4. Blob storage costs are completely ignored.
+//  2. Network egress costs are completely ignored.
+//  3. Blob storage costs are completely ignored.
 func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 	// Construct cost estimation service
 	ctx := context.Background()
@@ -2145,7 +2133,8 @@ func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 					},
 				}
 			}
-			for _, v := range vm.NonBootAttachedVolumes {
+			volumes := append(vm.NonBootAttachedVolumes, vm.BootVolume)
+			for _, v := range volumes {
 				workload.ComputeVmWorkload.PersistentDisks = append(workload.ComputeVmWorkload.PersistentDisks, &cloudbilling.PersistentDisk{
 					DiskSize: &cloudbilling.Usage{
 						UsageRateTimeline: &cloudbilling.UsageRateTimeline{
@@ -2161,22 +2150,6 @@ func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 					Scope:    "SCOPE_ZONAL",
 				})
 			}
-			// Add the root partition to the workload
-			rootDisk := &cloudbilling.PersistentDisk{
-				DiskSize: &cloudbilling.Usage{
-					UsageRateTimeline: &cloudbilling.UsageRateTimeline{
-						Unit: "GiBy",
-						UsageRateTimelineEntries: []*cloudbilling.UsageRateTimelineEntry{
-							{
-								UsageRate: float64(vm.BootVolume.Size),
-							},
-						},
-					},
-				},
-				DiskType: vm.BootVolume.ProviderVolumeType,
-				Scope:    "SCOPE_ZONAL",
-			}
-			workload.ComputeVmWorkload.PersistentDisks = append(workload.ComputeVmWorkload.PersistentDisks, rootDisk)
 			scenario.CostScenario.Workloads = append(scenario.CostScenario.Workloads, &workload)
 		}
 		estimate, err := beta.EstimateCostScenario(&scenario).Do()
