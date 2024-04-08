@@ -32,7 +32,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.ManualOnly,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(8), spec.VolumeSize(1024)),
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          12 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -98,7 +98,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 			m.Go(func(ctx context.Context) error {
 				c.Run(ctx, option.WithNodes(c.Node(crdbNodes+1)),
-					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --histograms=%s/stats.json --read-percent=0 --max-rate 500 --concurrency=1024 {pgurl:1-%d}",
+					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --histograms=%s/stats.json --read-percent=50 --max-rate 500 --concurrency=256 {pgurl:1-%d}",
 						t.PerfArtifactsDir(), crdbNodes))
 				return nil
 			})
