@@ -193,7 +193,7 @@ func (jsonVM *jsonVM) toVM(
 		remoteUser = config.OSUser.Username
 	}
 
-	var volumes []vm.Volume
+	var persistentVolumes []vm.Volume
 	var localDisks []vm.Volume
 
 	parseDiskSize := func(size string) int {
@@ -214,51 +214,49 @@ func (jsonVM *jsonVM) toVM(
 			})
 			continue
 		}
-		if !jsonVMDisk.Boot {
-			// Find a persistent volume (detailedDisk) matching the attached non-boot disk.
-			for _, detailedDisk := range disks {
-				if detailedDisk.SelfLink == jsonVMDisk.Source {
-					vol := vm.Volume{
-						// NB: See TODO in toDescribeVolumeCommandResponse. We
-						// should be able to "just" use detailedDisk.Name here,
-						// but we're abusing that field elsewhere, and
-						// incorrectly. Using SelfLink is correct.
-						ProviderResourceID: lastComponent(detailedDisk.SelfLink),
-						ProviderVolumeType: detailedDisk.Type,
-						Zone:               lastComponent(detailedDisk.Zone),
-						Name:               detailedDisk.Name,
-						Labels:             detailedDisk.Labels,
-						Size:               parseDiskSize(detailedDisk.SizeGB),
-					}
-					volumes = append(volumes, vol)
+		// Find a persistent volume (detailedDisk) matching the attached non-boot disk.
+		for _, detailedDisk := range disks {
+			if detailedDisk.SelfLink == jsonVMDisk.Source {
+				vol := vm.Volume{
+					// NB: See TODO in toDescribeVolumeCommandResponse. We
+					// should be able to "just" use detailedDisk.Name here,
+					// but we're abusing that field elsewhere, and
+					// incorrectly. Using SelfLink is correct.
+					ProviderResourceID: lastComponent(detailedDisk.SelfLink),
+					ProviderVolumeType: detailedDisk.Type,
+					Zone:               lastComponent(detailedDisk.Zone),
+					Name:               detailedDisk.Name,
+					Labels:             detailedDisk.Labels,
+					Size:               parseDiskSize(detailedDisk.SizeGB),
 				}
+				persistentVolumes = append(persistentVolumes, vol)
 			}
 		}
 	}
 
 	return &vm.VM{
-		Name:                   jsonVM.Name,
-		CreatedAt:              jsonVM.CreationTimestamp,
-		Errors:                 vmErrors,
-		DNS:                    fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
-		Lifetime:               lifetime,
-		Preemptible:            jsonVM.Scheduling.Preemptible,
-		Labels:                 jsonVM.Labels,
-		PrivateIP:              privateIP,
-		Provider:               ProviderName,
-		DNSProvider:            ProviderName,
-		ProviderID:             jsonVM.Name,
-		PublicIP:               publicIP,
-		PublicDNS:              fmt.Sprintf("%s.%s", jsonVM.Name, Subdomain),
-		RemoteUser:             remoteUser,
-		VPC:                    vpc,
-		MachineType:            machineType,
-		CPUArch:                vm.ParseArch(cpuPlatform),
-		CPUFamily:              strings.Replace(strings.ToLower(cpuPlatform), "intel ", "", 1),
-		Zone:                   zone,
-		Project:                project,
-		NonBootAttachedVolumes: volumes,
-		LocalDisks:             localDisks,
+		Name:              jsonVM.Name,
+		CreatedAt:         jsonVM.CreationTimestamp,
+		Errors:            vmErrors,
+		DNS:               fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
+		Lifetime:          lifetime,
+		Preemptible:       jsonVM.Scheduling.Preemptible,
+		Labels:            jsonVM.Labels,
+		PrivateIP:         privateIP,
+		Provider:          ProviderName,
+		DNSProvider:       ProviderName,
+		ProviderID:        jsonVM.Name,
+		PublicIP:          publicIP,
+		PublicDNS:         fmt.Sprintf("%s.%s", jsonVM.Name, Subdomain),
+		RemoteUser:        remoteUser,
+		VPC:               vpc,
+		MachineType:       machineType,
+		CPUArch:           vm.ParseArch(cpuPlatform),
+		CPUFamily:         strings.Replace(strings.ToLower(cpuPlatform), "intel ", "", 1),
+		Zone:              zone,
+		Project:           project,
+		PersistentVolumes: persistentVolumes,
+		LocalDisks:        localDisks,
 	}
 }
 
@@ -747,7 +745,7 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 		})
 	}
 
-	// TODO(irfansharif): Update v.NonBootAttachedVolumes? It's awkward to have
+	// TODO(irfansharif): Update v.PersistentVolumes? It's awkward to have
 	// that field at all.
 	return volumes, nil
 }
@@ -2536,7 +2534,7 @@ func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 					},
 				}
 			}
-			for _, v := range vm.NonBootAttachedVolumes {
+			for _, v := range vm.PersistentVolumes {
 				workload.ComputeVmWorkload.PersistentDisks = append(workload.ComputeVmWorkload.PersistentDisks, &cloudbilling.PersistentDisk{
 					DiskSize: &cloudbilling.Usage{
 						UsageRateTimeline: &cloudbilling.UsageRateTimeline{

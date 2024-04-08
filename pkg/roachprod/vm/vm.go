@@ -137,8 +137,8 @@ type VM struct {
 	// LocalClusterName is only set for VMs in a local cluster.
 	LocalClusterName string `json:"local_cluster_name,omitempty"`
 
-	// NonBootAttachedVolumes are the non-bootable, _persistent_ volumes attached to the VM.
-	NonBootAttachedVolumes []Volume `json:"non_bootable_volumes"`
+	// PersistentVolumes are the _persistent_ volumes attached to the VM.
+	PersistentVolumes []Volume `json:"non_bootable_volumes"`
 
 	// LocalDisks are the ephemeral SSD disks attached to the VM.
 	LocalDisks []Volume `json:"local_disks"`
@@ -201,7 +201,7 @@ func (vm *VM) ZoneEntry() (string, error) {
 }
 
 func (vm *VM) AttachVolume(l *logger.Logger, v Volume) (deviceName string, _ error) {
-	vm.NonBootAttachedVolumes = append(vm.NonBootAttachedVolumes, v)
+	vm.PersistentVolumes = append(vm.PersistentVolumes, v)
 	if err := ForProvider(vm.Provider, func(provider Provider) error {
 		var err error
 		deviceName, err = provider.AttachVolume(l, v, vm)
