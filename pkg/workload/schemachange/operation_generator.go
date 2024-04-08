@@ -3994,22 +3994,28 @@ FROM
 	}
 
 	// For each function generate a possible invocation passing in null arguments.
-	for _, function := range functions {
-		args := ""
-		if function["args"] != nil {
-			args = function["args"].(string)
-			argIn := strings.Builder{}
-			// TODO(fqazi): Longer term we should populate actual arguments and
-			// not just NULLs.
-			for range strings.Split(args, ",") {
-				if argIn.Len() > 0 {
-					argIn.WriteString(",")
+	supportsUDFCallingUDF, err := isClusterVersionLessThan(ctx, tx, clusterversion.V24_1.Version())
+	if err != nil {
+		return nil, err
+	}
+	if supportsUDFCallingUDF {
+		for _, function := range functions {
+			args := ""
+			if function["args"] != nil {
+				args = function["args"].(string)
+				argIn := strings.Builder{}
+				// TODO(fqazi): Longer term we should populate actual arguments and
+				// not just NULLs.
+				for range strings.Split(args, ",") {
+					if argIn.Len() > 0 {
+						argIn.WriteString(",")
+					}
+					argIn.WriteString("NULL")
 				}
-				argIn.WriteString("NULL")
+				args = argIn.String()
 			}
-			args = argIn.String()
+			possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf("(SELECT %s.%s(%s) IS NOT NULL)", function["schema"].(string), function["name"].(string), args))
 		}
-		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf("(SELECT %s.%s(%s) IS NOT NULL)", function["schema"].(string), function["name"].(string), args))
 	}
 
 	placeholderMap := template.FuncMap{
