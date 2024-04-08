@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-23.1
-
 statement ok
 CREATE FUNCTION lower_hello() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
 

@@ -1474,11 +1474,9 @@ subtest create-schema
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
-skipif config local-mixed-23.1
 statement ok
 CREATE SCHEMA sc
 
-skipif config local-mixed-23.1
 query TT rowsort
 SHOW SCHEMAS
 ----
@@ -1489,11 +1487,9 @@ pg_extension        node
 public              admin
 sc                  root
 
-skipif config local-mixed-23.1
 statement ok
 DROP SCHEMA sc
 
-skipif config local-mixed-23.1
 query TT rowsort
 SHOW SCHEMAS
 ----
@@ -1535,7 +1531,6 @@ EXPLAIN (DDL) CREATE SCHEMA schema1
 statement ok
 SET CLUSTER SETTING sql.schema.force_declarative_statements='+CREATE SCHEMA'
 
-skipif config local-mixed-23.1
 statement ok
 EXPLAIN (DDL) CREATE SCHEMA sc1
 

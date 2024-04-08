@@ -3310,12 +3310,10 @@ CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j)
 INSERT INTO t_99035 VALUES (0,0);
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 statement ok
 ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
@@ -3331,7 +3329,6 @@ CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j)
 INSERT INTO t_99035 VALUES (0,0);
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 statement error validation of CHECK "j > 0:::INT8" failed on row: j=0, k=[0-9]+, p=30
 ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 30, ADD CHECK (j>0);
 
@@ -3341,12 +3338,10 @@ SELECT * FROM t_99035
 0 0
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 statement ok
 ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 30, ADD CHECK (j>=0);
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
@@ -3364,12 +3359,10 @@ CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j)
 INSERT INTO t_99035 VALUES (0,0);
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 statement ok
 ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 0, ADD CHECK (j>=0), ADD FOREIGN KEY (p) REFERENCES t_99035(j);
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
@@ -3423,7 +3416,6 @@ ALTER TABLE t_99281 ADD COLUMN p INT DEFAULT unique_rowid(), ADD UNIQUE WITHOUT 
 
 # The following statement will cause the stmt to hang using the legacy schema changer.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 statement error pq: could not create unique constraint ".*"
 ALTER TABLE t_99281 DROP COLUMN k, ADD UNIQUE WITHOUT INDEX (j);
 
@@ -3441,7 +3433,6 @@ ALTER TABLE t_99281 ADD COLUMN p INT DEFAULT unique_rowid(), ADD FOREIGN KEY (j)
 
 # The following statement is not supported using the legacy schema changer.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 statement error pq: foreign key violation: "t_99281" row j=0, k=[0-1] has no match in "t_99281_other"
 ALTER TABLE t_99281 ALTER PRIMARY KEY USING COLUMNS (k), ADD FOREIGN KEY (j) REFERENCES t_99281_other;
 

@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-23.1
-
 subtest types
 
 statement error pgcode 42601 pq: at or near "float": syntax error
