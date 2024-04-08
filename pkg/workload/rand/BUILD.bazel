@@ -35,6 +35,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
