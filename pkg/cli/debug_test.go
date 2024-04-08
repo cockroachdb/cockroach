@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -39,7 +40,12 @@ func createStore(t *testing.T, path string) {
 	db, err := storage.Open(
 		context.Background(),
 		fs.MustInitPhysicalTestingEnv(path),
-		cluster.MakeClusterSettings(),
+		cluster.MakeClusterSettingsWithVersions(
+			clusterversion.Latest.Version(),
+			// We use PreviousRelease so that we don't have the enable version
+			// skipping when running tests against this store.
+			clusterversion.PreviousRelease.Version(),
+		),
 		storage.CacheSize(server.DefaultCacheSize))
 	if err != nil {
 		t.Fatal(err)
