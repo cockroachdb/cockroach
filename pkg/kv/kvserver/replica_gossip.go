@@ -110,13 +110,15 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 		return errors.Errorf("unexpected intents on node liveness span %s: %+v", span, result.Local.EncounteredIntents)
 	}
 	kvs := br.Responses[0].GetInner().(*kvpb.ScanResponse).Rows
+
 	log.VEventf(ctx, 2, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
-	for _, kv := range kvs {
+	if len(kvs) == 1 {
 		// Parse the value to both confirm it's well-formatted and to extract the
 		// node ID from it. We could instead derive the node ID from the key and
 		// skip unmarshaling the value at all, which would be (marginally) faster,
 		// but that would be a greater change from how this code has historically
 		// worked and it's not likely to be a huge difference.
+		kv := kvs[0]
 		var kvLiveness livenesspb.Liveness
 		if err := kv.Value.GetProto(&kvLiveness); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal liveness value %s", kv.Key)
@@ -129,6 +131,27 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 		if err := r.store.Gossip().AddInfoIfNotRedundant(key, valBytes); err != nil {
 			return errors.Wrapf(err, "failed to gossip node liveness for %s", kv.Key)
 		}
+		return nil
+	}
+
+	// Same code as above, but for more than one liveness record. Allocate a
+	// slice that can be passed to a bulk gossip operation rather than taking
+	// and releasing the gossip mutex separately for each.
+	gossipInfos := make([]gossip.InfoToAdd, 0, len(kvs))
+	for _, kv := range kvs {
+		var kvLiveness livenesspb.Liveness
+		if err := kv.Value.GetProto(&kvLiveness); err != nil {
+			return errors.Wrapf(err, "failed to unmarshal liveness value %s", kv.Key)
+		}
+		key := gossip.MakeNodeLivenessKey(kvLiveness.NodeID)
+		valBytes, err := kv.Value.GetBytes()
+		if err != nil {
+			return errors.Wrapf(err, "failed to GetBytes to gossip node liveness for %s", kv.Key)
+		}
+		gossipInfos = append(gossipInfos, gossip.InfoToAdd{Key: key, Val: valBytes})
+	}
+	if err := r.store.Gossip().BulkAddInfoIfNotRedundant(gossipInfos); err != nil {
+		return errors.Wrapf(err, "failed to gossip node liveness for %d keys", len(kvs))
 	}
 	return nil
 }

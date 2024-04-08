@@ -903,6 +903,11 @@ func (g *Gossip) AddInfoIfNotRedundant(key string, val []byte) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
+	return g.addInfoIfNotRedundantLocked(key, val)
+}
+
+// addInfoIfNotRedundantLocked implements AddInfoIfNotRedundant.
+func (g *Gossip) addInfoIfNotRedundantLocked(key string, val []byte) error {
 	info := g.mu.is.getInfo(key)
 
 	if info != nil {
@@ -915,6 +920,23 @@ func (g *Gossip) AddInfoIfNotRedundant(key string, val []byte) error {
 
 	// Something is different, so we do need to add the provided key/value.
 	return g.addInfoLocked(key, val, 0 /* ttl */)
+}
+
+type InfoToAdd struct {
+	Key string
+	Val []byte
+}
+
+func (g *Gossip) BulkAddInfoIfNotRedundant(toAdd []InfoToAdd) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	for i := range toAdd {
+		if err := g.addInfoIfNotRedundantLocked(toAdd[i].Key, toAdd[i].Val); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // AddClusterID is a convenience method for gossipping the cluster ID. There's
