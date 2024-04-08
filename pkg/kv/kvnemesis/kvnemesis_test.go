@@ -131,9 +131,10 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 			log.Infof(context.Background(), "inserting illegal lease index for %s (seen %d times)", roachpb.Key(key), seen[key])
 			// LAI 1 is always going to fail because the LAI is initialized when the lease
 			// comes into existence. (It's important that we pick one here that reliably
-			// fails because otherwise we may accidentally regress the closed timestamp[^1].
+			// fails because otherwise we may accidentally regress the closed timestamp[^1][^2].
 			//
 			// [^1]: https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1433244880
+			// [^2]: https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1881165404
 			return 1
 		}
 	}
