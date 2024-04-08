@@ -401,9 +401,9 @@ SELECT f()
 ----
 pq: unknown function: f()
 
-# Test that backing up and restoring a cluster with a function on 23.2 does not
-# grant EXECUTE privileges on the public role for functions where that privilege
-# has been revoked.
+# Test that backing up and restoring a cluster with a function does not grant
+# EXECUTE privileges on the public role for functions where that privilege has
+# been revoked.
 new-cluster name=s4
 ----
 
