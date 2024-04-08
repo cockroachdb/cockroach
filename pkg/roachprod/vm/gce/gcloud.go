@@ -666,7 +666,7 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 		})
 	}
 
-	// TODO(irfansharif): Update v.PersistentVolumes? It's awkward to have
+	// TODO(irfansharif): Update v.NonBootAttachedVolumes? It's awkward to have
 	// that field at all.
 	return volumes, nil
 }
