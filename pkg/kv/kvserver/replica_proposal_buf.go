@@ -103,6 +103,12 @@ type propBuf struct {
 	testing struct {
 		// leaseIndexFilter can be used by tests to override the max lease index
 		// assigned to a proposal by returning a non-zero lease index.
+		//
+		// If this filter is set, the lease index 1 is reserved for out-of-order
+		// proposals, and propBuf will never submit "real" proposals at index 1.
+		// Returning indices > 1 here is generally unsafe because this may cause
+		// unintended proposal reordering and closed timestamp regressions, as in
+		// https://github.com/cockroachdb/cockroach/issues/118017
 		leaseIndexFilter func(*ProposalData) kvpb.LeaseAppliedIndex
 		// insertFilter allows tests to inject errors at Insert() time.
 		insertFilter func(*ProposalData) error
@@ -218,6 +224,16 @@ func (b *propBuf) Init(
 	b.evalTracker = tracker
 	b.settings = settings
 	b.assignedLAI = p.leaseAppliedIndex()
+
+	// Reserve LAI 1 for out-of-order proposals in tests. A bunch of tests
+	// override proposal's LAI to 1, in order to force reproposals. If these
+	// modified proposals race with a "real" proposal with LAI 1, this can cause a
+	// closed timestamp regression.
+	//
+	// https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1881165404
+	if b.testing.leaseIndexFilter != nil {
+		b.forwardAssignedLAILocked(1)
+	}
 }
 
 // AllocatedIdx returns the highest index that was allocated. This generally
