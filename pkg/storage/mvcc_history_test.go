@@ -1190,7 +1190,7 @@ func cmdVerifyLock(e *evalCtx) error {
 		txn := e.getTxn(optional)
 		key := e.getKey()
 		str := e.getStrength()
-		found, err := storage.VerifyLock(e.ctx, r, &txn.TxnMeta, str, key, txn.IgnoredSeqNums)
+		found, err := storage.MVCCVerifyLock(e.ctx, r, &txn.TxnMeta, str, key, txn.IgnoredSeqNums)
 		if err != nil {
 			return err
 		}

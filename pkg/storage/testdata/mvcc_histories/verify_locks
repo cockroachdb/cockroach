@@ -256,3 +256,60 @@ found: true
 found: false
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+
+# Test that the intent history is consulted when verifying locks.
+run ok
+with t=A
+  txn_step seq=20
+  put k=k8 v=v8
+  txn_step seq=25
+  put k=k8 v=v8_second
+  txn_step seq=30
+  put k=k8 v=v8_third
+----
+put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20 Replicated Intent [{5 15}]}
+put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=25 Replicated Intent [{5 15}]}
+put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30 Replicated Intent [{5 15}]}
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k4"/10.000000000,0 -> /BYTES/v_new
+data: "k4"/5.000000000,0 -> /BYTES/v4
+data: "k5"/5.000000000,0 -> /BYTES/v5
+data: "k6"/5.000000000,0 -> /BYTES/v6
+data: "k7"/5.000000000,0 -> /BYTES/v7
+meta: "k8"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{20 /BYTES/v8}{25 /BYTES/v8_second}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k8"/10.000000000,0 -> /BYTES/v8_third
+
+run ok
+with t=A
+  verify_lock k=k8 str=shared
+  verify_lock k=k8 str=exclusive
+  txn_ignore_seqs seqs=(30-30)
+  verify_lock k=k8 str=shared
+  verify_lock k=k8 str=exclusive
+  txn_ignore_seqs seqs=(25-25,30-30)
+  verify_lock k=k8 str=shared
+  verify_lock k=k8 str=exclusive
+  txn_ignore_seqs seqs=(20-20,30-30)
+  verify_lock k=k8 str=shared
+  verify_lock k=k8 str=exclusive
+  txn_ignore_seqs seqs=(20-20,25-25,30-30)
+  verify_lock k=k8 str=shared
+  verify_lock k=k8 str=exclusive
+----
+found: true
+found: true
+found: true
+found: true
+found: true
+found: true
+found: true
+found: true
+found: false
+found: false
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=3
