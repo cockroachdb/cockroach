@@ -2577,6 +2577,7 @@ var builtinOidsArray = []string{
 	2609: `crdb_internal.request_statement_bundle(stmtFingerprint: string, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval, redacted: bool) -> bool`,
 	2610: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval, redacted: bool) -> bool`,
 	2611: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, antiPlanGist: bool, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval, redacted: bool) -> bool`,
+	2612: `crdb_internal.index_span(tenant_id: int, table_id: int, index_id: int) -> bytes[]`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
