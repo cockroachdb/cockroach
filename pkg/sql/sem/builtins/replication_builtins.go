@@ -13,14 +13,18 @@ package builtins
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -382,6 +386,86 @@ var replicationBuiltins = map[string]builtinDefinition{
 				return &tsDec, err
 			},
 			Info:       "This function reverts the given tenant to a particular timestamp.",
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.split_at": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			Undocumented:     true,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "key", Typ: types.Bytes},
+				{Name: "ttl", Typ: types.Interval},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+				key := roachpb.Key(tree.MustBeDBytes(args[0]))
+				ttl := tree.MustBeDInterval(args[1])
+				expiration := evalCtx.Txn.DB().Clock().Now().Add(ttl.Nanos(), 0)
+				return tree.DVoidDatum, evalCtx.Txn.DB().AdminSplit(ctx, key, expiration)
+			},
+			Info:       "Splits at an *arbitrary* byte key.",
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.scatter": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			Undocumented:     true,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "key", Typ: types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+				key := roachpb.Key(tree.MustBeDBytes(args[0]))
+				_, err := evalCtx.Txn.DB().AdminScatter(ctx, key, 0)
+				return tree.DVoidDatum, err
+			},
+			Info:       "Scatters the passed arbitrary key",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+				key := roachpb.Key(tree.MustBeDBytes(args[0]))
+				endKey := roachpb.Key(tree.MustBeDBytes(args[1]))
+
+				scatterReq := &kvpb.AdminScatterRequest{
+					RequestHeader:   kvpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: endKey}),
+					RandomizeLeases: true,
+				}
+				_, pErr := kv.SendWrapped(ctx, evalCtx.Txn.DB().NonTransactionalSender(), scatterReq)
+				if pErr != nil {
+					return nil, pErr.GoError()
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info:       "Scatters the passed arbitrary key",
 			Volatility: volatility.Volatile,
 		},
 	),
