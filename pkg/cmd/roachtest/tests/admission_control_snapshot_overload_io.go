@@ -91,7 +91,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			// Initialize the kv database,
 			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", time.Minute))
 			c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
-				"./cockroach workload init kv --drop --splits=1000 --insert-count=500000000 "+
+				"./cockroach workload init kv --drop --splits=1000 --insert-count=50000000 "+
 					"--max-block-bytes=4096 --min-block-bytes=4096 {pgurl:1}")
 
 			t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
