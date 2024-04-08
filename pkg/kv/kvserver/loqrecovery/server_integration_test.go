@@ -52,6 +52,12 @@ func TestReplicaCollection(t *testing.T) {
 
 	ctx := context.Background()
 
+	// This test stops cluster servers. Use "reusable" listeners, otherwise the
+	// ports can be reused by other test clusters, and we may accidentally connect
+	// to a wrong node.
+	// TODO(pav-kv): force all tests calling StopServer to use sticky listeners.
+	listenerReg := listenerutil.NewListenerRegistry()
+	defer listenerReg.Close()
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{{InMemory: true}},
@@ -62,6 +68,7 @@ func TestReplicaCollection(t *testing.T) {
 				},
 			},
 		},
+		ReusableListenerReg: listenerReg,
 	})
 	tc.Start(t)
 	defer tc.Stopper().Stop(ctx)
