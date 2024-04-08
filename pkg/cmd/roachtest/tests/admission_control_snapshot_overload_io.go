@@ -104,8 +104,8 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			})
 
 			// Wait for nodes to get populated.
-			t.Status(fmt.Sprintf("waiting for kv workload to populate data for %s", time.Hour))
-			time.Sleep(time.Hour)
+			t.Status(fmt.Sprintf("waiting for kv workload to populate data for %s", time.Minute))
+			time.Sleep(time.Minute)
 
 			// Kill node 3.
 			t.Status(fmt.Sprintf("killing node 3... (<%s)", time.Minute))
@@ -113,6 +113,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 
 			// Wait for raft log truncation.
 			t.Status(fmt.Sprintf("waiting for raft log truncation (<%s)", time.Hour))
+			time.Sleep(time.Hour)
 
 			// Start node 3.
 			t.Status(fmt.Sprintf("killing node 3... (<%s)", time.Minute))
