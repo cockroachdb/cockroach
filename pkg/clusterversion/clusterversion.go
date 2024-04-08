@@ -168,19 +168,12 @@ type handleImpl struct {
 
 var _ Handle = (*handleImpl)(nil)
 
-// MakeVersionHandle returns a Handle that has its latest and minimum supported
-// versions initialized to this binary's build and its minimum supported
-// versions respectively.
-func MakeVersionHandle(sv *settings.Values) Handle {
-	return MakeVersionHandleWithOverride(sv, Latest.Version(), MinSupported.Version())
-}
-
-// MakeVersionHandleWithOverride returns a Handle that has its
-// binary and minimum supported versions initialized to the provided versions.
+// MakeVersionHandle returns a Handle that has its binary and minimum supported
+// versions initialized to the provided versions.
 //
 // It's typically used in tests that want to override the default binary and
 // minimum supported versions.
-func MakeVersionHandleWithOverride(
+func MakeVersionHandle(
 	sv *settings.Values, latestVersion, minSupportedVersion roachpb.Version,
 ) Handle {
 	return newHandleImpl(version, sv, latestVersion, minSupportedVersion)

@@ -46,7 +46,6 @@ go_test(
     ],
     embed = [":profiler"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/server/dumpstore",
         "//pkg/settings/cluster",
         "//pkg/util/mon",
