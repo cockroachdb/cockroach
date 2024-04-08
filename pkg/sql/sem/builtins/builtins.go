@@ -5885,6 +5885,33 @@ SELECT
 			Info:       "This function returns the span that contains the keys for the given index.",
 			Volatility: volatility.Leakproof,
 		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "tenant_id", Typ: types.Int},
+				{Name: "table_id", Typ: types.Int},
+				{Name: "index_id", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.BytesArray),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tenID := uint64(tree.MustBeDInt(args[0]))
+				tabID := uint32(tree.MustBeDInt(args[1]))
+				indexID := uint32(tree.MustBeDInt(args[2]))
+				tenant, err := roachpb.MakeTenantID(tenID)
+				if err != nil {
+					return nil, err
+				}
+
+				start := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.MakeSQLCodec(tenant),
+					catid.DescID(tabID),
+					catid.IndexID(indexID)))
+				return spanToDatum(roachpb.Span{
+					Key:    start,
+					EndKey: start.PrefixEnd(),
+				})
+			},
+			Info:       "This function returns the span that contains the keys for the given index.",
+			Volatility: volatility.Leakproof,
+		},
 	),
 	// Return a pretty key for a given raw key, skipping the specified number of
 	// fields.
