@@ -97,9 +97,13 @@ CREATE FUNCTION f_in_udf() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 let $fn_oid
 SELECT oid FROM pg_catalog.pg_proc WHERE proname = 'f_in_udf'
 
+skipif config local-mixed-23.1
+skipif config local-mixed-23.2
 statement ok
 CREATE FUNCTION f_using_udf() RETURNS INT LANGUAGE SQL AS $$ SELECT [FUNCTION $fn_oid]() $$;
 
+skipif config local-mixed-23.1
+skipif config local-mixed-23.2
 query I
 SELECT f_using_udf()
 ----
