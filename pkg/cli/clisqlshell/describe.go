@@ -305,8 +305,7 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 		// Do noting.
 	} else if showNormal {
 		if !showAggregate {
-			// TODO(sql-sessions): Use prokind here.
-			buf.WriteString(` AND NOT p.proisagg`)
+			buf.WriteString(` AND p.prokind != 'a'`)
 		}
 		if !showProcedure {
 			buf.WriteString(` AND (p.prokind IS NULL OR p.prokind <> 'p')`)
@@ -316,15 +315,13 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 			_ = 0 // disable lint SA9003
 		}
 		if !showWindow {
-			// TODO(sql-sessions): Use prokind here.
-			buf.WriteString(` AND NOT p.proiswindow`)
+			buf.WriteString(` AND p.prokind != 'w'`)
 		}
 	} else {
 		buf.WriteString(` AND (FALSE`)
 		// Note: at least one of these must be true.
 		if showAggregate {
-			// TODO(sql-sessions): Use prokind here.
-			buf.WriteString(` OR p.proisagg`)
+			buf.WriteString(` OR p.prokind = 'a'`)
 		}
 		if showTrigger {
 			// TODO(sql-sessions): Use prorettype here.
@@ -334,7 +331,7 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 			buf.WriteString(` OR (p.prokind IS NOT NULL AND p.prokind = 'p')`)
 		}
 		if showWindow {
-			buf.WriteString(` OR p.proiswindow`)
+			buf.WriteString(` OR p.prokind = 'w'`)
 		}
 		buf.WriteByte(')')
 	}
