@@ -1,0 +1,2 @@
+resume_all_jobs_stmt ::=
+	'RESUME' 'ALL' ( 'BACKUP' | 'CHANGEFEED' | 'RESTORE' | 'IMPORT') 'JOBS'

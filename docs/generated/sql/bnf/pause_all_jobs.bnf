@@ -1,0 +1,2 @@
+pause_all_jobs_stmt ::=
+	'PAUSE' 'ALL' ( 'BACKUP' | 'CHANGEFEED' | 'RESTORE' | 'IMPORT') 'JOBS'
