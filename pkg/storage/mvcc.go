@@ -6107,12 +6107,12 @@ func validateLockAcquisitionStrength(str lock.Strength) error {
 	return nil
 }
 
-// VerifyLock returns true if the supplied transaction holds a lock that offers
-// equal to or greater protection[1] than the supplied lock strength.
+// MVCCVerifyLock returns true if the supplied transaction holds a lock that
+// offers equal to or greater protection[1] than the supplied lock strength.
 //
 // [1] Locks that were acquired at sequence numbers that have since been ignored
 // aren't considered, as they may be rolled back in the future.
-func VerifyLock(
+func MVCCVerifyLock(
 	ctx context.Context,
 	reader Reader,
 	txn *enginepb.TxnMeta,
@@ -6162,7 +6162,30 @@ func VerifyLock(
 		// nothing stopping another request from rolling back the lock even though
 		// it exists right now.
 		if enginepb.TxnSeqIsIgnored(foundLock.Txn.Sequence, ignoredSeqNums) {
-			continue // the lock is ignored, proceed to check weaker lock strengths...
+			if iterStr != lock.Intent {
+				// The lock is ignored. Proceed to check weaker lock strengths...
+				continue
+			}
+			// If the existing lock is an intent, additionally check the intent
+			// history to verify that all of the intent writes in the intent history
+			// are also rolled back. If not, an element in the intent history is
+			// providing the required protection.
+			//
+			// This is not just an optimization. It is necessary for the correctness
+			// of MVCCVerifyLock because MVCCAcquireLock will skip lock acquisition if
+			// it finds a non-rolled back intent in the intent history.
+			inHistoryNotRolledBack := false
+			for _, e := range foundLock.IntentHistory {
+				if !enginepb.TxnSeqIsIgnored(e.Sequence, ignoredSeqNums) {
+					inHistoryNotRolledBack = true
+					break
+				}
+			}
+			if !inHistoryNotRolledBack {
+				// The intent and all prior intents in the intent history are
+				// ignored, proceed to check weaker lock strengths...
+				continue
+			}
 		}
 
 		return true, nil
