@@ -97,7 +97,7 @@ func (tg *testGranter) grant(grantChainID grantChainID) {
 		// was admitted. Sleep to let it get scheduled. We could do something more
 		// sophisticated like monitoring goroutine states like in
 		// concurrency_manager_test.go.
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(150 * time.Millisecond)
 	}
 	tg.buf.printf("granted%s: returned %d", tg.name, rv)
 }
