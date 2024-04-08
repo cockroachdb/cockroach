@@ -544,7 +544,7 @@ ALTER DATABASE system PRIMARY REGION "ap-southeast-2"
 # are in the system tenant. Hence the lack of error code checking and the
 # regex matching both possible outcomes.
 skipif config multiregion-9node-3region-3azs-tenant
-statement error user testuser may not modify the system database|modifying the regions of system database is not supported
+statement error user testuser may not modify the system database|Modifying the regions of system database is not supported. Set up your system database as multi-region using the cluster setting `sql.multiregion.preview_multiregion_system_database.enabled` https://www.cockroachlabs.com/docs/stable/cluster-settings
 ALTER DATABASE system PRIMARY REGION "ap-southeast-2"
 
 user root

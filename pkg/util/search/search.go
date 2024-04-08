@@ -12,8 +12,8 @@ package search
 
 import "github.com/cockroachdb/errors"
 
-// A Predicate is a funcation that returns whether a given search value "passes"
-// or not. It assumes that that within the search domain of [min, max) provided
+// A Predicate is a function that returns whether a given search value "passes"
+// or not. It assumes that within the search domain of [min, max) provided
 // to a Searcher, f(i) == true implies f(i-1) == true and f(i) == false implies
 // f(i+1) == false. A Predicate can be called multiple times, so it should be
 // a pure function.

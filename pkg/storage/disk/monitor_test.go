@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -73,11 +72,11 @@ func TestMonitor_Close(t *testing.T) {
 	monitor2 := Monitor{monitoredDisk: testDisk}
 
 	monitor1.Close()
-	require.Equal(t, testDisk.refCount, 1)
+	require.Equal(t, 1, testDisk.refCount)
 
 	monitor1.Close()
 	// Subsequent calls to a closed monitor should not reduce refCount.
-	require.Equal(t, testDisk.refCount, 1)
+	require.Equal(t, 1, testDisk.refCount)
 
 	go monitor2.Close()
 	// If there are no monitors, stop the stat polling loop.
@@ -86,40 +85,37 @@ func TestMonitor_Close(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Failed to receive stop signal")
 	}
-	require.Equal(t, testDisk.refCount, 0)
+	require.Equal(t, 0, testDisk.refCount)
 }
 
 func TestMonitor_IncrementalStats(t *testing.T) {
-	testDisk := &monitoredDisk{
-		stats: struct {
-			syncutil.Mutex
-			err             error
-			lastMeasurement Stats
-		}{
-			lastMeasurement: Stats{
-				ReadsCount:      1,
-				InProgressCount: 3,
-			},
-		},
+	now := time.Now()
+	testDisk := monitoredDisk{
+		tracer: newMonitorTracer(3),
 	}
-	monitor := Monitor{monitoredDisk: testDisk}
+	monitor := Monitor{monitoredDisk: &testDisk}
 
-	// First attempt at getting incremental stats should return empty stats.
-	stats, err := monitor.IncrementalStats()
-	require.NoError(t, err)
-	require.Equal(t, stats, Stats{})
+	testDisk.recordStats(now.Add(-10*time.Second), Stats{
+		ReadsCount:      1,
+		InProgressCount: 3,
+	})
+	// First attempt at getting incremental stats should fail since no data was
+	// collected at the specified time.
+	stats, err := monitor.IncrementalStats(time.Minute)
+	require.Error(t, err)
+	require.Equal(t, Stats{}, stats)
 
-	testDisk.stats.lastMeasurement = Stats{
+	testDisk.recordStats(now, Stats{
 		ReadsCount:      2,
 		InProgressCount: 2,
-	}
+	})
 	wantIncremental := Stats{
 		ReadsCount: 1,
 		// InProgressCount is a gauge so the increment should not be computed.
 		InProgressCount: 2,
 	}
-
-	stats, err = monitor.IncrementalStats()
+	// Tracer should compute diff using data recorded over 10 seconds ago.
+	stats, err = monitor.IncrementalStats(5 * time.Second)
 	require.NoError(t, err)
-	require.Equal(t, stats, wantIncremental)
+	require.Equal(t, wantIncremental, stats)
 }
