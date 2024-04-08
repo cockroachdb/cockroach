@@ -692,7 +692,7 @@ func TestSpecsPersistedOnlyAfterInitialPlan(t *testing.T) {
 	var replanCandidateCount int
 	replannedThreeTimes := make(chan struct{})
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		AfterReplicationFlowPlan: func(ingestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+		AfterReplicationFlowPlan: func(ingestionSpecs map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec,
 			frontierSpec *execinfrapb.StreamIngestionFrontierSpec) {
 			replanCandidateCount++
 			if replanCandidateCount > 2 {

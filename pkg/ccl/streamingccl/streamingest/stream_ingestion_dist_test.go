@@ -183,17 +183,19 @@ func TestSourceDestMatching(t *testing.T) {
 
 	// validatePairs tests that src-dst assignments are expected.
 	validatePairs := func(t *testing.T,
-		sipSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+		sipSpecs map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec,
 		expected map[pair]struct{}) {
-		for dstID, spec := range sipSpecs {
-			require.True(t, len(spec.PartitionSpecs) > 0, "empty node %s included in partition specs", dstID)
-			for srcID := range spec.PartitionSpecs {
-				srcIDNum, err := strconv.Atoi(srcID)
-				require.NoError(t, err)
-				expectKey := pair{srcIDNum, int(dstID)}
-				_, ok := expected[expectKey]
-				require.True(t, ok, "Src %s,Dst %d do not match", srcID, dstID)
-				delete(expected, expectKey)
+		for dstID, sips := range sipSpecs {
+			for _, spec := range sips {
+				require.True(t, len(spec.PartitionSpecs) > 0, "empty node %s included in partition specs", dstID)
+				for srcID := range spec.PartitionSpecs {
+					srcIDNum, err := strconv.Atoi(srcID)
+					require.NoError(t, err)
+					expectKey := pair{srcIDNum, int(dstID)}
+					_, ok := expected[expectKey]
+					require.True(t, ok, "Src %s,Dst %d do not match", srcID, dstID)
+					delete(expected, expectKey)
+				}
 			}
 		}
 		require.Equal(t, 0, len(expected), "expected matches not included")
@@ -202,13 +204,15 @@ func TestSourceDestMatching(t *testing.T) {
 	// validateEvenDistribution tests that source node assignments were evenly
 	// distributed across destination nodes. This function is only called on test
 	// cases without an expected exact src-dst node match.
-	validateEvenDistribution := func(t *testing.T, sipSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, dstNodes []sql.InstanceLocality) {
+	validateEvenDistribution := func(t *testing.T, sipSpecs map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec, dstNodes []sql.InstanceLocality) {
 		require.Equal(t, len(sipSpecs), len(dstNodes))
 		dstNodeAssignmentCount := make(map[base.SQLInstanceID]int, len(dstNodes))
-		for dstID, spec := range sipSpecs {
+		for dstID, specs := range sipSpecs {
 			dstNodeAssignmentCount[dstID] = 0
-			for range spec.PartitionSpecs {
-				dstNodeAssignmentCount[dstID]++
+			for _, spec := range specs {
+				for range spec.PartitionSpecs {
+					dstNodeAssignmentCount[dstID]++
+				}
 			}
 		}
 

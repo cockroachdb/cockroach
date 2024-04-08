@@ -1805,7 +1805,7 @@ type StreamingTestingKnobs struct {
 
 	// AfterReplicationFlowPlan allows the caller to inspect the ingestion and
 	// frontier specs generated for the replication job.
-	AfterReplicationFlowPlan func(map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+	AfterReplicationFlowPlan func(map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec,
 		*execinfrapb.StreamIngestionFrontierSpec)
 
 	AfterPersistingPartitionSpecs func()

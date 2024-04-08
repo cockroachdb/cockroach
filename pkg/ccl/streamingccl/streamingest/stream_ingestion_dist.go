@@ -547,12 +547,14 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 		}
 
 		// Setup a one-stage plan with one proc per input spec.
-		corePlacement := make([]physicalplan.ProcessorCorePlacement, len(streamIngestionSpecs))
-		i := 0
+		corePlacement := make([]physicalplan.ProcessorCorePlacement, 0, len(streamIngestionSpecs))
 		for instanceID := range streamIngestionSpecs {
-			corePlacement[i].SQLInstanceID = instanceID
-			corePlacement[i].Core.StreamIngestionData = streamIngestionSpecs[instanceID]
-			i++
+			for _, spec := range streamIngestionSpecs[instanceID] {
+				corePlacement = append(corePlacement, physicalplan.ProcessorCorePlacement{
+					SQLInstanceID: instanceID,
+					Core:          execinfrapb.ProcessorCoreUnion{StreamIngestionData: spec},
+				})
+			}
 		}
 
 		p := planCtx.NewPhysicalPlan()
@@ -750,28 +752,26 @@ func constructStreamIngestionPlanSpecs(
 	sourceTenantID roachpb.TenantID,
 	destinationTenantID roachpb.TenantID,
 ) (
-	map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+	map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec,
 	*execinfrapb.StreamIngestionFrontierSpec,
 	error,
 ) {
 
-	streamIngestionSpecs := make(map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, len(destSQLInstances))
-	for _, id := range destSQLInstances {
-		spec := &execinfrapb.StreamIngestionDataSpec{
-			StreamID:                    uint64(streamID),
-			JobID:                       int64(jobID),
-			PreviousReplicatedTimestamp: previousReplicatedTimestamp,
-			InitialScanTimestamp:        initialScanTimestamp,
-			Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
-			StreamAddress:               string(streamAddress),
-			PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
-			TenantRekey: execinfrapb.TenantRekey{
-				OldID: sourceTenantID,
-				NewID: destinationTenantID,
-			},
-		}
-		streamIngestionSpecs[id.GetInstanceID()] = spec
+	baseSpec := execinfrapb.StreamIngestionDataSpec{
+		StreamID:                    uint64(streamID),
+		JobID:                       int64(jobID),
+		PreviousReplicatedTimestamp: previousReplicatedTimestamp,
+		InitialScanTimestamp:        initialScanTimestamp,
+		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
+		StreamAddress:               string(streamAddress),
+		PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
+		TenantRekey: execinfrapb.TenantRekey{
+			OldID: sourceTenantID,
+			NewID: destinationTenantID,
+		},
 	}
+
+	res := make(map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec, len(destSQLInstances))
 
 	trackedSpans := make([]roachpb.Span, 0)
 	subscribingSQLInstances := make(map[string]uint32)
@@ -797,15 +797,12 @@ func constructStreamIngestionPlanSpecs(
 			SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
 			DestInstanceID:    destID,
 		}
-		streamIngestionSpecs[destID].PartitionSpecs[partition.ID] = partSpec
-		trackedSpans = append(trackedSpans, partition.Spans...)
-	}
-
-	// Remove any ingestion processors that haven't been assigned any work.
-	for key, spec := range streamIngestionSpecs {
-		if len(spec.PartitionSpecs) == 0 {
-			delete(streamIngestionSpecs, key)
+		spec := baseSpec
+		spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{
+			partition.ID: partSpec,
 		}
+		res[destID] = append(res[destID], &spec)
+		trackedSpans = append(trackedSpans, partition.Spans...)
 	}
 
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
@@ -818,10 +815,10 @@ func constructStreamIngestionPlanSpecs(
 		StreamAddresses:         topology.StreamAddresses(),
 		SubscribingSQLInstances: subscribingSQLInstances,
 		Checkpoint:              checkpoint,
-		PartitionSpecs:          repackagePartitionSpecs(streamIngestionSpecs),
+		PartitionSpecs:          repackagePartitionSpecs(res),
 	}
 
-	return streamIngestionSpecs, streamIngestionFrontierSpec, nil
+	return res, streamIngestionFrontierSpec, nil
 }
 
 // waitUntilProducerActive pings the producer job and waits until it

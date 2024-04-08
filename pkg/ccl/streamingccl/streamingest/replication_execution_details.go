@@ -170,13 +170,15 @@ func generateSpanFrontierExecutionDetailFile(
 }
 
 func repackagePartitionSpecs(
-	streamIngestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+	streamIngestionSpecs map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec,
 ) execinfrapb.StreamIngestionPartitionSpecs {
 	specs := make([]*execinfrapb.StreamIngestionPartitionSpec, 0)
 	partitionSpecs := execinfrapb.StreamIngestionPartitionSpecs{Specs: specs}
-	for _, d := range streamIngestionSpecs {
-		for _, partitionSpec := range d.PartitionSpecs {
-			partitionSpecs.Specs = append(partitionSpecs.Specs, &partitionSpec)
+	for _, nodeProcs := range streamIngestionSpecs {
+		for _, proc := range nodeProcs {
+			for _, partitionSpec := range proc.PartitionSpecs {
+				partitionSpecs.Specs = append(partitionSpecs.Specs, &partitionSpec)
+			}
 		}
 	}
 	return partitionSpecs
@@ -190,7 +192,7 @@ func persistStreamIngestionPartitionSpecs(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	ingestionJobID jobspb.JobID,
-	streamIngestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+	streamIngestionSpecs map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec,
 ) error {
 	partitionSpecs := repackagePartitionSpecs(streamIngestionSpecs)
 	specBytes, err := protoutil.Marshal(&partitionSpecs)
