@@ -97,7 +97,7 @@ func registerMultiTenantFairness(r registry.Registry) {
 			Owner:            registry.OwnerAdmissionControl,
 			Benchmark:        true,
 			Leases:           registry.MetamorphicLeases,
-			CompatibleClouds: registry.AllExceptAWS,
+			CompatibleClouds: registry.CloudsWithServiceRegistration,
 			Suites:           registry.Suites(registry.Weekly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runMultiTenantFairness(ctx, t, c, s)
