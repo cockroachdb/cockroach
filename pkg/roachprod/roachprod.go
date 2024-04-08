@@ -217,14 +217,19 @@ func Version(l *logger.Logger) string {
 
 // CachedClusters iterates over all roachprod clusters from the local cache, in
 // alphabetical order.
-func CachedClusters(l *logger.Logger, fn func(clusterName string, numVMs int)) {
+func CachedClusters(fn func(clusterName string, numVMs int)) {
 	for _, name := range sortedClusters() {
-		c, ok := readSyncedClusters(name)
+		c, ok := CachedCluster(name)
 		if !ok {
 			return
 		}
 		fn(c.Name, len(c.VMs))
 	}
+}
+
+// CachedCluster returns the cached information about a given cluster.
+func CachedCluster(name string) (*cloud.Cluster, bool) {
+	return readSyncedClusters(name)
 }
 
 // Sync grabs an exclusive lock on the roachprod state and then proceeds to

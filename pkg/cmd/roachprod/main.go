@@ -208,7 +208,7 @@ var cachedHostsCmd = &cobra.Command{
 	Short: "list all clusters (and optionally their host numbers) from local cache",
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		roachprod.CachedClusters(config.Logger, func(clusterName string, numVMs int) {
+		roachprod.CachedClusters(func(clusterName string, numVMs int) {
 			if strings.HasPrefix(clusterName, "teamcity") {
 				return
 			}
