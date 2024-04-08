@@ -206,6 +206,9 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	// recovery, we'll check that the range is still accessible for writes as
 	// normal.
 	sk := tcBefore.ScratchRange(t)
+	// The LOQ tooling does not work when a node fails during a split/merge
+	// operation. Make sure that splitting the scratch range fully completes.
+	require.NoError(t, tcBefore.WaitForSplitAndInitialization(sk))
 	require.NoError(t,
 		tcBefore.Server(0).DB().Put(ctx, testutils.MakeKey(sk, []byte{1}), "value"),
 		"failed to write value to scratch range")
