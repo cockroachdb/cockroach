@@ -83,6 +83,10 @@ func (b *TxnFingerprintIDCache) Add(
 ) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if _, ok := b.mu.cache.StealthyGet(id); ok {
+		// The value is already in the cache - do nothing.
+		return nil
+	}
 	if err := b.mu.acc.Grow(ctx, cacheEntrySize+txnFingerprintIDSize); err != nil {
 		return err
 	}
