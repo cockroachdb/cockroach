@@ -21,9 +21,11 @@ jobs:
         target: ${{ fromJSON(inputs.targets) }}
     steps:
       - uses: actions/checkout@v4
+      - id: goversion
+        run: echo "goversion=$(cat .go-version)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22.2"
+          go-version: ${{ steps.goversion.outputs.goversion }}
       - env: 
           TARGET: ${{ matrix.target }}
         run: |
