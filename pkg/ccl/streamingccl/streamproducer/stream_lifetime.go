@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -45,6 +46,14 @@ import (
 // TODO(msbutler): for the post cutover dummy producer job, the default
 // expiration window will be 24 hours.
 const defaultExpirationWindow = time.Hour * 24
+
+var streamMaxProcsPerPartition = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"stream_replication.ingest_processor_parallelism",
+	"controls the number of ingest processors to assign to each source-planned partition",
+	8,
+	settings.PositiveInt,
+)
 
 // notAReplicationJobError returns an error that is returned anytime
 // the user passes a job ID not related to a replication stream job.
@@ -310,6 +319,25 @@ func buildReplicationStreamSpec(
 	if err != nil {
 		return nil, err
 	}
+
+	const repartitionedMin = 10
+
+	par := int(streamMaxProcsPerPartition.Get(&evalCtx.Settings.SV))
+
+	repartitioned := make([]sql.SpanPartition, 0, len(spanPartitions)*par)
+	for _, sp := range spanPartitions {
+		l := len(sp.Spans) / par
+		if l < repartitionedMin {
+			repartitioned = append(repartitioned, sp)
+			continue
+		}
+		remaining := sp.Spans
+		for i := 0; i < par; i++ {
+			sp.Spans, remaining = remaining[:l], remaining[l:]
+			repartitioned = append(repartitioned, sp)
+		}
+	}
+	spanPartitions = repartitioned
 
 	var spanConfigsStreamID streampb.StreamID
 	if forSpanConfigs {
