@@ -98,7 +98,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 			m.Go(func(ctx context.Context) error {
 				c.Run(ctx, option.WithNodes(c.Node(crdbNodes+1)),
-					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --histograms=%s/stats.json --read-percent=50 --max-block-bytes=4096 --min-block-bytes=4096 --concurrency=256 {pgurl:1-%d}",
+					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --histograms=%s/stats.json --read-percent=50 --max-block-bytes=4096 --min-block-bytes=4096 --max-rate=200 --concurrency=256 {pgurl:1-%d}",
 						t.PerfArtifactsDir(), crdbNodes))
 				return nil
 			})
