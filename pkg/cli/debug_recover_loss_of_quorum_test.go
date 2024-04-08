@@ -188,6 +188,12 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	// single node should succeed.
 	tcBefore := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+				// The LOQ tooling does not work when a node fails during a split/merge
+				// operation. Disable unwanted splits/merges for this test.
+				DisableSplitQueue: true,
+				DisableMergeQueue: true,
+			}},
 			// This logic is specific to the storage layer.
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		},
