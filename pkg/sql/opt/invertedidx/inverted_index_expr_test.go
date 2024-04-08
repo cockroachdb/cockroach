@@ -103,7 +103,7 @@ func TestSimilarityTrigramsToScan(t *testing.T) {
 		{"foobar", 0.8, s("bar", "oob")},
 	}
 	for _, tc := range testCases {
-		res := similarityTrigramsToScan(tc.s, tc.threshold)
+		res := similarityTrigramsToScanForWord(tc.s, tc.threshold)
 		require.Equal(t, tc.expected, res)
 	}
 }

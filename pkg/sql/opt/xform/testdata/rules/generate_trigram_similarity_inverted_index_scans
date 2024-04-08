@@ -4,6 +4,7 @@ CREATE TABLE trgm (
     i INT NOT NULL,
     j INT,
     s STRING,
+    t STRING,
     CHECK (i IN (1, 2, 3)),
     INVERTED INDEX s_idx (s gin_trgm_ops),
     INVERTED INDEX i_j_s_idx (i, j, s gin_trgm_ops)
@@ -32,7 +33,7 @@ project
       │         ├── key: (1)
       │         └── scan trgm@s_idx
       │              ├── columns: k:1!null
-      │              └── constraint: /7
+      │              └── constraint: /8
       │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
       │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
       │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
@@ -43,21 +44,21 @@ opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE s % 'foo'
 ----
 select
- ├── columns: k:1!null i:2!null j:3 s:4
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-4)
+ ├── fd: (1)-->(2-5)
  ├── index-join trgm
- │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
+ │    ├── fd: (1)-->(2-5)
  │    └── distinct-on
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
  │         └── scan trgm@s_idx
  │              ├── columns: k:1!null
- │              └── constraint: /7
+ │              └── constraint: /8
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
  │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
  │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
@@ -70,21 +71,21 @@ opt expect=GenerateTrigramSimilarityInvertedIndexScans set=(pg_trgm.similarity_t
 SELECT * FROM trgm WHERE s % 'foo'
 ----
 select
- ├── columns: k:1!null i:2!null j:3 s:4
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-4)
+ ├── fd: (1)-->(2-5)
  ├── index-join trgm
- │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
+ │    ├── fd: (1)-->(2-5)
  │    └── distinct-on
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
  │         └── scan trgm@s_idx
  │              ├── columns: k:1!null
- │              └── constraint: /7: [/'\x12666f6f0001' - /'\x12666f6f0001']
+ │              └── constraint: /8: [/'\x12666f6f0001' - /'\x12666f6f0001']
  └── filters
       └── s:4 % 'foo' [outer=(4), stable]
 
@@ -92,21 +93,21 @@ opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE s % 'foo'::NAME
 ----
 select
- ├── columns: k:1!null i:2!null j:3 s:4
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-4)
+ ├── fd: (1)-->(2-5)
  ├── index-join trgm
- │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
+ │    ├── fd: (1)-->(2-5)
  │    └── distinct-on
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
  │         └── scan trgm@s_idx
  │              ├── columns: k:1!null
- │              └── constraint: /7
+ │              └── constraint: /8
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
  │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
  │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
@@ -117,21 +118,21 @@ opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE 'foo' % s
 ----
 select
- ├── columns: k:1!null i:2!null j:3 s:4
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-4)
+ ├── fd: (1)-->(2-5)
  ├── index-join trgm
- │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
+ │    ├── fd: (1)-->(2-5)
  │    └── distinct-on
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
  │         └── scan trgm@s_idx
  │              ├── columns: k:1!null
- │              └── constraint: /7
+ │              └── constraint: /8
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
  │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
  │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
@@ -142,21 +143,21 @@ opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE s % 'foo' AND s % 'bar'
 ----
 select
- ├── columns: k:1!null i:2!null j:3 s:4
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-4)
+ ├── fd: (1)-->(2-5)
  ├── index-join trgm
- │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
+ │    ├── fd: (1)-->(2-5)
  │    └── distinct-on
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
  │         └── scan trgm@s_idx
  │              ├── columns: k:1!null
- │              └── constraint: /7
+ │              └── constraint: /8
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
  │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
  │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
@@ -168,21 +169,21 @@ opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE s % 'foobar'
 ----
 select
- ├── columns: k:1!null i:2!null j:3 s:4
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-4)
+ ├── fd: (1)-->(2-5)
  ├── index-join trgm
- │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
+ │    ├── fd: (1)-->(2-5)
  │    └── distinct-on
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
  │         └── scan trgm@s_idx
  │              ├── columns: k:1!null
- │              └── constraint: /7
+ │              └── constraint: /8
  │                   ├── [/'\x126172200001' - /'\x126172200001']
  │                   ├── [/'\x126261720001' - /'\x126261720001']
  │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
@@ -192,24 +193,240 @@ select
       └── s:4 % 'foobar' [outer=(4), stable]
 
 opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s % 'foo' OR s % 'bar'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx
+ │              ├── columns: k:1!null
+ │              └── constraint: /8
+ │                   ├── [/'\x122062610001' - /'\x122062610001']
+ │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
+ │                   ├── [/'\x126172200001' - /'\x126172200001']
+ │                   ├── [/'\x126261720001' - /'\x126261720001']
+ │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
+ │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
+ └── filters
+      └── (s:4 % 'foo') OR (s:4 % 'bar') [outer=(4), stable]
+
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s % 'foo' OR s % 'bar' OR s % 'baz'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx
+ │              ├── columns: k:1!null
+ │              └── constraint: /8
+ │                   ├── [/'\x122062610001' - /'\x122062610001']
+ │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
+ │                   ├── [/'\x126172200001' - /'\x126172200001']
+ │                   ├── [/'\x12617a200001' - /'\x12617a200001']
+ │                   ├── [/'\x126261720001' - /'\x126261720001']
+ │                   ├── [/'\x1262617a0001' - /'\x1262617a0001']
+ │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
+ │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
+ └── filters
+      └── ((s:4 % 'foo') OR (s:4 % 'bar')) OR (s:4 % 'baz') [outer=(4), stable]
+
+# Only one side of the conjunction used to constrain the scan.
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE (s % 'foo' OR s % 'bar') AND s % 'baz'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx
+ │              ├── columns: k:1!null
+ │              └── constraint: /8
+ │                   ├── [/'\x122062610001' - /'\x122062610001']
+ │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
+ │                   ├── [/'\x126172200001' - /'\x126172200001']
+ │                   ├── [/'\x126261720001' - /'\x126261720001']
+ │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
+ │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
+ └── filters
+      ├── (s:4 % 'foo') OR (s:4 % 'bar') [outer=(4), stable]
+      └── s:4 % 'baz' [outer=(4), stable]
+
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s % 'foo' OR s % 'bar' OR s % NULL
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx
+ │              ├── columns: k:1!null
+ │              └── constraint: /8
+ │                   ├── [/'\x122062610001' - /'\x122062610001']
+ │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
+ │                   ├── [/'\x126172200001' - /'\x126172200001']
+ │                   ├── [/'\x126261720001' - /'\x126261720001']
+ │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
+ │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
+ └── filters
+      └── (s:4 % 'foo') OR (s:4 % 'bar') [outer=(4), stable]
+
+opt expect-not=GenerateTrigramSimilarityInvertedIndexScans disable=(FoldNullBinaryRight) format=show-scalars
+SELECT * FROM trgm WHERE s % 'foo' OR s % 'bar' OR s % NULL::STRING
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ │    ├── check constraint expressions
+ │    │    └── in [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    │         ├── variable: i:2
+ │    │         └── tuple
+ │    │              ├── const: 1
+ │    │              ├── const: 2
+ │    │              └── const: 3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── or [outer=(4), stable]
+           ├── or
+           │    ├── mod
+           │    │    ├── variable: s:4
+           │    │    └── const: 'foo'
+           │    └── mod
+           │         ├── variable: s:4
+           │         └── const: 'bar'
+           └── mod
+                ├── variable: s:4
+                └── null
+
+opt expect-not=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s < 'foo' OR s % 'bar'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ │    ├── check constraint expressions
+ │    │    └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── (s:4 < 'foo') OR (s:4 % 'bar') [outer=(4), stable]
+
+opt expect-not=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s % 'foo' OR s < 'bar'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ │    ├── check constraint expressions
+ │    │    └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── (s:4 % 'foo') OR (s:4 < 'bar') [outer=(4), stable]
+
+opt expect-not=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s % 'foo' OR s % 'bar' OR s % ''
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ │    ├── check constraint expressions
+ │    │    └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── ((s:4 % 'foo') OR (s:4 % 'bar')) OR (s:4 % '') [outer=(4), stable]
+
+opt expect-not=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s % 'foo' OR t % 'bar'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ │    ├── check constraint expressions
+ │    │    └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── (s:4 % 'foo') OR (t:5 % 'bar') [outer=(4,5), stable]
+
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE j = 10 AND s % 'foo'
 ----
 select
- ├── columns: k:1!null i:2!null j:3!null s:4
+ ├── columns: k:1!null i:2!null j:3!null s:4 t:5
  ├── stable
  ├── key: (1)
- ├── fd: ()-->(3), (1)-->(2,4)
+ ├── fd: ()-->(3), (1)-->(2,4,5)
  ├── index-join trgm
- │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
+ │    ├── fd: (1)-->(2-5)
  │    └── distinct-on
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
  │         └── scan trgm@i_j_s_idx
  │              ├── columns: k:1!null
- │              └── constraint: /2/3/8
+ │              └── constraint: /2/3/9
  │                   ├── [/1/10/'\x1220666f0001' - /1/10/'\x1220666f0001']
  │                   ├── [/1/10/'\x12666f6f0001' - /1/10/'\x12666f6f0001']
  │                   ├── [/1/10/'\x126f6f200001' - /1/10/'\x126f6f200001']
@@ -226,21 +443,21 @@ opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE j IN (10, 20) AND s % 'foo'
 ----
 select
- ├── columns: k:1!null i:2!null j:3!null s:4
+ ├── columns: k:1!null i:2!null j:3!null s:4 t:5
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-4)
+ ├── fd: (1)-->(2-5)
  ├── index-join trgm
- │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
+ │    ├── fd: (1)-->(2-5)
  │    └── distinct-on
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
  │         └── scan trgm@i_j_s_idx
  │              ├── columns: k:1!null
- │              └── constraint: /2/3/8
+ │              └── constraint: /2/3/9
  │                   ├── [/1/10/'\x1220666f0001' - /1/10/'\x1220666f0001']
  │                   ├── [/1/10/'\x12666f6f0001' - /1/10/'\x12666f6f0001']
  │                   ├── [/1/10/'\x126f6f200001' - /1/10/'\x126f6f200001']
@@ -262,16 +479,74 @@ select
  └── filters
       └── s:4 % 'foo' [outer=(4), stable]
 
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE j IN (10, 20) AND (s % 'foo' OR s % 'bar')
+----
+select
+ ├── columns: k:1!null i:2!null j:3!null s:4 t:5
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@i_j_s_idx
+ │              ├── columns: k:1!null
+ │              └── constraint: /2/3/9
+ │                   ├── [/1/10/'\x122062610001' - /1/10/'\x122062610001']
+ │                   ├── [/1/10/'\x1220666f0001' - /1/10/'\x1220666f0001']
+ │                   ├── [/1/10/'\x126172200001' - /1/10/'\x126172200001']
+ │                   ├── [/1/10/'\x126261720001' - /1/10/'\x126261720001']
+ │                   ├── [/1/10/'\x12666f6f0001' - /1/10/'\x12666f6f0001']
+ │                   ├── [/1/10/'\x126f6f200001' - /1/10/'\x126f6f200001']
+ │                   ├── [/1/20/'\x122062610001' - /1/20/'\x122062610001']
+ │                   ├── [/1/20/'\x1220666f0001' - /1/20/'\x1220666f0001']
+ │                   ├── [/1/20/'\x126172200001' - /1/20/'\x126172200001']
+ │                   ├── [/1/20/'\x126261720001' - /1/20/'\x126261720001']
+ │                   ├── [/1/20/'\x12666f6f0001' - /1/20/'\x12666f6f0001']
+ │                   ├── [/1/20/'\x126f6f200001' - /1/20/'\x126f6f200001']
+ │                   ├── [/2/10/'\x122062610001' - /2/10/'\x122062610001']
+ │                   ├── [/2/10/'\x1220666f0001' - /2/10/'\x1220666f0001']
+ │                   ├── [/2/10/'\x126172200001' - /2/10/'\x126172200001']
+ │                   ├── [/2/10/'\x126261720001' - /2/10/'\x126261720001']
+ │                   ├── [/2/10/'\x12666f6f0001' - /2/10/'\x12666f6f0001']
+ │                   ├── [/2/10/'\x126f6f200001' - /2/10/'\x126f6f200001']
+ │                   ├── [/2/20/'\x122062610001' - /2/20/'\x122062610001']
+ │                   ├── [/2/20/'\x1220666f0001' - /2/20/'\x1220666f0001']
+ │                   ├── [/2/20/'\x126172200001' - /2/20/'\x126172200001']
+ │                   ├── [/2/20/'\x126261720001' - /2/20/'\x126261720001']
+ │                   ├── [/2/20/'\x12666f6f0001' - /2/20/'\x12666f6f0001']
+ │                   ├── [/2/20/'\x126f6f200001' - /2/20/'\x126f6f200001']
+ │                   ├── [/3/10/'\x122062610001' - /3/10/'\x122062610001']
+ │                   ├── [/3/10/'\x1220666f0001' - /3/10/'\x1220666f0001']
+ │                   ├── [/3/10/'\x126172200001' - /3/10/'\x126172200001']
+ │                   ├── [/3/10/'\x126261720001' - /3/10/'\x126261720001']
+ │                   ├── [/3/10/'\x12666f6f0001' - /3/10/'\x12666f6f0001']
+ │                   ├── [/3/10/'\x126f6f200001' - /3/10/'\x126f6f200001']
+ │                   ├── [/3/20/'\x122062610001' - /3/20/'\x122062610001']
+ │                   ├── [/3/20/'\x1220666f0001' - /3/20/'\x1220666f0001']
+ │                   ├── [/3/20/'\x126172200001' - /3/20/'\x126172200001']
+ │                   ├── [/3/20/'\x126261720001' - /3/20/'\x126261720001']
+ │                   ├── [/3/20/'\x12666f6f0001' - /3/20/'\x12666f6f0001']
+ │                   └── [/3/20/'\x126f6f200001' - /3/20/'\x126f6f200001']
+ └── filters
+      └── (s:4 % 'foo') OR (s:4 % 'bar') [outer=(4), stable]
+
 opt expect-not=GenerateTrigramSimilarityInvertedIndexScans disable=(FoldNullBinaryRight) format=show-scalars
 SELECT * FROM trgm WHERE s % NULL::STRING
 ----
 select
- ├── columns: k:1!null i:2!null j:3 s:4
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-4)
+ ├── fd: (1)-->(2-5)
  ├── scan trgm
- │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
  │    ├── check constraint expressions
  │    │    └── in [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
  │    │         ├── variable: i:2
@@ -280,7 +555,7 @@ select
  │    │              ├── const: 2
  │    │              └── const: 3
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4)
+ │    └── fd: (1)-->(2-5)
  └── filters
       └── mod [outer=(4), stable]
            ├── variable: s:4
@@ -290,16 +565,16 @@ opt expect-not=GenerateTrigramSimilarityInvertedIndexScans set=(pg_trgm.similari
 SELECT * FROM trgm WHERE s % 'foo'
 ----
 select
- ├── columns: k:1!null i:2!null j:3 s:4
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-4)
+ ├── fd: (1)-->(2-5)
  ├── scan trgm
- │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
  │    ├── check constraint expressions
  │    │    └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4)
+ │    └── fd: (1)-->(2-5)
  └── filters
       └── s:4 % 'foo' [outer=(4), stable]
 
@@ -307,16 +582,16 @@ opt expect-not=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE s % ''
 ----
 select
- ├── columns: k:1!null i:2!null j:3 s:4
+ ├── columns: k:1!null i:2!null j:3 s:4 t:5
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-4)
+ ├── fd: (1)-->(2-5)
  ├── scan trgm
- │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── columns: k:1!null i:2!null j:3 s:4 t:5
  │    ├── check constraint expressions
  │    │    └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4)
+ │    └── fd: (1)-->(2-5)
  └── filters
       └── s:4 % '' [outer=(4), stable]
 
@@ -327,7 +602,7 @@ project
  └── select
       ├── index-join trgm
       │    └── inverted-filter
-      │         ├── inverted expression: /7
+      │         ├── inverted expression: /8
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
       │         │         ├── ["\x12  f\x00\x01", "\x12  f\x00\x01"]
@@ -335,7 +610,7 @@ project
       │         │         ├── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
       │         │         └── ["\x12oo \x00\x01", "\x12oo \x00\x01"]
       │         └── scan trgm@s_idx
-      │              └── inverted constraint: /7/1
+      │              └── inverted constraint: /8/1
       │                   └── spans
       │                        ├── ["\x12  f\x00\x01", "\x12  f\x00\x01"]
       │                        ├── ["\x12 fo\x00\x01", "\x12 fo\x00\x01"]

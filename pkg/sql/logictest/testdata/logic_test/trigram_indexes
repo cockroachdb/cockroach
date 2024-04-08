@@ -132,6 +132,12 @@ SELECT similarity(t, 'fo'), * FROM a@a_t_idx WHERE t % 'fo' ORDER BY a
 ----
 0.4  2  Foo
 
+query FIT
+SELECT similarity(t, 'fo'), * FROM a@a_t_idx WHERE t % 'fo' OR t % 'blar' ORDER BY a
+----
+0.4  2  Foo
+0    3  blah
+
 statement ok
 SET pg_trgm.similarity_threshold=.45
 
