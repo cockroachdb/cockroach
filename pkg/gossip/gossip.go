@@ -905,6 +905,11 @@ func (g *Gossip) AddInfoIfNotRedundant(key string, val []byte) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
+	return g.addInfoIfNotRedundantLocked(key, val)
+}
+
+// addInfoIfNotRedundantLocked implements AddInfoIfNotRedundant.
+func (g *Gossip) addInfoIfNotRedundantLocked(key string, val []byte) error {
 	info := g.mu.is.getInfo(key)
 
 	if info != nil {
@@ -917,6 +922,28 @@ func (g *Gossip) AddInfoIfNotRedundant(key string, val []byte) error {
 
 	// Something is different, so we do need to add the provided key/value.
 	return g.addInfoLocked(key, val, 0 /* ttl */)
+}
+
+// InfoToAdd contains a single Gossip info to be added to the network.
+type InfoToAdd struct {
+	Key string
+	Val []byte
+}
+
+// BulkAddInfoIfNotRedundant matches the semantics of AddInfoIfNotRedundant
+// except for a batch of gossip infos rather than for a single info. The
+// benefit of batching is not needing to repeatedly lock and unlock the gossip
+// mutex for each info.
+func (g *Gossip) BulkAddInfoIfNotRedundant(toAdd []InfoToAdd) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	for i := range toAdd {
+		if err := g.addInfoIfNotRedundantLocked(toAdd[i].Key, toAdd[i].Val); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // AddClusterID is a convenience method for gossipping the cluster ID. There's
