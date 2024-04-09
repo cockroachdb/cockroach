@@ -95,7 +95,9 @@ export const statusOptions = [
   { value: JOB_STATUS_REVERT_FAILED, name: "Revert Failed" },
 ];
 
-const ALL_JOB_STATUSES = new Set(statusOptions.map(option => option.value));
+export const ALL_JOB_STATUSES = new Set(
+  statusOptions.map(option => option.value),
+);
 
 /**
  * @param jobStatus job status - any string
