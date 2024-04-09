@@ -441,6 +441,14 @@ func authCert(
 			log.Ops.Warningf(ctx, "failed to get cert manager info: %v", err)
 		}
 
+		roleSubject = security.ApplyRootOrNodeDNFlag(roleSubject, systemIdentity)
+		if security.ClientCertSubjectRequired.Get(&execCfg.Settings.SV) && roleSubject == nil {
+			return errors.Newf(
+				"db user %v does not have a distinguished name set which subject_required cluster setting mandates",
+				systemIdentity.Normalized(),
+			)
+		}
+
 		hook, err := security.UserAuthCertHook(
 			false, /*insecure*/
 			&tlsState,

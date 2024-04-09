@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -119,12 +120,12 @@ type UserAuthHook func(
 	clientConnection bool,
 ) error
 
-// applyRootOrNodeDNFlag returns distinguished name set for root or node user
+// ApplyRootOrNodeDNFlag returns distinguished name set for root or node user
 // via root-cert-distinguished-name and node-cert-distinguished flags
 // respectively if systemIdentity conforms to one of these 2 users. It may also
 // return previously set subject option and systemIdentity is not root or node.
 // Root and Node roles cannot have subject role option set for them.
-func applyRootOrNodeDNFlag(
+func ApplyRootOrNodeDNFlag(
 	previouslySetRoleSubject *ldap.DN, systemIdentity username.SQLUsername,
 ) (dn *ldap.DN) {
 	dn = previouslySetRoleSubject
@@ -160,6 +161,17 @@ func CheckCertDNMatchesRootDNorNodeDN(
 		}
 	}
 	return rootOrNodeDNSet, certDNMatchesRootOrNodeDN
+}
+
+// CheckRootAndNodeSubjectRequiredSatisfied mandates root and node users to have
+// valid DNs set if subject_required cluster setting is set to true.
+func CheckRootAndNodeSubjectRequiredSatisfied(sv *settings.Values) bool {
+	if ClientCertSubjectRequired.Get(sv) {
+		rootDN := rootSubjectMu.getDN()
+		nodeDN := nodeSubjectMu.getDN()
+		return rootDN != nil && nodeDN != nil
+	}
+	return true
 }
 
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
@@ -297,8 +309,6 @@ func UserAuthCertHook(
 		if IsTenantCertificate(peerCert) {
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
-
-		roleSubject = applyRootOrNodeDNFlag(roleSubject, systemIdentity)
 
 		var certSubject *ldap.DN
 		if roleSubject != nil {

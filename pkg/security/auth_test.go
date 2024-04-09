@@ -458,6 +458,7 @@ func TestAuthenticationHook(t *testing.T) {
 				}
 			}
 
+			roleSubject = security.ApplyRootOrNodeDNFlag(roleSubject, tc.username)
 			hook, err := security.UserAuthCertHook(
 				tc.insecure,
 				makeFakeTLSState(t, tc.tlsSpec),

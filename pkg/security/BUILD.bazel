@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "auth.go",
         "cert_expiry_cache.go",
+        "cert_settings.go",
         "certificate_loader.go",
         "certificate_manager.go",
         "certificate_metrics.go",

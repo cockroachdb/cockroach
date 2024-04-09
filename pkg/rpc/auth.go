@@ -309,13 +309,19 @@ func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, er
 	// matches our own). The client could also present a certificate with subject
 	// DN equalling rootSubject or nodeSubject set using
 	// root-cert-distinguished-name and node-cert-distinguished-name cli flags
-	// respectively.
+	// respectively. Additionally if subject_required cluster setting is set, both
+	// root and node users must have a valid DN set.
 	//
 	// TODO(benesch): the vast majority of RPCs should be limited to
 	// just NodeUser. This is not a security concern, as RootUser has
 	// access to read and write all data, merely good hygiene. For
 	// example, there is no reason to permit the root user to send raw
 	// Raft RPCs.
+	if !security.CheckRootAndNodeSubjectRequiredSatisfied(a.sv) {
+		return nil, authErrorf(
+			"root and node roles do not have valid DNs set which subject_required cluster setting mandates",
+		)
+	}
 	rootOrNodeDNSet, certDNMatchesRootOrNodeDN := security.CheckCertDNMatchesRootDNorNodeDN(clientCert)
 	if rootOrNodeDNSet && !certDNMatchesRootOrNodeDN {
 		return nil, authErrorf(
