@@ -737,7 +737,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		// NO_FULL_SCAN hint (isUnfiltered is false for partial indexes), but if the
 		// user has explicitly forced the partial index *and* used NO_FULL_SCAN, we
 		// disallow the full index scan.
-		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan(md)) {
+		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan()) {
 			return execPlan{}, colOrdMap{}, fmt.Errorf("could not produce a query plan conforming to the NO_FULL_SCAN hint")
 		}
 	}

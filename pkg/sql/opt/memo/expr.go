@@ -844,7 +844,7 @@ func (s *ScanPrivate) IsUnfiltered(md *opt.Metadata) bool {
 
 // IsFullIndexScan returns true if the ScanPrivate will produce all rows in the
 // index.
-func (s *ScanPrivate) IsFullIndexScan(md *opt.Metadata) bool {
+func (s *ScanPrivate) IsFullIndexScan() bool {
 	return (s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
 		s.InvertedConstraint == nil &&
 		s.HardLimit == 0
