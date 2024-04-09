@@ -44,7 +44,7 @@ go_library(
 
 go_test(
     name = "slstorage_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "key_encoder_test.go",
         "main_test.go",

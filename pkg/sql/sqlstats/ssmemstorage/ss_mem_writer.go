@@ -319,7 +319,7 @@ func (s *Container) RecordTransaction(
 	// fingerprints for this app. We also abort the operation and return an error.
 	if created {
 		estimatedMemAllocBytes :=
-			stats.sizeUnsafe() + key.Size() + 8 /* hash of transaction key */
+			stats.sizeUnsafeLocked() + key.Size() + 8 /* hash of transaction key */
 		if err := func() error {
 			s.mu.Lock()
 			defer s.mu.Unlock()
