@@ -115,7 +115,7 @@ functions along with the number of arguments and the return type of the overload
    SELECT p.proname, p.pronargs, t.typname
    FROM pg_proc p, pg_type t
    WHERE p.provolatile='s' and p.prorettype = t.oid and
-         p.proiswindow=false and p.proisagg=false and p.proretset=false
+         p.prokind='f' and p.proretset=false
    ORDER BY proname
 
                             proname                            | pronargs |   typname

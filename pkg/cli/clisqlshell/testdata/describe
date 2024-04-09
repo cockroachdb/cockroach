@@ -609,7 +609,7 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html"
 pg_catalog,pg_prepared_xacts,table,node,NULL,permanent,prefix,"prepared transactions (empty - feature does not exist)
 https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html"
 pg_catalog,pg_proc,table,node,NULL,permanent,prefix,"built-in functions (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-proc.html"
+https://www.postgresql.org/docs/16/catalog-pg-proc.html"
 pg_catalog,pg_proc_oid_idx,index,node,NULL,permanent,prefix,
 pg_catalog,pg_publication,table,node,NULL,permanent,prefix,pg_publication was created for compatibility and is currently unimplemented
 pg_catalog,pg_publication_rel,table,node,NULL,permanent,prefix,pg_publication_rel was created for compatibility and is currently unimplemented
@@ -2179,7 +2179,7 @@ List of functions:
          END AS "Type"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND (FALSE OR p.proiswindow) AND p.proname LIKE '%rank%' ORDER BY 1, 2, 4
+    WHERE TRUE  AND (FALSE OR p.prokind = 'w') AND p.proname LIKE '%rank%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type
 pg_catalog,dense_rank,int8,,window
 pg_catalog,percent_rank,float8,,window
@@ -2212,7 +2212,7 @@ List of functions:
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND (FALSE OR p.proiswindow) AND p.proname LIKE '%rank%' ORDER BY 1, 2, 4
+    WHERE TRUE  AND (FALSE OR p.prokind = 'w') AND p.proname LIKE '%rank%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
 pg_catalog,dense_rank,int8,,window,i,NULL,invoker,,dense_rank,Calculates the rank of the current row without gaps; this function counts peer groups.
 pg_catalog,percent_rank,float8,,window,i,NULL,invoker,,percent_rank,Calculates the relative rank of the current row: (rank - 1) / (total rows - 1).
@@ -2235,7 +2235,7 @@ List of functions:
          END AS "Type"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND (FALSE OR p.proisagg) AND p.proname LIKE 'xor%' ORDER BY 1, 2, 4
+    WHERE TRUE  AND (FALSE OR p.prokind = 'a') AND p.proname LIKE 'xor%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type
 pg_catalog,xor_agg,bytea,bytea,agg
 pg_catalog,xor_agg,int8,int8,agg
@@ -2267,7 +2267,7 @@ List of functions:
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND (FALSE OR p.proisagg) AND p.proname LIKE 'xor%' ORDER BY 1, 2, 4
+    WHERE TRUE  AND (FALSE OR p.prokind = 'a') AND p.proname LIKE 'xor%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
 pg_catalog,xor_agg,bytea,bytea,agg,i,NULL,invoker,,xor_agg,Calculates the bitwise XOR of the selected values.
 pg_catalog,xor_agg,int8,int8,agg,i,NULL,invoker,,xor_agg,Calculates the bitwise XOR of the selected values.
@@ -2289,7 +2289,7 @@ List of functions:
          END AS "Type"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND NOT p.proisagg AND (p.prokind IS NULL OR p.prokind <> 'p') AND NOT p.proiswindow
+    WHERE TRUE  AND p.prokind != 'a' AND (p.prokind IS NULL OR p.prokind <> 'p') AND p.prokind != 'w'
       AND n.nspname !~ '^pg_'
       AND n.nspname <> 'information_schema'
       AND n.nspname <> 'crdb_internal'
@@ -2324,7 +2324,7 @@ List of functions:
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND NOT p.proisagg AND (p.prokind IS NULL OR p.prokind <> 'p') AND NOT p.proiswindow
+    WHERE TRUE  AND p.prokind != 'a' AND (p.prokind IS NULL OR p.prokind <> 'p') AND p.prokind != 'w'
       AND n.nspname !~ '^pg_'
       AND n.nspname <> 'information_schema'
       AND n.nspname <> 'crdb_internal'
@@ -2349,13 +2349,13 @@ List of functions:
          END AS "Type"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND (FALSE OR p.proisagg OR p.proiswindow) AND p.proname LIKE '%tile%' ORDER BY 1, 2, 4
+    WHERE TRUE  AND (FALSE OR p.prokind = 'a' OR p.prokind = 'w') AND p.proname LIKE '%tile%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type
 pg_catalog,ntile,int8,int8,window
-pg_catalog,percentile_cont,_interval,_float8,agg
 pg_catalog,percentile_cont,_float8,_float8,agg
-pg_catalog,percentile_cont,interval,float8,agg
+pg_catalog,percentile_cont,_interval,_float8,agg
 pg_catalog,percentile_cont,float8,float8,agg
+pg_catalog,percentile_cont,interval,float8,agg
 pg_catalog,percentile_disc,anyelement,_float8,agg
 pg_catalog,percentile_disc,anyelement,float8,agg
 
