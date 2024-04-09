@@ -34,6 +34,12 @@ import (
 )
 
 func makeTenantSpan(tenantID uint64) roachpb.Span {
+	// TODO(dt): remove conditional if we make MakeTenantSpan do this.
+	if tenantID == 1 {
+		return roachpb.Span{
+			Key: keys.TableDataMin, EndKey: keys.TableDataMax,
+		}
+	}
 	tenID := roachpb.MustMakeTenantID(tenantID)
 	return keys.MakeTenantSpan(tenID)
 }

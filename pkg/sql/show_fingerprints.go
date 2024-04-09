@@ -251,8 +251,14 @@ func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 		allRevisions = true
 	}
 
+	// TODO(dt): remove conditional if we make MakeTenantSpan do this.
+	span := keys.MakeTenantSpan(tid)
+	if tid.IsSystem() {
+		span = roachpb.Span{Key: keys.TableDataMin, EndKey: keys.TableDataMax}
+	}
+
 	fingerprint, err := params.p.FingerprintSpan(params.ctx,
-		keys.MakeTenantSpan(tid),
+		span,
 		startTime,
 		allRevisions,
 		false /* stripped */)
