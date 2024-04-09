@@ -168,41 +168,53 @@ func ParseTime(
 //
 // The dependsOnContext return value indicates if we had to consult the given
 // `now` value (either for the time or the local timezone).
+//
+// Memory allocations can be avoided by passing ParseHelper which can be re-used
+// across calls for batch parsing purposes, otherwise it can be nil.
 func ParseTimeWithoutTimezone(
-	now time.Time, dateStyle DateStyle, s string,
+	now time.Time, dateStyle DateStyle, s string, h *ParseHelper,
 ) (_ time.Time, dependsOnContext bool, _ error) {
-	fe := fieldExtract{
+	if h == nil {
+		h = &ParseHelper{}
+	}
+	h.fe = fieldExtract{
 		currentTime: now,
 		required:    timeRequiredFields,
 		wanted:      timeFields,
 	}
 
-	if err := fe.Extract(s); err != nil {
+	if err := h.fe.Extract(s); err != nil {
 		// It's possible that the user has given us a complete
 		// timestamp string; let's try again, accepting more fields.
-		fe = fieldExtract{
+		h.fe = fieldExtract{
 			currentTime: now,
 			dateStyle:   dateStyle,
 			required:    timeRequiredFields,
 			wanted:      dateTimeFields,
 		}
 
-		if err := fe.Extract(s); err != nil {
+		if err := h.fe.Extract(s); err != nil {
 			return TimeEpoch, false, parseError(err, "time", s)
 		}
 	}
-	res := fe.MakeTimeWithoutTimezone()
-	return res, fe.currentTimeUsed, nil
+	res := h.fe.MakeTimeWithoutTimezone()
+	return res, h.fe.currentTimeUsed, nil
 }
 
 // ParseTimestamp converts a string into a timestamp.
 //
 // The dependsOnContext return value indicates if we had to consult the given
 // `now` value (either for the time or the local timezone).
+//
+// Memory allocations can be avoided by passing ParseHelper which can be re-used
+// across calls for batch parsing purposes, otherwise it can be nil.
 func ParseTimestamp(
-	now time.Time, dateStyle DateStyle, s string,
+	now time.Time, dateStyle DateStyle, s string, h *ParseHelper,
 ) (_ time.Time, dependsOnContext bool, _ error) {
-	fe := fieldExtract{
+	if h == nil {
+		h = &ParseHelper{}
+	}
+	h.fe = fieldExtract{
 		dateStyle:   dateStyle,
 		currentTime: now,
 		// A timestamp only actually needs a date component; the time
@@ -211,11 +223,11 @@ func ParseTimestamp(
 		wanted:   dateTimeFields,
 	}
 
-	if err := fe.Extract(s); err != nil {
+	if err := h.fe.Extract(s); err != nil {
 		return TimeEpoch, false, parseError(err, "timestamp", s)
 	}
-	res := fe.MakeTimestamp()
-	return res, fe.currentTimeUsed, nil
+	res := h.fe.MakeTimestamp()
+	return res, h.fe.currentTimeUsed, nil
 }
 
 // ParseTimestampWithoutTimezone converts a string into a timestamp, stripping
@@ -231,10 +243,16 @@ func ParseTimestamp(
 //
 // The dependsOnContext return value indicates if we had to consult the given
 // `now` value (either for the time or the local timezone).
+//
+// Memory allocations can be avoided by passing ParseHelper which can be re-used
+// across calls for batch parsing purposes, otherwise it can be nil.
 func ParseTimestampWithoutTimezone(
-	now time.Time, dateStyle DateStyle, s string,
+	now time.Time, dateStyle DateStyle, s string, h *ParseHelper,
 ) (_ time.Time, dependsOnContext bool, _ error) {
-	fe := fieldExtract{
+	if h == nil {
+		h = &ParseHelper{}
+	}
+	h.fe = fieldExtract{
 		dateStyle:   dateStyle,
 		currentTime: now,
 		// A timestamp only actually needs a date component; the time
@@ -243,11 +261,11 @@ func ParseTimestampWithoutTimezone(
 		wanted:   dateTimeFields,
 	}
 
-	if err := fe.Extract(s); err != nil {
+	if err := h.fe.Extract(s); err != nil {
 		return TimeEpoch, false, parseError(err, "timestamp", s)
 	}
-	res := fe.MakeTimestampWithoutTimezone()
-	return res, fe.currentTimeUsed, nil
+	res := h.fe.MakeTimestampWithoutTimezone()
+	return res, h.fe.currentTimeUsed, nil
 }
 
 // badFieldPrefixError constructs an error with pg code InvalidDatetimeFormat.
