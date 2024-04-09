@@ -62,12 +62,7 @@ func (a *rawNodeAdapter) Ready() <-chan Ready { return nil }
 
 // Node takes more contexts. Easy enough to fix.
 
-func (a *rawNodeAdapter) Campaign(context.Context) error { return a.RawNode.Campaign() }
-func (a *rawNodeAdapter) ReadIndex(_ context.Context, rctx []byte) error {
-	a.RawNode.ReadIndex(rctx)
-	// RawNode swallowed the error in ReadIndex, it probably should not do that.
-	return nil
-}
+func (a *rawNodeAdapter) Campaign(context.Context) error             { return a.RawNode.Campaign() }
 func (a *rawNodeAdapter) Step(_ context.Context, m pb.Message) error { return a.RawNode.Step(m) }
 func (a *rawNodeAdapter) Propose(_ context.Context, data []byte) error {
 	return a.RawNode.Propose(data)
@@ -505,53 +500,6 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	require.Len(t, entries, 3)
 	assert.Equal(t, ccdata1, entries[0].Data)
 	assert.Equal(t, ccdata2, entries[2].Data)
-}
-
-// TestRawNodeReadIndex ensures that Rawnode.ReadIndex sends the MsgReadIndex message
-// to the underlying raft. It also ensures that ReadState can be read out.
-func TestRawNodeReadIndex(t *testing.T) {
-	var msgs []pb.Message
-	appendStep := func(r *raft, m pb.Message) error {
-		msgs = append(msgs, m)
-		return nil
-	}
-	wrs := []ReadState{{Index: uint64(1), RequestCtx: []byte("somedata")}}
-
-	s := newTestMemoryStorage(withPeers(1))
-	c := newTestConfig(1, 10, 1, s)
-	rawNode, err := NewRawNode(c)
-	require.NoError(t, err)
-
-	rawNode.raft.readStates = wrs
-	// ensure the ReadStates can be read out
-	assert.True(t, rawNode.HasReady())
-	rd := rawNode.Ready()
-	assert.Equal(t, wrs, rd.ReadStates)
-	s.Append(rd.Entries)
-	rawNode.Advance(rd)
-	// ensure raft.readStates is reset after advance
-	assert.Nil(t, rawNode.raft.readStates)
-
-	wrequestCtx := []byte("somedata2")
-	rawNode.Campaign()
-	for {
-		rd = rawNode.Ready()
-		s.Append(rd.Entries)
-
-		if rd.SoftState.Lead == rawNode.raft.id {
-			rawNode.Advance(rd)
-
-			// Once we are the leader, issue a ReadIndex request
-			rawNode.raft.step = appendStep
-			rawNode.ReadIndex(wrequestCtx)
-			break
-		}
-		rawNode.Advance(rd)
-	}
-	// ensure that MsgReadIndex message is sent to the underlying raft
-	require.Len(t, msgs, 1)
-	assert.Equal(t, pb.MsgReadIndex, msgs[0].Type)
-	assert.Equal(t, wrequestCtx, msgs[0].Entries[0].Data)
 }
 
 // TestBlockProposal from node_test.go has no equivalent in rawNode because there is
