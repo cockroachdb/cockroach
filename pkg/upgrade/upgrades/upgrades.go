@@ -114,6 +114,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not preserve the multiregion configuration of the system database"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"add the span_counts table to the system tenant",
+		clusterversion.V24_1_AddSpanCounts.Version(),
+		upgrade.NoPrecondition,
+		addSpanCountTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
