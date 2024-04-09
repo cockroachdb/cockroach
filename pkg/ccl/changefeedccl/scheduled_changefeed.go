@@ -243,11 +243,11 @@ type scheduledChangefeedSpec struct {
 
 func getFirstRunOpt(evalCtx *eval.Context, opts map[string]string) (*time.Time, error) {
 	if v, ok := opts[optFirstRun]; ok {
-		firstRun, _, err := tree.ParseDTimestampTZ(evalCtx, v, time.Microsecond)
+		firstRun, _, err := tree.ParseTimestampTZ(evalCtx, v, time.Microsecond)
 		if err != nil {
 			return nil, err
 		}
-		return &firstRun.Time, nil
+		return &firstRun, nil
 	}
 	return nil, nil
 }
