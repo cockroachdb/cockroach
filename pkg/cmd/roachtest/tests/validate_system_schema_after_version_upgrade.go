@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"math/rand"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -46,7 +47,9 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 
 		// Execute the SQL query.
 		rows := sqlRunner.QueryStr(t, sql)
-
+		sort.Slice(rows, func(i, j int) bool {
+			return strings.Compare(rows[i][0], rows[j][0]) < 0
+		})
 		// Extract return.
 		var sb strings.Builder
 		for _, row := range rows {
