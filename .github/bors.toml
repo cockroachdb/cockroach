@@ -3,7 +3,6 @@
 # List of commit statuses that must pass on the merge commit before it is
 # pushed to master.
 status = [
-       "Bazel Essential CI (Cockroach)",
        "acceptance",
        "check_generated_code",
        "docker_image_amd64",
@@ -16,6 +15,7 @@ status = [
        "local_roachtest_fips",
        "macos_amd64_build",
        "macos_arm64_build",
+       "unit_tests",
        "windows_build",
 ]
 
