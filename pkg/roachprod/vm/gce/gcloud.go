@@ -19,7 +19,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1108,17 +1107,8 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 			zones = []string{"us-central1-a"}
 		}
 
-		// Extracted from https://cloud.google.com/compute/docs/regions-zones#available
-		supportedT2AZones := []string{
-			"asia-southeast1-b", "asia-southeast1-c",
-			"europe-west4-a", "europe-west4-b", "europe-west4-c",
-			"us-central1-a", "us-central1-b", "us-central1-f",
-		}
-
-		for _, zone := range providerOpts.Zones {
-			if slices.Index(supportedT2AZones, zone) == -1 {
-				return nil, errors.Newf("T2A instances are not supported outside of [%s]", strings.Join(supportedT2AZones, ","))
-			}
+		if !IsSupportedT2AZone(providerOpts.Zones) {
+			return nil, errors.Newf("T2A instances are not supported outside of [%s]", strings.Join(SupportedT2AZones, ","))
 		}
 	}
 	return zones, nil
