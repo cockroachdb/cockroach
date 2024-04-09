@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,7 +53,7 @@ func TestNewActiveQueryProfiler(t *testing.T) {
 			profiler: &ActiveQueryProfiler{
 				profiler: makeProfiler(
 					newProfileStore(
-						dumpstore.NewStore(heapProfilerDirName, maxCombinedFileSize, nil),
+						dumpstore.NewStore(heapProfilerDirName, activeQueryCombinedFileSize, nil),
 						QueryFileNamePrefix,
 						QueryFileNameSuffix,
 						nil),
@@ -80,12 +81,13 @@ func TestNewActiveQueryProfiler(t *testing.T) {
 			test.profiler.resetInterval = nil
 			profiler.resetInterval = nil
 			require.Equal(t, test.profiler, profiler)
-			require.Equal(t, test.profiler, profiler)
 		})
 	}
 }
 
 func TestShouldDump(t *testing.T) {
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	createSettingFn := func(settingEnabled bool) *cluster.Settings {
 		s := cluster.MakeClusterSettings()
@@ -96,7 +98,7 @@ func TestShouldDump(t *testing.T) {
 	profiler := &ActiveQueryProfiler{
 		profiler: profiler{
 			store: newProfileStore(
-				dumpstore.NewStore(heapProfilerDirName, maxCombinedFileSize, nil),
+				dumpstore.NewStore(heapProfilerDirName, activeQueryCombinedFileSize, nil),
 				QueryFileNamePrefix,
 				QueryFileNameSuffix,
 				nil),
@@ -201,6 +203,8 @@ func TestShouldDump(t *testing.T) {
 }
 
 func TestMaybeDumpQueries_PanicHandler(t *testing.T) {
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	memLimitFn = cgroupFnWithReturn(mbToBytes(256), "", nil)
 	s := &cluster.Settings{}

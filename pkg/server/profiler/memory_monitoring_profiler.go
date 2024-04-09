@@ -44,6 +44,13 @@ type MemoryMonitoringProfiler struct {
 const memMonitoringFileNamePrefix = "memmonitoring"
 const memMonitoringFileNameSuffix = ".txt"
 
+var memMonitoringCombinedFileSize = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"server.mem_monitoring.total_dump_size_limit",
+	"maximum combined disk size of preserved mem monitoring profiles",
+	4<<20, // 4MiB
+)
+
 // NewMemoryMonitoringProfiler returns a new MemoryMonitoringProfiler. dir is
 // the directory in which memory monitoring dumps are to be stored.
 func NewMemoryMonitoringProfiler(
@@ -53,7 +60,7 @@ func NewMemoryMonitoringProfiler(
 		return nil, errors.AssertionFailedf("need to specify dir for MemoryMonitoringProfiler")
 	}
 
-	dumpStore := dumpstore.NewStore(dir, maxCombinedFileSize, st)
+	dumpStore := dumpstore.NewStore(dir, memMonitoringCombinedFileSize, st)
 	mmp := &MemoryMonitoringProfiler{
 		profiler: makeProfiler(
 			newProfileStore(dumpStore, memMonitoringFileNamePrefix, memMonitoringFileNameSuffix, st),

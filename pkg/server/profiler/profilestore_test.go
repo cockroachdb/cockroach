@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -42,6 +43,8 @@ func TestMakeFileName(t *testing.T) {
 }
 
 func TestParseFileName(t *testing.T) {
+	defer log.Scope(t).Close(t)
+
 	z := time.Time{}
 	testData := []struct {
 		f         string
@@ -58,10 +61,6 @@ func TestParseFileName(t *testing.T) {
 
 		// New format.
 		{"memprof.2020-06-15T13_19_19.543.123456", time.Date(2020, 6, 15, 13, 19, 19, 543000000, time.UTC), 123456, false},
-		// v20.2 transition formats.
-		// TODO(knz): Remove in v21.1.
-		{"memprof.2020-06-15T13_19_19.54.123456", time.Date(2020, 6, 15, 13, 19, 19, 540000000, time.UTC), 123456, false},
-		{"memprof.2020-06-15T13_19_19.5.123456", time.Date(2020, 6, 15, 13, 19, 19, 500000000, time.UTC), 123456, false},
 	}
 
 	s := profileStore{prefix: heapFileNamePrefix}
@@ -77,6 +76,8 @@ func TestParseFileName(t *testing.T) {
 }
 
 func TestCleanupLastRampup(t *testing.T) {
+	defer log.Scope(t).Close(t)
+
 	testData := []struct {
 		startFiles []string
 		maxP       int64

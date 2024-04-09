@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -43,6 +44,13 @@ const statsFileNamePrefix = "memstats"
 // statsFileNameSuffix is the suffix of memory stats dumps.
 const statsFileNameSuffix = ".txt"
 
+var memStatsCombinedFileSize = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"server.mem_stats.total_dump_size_limit",
+	"maximum combined disk size of preserved memstats profiles",
+	32<<20, // 32MiB
+)
+
 // NewStatsProfiler creates a StatsProfiler. dir is the
 // directory in which profiles are to be stored.
 func NewStatsProfiler(
@@ -52,7 +60,7 @@ func NewStatsProfiler(
 		return nil, errors.AssertionFailedf("need to specify dir for NewStatsProfiler")
 	}
 
-	dumpStore := dumpstore.NewStore(dir, maxCombinedFileSize, st)
+	dumpStore := dumpstore.NewStore(dir, memStatsCombinedFileSize, st)
 
 	hp := &StatsProfiler{
 		profiler: makeProfiler(
