@@ -50,13 +50,6 @@ num=1
 # Replicated lock acquisition will cause us to forget the unreplicated lock.
 acquire r=req2 k=a durability=r strength=intent
 ----
-num=1
- lock: "a"
-   queued locking requests:
-    active: false req: 2 promoting: true, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
-
-dequeue r=req2
-----
 num=0
 
 # ------------------------------------------------------------------------------
