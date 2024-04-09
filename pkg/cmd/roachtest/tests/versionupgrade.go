@@ -111,6 +111,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt := mixedversion.NewTest(
 		testCtx, t, t.L(), c, c.All(),
 		mixedversion.AlwaysUseFixtures, mixedversion.AlwaysUseLatestPredecessors,
+		mixedversion.NumUpgrades(1),
 	)
 	mvt.OnStartup(
 		"setup schema changer workload",
