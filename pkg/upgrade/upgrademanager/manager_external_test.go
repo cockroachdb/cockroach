@@ -247,7 +247,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	targetCV := clusterversion.V23_2Start + 1
+	targetCV := clusterversion.PreviousRelease + 1
 	targetCVJSON, err := protoreflect.MessageToJSON(&clusterversion.ClusterVersion{Version: targetCV.Version()},
 		protoreflect.FmtFlags{EmitDefaults: false})
 	require.NoError(t, err)
@@ -368,7 +368,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// We're going to be migrating from startCV to endCV.
-	startCVKey := clusterversion.V23_1
+	startCVKey := clusterversion.MinSupported
 	startCV := startCVKey.Version()
 	endCVKey := startCVKey + 1
 	endCV := endCVKey.Version()
