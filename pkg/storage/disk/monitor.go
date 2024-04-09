@@ -180,13 +180,6 @@ type monitoredDisk struct {
 	}
 }
 
-func (m *monitoredDisk) recordStats(stats Stats) {
-	m.stats.Lock()
-	defer m.stats.Unlock()
-	m.stats.lastMeasurement = stats
-	m.stats.err = nil
-}
-
 // Monitor provides statistics for an individual disk.
 type Monitor struct {
 	*monitoredDisk
