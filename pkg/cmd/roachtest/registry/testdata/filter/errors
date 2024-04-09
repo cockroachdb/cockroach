@@ -10,7 +10,7 @@ error: invalid owner "badowner"
 
 filter suite=badsuite
 ----
-error: invalid suite "badsuite"; valid suites are nightly,weekly,release_qualification,orm,driver,tool,smoketest,quick,fixtures,pebble,pebble_nightly_write,pebble_nightly_ycsb,pebble_nightly_ycsb_race,roachtest
+error: invalid suite "badsuite"; valid suites are nightly,weekly,release_qualification,orm,driver,tool,smoketest,quick,fixtures,pebble,pebble_nightly_write,pebble_nightly_ycsb,pebble_nightly_ycsb_race,roachtest,acceptance
 
 filter cloud=badcloud owner=badowner suite=badsuite
 ----
