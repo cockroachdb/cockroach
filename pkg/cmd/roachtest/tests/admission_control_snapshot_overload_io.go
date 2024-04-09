@@ -89,34 +89,30 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			}
 
 			// Initialize the kv database,
-			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", time.Minute))
+			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", time.Hour))
 			c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
-				"./cockroach workload init kv --drop --splits=1000 --insert-count=100000000 "+
+				"./cockroach workload init kv --drop --insert-count=100000000 "+
 					"--max-block-bytes=4096 --min-block-bytes=4096 {pgurl:1}")
-
-			t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
-			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
-			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, option.WithNodes(c.Node(crdbNodes+1)),
-					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --histograms=%s/stats.json --read-percent=50 --max-block-bytes=4096 --min-block-bytes=4096 --max-rate=200 --concurrency=256 {pgurl:1-%d}",
-						t.PerfArtifactsDir(), crdbNodes))
-				return nil
-			})
-
-			// Wait for nodes to get populated.
-			t.Status(fmt.Sprintf("waiting for kv workload to populate data for %s", time.Minute))
-			time.Sleep(time.Minute)
 
 			// Kill node 3.
 			t.Status(fmt.Sprintf("killing node 3... (<%s)", time.Minute))
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
 
+			t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
+			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
+			m.Go(func(ctx context.Context) error {
+				c.Run(ctx, option.WithNodes(c.Node(crdbNodes+1)),
+					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --splits=1000 --histograms=%s/stats.json --read-percent=50 --max-block-bytes=4096 --min-block-bytes=4096 --max-rate=400 --concurrency=256 {pgurl:1}",
+						t.PerfArtifactsDir()))
+				return nil
+			})
+
 			// Wait for raft log truncation.
-			t.Status(fmt.Sprintf("waiting for raft log truncation (<%s)", time.Hour))
-			time.Sleep(time.Hour)
+			t.Status(fmt.Sprintf("waiting for raft log truncation (<%s)", time.Hour*2))
+			time.Sleep(time.Hour * 2)
 
 			// Start node 3.
-			t.Status(fmt.Sprintf("killing node 3... (<%s)", time.Minute))
+			t.Status(fmt.Sprintf("start node 3... (<%s)", time.Minute))
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
 
 			//t.Status(fmt.Sprintf("starting snapshot transfers for %s (<%s)", totalTransferDuration, time.Minute))
