@@ -1016,7 +1016,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, proname, pronamespace, proowner, prolang, procost, prorows, provariadic, protransform, proisagg, proiswindow, prosecdef, proleakproof, proisstrict, proretset, provolatile, proparallel, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults, protrftypes, prosrc, probin, proconfig, proacl, prokind, prosupport)
+  columns: (oid, proname, pronamespace, proowner, prolang, procost, prorows, provariadic, prosupport, prokind, prosecdef, proleakproof, proisstrict, proretset, provolatile, proparallel, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults, protrftypes, prosrc, probin, prosqlbody, proconfig, proacl)
   estimated row count: 10 (missing stats)
   table: pg_proc@pg_proc_oid_idx
   spans: [/array_agg - /array_agg]
@@ -1028,7 +1028,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, proname, pronamespace, proowner, prolang, procost, prorows, provariadic, protransform, proisagg, proiswindow, prosecdef, proleakproof, proisstrict, proretset, provolatile, proparallel, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults, protrftypes, prosrc, probin, proconfig, proacl, prokind, prosupport)
+  columns: (oid, proname, pronamespace, proowner, prolang, procost, prorows, provariadic, prosupport, prokind, prosecdef, proleakproof, proisstrict, proretset, provolatile, proparallel, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults, protrftypes, prosrc, probin, prosqlbody, proconfig, proacl)
   estimated row count: 10 (missing stats)
   table: pg_proc@pg_proc_oid_idx
   spans: [/12345 - /12345]

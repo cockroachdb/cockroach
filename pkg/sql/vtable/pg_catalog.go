@@ -589,7 +589,7 @@ CREATE TABLE pg_catalog.pg_prepared_statements (
 )`
 
 // PGCatalogProc describes the schema of the pg_catalog.pg_proc table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-proc.html,
+// https://www.postgresql.org/docs/16/catalog-pg-proc.html,
 const PGCatalogProc = `
 CREATE TABLE pg_catalog.pg_proc (
 	oid OID,
@@ -600,9 +600,8 @@ CREATE TABLE pg_catalog.pg_proc (
 	procost FLOAT4,
 	prorows FLOAT4,
 	provariadic OID,
-	protransform STRING,
-	proisagg BOOL,
-	proiswindow BOOL,
+	prosupport REGPROC,
+	prokind "char",
 	prosecdef BOOL,
 	proleakproof BOOL,
 	proisstrict BOOL,
@@ -620,10 +619,9 @@ CREATE TABLE pg_catalog.pg_proc (
 	protrftypes OID[],
 	prosrc STRING,
 	probin STRING,
+	prosqlbody STRING,
 	proconfig STRING[],
 	proacl STRING[],
-	prokind "char",
-	prosupport REGPROC,
 	INDEX(oid)
 )`
 
