@@ -862,3 +862,14 @@ SELECT -488 OF FROM t;
 ----
 of
 -488
+
+# Regression test for incorrect evaluation of the IN filter due to integer
+# overflow when working with INT4 type (#102864).
+statement ok
+CREATE TABLE t102864 (c INT4);
+INSERT INTO t102864 (c) VALUES (0);
+
+query I
+SELECT c FROM t102864 WHERE c IN (0, 862827606027206657::INT8);
+----
+0
