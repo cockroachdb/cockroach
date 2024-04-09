@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-23.1
-
 subtest privileges_mutations
 
 statement ok

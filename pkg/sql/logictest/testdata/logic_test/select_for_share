@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-23.1
-
 statement ok
 CREATE TABLE t(a INT PRIMARY KEY);
 INSERT INTO t VALUES(1);

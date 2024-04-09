@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-23.1 !local-mixed-23.2
+# LogicTest: !local-mixed-23.2
 
 # Regression test for #120916 - the nested routine is not in tail-call position,
 # and so cannot be a target for TCO.
