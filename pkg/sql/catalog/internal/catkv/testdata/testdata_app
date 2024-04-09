@@ -217,6 +217,9 @@ catalog:
   "007":
     descriptor: relation
     namespace: (1, 29, "descriptor_id_seq")
+  "008":
+    descriptor: relation
+    namespace: (1, 29, "tenants")
   "009":
     descriptor: relation
     namespace: (1, 29, "region_liveness")
@@ -306,49 +309,67 @@ catalog:
   "044":
     descriptor: relation
     namespace: (1, 29, "database_role_settings")
+  "045":
+    descriptor: relation
+    namespace: (1, 29, "tenant_usage")
   "046":
     descriptor: relation
     namespace: (1, 29, "sql_instances")
+  "047":
+    descriptor: relation
+    namespace: (1, 29, "span_configurations")
   "048":
     descriptor: relation
     namespace: (1, 29, "role_id_seq")
   "050":
     descriptor: relation
-    namespace: (1, 29, "span_count")
+    namespace: (1, 29, "tenant_settings")
   "051":
     descriptor: relation
-    namespace: (1, 29, "privileges")
+    namespace: (1, 29, "span_count")
   "052":
     descriptor: relation
-    namespace: (1, 29, "external_connections")
+    namespace: (1, 29, "privileges")
   "053":
     descriptor: relation
-    namespace: (1, 29, "job_info")
+    namespace: (1, 29, "external_connections")
   "054":
     descriptor: relation
-    namespace: (1, 29, "span_stats_unique_keys")
+    namespace: (1, 29, "job_info")
   "055":
     descriptor: relation
-    namespace: (1, 29, "span_stats_buckets")
+    namespace: (1, 29, "span_stats_unique_keys")
   "056":
     descriptor: relation
-    namespace: (1, 29, "span_stats_samples")
+    namespace: (1, 29, "span_stats_buckets")
   "057":
     descriptor: relation
-    namespace: (1, 29, "span_stats_tenant_boundaries")
+    namespace: (1, 29, "span_stats_samples")
   "058":
     descriptor: relation
-    namespace: (1, 29, "statement_activity")
+    namespace: (1, 29, "span_stats_tenant_boundaries")
   "059":
     descriptor: relation
-    namespace: (1, 29, "transaction_activity")
+    namespace: (1, 29, "task_payloads")
   "060":
     descriptor: relation
-    namespace: (1, 29, "mvcc_statistics")
+    namespace: (1, 29, "tenant_tasks")
   "061":
     descriptor: relation
-    namespace: (1, 29, "transaction_execution_insights")
+    namespace: (1, 29, "statement_activity")
   "062":
+    descriptor: relation
+    namespace: (1, 29, "transaction_activity")
+  "063":
+    descriptor: relation
+    namespace: (1, 29, "tenant_id_seq")
+  "064":
+    descriptor: relation
+    namespace: (1, 29, "mvcc_statistics")
+  "065":
+    descriptor: relation
+    namespace: (1, 29, "transaction_execution_insights")
+  "066":
     descriptor: relation
     namespace: (1, 29, "statement_execution_insights")
   "100":

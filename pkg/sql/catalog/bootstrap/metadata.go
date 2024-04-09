@@ -98,24 +98,6 @@ func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
 	ms.descs = append(ms.descs, desc)
 }
 
-// AddDescriptorForSystemTenant is like AddDescriptor but only for the system
-// tenant.
-func (ms *MetadataSchema) AddDescriptorForSystemTenant(desc catalog.Descriptor) {
-	if !ms.codec.ForSystemTenant() {
-		return
-	}
-	ms.AddDescriptor(desc)
-}
-
-// AddDescriptorForNonSystemTenant is like AddDescriptor but only for non-system
-// tenants.
-func (ms *MetadataSchema) AddDescriptorForNonSystemTenant(desc catalog.Descriptor) {
-	if ms.codec.ForSystemTenant() {
-		return
-	}
-	ms.AddDescriptor(desc)
-}
-
 // ForEachCatalogDescriptor iterates through each catalog.Descriptor object in
 // this schema.
 // iterutil.StopIteration is supported.
@@ -394,7 +376,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.ZonesTable)
 	target.AddDescriptor(systemschema.SettingsTable)
 	target.AddDescriptor(systemschema.DescIDSequence)
-	target.AddDescriptorForSystemTenant(systemschema.TenantsTable)
+	target.AddDescriptor(systemschema.TenantsTable)
 
 	// Add all the other system tables.
 	target.AddDescriptor(systemschema.LeaseTable())
@@ -441,14 +423,14 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.StatementStatisticsTable)
 	target.AddDescriptor(systemschema.TransactionStatisticsTable)
 	target.AddDescriptor(systemschema.DatabaseRoleSettingsTable)
-	target.AddDescriptorForSystemTenant(systemschema.TenantUsageTable)
+	target.AddDescriptor(systemschema.TenantUsageTable)
 	target.AddDescriptor(systemschema.SQLInstancesTable())
-	target.AddDescriptorForSystemTenant(systemschema.SpanConfigurationsTable)
+	target.AddDescriptor(systemschema.SpanConfigurationsTable)
 
 	// Tables introduced in 22.1.
 
-	target.AddDescriptorForSystemTenant(systemschema.TenantSettingsTable)
-	target.AddDescriptorForNonSystemTenant(systemschema.SpanCountTable)
+	target.AddDescriptor(systemschema.TenantSettingsTable)
+	target.AddDescriptor(systemschema.SpanCountTable)
 
 	// Tables introduced in 22.2.
 	target.AddDescriptor(systemschema.SystemPrivilegeTable)
@@ -461,11 +443,11 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.SpanStatsBucketsTable)
 	target.AddDescriptor(systemschema.SpanStatsSamplesTable)
 	target.AddDescriptor(systemschema.SpanStatsTenantBoundariesTable)
-	target.AddDescriptorForSystemTenant(systemschema.SystemTaskPayloadsTable)
-	target.AddDescriptorForSystemTenant(systemschema.SystemTenantTasksTable)
+	target.AddDescriptor(systemschema.SystemTaskPayloadsTable)
+	target.AddDescriptor(systemschema.SystemTenantTasksTable)
 	target.AddDescriptor(systemschema.StatementActivityTable)
 	target.AddDescriptor(systemschema.TransactionActivityTable)
-	target.AddDescriptorForSystemTenant(systemschema.TenantIDSequence)
+	target.AddDescriptor(systemschema.TenantIDSequence)
 
 	// Tables introduced in 23.2.
 	target.AddDescriptor(systemschema.RegionLivenessTable)
@@ -485,7 +467,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 // NumSystemTablesForSystemTenant is the number of system tables defined on
 // the system tenant. This constant is only defined to avoid having to manually
 // update auto stats tests every time a new system table is added.
-const NumSystemTablesForSystemTenant = 55
+const NumSystemTablesForSystemTenant = 56
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
 // MetadataSchema.
