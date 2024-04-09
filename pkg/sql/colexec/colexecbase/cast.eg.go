@@ -11432,7 +11432,8 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v))
+							_h := evalCtx.GetDateHelper()
+							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v), _h)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11467,7 +11468,8 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v))
+							_h := evalCtx.GetDateHelper()
+							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v), _h)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11504,7 +11506,8 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v))
+							_h := evalCtx.GetDateHelper()
+							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v), _h)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11539,7 +11542,8 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v))
+							_h := evalCtx.GetDateHelper()
+							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v), _h)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11608,7 +11612,8 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v))
+							_h := evalCtx.GetDateHelper()
+							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v), _h)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11643,7 +11648,8 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v))
+							_h := evalCtx.GetDateHelper()
+							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v), _h)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11680,7 +11686,8 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v))
+							_h := evalCtx.GetDateHelper()
+							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v), _h)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11715,7 +11722,8 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v))
+							_h := evalCtx.GetDateHelper()
+							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v), _h)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}

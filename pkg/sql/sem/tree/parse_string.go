@@ -270,7 +270,7 @@ func ParseAndRequireStringHandler(
 	case types.TimestampFamily:
 		now := relativeParseTime(ctx)
 		var ts time.Time
-		if ts, _, err = pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s); err == nil {
+		if ts, _, err = pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s, dateParseHelper(ctx)); err == nil {
 			// Always normalize time to the current location.
 			if ts, err = checkTimeBounds(ts, TimeFamilyPrecisionToRoundDuration(t.Precision())); err == nil {
 				vh.TimestampTZ(ts)

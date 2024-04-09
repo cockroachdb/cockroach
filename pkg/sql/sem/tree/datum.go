@@ -2383,7 +2383,7 @@ func ParseDTime(
 
 	s = timeutil.ReplaceLibPQTimePrefix(s)
 
-	t, dependsOnContext, err := pgdate.ParseTimeWithoutTimezone(now, dateStyle(ctx), s)
+	t, dependsOnContext, err := pgdate.ParseTimeWithoutTimezone(now, dateStyle(ctx), s, dateParseHelper(ctx))
 	if err != nil {
 		return nil, false, MakeParseError(s, types.Time, err)
 	}
@@ -2723,7 +2723,7 @@ func ParseDTimestamp(
 	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimestamp, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, dependsOnContext, err := pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s)
+	t, dependsOnContext, err := pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s, dateParseHelper(ctx))
 	if err != nil {
 		return nil, false, err
 	}
@@ -3024,7 +3024,7 @@ func ParseDTimestampTZ(
 	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimestampTZ, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, dependsOnContext, err := pgdate.ParseTimestamp(now, dateStyle(ctx), s)
+	t, dependsOnContext, err := pgdate.ParseTimestamp(now, dateStyle(ctx), s, dateParseHelper(ctx))
 	if err != nil {
 		return nil, false, err
 	}
