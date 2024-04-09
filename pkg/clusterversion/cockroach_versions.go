@@ -309,6 +309,10 @@ const (
 	// to be pipelined.
 	V24_1_ReplicatedLockPipelining
 
+	// V24_1_AddSpanCounts is the migration that added the span_counts table to
+	// the system tenant to ensure it is a superset of secondary tenants.
+	V24_1_AddSpanCounts
+
 	numKeys
 )
 
@@ -377,6 +381,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1_GossipMaximumIOOverload:              {Major: 23, Minor: 2, Internal: 20},
 	V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 22},
 	V24_1_ReplicatedLockPipelining:             {Major: 23, Minor: 2, Internal: 24},
+	V24_1_AddSpanCounts:                        {Major: 23, Minor: 2, Internal: 26},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster
