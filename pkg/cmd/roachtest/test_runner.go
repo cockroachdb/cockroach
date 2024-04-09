@@ -1243,7 +1243,7 @@ func (r *testRunner) runTest(
 func getPreemptedVMNames(ctx context.Context, c *clusterImpl, l *logger.Logger) string {
 	preemptedVMs, err := c.GetPreemptedVMs(ctx, l)
 	if err != nil {
-		l.Printf("failed to check preempted VMs: %s", err)
+		l.Printf("failed to check preempted VMs:\n%+v", err)
 		return ""
 	}
 

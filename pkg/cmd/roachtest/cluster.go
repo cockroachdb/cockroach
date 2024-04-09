@@ -3005,27 +3005,28 @@ func (c *clusterImpl) GetPreemptedVMs(
 		return nil, nil
 	}
 
-	pattern := "^" + regexp.QuoteMeta(c.name) + "$" // exact match of the cluster name
-	cloudClusters, err := roachprod.List(l, false, pattern, vm.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	cDetails, ok := cloudClusters.Clusters[c.name]
+	cachedCluster, ok := roachprod.CachedCluster(c.name)
 	if !ok {
-		return nil, errors.Wrapf(errClusterNotFound, "%q", c.name)
+		var availableClusters []string
+		roachprod.CachedClusters(func(name string, _ int) {
+			availableClusters = append(availableClusters, name)
+		})
+
+		err := errors.Wrapf(errClusterNotFound, "%q", c.name)
+		return nil, errors.WithHintf(err, "\nAvailable clusters:\n%s", strings.Join(availableClusters, "\n"))
 	}
-	// Bucket cDetails.vms by provider
+
+	// Bucket cachedCluster.VMs by provider.
 	providerToVMs := make(map[string][]vm.VM)
-	for _, vm := range cDetails.VMs {
+	for _, vm := range cachedCluster.VMs {
 		providerToVMs[vm.Provider] = append(providerToVMs[vm.Provider], vm)
 	}
 
-	// Iterate through providerToVMs and call preemptedVMs for each provider
 	var allPreemptedVMs []vm.PreemptedVM
 	for provider, vms := range providerToVMs {
 		p := vm.Providers[provider]
 		if p.SupportsSpotVMs() {
-			preemptedVMS, err := p.GetPreemptedSpotVMs(l, vms, cDetails.CreatedAt)
+			preemptedVMS, err := p.GetPreemptedSpotVMs(l, vms, cachedCluster.CreatedAt)
 			if err != nil {
 				l.Errorf("failed to get preempted VMs for provider %s: %s", provider, err)
 				continue
