@@ -480,6 +480,8 @@ var startCtx struct {
 	serverSSLCertsDir      string
 	serverCertPrincipalMap []string
 	serverListenAddr       string
+	serverRootCertDN       string
+	serverNodeCertDN       string
 
 	// The TLS auto-handshake parameters.
 	initToken             string
@@ -533,6 +535,8 @@ func setStartContextDefaults() {
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
 	startCtx.serverCertPrincipalMap = nil
+	startCtx.serverRootCertDN = ""
+	startCtx.serverNodeCertDN = ""
 	startCtx.serverListenAddr = ""
 	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""
