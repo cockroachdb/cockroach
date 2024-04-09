@@ -174,7 +174,7 @@ func (sc *spanConfigIngestor) bufferRecord(
 	ctx context.Context, update *streampb.StreamedSpanConfigEntry,
 ) error {
 	sourceSpan := update.SpanConfig.Target.GetSpan()
-	destStartKey, ok, err := sc.rekeyer.RewriteKey(sourceSpan.Key, 0)
+	destStartKey, ok, err := sc.rekeyer.RewriteTenant(sourceSpan.Key)
 	if err != nil {
 		return err
 	}
@@ -182,7 +182,7 @@ func (sc *spanConfigIngestor) bufferRecord(
 		// No need to replicate the span cfgs for ephemeral tables in the app tenant
 		return nil
 	}
-	destEndKey, ok, err := sc.rekeyer.RewriteKey(sourceSpan.EndKey, 0)
+	destEndKey, ok, err := sc.rekeyer.RewriteTenant(sourceSpan.EndKey)
 	if err != nil {
 		return err
 	}

@@ -160,11 +160,10 @@ func ingestionPlanHook(
 		}
 		streamAddress = streamingccl.StreamAddress(streamURL.String())
 
-		if roachpb.IsSystemTenantName(roachpb.TenantName(sourceTenant)) ||
-			roachpb.IsSystemTenantName(roachpb.TenantName(dstTenantName)) ||
+		if roachpb.IsSystemTenantName(roachpb.TenantName(dstTenantName)) ||
 			roachpb.IsSystemTenantID(dstTenantID) {
-			return errors.Newf("neither the source tenant %q nor the destination tenant %q (%d) can be the system tenant",
-				sourceTenant, dstTenantName, dstTenantID)
+			return errors.Newf("the destination tenant %q (%d) cannot be the system tenant",
+				dstTenantName, dstTenantID)
 		}
 
 		// If we don't have a resume timestamp, make a new tenant

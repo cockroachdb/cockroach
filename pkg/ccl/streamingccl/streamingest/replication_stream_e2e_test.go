@@ -630,56 +630,63 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	skip.UnderRace(t, "multi-node test may time out under race")
 
 	ctx := context.Background()
-	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.MultitenantSingleClusterNumNodes = 3
 
-	// Track the number of unique addresses that were connected to
-	clientAddresses := make(map[string]struct{})
-	var addressesMu syncutil.Mutex
-	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
-			addressesMu.Lock()
-			defer addressesMu.Unlock()
-			clientAddresses[addr] = struct{}{}
-		},
-	}
+	testutils.RunTrueAndFalse(t, "fromSystem", func(t *testing.T, sys bool) {
+		args := replicationtestutils.DefaultTenantStreamingClustersArgs
+		args.MultitenantSingleClusterNumNodes = 3
 
-	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
-	defer cleanup()
+		// Track the number of unique addresses that were connected to
+		clientAddresses := make(map[string]struct{})
+		var addressesMu syncutil.Mutex
+		args.TestingKnobs = &sql.StreamingTestingKnobs{
+			BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
+				addressesMu.Lock()
+				defer addressesMu.Unlock()
+				clientAddresses[addr] = struct{}{}
+			},
+		}
 
-	// Make sure we have data on all nodes, so that we will have multiple
-	// connections and client addresses (and actually test multi-node).
-	replicationtestutils.CreateScatteredTable(t, c, 3)
+		if sys {
+			args.SrcTenantID = roachpb.SystemTenantID
+			args.SrcTenantName = "system"
+		}
+		c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
+		defer cleanup()
 
-	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+		// Make sure we have data on all nodes, so that we will have multiple
+		// connections and client addresses (and actually test multi-node).
+		replicationtestutils.CreateScatteredTable(t, c, 3)
 
-	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
-		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (1, 1)")
+		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+		jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+		jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+		c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+			tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
+			tenantSQL.Exec(t, "INSERT INTO d.x VALUES (1, 1)")
+		})
+
+		c.DestSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
+		jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+		c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+			tenantSQL.Exec(t, "INSERT INTO d.x VALUES (2, 2)")
+		})
+		c.DestSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
+		jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+		c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+			tenantSQL.Exec(t, "INSERT INTO d.x VALUES (3, 3)")
+		})
+
+		c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+
+		cutoverTime := c.DestSysServer.Clock().Now()
+		c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
+		c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
+
+		// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
+		require.Greater(t, len(clientAddresses), 1)
 	})
-
-	c.DestSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
-	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (2, 2)")
-	})
-	c.DestSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
-	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (3, 3)")
-	})
-
-	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
-
-	cutoverTime := c.DestSysServer.Clock().Now()
-	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
-	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
-
-	// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
-	require.Greater(t, len(clientAddresses), 1)
 }
 
 func TestSpecsPersistedOnlyAfterInitialPlan(t *testing.T) {
@@ -1258,70 +1265,75 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes too long under race")
 
-	ctx := context.Background()
-	regions := []string{"mars", "venus", "mercury"}
-	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.MultitenantSingleClusterNumNodes = 3
-	args.MultiTenantSingleClusterTestRegions = regions
-	marsNodeID := roachpb.NodeID(1)
+	testutils.RunTrueAndFalse(t, "fromSys", func(t *testing.T, sys bool) {
+		ctx := context.Background()
+		regions := []string{"mars", "venus", "mercury"}
+		args := replicationtestutils.DefaultTenantStreamingClustersArgs
+		args.MultitenantSingleClusterNumNodes = 3
+		args.MultiTenantSingleClusterTestRegions = regions
+		if sys {
+			args.SrcTenantID = roachpb.SystemTenantID
+			args.SrcTenantName = "system"
+		}
+		marsNodeID := roachpb.NodeID(1)
 
-	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
-	defer cleanup()
+		c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
+		defer cleanup()
 
-	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+		jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+		jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
-	c.SrcTenantSQL.Exec(t, "CREATE DATABASE test")
-	c.SrcTenantSQL.Exec(t, `ALTER DATABASE test CONFIGURE ZONE USING constraints = '[+region=mars]', num_replicas = 1;`)
-	c.SrcTenantSQL.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
-	c.SrcTenantSQL.Exec(t, "INSERT INTO test.x VALUES (1, 1)")
+		c.SrcTenantSQL.Exec(t, "CREATE DATABASE test")
+		c.SrcTenantSQL.Exec(t, `ALTER DATABASE test CONFIGURE ZONE USING constraints = '[+region=mars]', num_replicas = 1;`)
+		c.SrcTenantSQL.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
+		c.SrcTenantSQL.Exec(t, "INSERT INTO test.x VALUES (1, 1)")
 
-	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+		srcTime := c.SrcCluster.Server(0).Clock().Now()
+		c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 
-	checkLocalities := func(targetSpan roachpb.Span, scanner rangedesc.Scanner) func() error {
-		// make pageSize large enough to not affect the test
-		pageSize := 10000
-		init := func() {}
+		checkLocalities := func(targetSpan roachpb.Span, scanner rangedesc.Scanner) func() error {
+			// make pageSize large enough to not affect the test
+			pageSize := 10000
+			init := func() {}
 
-		return func() error {
-			return scanner.Scan(ctx, pageSize, init, targetSpan, func(descriptors ...roachpb.RangeDescriptor) error {
-				for _, desc := range descriptors {
-					for _, replica := range desc.InternalReplicas {
-						if replica.NodeID != marsNodeID {
-							return errors.Newf("found table data located on another node %d, desc %v",
-								replica.NodeID, desc)
+			return func() error {
+				return scanner.Scan(ctx, pageSize, init, targetSpan, func(descriptors ...roachpb.RangeDescriptor) error {
+					for _, desc := range descriptors {
+						for _, replica := range desc.InternalReplicas {
+							if replica.NodeID != marsNodeID {
+								return errors.Newf("found table data located on another node %d, desc %v",
+									replica.NodeID, desc)
+							}
 						}
 					}
-				}
-				return nil
-			})
+					return nil
+				})
+			}
 		}
-	}
 
-	srcCodec := keys.MakeSQLCodec(c.Args.SrcTenantID)
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
-		c.SrcSysServer.DB(), srcCodec, "test", "x")
-	destCodec := keys.MakeSQLCodec(c.Args.DestTenantID)
+		srcCodec := keys.MakeSQLCodec(c.Args.SrcTenantID)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+			c.SrcSysServer.DB(), srcCodec, "test", "x")
+		destCodec := keys.MakeSQLCodec(c.Args.DestTenantID)
 
-	testutils.SucceedsWithin(t,
-		checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())),
-		time.Second*45*5)
+		testutils.SucceedsWithin(t,
+			checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())),
+			time.Second*45*5)
 
-	testutils.SucceedsWithin(t,
-		checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())),
-		time.Second*45*5)
+		testutils.SucceedsWithin(t,
+			checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())),
+			time.Second*45*5)
 
-	tableName := "test"
-	tabledIDQuery := fmt.Sprintf(`SELECT id FROM system.namespace WHERE name ='%s'`, tableName)
+		tableName := "test"
+		tabledIDQuery := fmt.Sprintf(`SELECT id FROM system.namespace WHERE name ='%s'`, tableName)
 
-	var tableID uint32
-	c.SrcTenantSQL.QueryRow(t, tabledIDQuery).Scan(&tableID)
-	fmt.Printf("%d", tableID)
+		var tableID uint32
+		c.SrcTenantSQL.QueryRow(t, tabledIDQuery).Scan(&tableID)
+		fmt.Printf("%d", tableID)
 
-	checkLocalityRanges(t, c.SrcSysSQL, srcCodec, uint32(tableDesc.GetID()), "mars")
-
+		checkLocalityRanges(t, c.SrcSysSQL, srcCodec, uint32(tableDesc.GetID()), "mars")
+	})
 }
 
 func TestStreamingMismatchedMRDatabase(t *testing.T) {

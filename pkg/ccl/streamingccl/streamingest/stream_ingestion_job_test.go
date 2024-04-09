@@ -55,12 +55,8 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srv.SystemLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
-	t.Run("source cannot be system tenant", func(t *testing.T) {
-		sysSQL.ExpectErr(t, `pq: neither the source tenant "system" nor the destination tenant "dest" \(0\) can be the system tenant`,
-			"CREATE TENANT dest FROM REPLICATION OF system ON $1", srcPgURL.String())
-	})
 	t.Run("destination cannot be system tenant", func(t *testing.T) {
-		sysSQL.ExpectErr(t, `pq: neither the source tenant "source" nor the destination tenant "system" \(0\) can be the system tenant`,
+		sysSQL.ExpectErr(t, `pq: the destination tenant "system" \(0\) cannot be the system tenant`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1", srcPgURL.String())
 	})
 	t.Run("cannot set expiration window on creat tenant from replication", func(t *testing.T) {
