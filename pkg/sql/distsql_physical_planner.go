@@ -4759,7 +4759,7 @@ func logAndSanitizeExportDestination(ctx context.Context, dest string) error {
 // processors eagerly move into the draining state which will cancel the context
 // of parallel TableReaders which might "poison" the transaction.
 func checkScanParallelizationIfLocal(
-	ctx context.Context, plan *planComponents,
+	ctx context.Context, plan *planComponents, c *localScanParallelizationChecker,
 ) (prohibitParallelization, hasScanNodeToParallelize bool) {
 	if plan.main.planNode == nil || len(plan.cascades) != 0 || len(plan.checkPlans) != 0 {
 		// We either used the experimental DistSQL spec factory or have
@@ -4767,7 +4767,7 @@ func checkScanParallelizationIfLocal(
 		// the scan parallelization.
 		return true, false
 	}
-	var c localScanParallelizationChecker
+	*c = localScanParallelizationChecker{}
 	o := planObserver{enterNode: c.enterNode}
 	_ = walkPlan(ctx, plan.main.planNode, o)
 	for _, s := range plan.subqueryPlans {
@@ -4794,7 +4794,7 @@ func (c *localScanParallelizationChecker) enterNode(
 		// walkPlan doesn't recurse into explainPlanNode, so we have to manually
 		// walk over the wrapped plan.
 		plan := n.plan.WrappedPlan.(*planComponents)
-		prohibit, has := checkScanParallelizationIfLocal(ctx, plan)
+		prohibit, has := checkScanParallelizationIfLocal(ctx, plan, c)
 		c.prohibitParallelization = c.prohibitParallelization || prohibit
 		c.hasScanNodeToParallelize = c.hasScanNodeToParallelize || has
 		return false, nil
@@ -4905,7 +4905,9 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 			// - the plan uses locking (see #94290).
 			return planCtx
 		}
-		prohibitParallelization, hasScanNodeToParallelize := checkScanParallelizationIfLocal(ctx, &planner.curPlan.planComponents)
+		prohibitParallelization, hasScanNodeToParallelize := checkScanParallelizationIfLocal(
+			ctx, &planner.curPlan.planComponents, &planner.parallelizationChecker,
+		)
 		if prohibitParallelization || !hasScanNodeToParallelize {
 			return planCtx
 		}
