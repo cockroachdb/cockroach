@@ -702,7 +702,6 @@ CREATE INDEX on seed (_int8, _float8, _date);
 statement ok
 CREATE INVERTED INDEX on seed (_jsonb);
 
-skipif config local-mixed-23.1
 statement error pgcode 22P02 pq: pg_lsn\(\): invalid input syntax for type pg_lsn: \"1\"
 SELECT
   tab378984.crdb_internal_mvcc_timestamp AS "%pcol857759",
