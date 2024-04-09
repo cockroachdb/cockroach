@@ -176,10 +176,10 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 // newIntColumns returns nCols columns of types.Int with non-decreasing values
 // starting at 0. dupCount controls the number of duplicates for each row
 // (including the row itself), use dupCount=1 for distinct tuples.
-func newIntColumns(nCols int, length int, dupCount int) []coldata.Vec {
-	cols := make([]coldata.Vec, nCols)
+func newIntColumns(nCols int, length int, dupCount int) []*coldata.Vec {
+	cols := make([]*coldata.Vec, nCols)
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		cols[colIdx] = testAllocator.NewMemColumn(types.Int, length)
+		cols[colIdx] = testAllocator.NewVec(types.Int, length)
 		col := cols[colIdx].Int64()
 		for i := 0; i < length; i++ {
 			col[i] = int64(i / dupCount)
@@ -192,10 +192,10 @@ func newIntColumns(nCols int, length int, dupCount int) []coldata.Vec {
 // values of 8 byte size, starting at '00000000'. dupCount controls the number
 // of duplicates for each row (including the row itself), use dupCount=1 for
 // distinct tuples.
-func newBytesColumns(nCols int, length int, dupCount int) []coldata.Vec {
-	cols := make([]coldata.Vec, nCols)
+func newBytesColumns(nCols int, length int, dupCount int) []*coldata.Vec {
+	cols := make([]*coldata.Vec, nCols)
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		cols[colIdx] = testAllocator.NewMemColumn(types.Bytes, length)
+		cols[colIdx] = testAllocator.NewVec(types.Bytes, length)
 		col := cols[colIdx].Bytes()
 		for i := 0; i < length; i++ {
 			col.Set(i, []byte(fmt.Sprintf("%08d", i/dupCount)))
@@ -238,7 +238,7 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 					// provide a meaningful signal, so we skip such config.
 					continue
 				}
-				var cols []coldata.Vec
+				var cols []*coldata.Vec
 				if typ.Identical(types.Int) {
 					cols = newIntColumns(nCols, nRows, 1 /* dupCount */)
 				} else {

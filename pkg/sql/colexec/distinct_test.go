@@ -490,7 +490,7 @@ func runDistinctBenchmarks(
 		nRowsOptions = []int{coldata.BatchSize()}
 	}
 	bytesValueScratch := make([]byte, bytesValueLength)
-	setFirstValue := func(vec coldata.Vec) {
+	setFirstValue := func(vec *coldata.Vec) {
 		if typ := vec.Type(); typ.Identical(types.Int) {
 			vec.Int64()[0] = 0
 		} else if typ.Identical(types.Bytes) {
@@ -499,7 +499,7 @@ func runDistinctBenchmarks(
 			colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", typ))
 		}
 	}
-	setIthValue := func(vec coldata.Vec, i int, newValueProbability float64) {
+	setIthValue := func(vec *coldata.Vec, i int, newValueProbability float64) {
 		if i == 0 {
 			colexecerror.InternalError(errors.New("setIthValue called with i == 0"))
 		}
@@ -540,10 +540,10 @@ func runDistinctBenchmarks(
 				}
 				for _, typ := range []*types.T{types.Int, types.Bytes} {
 					typs := make([]*types.T, nCols)
-					cols := make([]coldata.Vec, nCols)
+					cols := make([]*coldata.Vec, nCols)
 					for i := range typs {
 						typs[i] = typ
-						cols[i] = testAllocator.NewMemColumn(typs[i], nRows)
+						cols[i] = testAllocator.NewVec(typs[i], nRows)
 					}
 					numOrderedCols := getNumOrderedCols(nCols)
 					newValueProbability := getNewValueProbabilityForDistinct(newTupleProbability, nCols)
@@ -568,7 +568,7 @@ func runDistinctBenchmarks(
 							order[i], order[j] = order[j], order[i]
 						})
 						for colIdx, oldCol := range cols {
-							cols[colIdx] = testAllocator.NewMemColumn(typs[colIdx], nRows)
+							cols[colIdx] = testAllocator.NewVec(typs[colIdx], nRows)
 							if typs[colIdx].Identical(types.Int) {
 								oldInt64s := oldCol.Int64()
 								newInt64s := cols[colIdx].Int64()

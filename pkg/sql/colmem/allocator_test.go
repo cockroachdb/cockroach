@@ -82,7 +82,7 @@ func TestMaybeAppendColumn(t *testing.T) {
 
 		// We expect that the old vector is reallocated because the present one
 		// is made to be of insufficient capacity.
-		b.ReplaceCol(testAllocator.NewMemColumn(types.Int, 1 /* capacity */), colIdx)
+		b.ReplaceCol(testAllocator.NewVec(types.Int, 1 /* capacity */), colIdx)
 		testAllocator.MaybeAppendColumn(b, types.Int, colIdx)
 		require.Equal(t, coldata.BatchSize(), b.ColVec(colIdx).Capacity())
 

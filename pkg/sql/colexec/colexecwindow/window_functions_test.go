@@ -1244,11 +1244,11 @@ func BenchmarkWindowFunctions(b *testing.B) {
 		return op
 	}
 
-	inputCreator := func(length int) []coldata.Vec {
+	inputCreator := func(length int) []*coldata.Vec {
 		const arg1Offset, arg1Range = 5, 10
-		vecs := make([]coldata.Vec, len(sourceTypes))
+		vecs := make([]*coldata.Vec, len(sourceTypes))
 		for i := range vecs {
-			vecs[i] = testAllocator.NewMemColumn(sourceTypes[i], length)
+			vecs[i] = testAllocator.NewVec(sourceTypes[i], length)
 		}
 		argCol1 := vecs[arg1ColIdx].Int64()
 		argCol2 := vecs[arg2ColIdx].Int64()

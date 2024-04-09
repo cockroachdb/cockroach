@@ -36,15 +36,15 @@ type countRowsOrderedAgg struct {
 
 var _ AggregateFunc = &countRowsOrderedAgg{}
 
-func (a *countRowsOrderedAgg) SetOutput(vec coldata.Vec) {
+func (a *countRowsOrderedAgg) SetOutput(vec *coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int64()
 }
 
 func (a *countRowsOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// Capture groups to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups
@@ -148,19 +148,19 @@ type countOrderedAgg struct {
 
 var _ AggregateFunc = &countOrderedAgg{}
 
-func (a *countOrderedAgg) SetOutput(vec coldata.Vec) {
+func (a *countOrderedAgg) SetOutput(vec *coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int64()
 }
 
 func (a *countOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
 	nulls := vecs[inputIdxs[0]].Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// Capture groups to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups

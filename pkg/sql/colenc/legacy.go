@@ -23,7 +23,7 @@ import (
 
 // MarshalLegacy is the vectorized version of the row based valueside.MarshalLegacy.
 // It plucks off the vectorized types for special handling and delegates the rest.
-func MarshalLegacy(colType *types.T, vec coldata.Vec, row int) (roachpb.Value, error) {
+func MarshalLegacy(colType *types.T, vec *coldata.Vec, row int) (roachpb.Value, error) {
 	var r roachpb.Value
 
 	if vec.Nulls().NullAt(row) {

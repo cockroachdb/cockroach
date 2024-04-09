@@ -40,7 +40,7 @@ type slidingWindowAggregateFunc interface {
 	// Note: the implementations should be careful to account for their memory
 	// usage.
 	// Note: endIdx is assumed to be greater than zero.
-	Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int)
+	Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int)
 }
 
 // NewWindowAggregatorOperator creates a new Operator that computes aggregate
@@ -81,7 +81,7 @@ func NewWindowAggregatorOperator(
 		outputColIdx: args.OutputColIdx,
 		inputIdxs:    inputIdxs,
 		framer:       framer,
-		vecs:         make([]coldata.Vec, len(inputIdxs)),
+		vecs:         make([]*coldata.Vec, len(inputIdxs)),
 	}
 	var agg colexecagg.AggregateFunc
 	if aggAlloc != nil {
@@ -146,7 +146,7 @@ type windowAggregatorBase struct {
 
 	outputColIdx int
 	inputIdxs    []uint32
-	vecs         []coldata.Vec
+	vecs         []*coldata.Vec
 	framer       windowFramer
 }
 
@@ -213,7 +213,7 @@ func (a *windowAggregator) Close(ctx context.Context) {
 func (a *windowAggregator) processBatch(batch coldata.Batch, startIdx, endIdx int) {
 	outVec := batch.ColVec(a.outputColIdx)
 	a.agg.SetOutput(outVec)
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
 			{
@@ -260,7 +260,7 @@ func (a *slidingWindowAggregator) Close(ctx context.Context) {
 func (a *slidingWindowAggregator) processBatch(batch coldata.Batch, startIdx, endIdx int) {
 	outVec := batch.ColVec(a.outputColIdx)
 	a.agg.SetOutput(outVec)
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
 			toAdd, toRemove := a.framer.slidingWindowIntervals()

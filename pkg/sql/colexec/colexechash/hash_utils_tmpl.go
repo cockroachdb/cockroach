@@ -72,7 +72,6 @@ func _REHASH_BODY(
 	sel []int,
 	_HAS_SEL bool,
 	_HAS_NULLS bool,
-	_UINT64 bool,
 ) { // */}}
 	// {{define "rehashBody" -}}
 	// Early bounds checks.
@@ -109,11 +108,7 @@ func _REHASH_BODY(
 		p := uintptr(buckets[i])
 		_ASSIGN_HASH(p, v, keys, selIdx)
 		//gcassert:bce
-		// {{if .Uint64}}
-		buckets[i] = uint64(p)
-		// {{else}}
-		buckets[i] = uint32(p)
-		// {{end}}
+		buckets[i] = T(p)
 	}
 	// {{end}}
 
@@ -125,9 +120,9 @@ func _REHASH_BODY(
 // rehash takes an element of a key (tuple representing a row of equality
 // column values) at a given column and computes a new hash by applying a
 // transformation to the existing hash.
-func rehash(
-	buckets []uint32,
-	col coldata.Vec,
+func rehash[T uint32 | uint64](
+	buckets []T,
+	col *coldata.Vec,
 	nKeys int,
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,
@@ -142,62 +137,15 @@ func rehash(
 			keys, nulls := col.TemplateType(), col.Nulls()
 			if col.MaybeHasNulls() {
 				if sel != nil {
-					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, true, true, false)
+					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, true, true)
 				} else {
-					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, false, true, false)
+					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, false, true)
 				}
 			} else {
 				if sel != nil {
-					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, true, false, false)
+					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, true, false)
 				} else {
-					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, false, false, false)
-				}
-			}
-			// {{end}}
-		}
-		// {{end}}
-	default:
-		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", col.Type()))
-	}
-	cancelChecker.CheckEveryCall()
-}
-
-// rehash64 takes an element of a key (tuple representing a row of equality
-// column values) at a given column and computes a new hash by applying a
-// transformation to the existing hash.
-//
-// Note that this function is a duplicate of rehash except that it works on
-// uint64s instead of uint32s. The function could be made generic, but that
-// incurs a small performance penalty because one of the arguments is an
-// interface.
-// TODO(yuzefovich): if / when we make coldata.Vec to no longer be an interface,
-// then we should remove the code duplication here.
-func rehash64(
-	buckets []uint64,
-	col coldata.Vec,
-	nKeys int,
-	sel []int,
-	cancelChecker colexecutils.CancelChecker,
-	datumAlloc *tree.DatumAlloc,
-) {
-	switch col.CanonicalTypeFamily() {
-	// {{range .}}
-	case _CANONICAL_TYPE_FAMILY:
-		switch col.Type().Width() {
-		// {{range .WidthOverloads}}
-		case _TYPE_WIDTH:
-			keys, nulls := col.TemplateType(), col.Nulls()
-			if col.MaybeHasNulls() {
-				if sel != nil {
-					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, true, true, true)
-				} else {
-					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, false, true, true)
-				}
-			} else {
-				if sel != nil {
-					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, true, false, true)
-				} else {
-					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, false, false, true)
+					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, false, false)
 				}
 			}
 			// {{end}}

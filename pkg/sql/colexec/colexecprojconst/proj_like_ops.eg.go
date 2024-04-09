@@ -38,7 +38,7 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -118,7 +118,7 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -198,7 +198,7 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -278,7 +278,7 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -404,7 +404,7 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 )
 
-func columnByteSize(col coldata.Vec) int64 {
+func columnByteSize(col *coldata.Vec) int64 {
 	switch t := col.Type(); col.CanonicalTypeFamily() {
 	case types.IntFamily:
 		switch t.Width() {

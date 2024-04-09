@@ -36,9 +36,9 @@ type countRowsHashAgg struct {
 var _ AggregateFunc = &countRowsHashAgg{}
 
 func (a *countRowsHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		{
 			{
 				// We don't need to pay attention to nulls (either because it's a
@@ -100,13 +100,13 @@ type countHashAgg struct {
 var _ AggregateFunc = &countHashAgg{}
 
 func (a *countHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
 	nulls := vecs[inputIdxs[0]].Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		{
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel[startIdx:endIdx] {
