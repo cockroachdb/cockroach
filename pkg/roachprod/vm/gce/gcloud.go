@@ -195,6 +195,7 @@ func (jsonVM *jsonVM) toVM(
 
 	var volumes []vm.Volume
 	var localDisks []vm.Volume
+	var bootVolume vm.Volume
 
 	parseDiskSize := func(size string) int {
 		if val, err := strconv.Atoi(size); err == nil {
@@ -214,23 +215,25 @@ func (jsonVM *jsonVM) toVM(
 			})
 			continue
 		}
-		if !jsonVMDisk.Boot {
-			// Find a persistent volume (detailedDisk) matching the attached non-boot disk.
-			for _, detailedDisk := range disks {
-				if detailedDisk.SelfLink == jsonVMDisk.Source {
-					vol := vm.Volume{
-						// NB: See TODO in toDescribeVolumeCommandResponse. We
-						// should be able to "just" use detailedDisk.Name here,
-						// but we're abusing that field elsewhere, and
-						// incorrectly. Using SelfLink is correct.
-						ProviderResourceID: lastComponent(detailedDisk.SelfLink),
-						ProviderVolumeType: detailedDisk.Type,
-						Zone:               lastComponent(detailedDisk.Zone),
-						Name:               detailedDisk.Name,
-						Labels:             detailedDisk.Labels,
-						Size:               parseDiskSize(detailedDisk.SizeGB),
-					}
+		// Find a persistent volume (detailedDisk) matching the attached non-boot disk.
+		for _, detailedDisk := range disks {
+			if detailedDisk.SelfLink == jsonVMDisk.Source {
+				vol := vm.Volume{
+					// NB: See TODO in toDescribeVolumeCommandResponse. We
+					// should be able to "just" use detailedDisk.Name here,
+					// but we're abusing that field elsewhere, and
+					// incorrectly. Using SelfLink is correct.
+					ProviderResourceID: lastComponent(detailedDisk.SelfLink),
+					ProviderVolumeType: detailedDisk.Type,
+					Zone:               lastComponent(detailedDisk.Zone),
+					Name:               detailedDisk.Name,
+					Labels:             detailedDisk.Labels,
+					Size:               parseDiskSize(detailedDisk.SizeGB),
+				}
+				if !jsonVMDisk.Boot {
 					volumes = append(volumes, vol)
+				} else {
+					bootVolume = vol
 				}
 			}
 		}
@@ -258,6 +261,7 @@ func (jsonVM *jsonVM) toVM(
 		Zone:                   zone,
 		Project:                project,
 		NonBootAttachedVolumes: volumes,
+		BootVolume:             bootVolume,
 		LocalDisks:             localDisks,
 	}
 }
@@ -2448,9 +2452,8 @@ func toDescribeVolumeCommandResponse(
 // using a basic estimation method.
 //  1. Compute and attached disks are estimated at the list prices, ignoring
 //     all discounts, but including any automatically applied credits.
-//  2. Boot disk costs are completely ignored.
-//  3. Network egress costs are completely ignored.
-//  4. Blob storage costs are completely ignored.
+//  2. Network egress costs are completely ignored.
+//  3. Blob storage costs are completely ignored.
 func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 	// Construct cost estimation service
 	ctx := context.Background()
@@ -2536,7 +2539,8 @@ func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 					},
 				}
 			}
-			for _, v := range vm.NonBootAttachedVolumes {
+			volumes := append(vm.NonBootAttachedVolumes, vm.BootVolume)
+			for _, v := range volumes {
 				workload.ComputeVmWorkload.PersistentDisks = append(workload.ComputeVmWorkload.PersistentDisks, &cloudbilling.PersistentDisk{
 					DiskSize: &cloudbilling.Usage{
 						UsageRateTimeline: &cloudbilling.UsageRateTimeline{

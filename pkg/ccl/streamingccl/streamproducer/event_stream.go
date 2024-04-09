@@ -191,8 +191,16 @@ func (s *eventStream) Next(ctx context.Context) (bool, error) {
 	select {
 	case <-ctx.Done():
 		return false, ctx.Err()
+	case err := <-s.errCh:
+		return false, err
 	case s.data = <-s.streamCh:
-		return true, nil
+		// Re-check the err Ch
+		select {
+		case err := <-s.errCh:
+			return false, err
+		default:
+			return true, nil
+		}
 	}
 }
 

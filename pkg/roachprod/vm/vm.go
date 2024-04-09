@@ -140,6 +140,9 @@ type VM struct {
 	// NonBootAttachedVolumes are the non-bootable, _persistent_ volumes attached to the VM.
 	NonBootAttachedVolumes []Volume `json:"non_bootable_volumes"`
 
+	// BootVolume is the bootable, _persistent_ volume attached to the VM.
+	BootVolume Volume `json:"bootable_volume"`
+
 	// LocalDisks are the ephemeral SSD disks attached to the VM.
 	LocalDisks []Volume `json:"local_disks"`
 
