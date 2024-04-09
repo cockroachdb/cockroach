@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -669,7 +668,8 @@ func setDemoContextDefaults() {
 	demoCtx.SQLPort, _ = strconv.Atoi(base.DefaultPort)
 	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 	demoCtx.WorkloadMaxQPS = 25
-	demoCtx.Multitenant = clusterversion.DevelopmentBranch
+	// TODO(celia, #122053) set .Multitenant back to clusterversion.DevelopmentBranch once test_demo tcl files have been updated as needed
+	demoCtx.Multitenant = true
 	demoCtx.DisableServerController = false
 	demoCtx.DefaultEnableRangefeeds = true
 
