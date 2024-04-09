@@ -672,11 +672,18 @@ func (r *testRunner) runWorker(
 			c, vmCreateOpts, clusterCreateErr = r.allocateCluster(
 				ctx, clusterFactory, clustersOpt, lopt,
 				testToRun.spec, arch, wStatus)
+
 			if clusterCreateErr != nil {
 				atomic.AddInt32(&r.numClusterErrs, 1)
 				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
 					testToRun.spec.Name, clusterCreateErr)
 			} else {
+				if c.arch != arch {
+					// N.B. this can happen if requested machine type is not feasible/available.
+					l.PrintfCtx(ctx, "WARN: cluster arch for test differs %s: %s (cluster arch=%q, specified arch=%q)",
+						testToRun.spec.Name, c.Name(), c.arch, arch)
+					arch = c.arch
+				}
 				l.PrintfCtx(ctx, "Created new cluster for test %s: %s (arch=%q)", testToRun.spec.Name, c.Name(), arch)
 			}
 		}
@@ -686,8 +693,14 @@ func (r *testRunner) runWorker(
 		if artifactsRootDir == "" {
 			artifactsRootDir, _ = os.MkdirTemp("", "roachtest-logger")
 		}
-
-		escapedTestName := teamCityNameEscape(testToRun.spec.Name)
+		testName := testToRun.spec.Name
+		// N.B. c may be nil owing to clusterCreateErr
+		if c != nil && c.arch != vm.ArchAMD64 {
+			// N.B. For non-default cpu architecture, encode it in the test name. This helps to differentiate test
+			// artifacts/results by cpu architecture.
+			testName = fmt.Sprintf("%s/cpu_arch=%s", testName, c.arch)
+		}
+		escapedTestName := teamCityNameEscape(testName)
 		runSuffix := "run_" + strconv.Itoa(testToRun.runNum)
 
 		testArtifactsDir := filepath.Join(filepath.Join(artifactsRootDir, escapedTestName), runSuffix)
