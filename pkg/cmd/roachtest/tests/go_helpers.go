@@ -12,10 +12,12 @@ package tests
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 const goPath = `/mnt/data1/go`
@@ -42,8 +44,13 @@ func installGolang(
 		t.Fatal(err)
 	}
 
+	binary := "go1.21.3.linux-amd64.tar.gz"
+	if c.Architecture() == vm.ArchARM64 {
+		binary = "go1.21.3.linux-arm64.tar.gz"
+	}
+
 	if err := repeatRunE(
-		ctx, t, c, node, "download go", `curl -fsSL https://dl.google.com/go/go1.21.3.linux-amd64.tar.gz > /tmp/go.tgz`,
+		ctx, t, c, node, "download go", fmt.Sprintf(`curl -fsSL https://dl.google.com/go/%s > /tmp/go.tgz`, binary),
 	); err != nil {
 		t.Fatal(err)
 	}

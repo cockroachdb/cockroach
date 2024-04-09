@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -74,6 +75,11 @@ func registerKnex(r registry.Registry) {
 			ctx, option.WithNodes(node), `sudo npm i -g npm`,
 		)
 
+		arch := "amd64"
+		if c.Architecture() == vm.ArchARM64 {
+			arch = "arm64"
+		}
+
 		if err != nil {
 			err = repeatRunE(
 				ctx,
@@ -81,12 +87,13 @@ func registerKnex(r registry.Registry) {
 				c,
 				node,
 				"add nodesource key and deb repository",
-				`
+				fmt.Sprintf(`
 sudo apt-get update && \
 sudo apt-get install -y ca-certificates curl gnupg && \
 sudo mkdir -p /etc/apt/keyrings && \
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
-echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list`,
+echo "deb [arch=%s signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list`,
+					arch),
 			)
 			require.NoError(t, err)
 
