@@ -105,7 +105,7 @@ proc generate_root_or_node_cert {argv certs_dir name} {
 proc set_role_subject_for_user {argv name role_subject} {
     report "SETTING SUBJECT ROLE OPTION for USER $name with SUBJECT $role_subject"
     send "$argv sql --certs-dir=$::certs_dir -e 'alter role $name with subject \"$role_subject\" login';\r"
-    eexpect $::prompt
+    eexpect "ALTER ROLE"
 }
 
 start_secure_server $argv $certs_dir ""
@@ -156,6 +156,25 @@ restart_secure_server_distinguished_name_flags $argv $certs_dir "O=Cockroach,CN=
 start_test "valid node-cert-distinguished-nane and root-cert-distinguished-name"
 send "$argv sql --certs-dir=$certs_dir --user=root -e 'select 1'\r"
 eexpect $::prompt
+end_test
+
+# Check cert still works without setting role subject option when cluster setting subject_required = false
+send "$argv sql --certs-dir=$certs_dir --user=gallant -e 'select 1'\r"
+eexpect $::prompt
+
+# Check cert fails without setting role subject option when cluster setting subject_required = true
+start_test "validating cert auth fails without subject role option when subject_required cluster setting is set"
+send "$argv sql --certs-dir=$certs_dir --user=root -e 'SET CLUSTER SETTING security.client_cert.subject_required.enabled = true'\r"
+eexpect $::prompt
+send "$argv sql --certs-dir=$certs_dir --user=gallant -e 'select 1'\r"
+eexpect "user \"gallant\" does not have a distinguished name set which subject_required cluster setting mandates"
+end_test
+
+# Check cert succeeds after setting role subject option when cluster setting subject_required = true
+start_test "validating cert auth succeeds with valid subject role option when subject_required cluster setting is set"
+set_role_subject_for_user $argv gallant "O=Cockroach,CN=gallant"
+send "$argv sql --certs-dir=$certs_dir --user=gallant -e 'select 1'\r"
+eexpect "(1 row)"
 end_test
 
 stop_server $argv

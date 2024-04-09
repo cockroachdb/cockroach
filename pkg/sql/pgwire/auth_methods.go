@@ -447,6 +447,7 @@ func authCert(
 			execCfg.RPCContext.TenantID,
 			cm,
 			roleSubject,
+			security.ClientCertSubjectRequired.Get(&execCfg.Settings.SV),
 		)
 		if err != nil {
 			return err

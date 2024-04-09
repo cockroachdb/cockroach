@@ -71,6 +71,7 @@ kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, t
 kv.transaction.write_pipelining.enabled	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.max_batch_size	integer	128	if non-zero, defines that maximum size batch that will be pipelined through Raft consensus	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
+security.client_cert.subject_required.enabled	boolean	false	mandates a requirement for subject role to be set for db user	system-visible
 security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	application
 security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable	application
 server.auth_log.sql_connections.enabled	boolean	false	if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)	application
