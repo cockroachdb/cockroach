@@ -56,6 +56,7 @@ var (
 // {{/*
 
 type _GOTYPESLICE interface{}
+type _GOTYPE_UPCAST_INT interface{}
 type _GOTYPE interface{}
 type _TYPE interface{}
 
@@ -146,7 +147,7 @@ func GetInOperator(
 
 type selectInOp_TYPE struct {
 	colexecop.OneInputHelper
-	filterRow []_GOTYPE
+	filterRow []_GOTYPE_UPCAST_INT
 	colIdx    int
 	hasNulls  bool
 	negate    bool
@@ -157,7 +158,7 @@ var _ colexecop.Operator = &selectInOp_TYPE{}
 type projectInOp_TYPE struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
-	filterRow []_GOTYPE
+	filterRow []_GOTYPE_UPCAST_INT
 	colIdx    int
 	outputIdx int
 	hasNulls  bool
@@ -168,19 +169,24 @@ var _ colexecop.Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(
 	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
-) ([]_GOTYPE, bool) {
+) ([]_GOTYPE_UPCAST_INT, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
 
+	// {{if or (eq .VecMethod "Int16") (eq .VecMethod "Int32")}}
+	// Ensure that we always upcast all integer types.
+	conv := colconv.GetDatumToPhysicalFn(types.Int)
+	//{{else}}
 	conv := colconv.GetDatumToPhysicalFn(t)
-	var result []_GOTYPE
+	// {{end}}
+	var result []_GOTYPE_UPCAST_INT
 	hasNulls := false
 	for _, d := range datumTuple.D {
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
 			convRaw := conv(d)
-			converted := convRaw.(_GOTYPE)
+			converted := convRaw.(_GOTYPE_UPCAST_INT)
 			result = append(result, converted)
 		}
 	}
@@ -188,7 +194,7 @@ func fillDatumRow_TYPE(
 }
 
 func cmpIn_TYPE(
-	targetElem _GOTYPE, targetCol _GOTYPESLICE, filterRow []_GOTYPE, hasNulls bool,
+	targetElem _GOTYPE, targetCol _GOTYPESLICE, filterRow []_GOTYPE_UPCAST_INT, hasNulls bool,
 ) comparisonResult {
 	// Filter row input was already sorted in fillDatumRow_TYPE, so we can
 	// perform a binary search.
