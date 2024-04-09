@@ -48,6 +48,7 @@ go_test(
     deps = [
         "//pkg/server/dumpstore",
         "//pkg/settings/cluster",
+        "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_redact//:redact",

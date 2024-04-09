@@ -26,21 +26,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var (
-	maxProfiles = settings.RegisterIntSetting(
-		settings.ApplicationLevel,
-		"server.mem_profile.max_profiles",
-		"maximum number of profiles to be kept per ramp-up of memory usage. "+
-			"A ramp-up is defined as a sequence of profiles with increasing usage.",
-		5,
-	)
-
-	maxCombinedFileSize = settings.RegisterByteSizeSetting(
-		settings.ApplicationLevel,
-		"server.mem_profile.total_dump_size_limit",
-		"maximum combined disk size of preserved memory profiles",
-		256<<20, // 256MiB
-	)
+var maxProfiles = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"server.mem_profile.max_profiles",
+	"maximum number of profiles to be kept per ramp-up of memory usage. "+
+		"A ramp-up is defined as a sequence of profiles with increasing usage.",
+	5,
 )
 
 func init() {
@@ -48,14 +39,6 @@ func init() {
 		settings.ApplicationLevel,
 		"server.heap_profile.max_profiles", "use server.mem_profile.max_profiles instead", 5,
 		settings.Retired)
-
-	_ = settings.RegisterByteSizeSetting(
-		settings.ApplicationLevel,
-		"server.heap_profile.total_dump_size_limit",
-		"use server.mem_profile.total_dump_size_limit instead",
-		256<<20, // 256MiB
-		settings.Retired,
-	)
 }
 
 // profileStore represents the directory where heap profiles are stored.
@@ -159,15 +142,6 @@ func (s *profileStore) parseFileName(
 	if len(parts) < numParts || parts[0] != s.prefix {
 		// Not for us. Silently ignore.
 		return
-	}
-	if len(parts[2]) < 3 {
-		// At some point in the v20.2 cycle the timestamps were generated
-		// with format .999, which caused the trailing zeroes to be
-		// omitted. During parsing, they must be present, so re-add them
-		// here.
-		//
-		// TODO(knz): Remove this code in v21.1.
-		parts[2] += "000"[:3-len(parts[2])]
 	}
 	maybeTimestamp := parts[1] + "." + parts[2]
 	var err error
