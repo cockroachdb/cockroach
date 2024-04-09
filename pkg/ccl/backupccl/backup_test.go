@@ -11101,14 +11101,7 @@ $$;
 		udfID, err = strconv.Atoi(rows[0][0])
 		require.NoError(t, err)
 
-		isSystemTenant := tgtCluster.ApplicationLayer(0).Codec().ForSystemTenant()
-
-		// System tenant restores the system.tenant_settings while the secondary
-		// tenant does not.
-		startingDescID := 122
-		if isSystemTenant {
-			startingDescID = 123
-		}
+		const startingDescID = 123
 		err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 			require.NoError(t, err)
@@ -11142,14 +11135,9 @@ $$;
 			require.Equal(t, fmt.Sprintf("SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(%d:::REGCLASS);",
 				startingDescID+6), fnDesc.GetFunctionBody())
 
-			expectedOID := 100126
-			dependsOn := []descpb.ID{125, 128}
-			dependsOnTypes := []descpb.ID{126, 127}
-			if isSystemTenant {
-				expectedOID = 100127
-				dependsOn = []descpb.ID{126, 129}
-				dependsOnTypes = []descpb.ID{127, 128}
-			}
+			expectedOID := 100127
+			dependsOn := []descpb.ID{126, 129}
+			dependsOnTypes := []descpb.ID{127, 128}
 			require.Equal(t, expectedOID, int(fnDesc.GetParams()[0].Type.Oid()))
 			require.Equal(t, dependsOn, fnDesc.GetDependsOn())
 			require.Equal(t, dependsOnTypes, fnDesc.GetDependsOnTypes())
