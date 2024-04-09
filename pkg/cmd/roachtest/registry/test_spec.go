@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 // LibGEOS is a list of native libraries for libgeos.
@@ -58,6 +59,10 @@ type TestSpec struct {
 	// CompatibleClouds is the set of clouds this test can run on (e.g. AllClouds,
 	// OnlyGCE, etc). Must be set.
 	CompatibleClouds CloudSet
+
+	// CompatibleArch is the set of architectures this test can run on (e.g. AllArchs,
+	// AllExceptArm64, etc). Defaults to AllArchs if not set.
+	CompatibleArch ArchSet
 
 	// Suites is the set of suites this test is part of (e.g. Nightly, Weekly,
 	// etc). Must be set, even if empty (see ManualOnly).
@@ -261,6 +266,48 @@ func (cs CloudSet) AssertInitialized() {
 	if cs.m == nil {
 		panic("CloudSet not initialized")
 	}
+}
+
+// ArchSet represents a set of architectures.
+//
+// Instances of ArchSet are immutable.
+type ArchSet struct {
+	m map[vm.CPUArch]struct{}
+}
+
+var allArchs = []vm.CPUArch{vm.ArchAMD64, vm.ArchARM64, vm.ArchFIPS}
+
+var AllArchs = Archs(allArchs...)
+
+func Archs(archs ...vm.CPUArch) ArchSet {
+	var as ArchSet
+	as.m = make(map[vm.CPUArch]struct{})
+	for _, a := range archs {
+		as.m[a] = struct{}{}
+	}
+	return as
+}
+
+// Contains returns true if the set contains the given arch.
+func (as ArchSet) Contains(arch vm.CPUArch) bool {
+	// Return true if not set.
+	if as.m == nil {
+		return true
+	}
+	_, ok := as.m[arch]
+	return ok
+}
+
+var AllExceptArm64 = AllArchs.NoARM64()
+
+func (as ArchSet) NoARM64() ArchSet {
+	var asCopy ArchSet
+	asCopy.m = make(map[vm.CPUArch]struct{})
+	for k, v := range as.m {
+		asCopy.m[k] = v
+	}
+	delete(asCopy.m, vm.ArchARM64)
+	return asCopy
 }
 
 // Suite names.

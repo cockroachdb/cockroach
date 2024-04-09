@@ -45,8 +45,10 @@ func installGolang(
 	}
 
 	binary := "go1.21.3.linux-amd64.tar.gz"
+	sha := "1241381b2843fae5a9707eec1f8fb2ef94d827990582c7c7c32f5bdfbfd420c8"
 	if c.Architecture() == vm.ArchARM64 {
 		binary = "go1.21.3.linux-arm64.tar.gz"
+		sha = "fc90fa48ae97ba6368eecb914343590bbb61b388089510d0c56c2dde52987ef3"
 	}
 
 	if err := repeatRunE(
@@ -55,9 +57,9 @@ func installGolang(
 		t.Fatal(err)
 	}
 	if err := repeatRunE(
-		ctx, t, c, node, "verify tarball", `sha256sum -c - <<EOF
-1241381b2843fae5a9707eec1f8fb2ef94d827990582c7c7c32f5bdfbfd420c8 /tmp/go.tgz
-EOF`,
+		ctx, t, c, node, "verify tarball", fmt.Sprintf(`sha256sum -c - <<EOF
+%s /tmp/go.tgz
+EOF`, sha),
 	); err != nil {
 		t.Fatal(err)
 	}

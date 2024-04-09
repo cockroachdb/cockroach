@@ -36,6 +36,9 @@ func makeTestFilter(regexps []string) (*registry.TestFilter, error) {
 	if roachtestflags.Suite != "" {
 		options = append(options, registry.WithSuite(roachtestflags.Suite))
 	}
+	if roachtestflags.Arch != "" && roachtestflags.Arch != "all" {
+		options = append(options, registry.WithArch(roachtestflags.Arch))
+	}
 
 	// Tags no longer exist, but we provide some basic backward compatibility: if
 	// we see a single tag which matches a known suite, we convert it to a suite.

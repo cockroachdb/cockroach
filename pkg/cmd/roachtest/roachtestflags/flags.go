@@ -33,6 +33,13 @@ var (
 		        default, only tests compatible with the given cloud are run`,
 	})
 
+	Arch string
+	_    = registerListFlag(&Arch, FlagInfo{
+		Name: "arch",
+		Usage: `List only tests compatible with the given arch ("amd64", "arm64",
+		        "fips", "azure", or "all")`,
+	})
+
 	Suite string
 	_     = registerListFlag(&Suite, FlagInfo{
 		Name:  "suite",

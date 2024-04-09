@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 )
 
@@ -25,6 +26,9 @@ type TestFilter struct {
 
 	// Cloud, if set, restricts the set of tests to those compatible with this cloud.
 	Cloud string
+
+	// Arch, if set, restricts the set of tests to those compatible with this architecture.
+	Arch vm.CPUArch
 
 	// Suite, if set, restricts the set of tests to those that are part of this suite.
 	Suite string
@@ -42,6 +46,11 @@ type TestFilterOption func(tf *TestFilter)
 // WithCloud restricts the set of tests to those compatible with this cloud.
 func WithCloud(cloud string) TestFilterOption {
 	return func(tf *TestFilter) { tf.Cloud = cloud }
+}
+
+// WithArch restricts the set of tests to those compatible with this cloud.
+func WithArch(arch string) TestFilterOption {
+	return func(tf *TestFilter) { tf.Arch = vm.ParseArch(arch) }
 }
 
 // WithSuite restricts the set of tests to those that are part of this suite.
@@ -82,9 +91,12 @@ func NewTestFilter(regexps []string, options ...TestFilterOption) (*TestFilter, 
 		o(tf)
 	}
 
-	// Validate Cloud, Suite, Owner fields.
+	// Validate Cloud, Arch, Suite, Owner fields.
 	if tf.Cloud != "" && !AllClouds.Contains(tf.Cloud) {
 		return nil, errors.Newf("invalid cloud %q; valid clouds are %s", tf.Cloud, AllClouds)
+	}
+	if tf.Arch != "" && !AllArchs.Contains(tf.Arch) {
+		return nil, errors.Newf("invalid arch %q", tf.Arch)
 	}
 	if tf.Suite != "" && !AllSuites.Contains(tf.Suite) {
 		return nil, errors.Newf("invalid suite %q; valid suites are %s", tf.Suite, AllSuites)
@@ -108,6 +120,8 @@ type MatchFailReason struct {
 	NotPartOfSuite bool
 	// If true, the test is not compatible with the cloud in the filter.
 	CloudNotCompatible bool
+	// If true, the test is not compatible with the arch in the filter.
+	ArchNotCompatible bool
 }
 
 // Matches returns true if the filter matches the test. If the test doesn't
@@ -118,6 +132,7 @@ func (filter *TestFilter) Matches(t *TestSpec) (matches bool, reason MatchFailRe
 	reason.OwnerMismatch = filter.Owner != "" && t.Owner != filter.Owner
 	reason.NotPartOfSuite = filter.Suite != "" && !t.Suites.Contains(filter.Suite)
 	reason.CloudNotCompatible = filter.Cloud != "" && !t.CompatibleClouds.Contains(filter.Cloud)
+	reason.ArchNotCompatible = filter.Arch != "" && !t.CompatibleArch.Contains(filter.Arch)
 
 	// We have a match if all fields are false.
 	return reason == MatchFailReason{}, reason
