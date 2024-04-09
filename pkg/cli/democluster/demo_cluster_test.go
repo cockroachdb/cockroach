@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -310,9 +309,6 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	var cancel func()
 	ctx, cancel = c.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
-
-	// Ensure CREATE TABLE below works properly.
-	sqlclustersettings.RestrictAccessToSystemInterface.Override(ctx, &c.firstServer.SystemLayer().ClusterSettings().SV, false)
 
 	testutils.RunTrueAndFalse(t, "forSecondaryTenant", func(t *testing.T, forSecondaryTenant bool) {
 		url, err := c.getNetworkURLForServer(ctx, 0,
