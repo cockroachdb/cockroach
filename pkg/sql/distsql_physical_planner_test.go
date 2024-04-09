@@ -1785,7 +1785,8 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			prohibitParallelization: true,
 		},
 	} {
-		prohibitParallelization, hasScanNodeToParallize := checkScanParallelizationIfLocal(context.Background(), &tc.plan)
+		var c localScanParallelizationChecker
+		prohibitParallelization, hasScanNodeToParallize := checkScanParallelizationIfLocal(context.Background(), &tc.plan, &c)
 		require.Equal(t, tc.prohibitParallelization, prohibitParallelization)
 		require.Equal(t, tc.hasScanNodeToParallelize, hasScanNodeToParallize)
 	}
