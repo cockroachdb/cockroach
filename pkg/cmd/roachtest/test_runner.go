@@ -663,7 +663,6 @@ func (r *testRunner) runWorker(
 				c.arch = arch
 			}
 		}
-
 		//  TODO(babusrithar): remove this once we see enough data in
 		//  nightly runs. This is a temp logic to test spot VMs.
 		if roachtestflags.Cloud == spec.GCE &&
