@@ -2884,6 +2884,7 @@ func (r roleOptions) validUntil(p *planner) (tree.Datum, error) {
 		p.EvalContext().GetRelativeParseTime(),
 		pgdate.DefaultDateStyle(),
 		*validUntilText,
+		nil, /* h */
 	)
 	if err != nil {
 		return nil, errors.Errorf("rolValidUntil string %s could not be parsed with datestyle %s", *validUntilText, p.EvalContext().GetDateStyle())
