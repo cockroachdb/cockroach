@@ -91,7 +91,7 @@ func (ss *DiskSideloadStorage) Put(
 	for {
 		// Use 0644 since that's what RocksDB uses:
 		// https://github.com/facebook/rocksdb/blob/56656e12d67d8a63f1e4c4214da9feeec2bd442b/env/env_posix.cc#L171
-		if err := kvserverbase.WriteFileSyncing(ctx, filename, contents, ss.eng.Env(), 0644, ss.st, ss.limiter); err == nil {
+		if err := kvserverbase.WriteFileSyncing(ctx, filename, contents, ss.eng.Env(), 0644, ss.st, ss.limiter, fs.PebbleIngestionWriteCategory); err == nil {
 			return nil
 		} else if !oserror.IsNotExist(err) {
 			return err

@@ -116,7 +116,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		if err := eng.Env().MkdirAll(dir, os.ModePerm); err != nil {
 			t.Fatal(err)
 		}
-		if err := fs.WriteFile(eng.Env(), filepath.Join(dir, "i1000000.t100000"), []byte("foo")); err != nil {
+		if err := fs.WriteFile(eng.Env(), filepath.Join(dir, "i1000000.t100000"), []byte("foo"), fs.UnspecifiedWriteCategory); err != nil {
 			t.Fatal(err)
 		}
 

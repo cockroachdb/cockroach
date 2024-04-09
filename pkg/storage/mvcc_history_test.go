@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
@@ -196,12 +198,14 @@ func TestMVCCHistories(t *testing.T) {
 		}
 
 		disableSeparateEngineBlocks := strings.Contains(path, "_disable_separate_engine_blocks")
+		storageConfigOpts := []storage.ConfigOption{
+			storage.CacheSize(1 << 20 /* 1 MiB */),
+			storage.If(separateEngineBlocks && !disableSeparateEngineBlocks, storage.BlockSize(1)),
+			storage.DiskWriteStatsCollector(vfs.NewDiskWriteStatsCollector()),
+		}
 
 		// We start from a clean slate in every test file.
-		engine, err := storage.Open(ctx, storage.InMemory(), st,
-			storage.CacheSize(1<<20 /* 1 MiB */),
-			storage.If(separateEngineBlocks && !disableSeparateEngineBlocks, storage.BlockSize(1)),
-		)
+		engine, err := storage.Open(ctx, storage.InMemory(), st, storageConfigOpts...)
 		require.NoError(t, err)
 		defer engine.Close()
 
@@ -210,7 +214,7 @@ func TestMVCCHistories(t *testing.T) {
 
 			for _, span := range spans {
 				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypeRangesOnly,
-					storage.UnknownReadCategory,
+					fs.UnknownReadCategory,
 					func(_ storage.MVCCKeyValue, rangeKeys storage.MVCCRangeKeyStack) error {
 						hasData = true
 						buf.Printf("rangekey: %s/[", rangeKeys.Bounds)
@@ -230,7 +234,7 @@ func TestMVCCHistories(t *testing.T) {
 				}
 
 				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
-					storage.UnknownReadCategory,
+					fs.UnknownReadCategory,
 					func(r storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 						hasData = true
 						if r.Key.Timestamp.IsEmpty() {
