@@ -244,6 +244,13 @@ func DatumToHLC(
 	case *tree.DString:
 		s := string(*d)
 		// Attempt to parse as timestamp.
+		//
+		// Disable error annotation since we don't care what the error is if it
+		// occurs.
+		defer func(origValue bool) {
+			evalCtx.GetDateHelper().SkipErrorAnnotation = origValue
+		}(evalCtx.GetDateHelper().SkipErrorAnnotation)
+		evalCtx.GetDateHelper().SkipErrorAnnotation = true
 		if dt, _, err := tree.ParseDTimestampTZ(evalCtx, s, time.Nanosecond); err == nil {
 			ts.WallTime = dt.Time.UnixNano()
 			break
