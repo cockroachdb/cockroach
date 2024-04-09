@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 	"text/template"
@@ -511,4 +512,21 @@ func SetUserAuthorizedKeys(keys AuthorizedKeys) (retErr error) {
 // roachprod).
 func isValidSSHUser(user string) bool {
 	return user != config.RootUser && user != config.SharedUser
+}
+
+// Extracted from https://cloud.google.com/compute/docs/regions-zones#available
+var SupportedT2AZones = []string{
+	"asia-southeast1-b", "asia-southeast1-c",
+	"europe-west4-a", "europe-west4-b", "europe-west4-c",
+	"us-central1-a", "us-central1-b", "us-central1-f",
+}
+
+// Used mainly in support of https://github.com/cockroachdb/cockroach/issues/122035.
+func IsSupportedT2AZone(zones []string) bool {
+	for _, zone := range zones {
+		if slices.Index(SupportedT2AZones, zone) == -1 {
+			return false
+		}
+	}
+	return true
 }
