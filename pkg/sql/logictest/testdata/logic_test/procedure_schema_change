@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-23.1
-
 subtest alter_procedure_name
 
 statement ok

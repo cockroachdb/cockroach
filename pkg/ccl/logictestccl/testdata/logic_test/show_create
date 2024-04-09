@@ -61,11 +61,9 @@ CREATE FUNCTION r1() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 statement ok
 CREATE FUNCTION r1(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 
-skipif config local-mixed-23.1
 statement ok
 CREATE PROCEDURE r1(s STRING) LANGUAGE SQL AS 'SELECT 1'
 
-skipif config local-mixed-23.1
 statement ok
 CREATE PROCEDURE r1(s STRING, i INT) LANGUAGE SQL AS 'SELECT 1'
 
@@ -112,14 +110,12 @@ CREATE SCHEMA sc
 statement ok
 CREATE FUNCTION sc.r2() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 
-skipif config local-mixed-23.1
 statement ok
 CREATE PROCEDURE sc.r2(s STRING) LANGUAGE SQL AS 'SELECT 1'
 
 statement error pgcode 42883 pq: unknown function: r2()
 SHOW CREATE FUNCTION r2;
 
-skipif config local-mixed-23.1
 statement error pgcode 42883 pq: unknown procedure: r2()
 SHOW CREATE PROCEDURE r2;
 
@@ -139,7 +135,6 @@ r2  CREATE FUNCTION sc.r2()
       SELECT 1;
     $$
 
-skipif config local-mixed-23.1
 query TT
 SHOW CREATE PROCEDURE r2
 ----
@@ -150,7 +145,6 @@ r2  CREATE PROCEDURE sc.r2(s STRING)
     $$
 
 # Regression test for #112134 - correctly parse and display PLpgSQL.
-skipif config local-mixed-23.1
 statement ok
 CREATE FUNCTION f112134() RETURNS INT AS $$
   DECLARE
@@ -166,7 +160,6 @@ CREATE FUNCTION f112134() RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 
 # TODO(112136): Fix the formatting.
-skipif config local-mixed-23.1
 query TT
 SHOW CREATE FUNCTION f112134;
 ----

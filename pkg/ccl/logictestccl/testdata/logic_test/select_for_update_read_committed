@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-23.1
-
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX (b), FAMILY (a, b, c))
 

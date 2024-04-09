@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-23.1
-
 # Disable fast path for some test runs.
 let $enable_insert_fast_path
 SELECT random() < 0.5
