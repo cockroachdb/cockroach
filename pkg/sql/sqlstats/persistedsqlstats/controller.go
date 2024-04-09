@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -87,10 +86,6 @@ func (s *Controller) ResetActivityTables(ctx context.Context) error {
 // ResetInsightsTables implements the tree.SQLStatsController interface. This
 // method reset the {statement|transaction}_execution_insights tables.
 func (s *Controller) ResetInsightsTables(ctx context.Context) error {
-	if !s.st.Version.IsActive(ctx, clusterversion.V23_2_AddSystemExecInsightsTable) {
-		return nil
-	}
-
 	if err := s.resetSysTableStats(ctx, "system.statement_execution_insights"); err != nil {
 		return err
 	}
