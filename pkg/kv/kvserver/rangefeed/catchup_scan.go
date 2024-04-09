@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -96,7 +97,7 @@ func NewCatchUpIterator(
 			// over the provisional values during
 			// iteration.
 			IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
-			ReadCategory: storage.RangefeedReadCategory,
+			ReadCategory: fs.RangefeedReadCategory,
 		})
 	if err != nil {
 		return nil, err

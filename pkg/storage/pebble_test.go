@@ -333,8 +333,8 @@ func TestPebbleIterConsistency(t *testing.T) {
 	require.NoError(t, err)
 	engIter.Close()
 	// Pin the state for iterators.
-	require.Nil(t, roEngine2.PinEngineStateForIterators(UnknownReadCategory))
-	require.Nil(t, batch2.PinEngineStateForIterators(UnknownReadCategory))
+	require.Nil(t, roEngine2.PinEngineStateForIterators(fs.UnknownReadCategory))
+	require.Nil(t, batch2.PinEngineStateForIterators(fs.UnknownReadCategory))
 
 	// Write a newer version of "a"
 	k2 := MVCCKey{Key: []byte("a"), Timestamp: ts2}
@@ -574,11 +574,11 @@ type errorFS struct {
 	errorCount int32
 }
 
-func (fs *errorFS) Create(name string) (vfs.File, error) {
+func (fs *errorFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File, error) {
 	if filepath.Ext(name) == ".sst" && atomic.AddInt32(&fs.errorCount, -1) >= 0 {
 		return nil, errors.New("background error")
 	}
-	return fs.FS.Create(name)
+	return fs.FS.Create(name, category)
 }
 
 func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
@@ -988,7 +988,7 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	defer roGuaranteed.Close()
 	roGuaranteedPinned := eng.NewReader(GuaranteedDurability)
 	defer roGuaranteedPinned.Close()
-	require.NoError(t, roGuaranteedPinned.PinEngineStateForIterators(UnknownReadCategory))
+	require.NoError(t, roGuaranteedPinned.PinEngineStateForIterators(fs.UnknownReadCategory))
 	// Returns the value found or nil.
 	checkGetAndIter := func(reader Reader) []byte {
 		v := mvccGetRaw(t, reader, k)
@@ -1058,19 +1058,19 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 
 	readOnly := eng.NewReader(StandardDurability)
 	defer readOnly.Close()
-	require.NoError(t, readOnly.PinEngineStateForIterators(UnknownReadCategory))
+	require.NoError(t, readOnly.PinEngineStateForIterators(fs.UnknownReadCategory))
 
 	snapshot := eng.NewSnapshot()
 	defer snapshot.Close()
-	require.NoError(t, snapshot.PinEngineStateForIterators(UnknownReadCategory))
+	require.NoError(t, snapshot.PinEngineStateForIterators(fs.UnknownReadCategory))
 
 	efos := eng.NewEventuallyFileOnlySnapshot([]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}})
 	defer efos.Close()
-	require.NoError(t, efos.PinEngineStateForIterators(UnknownReadCategory))
+	require.NoError(t, efos.PinEngineStateForIterators(fs.UnknownReadCategory))
 
 	batch := eng.NewBatch()
 	defer batch.Close()
-	require.NoError(t, batch.PinEngineStateForIterators(UnknownReadCategory))
+	require.NoError(t, batch.PinEngineStateForIterators(fs.UnknownReadCategory))
 
 	// These writes should not be visible to any of the pinned iterators.
 	require.NoError(t, eng.PutMVCC(a1, vx))
@@ -1230,7 +1230,7 @@ func TestIncompatibleVersion(t *testing.T) {
 	version := roachpb.Version{Major: 21, Minor: 1}
 	b, err := protoutil.Marshal(&version)
 	require.NoError(t, err)
-	require.NoError(t, fs.SafeWriteToFile(memFS, "", MinVersionFilename, b))
+	require.NoError(t, fs.SafeWriteToFile(memFS, "", MinVersionFilename, b, fs.UnspecifiedWriteCategory))
 
 	env = mustInitTestEnv(t, memFS, "")
 	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
@@ -1363,7 +1363,7 @@ func TestConvertFilesToBatchAndCommit(t *testing.T) {
 	}
 	// Ingest into [2, 6) with 2 files.
 	fileName1 := "file1"
-	f1, err := mem.Create(fileName1)
+	f1, err := mem.Create(fileName1, fs.UnspecifiedWriteCategory)
 	require.NoError(t, err)
 	w1 := MakeIngestionSSTWriter(ctx, st, objstorageprovider.NewFileWritable(f1))
 	startKey := key(2)
@@ -1380,7 +1380,7 @@ func TestConvertFilesToBatchAndCommit(t *testing.T) {
 	w1.Close()
 
 	fileName2 := "file2"
-	f2, err := mem.Create(fileName2)
+	f2, err := mem.Create(fileName2, fs.UnspecifiedWriteCategory)
 	require.NoError(t, err)
 	w2 := MakeIngestionSSTWriter(ctx, st, objstorageprovider.NewFileWritable(f2))
 	require.NoError(t, w2.ClearRawRange(startKey, endKey, true, true))

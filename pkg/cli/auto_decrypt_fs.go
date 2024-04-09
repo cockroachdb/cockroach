@@ -64,7 +64,7 @@ func (afs *autoDecryptFS) Close() error {
 	return nil
 }
 
-func (afs *autoDecryptFS) Create(name string) (vfs.File, error) {
+func (afs *autoDecryptFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File, error) {
 	name, err := filepath.Abs(name)
 	if err != nil {
 		return nil, err
@@ -73,7 +73,7 @@ func (afs *autoDecryptFS) Create(name string) (vfs.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return fs.Create(name)
+	return fs.Create(name, category)
 }
 
 func (afs *autoDecryptFS) Link(oldname, newname string) error {
@@ -104,7 +104,9 @@ func (afs *autoDecryptFS) Open(name string, opts ...vfs.OpenOption) (vfs.File, e
 	return fs.Open(name, opts...)
 }
 
-func (afs *autoDecryptFS) OpenReadWrite(name string, opts ...vfs.OpenOption) (vfs.File, error) {
+func (afs *autoDecryptFS) OpenReadWrite(
+	name string, category vfs.DiskWriteCategory, opts ...vfs.OpenOption,
+) (vfs.File, error) {
 	name, err := filepath.Abs(name)
 	if err != nil {
 		return nil, err
@@ -113,7 +115,7 @@ func (afs *autoDecryptFS) OpenReadWrite(name string, opts ...vfs.OpenOption) (vf
 	if err != nil {
 		return nil, err
 	}
-	return fs.OpenReadWrite(name, opts...)
+	return fs.OpenReadWrite(name, category, opts...)
 }
 
 func (afs *autoDecryptFS) OpenDir(name string) (vfs.File, error) {
@@ -160,7 +162,9 @@ func (afs *autoDecryptFS) Rename(oldname, newname string) error {
 	return fs.Rename(oldname, newname)
 }
 
-func (afs *autoDecryptFS) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+func (afs *autoDecryptFS) ReuseForWrite(
+	oldname, newname string, category vfs.DiskWriteCategory,
+) (vfs.File, error) {
 	oldname, err := filepath.Abs(oldname)
 	if err != nil {
 		return nil, err
@@ -173,7 +177,7 @@ func (afs *autoDecryptFS) ReuseForWrite(oldname, newname string) (vfs.File, erro
 	if err != nil {
 		return nil, err
 	}
-	return fs.ReuseForWrite(oldname, newname)
+	return fs.ReuseForWrite(oldname, newname, category)
 }
 
 func (afs *autoDecryptFS) MkdirAll(dir string, perm os.FileMode) error {

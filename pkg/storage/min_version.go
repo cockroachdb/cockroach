@@ -47,7 +47,7 @@ func writeMinVersionFile(atomicRenameFS vfs.FS, dir string, version roachpb.Vers
 		return err
 	}
 	filename := atomicRenameFS.PathJoin(dir, MinVersionFilename)
-	if err := fs.SafeWriteToFile(atomicRenameFS, dir, filename, b); err != nil {
+	if err := fs.SafeWriteToFile(atomicRenameFS, dir, filename, b, fs.UnspecifiedWriteCategory); err != nil {
 		return err
 	}
 	return nil
