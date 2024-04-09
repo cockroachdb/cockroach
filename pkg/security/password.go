@@ -148,7 +148,8 @@ var MinPasswordLength = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"server.user_login.min_password_length",
 	"the minimum length accepted for passwords set in cleartext via SQL. "+
-		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
+		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case. "+
+		"This setting only applies when adding new users or altering an existing user's password; it will not affect existing logins.",
 	1,
 	settings.NonNegativeInt,
 	settings.WithPublic)
