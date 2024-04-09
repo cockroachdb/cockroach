@@ -1,9 +1,9 @@
-# LogicTest: cockroach-go-testserver-23.1
+# LogicTest: cockroach-go-testserver-23.2
 
 query T
 select crdb_internal.active_version()
 ----
-{"internal": 0, "major": 23, "minor": 1, "patch": 0}
+{"internal": 0, "major": 23, "minor": 2, "patch": 0}
 
 upgrade all
 

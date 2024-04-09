@@ -2433,13 +2433,11 @@ CREATE TABLE public.t72820 (
 
 # Also make sure that creating a sequence directly handles the name conflict.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 skipif config local-mixed-23.2
 statement error relation "test.public.t72820_i_seq" already exists
 CREATE SEQUENCE t72820_i_seq
 
 onlyif config local-legacy-schema-changer
-onlyif config local-mixed-23.1
 onlyif config local-mixed-23.2
 statement error type "test.public.t72820_i_seq" already exists
 CREATE SEQUENCE t72820_i_seq
@@ -2467,37 +2465,29 @@ subtest end
 subtest geo_types
 
 onlyif config local-legacy-schema-changer
-onlyif config local-mixed-23.1
 onlyif config local-mixed-23.2
 statement error type "geography" already exists
 CREATE SEQUENCE geography
 
-onlyif config local-legacy-schema-changer
-onlyif config local-mixed-23.1
-onlyif config local-legacy-schema-changer local-mixed-23.1 local-mixed-23.2
+onlyif config local-legacy-schema-changer local-mixed-23.2
 statement error type "geometry" already exists
 CREATE SEQUENCE geometry
 
-onlyif config local-legacy-schema-changer local-mixed-23.1 local-mixed-23.2
-onlyif config local-mixed-23.1
-onlyif config local-legacy-schema-changer local-mixed-23.1 local-mixed-23.2
+onlyif config local-legacy-schema-changer local-mixed-23.2
 statement error type "box2d" already exists
 CREATE SEQUENCE box2d
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 skipif config local-mixed-23.2
 statement error geography is a built-in type and cannot be modified
 CREATE SEQUENCE geography
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 skipif config local-mixed-23.2
 statement error geometry is a built-in type and cannot be modified
 CREATE SEQUENCE geometry
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.1
 skipif config local-mixed-23.2
 statement error box2d is a built-in type and cannot be modified
 CREATE SEQUENCE box2d

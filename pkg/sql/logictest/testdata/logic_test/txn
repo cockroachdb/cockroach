@@ -196,13 +196,11 @@ BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 ----
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T noticetrace
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 ----
 NOTICE: READ COMMITTED isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE
 
-skipif config local-mixed-23.1
 statement ok
 COMMIT
 
@@ -224,7 +222,6 @@ SET TRANSACTION ISOLATION LEVEL READ COMMITTED
 ----
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T noticetrace
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED
 ----
@@ -367,14 +364,12 @@ SHOW transaction_isolation
 snapshot
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
@@ -399,7 +394,6 @@ SHOW TRANSACTION ISOLATION LEVEL
 snapshot
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -432,7 +426,6 @@ SHOW TRANSACTION ISOLATION LEVEL
 read committed
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -457,7 +450,6 @@ SHOW TRANSACTION ISOLATION LEVEL
 read committed
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -470,7 +462,6 @@ SHOW transaction_isolation
 read committed
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
@@ -808,7 +799,6 @@ SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
 ----
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T noticetrace
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
 ----
@@ -824,7 +814,6 @@ SHOW DEFAULT_TRANSACTION_ISOLATION
 snapshot
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
@@ -843,7 +832,6 @@ SHOW DEFAULT_TRANSACTION_ISOLATION
 read committed
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
@@ -905,7 +893,6 @@ SHOW default_transaction_isolation
 read committed
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW default_transaction_isolation
 ----
@@ -917,7 +904,6 @@ SET default_transaction_isolation = 'read committed'
 ----
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T noticetrace
 SET default_transaction_isolation = 'read committed'
 ----
@@ -930,7 +916,6 @@ SHOW default_transaction_isolation
 read committed
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW default_transaction_isolation
 ----
@@ -951,7 +936,6 @@ SHOW default_transaction_isolation
 snapshot
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW default_transaction_isolation
 ----
@@ -967,7 +951,6 @@ SHOW DEFAULT_TRANSACTION_ISOLATION
 snapshot
 
 skipif config enterprise-configs
-skipif config local-mixed-23.1
 query T
 SHOW default_transaction_isolation
 ----

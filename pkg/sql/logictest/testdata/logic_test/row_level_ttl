@@ -1125,11 +1125,6 @@ subtest end
 
 subtest desc_pk_with_ttl
 
-onlyif config local-mixed-23.1
-statement error non-ascending ordering on PRIMARY KEYs are not supported
-CREATE TABLE tbl_desc_pk_with_ttl (id INT, id2 INT, PRIMARY KEY (id, id2 DESC)) WITH (ttl_expire_after = '10 minutes')
-
-skipif config local-mixed-23.1
 statement ok
 CREATE TABLE tbl_desc_pk_with_ttl (id INT, id2 INT, PRIMARY KEY (id, id2 DESC)) WITH (ttl_expire_after = '10 minutes')
 
@@ -1140,11 +1135,6 @@ subtest desc_pk_without_ttl_add_ttl
 statement ok
 CREATE TABLE tbl_desc_pk_without_ttl_add_ttl (id INT, id2 INT, PRIMARY KEY (id, id2 DESC))
 
-onlyif config local-mixed-23.1
-statement error non-ascending ordering on PRIMARY KEYs are not supported
-ALTER TABLE tbl_desc_pk_without_ttl_add_ttl SET (ttl_expire_after = '10 minutes')
-
-skipif config local-mixed-23.1
 statement ok
 ALTER TABLE tbl_desc_pk_without_ttl_add_ttl SET (ttl_expire_after = '10 minutes')
 
@@ -1155,11 +1145,6 @@ subtest asc_pk_alter_desc_pk
 statement ok
 CREATE TABLE tbl_asc_pk_alter_desc_pk (id INT, id2 INT, PRIMARY KEY (id, id2)) WITH (ttl_expire_after = '10 minutes')
 
-onlyif config local-mixed-23.1
-statement error non-ascending ordering on PRIMARY KEYs are not supported
-ALTER TABLE tbl_asc_pk_alter_desc_pk ALTER PRIMARY KEY USING COLUMNS (id, id2 DESC)
-
-skipif config local-mixed-23.1
 statement ok
 ALTER TABLE tbl_asc_pk_alter_desc_pk ALTER PRIMARY KEY USING COLUMNS (id, id2 DESC)
 

@@ -938,11 +938,6 @@ func TestSchemaChangeComparator_json_index(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/json_index"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_json_index_local_mixed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/json_index_local_mixed"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
 func TestSchemaChangeComparator_kv_builtin_functions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/kv_builtin_functions"
@@ -1018,44 +1013,9 @@ func TestSchemaChangeComparator_mixed_version_can_login(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_can_login"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_mixed_version_insights_queries(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_insights_queries"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_mixed_version_partially_visible_index(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_partially_visible_index"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_mixed_version_procedure(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_procedure"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_mixed_version_refcursor(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_refcursor"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_mixed_version_schedule_details(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_schedule_details"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
 func TestSchemaChangeComparator_mixed_version_sequence_per_node_cache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_sequence_per_node_cache"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_mixed_version_udf_execute_privileges(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_udf_execute_privileges"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_mixed_version_udf_mutations(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_udf_mutations"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_mixed_version_upgrade_preserve_ttl(t *testing.T) {
@@ -1206,11 +1166,6 @@ func TestSchemaChangeComparator_pg_extension(t *testing.T) {
 func TestSchemaChangeComparator_pg_lsn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/pg_lsn"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_pg_lsn_mixed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/pg_lsn_mixed"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_pgcrypto_builtins(t *testing.T) {

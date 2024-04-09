@@ -701,7 +701,6 @@ CREATE USER u
 statement ok
 CREATE SCHEMA AUTHORIZATION u
 
-skipif config local-mixed-23.1
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
