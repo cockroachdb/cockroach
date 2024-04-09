@@ -32,15 +32,16 @@ state offset=47
 /Table/5{4-5}                              database system (host)
 /Table/5{5-6}                              database system (host)
 /Table/5{6-7}                              database system (host)
-/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
-/Table/5{8-9}                              database system (host)
+/Table/5{7-8}                              database system (host)
+/Table/5{8-9}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/{59-60}                             database system (host)
-/Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/6{0-1}                              database system (host)
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
-/Table/6{2-3}                              database system (host)
+/Table/6{2-3}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{3-4}                              database system (host)
 /Table/6{4-5}                              database system (host)
 /Table/6{5-6}                              database system (host)
+/Table/6{6-7}                              database system (host)
 /Tenant/10{-\x00}                          database system (tenant)
 /Tenant/11{-\x00}                          database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
@@ -57,6 +58,7 @@ upsert /Tenant/10/Table/{4-5}              database system (tenant)
 upsert /Tenant/10/Table/{5-6}              database system (tenant)
 upsert /Tenant/10/Table/{6-7}              database system (tenant)
 upsert /Tenant/10/Table/{7-8}              database system (tenant)
+upsert /Tenant/10/Table/{8-9}              database system (tenant)
 upsert /Tenant/10/Table/{9-10}             database system (tenant)
 upsert /Tenant/10/Table/1{1-2}             ignore_strict_gc=true rangefeed_enabled=true exclude_data_from_backup=true
 upsert /Tenant/10/Table/1{2-3}             database system (tenant)
@@ -86,7 +88,9 @@ upsert /Tenant/10/Table/4{1-2}             database system (tenant)
 upsert /Tenant/10/Table/4{2-3}             database system (tenant)
 upsert /Tenant/10/Table/4{3-4}             database system (tenant)
 upsert /Tenant/10/Table/4{4-5}             database system (tenant)
+upsert /Tenant/10/Table/4{5-6}             ignore_strict_gc=true rangefeed_enabled=true exclude_data_from_backup=true
 upsert /Tenant/10/Table/4{6-7}             database system (tenant)
+upsert /Tenant/10/Table/4{7-8}             ignore_strict_gc=true rangefeed_enabled=true exclude_data_from_backup=true
 upsert /Tenant/10/Table/4{8-9}             database system (tenant)
 upsert /Tenant/10/Table/5{0-1}             database system (tenant)
 upsert /Tenant/10/Table/5{1-2}             database system (tenant)
@@ -101,6 +105,10 @@ upsert /Tenant/10/Table/{59-60}            database system (tenant)
 upsert /Tenant/10/Table/6{0-1}             database system (tenant)
 upsert /Tenant/10/Table/6{1-2}             database system (tenant)
 upsert /Tenant/10/Table/6{2-3}             database system (tenant)
+upsert /Tenant/10/Table/6{3-4}             database system (tenant)
+upsert /Tenant/10/Table/6{4-5}             database system (tenant)
+upsert /Tenant/10/Table/6{5-6}             database system (tenant)
+upsert /Tenant/10/Table/6{6-7}             database system (tenant)
 
 state offset=47
 ----
@@ -115,20 +123,22 @@ state offset=47
 /Table/5{4-5}                              database system (host)
 /Table/5{5-6}                              database system (host)
 /Table/5{6-7}                              database system (host)
-/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
-/Table/5{8-9}                              database system (host)
+/Table/5{7-8}                              database system (host)
+/Table/5{8-9}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/{59-60}                             database system (host)
-/Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/6{0-1}                              database system (host)
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
-/Table/6{2-3}                              database system (host)
+/Table/6{2-3}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{3-4}                              database system (host)
 /Table/6{4-5}                              database system (host)
 /Table/6{5-6}                              database system (host)
+/Table/6{6-7}                              database system (host)
 /Tenant/10{-/Table/4}                      database system (tenant)
 /Tenant/10/Table/{4-5}                     database system (tenant)
 /Tenant/10/Table/{5-6}                     database system (tenant)
 /Tenant/10/Table/{6-7}                     database system (tenant)
 /Tenant/10/Table/{7-8}                     database system (tenant)
+/Tenant/10/Table/{8-9}                     database system (tenant)
 /Tenant/10/Table/{9-10}                    database system (tenant)
 /Tenant/10/Table/1{1-2}                    ignore_strict_gc=true rangefeed_enabled=true exclude_data_from_backup=true
 /Tenant/10/Table/1{2-3}                    database system (tenant)
@@ -158,7 +168,9 @@ state offset=47
 /Tenant/10/Table/4{2-3}                    database system (tenant)
 /Tenant/10/Table/4{3-4}                    database system (tenant)
 /Tenant/10/Table/4{4-5}                    database system (tenant)
+/Tenant/10/Table/4{5-6}                    ignore_strict_gc=true rangefeed_enabled=true exclude_data_from_backup=true
 /Tenant/10/Table/4{6-7}                    database system (tenant)
+/Tenant/10/Table/4{7-8}                    ignore_strict_gc=true rangefeed_enabled=true exclude_data_from_backup=true
 /Tenant/10/Table/4{8-9}                    database system (tenant)
 /Tenant/10/Table/5{0-1}                    database system (tenant)
 /Tenant/10/Table/5{1-2}                    database system (tenant)
@@ -173,6 +185,10 @@ state offset=47
 /Tenant/10/Table/6{0-1}                    database system (tenant)
 /Tenant/10/Table/6{1-2}                    database system (tenant)
 /Tenant/10/Table/6{2-3}                    database system (tenant)
+/Tenant/10/Table/6{3-4}                    database system (tenant)
+/Tenant/10/Table/6{4-5}                    database system (tenant)
+/Tenant/10/Table/6{5-6}                    database system (tenant)
+/Tenant/10/Table/6{6-7}                    database system (tenant)
 /Tenant/11{-\x00}                          database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
 
@@ -197,6 +213,8 @@ upsert /Tenant/10/Table/11{3-4}            range default
 state offset=81
 ----
 ...
+/Tenant/10/Table/2{1-2}                    database system (tenant)
+/Tenant/10/Table/2{3-4}                    database system (tenant)
 /Tenant/10/Table/2{4-5}                    database system (tenant)
 /Tenant/10/Table/2{5-6}                    ignore_strict_gc=true rangefeed_enabled=true exclude_data_from_backup=true
 /Tenant/10/Table/2{6-7}                    database system (tenant)
@@ -216,7 +234,9 @@ state offset=81
 /Tenant/10/Table/4{2-3}                    database system (tenant)
 /Tenant/10/Table/4{3-4}                    database system (tenant)
 /Tenant/10/Table/4{4-5}                    database system (tenant)
+/Tenant/10/Table/4{5-6}                    ignore_strict_gc=true rangefeed_enabled=true exclude_data_from_backup=true
 /Tenant/10/Table/4{6-7}                    database system (tenant)
+/Tenant/10/Table/4{7-8}                    ignore_strict_gc=true rangefeed_enabled=true exclude_data_from_backup=true
 /Tenant/10/Table/4{8-9}                    database system (tenant)
 /Tenant/10/Table/5{0-1}                    database system (tenant)
 /Tenant/10/Table/5{1-2}                    database system (tenant)
@@ -231,6 +251,10 @@ state offset=81
 /Tenant/10/Table/6{0-1}                    database system (tenant)
 /Tenant/10/Table/6{1-2}                    database system (tenant)
 /Tenant/10/Table/6{2-3}                    database system (tenant)
+/Tenant/10/Table/6{3-4}                    database system (tenant)
+/Tenant/10/Table/6{4-5}                    database system (tenant)
+/Tenant/10/Table/6{5-6}                    database system (tenant)
+/Tenant/10/Table/6{6-7}                    database system (tenant)
 /Tenant/10/Table/10{6-7}                   range default
 /Tenant/10/Table/10{7-8}                   range default
 /Tenant/10/Table/11{2-3}                   range default

@@ -56,7 +56,7 @@ func TestInitialKeys(t *testing.T) {
 			nonDescKeys = 16
 		} else {
 			codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
-			nonDescKeys = 4
+			nonDescKeys = 8
 		}
 
 		ms := bootstrap.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
@@ -194,10 +194,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		}
 	}
 
-	// Add one for the system.span_count table, which is currently the only
-	// non-system tenant table.
-	const expectedNumberOfSystemTables = bootstrap.NumSystemTablesForSystemTenant + 1
-	require.Equal(t, expectedNumberOfSystemTables, len(testcases))
+	require.Equal(t, bootstrap.NumSystemTablesForSystemTenant, len(testcases))
 
 	runTest := func(t *testing.T, name string, test testcase) {
 		privs := *test.pkg.GetPrivileges()

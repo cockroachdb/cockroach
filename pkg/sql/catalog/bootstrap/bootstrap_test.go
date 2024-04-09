@@ -154,7 +154,7 @@ func TestSystemDatabaseSchemaBootstrapVersionBumped(t *testing.T) {
 
 	// If you need to update this value (i.e. failed this test), check whether
 	// you need to bump systemschema.SystemDatabaseSchemaBootstrapVersion too.
-	const prevSystemHash = "eda44377c619547fba3a3ad138170a5e806671bbd80e438107b8b2580ffb1255"
+	const prevSystemHash = "2c0b6d061800b632f4d6e33e67219bf93395bc87349363262f8902fa8ee96d37"
 	_, curSystemHash := GetAndHashInitialValuesToString(0 /* tenantID */)
 
 	if prevSystemHash != curSystemHash {

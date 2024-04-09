@@ -939,6 +939,10 @@ system         public        tenant_settings                  admin    DELETE   
 system         public        tenant_settings                  admin    INSERT          true
 system         public        tenant_settings                  admin    SELECT          true
 system         public        tenant_settings                  admin    UPDATE          true
+system         public        span_count                       admin    DELETE          true
+system         public        span_count                       admin    INSERT          true
+system         public        span_count                       admin    SELECT          true
+system         public        span_count                       admin    UPDATE          true
 system         public        privileges                       admin    DELETE          true
 system         public        privileges                       admin    INSERT          true
 system         public        privileges                       admin    SELECT          true
@@ -1146,6 +1150,10 @@ system         public        tenant_settings                  root     DELETE   
 system         public        tenant_settings                  root     INSERT          true
 system         public        tenant_settings                  root     SELECT          true
 system         public        tenant_settings                  root     UPDATE          true
+system         public        span_count                       root     DELETE          true
+system         public        span_count                       root     INSERT          true
+system         public        span_count                       root     SELECT          true
+system         public        span_count                       root     UPDATE          true
 system         public        privileges                       root     DELETE          true
 system         public        privileges                       root     INSERT          true
 system         public        privileges                       root     SELECT          true
@@ -2126,6 +2134,14 @@ system         public       span_configurations              root     DELETE    
 system         public       span_configurations              root     INSERT          true
 system         public       span_configurations              root     SELECT          true
 system         public       span_configurations              root     UPDATE          true
+system         public       span_count                       admin    DELETE          true
+system         public       span_count                       admin    INSERT          true
+system         public       span_count                       admin    SELECT          true
+system         public       span_count                       admin    UPDATE          true
+system         public       span_count                       root     DELETE          true
+system         public       span_count                       root     INSERT          true
+system         public       span_count                       root     SELECT          true
+system         public       span_count                       root     UPDATE          true
 system         public       span_stats_buckets               admin    DELETE          true
 system         public       span_stats_buckets               admin    INSERT          true
 system         public       span_stats_buckets               admin    SELECT          true
