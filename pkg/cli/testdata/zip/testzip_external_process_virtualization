@@ -77,9 +77,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] retrieving SQL data for system.role_options... writing output: debug/system.role_options.txt... done
 [cluster] retrieving SQL data for system.scheduled_jobs... writing output: debug/system.scheduled_jobs.txt... done
 [cluster] retrieving SQL data for system.settings... writing output: debug/system.settings.txt... done
-[cluster] retrieving SQL data for system.span_configurations... writing output: debug/system.span_configurations.txt...
-[cluster] retrieving SQL data for system.span_configurations: last request failed: ERROR: relation "system.span_configurations" does not exist (SQLSTATE 42P01)
-[cluster] retrieving SQL data for system.span_configurations: creating error output: debug/system.span_configurations.txt.err.txt... done
+[cluster] retrieving SQL data for system.span_configurations... writing output: debug/system.span_configurations.txt... done
 [cluster] retrieving SQL data for system.sql_instances... writing output: debug/system.sql_instances.txt... done
 [cluster] retrieving SQL data for system.sql_stats_cardinality... writing output: debug/system.sql_stats_cardinality.txt... done
 [cluster] retrieving SQL data for system.sqlliveness... writing output: debug/system.sqlliveness.txt... done
@@ -87,21 +85,11 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] retrieving SQL data for system.statement_diagnostics_requests... writing output: debug/system.statement_diagnostics_requests.txt... done
 [cluster] retrieving SQL data for system.statement_statistics_limit_5000... writing output: debug/system.statement_statistics_limit_5000.txt... done
 [cluster] retrieving SQL data for system.table_statistics... writing output: debug/system.table_statistics.txt... done
-[cluster] retrieving SQL data for system.task_payloads... writing output: debug/system.task_payloads.txt...
-[cluster] retrieving SQL data for system.task_payloads: last request failed: ERROR: relation "system.task_payloads" does not exist (SQLSTATE 42P01)
-[cluster] retrieving SQL data for system.task_payloads: creating error output: debug/system.task_payloads.txt.err.txt... done
-[cluster] retrieving SQL data for system.tenant_settings... writing output: debug/system.tenant_settings.txt...
-[cluster] retrieving SQL data for system.tenant_settings: last request failed: ERROR: relation "system.tenant_settings" does not exist (SQLSTATE 42P01)
-[cluster] retrieving SQL data for system.tenant_settings: creating error output: debug/system.tenant_settings.txt.err.txt... done
-[cluster] retrieving SQL data for system.tenant_tasks... writing output: debug/system.tenant_tasks.txt...
-[cluster] retrieving SQL data for system.tenant_tasks: last request failed: ERROR: relation "system.tenant_tasks" does not exist (SQLSTATE 42P01)
-[cluster] retrieving SQL data for system.tenant_tasks: creating error output: debug/system.tenant_tasks.txt.err.txt... done
-[cluster] retrieving SQL data for system.tenant_usage... writing output: debug/system.tenant_usage.txt...
-[cluster] retrieving SQL data for system.tenant_usage: last request failed: ERROR: relation "system.tenant_usage" does not exist (SQLSTATE 42P01)
-[cluster] retrieving SQL data for system.tenant_usage: creating error output: debug/system.tenant_usage.txt.err.txt... done
-[cluster] retrieving SQL data for system.tenants... writing output: debug/system.tenants.txt...
-[cluster] retrieving SQL data for system.tenants: last request failed: ERROR: relation "system.tenants" does not exist (SQLSTATE 42P01)
-[cluster] retrieving SQL data for system.tenants: creating error output: debug/system.tenants.txt.err.txt... done
+[cluster] retrieving SQL data for system.task_payloads... writing output: debug/system.task_payloads.txt... done
+[cluster] retrieving SQL data for system.tenant_settings... writing output: debug/system.tenant_settings.txt... done
+[cluster] retrieving SQL data for system.tenant_tasks... writing output: debug/system.tenant_tasks.txt... done
+[cluster] retrieving SQL data for system.tenant_usage... writing output: debug/system.tenant_usage.txt... done
+[cluster] retrieving SQL data for system.tenants... writing output: debug/system.tenants.txt... done
 [cluster] requesting nodes... received response...
 [cluster] requesting nodes: last request failed: rpc error: ...
 [cluster] requesting nodes: creating error output: debug/nodes.json.err.txt... done
