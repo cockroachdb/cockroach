@@ -15,6 +15,7 @@ if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
   arch=amd64-fips
 fi
 $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
 
 artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
@@ -57,6 +58,7 @@ fi
 
 build/teamcity-roachtest-invoke.sh \
   --metamorphic-encryption-probability=0.5 \
+  --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
   --select-probability="${select_probability}" \
   --cloud="${CLOUD}" \
   --count="${COUNT-1}" \
