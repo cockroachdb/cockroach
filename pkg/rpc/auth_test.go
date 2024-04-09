@@ -15,8 +15,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -106,10 +108,14 @@ func TestAuthenticateTenant(t *testing.T) {
 		systemID         roachpb.TenantID
 		ous              []string
 		commonName       string
+		rootDNString     string
+		nodeDNString     string
 		expTenID         roachpb.TenantID
 		expErr           string
 		tenantScope      uint64
 		clientTenantInMD string
+		certPrincipalMap string
+		certDNSName      string
 	}{
 		{systemID: stid, ous: correctOU, commonName: "10", expTenID: tenTen},
 		{systemID: stid, ous: correctOU, commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
@@ -170,13 +176,57 @@ func TestAuthenticateTenant(t *testing.T) {
 		{clientTenantInMD: "123",
 			systemID: tenTen, ous: nil, commonName: "root",
 			expErr: `client tenant identity \(123\) does not match server`},
+		{systemID: stid, ous: nil, commonName: "foo", rootDNString: "CN=foo"},
+		{systemID: stid, ous: nil, commonName: "foo", nodeDNString: "CN=foo"},
+		{systemID: stid, ous: nil, commonName: "foo", rootDNString: "CN=bar",
+			expErr: `need root or node client cert to perform RPCs on this server. cert dn did not match set root or node dn`},
+		{systemID: stid, ous: nil, commonName: "foo", nodeDNString: "CN=bar",
+			expErr: `need root or node client cert to perform RPCs on this server. cert dn did not match set root or node dn`},
+		{systemID: stid, ous: nil, commonName: "foo", certPrincipalMap: "foo:root"},
+		{systemID: stid, ous: nil, commonName: "foo", certPrincipalMap: "foo:node"},
+		{systemID: stid, ous: nil, commonName: "foo", certPrincipalMap: "foo:bar",
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "bar" on all tenants\)`},
+		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "root"},
+		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "node"},
+		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "bar",
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "foo" on all tenants, "bar" on all tenants\)`},
+		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "bar", certPrincipalMap: "bar:root"},
+		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "bar", certPrincipalMap: "bar:node"},
 	} {
 		t.Run(fmt.Sprintf("from %v to %v (md %q)", tc.commonName, tc.systemID, tc.clientTenantInMD), func(t *testing.T) {
+			err := security.SetCertPrincipalMap(strings.Split(tc.certPrincipalMap, ","))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.rootDNString != "" {
+				err = security.SetRootSubject(tc.rootDNString)
+				if err != nil {
+					t.Fatalf("could not set root subject DN, err: %v", err)
+				}
+			}
+			if tc.nodeDNString != "" {
+				err = security.SetNodeSubject(tc.nodeDNString)
+				if err != nil {
+					t.Fatalf("could not set node subject DN, err: %v", err)
+				}
+			}
+			defer func() {
+				security.UnsetRootSubject()
+				security.UnsetNodeSubject()
+			}()
+
 			cert := &x509.Certificate{
 				Subject: pkix.Name{
 					CommonName:         tc.commonName,
 					OrganizationalUnit: tc.ous,
 				},
+			}
+			cert.RawSubject, err = asn1.Marshal(cert.Subject.ToRDNSequence())
+			if err != nil {
+				t.Fatalf("unable to marshal rdn sequence to raw subject, err: %v", err)
+			}
+			if tc.certDNSName != "" {
+				cert.DNSNames = append(cert.DNSNames, tc.certDNSName)
 			}
 			if tc.tenantScope > 0 {
 				tenantSANs, err := security.MakeTenantURISANs(

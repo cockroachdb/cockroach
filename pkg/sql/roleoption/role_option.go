@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -221,7 +222,9 @@ func MakeListFromKVOptions(
 					return err
 				}
 				if u.IsRootUser() {
-					return pgerror.Newf(pgcode.InvalidParameterValue, "role %q cannot have a SUBJECT", u)
+					return pgerror.Newf(pgcode.InvalidParameterValue, "role %q cannot have a SUBJECT", u,
+						"use the --%s CLI flag to configure root",
+						cliflags.RootCertDistinguishedName.Name)
 				}
 				if err := distinguishedname.ValidateDN(s); err != nil {
 					return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)

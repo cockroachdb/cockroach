@@ -23,6 +23,7 @@ go_library(
         "//pkg/testutils/serverutils",  # keep
         "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",  # keep
+        "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/randutil",  # keep
         "//pkg/util/stop",
