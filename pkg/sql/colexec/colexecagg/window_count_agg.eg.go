@@ -36,7 +36,7 @@ type countRowsWindowAgg struct {
 var _ AggregateFunc = &countRowsWindowAgg{}
 
 func (a *countRowsWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// Unnecessary memory accounting can have significant overhead for window
 	// aggregate functions because Compute is called at least once for every row.
@@ -99,7 +99,7 @@ type countWindowAgg struct {
 var _ AggregateFunc = &countWindowAgg{}
 
 func (a *countWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
@@ -140,7 +140,7 @@ func (a *countWindowAgg) Reset() {
 // Remove implements the slidingWindowAggregateFunc interface (see
 // window_aggregator_tmpl.go).
 func (a *countWindowAgg) Remove(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
 ) {
 	nulls := vecs[inputIdxs[0]].Nulls()
 	if nulls.MaybeHasNulls() {

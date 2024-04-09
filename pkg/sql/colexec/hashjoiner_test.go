@@ -1054,8 +1054,8 @@ func BenchmarkHashJoiner(b *testing.B) {
 	// right input.
 	const leftRowsMultiple = 2
 
-	getCols := func(typ *types.T, length int, distinct bool, nullProb float64) []coldata.Vec {
-		var cols []coldata.Vec
+	getCols := func(typ *types.T, length int, distinct bool, nullProb float64) []*coldata.Vec {
+		var cols []*coldata.Vec
 		dupCount := 1
 		if distinct {
 			// When the source contains non-distinct tuples, then each tuple

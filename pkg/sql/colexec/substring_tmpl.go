@@ -116,7 +116,7 @@ func (s *substring_StartType_LengthTypeOperator) Next() coldata.Batch {
 	outputCol := outputVec.Bytes()
 	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
-		[]coldata.Vec{outputVec},
+		[]*coldata.Vec{outputVec},
 		func() {
 			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {

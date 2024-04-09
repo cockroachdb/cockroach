@@ -179,7 +179,7 @@ func (c constBoolOp) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Bool()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check
@@ -218,7 +218,7 @@ func (c constBytesOp) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Bytes()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check
@@ -256,7 +256,7 @@ func (c constDecimalOp) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Decimal()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check
@@ -295,7 +295,7 @@ func (c constInt16Op) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Int16()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check
@@ -334,7 +334,7 @@ func (c constInt32Op) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Int32()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check
@@ -373,7 +373,7 @@ func (c constInt64Op) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Int64()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check
@@ -412,7 +412,7 @@ func (c constFloat64Op) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Float64()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check
@@ -451,7 +451,7 @@ func (c constTimestampOp) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Timestamp()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check
@@ -490,7 +490,7 @@ func (c constIntervalOp) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Interval()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check
@@ -529,7 +529,7 @@ func (c constJSONOp) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.JSON()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check
@@ -567,7 +567,7 @@ func (c constDatumOp) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Datum()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check

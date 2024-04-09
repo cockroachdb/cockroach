@@ -115,7 +115,7 @@ func (s *substringInt64Int16Operator) Next() coldata.Batch {
 	outputCol := outputVec.Bytes()
 	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
-		[]coldata.Vec{outputVec},
+		[]*coldata.Vec{outputVec},
 		func() {
 			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
@@ -216,7 +216,7 @@ func (s *substringInt64Int32Operator) Next() coldata.Batch {
 	outputCol := outputVec.Bytes()
 	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
-		[]coldata.Vec{outputVec},
+		[]*coldata.Vec{outputVec},
 		func() {
 			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
@@ -317,7 +317,7 @@ func (s *substringInt64Int64Operator) Next() coldata.Batch {
 	outputCol := outputVec.Bytes()
 	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
-		[]coldata.Vec{outputVec},
+		[]*coldata.Vec{outputVec},
 		func() {
 			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
@@ -418,7 +418,7 @@ func (s *substringInt16Int16Operator) Next() coldata.Batch {
 	outputCol := outputVec.Bytes()
 	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
-		[]coldata.Vec{outputVec},
+		[]*coldata.Vec{outputVec},
 		func() {
 			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
@@ -519,7 +519,7 @@ func (s *substringInt16Int32Operator) Next() coldata.Batch {
 	outputCol := outputVec.Bytes()
 	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
-		[]coldata.Vec{outputVec},
+		[]*coldata.Vec{outputVec},
 		func() {
 			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
@@ -620,7 +620,7 @@ func (s *substringInt16Int64Operator) Next() coldata.Batch {
 	outputCol := outputVec.Bytes()
 	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
-		[]coldata.Vec{outputVec},
+		[]*coldata.Vec{outputVec},
 		func() {
 			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
@@ -721,7 +721,7 @@ func (s *substringInt32Int16Operator) Next() coldata.Batch {
 	outputCol := outputVec.Bytes()
 	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
-		[]coldata.Vec{outputVec},
+		[]*coldata.Vec{outputVec},
 		func() {
 			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
@@ -822,7 +822,7 @@ func (s *substringInt32Int32Operator) Next() coldata.Batch {
 	outputCol := outputVec.Bytes()
 	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
-		[]coldata.Vec{outputVec},
+		[]*coldata.Vec{outputVec},
 		func() {
 			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
@@ -923,7 +923,7 @@ func (s *substringInt32Int64Operator) Next() coldata.Batch {
 	outputCol := outputVec.Bytes()
 	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
-		[]coldata.Vec{outputVec},
+		[]*coldata.Vec{outputVec},
 		func() {
 			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {

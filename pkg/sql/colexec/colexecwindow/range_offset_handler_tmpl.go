@@ -207,7 +207,7 @@ func (h *_OP_STRING) getIdx(ctx context.Context, currRow, lastIdx int) (idx int)
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -293,7 +293,7 @@ func (h *_OP_STRING) getIdx(ctx context.Context, currRow, lastIdx int) (idx int)
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break

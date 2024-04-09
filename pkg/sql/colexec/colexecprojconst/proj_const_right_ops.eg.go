@@ -66,7 +66,7 @@ func (p projBitandInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -140,7 +140,7 @@ func (p projBitandInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -214,7 +214,7 @@ func (p projBitandInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -288,7 +288,7 @@ func (p projBitandInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -362,7 +362,7 @@ func (p projBitandInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -436,7 +436,7 @@ func (p projBitandInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -510,7 +510,7 @@ func (p projBitandInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -584,7 +584,7 @@ func (p projBitandInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -658,7 +658,7 @@ func (p projBitandInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -735,7 +735,7 @@ func (p projBitandDatumDatumConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -843,7 +843,7 @@ func (p projBitorInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -917,7 +917,7 @@ func (p projBitorInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -991,7 +991,7 @@ func (p projBitorInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1065,7 +1065,7 @@ func (p projBitorInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1139,7 +1139,7 @@ func (p projBitorInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1213,7 +1213,7 @@ func (p projBitorInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1287,7 +1287,7 @@ func (p projBitorInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1361,7 +1361,7 @@ func (p projBitorInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1435,7 +1435,7 @@ func (p projBitorInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1512,7 +1512,7 @@ func (p projBitorDatumDatumConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1620,7 +1620,7 @@ func (p projBitxorInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1694,7 +1694,7 @@ func (p projBitxorInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1768,7 +1768,7 @@ func (p projBitxorInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1842,7 +1842,7 @@ func (p projBitxorInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1916,7 +1916,7 @@ func (p projBitxorInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -1990,7 +1990,7 @@ func (p projBitxorInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -2064,7 +2064,7 @@ func (p projBitxorInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -2138,7 +2138,7 @@ func (p projBitxorInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -2212,7 +2212,7 @@ func (p projBitxorInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -2289,7 +2289,7 @@ func (p projBitxorDatumDatumConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -2397,7 +2397,7 @@ func (p projPlusDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -2499,7 +2499,7 @@ func (p projPlusDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -2601,7 +2601,7 @@ func (p projPlusDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -2703,7 +2703,7 @@ func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -2805,7 +2805,7 @@ func (p projPlusInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -2903,7 +2903,7 @@ func (p projPlusInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -3001,7 +3001,7 @@ func (p projPlusInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -3099,7 +3099,7 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -3212,7 +3212,7 @@ func (p projPlusInt16DatumConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -3328,7 +3328,7 @@ func (p projPlusInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -3426,7 +3426,7 @@ func (p projPlusInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -3524,7 +3524,7 @@ func (p projPlusInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -3622,7 +3622,7 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -3735,7 +3735,7 @@ func (p projPlusInt32DatumConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -3851,7 +3851,7 @@ func (p projPlusInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -3949,7 +3949,7 @@ func (p projPlusInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -4047,7 +4047,7 @@ func (p projPlusInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -4145,7 +4145,7 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -4258,7 +4258,7 @@ func (p projPlusInt64DatumConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -4374,7 +4374,7 @@ func (p projPlusFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -4460,7 +4460,7 @@ func (p projPlusTimestampIntervalConstOp) Next() coldata.Batch {
 	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -4546,7 +4546,7 @@ func (p projPlusIntervalTimestampConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -4632,7 +4632,7 @@ func (p projPlusIntervalIntervalConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -4701,7 +4701,7 @@ func (p projPlusIntervalDatumConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -4820,7 +4820,7 @@ func (p projPlusDatumIntervalConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -4941,7 +4941,7 @@ func (p projPlusDatumInt16ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -5062,7 +5062,7 @@ func (p projPlusDatumInt32ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -5183,7 +5183,7 @@ func (p projPlusDatumInt64ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -5301,7 +5301,7 @@ func (p projMinusDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -5403,7 +5403,7 @@ func (p projMinusDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -5505,7 +5505,7 @@ func (p projMinusDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -5607,7 +5607,7 @@ func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -5709,7 +5709,7 @@ func (p projMinusInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -5807,7 +5807,7 @@ func (p projMinusInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -5905,7 +5905,7 @@ func (p projMinusInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -6003,7 +6003,7 @@ func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -6116,7 +6116,7 @@ func (p projMinusInt16DatumConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -6232,7 +6232,7 @@ func (p projMinusInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -6330,7 +6330,7 @@ func (p projMinusInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -6428,7 +6428,7 @@ func (p projMinusInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -6526,7 +6526,7 @@ func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -6639,7 +6639,7 @@ func (p projMinusInt32DatumConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -6755,7 +6755,7 @@ func (p projMinusInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -6853,7 +6853,7 @@ func (p projMinusInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -6951,7 +6951,7 @@ func (p projMinusInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -7049,7 +7049,7 @@ func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -7162,7 +7162,7 @@ func (p projMinusInt64DatumConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -7278,7 +7278,7 @@ func (p projMinusFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -7364,7 +7364,7 @@ func (p projMinusTimestampTimestampConstOp) Next() coldata.Batch {
 	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -7442,7 +7442,7 @@ func (p projMinusTimestampIntervalConstOp) Next() coldata.Batch {
 	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -7528,7 +7528,7 @@ func (p projMinusIntervalIntervalConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -7597,7 +7597,7 @@ func (p projMinusIntervalDatumConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -7713,7 +7713,7 @@ func (p projMinusJSONBytesConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -7813,7 +7813,7 @@ func (p projMinusJSONInt16ConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -7899,7 +7899,7 @@ func (p projMinusJSONInt32ConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -7985,7 +7985,7 @@ func (p projMinusJSONInt64ConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -8074,7 +8074,7 @@ func (p projMinusDatumDatumConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -8185,7 +8185,7 @@ func (p projMinusDatumIntervalConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -8306,7 +8306,7 @@ func (p projMinusDatumBytesConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -8425,7 +8425,7 @@ func (p projMinusDatumInt16ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -8546,7 +8546,7 @@ func (p projMinusDatumInt32ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -8667,7 +8667,7 @@ func (p projMinusDatumInt64ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -8785,7 +8785,7 @@ func (p projMultDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -8887,7 +8887,7 @@ func (p projMultDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -8989,7 +8989,7 @@ func (p projMultDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -9091,7 +9091,7 @@ func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -9193,7 +9193,7 @@ func (p projMultDecimalIntervalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -9279,7 +9279,7 @@ func (p projMultInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -9409,7 +9409,7 @@ func (p projMultInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -9539,7 +9539,7 @@ func (p projMultInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -9669,7 +9669,7 @@ func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -9779,7 +9779,7 @@ func (p projMultInt16IntervalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -9845,7 +9845,7 @@ func (p projMultInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -9975,7 +9975,7 @@ func (p projMultInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -10105,7 +10105,7 @@ func (p projMultInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -10235,7 +10235,7 @@ func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -10345,7 +10345,7 @@ func (p projMultInt32IntervalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -10411,7 +10411,7 @@ func (p projMultInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -10541,7 +10541,7 @@ func (p projMultInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -10671,7 +10671,7 @@ func (p projMultInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -10801,7 +10801,7 @@ func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -10911,7 +10911,7 @@ func (p projMultInt64IntervalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -10977,7 +10977,7 @@ func (p projMultFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -11063,7 +11063,7 @@ func (p projMultFloat64IntervalConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -11129,7 +11129,7 @@ func (p projMultIntervalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -11195,7 +11195,7 @@ func (p projMultIntervalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -11261,7 +11261,7 @@ func (p projMultIntervalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -11327,7 +11327,7 @@ func (p projMultIntervalFloat64ConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -11393,7 +11393,7 @@ func (p projMultIntervalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -11479,7 +11479,7 @@ func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -11597,7 +11597,7 @@ func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -11715,7 +11715,7 @@ func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -11833,7 +11833,7 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -11967,7 +11967,7 @@ func (p projDivInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -12081,7 +12081,7 @@ func (p projDivInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -12195,7 +12195,7 @@ func (p projDivInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -12309,7 +12309,7 @@ func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -12451,7 +12451,7 @@ func (p projDivInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -12565,7 +12565,7 @@ func (p projDivInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -12679,7 +12679,7 @@ func (p projDivInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -12793,7 +12793,7 @@ func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -12935,7 +12935,7 @@ func (p projDivInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -13049,7 +13049,7 @@ func (p projDivInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -13163,7 +13163,7 @@ func (p projDivInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -13277,7 +13277,7 @@ func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -13419,7 +13419,7 @@ func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -13521,7 +13521,7 @@ func (p projDivIntervalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -13603,7 +13603,7 @@ func (p projDivIntervalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -13685,7 +13685,7 @@ func (p projDivIntervalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -13767,7 +13767,7 @@ func (p projDivIntervalFloat64ConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -13849,7 +13849,7 @@ func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -13967,7 +13967,7 @@ func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -14085,7 +14085,7 @@ func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -14203,7 +14203,7 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -14337,7 +14337,7 @@ func (p projFloorDivInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -14431,7 +14431,7 @@ func (p projFloorDivInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -14525,7 +14525,7 @@ func (p projFloorDivInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -14619,7 +14619,7 @@ func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -14761,7 +14761,7 @@ func (p projFloorDivInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -14855,7 +14855,7 @@ func (p projFloorDivInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -14949,7 +14949,7 @@ func (p projFloorDivInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -15043,7 +15043,7 @@ func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -15185,7 +15185,7 @@ func (p projFloorDivInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -15279,7 +15279,7 @@ func (p projFloorDivInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -15373,7 +15373,7 @@ func (p projFloorDivInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -15467,7 +15467,7 @@ func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -15609,7 +15609,7 @@ func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -15711,7 +15711,7 @@ func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -15829,7 +15829,7 @@ func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -15947,7 +15947,7 @@ func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -16065,7 +16065,7 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -16183,7 +16183,7 @@ func (p projModInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -16277,7 +16277,7 @@ func (p projModInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -16371,7 +16371,7 @@ func (p projModInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -16465,7 +16465,7 @@ func (p projModInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -16591,7 +16591,7 @@ func (p projModInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -16685,7 +16685,7 @@ func (p projModInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -16779,7 +16779,7 @@ func (p projModInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -16873,7 +16873,7 @@ func (p projModInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -16999,7 +16999,7 @@ func (p projModInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -17093,7 +17093,7 @@ func (p projModInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -17187,7 +17187,7 @@ func (p projModInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -17281,7 +17281,7 @@ func (p projModInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -17407,7 +17407,7 @@ func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -17509,7 +17509,7 @@ func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -17611,7 +17611,7 @@ func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -17713,7 +17713,7 @@ func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -17815,7 +17815,7 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -17917,7 +17917,7 @@ func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -18039,7 +18039,7 @@ func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -18161,7 +18161,7 @@ func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -18283,7 +18283,7 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -18393,7 +18393,7 @@ func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -18515,7 +18515,7 @@ func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -18637,7 +18637,7 @@ func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -18759,7 +18759,7 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -18869,7 +18869,7 @@ func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -18991,7 +18991,7 @@ func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -19113,7 +19113,7 @@ func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -19235,7 +19235,7 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -19345,7 +19345,7 @@ func (p projPowFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -19431,7 +19431,7 @@ func (p projConcatBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -19523,7 +19523,7 @@ func (p projConcatJSONJSONConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -19614,7 +19614,7 @@ func (p projConcatDatumDatumConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -19722,7 +19722,7 @@ func (p projLShiftInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -19820,7 +19820,7 @@ func (p projLShiftInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -19918,7 +19918,7 @@ func (p projLShiftInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -20016,7 +20016,7 @@ func (p projLShiftInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -20114,7 +20114,7 @@ func (p projLShiftInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -20212,7 +20212,7 @@ func (p projLShiftInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -20310,7 +20310,7 @@ func (p projLShiftInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -20408,7 +20408,7 @@ func (p projLShiftInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -20506,7 +20506,7 @@ func (p projLShiftInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -20607,7 +20607,7 @@ func (p projLShiftDatumInt16ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -20728,7 +20728,7 @@ func (p projLShiftDatumInt32ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -20849,7 +20849,7 @@ func (p projLShiftDatumInt64ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -20967,7 +20967,7 @@ func (p projRShiftInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -21065,7 +21065,7 @@ func (p projRShiftInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -21163,7 +21163,7 @@ func (p projRShiftInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -21261,7 +21261,7 @@ func (p projRShiftInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -21359,7 +21359,7 @@ func (p projRShiftInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -21457,7 +21457,7 @@ func (p projRShiftInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -21555,7 +21555,7 @@ func (p projRShiftInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -21653,7 +21653,7 @@ func (p projRShiftInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -21751,7 +21751,7 @@ func (p projRShiftInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -21852,7 +21852,7 @@ func (p projRShiftDatumInt16ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -21973,7 +21973,7 @@ func (p projRShiftDatumInt32ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -22094,7 +22094,7 @@ func (p projRShiftDatumInt64ConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -22212,7 +22212,7 @@ func (p projJSONFetchValJSONBytesConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -22324,7 +22324,7 @@ func (p projJSONFetchValJSONInt16ConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -22426,7 +22426,7 @@ func (p projJSONFetchValJSONInt32ConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -22528,7 +22528,7 @@ func (p projJSONFetchValJSONInt64ConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -22630,7 +22630,7 @@ func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -22778,7 +22778,7 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -22916,7 +22916,7 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -23054,7 +23054,7 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -23192,7 +23192,7 @@ func (p projJSONFetchValPathJSONDatumConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -23292,7 +23292,7 @@ func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -23432,7 +23432,7 @@ func (p projEQBoolBoolConstOp) Next() coldata.Batch {
 	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -23554,7 +23554,7 @@ func (p projEQBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -23642,7 +23642,7 @@ func (p projEQDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -23756,7 +23756,7 @@ func (p projEQDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -23870,7 +23870,7 @@ func (p projEQDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -23984,7 +23984,7 @@ func (p projEQDecimalFloat64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -24106,7 +24106,7 @@ func (p projEQDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -24196,7 +24196,7 @@ func (p projEQInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -24330,7 +24330,7 @@ func (p projEQInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -24464,7 +24464,7 @@ func (p projEQInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -24598,7 +24598,7 @@ func (p projEQInt16Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -24764,7 +24764,7 @@ func (p projEQInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -24878,7 +24878,7 @@ func (p projEQInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -25012,7 +25012,7 @@ func (p projEQInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -25146,7 +25146,7 @@ func (p projEQInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -25280,7 +25280,7 @@ func (p projEQInt32Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -25446,7 +25446,7 @@ func (p projEQInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -25560,7 +25560,7 @@ func (p projEQInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -25694,7 +25694,7 @@ func (p projEQInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -25828,7 +25828,7 @@ func (p projEQInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -25962,7 +25962,7 @@ func (p projEQInt64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -26128,7 +26128,7 @@ func (p projEQInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -26242,7 +26242,7 @@ func (p projEQFloat64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -26408,7 +26408,7 @@ func (p projEQFloat64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -26574,7 +26574,7 @@ func (p projEQFloat64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -26740,7 +26740,7 @@ func (p projEQFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -26906,7 +26906,7 @@ func (p projEQFloat64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -27028,7 +27028,7 @@ func (p projEQTimestampTimestampConstOp) Next() coldata.Batch {
 	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -27146,7 +27146,7 @@ func (p projEQIntervalIntervalConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -27236,7 +27236,7 @@ func (p projEQJSONJSONConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -27348,7 +27348,7 @@ func (p projEQDatumDatumConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -27452,7 +27452,7 @@ func (p projNEBoolBoolConstOp) Next() coldata.Batch {
 	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -27574,7 +27574,7 @@ func (p projNEBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -27662,7 +27662,7 @@ func (p projNEDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -27776,7 +27776,7 @@ func (p projNEDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -27890,7 +27890,7 @@ func (p projNEDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -28004,7 +28004,7 @@ func (p projNEDecimalFloat64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -28126,7 +28126,7 @@ func (p projNEDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -28216,7 +28216,7 @@ func (p projNEInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -28350,7 +28350,7 @@ func (p projNEInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -28484,7 +28484,7 @@ func (p projNEInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -28618,7 +28618,7 @@ func (p projNEInt16Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -28784,7 +28784,7 @@ func (p projNEInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -28898,7 +28898,7 @@ func (p projNEInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -29032,7 +29032,7 @@ func (p projNEInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -29166,7 +29166,7 @@ func (p projNEInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -29300,7 +29300,7 @@ func (p projNEInt32Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -29466,7 +29466,7 @@ func (p projNEInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -29580,7 +29580,7 @@ func (p projNEInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -29714,7 +29714,7 @@ func (p projNEInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -29848,7 +29848,7 @@ func (p projNEInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -29982,7 +29982,7 @@ func (p projNEInt64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -30148,7 +30148,7 @@ func (p projNEInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -30262,7 +30262,7 @@ func (p projNEFloat64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -30428,7 +30428,7 @@ func (p projNEFloat64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -30594,7 +30594,7 @@ func (p projNEFloat64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -30760,7 +30760,7 @@ func (p projNEFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -30926,7 +30926,7 @@ func (p projNEFloat64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -31048,7 +31048,7 @@ func (p projNETimestampTimestampConstOp) Next() coldata.Batch {
 	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -31166,7 +31166,7 @@ func (p projNEIntervalIntervalConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -31256,7 +31256,7 @@ func (p projNEJSONJSONConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -31368,7 +31368,7 @@ func (p projNEDatumDatumConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -31472,7 +31472,7 @@ func (p projLTBoolBoolConstOp) Next() coldata.Batch {
 	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -31594,7 +31594,7 @@ func (p projLTBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -31682,7 +31682,7 @@ func (p projLTDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -31796,7 +31796,7 @@ func (p projLTDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -31910,7 +31910,7 @@ func (p projLTDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -32024,7 +32024,7 @@ func (p projLTDecimalFloat64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -32146,7 +32146,7 @@ func (p projLTDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -32236,7 +32236,7 @@ func (p projLTInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -32370,7 +32370,7 @@ func (p projLTInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -32504,7 +32504,7 @@ func (p projLTInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -32638,7 +32638,7 @@ func (p projLTInt16Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -32804,7 +32804,7 @@ func (p projLTInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -32918,7 +32918,7 @@ func (p projLTInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -33052,7 +33052,7 @@ func (p projLTInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -33186,7 +33186,7 @@ func (p projLTInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -33320,7 +33320,7 @@ func (p projLTInt32Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -33486,7 +33486,7 @@ func (p projLTInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -33600,7 +33600,7 @@ func (p projLTInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -33734,7 +33734,7 @@ func (p projLTInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -33868,7 +33868,7 @@ func (p projLTInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -34002,7 +34002,7 @@ func (p projLTInt64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -34168,7 +34168,7 @@ func (p projLTInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -34282,7 +34282,7 @@ func (p projLTFloat64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -34448,7 +34448,7 @@ func (p projLTFloat64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -34614,7 +34614,7 @@ func (p projLTFloat64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -34780,7 +34780,7 @@ func (p projLTFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -34946,7 +34946,7 @@ func (p projLTFloat64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -35068,7 +35068,7 @@ func (p projLTTimestampTimestampConstOp) Next() coldata.Batch {
 	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -35186,7 +35186,7 @@ func (p projLTIntervalIntervalConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -35276,7 +35276,7 @@ func (p projLTJSONJSONConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -35388,7 +35388,7 @@ func (p projLTDatumDatumConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -35492,7 +35492,7 @@ func (p projLEBoolBoolConstOp) Next() coldata.Batch {
 	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -35614,7 +35614,7 @@ func (p projLEBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -35702,7 +35702,7 @@ func (p projLEDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -35816,7 +35816,7 @@ func (p projLEDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -35930,7 +35930,7 @@ func (p projLEDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -36044,7 +36044,7 @@ func (p projLEDecimalFloat64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -36166,7 +36166,7 @@ func (p projLEDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -36256,7 +36256,7 @@ func (p projLEInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -36390,7 +36390,7 @@ func (p projLEInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -36524,7 +36524,7 @@ func (p projLEInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -36658,7 +36658,7 @@ func (p projLEInt16Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -36824,7 +36824,7 @@ func (p projLEInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -36938,7 +36938,7 @@ func (p projLEInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -37072,7 +37072,7 @@ func (p projLEInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -37206,7 +37206,7 @@ func (p projLEInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -37340,7 +37340,7 @@ func (p projLEInt32Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -37506,7 +37506,7 @@ func (p projLEInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -37620,7 +37620,7 @@ func (p projLEInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -37754,7 +37754,7 @@ func (p projLEInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -37888,7 +37888,7 @@ func (p projLEInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -38022,7 +38022,7 @@ func (p projLEInt64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -38188,7 +38188,7 @@ func (p projLEInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -38302,7 +38302,7 @@ func (p projLEFloat64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -38468,7 +38468,7 @@ func (p projLEFloat64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -38634,7 +38634,7 @@ func (p projLEFloat64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -38800,7 +38800,7 @@ func (p projLEFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -38966,7 +38966,7 @@ func (p projLEFloat64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -39088,7 +39088,7 @@ func (p projLETimestampTimestampConstOp) Next() coldata.Batch {
 	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -39206,7 +39206,7 @@ func (p projLEIntervalIntervalConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -39296,7 +39296,7 @@ func (p projLEJSONJSONConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -39408,7 +39408,7 @@ func (p projLEDatumDatumConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -39512,7 +39512,7 @@ func (p projGTBoolBoolConstOp) Next() coldata.Batch {
 	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -39634,7 +39634,7 @@ func (p projGTBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -39722,7 +39722,7 @@ func (p projGTDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -39836,7 +39836,7 @@ func (p projGTDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -39950,7 +39950,7 @@ func (p projGTDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -40064,7 +40064,7 @@ func (p projGTDecimalFloat64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -40186,7 +40186,7 @@ func (p projGTDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -40276,7 +40276,7 @@ func (p projGTInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -40410,7 +40410,7 @@ func (p projGTInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -40544,7 +40544,7 @@ func (p projGTInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -40678,7 +40678,7 @@ func (p projGTInt16Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -40844,7 +40844,7 @@ func (p projGTInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -40958,7 +40958,7 @@ func (p projGTInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -41092,7 +41092,7 @@ func (p projGTInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -41226,7 +41226,7 @@ func (p projGTInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -41360,7 +41360,7 @@ func (p projGTInt32Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -41526,7 +41526,7 @@ func (p projGTInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -41640,7 +41640,7 @@ func (p projGTInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -41774,7 +41774,7 @@ func (p projGTInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -41908,7 +41908,7 @@ func (p projGTInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -42042,7 +42042,7 @@ func (p projGTInt64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -42208,7 +42208,7 @@ func (p projGTInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -42322,7 +42322,7 @@ func (p projGTFloat64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -42488,7 +42488,7 @@ func (p projGTFloat64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -42654,7 +42654,7 @@ func (p projGTFloat64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -42820,7 +42820,7 @@ func (p projGTFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -42986,7 +42986,7 @@ func (p projGTFloat64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -43108,7 +43108,7 @@ func (p projGTTimestampTimestampConstOp) Next() coldata.Batch {
 	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -43226,7 +43226,7 @@ func (p projGTIntervalIntervalConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -43316,7 +43316,7 @@ func (p projGTJSONJSONConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -43428,7 +43428,7 @@ func (p projGTDatumDatumConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -43532,7 +43532,7 @@ func (p projGEBoolBoolConstOp) Next() coldata.Batch {
 	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -43654,7 +43654,7 @@ func (p projGEBytesBytesConstOp) Next() coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -43742,7 +43742,7 @@ func (p projGEDecimalInt16ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -43856,7 +43856,7 @@ func (p projGEDecimalInt32ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -43970,7 +43970,7 @@ func (p projGEDecimalInt64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -44084,7 +44084,7 @@ func (p projGEDecimalFloat64ConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -44206,7 +44206,7 @@ func (p projGEDecimalDecimalConstOp) Next() coldata.Batch {
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -44296,7 +44296,7 @@ func (p projGEInt16Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -44430,7 +44430,7 @@ func (p projGEInt16Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -44564,7 +44564,7 @@ func (p projGEInt16Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -44698,7 +44698,7 @@ func (p projGEInt16Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -44864,7 +44864,7 @@ func (p projGEInt16DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -44978,7 +44978,7 @@ func (p projGEInt32Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -45112,7 +45112,7 @@ func (p projGEInt32Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -45246,7 +45246,7 @@ func (p projGEInt32Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -45380,7 +45380,7 @@ func (p projGEInt32Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -45546,7 +45546,7 @@ func (p projGEInt32DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -45660,7 +45660,7 @@ func (p projGEInt64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -45794,7 +45794,7 @@ func (p projGEInt64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -45928,7 +45928,7 @@ func (p projGEInt64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -46062,7 +46062,7 @@ func (p projGEInt64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -46228,7 +46228,7 @@ func (p projGEInt64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -46342,7 +46342,7 @@ func (p projGEFloat64Int16ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -46508,7 +46508,7 @@ func (p projGEFloat64Int32ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -46674,7 +46674,7 @@ func (p projGEFloat64Int64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -46840,7 +46840,7 @@ func (p projGEFloat64Float64ConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -47006,7 +47006,7 @@ func (p projGEFloat64DecimalConstOp) Next() coldata.Batch {
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -47128,7 +47128,7 @@ func (p projGETimestampTimestampConstOp) Next() coldata.Batch {
 	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -47246,7 +47246,7 @@ func (p projGEIntervalIntervalConstOp) Next() coldata.Batch {
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -47336,7 +47336,7 @@ func (p projGEJSONJSONConstOp) Next() coldata.Batch {
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
@@ -47448,7 +47448,7 @@ func (p projGEDatumDatumConstOp) Next() coldata.Batch {
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col

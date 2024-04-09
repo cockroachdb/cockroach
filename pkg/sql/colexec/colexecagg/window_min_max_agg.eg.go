@@ -126,7 +126,7 @@ type minBoolWindowAgg struct {
 var _ AggregateFunc = &minBoolWindowAgg{}
 
 func (a *minBoolWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -251,7 +251,7 @@ func (a *minBoolWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*minBoolWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*minBoolWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minBoolWindowAgg"))
 }
 
@@ -269,7 +269,7 @@ type minBytesWindowAgg struct {
 var _ AggregateFunc = &minBytesWindowAgg{}
 
 func (a *minBytesWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
@@ -382,7 +382,7 @@ func (a *minBytesWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*minBytesWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*minBytesWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minBytesWindowAgg"))
 }
 
@@ -400,7 +400,7 @@ type minDecimalWindowAgg struct {
 var _ AggregateFunc = &minDecimalWindowAgg{}
 
 func (a *minDecimalWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
@@ -509,7 +509,7 @@ func (a *minDecimalWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*minDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*minDecimalWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minDecimalWindowAgg"))
 }
 
@@ -527,7 +527,7 @@ type minInt16WindowAgg struct {
 var _ AggregateFunc = &minInt16WindowAgg{}
 
 func (a *minInt16WindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -658,7 +658,7 @@ func (a *minInt16WindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*minInt16WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*minInt16WindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minInt16WindowAgg"))
 }
 
@@ -676,7 +676,7 @@ type minInt32WindowAgg struct {
 var _ AggregateFunc = &minInt32WindowAgg{}
 
 func (a *minInt32WindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -807,7 +807,7 @@ func (a *minInt32WindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*minInt32WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*minInt32WindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minInt32WindowAgg"))
 }
 
@@ -825,7 +825,7 @@ type minInt64WindowAgg struct {
 var _ AggregateFunc = &minInt64WindowAgg{}
 
 func (a *minInt64WindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -956,7 +956,7 @@ func (a *minInt64WindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*minInt64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*minInt64WindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minInt64WindowAgg"))
 }
 
@@ -974,7 +974,7 @@ type minFloat64WindowAgg struct {
 var _ AggregateFunc = &minFloat64WindowAgg{}
 
 func (a *minFloat64WindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -1121,7 +1121,7 @@ func (a *minFloat64WindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*minFloat64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*minFloat64WindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minFloat64WindowAgg"))
 }
 
@@ -1139,7 +1139,7 @@ type minTimestampWindowAgg struct {
 var _ AggregateFunc = &minTimestampWindowAgg{}
 
 func (a *minTimestampWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -1262,7 +1262,7 @@ func (a *minTimestampWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*minTimestampWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*minTimestampWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minTimestampWindowAgg"))
 }
 
@@ -1280,7 +1280,7 @@ type minIntervalWindowAgg struct {
 var _ AggregateFunc = &minIntervalWindowAgg{}
 
 func (a *minIntervalWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -1389,7 +1389,7 @@ func (a *minIntervalWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*minIntervalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*minIntervalWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minIntervalWindowAgg"))
 }
 
@@ -1407,7 +1407,7 @@ type minJSONWindowAgg struct {
 var _ AggregateFunc = &minJSONWindowAgg{}
 
 func (a *minJSONWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
@@ -1585,7 +1585,7 @@ func (a *minJSONWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*minJSONWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*minJSONWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minJSONWindowAgg"))
 }
 
@@ -1603,7 +1603,7 @@ type minDatumWindowAgg struct {
 var _ AggregateFunc = &minDatumWindowAgg{}
 
 func (a *minDatumWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 
 	var oldCurAggSize uintptr
@@ -1732,7 +1732,7 @@ func (a *minDatumWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*minDatumWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*minDatumWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minDatumWindowAgg"))
 }
 
@@ -1819,7 +1819,7 @@ type maxBoolWindowAgg struct {
 var _ AggregateFunc = &maxBoolWindowAgg{}
 
 func (a *maxBoolWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -1944,7 +1944,7 @@ func (a *maxBoolWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*maxBoolWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*maxBoolWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxBoolWindowAgg"))
 }
 
@@ -1962,7 +1962,7 @@ type maxBytesWindowAgg struct {
 var _ AggregateFunc = &maxBytesWindowAgg{}
 
 func (a *maxBytesWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
@@ -2075,7 +2075,7 @@ func (a *maxBytesWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*maxBytesWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*maxBytesWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxBytesWindowAgg"))
 }
 
@@ -2093,7 +2093,7 @@ type maxDecimalWindowAgg struct {
 var _ AggregateFunc = &maxDecimalWindowAgg{}
 
 func (a *maxDecimalWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
@@ -2202,7 +2202,7 @@ func (a *maxDecimalWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*maxDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*maxDecimalWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxDecimalWindowAgg"))
 }
 
@@ -2220,7 +2220,7 @@ type maxInt16WindowAgg struct {
 var _ AggregateFunc = &maxInt16WindowAgg{}
 
 func (a *maxInt16WindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -2351,7 +2351,7 @@ func (a *maxInt16WindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*maxInt16WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*maxInt16WindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxInt16WindowAgg"))
 }
 
@@ -2369,7 +2369,7 @@ type maxInt32WindowAgg struct {
 var _ AggregateFunc = &maxInt32WindowAgg{}
 
 func (a *maxInt32WindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -2500,7 +2500,7 @@ func (a *maxInt32WindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*maxInt32WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*maxInt32WindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxInt32WindowAgg"))
 }
 
@@ -2518,7 +2518,7 @@ type maxInt64WindowAgg struct {
 var _ AggregateFunc = &maxInt64WindowAgg{}
 
 func (a *maxInt64WindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -2649,7 +2649,7 @@ func (a *maxInt64WindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*maxInt64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*maxInt64WindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxInt64WindowAgg"))
 }
 
@@ -2667,7 +2667,7 @@ type maxFloat64WindowAgg struct {
 var _ AggregateFunc = &maxFloat64WindowAgg{}
 
 func (a *maxFloat64WindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -2814,7 +2814,7 @@ func (a *maxFloat64WindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*maxFloat64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*maxFloat64WindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxFloat64WindowAgg"))
 }
 
@@ -2832,7 +2832,7 @@ type maxTimestampWindowAgg struct {
 var _ AggregateFunc = &maxTimestampWindowAgg{}
 
 func (a *maxTimestampWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -2955,7 +2955,7 @@ func (a *maxTimestampWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*maxTimestampWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*maxTimestampWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxTimestampWindowAgg"))
 }
 
@@ -2973,7 +2973,7 @@ type maxIntervalWindowAgg struct {
 var _ AggregateFunc = &maxIntervalWindowAgg{}
 
 func (a *maxIntervalWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -3082,7 +3082,7 @@ func (a *maxIntervalWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*maxIntervalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*maxIntervalWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxIntervalWindowAgg"))
 }
 
@@ -3100,7 +3100,7 @@ type maxJSONWindowAgg struct {
 var _ AggregateFunc = &maxJSONWindowAgg{}
 
 func (a *maxJSONWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
@@ -3278,7 +3278,7 @@ func (a *maxJSONWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*maxJSONWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*maxJSONWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxJSONWindowAgg"))
 }
 
@@ -3296,7 +3296,7 @@ type maxDatumWindowAgg struct {
 var _ AggregateFunc = &maxDatumWindowAgg{}
 
 func (a *maxDatumWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 
 	var oldCurAggSize uintptr
@@ -3425,6 +3425,6 @@ func (a *maxDatumWindowAggAlloc) newAggFunc() AggregateFunc {
 // window_aggregator_tmpl.go). This allows min and max operators to be used when
 // the window frame only grows. For the case when the window frame can shrink,
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
-func (*maxDatumWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (*maxDatumWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxDatumWindowAgg"))
 }

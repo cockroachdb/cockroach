@@ -89,7 +89,7 @@ type AggregateFunc interface {
 	// SetOutput sets the output vector to write the results of aggregation
 	// into. If the output vector changes, it is up to the caller to make sure
 	// that results already written to the old vector are propagated further.
-	SetOutput(vec coldata.Vec)
+	SetOutput(vec *coldata.Vec)
 
 	// CurrentOutputIndex returns the current index in the output vector that
 	// the aggregate function is writing to. All indices < the index returned
@@ -103,7 +103,7 @@ type AggregateFunc interface {
 	// Note: the implementations should be careful to account for their memory
 	// usage.
 	// Note: endIdx is assumed to be greater than zero.
-	Compute(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int)
+	Compute(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int)
 
 	// Flush flushes the result of aggregation on the last group. It should be
 	// called once after input batches have been Compute()'d. outputIdx is only
@@ -129,7 +129,7 @@ type orderedAggregateFuncBase struct {
 	curIdx    int
 	allocator *colmem.Allocator
 	// vec is the output vector of this function.
-	vec coldata.Vec
+	vec *coldata.Vec
 	// nulls is the nulls vector of the output vector of this function.
 	nulls *coldata.Nulls
 	// isFirstGroup tracks whether the new group (indicated by 'true' in
@@ -142,7 +142,7 @@ func (o *orderedAggregateFuncBase) Init(groups []bool) {
 	o.Reset()
 }
 
-func (o *orderedAggregateFuncBase) SetOutput(vec coldata.Vec) {
+func (o *orderedAggregateFuncBase) SetOutput(vec *coldata.Vec) {
 	o.vec = vec
 	o.nulls = vec.Nulls()
 }
@@ -170,14 +170,14 @@ func (o *orderedAggregateFuncBase) Reset() {
 type unorderedAggregateFuncBase struct {
 	allocator *colmem.Allocator
 	// vec is the output vector of this function.
-	vec coldata.Vec
+	vec *coldata.Vec
 	// nulls is the nulls vector of the output vector of this function.
 	nulls *coldata.Nulls
 }
 
 func (h *unorderedAggregateFuncBase) Init(_ []bool) {}
 
-func (h *unorderedAggregateFuncBase) SetOutput(vec coldata.Vec) {
+func (h *unorderedAggregateFuncBase) SetOutput(vec *coldata.Vec) {
 	h.vec = vec
 	h.nulls = vec.Nulls()
 }

@@ -74,7 +74,7 @@ func WriteCSVRows(
 	return rowBatchIdx, csvW.Error()
 }
 
-func colDatumToCSVString(col coldata.Vec, rowIdx int) string {
+func colDatumToCSVString(col *coldata.Vec, rowIdx int) string {
 	if col.Nulls().NullAt(rowIdx) {
 		return `NULL`
 	}

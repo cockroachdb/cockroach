@@ -139,7 +139,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_local_roachtest:
+  local_roachtest:
     runs-on: [self-hosted, basic_big_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -159,7 +159,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_local_roachtest_fips:
+  local_roachtest_fips:
     runs-on: [self-hosted, basic_runner_group_fips]
     steps:
       - uses: actions/checkout@v4

@@ -226,7 +226,7 @@ func (b *SpillingBuffer) AppendTuples(
 // made.
 func (b *SpillingBuffer) GetVecWithTuple(
 	ctx context.Context, colIdx, idx int,
-) (_ coldata.Vec, rowIdx int, length int) {
+) (_ *coldata.Vec, rowIdx int, length int) {
 	var err error
 	if idx < 0 || idx >= b.Length() {
 		colexecerror.InternalError(

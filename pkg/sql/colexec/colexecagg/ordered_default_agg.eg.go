@@ -44,12 +44,12 @@ type defaultOrderedAgg struct {
 var _ AggregateFunc = &defaultOrderedAgg{}
 
 func (a *defaultOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// Note that we only need to account for the memory of the output vector
 	// and not for the intermediate results of aggregation since the aggregate
 	// function itself does the latter.
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// Capture groups to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups

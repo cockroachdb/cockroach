@@ -64,7 +64,7 @@ func (t *tupleProjOp) Next() coldata.Batch {
 	t.converter.ConvertBatchAndDeselect(batch)
 	projVec := batch.ColVec(t.outputIdx)
 
-	t.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	t.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Preallocate the tuples and their underlying datums in a contiguous
 		// slice to reduce allocations.
 		tuples := make([]tree.DTuple, n)
