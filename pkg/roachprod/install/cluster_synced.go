@@ -2168,7 +2168,7 @@ func (c *SyncedCluster) Put(
 	}
 
 	if finalErr != nil {
-		return errors.Wrapf(finalErr, "put %s failed", src)
+		return errors.Wrapf(finalErr, "put %q failed", src)
 	}
 	return nil
 }

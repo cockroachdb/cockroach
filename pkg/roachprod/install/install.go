@@ -80,21 +80,31 @@ curl https://packages.confluent.io/archive/5.0/confluent-oss-5.0.0-2.11.tar.gz |
 sudo ln -s /usr/local/confluent-5.0.0 /usr/local/confluent;
 `,
 
+	// Docker installation steps are lifted from https://docs.docker.com/engine/install/ubuntu/
 	"docker": `
+# Add Docker's official GPG key:
 sudo apt-get update;
 sudo apt-get install  -y \
-    apt-transport-https \
     ca-certificates \
     curl \
-    software-properties-common;
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -;
-sudo add-apt-repository \
-   "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
-   $(lsb_release -cs) \
-   stable";
+    gnupg;
+sudo install -m 0755 -d /etc/apt/keyrings;
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --no-tty --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg;
+sudo chmod a+r /etc/apt/keyrings/docker.gpg;
 
+# Add the repository to Apt sources:
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null;
 sudo apt-get update;
-sudo apt-get install  -y docker-ce;
+
+# Install
+sudo apt-get install -y docker-ce;
+sudo usermod -aG docker ubuntu;
+
+# Verify
+sudo docker run hello-world
 `,
 
 	"gcc": `
