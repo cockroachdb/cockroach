@@ -172,6 +172,13 @@ func TestDockerCLI_test_disable_replication(t *testing.T) {
 	runTestDockerCLI(t, "test_disable_replication", "../cli/interactive_tests/test_disable_replication.tcl")
 }
 
+func TestDockerCLI_test_distinguished_name_validation(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_distinguished_name_validation", "../cli/interactive_tests/test_distinguished_name_validation.tcl")
+}
+
 func TestDockerCLI_test_dump_sig(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
