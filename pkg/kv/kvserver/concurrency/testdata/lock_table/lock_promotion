@@ -48,12 +48,11 @@ num=1
     active: false req: 2 promoting: true, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 # Replicated lock acquisition will cause us to forget the unreplicated lock.
+# Additionally, the inactive waiter will be removed from the lock's wait queue
+# as its "promoting" state is no longer in line with the lock's held state.
 acquire r=req2 k=a durability=r strength=intent
 ----
-num=1
- lock: "a"
-   queued locking requests:
-    active: false req: 2 promoting: true, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+num=0
 
 dequeue r=req2
 ----
