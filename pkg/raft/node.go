@@ -68,12 +68,6 @@ type Ready struct {
 	// Messages slice.
 	pb.HardState
 
-	// ReadStates can be used for node to serve linearizable read requests locally
-	// when its applied index is greater than the index in ReadState.
-	// Note that the readState will be returned when raft receives msgReadIndex.
-	// The returned is only valid for the request that requested to read.
-	ReadStates []ReadState
-
 	// Entries specifies entries to be saved to stable storage BEFORE
 	// Messages are sent.
 	//
@@ -213,18 +207,7 @@ type Node interface {
 	// from the leader recently). However, 3 can not campaign unilaterally, a
 	// quorum have to agree that the leader is dead, which avoids disrupting the
 	// leader if individual nodes are wrong about it being dead.
-	//
-	// This does nothing with ReadOnlyLeaseBased, since it would allow a new
-	// leader to be elected without the old leader knowing.
 	ForgetLeader(ctx context.Context) error
-
-	// ReadIndex request a read state. The read state will be set in the ready.
-	// Read state has a read index. Once the application advances further than the read
-	// index, any linearizable read requests issued before the read request can be
-	// processed safely. The read state will have the same rctx attached.
-	// Note that request can be lost without notice, therefore it is user's job
-	// to ensure read index retries.
-	ReadIndex(ctx context.Context, rctx []byte) error
 
 	// Status returns the current status of the raft state machine.
 	Status() Status
@@ -606,8 +589,4 @@ func (n *node) TransferLeadership(ctx context.Context, lead, transferee uint64) 
 
 func (n *node) ForgetLeader(ctx context.Context) error {
 	return n.step(ctx, pb.Message{Type: pb.MsgForgetLeader})
-}
-
-func (n *node) ReadIndex(ctx context.Context, rctx []byte) error {
-	return n.step(ctx, pb.Message{Type: pb.MsgReadIndex, Entries: []pb.Entry{{Data: rctx}}})
 }

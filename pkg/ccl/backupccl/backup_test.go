@@ -733,6 +733,8 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderStressRace(t, "this test is heavyweight and is not expected to reveal any direct bugs under stress race")
+
 	const numAccounts = 1
 	_, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
