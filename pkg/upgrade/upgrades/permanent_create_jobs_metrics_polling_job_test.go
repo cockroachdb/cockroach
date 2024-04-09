@@ -30,12 +30,11 @@ func TestCreateJobsMetricsPollingJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var (
-		ctx   = context.Background()
-		tc    = testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-		sqlDB = tc.ServerConn(0)
-	)
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
+	sqlDB := tc.ServerConn(0)
+	defer sqlDB.Close()
 
 	row := sqlDB.QueryRow("SELECT count(*) FROM crdb_internal.jobs WHERE job_type = 'POLL JOBS STATS'")
 	var count int

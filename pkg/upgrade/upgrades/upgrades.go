@@ -64,37 +64,6 @@ var upgrades = []upgradebase.Upgrade{
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
-	newFirstUpgrade(clusterversion.V23_2Start.Version()),
-
-	upgrade.NewTenantUpgrade(
-		"update system.statement_diagnostics_requests to support plan gist matching",
-		clusterversion.V23_2_StmtDiagForPlanGist.Version(),
-		upgrade.NoPrecondition,
-		stmtDiagForPlanGistMigration,
-		upgrade.RestoreActionNotRequired("diagnostics requests are unique to the cluster on which they were requested"),
-	),
-	upgrade.NewTenantUpgrade(
-		"create system.region_liveness table",
-		clusterversion.V23_2_RegionaLivenessTable.Version(),
-		upgrade.NoPrecondition,
-		createRegionLivenessTables,
-		upgrade.RestoreActionNotRequired("ephemeral table that is not backed up or restored"),
-	),
-	upgrade.NewTenantUpgrade(
-		"create system.mvcc_statistics table and job",
-		clusterversion.V23_2_MVCCStatisticsTable.Version(),
-		upgrade.NoPrecondition,
-		createMVCCStatisticsTableAndJobMigration,
-		upgrade.RestoreActionNotRequired("table is relevant to the storage cluster and is not restored"),
-	),
-	upgrade.NewTenantUpgrade(
-		"create transaction_execution_insights and statement_execution_insights tables",
-		clusterversion.V23_2_AddSystemExecInsightsTable.Version(),
-		upgrade.NoPrecondition,
-		systemExecInsightsTableMigration,
-		upgrade.RestoreActionNotRequired("execution insights are specific to the cluster that executed some query and are not restored"),
-	),
-
 	newFirstUpgrade(clusterversion.V24_1Start.Version()),
 
 	upgrade.NewTenantUpgrade(
