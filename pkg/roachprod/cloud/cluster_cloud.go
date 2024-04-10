@@ -247,11 +247,11 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 			return errors.Wrapf(err, "provider %s", provider.Name())
 		})
 	}
-
-	if err := g.Wait(); err != nil {
+	err := g.Wait()
+	if err != nil {
 		// We continue despite the error as we don't want to fail for all providers if only one
-		// has an issue. The function that calls ListCloud may not even use the erring provider.
-		// If it does, it will fail later when it doesn't find the specified cluster.
+		// has an issue. The function that calls ListCloud may not even use the erring provider,
+		// so log a warning and let the caller decide how to handle the error.
 		l.Printf("WARNING: Error listing VMs, continuing but list may be incomplete. %s \n", err.Error())
 	}
 
@@ -299,15 +299,15 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 	}
 
 	// Sort VMs for each cluster. We want to make sure we always have the same order.
-	// Also assert that no cluster can be empty.
+	// Also check and warn if we find an empty cluster.
 	for _, c := range cloud.Clusters {
 		if len(c.VMs) == 0 {
-			return nil, errors.Errorf("found no VMs in cluster %s", c.Name)
+			l.Printf("WARNING: found no VMs in cluster %s\n", c.Name)
 		}
 		sort.Sort(c.VMs)
 	}
 
-	return cloud, nil
+	return cloud, err
 }
 
 // CreateCluster TODO(peter): document
