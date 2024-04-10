@@ -115,30 +115,8 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			t.Status(fmt.Sprintf("start node 3... (<%s)", time.Minute))
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
 
-			//t.Status(fmt.Sprintf("starting snapshot transfers for %s (<%s)", totalTransferDuration, time.Minute))
-			//m.Go(func(ctx context.Context) error {
-			//	for i := 0; i < iters; i++ {
-			//		nextDestinationNode := 1 + ((i + 1) % crdbNodes) // if crdbNodes = 3, this cycles through 2, 3, 1, 2, 3, 1, ...
-			//		t.Status(fmt.Sprintf("snapshot round %d/%d: inert data and active leases routing to n%d (<%s)",
-			//			i+1, iters, nextDestinationNode, transferDuration))
-			//
-			//		if _, err := db.ExecContext(ctx, fmt.Sprintf(
-			//			"ALTER DATABASE kv CONFIGURE ZONE USING num_replicas = %d, constraints = '{%s}', lease_preferences = '[[+n%d]]'",
-			//			crdbNodes, constraint, nextDestinationNode),
-			//		); err != nil {
-			//			t.Fatalf("failed to configure zone for DATABASE kv: %v", err)
-			//		}
-			//		time.Sleep(leaseWaitDuration)
-			//
-			//		if _, err := db.ExecContext(ctx,
-			//			fmt.Sprintf("ALTER DATABASE tpcc CONFIGURE ZONE USING num_replicas = 1, constraints = '[+n%d]';", nextDestinationNode),
-			//		); err != nil {
-			//			t.Fatalf("failed to configure zone for RANGE DEFAULT: %v", err)
-			//		}
-			//		time.Sleep(replicaWaitDuration)
-			//	}
-			//	return nil
-			//})
+			// TODO(aaditya)
+			// 	1. We need to assert on sublevel count and sql latency while the ingest is taking place
 
 			t.Status(fmt.Sprintf("waiting for workload/snapshot transfers to finish %s", time.Minute))
 			m.Wait()
