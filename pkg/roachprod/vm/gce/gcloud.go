@@ -790,15 +790,9 @@ func (p *Provider) Create(
 	if useArmAMI {
 		if len(providerOpts.Zones) == 0 {
 			zones = []string{"us-central1-a"}
-		} else {
-			supportedT2ARegions := []string{"us-central1", "asia-southeast1", "europe-west4"}
-			for _, zone := range providerOpts.Zones {
-				for _, region := range supportedT2ARegions {
-					if !strings.HasPrefix(zone, region) {
-						return errors.Newf("T2A instances are not supported outside of [%s]", strings.Join(supportedT2ARegions, ","))
-					}
-				}
-			}
+		}
+		if !IsSupportedT2AZone(providerOpts.Zones) {
+			return errors.Newf("T2A instances are not supported outside of [%s]", strings.Join(SupportedT2AZones, ","))
 		}
 		if providerOpts.MinCPUPlatform != "" {
 			l.Printf("WARNING: --gce-min-cpu-platform is ignored for T2A instances")

@@ -397,3 +397,28 @@ func GetUserAuthorizedKeys(l *logger.Logger) (authorizedKeys []byte, err error) 
 	}
 	return pubKeyBuf.Bytes(), nil
 }
+
+// Extracted from https://cloud.google.com/compute/docs/regions-zones#available
+var SupportedT2AZones = []string{
+	"asia-southeast1-b", "asia-southeast1-c",
+	"europe-west4-a", "europe-west4-b", "europe-west4-c",
+	"us-central1-a", "us-central1-b", "us-central1-f",
+}
+
+// Used mainly in support of https://github.com/cockroachdb/cockroach/issues/122035.
+func IsSupportedT2AZone(zones []string) bool {
+	index := func(s []string, v string) int {
+		for i, e := range s {
+			if e == v {
+				return i
+			}
+		}
+		return -1
+	}
+	for _, zone := range zones {
+		if index(SupportedT2AZones, zone) == -1 {
+			return false
+		}
+	}
+	return true
+}
