@@ -9,6 +9,7 @@ test       root  NULL  NULL  {}  NULL
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
+skipif config local-mixed-23.2
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] ORDER BY 2
 ----
@@ -41,6 +42,7 @@ public  role_options                     table     node  NULL
 public  scheduled_jobs                   table     node  NULL
 public  settings                         table     node  NULL
 public  span_configurations              table     node  NULL
+public  span_count                       table     node  NULL
 public  span_stats_buckets               table     node  NULL
 public  span_stats_samples               table     node  NULL
 public  span_stats_tenant_boundaries     table     node  NULL
@@ -100,6 +102,7 @@ public  role_members                     table     node  NULL
 public  role_options                     table     node  NULL
 public  scheduled_jobs                   table     node  NULL
 public  settings                         table     node  NULL
+public  span_configurations              table     node  NULL
 public  span_count                       table     node  NULL
 public  span_stats_buckets               table     node  NULL
 public  span_stats_samples               table     node  NULL
@@ -114,6 +117,12 @@ public  statement_diagnostics_requests   table     node  NULL
 public  statement_execution_insights     table     node  NULL
 public  statement_statistics             table     node  NULL
 public  table_statistics                 table     node  NULL
+public  task_payloads                    table     node  NULL
+public  tenant_id_seq                    sequence  node  NULL
+public  tenant_settings                  table     node  NULL
+public  tenant_tasks                     table     node  NULL
+public  tenant_usage                     table     node  NULL
+public  tenants                          table     node  NULL
 public  transaction_activity             table     node  NULL
 public  transaction_execution_insights   table     node  NULL
 public  transaction_statistics           table     node  NULL
@@ -126,6 +135,7 @@ public  zones                            table     node  NULL
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
+skipif config local-mixed-23.2
 query I rowsort
 SELECT id FROM system.descriptor ORDER BY 1
 ----
@@ -185,6 +195,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 63
 64
 65
+66
 100
 101
 102
@@ -202,6 +213,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 5
 6
 7
+8
 9
 11
 12
@@ -231,7 +243,9 @@ SELECT id FROM system.descriptor ORDER BY 1
 42
 43
 44
+45
 46
+47
 48
 50
 51
@@ -246,6 +260,10 @@ SELECT id FROM system.descriptor ORDER BY 1
 60
 61
 62
+63
+64
+65
+66
 100
 101
 102
@@ -385,6 +403,7 @@ system  root   CONNECT  true
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
+skipif config local-mixed-23.2
 query TTTTTB rowsort
 SHOW GRANTS ON system.*
 ----
@@ -589,6 +608,14 @@ system  public  span_configurations              root    DELETE  true
 system  public  span_configurations              root    INSERT  true
 system  public  span_configurations              root    SELECT  true
 system  public  span_configurations              root    UPDATE  true
+system  public  span_count                       admin   DELETE  true
+system  public  span_count                       admin   INSERT  true
+system  public  span_count                       admin   SELECT  true
+system  public  span_count                       admin   UPDATE  true
+system  public  span_count                       root    DELETE  true
+system  public  span_count                       root    INSERT  true
+system  public  span_count                       root    SELECT  true
+system  public  span_count                       root    UPDATE  true
 system  public  span_stats_buckets               admin   DELETE  true
 system  public  span_stats_buckets               admin   INSERT  true
 system  public  span_stats_buckets               admin   SELECT  true
@@ -959,6 +986,14 @@ system  public  settings                         root    DELETE  true
 system  public  settings                         root    INSERT  true
 system  public  settings                         root    SELECT  true
 system  public  settings                         root    UPDATE  true
+system  public  span_configurations              admin   DELETE  true
+system  public  span_configurations              admin   INSERT  true
+system  public  span_configurations              admin   SELECT  true
+system  public  span_configurations              admin   UPDATE  true
+system  public  span_configurations              root    DELETE  true
+system  public  span_configurations              root    INSERT  true
+system  public  span_configurations              root    SELECT  true
+system  public  span_configurations              root    UPDATE  true
 system  public  span_count                       admin   DELETE  true
 system  public  span_count                       admin   INSERT  true
 system  public  span_count                       admin   SELECT  true
@@ -1059,6 +1094,42 @@ system  public  table_statistics                 root    DELETE  true
 system  public  table_statistics                 root    INSERT  true
 system  public  table_statistics                 root    SELECT  true
 system  public  table_statistics                 root    UPDATE  true
+system  public  task_payloads                    admin   DELETE  true
+system  public  task_payloads                    admin   INSERT  true
+system  public  task_payloads                    admin   SELECT  true
+system  public  task_payloads                    admin   UPDATE  true
+system  public  task_payloads                    root    DELETE  true
+system  public  task_payloads                    root    INSERT  true
+system  public  task_payloads                    root    SELECT  true
+system  public  task_payloads                    root    UPDATE  true
+system  public  tenant_id_seq                    admin   SELECT  true
+system  public  tenant_id_seq                    root    SELECT  true
+system  public  tenant_settings                  admin   DELETE  true
+system  public  tenant_settings                  admin   INSERT  true
+system  public  tenant_settings                  admin   SELECT  true
+system  public  tenant_settings                  admin   UPDATE  true
+system  public  tenant_settings                  root    DELETE  true
+system  public  tenant_settings                  root    INSERT  true
+system  public  tenant_settings                  root    SELECT  true
+system  public  tenant_settings                  root    UPDATE  true
+system  public  tenant_tasks                     admin   DELETE  true
+system  public  tenant_tasks                     admin   INSERT  true
+system  public  tenant_tasks                     admin   SELECT  true
+system  public  tenant_tasks                     admin   UPDATE  true
+system  public  tenant_tasks                     root    DELETE  true
+system  public  tenant_tasks                     root    INSERT  true
+system  public  tenant_tasks                     root    SELECT  true
+system  public  tenant_tasks                     root    UPDATE  true
+system  public  tenant_usage                     admin   DELETE  true
+system  public  tenant_usage                     admin   INSERT  true
+system  public  tenant_usage                     admin   SELECT  true
+system  public  tenant_usage                     admin   UPDATE  true
+system  public  tenant_usage                     root    DELETE  true
+system  public  tenant_usage                     root    INSERT  true
+system  public  tenant_usage                     root    SELECT  true
+system  public  tenant_usage                     root    UPDATE  true
+system  public  tenants                          admin   SELECT  true
+system  public  tenants                          root    SELECT  true
 system  public  transaction_activity             admin   SELECT  true
 system  public  transaction_activity             root    SELECT  true
 system  public  transaction_execution_insights   admin   DELETE  true
