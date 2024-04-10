@@ -15,7 +15,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -495,8 +494,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeySpans(header.State.Desc)
 
-	doExcise := header.SharedReplicate || header.ExternalReplicate || (storage.UseExciseForSnapshots.Get(&s.ClusterSettings().SV) &&
-		s.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2_EnablePebbleFormatVirtualSSTables))
+	doExcise := header.SharedReplicate || header.ExternalReplicate || storage.UseExciseForSnapshots.Get(&s.ClusterSettings().SV)
 	if header.SharedReplicate && !s.cfg.SharedStorageEnabled {
 		return noSnap, sendSnapshotError(ctx, s, stream, errors.New("cannot accept shared sstables"))
 	}
