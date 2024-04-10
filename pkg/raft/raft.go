@@ -28,6 +28,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -259,6 +260,10 @@ type Config struct {
 	// This behavior will become unconditional in the future. See:
 	// https://github.com/etcd-io/raft/issues/83
 	StepDownOnRemoval bool
+
+	// The version handle of cockroachdb, we use this handle to migrate
+	// backward incompatible changes with version gate.
+	CRDBVersion clusterversion.Handle
 }
 
 func (c *Config) validate() error {
@@ -388,7 +393,8 @@ type raft struct {
 	tick func()
 	step stepFunc
 
-	logger Logger
+	logger      Logger
+	crdbVersion clusterversion.Handle
 }
 
 func newRaft(c *Config) *raft {
@@ -417,6 +423,7 @@ func newRaft(c *Config) *raft {
 		disableProposalForwarding:   c.DisableProposalForwarding,
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		stepDownOnRemoval:           c.StepDownOnRemoval,
+		crdbVersion:                 c.CRDBVersion,
 	}
 
 	lastID := r.raftLog.lastEntryID()
