@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -2936,6 +2937,18 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 		arch = vm.ArchFIPS
 	} else {
 		arch = vm.ArchAMD64
+	}
+	if roachtestflags.Cloud == spec.GCE && arch == vm.ArchARM64 {
+		// N.B. T2A support is rather limited, both in terms of supported regions and no local SSDs. Thus, we must
+		// fall back to AMD64 in those cases. See #122035.
+		if !gce.IsSupportedT2AZone(strings.Split(testSpec.Cluster.GCE.Zones, ",")) {
+			l.PrintfCtx(ctx, "%q specified one or more GCE regions unsupported by T2A, falling back to AMD64; see #122035", testSpec.Name)
+			return vm.ArchAMD64
+		}
+		if roachtestflags.PreferLocalSSD && testSpec.Cluster.VolumeSize == 0 && testSpec.Cluster.SSDs > 1 {
+			l.PrintfCtx(ctx, "%q specified multiple _local_ SSDs unsupported by T2A, falling back to AMD64; see #122035", testSpec.Name)
+			return vm.ArchAMD64
+		}
 	}
 	l.PrintfCtx(ctx, "Using randomly chosen arch=%q, %s", arch, testSpec.Name)
 
