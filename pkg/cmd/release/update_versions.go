@@ -446,25 +446,25 @@ func generateRepoList(
 	}
 
 	// 2. Brew. Update for all stable releases
-	if releasedVersion.Prerelease() == "" {
-		reposToWorkOn = append(reposToWorkOn, prRepo{
-			owner:          owner,
-			repo:           prefix + "homebrew-tap",
-			branch:         "master",
-			githubUsername: "cockroach-teamcity",
-			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
-			commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.Original()),
-			fn: func(gitDir string) error {
-				if dryRun {
-					log.Printf("brew fetches and verifies the binaries, so it's likely it'll fail in dry-run mode. Skipping..")
-					return nil
-				}
-				return updateBrew(gitDir, releasedVersion, isLatest)
-			},
-		})
-	}
+	// if releasedVersion.Prerelease() == "" {
+	// 	reposToWorkOn = append(reposToWorkOn, prRepo{
+	// 		owner:          owner,
+	// 		repo:           prefix + "homebrew-tap",
+	// 		branch:         "master",
+	// 		githubUsername: "cockroach-teamcity",
+	// 		prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
+	// 		commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.Original()),
+	// 		fn: func(gitDir string) error {
+	// 			if dryRun {
+	// 				log.Printf("brew fetches and verifies the binaries, so it's likely it'll fail in dry-run mode. Skipping..")
+	// 				return nil
+	// 			}
+	// 			return updateBrew(gitDir, releasedVersion, isLatest)
+	// 		},
+	// 	})
+	// }
 	// 3. Helm. Only for latest stable releases
-	if isLatest && releasedVersion.Prerelease() == "" {
+	if releasedVersion.Prerelease() == "" {
 		reposToWorkOn = append(reposToWorkOn, prRepo{
 			owner:          owner,
 			repo:           prefix + "helm-charts",
