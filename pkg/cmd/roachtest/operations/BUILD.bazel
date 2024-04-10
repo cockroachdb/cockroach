@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "add_column.go",
         "add_index.go",
+        "network_partition.go",
         "register.go",
         "utils.go",
     ],
