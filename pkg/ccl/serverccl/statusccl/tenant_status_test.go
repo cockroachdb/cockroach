@@ -589,8 +589,8 @@ func testResetSQLStatsRPCForTenant(
 			}
 
 			if flushed {
-				testTenant.TenantSQLStats().Flush(ctx, testTenant.GetTenant().AppStopper())
-				controlCluster.TenantSQLStats(serverccl.RandomServer).Flush(ctx, controlCluster.Tenant(0).GetTenant().AppStopper())
+				testTenant.TenantSQLStats().MaybeFlush(ctx, testTenant.GetTenant().AppStopper())
+				controlCluster.TenantSQLStats(serverccl.RandomServer).MaybeFlush(ctx, controlCluster.Tenant(0).GetTenant().AppStopper())
 			}
 
 			status := testTenant.TenantStatusSrv()

@@ -29,9 +29,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Flush flushes in-memory sql stats into a system table. Any errors encountered
+// MaybeFlush flushes in-memory sql stats into a system table. Any errors encountered
 // during the flush will be logged as warning.
-func (s *PersistedSQLStats) Flush(ctx context.Context, stopper *stop.Stopper) {
+func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stopper) {
 	now := s.getTimeNow()
 
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)

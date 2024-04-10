@@ -194,7 +194,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 				return
 			}
 
-			s.Flush(ctx, stopper)
+			s.MaybeFlush(ctx, stopper)
 
 			// Tell the local activity translator job, if any, that we've
 			// performed a round of flush.
