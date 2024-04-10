@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -97,7 +98,7 @@ func registerMultiTenantFairness(r registry.Registry) {
 			Owner:            registry.OwnerAdmissionControl,
 			Benchmark:        true,
 			Leases:           registry.MetamorphicLeases,
-			CompatibleClouds: registry.AllExceptAWS,
+			CompatibleClouds: registry.Clouds(spec.Local, spec.GCE), // Requires service registration.
 			Suites:           registry.Suites(registry.Weekly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runMultiTenantFairness(ctx, t, c, s)

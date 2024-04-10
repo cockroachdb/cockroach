@@ -247,6 +247,17 @@ func (cs CloudSet) NoAzure() CloudSet {
 	return CloudSet{m: removeFromSet(cs.m, spec.Azure)}
 }
 
+// Remove removes all clouds passed in and returns the new set.
+func (cs CloudSet) Remove(clouds ...string) CloudSet {
+	assertValidValues(allClouds, clouds...)
+	copyCs := CloudSet{m: cs.m}
+	for _, c := range clouds {
+		copyCs.m = removeFromSet(copyCs.m, c)
+	}
+
+	return copyCs
+}
+
 // Contains returns true if the set contains the given cloud.
 func (cs CloudSet) Contains(cloud string) bool {
 	cs.AssertInitialized()
