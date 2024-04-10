@@ -1371,12 +1371,24 @@ func (t *Transaction) Update(o *Transaction) {
 
 	// Ratchet the transaction priority.
 	t.UpgradePriority(o.Priority)
-	// Defensive, since AdmissionPriority does not change. We have already
-	// handled the case of t being uninitialized at the beginning of this
-	// function.
-	t.AdmissionPriority = o.AdmissionPriority
-	// OmitInRangefeeds doesn't change.
-	t.OmitInRangefeeds = o.OmitInRangefeeds
+
+	// The following fields are not present in TransactionRecord, so we need to be
+	// careful when updating them since Transaction o might be coming from a
+	// TransactionRecord. If the fields were previously set, do not overwrite them
+	// with the default values. Conversely, if the fields were previously unset,
+	// allow updating them to handle the case when a Transaction proto updates a
+	// TransactionRecord proto.
+
+	// AdmissionPriority doesn't change after the transaction is created, so we
+	// don't ever expect to change it from a non-zero value to 0.
+	if o.AdmissionPriority != 0 {
+		t.AdmissionPriority = o.AdmissionPriority
+	}
+	// OmitInRangefeeds doesn't change after the transaction is created, so we
+	// don't ever expect to change it from true to false.
+	if o.OmitInRangefeeds {
+		t.OmitInRangefeeds = o.OmitInRangefeeds
+	}
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
