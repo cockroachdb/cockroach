@@ -202,10 +202,10 @@ func (t Timestamp) IsSet() bool {
 }
 
 // AddDuration adds a given duration to this Timestamp. Normally if you want to
-// bump your clock to  the higher of two timestamps, use Forward, however this
+// bump your clock to the higher of two timestamps, use Forward, however this
 // method is here to create a hlc.Timestamp in the future (or past).
 func (t Timestamp) AddDuration(duration time.Duration) Timestamp {
-	return t.Add(duration.Nanoseconds(), t.Logical)
+	return t.Add(duration.Nanoseconds(), 0)
 }
 
 // Add returns a timestamp with the WallTime and Logical components increased.
