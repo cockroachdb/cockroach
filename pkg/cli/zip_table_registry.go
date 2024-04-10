@@ -806,6 +806,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"used",
 			"reserved_used",
 			"reserved_reserved",
+			"stopped",
 		},
 	},
 	"crdb_internal.node_metrics": {

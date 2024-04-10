@@ -329,6 +329,8 @@ type MonitorState struct {
 	// ReservedReserved is amount of bytes reserved in the reserved account, or
 	// 0 if no reserved account was provided in Start.
 	ReservedReserved int64
+	// Stopped indicates whether the monitor has been stopped.
+	Stopped bool
 }
 
 // TraverseTree traverses the tree of monitors rooted in the BytesMonitor. The
@@ -344,15 +346,9 @@ func (mm *BytesMonitor) TraverseTree(monitorStateCb func(MonitorState) error) er
 }
 
 // traverseTree recursively traverses the tree of monitors rooted in the current
-// monitor. If the monitor is stopped, then the tree is not traversed and the
-// callback is not called.
+// monitor.
 func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState) error) error {
 	mm.mu.Lock()
-	if mm.mu.stopped {
-		// The monitor has been stopped, so it should be ignored.
-		mm.mu.Unlock()
-		return nil
-	}
 	var reservedUsed, reservedReserved int64
 	if mm.reserved != nil {
 		reservedUsed = mm.reserved.used
@@ -371,6 +367,7 @@ func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState
 		Used:             mm.mu.curAllocated,
 		ReservedUsed:     reservedUsed,
 		ReservedReserved: reservedReserved,
+		Stopped:          mm.mu.stopped,
 	}
 	// Note that we cannot call traverseTree on the children while holding mm's
 	// lock since it could lead to deadlocks. Instead, we store all children as
