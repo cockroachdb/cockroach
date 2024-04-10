@@ -35,11 +35,12 @@ cp $EXECROOT/external/archived_cdep_libgeos_linux/lib/libgeos.so lib/libgeos.so
 cp $EXECROOT/external/archived_cdep_libgeos_linux/lib/libgeos_c.so lib/libgeos_c.so
 chmod a+w lib/libgeos.so lib/libgeos_c.so
 
-$BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest run acceptance \
+$BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest run \
   --local \
   --parallelism=1 \
   --cockroach "$BAZEL_BIN/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short" \
   --workload "$BAZEL_BIN/pkg/cmd/workload/workload_/workload" \
   --artifacts $PWD/artifacts \
-  --github
+  --github \
+  --suite acceptance
 
