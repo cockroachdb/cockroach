@@ -360,6 +360,7 @@ func newRaftConfig(
 	appliedIndex kvpb.RaftIndex,
 	storeCfg StoreConfig,
 	logger raft.Logger,
+	crdbVersion *clusterversion.Handle,
 ) *raft.Config {
 	return &raft.Config{
 		ID:                          id,
@@ -392,6 +393,7 @@ func newRaftConfig(
 
 		PreVote:     true,
 		CheckQuorum: storeCfg.RaftEnableCheckQuorum,
+		CRDBVersion: crdbVersion,
 	}
 }
 
