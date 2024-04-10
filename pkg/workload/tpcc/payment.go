@@ -196,38 +196,39 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 			if err := p.updateWarehouse.QueryRowTx(
 				ctx, tx, d.hAmount, wID,
 			).Scan(&wName, &d.wStreet1, &d.wStreet2, &d.wCity, &d.wState, &d.wZip); err != nil {
-				return err
+				return errors.Wrap(err, "update warehouse failed")
 			}
 
 			// Update district with payment
 			if err := p.updateDistrict.QueryRowTx(
 				ctx, tx, d.hAmount, wID, d.dID,
 			).Scan(&dName, &d.dStreet1, &d.dStreet2, &d.dCity, &d.dState, &d.dZip); err != nil {
-				return err
+				return errors.Wrap(err, "update district failed")
 			}
 
 			// If we are selecting by last name, first find the relevant customer id and
 			// then proceed.
 			if d.cID == 0 {
 				// 2.5.2.2 Case 2: Pick the middle row, rounded up, from the selection by last name.
-				rows, err := p.selectByLastName.QueryTx(ctx, tx, wID, d.dID, d.cLast)
-				if err != nil {
-					return errors.Wrap(err, "select by last name fail")
-				}
 				customers := make([]int, 0, 1)
-				for rows.Next() {
-					var cID int
-					err = rows.Scan(&cID)
+				if err := func() error {
+					rows, err := p.selectByLastName.QueryTx(ctx, tx, wID, d.dID, d.cLast)
 					if err != nil {
-						rows.Close()
 						return err
 					}
-					customers = append(customers, cID)
+					defer rows.Close()
+
+					for rows.Next() {
+						var cID int
+						if err := rows.Scan(&cID); err != nil {
+							return err
+						}
+						customers = append(customers, cID)
+					}
+					return rows.Err()
+				}(); err != nil {
+					return errors.Wrap(err, "select customer failed")
 				}
-				if err := rows.Err(); err != nil {
-					return err
-				}
-				rows.Close()
 				cIdx := (len(customers) - 1) / 2
 				d.cID = customers[cIdx]
 			}
@@ -242,17 +243,20 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 				&d.cCity, &d.cState, &d.cZip, &d.cPhone, &d.cSince, &d.cCredit,
 				&d.cCreditLim, &d.cDiscount, &d.cBalance, &d.cData,
 			); err != nil {
-				return errors.Wrap(err, "select by customer idfail")
+				return errors.Wrap(err, "update customer failed")
 			}
 
 			hData := fmt.Sprintf("%s    %s", wName, dName)
 
 			// Insert history line.
-			_, err := p.insertHistory.ExecTx(
+			if _, err := p.insertHistory.ExecTx(
 				ctx, tx,
 				d.cID, d.cDID, d.cWID, d.dID, wID, d.hAmount, d.hDate.Format("2006-01-02 15:04:05"), hData,
-			)
-			return err
+			); err != nil {
+				return errors.Wrap(err, "insert history failed")
+			}
+
+			return nil
 		}); err != nil {
 		return nil, err
 	}
