@@ -12,10 +12,12 @@ package tests
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 const goPath = `/mnt/data1/go`
@@ -42,15 +44,22 @@ func installGolang(
 		t.Fatal(err)
 	}
 
+	binary := "go1.21.3.linux-amd64.tar.gz"
+	sha := "1241381b2843fae5a9707eec1f8fb2ef94d827990582c7c7c32f5bdfbfd420c8"
+	if c.Architecture() == vm.ArchARM64 {
+		binary = "go1.21.3.linux-arm64.tar.gz"
+		sha = "fc90fa48ae97ba6368eecb914343590bbb61b388089510d0c56c2dde52987ef3"
+	}
+
 	if err := repeatRunE(
-		ctx, t, c, node, "download go", `curl -fsSL https://dl.google.com/go/go1.21.3.linux-amd64.tar.gz > /tmp/go.tgz`,
+		ctx, t, c, node, "download go", fmt.Sprintf(`curl -fsSL https://dl.google.com/go/%s > /tmp/go.tgz`, binary),
 	); err != nil {
 		t.Fatal(err)
 	}
 	if err := repeatRunE(
-		ctx, t, c, node, "verify tarball", `sha256sum -c - <<EOF
-1241381b2843fae5a9707eec1f8fb2ef94d827990582c7c7c32f5bdfbfd420c8 /tmp/go.tgz
-EOF`,
+		ctx, t, c, node, "verify tarball", fmt.Sprintf(`sha256sum -c - <<EOF
+%s /tmp/go.tgz
+EOF`, sha),
 	); err != nil {
 		t.Fatal(err)
 	}
