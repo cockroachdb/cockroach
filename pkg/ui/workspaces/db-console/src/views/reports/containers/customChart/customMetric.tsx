@@ -54,7 +54,7 @@ export class CustomMetricState {
   downsampler = TimeSeriesQueryAggregator.AVG;
   aggregator = TimeSeriesQueryAggregator.SUM;
   derivative = TimeSeriesQueryDerivative.NONE;
-  perNode = false;
+  perSource = false;
   perTenant = false;
   source = "";
   tenantSource = "";
@@ -124,9 +124,9 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
     });
   };
 
-  changePerNode = (selection: React.FormEvent<HTMLInputElement>) => {
+  changePerSource = (selection: React.FormEvent<HTMLInputElement>) => {
     this.changeState({
-      perNode: selection.currentTarget.checked,
+      perSource: selection.currentTarget.checked,
     });
   };
 
@@ -152,7 +152,7 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
         aggregator,
         derivative,
         source,
-        perNode,
+        perSource,
         tenantSource,
         perTenant,
       },
@@ -226,8 +226,8 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
         <td className="metric-table__cell">
           <input
             type="checkbox"
-            checked={perNode}
-            onChange={this.changePerNode}
+            checked={perSource}
+            onChange={this.changePerSource}
           />
         </td>
         {canViewTenantOptions && (
@@ -340,7 +340,7 @@ export class CustomChartTable extends React.Component<CustomChartTableProps> {
               <td className="metric-table__header">Aggregator</td>
               <td className="metric-table__header">Rate</td>
               <td className="metric-table__header">Source</td>
-              <td className="metric-table__header">Per Node</td>
+              <td className="metric-table__header">Per Node/Store</td>
               {canViewTenantOptions && (
                 <td className="metric-table__header">Virtual Cluster</td>
               )}

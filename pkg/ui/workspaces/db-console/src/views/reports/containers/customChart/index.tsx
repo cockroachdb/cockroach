@@ -208,52 +208,55 @@ export class CustomChart extends React.Component<
     );
   };
 
+  getSources = (nodesSummary: NodesSummary, metricName: string): string[] => {
+    if (!(nodesSummary?.nodeStatuses?.length > 0)) {
+      return [];
+    }
+    return isStoreMetric(nodesSummary.nodeStatuses[0], metricName)
+      ? Object.values(nodesSummary.storeIDsByNodeID).flatMap(s => s)
+      : nodesSummary.nodeIDs;
+  };
+
   // This function handles the logic related to creating Metric components
   // based on perNode and perTenant flags.
   renderMetricComponents = (metrics: CustomMetricState[], index: number) => {
     const { nodesSummary, tenantOptions } = this.props;
+    // We require nodes information to determine sources (storeIDs/nodeIDs) down below.
+    if (!(nodesSummary?.nodeStatuses?.length > 0)) {
+      return;
+    }
     const tenants = tenantOptions.length > 1 ? tenantOptions.slice(1) : [];
     return metrics.map((m, i) => {
       if (m.metric === "") {
         return "";
       }
-      if (m.perNode && m.perTenant) {
-        return _.flatMap(nodesSummary.nodeIDs, nodeID => {
+      if (m.perSource && m.perTenant) {
+        const sources = this.getSources(nodesSummary, m.metric);
+        return _.flatMap(sources, source => {
           return tenants.map(tenant => (
             <Metric
-              key={`${index}${i}${nodeID}${tenant.value}`}
-              title={`${nodeID}-${tenant.value}: ${m.metric} (${i})`}
+              key={`${index}${i}${source}${tenant.value}`}
+              title={`${source}-${tenant.value}: ${m.metric} (${i})`}
               name={m.metric}
               aggregator={m.aggregator}
               downsampler={m.downsampler}
               derivative={m.derivative}
-              sources={
-                isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
-                  ? _.map(nodesSummary.storeIDsByNodeID[nodeID] || [], n =>
-                      n.toString(),
-                    )
-                  : [nodeID]
-              }
+              sources={[source]}
               tenantSource={tenant.value}
             />
           ));
         });
-      } else if (m.perNode) {
-        return _.map(nodesSummary.nodeIDs, nodeID => (
+      } else if (m.perSource) {
+        const sources = this.getSources(nodesSummary, m.metric);
+        return _.map(sources, source => (
           <Metric
-            key={`${index}${i}${nodeID}`}
-            title={`${nodeID}: ${m.metric} (${i})`}
+            key={`${index}${i}${source}`}
+            title={`${source}: ${m.metric} (${i})`}
             name={m.metric}
             aggregator={m.aggregator}
             downsampler={m.downsampler}
             derivative={m.derivative}
-            sources={
-              isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
-                ? _.map(nodesSummary.storeIDsByNodeID[nodeID] || [], n =>
-                    n.toString(),
-                  )
-                : [nodeID]
-            }
+            sources={[source]}
             tenantSource={m.tenantSource}
           />
         ));
@@ -402,5 +405,8 @@ export default withRouter(
 );
 
 function isStoreMetric(nodeStatus: INodeStatus, metricName: string) {
+  if (metricName?.startsWith("cr.store")) {
+    return true;
+  }
   return _.has(nodeStatus.store_statuses[0].metrics, metricName);
 }
