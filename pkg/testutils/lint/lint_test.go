@@ -367,8 +367,8 @@ func TestLint(t *testing.T) {
 		// TODO(pav-kv): add "*.proto". Currently raft.proto has no header.
 		extensions := []string{"*.go"}
 
-		// The commit that imported etcd-io/raft into pkg/raft.
-		const baseSHA = "cd6f4f263bd42688096064825dfa668bde2d3720"
+		// The latest commit in etcd-io/raft that was imported into pkg/raft.
+		const baseSHA = "d9cb9933fcada57a89d33d22c825e181b7bcc350"
 		// modified will contain the set of all files in pkg/raft that were modified
 		// since importing etcd-io/raft into it.
 		modified := func() map[string]struct{} {

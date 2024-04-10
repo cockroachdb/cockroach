@@ -22,7 +22,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":quorum"],
-    deps = ["@com_github_cockroachdb_datadriven//:datadriven"],
+    deps = [
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 stringer(
