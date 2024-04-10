@@ -120,7 +120,7 @@ func registerOnlineRestore(r registry.Registry) {
 						// These tests measure performance. To ensure consistent perf,
 						// disable metamorphic encryption.
 						EncryptionSupport: registry.EncryptionAlwaysDisabled,
-						CompatibleClouds:  registry.Clouds(sp.backup.cloud),
+						CompatibleClouds:  sp.backup.CompatibleClouds(),
 						Suites:            sp.suites,
 						Skip:              sp.skip,
 						// Takes 10 minutes on OR tests for some reason.
