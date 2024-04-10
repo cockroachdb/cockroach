@@ -143,28 +143,29 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 				if err := o.selectByCustID.QueryRowTx(
 					ctx, tx, wID, d.dID, d.cID,
 				).Scan(&d.cBalance, &d.cFirst, &d.cMiddle, &d.cLast); err != nil {
-					return errors.Wrap(err, "select by customer idfail")
+					return errors.Wrap(err, "select customer by id failed")
 				}
 			} else {
 				// Case 2: Pick the middle row, rounded up, from the selection by last name.
-				rows, err := o.selectByLastName.QueryTx(ctx, tx, wID, d.dID, d.cLast)
-				if err != nil {
-					return errors.Wrap(err, "select by last name fail")
-				}
 				customers := make([]customerData, 0, 1)
-				for rows.Next() {
-					c := customerData{}
-					err = rows.Scan(&c.cID, &c.cBalance, &c.cFirst, &c.cMiddle)
+				if err := func() error {
+					rows, err := o.selectByLastName.QueryTx(ctx, tx, wID, d.dID, d.cLast)
 					if err != nil {
-						rows.Close()
 						return err
 					}
-					customers = append(customers, c)
+					defer rows.Close()
+
+					for rows.Next() {
+						c := customerData{}
+						if err := rows.Scan(&c.cID, &c.cBalance, &c.cFirst, &c.cMiddle); err != nil {
+							return err
+						}
+						customers = append(customers, c)
+					}
+					return rows.Err()
+				}(); err != nil {
+					return errors.Wrap(err, "select customer by last name failed")
 				}
-				if err := rows.Err(); err != nil {
-					return err
-				}
-				rows.Close()
 				if len(customers) == 0 {
 					return errors.New("found no customers matching query orderStatus.selectByLastName")
 				}
@@ -180,26 +181,32 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 			if err := o.selectOrder.QueryRowTx(
 				ctx, tx, wID, d.dID, d.cID,
 			).Scan(&d.oID, &d.oEntryD, &d.oCarrierID); err != nil {
-				return errors.Wrap(err, "select order fail")
+				return errors.Wrap(err, "select order failed")
 			}
 
 			// Select the items from the customer's order.
-			rows, err := o.selectItems.QueryTx(ctx, tx, wID, d.dID, d.oID)
-			if err != nil {
-				return errors.Wrap(err, "select items fail")
-			}
-			defer rows.Close()
-
-			// On average there's 10 items per order - 2.4.1.3
-			d.items = make([]orderItem, 0, 10)
-			for rows.Next() {
-				item := orderItem{}
-				if err := rows.Scan(&item.olIID, &item.olSupplyWID, &item.olQuantity, &item.olAmount, &item.olDeliveryD); err != nil {
+			if err := func() error {
+				rows, err := o.selectItems.QueryTx(ctx, tx, wID, d.dID, d.oID)
+				if err != nil {
 					return err
 				}
-				d.items = append(d.items, item)
+				defer rows.Close()
+
+				// On average there's 10 items per order - 2.4.1.3
+				d.items = make([]orderItem, 0, 10)
+				for rows.Next() {
+					item := orderItem{}
+					if err := rows.Scan(&item.olIID, &item.olSupplyWID, &item.olQuantity, &item.olAmount, &item.olDeliveryD); err != nil {
+						return err
+					}
+					d.items = append(d.items, item)
+				}
+				return rows.Err()
+			}(); err != nil {
+				return errors.Wrap(err, "select order_line failed")
 			}
-			return rows.Err()
+
+			return nil
 		}); err != nil {
 		return nil, err
 	}
