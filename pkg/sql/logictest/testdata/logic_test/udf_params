@@ -652,6 +652,12 @@ CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT = d + 1) RETURNS INT LANGUA
 statement error pgcode 42804 argument of DEFAULT must be type int, not type bool
 CREATE FUNCTION my_sum(a INT, b INT DEFAULT true) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
 
+statement error pgcode 0A000 subqueries are not allowed in DEFAULT expressions
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT (SELECT 1)) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement error pgcode 0A000 subqueries are not allowed in DEFAULT expressions
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 1 + (SELECT 2 FROM (VALUES (NULL)))) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
 statement ok
 CREATE FUNCTION my_sum(a INT, b INT, c INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
 

@@ -145,13 +145,9 @@ func (b *Builder) resolveProcedureDefinition(
 	inScope *scope, proc *tree.FuncExpr,
 ) (f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition) {
 	// Type-check the procedure and its arguments. Subqueries are disallowed in
-	// arguments. Note that we don't use defer to reset semaCtx.Properties
-	// because it must be reset before the call to buildRoutine below, or else
-	// subqueries would be disallowed in the body of procedures.
-	originalProps := b.semaCtx.Properties
-	b.semaCtx.Properties.Require("CALL argument", tree.RejectSubqueries)
-	typedExpr := inScope.resolveType(proc, types.Any)
-	b.semaCtx.Properties = originalProps
+	// arguments.
+	typedExpr := inScope.resolveTypeAndReject(proc, types.Any,
+		"CALL argument", tree.RejectSubqueries)
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%s is not a procedure", proc.Func.String()))

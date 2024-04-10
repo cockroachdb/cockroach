@@ -496,6 +496,17 @@ func (s *scope) resolveAndRequireType(expr tree.Expr, desired *types.T) tree.Typ
 	return s.ensureNullType(texpr, desired)
 }
 
+// resolveTypeAndReject converts the given expr to a tree.TypedExpr. It is
+// similar to resolveType, but also allows tree.SemaRejectFlags to be provided.
+// The original tree.SemaRejectFlags are restored before the function returns.
+func (s *scope) resolveTypeAndReject(
+	expr tree.Expr, desired *types.T, context string, flags tree.SemaRejectFlags,
+) tree.TypedExpr {
+	defer s.builder.semaCtx.Properties.Restore(s.builder.semaCtx.Properties)
+	s.builder.semaCtx.Properties.Require(context, flags)
+	return s.resolveType(expr, desired)
+}
+
 // ensureNullType tests the type of the given expression. If types.Unknown, then
 // ensureNullType wraps the expression in a CAST to the desired type (assuming
 // it is not types.Any). types.Unknown is a special type used for null values,
