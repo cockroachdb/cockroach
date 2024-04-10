@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -2899,6 +2900,7 @@ func (kl *keyLocks) acquireLock(
 ) error {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
+	log.Infof(context.TODO(), "!!!!!! acquire lock by txn %s on key %s", acq.Txn.ID, kl.key)
 	if kl.isLockedBy(acq.Txn.ID) {
 		// Already held.
 		e, found := kl.heldBy[acq.Txn.ID]
@@ -3166,6 +3168,17 @@ func (kl *keyLocks) tryUpdateLock(
 func (kl *keyLocks) tryUpdateLockLocked(
 	up roachpb.LockUpdate, st *cluster.Settings,
 ) (heldByTxn, gc bool) {
+	before := kl.String()
+	defer func() {
+		after := kl.String()
+		ctx := context.TODO()
+		log.Infof(ctx, "!!!! update lock by txn %s; before: \n%s\nafter:\n%s\n", up.Txn.ID, before, after)
+		if kl.queuedLockingRequests.Len() == 0 && kl.waitingReaders.Len() == 0 {
+			log.Infof(ctx, "!!!! no queued requests; txn %s", up.Txn.ID)
+		} else {
+			log.Infof(ctx, "!!!! there are queued requests; txn %s", up.Txn.ID)
+		}
+	}()
 	if kl.isEmptyLock() {
 		// Already free. This can happen when an unreplicated lock is removed in
 		// tryActiveWait due to the txn being in the txnStatusCache.
@@ -3175,6 +3188,7 @@ func (kl *keyLocks) tryUpdateLockLocked(
 		return false, false
 	}
 	if up.Status.IsFinalized() {
+		log.Infof(context.TODO(), "!!!! update lock for finalized txn %v on key %s", up.Txn.ID, kl.key)
 		kl.releaseLock(&up.Txn)
 		if !kl.isLocked() {
 			// The lock transitioned from held to unheld as a result of this lock
@@ -4284,6 +4298,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 		kl = iter.Cur()
 		if acq.Durability == lock.Replicated {
 			if freed, mustGC := kl.tryFreeLockOnReplicatedAcquire(acq); freed {
+				log.Infof(context.TODO(), "free-ed lock on replicated acquisition; txn %s, key %s", acq.Txn.ID, acq.Key)
 				// Don't remember uncontended replicated locks. Just like in the case
 				// where the lock is initially added as replicated, we drop replicated
 				// locks from the lockTable when being upgraded from Unreplicated to

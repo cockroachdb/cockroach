@@ -1115,6 +1115,8 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 				g = nil
 			}
 		}()
+		var timer timeutil.Timer
+		defer timer.Stop()
 		var err error
 		for {
 			// Since we can't do a select involving latch acquisition and context
@@ -1138,10 +1140,19 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			var lastID uuid.UUID
 		L:
 			for {
+				timer.Reset(time.Minute * 4)
 				select {
 				case <-g.NewStateChan():
 				case <-ctx.Done():
 					return ctx.Err()
+				case <-timer.C:
+					timer.Read = true
+					return errors.AssertionFailedf(
+						"request %d has been waiting for more than 4 minutes; request's snapshot of the lock table %s\n; lock table state:\n%s\n",
+						g.(*lockTableGuardImpl).seqNum,
+						g.(*lockTableGuardImpl).tableSnapshot.String(),
+						e.lt.String(),
+					)
 				}
 				state, err := g.CurState()
 				if err != nil {
@@ -1186,11 +1197,15 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 		}
 		return err
 	}
+
+	lockTableBefore := e.lt.String()
 	for i := range item.intents {
 		if err := e.lt.UpdateLocks(&item.intents[i]); err != nil {
 			return err
 		}
 	}
+	lockTableAfter := e.lt.String()
+	log.Infof(ctx, "!!! lock table before resolving intents (%v) \n for transaction %s:\n %s; after: %s", item.intents, item.intents[0].Txn.ID, lockTableBefore, lockTableAfter)
 	return nil
 }
 
@@ -1366,10 +1381,16 @@ func (e *workloadExecutor) tryFinishTxn(
 	if !tstate.finish || len(tstate.ongoingRequests) > 0 {
 		return false
 	}
+	if tstate.txn.ID != txnID {
+		panic("unexpected txn ID")
+	}
 	if len(tstate.acquiredLocks) > 0 {
+		log.Infof(ctx, "!!! launching goroutine to finish txn %s", txnID)
 		work := makeWorkItemFinishTxn(tstate)
 		group.Go(func() error { return doWork(ctx, &work, e) })
 		return true
+	} else {
+		log.Infof(ctx, "!!! did not need to finish txn %s because no locks were acquired", txnID)
 	}
 	return false
 }
@@ -1414,6 +1435,7 @@ L:
 					err = errors.Errorf("timer expired with lock table: %v", e.lt)
 					break L
 				} else if numOutstanding > maxNonStrictConcurrency {
+					log.Infof(ctx, "!!! numOutstanding %d > maxNonStrictConcurrency %d; continuing", numOutstanding, maxNonStrictConcurrency)
 					continue
 				} else {
 					e.numConcViolations++
