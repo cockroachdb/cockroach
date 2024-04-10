@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -58,8 +60,13 @@ func CountLeases(
 		systemDBVersion.AtLeast(clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version())
 	leasingMode := readSessionBasedLeasingMode(ctx, settings)
 	whereClauses := make([][]string, 2)
+	containsSystemDatabase := false
+	forceMultiRegionQuery := false
 	for _, t := range versions {
 		versionClause := ""
+		if t.ID == keys.SystemDatabaseID {
+			containsSystemDatabase = true
+		}
 		if !forAnyVersion {
 			versionClause = fmt.Sprintf("AND version = %d", t.Version)
 		}
@@ -118,12 +125,24 @@ func CountLeases(
 			err := txn.WithSyntheticDescriptors(descsToInject,
 				func() error {
 					var err error
-					if cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion() {
+					if (cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion()) ||
+						forceMultiRegionQuery {
 						// If we are injecting a raw leases descriptors, that will not have the enum
 						// type set, so convert the region to byte equivalent physical representation.
 						count, err = countLeasesByRegion(ctx, txn, prober, regionMap, cachedDatabaseRegions, len(descsToInject) > 0, at, whereClause)
 					} else {
 						count, err = countLeasesNonMultiRegion(ctx, txn, at, whereClause)
+						// It's possible that our cached database descriptor is stale relative to the
+						// visible lease table descriptor. Because the lease manager uses rangefeeds to
+						// keep track of new descriptor versions, when converting to a multi-region
+						// system database its possible for the lease table descriptor update to precede
+						// the system database descriptor update.
+						if err != nil &&
+							pgerror.GetPGCode(err) == pgcode.UndefinedFunction &&
+							containsSystemDatabase {
+							forceMultiRegionQuery = true
+							return txn.KV().GenerateForcedRetryableErr(ctx, "forcing retry once with MR columns")
+						}
 					}
 					return err
 				})
