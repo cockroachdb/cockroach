@@ -28,6 +28,7 @@ go_test(
         ":idxconstraint",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
+        "//pkg/sql/opt/constraint",
         "//pkg/sql/opt/exec/execbuilder",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",

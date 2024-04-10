@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -138,7 +139,8 @@ func TestIndexConstraints(t *testing.T) {
 					true /* consolidate */, &evalCtx, &f, partition.PrefixSorter{},
 					func() {}, /* checkCancellation */
 				)
-				result := ic.Constraint()
+				var result constraint.Constraint
+				ic.Constraint(&result)
 				var buf bytes.Buffer
 				for i := 0; i < result.Spans.Count(); i++ {
 					fmt.Fprintf(&buf, "%s\n", result.Spans.Get(i))
@@ -257,7 +259,8 @@ func BenchmarkIndexConstraints(b *testing.B) {
 					&evalCtx, &f, partition.PrefixSorter{},
 					func() {}, /* checkCancellation */
 				)
-				_ = ic.Constraint()
+				var result constraint.Constraint
+				ic.Constraint(&result)
 				_ = ic.RemainingFilters()
 			}
 		})
