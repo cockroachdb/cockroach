@@ -230,8 +230,26 @@ func (s setClusterSettingStep) Description() string {
 func (s setClusterSettingStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	stmt := fmt.Sprintf("SET CLUSTER SETTING %s = $1", s.name)
-	return h.ExecWithGateway(rng, nodesRunningAtLeast(s.minVersion, h), stmt, s.value)
+	var stmt string
+	var args []interface{}
+	// We do a type switch on common types to avoid errors when using
+	// placeholders, as type detection is often not implemented for some
+	// private cluster settings.
+	switch val := s.value.(type) {
+	case string:
+		stmt = fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", s.name, val)
+	case bool:
+		stmt = fmt.Sprintf("SET CLUSTER SETTING %s = %t", s.name, val)
+	case int:
+		stmt = fmt.Sprintf("SET CLUSTER SETTING %s = %d", s.name, val)
+	default:
+		// If not using any of these types, do a best-effort attempt using
+		// a placeholder.
+		stmt = fmt.Sprintf("SET CLUSTER SETTING %s = $1", s.name)
+		args = []interface{}{val}
+	}
+
+	return h.ExecWithGateway(rng, nodesRunningAtLeast(s.minVersion, h), stmt, args...)
 }
 
 // resetClusterSetting resets cluster setting `name`.
