@@ -143,13 +143,11 @@ go_test(
     ],
     embed = [":serverutils"],
     deps = [
-        "//pkg/base",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils",
         "//pkg/util/leaktest",
-        "//pkg/util/log",
         "@com_github_stretchr_testify//require",
     ],
 )
