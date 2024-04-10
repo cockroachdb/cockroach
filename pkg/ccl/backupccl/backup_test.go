@@ -6652,7 +6652,7 @@ INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='50b'`)
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test2'`)
 	startingSpan = mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2")
-	resumeSpan := mkSpan(id1, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2")
+	resumeSpan := mkSpan(id1, "/Tenant/10/Table/:id/1/510", "/Tenant/10/Table/:id/2")
 	mu.Lock()
 	require.Equal(t, []string{startingSpan.String(), resumeSpan.String()}, mu.exportRequestSpans)
 	mu.Unlock()
@@ -6664,10 +6664,10 @@ INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
 	var expected []string
 	for _, resume := range []exportResumePoint{
 		{mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id1, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id1, "/Tenant/10/Table/:id/1/310/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id1, "/Tenant/10/Table/:id/1/410/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id1, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id1, "/Tenant/10/Table/:id/1/210", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id1, "/Tenant/10/Table/:id/1/310", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id1, "/Tenant/10/Table/:id/1/410", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id1, "/Tenant/10/Table/:id/1/510", "/Tenant/10/Table/:id/2"), withoutTS},
 	} {
 		expected = append(expected, requestSpanStr(resume.Span, resume.timestamp))
 	}
@@ -6695,12 +6695,15 @@ INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510,
 	for _, resume := range []exportResumePoint{
 		{mkSpan(id2, "/Tenant/10/Table/3", "/Tenant/10/Table/4"), withoutTS},
 		{mkSpan(id2, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id2, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		// We have two entries for 210 because of history and super small table size
+		{mkSpan(id2, "/Tenant/10/Table/:id/1/210", "/Tenant/10/Table/:id/2"), withoutTS},
+		// We have two entries for 210 because of history and super small table
+		// size. Note that the second resume span has start key with the column
+		// family which implies that the previous export request response will not
+		// flush until this span completes.
 		{mkSpan(id2, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withTS},
-		{mkSpan(id2, "/Tenant/10/Table/:id/1/310/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id2, "/Tenant/10/Table/:id/1/410/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id2, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id2, "/Tenant/10/Table/:id/1/310", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id2, "/Tenant/10/Table/:id/1/410", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id2, "/Tenant/10/Table/:id/1/510", "/Tenant/10/Table/:id/2"), withoutTS},
 	} {
 		expected = append(expected, requestSpanStr(resume.Span, resume.timestamp))
 	}

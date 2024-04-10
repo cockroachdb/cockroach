@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,7 +72,7 @@ func TestFileSSTSinkExtendOneFile(t *testing.T) {
 		dataSST:        getKeys("b", 100),
 		revStart:       hlc.Timestamp{},
 		completedSpans: 1,
-		atKeyBoundary:  false,
+		resumeKey:      []byte("b"),
 	}
 
 	exportResponse2 := exportedSpan{
@@ -91,15 +92,20 @@ func TestFileSSTSinkExtendOneFile(t *testing.T) {
 		dataSST:        getKeys("c", 100),
 		revStart:       hlc.Timestamp{},
 		completedSpans: 1,
-		atKeyBoundary:  true,
 	}
 
 	st := cluster.MakeTestingClusterSettings()
 	targetFileSize.Override(ctx, &st.SV, 20)
 	sink, _ := fileSSTSinkTestSetUp(ctx, t, st)
 
-	require.NoError(t, sink.write(ctx, exportResponse1))
-	require.NoError(t, sink.write(ctx, exportResponse2))
+	resumeKey, err := sink.write(ctx, exportResponse1)
+	require.NoError(t, err)
+	require.Equal(t, exportResponse1.resumeKey, resumeKey)
+	resumeKey, err = sink.write(ctx, exportResponse2)
+	require.NoError(t, err)
+	require.Equal(t, exportResponse2.resumeKey, resumeKey)
+	// Close the sink.
+	require.NoError(t, err)
 
 	close(sink.conf.progCh)
 
@@ -139,32 +145,35 @@ func TestFileSSTSinkWrite(t *testing.T) {
 		unflushedSpans    []roachpb.Spans
 		// errorExplanation, if non-empty, explains why an error is expected when
 		// writing the case inputs, and makes the test case fail if none is hit.
+		//
+		// TODO (msbutler): we currently don't test expected error handling. If this
+		// is non-empty, we just skip the test.
 		errorExplanation string
 	}
 
-	for _, tt := range []testCase{
-		{
-			name: "out-of-order-key-boundary",
-			exportSpans: []exportedSpan{
-				newExportedSpanBuilder("a", "c", true).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "c", timestamp: 10}}).build(),
-				newExportedSpanBuilder("b", "d", true).withKVs([]kvAndTS{{key: "b", timestamp: 10}, {key: "d", timestamp: 10}}).build(),
-			},
-			flushedSpans:   []roachpb.Spans{{roachpb.Span{Key: []byte("a"), EndKey: []byte("c")}}},
-			unflushedSpans: []roachpb.Spans{{roachpb.Span{Key: []byte("b"), EndKey: []byte("d")}}},
+	for _, tt := range []testCase{{name: "out-of-order-key-boundary",
+		exportSpans: []exportedSpan{
+			newExportedSpanBuilder("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "c", timestamp: 10}}).build(),
+			newExportedSpanBuilder("b", "d").withKVs([]kvAndTS{{key: "b", timestamp: 10}, {key: "d", timestamp: 10}}).build(),
 		},
+		flushedSpans:   []roachpb.Spans{{roachpb.Span{Key: s2k0("a"), EndKey: s2k0("c")}}},
+		unflushedSpans: []roachpb.Spans{{roachpb.Span{Key: s2k0("b"), EndKey: s2k0("d")}}},
+	},
 		{
 			// Test that even if the most recently ingested export span does not
 			// end at a key boundary, a flush will still occur on the writing of
 			// an out-of-order export span.
+			//
+			// TODO (msbutler): this test is currently skipped as it has a non nil errorExplanation. Unskip it.
 			name: "out-of-order-not-key-boundary",
 			exportSpans: []exportedSpan{
-				newExportedSpanBuilder("a", "c", false).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "c", timestamp: 10}}).build(),
-				newExportedSpanBuilder("b", "d", true).withKVs([]kvAndTS{{key: "b", timestamp: 10}, {key: "d", timestamp: 10}}).build(),
-				newExportedSpanBuilder("c", "e", true).withKVs([]kvAndTS{{key: "c", timestamp: 9}, {key: "e", timestamp: 10}}).build(),
+				newRawExportedSpanBuilder(s2k0("a"), s2k0("c"), s2k0("c")).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "c", timestamp: 10}}).build(),
+				newExportedSpanBuilder("b", "d").withKVs([]kvAndTS{{key: "b", timestamp: 10}, {key: "d", timestamp: 10}}).build(),
+				newExportedSpanBuilder("c", "e").withKVs([]kvAndTS{{key: "c", timestamp: 9}, {key: "e", timestamp: 10}}).build(),
 			},
 			flushedSpans: []roachpb.Spans{
-				{roachpb.Span{Key: []byte("a"), EndKey: []byte("c")}},
-				{roachpb.Span{Key: []byte("b"), EndKey: []byte("d")}},
+				{roachpb.Span{Key: s2k0("a"), EndKey: s2k0("c")}},
+				{roachpb.Span{Key: s2k0("b"), EndKey: s2k0("d")}},
 			},
 			unflushedSpans:   []roachpb.Spans{{roachpb.Span{Key: []byte("c"), EndKey: []byte("e")}}},
 			errorExplanation: "unsupported write ordering; backup processor should not do this due to one sink per worker and #118990.",
@@ -172,59 +181,62 @@ func TestFileSSTSinkWrite(t *testing.T) {
 		{
 			name: "prefix-differ",
 			exportSpans: []exportedSpan{
-				newExportedSpanBuilder("2/a", "2/c", false).withKVs([]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/c", timestamp: 10}}).build(),
-				newExportedSpanBuilder("2/c", "2/d", true).withKVs([]kvAndTS{{key: "2/c", timestamp: 9}, {key: "2/d", timestamp: 10}}).build(),
-				newExportedSpanBuilder("3/c", "3/e", true).withKVs([]kvAndTS{{key: "3/c", timestamp: 9}, {key: "3/d", timestamp: 10}}).build(),
-				newExportedSpanBuilder("2/e", "2/g", true).withKVs([]kvAndTS{{key: "2/e", timestamp: 10}, {key: "2/f", timestamp: 10}}).build(),
+				// Note the resume key contains a column family because
+				newRawExportedSpanBuilder(s2k0("2/a"), s2k0("2/c"), s2k0("2/c")).withKVs([]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/c", timestamp: 10}}).build(),
+				newExportedSpanBuilder("2/c", "2/d").withKVs([]kvAndTS{{key: "2/c", timestamp: 9}, {key: "2/d", timestamp: 10}}).build(),
+				newExportedSpanBuilder("3/c", "3/e").withKVs([]kvAndTS{{key: "3/c", timestamp: 9}, {key: "3/d", timestamp: 10}}).build(),
+				newExportedSpanBuilder("2/e", "2/g").withKVs([]kvAndTS{{key: "2/e", timestamp: 10}, {key: "2/f", timestamp: 10}}).build(),
 			},
 			flushedSpans: []roachpb.Spans{
-				{roachpb.Span{Key: []byte("2/a"), EndKey: []byte("2/d")}, roachpb.Span{Key: []byte("3/c"), EndKey: []byte("3/e")}},
+				{roachpb.Span{Key: s2k0("2/a"), EndKey: s2k0("2/d")}, roachpb.Span{Key: s2k0("3/c"), EndKey: s2k0("3/e")}},
 			},
 			elideFlushedSpans: []roachpb.Spans{
-				{roachpb.Span{Key: []byte("2/a"), EndKey: []byte("2/d")}},
-				{roachpb.Span{Key: []byte("3/c"), EndKey: []byte("3/e")}},
+				{roachpb.Span{Key: s2k0("2/a"), EndKey: s2k0("2/d")}},
+				{roachpb.Span{Key: s2k0("3/c"), EndKey: s2k0("3/e")}},
 			},
-			unflushedSpans: []roachpb.Spans{{roachpb.Span{Key: []byte("2/e"), EndKey: []byte("2/g")}}},
+			unflushedSpans: []roachpb.Spans{{roachpb.Span{Key: s2k0("2/e"), EndKey: s2k0("2/g")}}},
 		},
 		{
 			name: "extend-key-boundary-1-file",
 			exportSpans: []exportedSpan{
-				newExportedSpanBuilder("a", "c", true).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}).build(),
-				newExportedSpanBuilder("c", "e", true).withKVs([]kvAndTS{{key: "c", timestamp: 10}, {key: "d", timestamp: 10}}).build(),
+				newExportedSpanBuilder("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}).build(),
+				newExportedSpanBuilder("c", "e").withKVs([]kvAndTS{{key: "c", timestamp: 10}, {key: "d", timestamp: 10}}).build(),
 			},
 			flushedSpans:   []roachpb.Spans{},
-			unflushedSpans: []roachpb.Spans{{{Key: []byte("a"), EndKey: []byte("e")}}},
+			unflushedSpans: []roachpb.Spans{{{Key: s2k0("a"), EndKey: s2k0("e")}}},
 		},
 		{
 			name: "extend-key-boundary-2-files",
 			exportSpans: []exportedSpan{
-				newExportedSpanBuilder("a", "c", true).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}).build(),
-				newExportedSpanBuilder("c", "e", true).withKVs([]kvAndTS{{key: "c", timestamp: 10}, {key: "d", timestamp: 10}}).build(),
-				newExportedSpanBuilder("e", "g", true).withKVs([]kvAndTS{{key: "e", timestamp: 10}, {key: "f", timestamp: 10}}).build(),
+				newExportedSpanBuilder("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}).build(),
+				newExportedSpanBuilder("c", "e").withKVs([]kvAndTS{{key: "c", timestamp: 10}, {key: "d", timestamp: 10}}).build(),
+				newExportedSpanBuilder("e", "g").withKVs([]kvAndTS{{key: "e", timestamp: 10}, {key: "f", timestamp: 10}}).build(),
 			},
 			flushedSpans:   []roachpb.Spans{},
-			unflushedSpans: []roachpb.Spans{{{Key: []byte("a"), EndKey: []byte("g")}}},
+			unflushedSpans: []roachpb.Spans{{{Key: s2k0("a"), EndKey: s2k0("g")}}},
 		},
 		{
 			name: "extend-not-key-boundary",
 			exportSpans: []exportedSpan{
-				newExportedSpanBuilder("a", "c", false).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "c", timestamp: 10}}).build(),
-				newExportedSpanBuilder("c", "e", true).withKVs([]kvAndTS{{key: "c", timestamp: 9}, {key: "d", timestamp: 10}}).build(),
+				newRawExportedSpanBuilder(s2k0("a"), s2k0("c"), s2k0("c")).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "c", timestamp: 10}}).build(),
+				newExportedSpanBuilder("c", "e").withKVs([]kvAndTS{{key: "c", timestamp: 9}, {key: "d", timestamp: 10}}).build(),
 			},
 			flushedSpans:   []roachpb.Spans{},
-			unflushedSpans: []roachpb.Spans{{{Key: []byte("a"), EndKey: []byte("e")}}},
+			unflushedSpans: []roachpb.Spans{{{Key: s2k0("a"), EndKey: s2k0("e")}}},
 		},
 		{
 			// TODO(rui): currently it is possible to make the sink error if we
 			// write different times of the revision history for the same key
 			// out of order.
 			// Issue: https://github.com/cockroachdb/cockroach/issues/105372
+			//
+			// TODO(msbutler): this test is skipped, as it has a non nil errorExplanation. Unskip this.
 			name:             "extend-same-key",
 			errorExplanation: "incorrectly fails with pebble: keys must be added in strictly increasing order",
 			exportSpans: []exportedSpan{
-				newExportedSpanBuilder("a", "a", false).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "a", timestamp: 9}}).build(),
-				newExportedSpanBuilder("a", "a", false).withKVs([]kvAndTS{{key: "a", timestamp: 5}, {key: "a", timestamp: 4}}).build(),
-				newExportedSpanBuilder("a", "a", false).withKVs([]kvAndTS{{key: "a", timestamp: 8}, {key: "a", timestamp: 7}}).build(),
+				newRawExportedSpanBuilder(s2k0("a"), s2k0("a"), s2k("a")).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "a", timestamp: 9}}).build(),
+				newRawExportedSpanBuilder(s2k0("a"), s2k0("a"), s2k("a")).withKVs([]kvAndTS{{key: "a", timestamp: 5}, {key: "a", timestamp: 4}}).build(),
+				newRawExportedSpanBuilder(s2k0("a"), s2k0("a"), s2k("a")).withKVs([]kvAndTS{{key: "a", timestamp: 8}, {key: "a", timestamp: 7}}).build(),
 			},
 			flushedSpans:   []roachpb.Spans{},
 			unflushedSpans: []roachpb.Spans{{{Key: []byte("a"), EndKey: []byte("e")}}},
@@ -232,12 +244,12 @@ func TestFileSSTSinkWrite(t *testing.T) {
 		{
 			name: "extend-metadata-same-timestamp",
 			exportSpans: []exportedSpan{
-				newExportedSpanBuilder("a", "c", true).
+				newExportedSpanBuilder("a", "c").
 					withKVs([]kvAndTS{{key: "a", timestamp: 5}, {key: "b", timestamp: 5}}).
 					withStartTime(5).
 					withEndTime(10).
 					build(),
-				newExportedSpanBuilder("c", "e", true).
+				newExportedSpanBuilder("c", "e").
 					withKVs([]kvAndTS{{key: "c", timestamp: 10}, {key: "d", timestamp: 10}}).
 					withStartTime(5).
 					withEndTime(10).
@@ -245,17 +257,17 @@ func TestFileSSTSinkWrite(t *testing.T) {
 			},
 			flushedSpans: []roachpb.Spans{},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: []byte("a"), EndKey: []byte("e")}},
+				{{Key: s2k0("a"), EndKey: s2k0("e")}},
 			},
 		},
 		{
 			name: "no-extend-metadata-timestamp-mismatch",
 			exportSpans: []exportedSpan{
-				newExportedSpanBuilder("a", "c", true).
+				newExportedSpanBuilder("a", "c").
 					withKVs([]kvAndTS{{key: "a", timestamp: 5}, {key: "b", timestamp: 5}}).
 					withEndTime(5).
 					build(),
-				newExportedSpanBuilder("c", "e", true).
+				newExportedSpanBuilder("c", "e").
 					withKVs([]kvAndTS{{key: "c", timestamp: 10}, {key: "d", timestamp: 10}}).
 					withStartTime(5).
 					withEndTime(10).
@@ -263,53 +275,74 @@ func TestFileSSTSinkWrite(t *testing.T) {
 			},
 			flushedSpans: []roachpb.Spans{},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: []byte("a"), EndKey: []byte("c")}, {Key: []byte("c"), EndKey: []byte("e")}},
+				{{Key: s2k0("a"), EndKey: s2k0("c")}, {Key: s2k0("c"), EndKey: s2k0("e")}},
 			},
 		},
 		{
 			name: "size-flush",
 			exportSpans: []exportedSpan{
-				newExportedSpanBuilder("a", "c", true).withKVs([]kvAndTS{{key: "a", timestamp: 10, value: make([]byte, 20<<20)}, {key: "b", timestamp: 10}}).build(),
-				newExportedSpanBuilder("d", "f", true).withKVs([]kvAndTS{{key: "d", timestamp: 10}, {key: "e", timestamp: 10}}).build(),
+				newExportedSpanBuilder("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10, value: make([]byte, 20<<20)}, {key: "b", timestamp: 10}}).build(),
+				newExportedSpanBuilder("d", "f").withKVs([]kvAndTS{{key: "d", timestamp: 10}, {key: "e", timestamp: 10}}).build(),
 			},
 			flushedSpans: []roachpb.Spans{
-				{{Key: []byte("a"), EndKey: []byte("c")}},
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: []byte("d"), EndKey: []byte("f")}},
+				{{Key: s2k0("d"), EndKey: s2k0("f")}},
 			},
 		},
 		{
-			name: "no-size-flush-if-not-at-boundary",
+			// No flush can occur between two versions of the same key. Further, we must combine flushes which split a row.
+			name: "no-size-flush-if-mid-mvcc",
 			exportSpans: []exportedSpan{
-				newExportedSpanBuilder("a", "c", false).withKVs([]kvAndTS{{key: "a", timestamp: 10, value: make([]byte, 20<<20)}, {key: "b", timestamp: 10}}).build(),
-				newExportedSpanBuilder("d", "f", false).withKVs([]kvAndTS{{key: "d", timestamp: 10}, {key: "e", timestamp: 10}}).build(),
+				newRawExportedSpanBuilder(s2k0("a"), s2k0("c"), s2k0("c")).withKVs([]kvAndTS{{key: "a", timestamp: 10, value: make([]byte, 20<<20)}, {key: "c", timestamp: 10}}).build(),
+				newRawExportedSpanBuilder(s2k0("c"), s2k0("f"), s2k0("f")).withKVs([]kvAndTS{{key: "c", timestamp: 8}, {key: "f", timestamp: 10}}).build(),
 			},
 			flushedSpans: []roachpb.Spans{},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: []byte("a"), EndKey: []byte("c")}, {Key: []byte("d"), EndKey: []byte("f")}},
+				{{Key: s2k0("a"), EndKey: s2k0("f")}},
 			},
 		},
+		{
+			// No flush can occur between the two column families of the same row. Further, we must combine flushes which split a row.
+			name: "no-size-flush-mid-col-family",
+			exportSpans: []exportedSpan{
+				newRawExportedSpanBuilder(s2kWithColFamily("c", 0), s2kWithColFamily("c", 1), s2kWithColFamily("c", 1)).withKVs([]kvAndTS{
+					{key: "c", timestamp: 10, value: make([]byte, 20<<20)}}).build(),
+				newRawExportedSpanBuilder(s2kWithColFamily("c", 1), s2kWithColFamily("c", 2), s2kWithColFamily("c", 2)).withKVs([]kvAndTS{
+					{key: "c", timestamp: 10, value: make([]byte, 20<<20)}}).buildWithEncoding(func(stingedKey string) roachpb.Key { return s2kWithColFamily(stingedKey, 1) }),
+			},
+			flushedSpans: []roachpb.Spans{},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2kWithColFamily("c", 0), EndKey: s2kWithColFamily("c", 2)}},
+			},
+		},
+		{
+			// It's safe to flush at the range boundary.
+			name: "size-flush-at-range-boundary",
+			exportSpans: []exportedSpan{
+				newRawExportedSpanBuilder(s2k("a"), s2k("d"), s2k("d")).withKVs([]kvAndTS{{key: "a", timestamp: 10, value: make([]byte, 20<<20)}, {key: "c", timestamp: 10}}).build(),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k("a"), EndKey: s2k("d")}},
+			},
+			unflushedSpans: []roachpb.Spans{},
+		},
+		{
+			// If the max key in the exported span is less than the trimmed span end
+			// key (i.e. without its column family), set the resume key and the end
+			// key to this trimmed key. The trimmed key ensures we never split in a
+			// row between two column families.
+			name: "trim-resume-key",
+			exportSpans: []exportedSpan{
+				newRawExportedSpanBuilder(s2k0("a"), s2k0("c"), s2k("c")).withKVs([]kvAndTS{{key: "a", timestamp: 10, value: make([]byte, 20<<20)}}).build(),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k("c")}},
+			},
+			unflushedSpans: []roachpb.Spans{},
+		},
 	} {
-		for i := range tt.flushedSpans {
-			for j, sp := range tt.flushedSpans[i] {
-				tt.flushedSpans[i][j].Key = s2k(string(sp.Key))
-				tt.flushedSpans[i][j].EndKey = s2k(string(sp.EndKey))
-			}
-		}
-		for i := range tt.elideFlushedSpans {
-			for j, sp := range tt.elideFlushedSpans[i] {
-				tt.elideFlushedSpans[i][j].Key = s2k(string(sp.Key))
-				tt.elideFlushedSpans[i][j].EndKey = s2k(string(sp.EndKey))
-			}
-		}
-		for i := range tt.unflushedSpans {
-			for j, sp := range tt.unflushedSpans[i] {
-				tt.unflushedSpans[i][j].Key = s2k(string(sp.Key))
-				tt.unflushedSpans[i][j].EndKey = s2k(string(sp.EndKey))
-			}
-		}
-
 		for _, elide := range []execinfrapb.ElidePrefix{execinfrapb.ElidePrefix_None, execinfrapb.ElidePrefix_TenantAndTable} {
 			t.Run(fmt.Sprintf("%s/elide=%s", tt.name, elide), func(t *testing.T) {
 				if tt.errorExplanation != "" {
@@ -324,8 +357,18 @@ func TestFileSSTSinkWrite(t *testing.T) {
 				}()
 				sink.elideMode = elide
 
+				var resumeKey roachpb.Key
+				var err error
 				for _, es := range tt.exportSpans {
-					require.NoError(t, sink.write(ctx, es))
+					if !resumeKey.Equal(roachpb.Key{}) {
+						require.Equal(t, resumeKey, es.metadata.Span.Key, "invalid test case: if the previous span emits a resume key, the next span must start with this key")
+					}
+					resumeKey, err = sink.write(ctx, es)
+					require.NoError(t, err)
+					if !es.resumeKey.Equal(resumeKey) {
+						require.NoError(t, err)
+					}
+					require.Equal(t, es.resumeKey, resumeKey, "unexpected resume key")
 				}
 
 				progress := make([]backuppb.BackupManifest_File, 0)
@@ -358,8 +401,8 @@ func TestFileSSTSinkWrite(t *testing.T) {
 				var actualUnflushedFiles []backuppb.BackupManifest_File
 				actualUnflushedFiles = append(actualUnflushedFiles, sink.flushedFiles...)
 				// We cannot end the test -- by calling flush -- if the sink is mid-key.
-				if len(tt.exportSpans) > 0 && !tt.exportSpans[len(tt.exportSpans)-1].atKeyBoundary {
-					sink.writeWithNoData(newExportedSpanBuilder("z", "zz", true).build())
+				if len(tt.exportSpans) > 0 && !tt.exportSpans[len(tt.exportSpans)-1].resumeKey.Equal(roachpb.Key{}) {
+					sink.writeWithNoData(newExportedSpanBuilder("z", "zz").build())
 				}
 				require.NoError(t, sink.flush(ctx))
 				require.NoError(t, checkFiles(ctx, store, actualUnflushedFiles, tt.unflushedSpans, eliding))
@@ -377,6 +420,15 @@ func s2k(s string) roachpb.Key {
 		k = []byte(p[1])
 	}
 	return append(keys.SystemSQLCodec.IndexPrefix(uint32(tbl), 2), k...)
+}
+
+func s2kWithColFamily(s string, colfamily uint64) roachpb.Key {
+	keys := s2k(s)
+	return encoding.EncodeUvarintAscending(keys, colfamily)
+}
+
+func s2k0(s string) roachpb.Key {
+	return s2kWithColFamily(s, 0)
 }
 
 // TestFileSSTSinkStats tests the internal counters and stats of the FileSSTSink under
@@ -415,35 +467,37 @@ func TestFileSSTSinkStats(t *testing.T) {
 	inputs := []inputAndExpectedStats{
 		{
 			// Write the first exported span to the sink.
-			newExportedSpanBuilder("a", "c", true).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}).build(),
+			newExportedSpanBuilder("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}).build(),
 			sinkStats{hlc.Timestamp{}, 1, 1, 0, 0, 0, 0},
 		},
 		{
 			// Write another exported span after the first span that doesn't
 			// extend the previous span. This ES also has a revStartTime.
-			newExportedSpanBuilder("d", "e", true).withKVs([]kvAndTS{{key: "d", timestamp: 10}}).withRevStartTime(5).build(),
+			newExportedSpanBuilder("d", "e").withKVs([]kvAndTS{{key: "d", timestamp: 10}}).withRevStartTime(5).build(),
 			sinkStats{hlc.Timestamp{WallTime: 5}, 2, 2, 0, 0, 0, 0}},
 		{
 			// Write an exported span that extends the previous span. This ES
 			// also has a later revStartTime.
-			newExportedSpanBuilder("e", "f", true).withKVs([]kvAndTS{{key: "e", timestamp: 10}}).withRevStartTime(10).build(),
+			newExportedSpanBuilder("e", "f").withKVs([]kvAndTS{{key: "e", timestamp: 10}}).withRevStartTime(10).build(),
 			sinkStats{hlc.Timestamp{WallTime: 10}, 3, 3, 0, 0, 0, 1}},
 		{
 			// Write an exported span that comes after all spans so far. This span has enough data for a size flush.
-			newExportedSpanBuilder("g", "h", true).withKVs([]kvAndTS{{key: "g", timestamp: 10, value: make([]byte, 20<<20)}}).build(),
+			newExportedSpanBuilder("g", "h").withKVs([]kvAndTS{{key: "g", timestamp: 10, value: make([]byte, 20<<20)}}).build(),
 			sinkStats{hlc.Timestamp{WallTime: 0}, 0, 4, 1, 0, 1, 1}},
 		{
 			// Write the first exported span after the flush.
-			newExportedSpanBuilder("i", "k", true).withKVs([]kvAndTS{{key: "i", timestamp: 10}, {key: "j", timestamp: 10}}).build(),
+			newExportedSpanBuilder("i", "k").withKVs([]kvAndTS{{key: "i", timestamp: 10}, {key: "j", timestamp: 10}}).build(),
 			sinkStats{hlc.Timestamp{}, 1, 5, 1, 0, 1, 1}},
 		{
 			// Write another exported span that causes an out of order flush.
-			newExportedSpanBuilder("j", "l", true).withKVs([]kvAndTS{{key: "j", timestamp: 10}, {key: "k", timestamp: 10}}).build(),
+			newExportedSpanBuilder("j", "l").withKVs([]kvAndTS{{key: "j", timestamp: 10}, {key: "k", timestamp: 10}}).build(),
 			sinkStats{hlc.Timestamp{}, 1, 6, 2, 1, 1, 1}},
 	}
 
 	for _, input := range inputs {
-		require.NoError(t, sink.write(ctx, input.input))
+		resumeKey, err := sink.write(ctx, input.input)
+		require.NoError(t, err)
+		require.Nil(t, input.input.resumeKey, resumeKey)
 
 		actualStats := sinkStats{
 			flushedRevStart: sink.flushedRevStart,
@@ -563,17 +617,22 @@ func TestFileSSTSinkCopyPointKeys(t *testing.T) {
 			for _, input := range tt.inputs {
 				kvs := input.input
 				// Add a range key in the input as well.
-				es := newExportedSpanBuilder(kvs[0].key, kvs[len(kvs)-1].key, false).
+				es := newRawExportedSpanBuilder(s2k0(kvs[0].key), s2k0(kvs[len(kvs)-1].key), s2k0(kvs[len(kvs)-1].key)).
 					withKVs(kvs).
 					withRangeKeys([]rangeKeyAndTS{{"a", "z", 10}}).
 					build()
-				err := sink.copyPointKeys(ctx, es.dataSST)
+				maxKey, err := sink.copyPointKeys(ctx, es.dataSST)
 				if input.expectErr != "" {
 					// Do not compare resulting SSTs if we expect errors.
 					require.ErrorContains(t, err, input.expectErr)
 					compareSST = false
+					require.Nil(t, maxKey)
 				} else {
 					require.NoError(t, err)
+					// NB: the assertion below will not be true for all exported spans,
+					// but it is for the exported spans constrcted in this test, where we
+					// set the end key of the exported span to the last key in the input.
+					require.Equal(t, es.resumeKey, maxKey)
 				}
 			}
 
@@ -586,7 +645,7 @@ func TestFileSSTSinkCopyPointKeys(t *testing.T) {
 			var expected []kvAndTS
 			for _, input := range tt.inputs {
 				for i := range input.input {
-					input.input[i].key = string(s2k(input.input[i].key))
+					input.input[i].key = string(s2k0(input.input[i].key))
 					v := roachpb.Value{}
 					v.SetBytes(input.input[i].value)
 
@@ -641,8 +700,9 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 
 	type testInput struct {
-		input     []rangeKeyAndTS
-		expectErr string
+		input          []rangeKeyAndTS
+		expectedMaxKey roachpb.Key
+		expectErr      string
 	}
 
 	type testCase struct {
@@ -659,6 +719,7 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 						{key: "a", endKey: "b", timestamp: 10},
 						{key: "b", endKey: "c", timestamp: 9},
 					},
+					expectedMaxKey: roachpb.Key("c"),
 				},
 			},
 		},
@@ -670,17 +731,20 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 						{key: "a", endKey: "b", timestamp: 10},
 						{key: "b", endKey: "c", timestamp: 9},
 					},
+					expectedMaxKey: roachpb.Key("c"),
 				},
 				{
 					input: []rangeKeyAndTS{
 						{key: "c", endKey: "d", timestamp: 10},
 						{key: "c", endKey: "d", timestamp: 9},
 					},
+					expectedMaxKey: roachpb.Key("d"),
 				},
 				{
 					input: []rangeKeyAndTS{
 						{key: "c", endKey: "d", timestamp: 8},
 					},
+					expectedMaxKey: roachpb.Key("d"),
 				},
 			},
 		},
@@ -692,6 +756,7 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 						{key: "a", endKey: "b", timestamp: 10},
 						{key: "b", endKey: "d", timestamp: 9},
 					},
+					expectedMaxKey: roachpb.Key("d"),
 				},
 				{
 					input: []rangeKeyAndTS{
@@ -710,12 +775,14 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 						{key: "a", endKey: "b", timestamp: 10},
 						{key: "b", endKey: "d", timestamp: 9},
 					},
+					expectedMaxKey: roachpb.Key("d"),
 				},
 				{
 					input: []rangeKeyAndTS{
 						{key: "b", endKey: "d", timestamp: 11},
 						{key: "c", endKey: "e", timestamp: 7},
 					},
+					expectedMaxKey: roachpb.Key("e"),
 				},
 			},
 		},
@@ -729,16 +796,18 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 			for _, input := range tt.inputs {
 				rangeKeys := input.input
 				// Add some point key values in the input as well.
-				es := newExportedSpanBuilder(rangeKeys[0].key, rangeKeys[len(rangeKeys)-1].key, false).
+				es := newRawExportedSpanBuilder(s2k(rangeKeys[0].key), s2k(rangeKeys[len(rangeKeys)-1].key), s2k(rangeKeys[len(rangeKeys)-1].key)).
 					withRangeKeys(rangeKeys).
 					withKVs([]kvAndTS{{key: rangeKeys[0].key, timestamp: rangeKeys[0].timestamp}}).
 					build()
-				err := sink.copyRangeKeys(es.dataSST)
+				resumeKey, err := sink.copyRangeKeys(es.dataSST)
 				if input.expectErr != "" {
 					// Do not compare resulting SSTs if we expect errors.
 					require.ErrorContains(t, err, input.expectErr)
 					compareSST = false
+					require.Nil(t, resumeKey)
 				} else {
+					require.Equal(t, input.expectedMaxKey, resumeKey)
 					require.NoError(t, err)
 				}
 			}
@@ -835,13 +904,17 @@ type exportedSpanBuilder struct {
 	rangeKeys []rangeKeyAndTS
 }
 
-func newExportedSpanBuilder(spanStart, spanEnd string, atKeyBoundary bool) *exportedSpanBuilder {
+func newExportedSpanBuilder(spanStart, spanEnd string) *exportedSpanBuilder {
+	return newRawExportedSpanBuilder(s2k0(spanStart), s2k0(spanEnd), nil)
+}
+
+func newRawExportedSpanBuilder(spanStart, spanEnd, resumeKey roachpb.Key) *exportedSpanBuilder {
 	return &exportedSpanBuilder{
 		es: &exportedSpan{
 			metadata: backuppb.BackupManifest_File{
 				Span: roachpb.Span{
-					Key:    s2k(spanStart),
-					EndKey: s2k(spanEnd),
+					Key:    spanStart,
+					EndKey: spanEnd,
 				},
 				EntryCounts: roachpb.RowCount{
 					DataSize:     1,
@@ -849,9 +922,8 @@ func newExportedSpanBuilder(spanStart, spanEnd string, atKeyBoundary bool) *expo
 					IndexEntries: 0,
 				},
 			},
-
 			completedSpans: 1,
-			atKeyBoundary:  atKeyBoundary,
+			resumeKey:      resumeKey,
 		},
 	}
 }
@@ -882,6 +954,10 @@ func (b *exportedSpanBuilder) withRevStartTime(time int64) *exportedSpanBuilder 
 }
 
 func (b *exportedSpanBuilder) build() exportedSpan {
+	return b.buildWithEncoding(s2k0)
+}
+
+func (b *exportedSpanBuilder) buildWithEncoding(stringToKey func(string) roachpb.Key) exportedSpan {
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
 	buf := &bytes.Buffer{}
@@ -891,7 +967,7 @@ func (b *exportedSpanBuilder) build() exportedSpan {
 		v.SetBytes(d.value)
 		v.InitChecksum(nil)
 		err := sst.Put(storage.MVCCKey{
-			Key:       s2k(d.key),
+			Key:       stringToKey(d.key),
 			Timestamp: hlc.Timestamp{WallTime: d.timestamp},
 		}, v.RawBytes)
 		if err != nil {

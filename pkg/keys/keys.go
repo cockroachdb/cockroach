@@ -963,7 +963,7 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	colFamIDLenByte := sqlKey[sqlN-1:]
 	if encoding.PeekType(colFamIDLenByte) != encoding.Int {
 		// The last byte is not a valid column family ID suffix.
-		return 0, errors.Errorf("%s: not a valid table key", key)
+		return 0, errors.Errorf("%s: not a valid column family ID suffix", key)
 	}
 
 	// Strip off the column family ID suffix from the buf. The last byte of the
@@ -972,7 +972,7 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	// 0 (see the optimization in MakeFamilyKey).
 	_, colFamIDLen, err := encoding.DecodeUvarintAscending(colFamIDLenByte)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrapf(err, "could not decode column family ID length")
 	}
 	// Note how this next comparison (and by extension the code after it) is
 	// overflow-safe. There are more intuitive ways of writing this that aren't
