@@ -414,7 +414,7 @@ func (expr *BinaryExpr) TypeCheck(
 	if len(s.overloadIdxs) != 1 {
 		var desStr string
 		if desired.Family() != types.AnyFamily {
-			desStr = fmt.Sprintf(" (desired <%s>)", desired)
+			desStr = fmt.Sprintf(" (returning <%s>)", desired)
 		}
 		sig := fmt.Sprintf("<%s> %s <%s>%s", leftReturn, expr.Operator, rightReturn, desStr)
 		if len(s.overloadIdxs) == 0 {
@@ -1765,7 +1765,7 @@ func (expr *UnaryExpr) TypeCheck(
 	if numOps != 1 {
 		var desStr string
 		if desired.Family() != types.AnyFamily {
-			desStr = fmt.Sprintf(" (desired <%s>)", desired)
+			desStr = fmt.Sprintf(" (returning <%s>)", desired)
 		}
 		sig := fmt.Sprintf("%s <%s>%s", expr.Operator, exprReturn, desStr)
 		if numOps == 0 {
