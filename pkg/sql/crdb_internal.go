@@ -8574,7 +8574,8 @@ CREATE TABLE crdb_internal.node_memory_monitors (
   parent_id         INT8,
   used              INT8,
   reserved_used     INT8,
-  reserved_reserved INT8
+  reserved_reserved INT8,
+  stopped           BOOL
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// The memory monitors' names can expose some information about the
@@ -8597,6 +8598,7 @@ CREATE TABLE crdb_internal.node_memory_monitors (
 				tree.NewDInt(tree.DInt(monitor.Used)),
 				tree.NewDInt(tree.DInt(monitor.ReservedUsed)),
 				tree.NewDInt(tree.DInt(monitor.ReservedReserved)),
+				tree.MakeDBool(tree.DBool(monitor.Stopped)),
 			)
 		}
 		return p.extendedEvalCtx.ExecCfg.RootMemoryMonitor.TraverseTree(monitorStateCb)

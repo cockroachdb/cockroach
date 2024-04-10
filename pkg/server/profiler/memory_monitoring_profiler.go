@@ -115,6 +115,10 @@ func takeMemoryMonitoringDump(
 
 func getMonitorStateCb(f io.Writer) func(state mon.MonitorState) error {
 	return func(s mon.MonitorState) error {
+		if s.Stopped {
+			// Omit monitors that have been stopped.
+			return nil
+		}
 		if s.Used == 0 && s.ReservedUsed == 0 && s.ReservedReserved == 0 {
 			// Omit monitors that don't have any memory usage reported.
 			return nil
