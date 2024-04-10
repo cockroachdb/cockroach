@@ -96,13 +96,11 @@ func TestSetMinVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	st := cluster.MakeClusterSettings()
 	p, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(0))
 	require.NoError(t, err)
 	defer p.Close()
 	require.Equal(t, MinimumSupportedFormatVersion, p.db.FormatMajorVersion())
 
-	ValueBlocksEnabled.Override(context.Background(), &st.SV, true)
 	// Advancing the store cluster version to one that supports a new feature
 	// should also advance the store's format major version.
 	err = p.SetMinVersion(clusterversion.Latest.Version())

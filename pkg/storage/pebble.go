@@ -60,19 +60,6 @@ import (
 	humanize "github.com/dustin/go-humanize"
 )
 
-// ValueBlocksEnabled controls whether older versions of MVCC keys in the same
-// sstable will have their values written to value blocks. This only affects
-// sstables that will be written in the future, as part of flushes or
-// compactions, and does not eagerly change the encoding of existing sstables.
-// Reads can correctly read both kinds of sstables.
-var ValueBlocksEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel, // used for temp storage in virtual cluster servers
-	"storage.value_blocks.enabled",
-	"set to true to enable writing of value blocks in sstables",
-	util.ConstantWithMetamorphicTestBool(
-		"storage.value_blocks.enabled", true),
-	settings.WithPublic)
-
 // UseEFOS controls whether uses of pebble Snapshots should use
 // EventuallyFileOnlySnapshots instead. This reduces write-amp with the main
 // tradeoff being higher space-amp. Note that UseExciseForSnapshot, if true,
@@ -1119,9 +1106,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.WALMinSyncInterval = func() time.Duration {
 		return minWALSyncInterval.Get(&cfg.settings.SV)
 	}
-	cfg.opts.Experimental.EnableValueBlocks = func() bool {
-		return ValueBlocksEnabled.Get(&cfg.settings.SV)
-	}
+	cfg.opts.Experimental.EnableValueBlocks = func() bool { return true }
 	cfg.opts.Experimental.DisableIngestAsFlushable = func() bool {
 		// Disable flushable ingests if shared storage is enabled. This is because
 		// flushable ingests currently do not support Excise operations.
