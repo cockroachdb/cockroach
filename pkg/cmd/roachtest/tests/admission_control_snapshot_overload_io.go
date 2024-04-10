@@ -91,8 +91,8 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			// Initialize the kv database,
 			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", time.Hour))
 			c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
-				"./cockroach workload init kv --drop --insert-count=100000000 "+
-					"--max-block-bytes=4096 --min-block-bytes=4096 {pgurl:1}")
+				"./cockroach workload init kv --drop --insert-count=40000000 "+
+					"--max-block-bytes=12288 --min-block-bytes=12288 {pgurl:1}")
 
 			// Kill node 3.
 			t.Status(fmt.Sprintf("killing node 3... (<%s)", time.Minute))
@@ -102,7 +102,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 			m.Go(func(ctx context.Context) error {
 				c.Run(ctx, option.WithNodes(c.Node(crdbNodes+1)),
-					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --splits=1000 --histograms=%s/stats.json --read-percent=50 --max-block-bytes=4096 --min-block-bytes=4096 --max-rate=400 --concurrency=256 {pgurl:1}",
+					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --splits=1000 --histograms=%s/stats.json --read-percent=50 --max-block-bytes=12288 --min-block-bytes=12288 --max-rate=400 --concurrency=512 {pgurl:1}",
 						t.PerfArtifactsDir()))
 				return nil
 			})
