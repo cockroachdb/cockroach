@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBasicProgress(t *testing.T) {
@@ -43,9 +44,7 @@ func TestBasicProgress(t *testing.T) {
 		nodes[0].Propose(context.TODO(), []byte("somedata"))
 	}
 
-	if !waitCommitConverge(nodes, 100) {
-		t.Errorf("commits failed to converge!")
-	}
+	assert.True(t, waitCommitConverge(nodes, 100))
 
 	for _, n := range nodes {
 		n.stop()
@@ -86,9 +85,7 @@ func TestRestart(t *testing.T) {
 	}
 	nodes[k1].restart()
 
-	if !waitCommitConverge(nodes, 120) {
-		t.Errorf("commits failed to converge!")
-	}
+	assert.True(t, waitCommitConverge(nodes, 120))
 
 	for _, n := range nodes {
 		n.stop()
@@ -125,9 +122,7 @@ func TestPause(t *testing.T) {
 	}
 	nodes[1].resume()
 
-	if !waitCommitConverge(nodes, 120) {
-		t.Errorf("commits failed to converge!")
-	}
+	assert.True(t, waitCommitConverge(nodes, 120))
 
 	for _, n := range nodes {
 		n.stop()
@@ -136,7 +131,7 @@ func TestPause(t *testing.T) {
 
 func waitLeader(ns []*node) int {
 	var l map[uint64]struct{}
-	var lindex int
+	var lindex = -1
 
 	for {
 		l = make(map[uint64]struct{})
@@ -151,7 +146,7 @@ func waitLeader(ns []*node) int {
 			}
 		}
 
-		if len(l) == 1 {
+		if len(l) == 1 && lindex != -1 {
 			return lindex
 		}
 	}
