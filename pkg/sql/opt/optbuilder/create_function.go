@@ -229,7 +229,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 		if param.DefaultVal != nil {
 			// The DEFAULT expression must be coercible to the parameter type.
-			texpr := inScope.resolveType(param.DefaultVal, typ)
+			// It cannot contain subqueries.
+			texpr := inScope.resolveTypeAndReject(param.DefaultVal, typ,
+				"DEFAULT expressions", tree.RejectSubqueries)
 			if resolved := texpr.ResolvedType(); !resolved.Identical(typ) {
 				if !cast.ValidCast(resolved, typ, cast.ContextAssignment) {
 					panic(pgerror.Newf(pgcode.DatatypeMismatch,

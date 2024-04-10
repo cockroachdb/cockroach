@@ -767,6 +767,12 @@ CREATE OR REPLACE FUNCTION my_sum(a INT, b INT, c INT = 3) RETURNS INT AS $$ BEG
 statement error pgcode 22P02 could not parse "a" as type int
 CREATE OR REPLACE FUNCTION my_sum(a INT = 'a', b INT DEFAULT 2, c INT = 3) RETURNS INT AS $$ BEGIN RETURN a + b + c; END; $$ LANGUAGE PLpgSQL;
 
+statement error pgcode 0A000 subqueries are not allowed in DEFAULT expressions
+CREATE OR REPLACE FUNCTION my_sum(a INT, b INT DEFAULT (SELECT 1)) RETURNS INT AS $$ BEGIN SELECT a + b; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 subqueries are not allowed in DEFAULT expressions
+CREATE OR REPLACE FUNCTION my_sum(a INT, b INT DEFAULT 1 + (SELECT 2 FROM (VALUES (NULL)))) RETURNS INT AS $$ BEGIN SELECT a + b; END; $$ LANGUAGE PLpgSQL;
+
 query I
 SELECT my_sum(1);
 ----
