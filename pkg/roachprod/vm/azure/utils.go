@@ -22,11 +22,9 @@ import (
 // created from /mnt/data<disknum> to the mount point.
 // azureStartupArgs specifies template arguments for the setup template.
 type azureStartupArgs struct {
-	RemoteUser      string // The uname for /data* directories.
-	AttachedDiskLun *int   // Use attached disk, with specified LUN; Use local ssd if nil.
-	// TODO(DarrylWong): In the future, when all tests are run on Ubuntu 22.04, we can remove this check and default true.
-	// See: https://github.com/cockroachdb/cockroach/issues/112112
-	IsUbuntu22 bool // Allow RSA SHA1 to be used and create tcpdump symlink.
+	RemoteUser           string // The uname for /data* directories.
+	AttachedDiskLun      *int   // Use attached disk, with specified LUN; Use local ssd if nil.
+	DisksInitializedFile string // File to touch when disks are initialized.
 }
 
 const azureStartupTemplate = `#!/bin/bash
@@ -118,7 +116,7 @@ sysctl --system  # reload sysctl settings
 sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
 sudo service ssh restart
 
-touch /mnt/data1/.roachprod-initialized
+touch {{ .DisksInitializedFile }}
 `
 
 // evalStartupTemplate evaluates startup template defined above and returns
