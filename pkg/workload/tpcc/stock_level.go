@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/exp/rand"
 )
@@ -102,14 +103,18 @@ func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
 			if err := s.selectDNextOID.QueryRowTx(
 				ctx, tx, wID, d.dID,
 			).Scan(&dNextOID); err != nil {
-				return err
+				return errors.Wrap(err, "select district failed")
 			}
 
 			// Count the number of recently sold items that have a stock level below
 			// the threshold.
-			return s.countRecentlySold.QueryRowTx(
+			if err := s.countRecentlySold.QueryRowTx(
 				ctx, tx, wID, d.dID, dNextOID, d.threshold,
-			).Scan(&d.lowStock)
+			).Scan(&d.lowStock); err != nil {
+				return errors.Wrap(err, "select order_line, stock failed")
+			}
+
+			return nil
 		}); err != nil {
 		return nil, err
 	}
