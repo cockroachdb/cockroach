@@ -15,7 +15,6 @@ import (
 	"context"
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/errors"
@@ -73,14 +72,9 @@ func (*noopFinishAbort) Abort() {}
 func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstable.WriterOptions {
 	// By default, take a conservative approach and assume we don't have newer
 	// table features available. Upgrade to an appropriate version only if the
-	// cluster supports it.
-	format := sstable.TableFormatPebblev2
-	if ValueBlocksEnabled.Get(&cs.SV) {
-		format = sstable.TableFormatPebblev3
-	}
-	if cs.Version.IsActive(ctx, clusterversion.V23_2_EnablePebbleFormatVirtualSSTables) {
-		format = sstable.TableFormatPebblev4
-	}
+	// cluster supports it. Currently, all supported versions understand
+	// TableFormatPebblev4.
+	format := sstable.TableFormatPebblev4
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 	opts.Compression = getCompressionAlgorithm(ctx, cs)
 	opts.MergerName = "nullptr"

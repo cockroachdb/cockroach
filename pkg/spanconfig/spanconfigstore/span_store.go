@@ -14,7 +14,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -159,8 +158,7 @@ func (s *spanConfigStore) computeSplitKey(
 			// ranges.
 			systemTableUpperBound := keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)
 			if roachpb.Key(rem).Compare(systemTableUpperBound) < 0 ||
-				!(StorageCoalesceAdjacentSetting.Get(&s.settings.SV) &&
-					s.settings.Version.IsActive(ctx, clusterversion.V23_2_EnableRangeCoalescingForSystemTenant)) {
+				!StorageCoalesceAdjacentSetting.Get(&s.settings.SV) {
 				return roachpb.RKey(match.span.Key), nil
 			}
 		} else {

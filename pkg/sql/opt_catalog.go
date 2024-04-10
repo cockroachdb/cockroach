@@ -15,7 +15,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -425,12 +424,6 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 
 // CheckExecutionPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
-	// If the required cluster version is not active, revert to pre-23.2
-	// behavior without any privilege checks.
-	activeVersion := oc.planner.ExecCfg().Settings.Version.ActiveVersion(ctx)
-	if !activeVersion.IsActive(clusterversion.V23_2_GrantExecuteToPublic) {
-		return nil
-	}
 	desc, err := oc.planner.FunctionDesc(ctx, oid)
 	if err != nil {
 		return errors.WithAssertionFailure(err)
