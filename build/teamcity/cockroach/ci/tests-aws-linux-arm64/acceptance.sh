@@ -33,6 +33,7 @@ $BAZCI --artifacts_dir=$PWD/artifacts -- \
   "--test_tmpdir=$ARTIFACTSDIR" \
   --test_arg=-l="$ARTIFACTSDIR" \
   --test_arg=-b=$PWD/artifacts/cockroach \
+  --test_env=COCKROACH_DEV_LICENSE  \
   --test_env=TZ=America/New_York \
   --profile=$PWD/artifacts/profile.gz \
   --test_timeout=1800 || status=$?
