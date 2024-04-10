@@ -400,7 +400,7 @@ type stmtStats struct {
 	}
 }
 
-func (s *stmtStats) sizeUnsafe() int64 {
+func (s *stmtStats) sizeUnsafeLocked() int64 {
 	const stmtStatsShallowSize = int64(unsafe.Sizeof(stmtStats{}))
 	databaseNameSize := int64(len(s.mu.database))
 
@@ -832,7 +832,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 			// If we created a new entry for the fingerprint, we check if we have
 			// exceeded our memory budget.
 			if created {
-				estimatedAllocBytes := stats.sizeUnsafe() + k.size() + 8 /* stmtKey hash */
+				estimatedAllocBytes := stats.sizeUnsafeLocked() + k.size() + 8 /* stmtKey hash */
 				// We still want to continue this loop to merge stats that are already
 				// present in our map that do not require allocation.
 				if latestErr := func() error {

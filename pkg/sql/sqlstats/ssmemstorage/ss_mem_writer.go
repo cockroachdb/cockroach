@@ -173,7 +173,7 @@ func (s *Container) RecordStatement(
 
 	if created {
 		// stats size + stmtKey size + hash of the statementKey
-		estimatedMemoryAllocBytes := stats.sizeUnsafe() + statementKey.size() + 8
+		estimatedMemoryAllocBytes := stats.sizeUnsafeLocked() + statementKey.size() + 8
 
 		// We also account for the memory used for s.sampledPlanMetadataCache.
 		// timestamp size + key size + hash.
