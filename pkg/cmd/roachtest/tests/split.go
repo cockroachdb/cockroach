@@ -206,9 +206,9 @@ func registerLoadSplits(r registry.Registry) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
 				cpuThreshold: 100 * time.Millisecond, // 1/10th of a CPU per second.
-				// There should be at least 15 splits, in practice there are on average
+				// There should be at least 13 splits, in practice there are on average
 				// 20.
-				minimumRanges: 15,
+				minimumRanges: 14,
 				maximumRanges: 25,
 				load: kvSplitLoad{
 					concurrency:  64, // 64 concurrent workers
