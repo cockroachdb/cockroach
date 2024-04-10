@@ -621,6 +621,12 @@ CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT, b INT, c INT = 3) AS $$ BEG
 statement error pgcode 22P02 could not parse "a" as type int
 CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT = 'a', b INT DEFAULT 2, c INT = 3) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
 
+statement error pgcode 0A000 subqueries are not allowed in DEFAULT expressions
+CREATE OR REPLACE PROCEDURE my_sum(a INT, b INT DEFAULT (SELECT 1)) AS $$ BEGIN SELECT a + b; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 subqueries are not allowed in DEFAULT expressions
+CREATE OR REPLACE PROCEDURE my_sum(a INT, b INT DEFAULT 1 + (SELECT 2 FROM (VALUES (NULL)))) AS $$ BEGIN SELECT a + b; END; $$ LANGUAGE PLpgSQL;
+
 query I
 CALL my_sum(NULL, 1);
 ----
