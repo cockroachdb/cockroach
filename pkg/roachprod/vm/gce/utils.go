@@ -190,8 +190,10 @@ sudo apt-get install -qy chrony
 systemctl stop unattended-upgrades
 apt-get purge -y unattended-upgrades
 
+{{ if not .EnableCron }}
 systemctl stop cron
 systemctl mask cron
+{{ end }}
 
 # Override the chrony config. In particular,
 # log aggressively when clock is adjusted (0.01s)
@@ -266,7 +268,7 @@ sudo touch /mnt/data1/.roachprod-initialized
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
 func writeStartupScript(
-	extraMountOpts string, fileSystem string, useMultiple bool, enableFIPS bool,
+	extraMountOpts string, fileSystem string, useMultiple bool, enableFIPS bool, enableCron bool,
 ) (string, error) {
 	type tmplParams struct {
 		ExtraMountOpts   string
@@ -275,6 +277,7 @@ func writeStartupScript(
 		EnableFIPS       bool
 		SharedUser       string
 		PublicKey        string
+		EnableCron       bool
 	}
 
 	publicKey, err := config.SSHPublicKey()
@@ -289,6 +292,7 @@ func writeStartupScript(
 		EnableFIPS:       enableFIPS,
 		SharedUser:       config.SharedUser,
 		PublicKey:        publicKey,
+		EnableCron:       enableCron,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")
