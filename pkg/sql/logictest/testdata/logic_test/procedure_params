@@ -573,6 +573,12 @@ CREATE OR REPLACE PROCEDURE my_sum(OUT INT, a INT, b INT, c INT = 3) LANGUAGE SQ
 statement error pgcode 22P02 could not parse "a" as type int
 CREATE OR REPLACE PROCEDURE my_sum(OUT INT, a INT = 'a', b INT DEFAULT 2, c INT = 3) LANGUAGE SQL AS $$ SELECT a + b + c; $$;
 
+statement error pgcode 0A000 subqueries are not allowed in DEFAULT expressions
+CREATE OR REPLACE PROCEDURE my_sum(a INT, b INT DEFAULT (SELECT 1)) LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement error pgcode 0A000 subqueries are not allowed in DEFAULT expressions
+CREATE OR REPLACE PROCEDURE my_sum(a INT, b INT DEFAULT 1 + (SELECT 2 FROM (VALUES (NULL)))) LANGUAGE SQL AS $$ SELECT a + b; $$;
+
 query I
 CALL my_sum(NULL, 1);
 ----
