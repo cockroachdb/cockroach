@@ -1647,7 +1647,7 @@ func getFuncSig(expr *FuncExpr, typedInputExprs []TypedExpr, desiredType *types.
 	}
 	var desStr string
 	if desiredType.Family() != types.AnyFamily {
-		desStr = fmt.Sprintf(" (desired <%s>)", desiredType)
+		desStr = fmt.Sprintf(" (returning <%s>)", desiredType)
 	}
 	return fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
 }

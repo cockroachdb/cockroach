@@ -44,7 +44,7 @@ SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
 NOTICE: follower reads disabled because you are running a non-CCL distribution
 NOTICE: follower reads disabled because you are running a non-CCL distribution
 
-statement error pq: unknown signature: follower_read_timestamp\(string\) \(desired <timestamptz>\)
+statement error pq: unknown signature: follower_read_timestamp\(string\) \(returning <timestamptz>\)
 SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp('boom')
 
 statement error pq: AS OF SYSTEM TIME: only constant expressions, with_min_timestamp, with_max_staleness, or follower_read_timestamp are allowed
