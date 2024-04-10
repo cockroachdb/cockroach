@@ -29,13 +29,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Flush flushes in-memory sql stats into a system table, returning true if the flush
+// MaybeFlush flushes in-memory sql stats into a system table, returning true if the flush
 // was attempted. Any errors encountered will be logged as warning. We may return
 // without attempting to flush any sql stats if any of the following are true:
 // 1. The flush is disabled by the cluster setting `sql.stats.flush.enabled`.
 // 2. The flush is called too soon after the last flush (`sql.stats.flush.minimum_interval`).
 // 3. We have reached the limit of the number of rows in the system table.
-func (s *PersistedSQLStats) Flush(ctx context.Context, stopper *stop.Stopper) bool {
+func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stopper) bool {
 	now := s.getTimeNow()
 
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)
