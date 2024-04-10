@@ -46,109 +46,132 @@ const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 
 set -x
 
-if [ -e /mnt/data1/.roachprod-initialized ]; then
-  echo "Already initialized, exiting."
+function setup_disks() {
+  first_setup=$1
+
+	{{ if not .Zfs }}
+	mount_opts="defaults,nofail"
+	{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
+	{{ end }}
+	
+	use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
+	
+	disks=()
+	mount_prefix="/mnt/data"
+	
+	{{ if .Zfs }}
+	apt-get update -q
+	apt-get install -yq zfsutils-linux
+	
+	# For zfs, we use the device names under /dev instead of the device
+	# links under /dev/disk/by-id/google-local* for local ssds, because
+	# there is an issue where the links for the zfs partitions which are
+	# created under /dev/disk/by-id/ when we run "zpool create ..." are
+	# inaccurate.
+	for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
+		zpool list -v -P | grep ${d} > /dev/null
+		if [ $? -ne 0 ]; then
+	{{ else }}
+	# if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
+	# then the disks will be selected for RAID'ing. If there are both Local SSDs and Persistent disks,
+	# RAID'ing in this case can cause performance differences. So, to avoid this, local SSDs are ignored.
+	# Scenarios:
+	#   (local SSD = 0, Persistent Disk - 1) - no RAID'ing and Persistent Disk mounted
+	#   (local SSD = 1, Persistent Disk - 0) - no RAID'ing and local SSD mounted
+	#   (local SSD >= 1, Persistent Disk = 1) - no RAID'ing and Persistent Disk mounted
+	#   (local SSD > 1, Persistent Disk = 0) - local SSDs selected for RAID'ing
+	#   (local SSD >= 0, Persistent Disk > 1) - network disks selected for RAID'ing
+	disk_list=()
+	if [ "$(ls /dev/disk/by-id/google-persistent-disk-[1-9]|wc -l)" -eq "0" ]; then
+		disk_list=$(ls /dev/disk/by-id/google-local-*)
+	else
+		echo "Only persistent disks are selected."
+		disk_list=$(ls /dev/disk/by-id/google-persistent-disk-[1-9])
+	fi
+	for d in ${disk_list}; do
+		if ! mount | grep ${d}; then
+	{{ end }}
+			disks+=("${d}")
+			echo "Disk ${d} not mounted, need to mount..."
+		else
+			echo "Disk ${d} already mounted, skipping..."
+		fi
+	done
+	
+	
+	if [ "${#disks[@]}" -eq "0" ]; then
+		mountpoint="${mount_prefix}1"
+		echo "No disks mounted, creating ${mountpoint}"
+		mkdir -p ${mountpoint}
+		chmod 777 ${mountpoint}
+	elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+		disknum=1
+		for disk in "${disks[@]}"
+		do
+			mountpoint="${mount_prefix}${disknum}"
+			disknum=$((disknum + 1 ))
+			echo "Mounting ${disk} at ${mountpoint}"
+			mkdir -p ${mountpoint}
+	{{ if .Zfs }}
+			zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disk}
+			# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+	{{ else }}
+			mkfs.ext4 -q -F ${disk}
+			mount -o ${mount_opts} ${disk} ${mountpoint}
+			if [ "$first_setup" = "true" ]; then
+				echo "${d} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+			fi
+			tune2fs -m 0 ${disk}
+	{{ end }}
+			chmod 777 ${mountpoint}
+		done
+	else
+		mountpoint="${mount_prefix}1"
+		echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
+		mkdir -p ${mountpoint}
+	{{ if .Zfs }}
+		zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disks[@]}
+		# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+	{{ else }}
+		raiddisk="/dev/md0"
+		mdadm -q --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
+		mkfs.ext4 -q -F ${raiddisk}
+		mount -o ${mount_opts} ${raiddisk} ${mountpoint}
+		if [ "$first_setup" = "true" ]; then
+			echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+		fi
+		tune2fs -m 0 ${raiddisk}
+	{{ end }}
+		chmod 777 ${mountpoint}
+	fi
+	
+	# Print the block device and FS usage output. This is useful for debugging.
+	lsblk
+	df -h
+	{{ if .Zfs }}
+	zpool list
+	{{ end }}
+
+	mkdir -p /mnt/data1/cores
+	chmod a+w /mnt/data1/cores
+
+	sudo touch {{ .DisksInitializedFile }}
+}
+
+if [ -e {{ .DisksInitializedFile }} ]; then
+  echo "OS and disks already initialized, exiting."
   exit 0
 fi
 
-{{ if not .Zfs }}
-mount_opts="defaults"
-{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
-{{ end }}
-
-use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
-
-disks=()
-mount_prefix="/mnt/data"
-
-{{ if .Zfs }}
-apt-get update -q
-apt-get install -yq zfsutils-linux
-
-# For zfs, we use the device names under /dev instead of the device
-# links under /dev/disk/by-id/google-local* for local ssds, because
-# there is an issue where the links for the zfs partitions which are
-# created under /dev/disk/by-id/ when we run "zpool create ..." are
-# inaccurate.
-for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
-  zpool list -v -P | grep ${d} > /dev/null
-  if [ $? -ne 0 ]; then
-{{ else }}
-# if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
-# then the disks will be selected for RAID'ing. If there are both Local SSDs and Persistent disks,
-# RAID'ing in this case can cause performance differences. So, to avoid this, local SSDs are ignored.
-# Scenarios:
-#   (local SSD = 0, Persistent Disk - 1) - no RAID'ing and Persistent Disk mounted
-#   (local SSD = 1, Persistent Disk - 0) - no RAID'ing and local SSD mounted
-#   (local SSD >= 1, Persistent Disk = 1) - no RAID'ing and Persistent Disk mounted
-#   (local SSD > 1, Persistent Disk = 0) - local SSDs selected for RAID'ing
-#   (local SSD >= 0, Persistent Disk > 1) - network disks selected for RAID'ing
-disk_list=()
-if [ "$(ls /dev/disk/by-id/google-persistent-disk-[1-9]|wc -l)" -eq "0" ]; then
-	disk_list=$(ls /dev/disk/by-id/google-local-*)
-else
-  echo "Only persistent disks are selected."
-	disk_list=$(ls /dev/disk/by-id/google-persistent-disk-[1-9])
-fi
-for d in ${disk_list}; do
-  if ! mount | grep ${d}; then
-{{ end }}
-    disks+=("${d}")
-    echo "Disk ${d} not mounted, need to mount..."
-  else
-    echo "Disk ${d} already mounted, skipping..."
-  fi
-done
-
-
-if [ "${#disks[@]}" -eq "0" ]; then
-  mountpoint="${mount_prefix}1"
-  echo "No disks mounted, creating ${mountpoint}"
-  mkdir -p ${mountpoint}
-  chmod 777 ${mountpoint}
-elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
-  disknum=1
-  for disk in "${disks[@]}"
-  do
-    mountpoint="${mount_prefix}${disknum}"
-    disknum=$((disknum + 1 ))
-    echo "Mounting ${disk} at ${mountpoint}"
-    mkdir -p ${mountpoint}
-{{ if .Zfs }}
-    zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disk}
-    # NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
-{{ else }}
-    mkfs.ext4 -q -F ${disk}
-    mount -o ${mount_opts} ${disk} ${mountpoint}
-    echo "${d} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
-    tune2fs -m 0 ${disk}
-{{ end }}
-    chmod 777 ${mountpoint}
-  done
-else
-  mountpoint="${mount_prefix}1"
-  echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
-  mkdir -p ${mountpoint}
-{{ if .Zfs }}
-  zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disks[@]}
-  # NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
-{{ else }}
-  raiddisk="/dev/md0"
-  mdadm -q --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
-  mkfs.ext4 -q -F ${raiddisk}
-  mount -o ${mount_opts} ${raiddisk} ${mountpoint}
-  echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
-  tune2fs -m 0 ${raiddisk}
-{{ end }}
-  chmod 777 ${mountpoint}
+if [ -e {{ .OSInitializedFile }} ]; then
+  echo "OS already initialized, only initializing disks."
+  # Initialize disks, but don't write fstab entries again.
+  setup_disks false
+  exit 0
 fi
 
-# Print the block device and FS usage output. This is useful for debugging.
-lsblk
-df -h
-{{ if .Zfs }}
-zpool list
-{{ end }}
+# Initialize disks and write fstab entries.
+setup_disks true
 
 # sshguard can prevent frequent ssh connections to the same host. Disable it.
 systemctl stop sshguard
@@ -240,8 +263,6 @@ root soft core unlimited
 root hard core unlimited
 EOF
 
-mkdir -p /mnt/data1/cores
-chmod a+w /mnt/data1/cores
 cat <<'EOF' > /bin/gzip_core.sh
 #!/bin/sh
 exec /bin/gzip -f - > /mnt/data1/cores/core.$1.$2.$3.$4.gz
@@ -263,7 +284,7 @@ sudo ua enable fips --assume-yes
 sudo -u {{ .SharedUser }} bash -c "mkdir ~/.ssh && chmod 700 ~/.ssh"
 sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
 
-sudo touch /mnt/data1/.roachprod-initialized
+sudo touch {{ .OSInitializedFile }}
 `
 
 // writeStartupScript writes the startup script to a temp file.
@@ -276,13 +297,15 @@ func writeStartupScript(
 	extraMountOpts string, fileSystem string, useMultiple bool, enableFIPS bool, enableCron bool,
 ) (string, error) {
 	type tmplParams struct {
-		ExtraMountOpts   string
-		UseMultipleDisks bool
-		Zfs              bool
-		EnableFIPS       bool
-		SharedUser       string
-		PublicKey        string
-		EnableCron       bool
+		ExtraMountOpts       string
+		UseMultipleDisks     bool
+		Zfs                  bool
+		EnableFIPS           bool
+		SharedUser           string
+		PublicKey            string
+		EnableCron           bool
+		OSInitializedFile    string
+		DisksInitializedFile string
 	}
 
 	publicKey, err := config.SSHPublicKey()
@@ -291,13 +314,15 @@ func writeStartupScript(
 	}
 
 	args := tmplParams{
-		ExtraMountOpts:   extraMountOpts,
-		UseMultipleDisks: useMultiple,
-		Zfs:              fileSystem == vm.Zfs,
-		EnableFIPS:       enableFIPS,
-		SharedUser:       config.SharedUser,
-		PublicKey:        publicKey,
-		EnableCron:       enableCron,
+		ExtraMountOpts:       extraMountOpts,
+		UseMultipleDisks:     useMultiple,
+		Zfs:                  fileSystem == vm.Zfs,
+		EnableFIPS:           enableFIPS,
+		SharedUser:           config.SharedUser,
+		PublicKey:            publicKey,
+		EnableCron:           enableCron,
+		OSInitializedFile:    vm.OSInitializedFile,
+		DisksInitializedFile: vm.DisksInitializedFile,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")
