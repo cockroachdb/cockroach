@@ -615,19 +615,17 @@ func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
 	// Using the same suffix for all keys in a block results in an interval of
 	// width one (inclusive lower bound to exclusive upper bound).
 	suffix := EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})
-	require.NoError(t, collector.UpdateKeySuffixes(
-		nil /* old prop */, nil /* old suffix */, suffix,
-	))
+	require.NoError(t, collector.AddCollectedWithSuffixReplacement(0, 0, nil, suffix))
 	finishAndCheck(42, 43)
 	// An invalid key results in an error.
 	// Case 1: malformed sentinel.
 	key := EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})
 	sentinelPos := len(key) - 1 - int(key[len(key)-1])
 	key[sentinelPos] = '\xff'
-	require.Error(t, collector.UpdateKeySuffixes(nil, nil, key))
+	require.Error(t, collector.AddCollectedWithSuffixReplacement(0, 0, nil, key))
 	// Case 2: malformed bare suffix (too short).
 	suffix = EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})[1:]
-	require.Error(t, collector.UpdateKeySuffixes(nil, nil, suffix))
+	require.Error(t, collector.AddCollectedWithSuffixReplacement(0, 0, nil, suffix))
 }
 
 // TestPebbleMVCCTimeIntervalCollectorAndFilter tests that point and range key

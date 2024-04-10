@@ -568,10 +568,7 @@ type pebbleDataBlockMVCCTimeIntervalPointCollector struct {
 	pebbleDataBlockMVCCTimeIntervalCollector
 }
 
-var (
-	_ sstable.DataBlockIntervalCollector      = (*pebbleDataBlockMVCCTimeIntervalPointCollector)(nil)
-	_ sstable.SuffixReplaceableBlockCollector = (*pebbleDataBlockMVCCTimeIntervalPointCollector)(nil)
-)
+var _ sstable.DataBlockIntervalCollector = (*pebbleDataBlockMVCCTimeIntervalPointCollector)(nil)
 
 func (tc *pebbleDataBlockMVCCTimeIntervalPointCollector) Add(
 	key pebble.InternalKey, _ []byte,
@@ -585,10 +582,7 @@ type pebbleDataBlockMVCCTimeIntervalRangeCollector struct {
 	pebbleDataBlockMVCCTimeIntervalCollector
 }
 
-var (
-	_ sstable.DataBlockIntervalCollector      = (*pebbleDataBlockMVCCTimeIntervalRangeCollector)(nil)
-	_ sstable.SuffixReplaceableBlockCollector = (*pebbleDataBlockMVCCTimeIntervalRangeCollector)(nil)
-)
+var _ sstable.DataBlockIntervalCollector = (*pebbleDataBlockMVCCTimeIntervalRangeCollector)(nil)
 
 func (tc *pebbleDataBlockMVCCTimeIntervalRangeCollector) Add(
 	key pebble.InternalKey, value []byte,
@@ -668,6 +662,7 @@ func decodeWallTime(ts []byte) uint64 {
 	return binary.BigEndian.Uint64(ts[0:engineKeyVersionWallTimeLen])
 }
 
+// FinishDataBlock is part of the sstable.DataBlockIntervalCollector interface.
 func (tc *pebbleDataBlockMVCCTimeIntervalCollector) FinishDataBlock() (
 	lower uint64,
 	upper uint64,
@@ -699,10 +694,18 @@ func (tc *pebbleDataBlockMVCCTimeIntervalCollector) FinishDataBlock() (
 	return lower, upper, nil
 }
 
-func (tc *pebbleDataBlockMVCCTimeIntervalCollector) UpdateKeySuffixes(
-	_ []byte, _, newSuffix []byte,
+// AddCollectedWithSuffixReplacement is part of the
+// sstable.DataBlockIntervalCollector interface.
+func (tc *pebbleDataBlockMVCCTimeIntervalCollector) AddCollectedWithSuffixReplacement(
+	oldLower, oldUpper uint64, oldSuffix, newSuffix []byte,
 ) error {
 	return tc.add(newSuffix)
+}
+
+// SupportsSuffixReplacement is part of the sstable.DataBlockIntervalCollector
+// interface.
+func (tc *pebbleDataBlockMVCCTimeIntervalCollector) SupportsSuffixReplacement() bool {
+	return true
 }
 
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
