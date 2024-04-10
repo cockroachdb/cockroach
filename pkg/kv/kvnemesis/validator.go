@@ -797,7 +797,7 @@ func (v *validator) processOp(op Operation) {
 		// effect of perhaps registering a failure with the validator.
 		v.failIfError(
 			op, t.Result,
-			exceptRollback, exceptAmbiguous, exceptSharedLockPromotionError, exceptSkipLockedReplayError,
+			exceptRollback, exceptAmbiguous, exceptSharedLockPromotionError,
 		)
 
 		ops := t.Ops
@@ -1379,7 +1379,6 @@ func (v *validator) checkError(
 		exceptAmbiguous, exceptOmitted, exceptRetry,
 		exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
 		exceptSharedLockPromotionError,
-		exceptSkipLockedReplayError,
 	}
 	sl = append(sl, extraExceptions...)
 	return v.failIfError(op, r, sl...)
