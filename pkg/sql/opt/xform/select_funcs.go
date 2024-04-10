@@ -945,7 +945,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 // derived, then tryConstrainIndex returns ok = false.
 func (c *CustomFuncs) tryConstrainIndex(
 	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
-) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
+) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	// Start with fast check to rule out indexes that cannot be constrained.
 	if !c.canMaybeConstrainNonInvertedIndex(requiredFilters, tabID, indexOrd) &&
 		!c.canMaybeConstrainNonInvertedIndex(optionalFilters, tabID, indexOrd) {
@@ -953,17 +953,12 @@ func (c *CustomFuncs) tryConstrainIndex(
 	}
 
 	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd)
-	constraint = ic.Constraint()
-	if constraint.IsUnconstrained() {
+	var cons constraint.Constraint
+	ic.Constraint(&cons)
+	if cons.IsUnconstrained() {
 		return nil, nil, false
 	}
-
-	// Return 0 if no remaining filter.
-	remaining := ic.RemainingFilters()
-
-	// Make copy of constraint so that idxconstraint instance is not referenced.
-	copy := *constraint
-	return &copy, remaining, true
+	return &cons, ic.RemainingFilters(), true
 }
 
 // canMaybeConstrainNonInvertedIndex returns true if we should try to constrain

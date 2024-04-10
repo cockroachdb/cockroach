@@ -392,7 +392,7 @@ func constrainPrefixColumns(
 	tabID opt.TableID,
 	index cat.Index,
 	checkCancellation func(),
-) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
+) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	tabMeta := factory.Metadata().TableMeta(tabID)
 	prefixColumnCount := index.NonInvertedPrefixColumnCount()
 	ps := tabMeta.IndexPartitionLocality(index.Ordinal())
@@ -439,18 +439,15 @@ func constrainPrefixColumns(
 		false, /* consolidate */
 		evalCtx, factory, ps, checkCancellation,
 	)
-	constraint = ic.UnconsolidatedConstraint()
-	if constraint.Prefix(evalCtx) < prefixColumnCount {
+	var c constraint.Constraint
+	ic.UnconsolidatedConstraint(&c)
+	if c.Prefix(evalCtx) < prefixColumnCount {
 		// If all of the constraint spans do not have the same start and end keys
 		// for all columns, the index cannot be used.
 		return nil, nil, false
 	}
 
-	// Make a copy of constraint so that the idxconstraint.Instance is not
-	// referenced.
-	copy := *constraint
-	remainingFilters = ic.RemainingFilters()
-	return &copy, remainingFilters, true
+	return &c, ic.RemainingFilters(), true
 }
 
 type invertedFilterPlanner interface {
