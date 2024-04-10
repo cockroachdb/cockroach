@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -31,8 +30,8 @@ to:
 See also: https://go.crdb.dev/p/testserver-and-cluster-virtualization
 `
 
-// When this env var is set, all the suspicious API calls are reported in test logs.
-var reportAllCalls = envutil.EnvOrDefaultBool("COCKROACH_TEST_SERVER_SHIM_VERBOSE", false)
+// When this env var is set, suspicious API calls are reported in test logs.
+var reportCalls = envutil.EnvOrDefaultBool("COCKROACH_TEST_SERVER_SHIM_VERBOSE", false)
 
 func wrapTestServer(
 	raw TestServerInterfaceRaw, opts base.DefaultTestTenantOptions,
@@ -180,52 +179,18 @@ func TestingSetWrapperLogger(w TestServerInterface, logFn func(string, ...interf
 func makeBenignNotifyFn(
 	logFn *func(string, ...interface{}), ifname, accessor string, showTip bool,
 ) func(methodName string) {
-	reportFn := func(fn func()) { fn() }
-	if !reportAllCalls {
-		var once sync.Once
-		reportFn = once.Do
+	if !reportCalls {
+		return func(_ string) {}
 	}
 	return func(methodName string) {
-		reportFn(func() {
-			(*logFn)("\n%s\n\tNOTICE: .%s() called via implicit interface %s;\nHINT: consider using .%s().%s() instead.\n",
-				GetExternalCaller(),
-				methodName, ifname, accessor, methodName)
-			if showTip {
-				(*logFn)("TIP: %s", tipText)
-			}
-		})
-	}
-}
-
-// makeSeriousNotifyFn constructs a function that strongly recommends
-// the user use an explicit interface accessor, the first time a
-// method is called on the given interface.
-//
-// The logging function is passed via a pointer because we want to
-// keep the ability to override it after the forwarder has been
-// instantiated (for example StartServerOnlyE injects the t.Log
-// function as a logger.
-func makeSeriousNotifyFn(
-	logFn *func(string, ...interface{}), ifname, accessor1, accessor2 string,
-) func(methodName string) {
-	reportFn := func(fn func()) { fn() }
-	if !reportAllCalls {
-		var once sync.Once
-		reportFn = once.Do
-	}
-	return func(methodName string) {
-		reportFn(func() {
-			(*logFn)("\n%s\n\tWARNING: risky use of implicit %s via .%s()\n"+
-				"See: https://go.crdb.dev/p/testserver-and-cluster-virtualization\n"+
-				"HINT: clarify intent using .%s().%s() or .%s().%s() instead.\n",
-				GetExternalCaller(),
-				ifname, methodName, accessor1, methodName, accessor2, methodName)
+		(*logFn)("\n%s\n\tNOTICE: .%s() called via implicit interface %s;\nHINT: consider using .%s().%s() instead.\n",
+			GetExternalCaller(),
+			methodName, ifname, accessor, methodName)
+		if showTip {
 			(*logFn)("TIP: %s", tipText)
-		})
+		}
 	}
 }
-
-var _ = makeSeriousNotifyFn // silence unused linter
 
 // GetExternalCaller returns the file:line of the first function in
 // the call stack outside of this package. It is used as prefix for
