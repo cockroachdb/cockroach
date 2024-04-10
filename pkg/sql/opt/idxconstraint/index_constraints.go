@@ -1157,26 +1157,34 @@ func (ic *Instance) Init(
 	ic.initialized = true
 }
 
-// Constraint returns the constraint created by Init. Panics if Init wasn't
-// called, or if a consolidated constraint was not built because
+// Constraint shallow-copies the constraint created by Init into c. Panics if
+// Init wasn't called, or if a consolidated constraint was not built because
 // consolidate=false was passed as an argument to Init.
-func (ic *Instance) Constraint() *constraint.Constraint {
+//
+// This method is designed specifically to avoid returning a reference to
+// Instance.consolidatedConstraint. If it did so, the entire Instance could not
+// be GC'd while the reference lived.
+func (ic *Instance) Constraint(c *constraint.Constraint) {
 	if !ic.initialized {
 		panic(errors.AssertionFailedf("Init was not called"))
 	}
 	if !ic.consolidated {
 		panic(errors.AssertionFailedf("Init was called with consolidate=false"))
 	}
-	return &ic.consolidatedConstraint
+	*c = ic.consolidatedConstraint
 }
 
-// UnconsolidatedConstraint returns the constraint created by Init before it was
-// consolidated. Panics if Init wasn't called.
-func (ic *Instance) UnconsolidatedConstraint() *constraint.Constraint {
+// UnconsolidatedConstraint shallow-copies the unconsolidated constraint created
+// by Init into c. Panics if Init wasn't called.
+//
+// This method is designed specifically to avoid returning a reference to
+// Instance.constraint. If it did so, the entire Instance could not be GC'd
+// while the reference lived.
+func (ic *Instance) UnconsolidatedConstraint(c *constraint.Constraint) {
 	if !ic.initialized {
 		panic(errors.AssertionFailedf("Init was not called"))
 	}
-	return &ic.constraint
+	*c = ic.constraint
 }
 
 // RemainingFilters calculates a simplified FiltersExpr that needs to be applied
