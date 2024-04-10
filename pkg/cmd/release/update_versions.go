@@ -109,7 +109,7 @@ func (r prRepo) name() string {
 }
 
 func (r prRepo) checkoutDir() string {
-	return fmt.Sprintf("%s_%s_%s", r.owner, r.repo, r.branch)
+	return fmt.Sprintf("%s_%s_%s", r.owner, r.repo, r.prBranch)
 }
 
 func (r prRepo) pushURL() string {
@@ -208,8 +208,13 @@ func (r prRepo) push() error {
 
 func (r prRepo) createPullRequest() (string, error) {
 	parts := []string{
-		"gh", "pr", "create", "--base", r.branch, "--fill", "--head",
-		fmt.Sprintf("%s:%s", r.githubUsername, r.prBranch),
+		"gh", "pr", "create", "--base", r.branch, "--head", fmt.Sprintf("%s:%s", r.githubUsername, r.prBranch),
+	}
+	title, body, _ := strings.Cut(r.commitMessage, "\n")
+	if title == "" {
+		parts = append(parts, "--fill")
+	} else {
+		parts = append(parts, "--title", title, "--body", body)
 	}
 	cmd := exec.Command(parts[0], parts[1:]...)
 	log.Printf("creating PR by running `%s`", strings.Join(parts, " "))
@@ -485,6 +490,44 @@ func generateRepoList(
 				return updateOrchestration(gitDir, releasedVersion.Original())
 			},
 		})
+	}
+	// 5. Merge baking branch back to the release branch.
+	maybeBakingbranches := []string{
+		fmt.Sprintf("release-%s-rc", releasedVersion.String()), // e.g. release-23.1.17-rc
+		fmt.Sprintf("staging-%s", releasedVersion.Original()),  // e.g. staging-v23.1.17
+	}
+	var bakingBranches []string
+	for _, branch := range maybeBakingbranches {
+		maybeMergeBranches, err := listRemoteBranches(branch)
+		if err != nil {
+			return []prRepo{}, fmt.Errorf("listing merge branch %s: %w", branch, err)
+		}
+		bakingBranches = append(bakingBranches, maybeMergeBranches...)
+	}
+	if len(bakingBranches) > 1 {
+		return []prRepo{}, fmt.Errorf("too many baking branches: %s", strings.Join(maybeBakingbranches, ", "))
+	}
+	for _, mergeBranch := range bakingBranches {
+		baseBranch := fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor())
+		repo := prRepo{
+			owner:          owner,
+			repo:           prefix + "cockroach",
+			branch:         baseBranch,
+			prBranch:       fmt.Sprintf("merge-%s-to-%s-%s", mergeBranch, baseBranch, randomString(4)),
+			githubUsername: "cockroach-teamcity",
+			commitMessage:  generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, baseBranch), releasedVersion, nextVersion),
+			fn: func(gitDir string) error {
+				cmd := exec.Command("git", "merge", "-s", "ours", "--no-commit", "origin/"+mergeBranch)
+				cmd.Dir = gitDir
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("failed running '%s' with message '%s': %w", cmd.String(), string(out), err)
+				}
+				log.Printf("ran '%s': %s\n", cmd.String(), string(out))
+				return nil
+			},
+		}
+		reposToWorkOn = append(reposToWorkOn, repo)
 	}
 	return reposToWorkOn, nil
 }
