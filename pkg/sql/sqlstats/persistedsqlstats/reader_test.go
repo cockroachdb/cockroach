@@ -56,7 +56,7 @@ func TestPersistedSQLStatsReadDisk(t *testing.T) {
 	defer testCluster.Stopper().Stop(ctx)
 	sqlConn, sqlStats, expectedStmtsNoConst := insertData(t, testCluster)
 
-	sqlStats.Flush(ctx)
+	sqlStats.MaybeFlush(ctx)
 	verifyDiskStmtFingerprints(t, sqlConn, expectedStmtsNoConst)
 	verifyStoredStmtFingerprints(t, expectedStmtsNoConst, sqlStats)
 }
@@ -70,7 +70,7 @@ func TestPersistedSQLStatsReadHybrid(t *testing.T) {
 	defer testCluster.Stopper().Stop(ctx)
 
 	sqlConn, sqlStats, expectedStmtsNoConst := insertData(t, testCluster)
-	sqlStats.Flush(ctx)
+	sqlStats.MaybeFlush(ctx)
 	// We execute each test queries one more time without flushing the stats.
 	// This means that we should see the exact same result as previous subtest
 	// except the execution count field will be incremented. We should not

@@ -124,7 +124,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			}
 			return strings.Join(rows, "\n")
 		case "sql-stats-flush":
-			sqlStats.Flush(ctx)
+			sqlStats.MaybeFlush(ctx)
 		case "set-time":
 			mustHaveArgsOrFatal(t, d, timeArgs)
 

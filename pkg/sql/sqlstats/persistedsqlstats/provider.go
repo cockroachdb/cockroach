@@ -192,7 +192,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 				return
 			}
 
-			flushed := s.Flush(ctx)
+			flushed := s.MaybeFlush(ctx)
 
 			if !flushed {
 				// If the flush did not do any work, don't signal flush completion.
