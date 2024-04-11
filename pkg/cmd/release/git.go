@@ -25,6 +25,11 @@ import (
 
 const remoteOrigin = "origin"
 
+var stagingReleaseBranchRegex = regexp.MustCompile("^(" +
+	"release-[0-9]{2}.[0-9]{1}.[0-9]+-rc|" + // e.g. release-23.1.17-rc
+	"staging-v[0-9]{2}.[0-9]{1}.[0-9]+" + // e.g. staging-v23.1.17
+	")$")
+
 type releaseInfo struct {
 	prevReleaseVersion string
 	nextReleaseVersion string
@@ -235,7 +240,7 @@ func findReleaseBranch(version string) (string, error) {
 		// TODO: add master for alphas
 	}
 	for _, branch := range maybeReleaseBranches {
-		remoteBranches, err := listRemoteBranches(branch)
+		remoteBranches, err := ListRemoteBranches(branch)
 		if err != nil {
 			return "", fmt.Errorf("listing release branch %s: %w", branch, err)
 		}
@@ -286,8 +291,15 @@ func findHealthyBuild(potentialRefs []string) (buildInfo, error) {
 	return buildInfo{}, fmt.Errorf("no ref found")
 }
 
-// listRemoteBranches retrieves a list of remote branches using a pattern, assuming the remote name is `origin`.
-func listRemoteBranches(pattern string) ([]string, error) {
+// IsStagingBranch returns true if branch follows one of the following patterns:
+//   - "release-[0-9]{2}.[0-9]{1}.[0-9]+-rc" + // e.g. release-23.1.17-rc
+//   - "staging-v[0-9]{2}.[0-9]{1}.[0-9]+" + // e.g. staging-v23.1.17
+func IsStagingBranch(branch string) bool {
+	return stagingReleaseBranchRegex.MatchString(branch)
+}
+
+// ListRemoteBranches retrieves a list of remote branches using a pattern, assuming the remote name is `origin`.
+func ListRemoteBranches(pattern string) ([]string, error) {
 	cmd := exec.Command("git", "ls-remote", "--refs", remoteOrigin, "refs/heads/"+pattern)
 	out, err := cmd.Output()
 	if err != nil {

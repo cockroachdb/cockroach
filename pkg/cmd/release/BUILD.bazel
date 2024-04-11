@@ -22,7 +22,7 @@ go_library(
         "update_versions.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release",
-    visibility = ["//visibility:private"],
+    visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
         "//pkg/testutils/release",

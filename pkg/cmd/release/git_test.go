@@ -10,7 +10,11 @@
 
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestBumpVersion(t *testing.T) {
 	tests := []struct {
@@ -124,6 +128,60 @@ func TestBumpVersion(t *testing.T) {
 			if got != tt.nextVersion {
 				t.Errorf("bumpVersion() got = %v, nextVersion %v", got, tt.nextVersion)
 			}
+		})
+	}
+}
+
+func TestIsStagingBranch(t *testing.T) {
+	tests := []struct {
+		description        string
+		maybeStagingBranch string
+		want               bool
+	}{
+		// happy path tests: should return true
+		{
+			description:        "should match `release-*-rc` staging branch",
+			maybeStagingBranch: "release-23.1.4-rc",
+			want:               true,
+		},
+		{
+			description:        "should match `release-*-rc` staging branch",
+			maybeStagingBranch: "release-23.0.44-rc",
+			want:               true,
+		},
+		{
+			description:        "should match `staging-*` staging branch",
+			maybeStagingBranch: "staging-v23.1.4",
+			want:               true,
+		},
+		{
+			description:        "should match `staging-*` staging branch",
+			maybeStagingBranch: "staging-v23.0.44",
+			want:               true,
+		},
+		// should return false for:
+		// - main release branches, e.g. release-23.1
+		// - doesn't begin with release or staging
+		// - has extra stuff before/after expected pattern
+		{
+			description:        "should not match main release branch",
+			maybeStagingBranch: "release-23.2",
+			want:               false,
+		},
+		{
+			description:        "should not match something with extra stuff before pattern",
+			maybeStagingBranch: "extra-release-23.2.1-rc",
+			want:               false,
+		},
+		{
+			description:        "should not match something with extra stuff after pattern",
+			maybeStagingBranch: "release-23.2.1-rc-extra",
+			want:               false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.maybeStagingBranch+": "+tt.description, func(t *testing.T) {
+			require.Equal(t, tt.want, IsStagingBranch(tt.maybeStagingBranch))
 		})
 	}
 }

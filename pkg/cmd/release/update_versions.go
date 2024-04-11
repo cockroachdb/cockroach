@@ -382,7 +382,7 @@ func generateRepoList(
 	// 1. Bump the version. Branches we need to bump the version on:
 	// stable releases: release-major.minor and all RC branches of the same release series.
 	// alpha, beta, rc: 1) master or 2) release-major.minor and all RC branches for the same release series
-	maybeVersionBumpBranches, err := listRemoteBranches(fmt.Sprintf("release-%d.%d.*", releasedVersion.Major(), releasedVersion.Minor()))
+	maybeVersionBumpBranches, err := ListRemoteBranches(fmt.Sprintf("release-%d.%d.*", releasedVersion.Major(), releasedVersion.Minor()))
 	if err != nil {
 		return []prRepo{}, fmt.Errorf("listing staging branches: %w", err)
 	}
@@ -392,7 +392,7 @@ func generateRepoList(
 		// For alpha/betas/rc releases, if we have not created the dot-zero branch
 		// (which is covered by the `release-major.minor.*` pattern), then use either the `release-major.minor` or the master branch for version bump.
 		// First, try to find the `release-major.minor` branch.
-		maybeReleaseBranches, err := listRemoteBranches(fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor()))
+		maybeReleaseBranches, err := ListRemoteBranches(fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor()))
 		if err != nil {
 			return []prRepo{}, fmt.Errorf("listing release branches: %w", err)
 		}
@@ -503,7 +503,7 @@ func generateRepoList(
 	}
 	var bakingBranches []string
 	for _, branch := range maybeBakingbranches {
-		maybeMergeBranches, err := listRemoteBranches(branch)
+		maybeMergeBranches, err := ListRemoteBranches(branch)
 		if err != nil {
 			return []prRepo{}, fmt.Errorf("listing merge branch %s: %w", branch, err)
 		}
