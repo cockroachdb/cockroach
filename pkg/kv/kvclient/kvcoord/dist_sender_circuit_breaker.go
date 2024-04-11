@@ -123,8 +123,8 @@ func (k cbRequestKind) String() string {
 	}
 }
 
-func cbRequestKindFromBatch(ba *kvpb.BatchRequest) cbRequestKind {
-	if ba.IsWrite() {
+func cbRequestKindFromBatch(ba *kvpb.BatchRequest, withCommit bool) cbRequestKind {
+	if ba.IsWrite() || withCommit {
 		return cbWriteRequest
 	}
 	return cbReadRequest
@@ -461,6 +461,9 @@ type replicaCircuitBreakerToken struct {
 
 	// ba is the batch request being tracked.
 	ba *kvpb.BatchRequest
+
+	// withCommit denotes whether the request is part of a transaction commit.
+	withCommit bool
 }
 
 // Done records the result of the request and untracks it. If the request was
@@ -469,7 +472,7 @@ type replicaCircuitBreakerToken struct {
 func (t replicaCircuitBreakerToken) Done(
 	br *kvpb.BatchResponse, sendErr error, nowNanos int64,
 ) error {
-	return t.r.done(t.ctx, t.cancelCtx, t.ba, br, sendErr, nowNanos)
+	return t.r.done(t.ctx, t.cancelCtx, t.ba, t.withCommit, br, sendErr, nowNanos)
 }
 
 // id returns a string identifier for the replica.
@@ -546,7 +549,7 @@ func (r *ReplicaCircuitBreaker) isClosed() bool {
 // for the send and a token which the caller must call Done() on with the result
 // of the request.
 func (r *ReplicaCircuitBreaker) Track(
-	ctx context.Context, ba *kvpb.BatchRequest, nowNanos int64,
+	ctx context.Context, ba *kvpb.BatchRequest, withCommit bool, nowNanos int64,
 ) (context.Context, replicaCircuitBreakerToken, error) {
 	if r == nil {
 		return ctx, replicaCircuitBreakerToken{}, nil // circuit breakers disabled
@@ -566,9 +569,10 @@ func (r *ReplicaCircuitBreaker) Track(
 
 	// Set up the request token.
 	token := replicaCircuitBreakerToken{
-		r:   r,
-		ctx: ctx,
-		ba:  ba,
+		r:          r,
+		ctx:        ctx,
+		ba:         ba,
+		withCommit: withCommit,
 	}
 
 	// Record in-flight requests. If this is the only request, tentatively start
@@ -602,7 +606,7 @@ func (r *ReplicaCircuitBreaker) Track(
 			sendCtx, cancel = context.WithCancelCause(ctx)
 			token.cancelCtx = sendCtx
 
-			reqKind := cbRequestKindFromBatch(ba)
+			reqKind := cbRequestKindFromBatch(ba, withCommit)
 			r.mu.Lock()
 			r.mu.cancelFns[reqKind][ba] = cancel
 			r.mu.Unlock()
@@ -621,6 +625,7 @@ func (r *ReplicaCircuitBreaker) done(
 	ctx context.Context,
 	cancelCtx context.Context,
 	ba *kvpb.BatchRequest,
+	withCommit bool,
 	br *kvpb.BatchResponse,
 	sendErr error,
 	nowNanos int64,
@@ -647,7 +652,7 @@ func (r *ReplicaCircuitBreaker) done(
 		}
 
 		// Clean up the cancel function.
-		reqKind := cbRequestKindFromBatch(ba)
+		reqKind := cbRequestKindFromBatch(ba, withCommit)
 		r.mu.Lock()
 		cancel := r.mu.cancelFns[reqKind][ba]
 		delete(r.mu.cancelFns[reqKind], ba) // nolint:deferunlockcheck

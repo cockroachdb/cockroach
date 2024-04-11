@@ -228,7 +228,7 @@ func benchmarkCircuitBreakersTrack(
 	// If this shouldn't be the only request, add another concurrent request to
 	// the tracking.
 	if !alone {
-		_, _, err := cbs.ForReplica(rangeDesc, replDesc).Track(ctx, ba, 1)
+		_, _, err := cbs.ForReplica(rangeDesc, replDesc).Track(ctx, ba, false /* withCommit */, 1)
 		require.NoError(b, err)
 	}
 
@@ -272,7 +272,7 @@ func benchmarkCircuitBreakersTrack(
 			// Adjust b.N for concurrency.
 			for i := 0; i < b.N/conc; i++ {
 				cb := cbs.ForReplica(rangeDesc, replDesc)
-				_, cbToken, err := cb.Track(sendCtx, ba, nowNanos)
+				_, cbToken, err := cb.Track(sendCtx, ba, false /* withCommit */, nowNanos)
 				if err != nil {
 					assert.NoError(b, err)
 					return
