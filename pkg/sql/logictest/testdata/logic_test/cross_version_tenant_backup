@@ -1,0 +1,30 @@
+# LogicTest: cockroach-go-testserver-23.2
+
+# Ensure that a backup of a tenant can restore into an new version.  
+# 
+# NB: Ideally this test would be run on clusterVersion.PreviousVersion to
+# clusterVersion.Latest, so the test would not be tied to a specific base
+# version.
+
+# Create tenant using old binary.
+statement ok
+CREATE VIRTUAL CLUSTER foo
+
+statement ok
+BACKUP TENANT 2 INTO 'userfile:///1/example'
+
+upgrade 0
+
+upgrade 1
+
+upgrade 2
+
+statement ok
+RESTORE TENANT 2 FROM LATEST IN 'userfile:///1/example' with tenant_name = 'baz'
+
+query TI nodeidx=0
+SELECT name, id FROM [SHOW TENANTS] ORDER BY id
+----
+system 1
+foo 2
+baz 3
