@@ -87,6 +87,11 @@ func (v *Version) AtLeast(other *Version) bool {
 	return v.Version.AtLeast(&other.Version)
 }
 
+// Series returns the release series this version is a part of.
+func (v *Version) Series() string {
+	return fmt.Sprintf("%d.%d", v.Major(), v.Minor())
+}
+
 // CurrentVersion returns the version associated with the current
 // build.
 func CurrentVersion() *Version {
