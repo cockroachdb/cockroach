@@ -34,7 +34,7 @@ import (
 func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 	testSpec := registry.TestSpec{
 		Name:              "tenant-span-stats/mixed-version",
-		Owner:             registry.OwnerClusterObs,
+		Owner:             registry.OwnerObservability,
 		Cluster:           r.MakeClusterSpec(4),
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),

@@ -37,8 +37,6 @@ cockroachdb/sql-queries:
     cockroachdb/sql-optimizer: other
     cockroachdb/sql-opt-prs: other
   label: T-sql-queries
-cockroachdb/cluster-observability:
-  triage_column_id: 12618343
 cockroachdb/kv:
   aliases:
     cockroachdb/kv-triage: roachtest
@@ -80,14 +78,9 @@ cockroachdb/server:
     cockroachdb/server-prs: other
     cockroachdb/http-api-prs: other
   triage_column_id: 2521812
-cockroachdb/admin-ui:
-  aliases:
-    cockroachdb/admin-ui-prs: other
-  triage_column_id: 6598672
-cockroachdb/kv-obs-prs:
-  triage_column_id: 0 # TODO
-cockroachdb/obs-inf-prs:
-  triage_column_id: 14196277
+cockroachdb/obs-prs:
+  # The observability team uses Jira for managing issues. So there is no triage column ID.
+  label: T-observability
 cockroachdb/multi-tenant:
   label: T-multitenant
 cockroachdb/jobs:
