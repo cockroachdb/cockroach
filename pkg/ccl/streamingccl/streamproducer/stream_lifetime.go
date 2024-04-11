@@ -74,10 +74,6 @@ func StartReplicationProducerJob(
 ) (streampb.ReplicationProducerSpec, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
-	if !kvserver.RangefeedEnabled.Get(&evalCtx.Settings.SV) {
-		return streampb.ReplicationProducerSpec{}, errors.Errorf("kv.rangefeed.enabled must be true to start a replication job")
-	}
-
 	tenantRecord, err := sql.GetTenantRecordByName(ctx, evalCtx.Settings, txn, tenantName)
 	if err != nil {
 		return streampb.ReplicationProducerSpec{}, err
@@ -85,6 +81,10 @@ func StartReplicationProducerJob(
 	tenantID, err := roachpb.MakeTenantID(tenantRecord.ID)
 	if err != nil {
 		return streampb.ReplicationProducerSpec{}, err
+	}
+
+	if tenantID.IsSystem() && !kvserver.RangefeedEnabled.Get(&evalCtx.Settings.SV) {
+		return streampb.ReplicationProducerSpec{}, errors.Errorf("kv.rangefeed.enabled must be true to start a replication job")
 	}
 
 	var replicationStartTime hlc.Timestamp
