@@ -158,7 +158,11 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	mvt := mixedversion.NewTest(
-		ctx, t, t.L(), c, c.All(), mixedversion.NumUpgrades(1),
+		ctx, t, t.L(), c, c.All(),
+		// Disable version skipping and limit the test to only one upgrade as the workload is only
+		// compatible with the branch it was built from and the major version before that.
+		mixedversion.NumUpgrades(1),
+		mixedversion.DisableSkipVersionUpgrades,
 	)
 
 	// Set up the testing state (e.g. create a few databases and tables) and always use declarative schema

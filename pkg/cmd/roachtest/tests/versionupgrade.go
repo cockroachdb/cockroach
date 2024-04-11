@@ -156,6 +156,12 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// TODO: re-enable once #116586 is addressed.
 			if h.IsFinalizing() {
 				l.Printf("schemachange workload has been flaking when run during upgrades; skipping")
+			}
+
+			// The schema change workload is only compatible with the branch it was built
+			// from and the major version before that.
+			if h.IsSkipVersionUpgrade() {
+				l.Printf("skipping: schema change workload is unsupported with skip version upgrades")
 				return nil
 			}
 

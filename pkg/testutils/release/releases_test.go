@@ -161,3 +161,58 @@ func TestLatestPredecessorHistory(t *testing.T) {
 		})
 	}
 }
+
+func TestMajorReleasesBetween(t *testing.T) {
+	oldReleaseData := releaseData
+	releaseData = testReleaseData
+	defer func() { releaseData = oldReleaseData }()
+
+	testCases := []struct {
+		name     string
+		v1       string
+		v2       string
+		expected int
+	}{
+		{
+			name:     "v1 and v2 are on the same release series",
+			v1:       "22.2.10",
+			v2:       "22.2.14",
+			expected: 0,
+		},
+		{
+			name:     "v1 and v2 are one major release apart",
+			v1:       "22.2.10",
+			v2:       "23.1.0",
+			expected: 1,
+		},
+		{
+			name:     "v1 and v2 are two major releases apart",
+			v1:       "22.1.8",
+			v2:       "23.1.0",
+			expected: 2,
+		},
+		{
+			name:     "v1 and v2 are multiple major releases apart",
+			v1:       "19.2.3",
+			v2:       "23.1.0",
+			expected: 3,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			vv1 := version.MustParse("v" + tc.v1)
+			vv2 := version.MustParse("v" + tc.v2)
+
+			// We should get the same result regardless of the order of
+			// arguments.
+			count, err := MajorReleasesBetween(vv1, vv2)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, count)
+
+			count, err = MajorReleasesBetween(vv2, vv1)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, count)
+		})
+	}
+}
