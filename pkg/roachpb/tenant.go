@@ -21,15 +21,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// SystemTenantID is the ID associated with the system's internal tenant in a
-// multi-tenant cluster and the only tenant in a single-tenant cluster.
+// SystemTenantID is the ID associated with the tenant that manages a cluster.
 //
-// The system tenant differs from all other tenants in four important ways:
-// 1. the system tenant's keyspace is not prefixed with a tenant specifier.
-// 2. the system tenant is created by default during cluster initialization.
-// 3. the system tenant is always present and can never be destroyed.
-// 4. the system tenant has the ability to create and destroy other tenants.
-var SystemTenantID = MustMakeTenantID(1)
+// The system tenant must exist and must use shared service, to be available to
+// node-internal processes. Additionally it is given special treatment in any
+// authorization decisions, bypassing typical restrictions that tenants act only
+// on their own key spans.
+var SystemTenantID = TenantOne
+
+// TenantOne is a special tenant ID, associated the numeric ID 1, which for
+// legacy compatibility reasons stores its tables without a tenant prefix.
+var TenantOne = MustMakeTenantID(1)
 
 // MinTenantID is the minimum ID of a (non-system) tenant in a multi-tenant
 // cluster.
