@@ -54,6 +54,10 @@ const (
 	beaverHubServerEndpoint = "https://beaver-hub-server-jjd2v2r2dq-uk.a.run.app/process"
 )
 
+// deletedStagingBranches keeps track of staging branches that have since been deleted, so that stress
+// tests can gracefully handle the deletion of a branch once a job has started.
+var deletedStagingBranches = map[string]bool{}
+
 type builtArtifact struct {
 	src, dst string
 }
@@ -516,6 +520,22 @@ func doPost() bool {
 		fmt.Printf("branch %s does not appear to be a release branch; skipping reporting issues to GitHub\n", branch)
 		return false
 	}
+
+	// If this is a temporary staging branch, enforce that the branch
+	// still exists before posting.
+	if release.IsStagingBranch(branch) {
+		if deletedStagingBranches[branch] {
+			fmt.Printf("branch %s no longer exists; skip reporting issues to GitHub\n", branch)
+			return false
+		}
+		remoteBranches, err := release.ListRemoteBranches(branch)
+		if len(remoteBranches) == 0 {
+			deletedStagingBranches[branch] = true
+			fmt.Printf("branch %s no longer exists; skip reporting issues to GitHub\n", branch)
+			return false
+		}
+	}
+
 	// GITHUB_API_TOKEN must be in the env or github-post will barf if it's
 	// ever asked to post, so enforce that on all runs.
 	// The way this env var is made available here is quite tricky. The build
