@@ -119,7 +119,7 @@ func (*queryBench) Tables() []workload.Table {
 func (g *queryBench) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
+	_, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -143,7 +143,7 @@ func (g *queryBench) Ops(
 		maxNumStmts = g.numRunsPerQuery * len(stmts)
 	}
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		op := queryBenchWorker{
 			hists:       reg.GetHandle(),

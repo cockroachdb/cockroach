@@ -209,7 +209,7 @@ func (s *schemaChange) Ops(
 	ctx, span := tracer.Start(ctx, "schemaChange.Ops")
 	defer func() { EndSpan(span, err) }()
 
-	sqlDatabase, err := workload.SanitizeUrls(s, s.connFlags.DBOverride, urls)
+	_, err = workload.SanitizeUrls(s, s.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -254,7 +254,6 @@ func (s *schemaChange) Ops(
 	}
 
 	ql := workload.QueryLoad{
-		SQLDatabase: sqlDatabase,
 		Close: func(_ context.Context) error {
 			// Create a new context for shutting down the tracer provider. The
 			// provided context may be cancelled depending on why the workload is

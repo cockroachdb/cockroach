@@ -150,7 +150,7 @@ func typeForOid(db *gosql.DB, typeOid oid.Oid, tableName, columnName string) (*t
 func (w *random) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (ql workload.QueryLoad, retErr error) {
-	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
+	_, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -289,7 +289,7 @@ AND    i.indisprimary`, relid)
 		}
 	}
 
-	fmt.Fprintf(&buf, `%s INTO %s.%s (`, dmlMethod, tree.NameString(sqlDatabase), tree.NameString(tableName))
+	fmt.Fprintf(&buf, `%s INTO %s (`, dmlMethod, tree.NameString(tableName))
 	for i, c := range nonComputedCols {
 		if i > 0 {
 			buf.WriteString(",")
@@ -320,7 +320,7 @@ AND    i.indisprimary`, relid)
 		return workload.QueryLoad{}, err
 	}
 
-	ql = workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql = workload.QueryLoad{}
 
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := randOp{

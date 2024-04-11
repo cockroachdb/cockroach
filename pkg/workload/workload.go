@@ -388,8 +388,6 @@ func (l requiresCCLBinaryDataLoader) InitialDataLoad(
 // QueryLoad represents some SQL query workload performable on a database
 // initialized with the requisite tables.
 type QueryLoad struct {
-	SQLDatabase string
-
 	// WorkerFns is one function per worker. It is to be called once per unit of
 	// work to be done.
 	WorkerFns []func(context.Context) error

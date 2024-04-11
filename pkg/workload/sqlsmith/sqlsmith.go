@@ -134,7 +134,7 @@ func (g *sqlSmith) Ops(
 	if err := g.validateErrorSetting(); err != nil {
 		return workload.QueryLoad{}, err
 	}
-	sqlDatabase, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
+	_, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -146,7 +146,7 @@ func (g *sqlSmith) Ops(
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(RandomSeed.Seed() + int64(i)))
 		smither, err := sqlsmith.NewSmither(db, rng)

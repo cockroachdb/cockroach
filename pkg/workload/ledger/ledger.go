@@ -182,7 +182,7 @@ func (w *ledger) Tables() []workload.Table {
 func (w *ledger) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
+	_, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -195,7 +195,7 @@ func (w *ledger) Ops(
 	db.SetMaxIdleConns(w.connFlags.Concurrency + 1)
 
 	w.reg = reg
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	now := timeutil.Now().UnixNano()
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		worker := &worker{
