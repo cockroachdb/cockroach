@@ -1649,7 +1649,7 @@ type connExecutor struct {
 
 	// statsCollector is used to collect statistics about SQL statements and
 	// transactions.
-	statsCollector sqlstats.StatsCollector
+	statsCollector *sslocal.StatsCollector
 
 	// cpuStatsCollector is used to estimate RU consumption due to CPU usage for
 	// tenants.

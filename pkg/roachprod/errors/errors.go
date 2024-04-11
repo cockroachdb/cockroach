@@ -29,13 +29,11 @@ type Error interface {
 // Exit codes for the errors
 const (
 	cmdExitCode          = 20
-	sshExitCode          = 10
+	transientExitCode    = 10
 	unclassifiedExitCode = 1
-)
 
-// ErrSSH255 is a reference error used to mark an SSH error with an exit
-// code of 255. This could be indicative of an SSH flake.
-var ErrSSH255 = errors.New("SSH error occurred with exit code 255")
+	sshProblemCause = "ssh_problem"
+)
 
 const (
 	SegmentationFaultExitCode = 139
@@ -66,28 +64,53 @@ func (e Cmd) Unwrap() error {
 	return e.Err
 }
 
-// SSH wraps ssh-specific errors from connections to remote hosts.
-type SSH struct {
-	Err error
+type TransientError struct {
+	Err   error
+	Cause string
 }
 
-func (e SSH) Error() string {
-	return fmt.Sprintf("SSH_PROBLEM: %s", e.Err.Error())
+// TransientFailure is used to label errors that are known to be
+// transient. Callers (notably, roachtest) can choose to deal with
+// these errors in different ways, such as not creating an issue for
+// test failures due to these errors.
+func TransientFailure(err error, label string) TransientError {
+	return TransientError{err, label}
 }
 
-// ExitCode gives the process exit code to return for SSH errors.
-func (e SSH) ExitCode() int {
-	return sshExitCode
+func (te TransientError) Error() string {
+	return fmt.Sprintf("TRANSIENT_ERROR(%s): %s", te.Cause, te.Err)
 }
 
-// Format passes formatting responsibilities to cockroachdb/errors
-func (e SSH) Format(s fmt.State, verb rune) {
-	errors.FormatError(e, s, verb)
+func (te TransientError) Format(s fmt.State, verb rune) {
+	errors.FormatError(te, s, verb)
 }
 
-// Unwrap the wrapped SSH error.
-func (e SSH) Unwrap() error {
-	return e.Err
+func (te TransientError) Is(other error) bool {
+	return errors.Is(te.Err, other)
+}
+
+func (te TransientError) ExitCode() int {
+	return transientExitCode
+}
+
+// IsTransient allows callers to check if a given error is a roachprod
+// transient error.
+func IsTransient(err error) bool {
+	return errors.Is(err, TransientError{})
+}
+
+// NewSSHError returns a transient error for SSH-related issues.
+func NewSSHError(err error) TransientError {
+	return TransientFailure(err, sshProblemCause)
+}
+
+func IsSSHError(err error) bool {
+	var transientErr TransientError
+	if errors.As(err, &transientErr) {
+		return transientErr.Cause == sshProblemCause
+	}
+
+	return false
 }
 
 // Unclassified wraps roachprod and unclassified errors.
@@ -124,7 +147,7 @@ func ClassifyCmdError(err error) Error {
 
 	if exitCode, ok := GetExitCode(err); ok {
 		if exitCode == 255 {
-			return SSH{errors.Mark(err, ErrSSH255)}
+			return NewSSHError(err)
 		}
 		return Cmd{err}
 	}

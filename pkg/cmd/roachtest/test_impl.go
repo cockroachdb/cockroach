@@ -494,17 +494,19 @@ func (t *testImpl) failureMsg() string {
 	return b.String()
 }
 
-// failuresContainError returns true if any of the errors in any of
-// the given failures matches the reference error.
-func failuresContainsError(failures []failure, refError error) bool {
+// failuresMatchingError checks whether the first error in trees of
+// any of the errors in the failures passed match the `refError`
+// target. If it does, `refError` is set to that target error value
+// and returns true. Otherwise, it returns false.
+func failuresMatchingError(failures []failure, refError any) bool {
 	for _, f := range failures {
 		for _, err := range f.errors {
-			if errors.Is(err, refError) {
+			if errors.As(err, refError) {
 				return true
 			}
 		}
 
-		if errors.Is(f.squashedErr, refError) {
+		if errors.As(f.squashedErr, refError) {
 			return true
 		}
 	}

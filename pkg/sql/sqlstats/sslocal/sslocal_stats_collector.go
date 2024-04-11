@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 )
 
-// StatsCollector is used to collect statement and transaction statistics
-// from connExecutor.
+// StatsCollector is used to collect statistics for transactions and
+// statements for the entire lifetime of a session.
 type StatsCollector struct {
 	sqlstats.ApplicationStats
 
@@ -38,7 +38,7 @@ type StatsCollector struct {
 
 var _ sqlstats.ApplicationStats = &StatsCollector{}
 
-// NewStatsCollector returns an instance of sqlstats.StatsCollector.
+// NewStatsCollector returns an instance of StatsCollector.
 func NewStatsCollector(
 	st *cluster.Settings,
 	appStats sqlstats.ApplicationStats,
@@ -53,17 +53,20 @@ func NewStatsCollector(
 	}
 }
 
-// PhaseTimes implements sqlstats.StatsCollector interface.
+// PhaseTimes returns the sessionphase.Times that this StatsCollector is
+// currently tracking.
 func (s *StatsCollector) PhaseTimes() *sessionphase.Times {
 	return s.phaseTimes
 }
 
-// PreviousPhaseTimes implements sqlstats.StatsCollector interface.
+// PreviousPhaseTimes returns the sessionphase.Times that this StatsCollector
+// was previously tracking before being Reset.
 func (s *StatsCollector) PreviousPhaseTimes() *sessionphase.Times {
 	return s.previousPhaseTimes
 }
 
-// Reset implements sqlstats.StatsCollector interface.
+// Reset resets the StatsCollector with a new ApplicationStats and a new copy
+// of the sessionphase.Times.
 func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *sessionphase.Times) {
 	previousPhaseTime := s.phaseTimes
 	s.flushTarget = appStats
@@ -72,14 +75,18 @@ func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *se
 	s.phaseTimes = phaseTime.Clone()
 }
 
-// StartTransaction implements sqlstats.StatsCollector interface.
+// StartTransaction sets up the StatsCollector for a new transaction.
 // The current application stats are reset for the new transaction.
 func (s *StatsCollector) StartTransaction() {
 	s.flushTarget = s.ApplicationStats
 	s.ApplicationStats = s.flushTarget.NewApplicationStatsWithInheritedOptions()
 }
 
-// EndTransaction implements sqlstats.StatsCollector interface.
+// EndTransaction informs the StatsCollector that the current txn has
+// finished execution. (Either COMMITTED or ABORTED). This means the txn's
+// fingerprint ID is now available. StatsCollector will now go back to update
+// the transaction fingerprint ID field of all the statement statistics for that
+// txn.
 func (s *StatsCollector) EndTransaction(
 	ctx context.Context, transactionFingerprintID appstatspb.TransactionFingerprintID,
 ) {
@@ -111,7 +118,10 @@ func (s *StatsCollector) EndTransaction(
 	s.flushTarget = nil
 }
 
-// ShouldSample implements sqlstats.StatsCollector interface.
+// ShouldSample returns two booleans, the first one indicates whether we
+// ever sampled (i.e. collected statistics for) the given combination of
+// statement metadata, and the second one whether we should save the logical
+// plan description for it.
 func (s *StatsCollector) ShouldSample(
 	fingerprint string, implicitTxn bool, database string,
 ) (previouslySampled bool, savePlanForStats bool) {
@@ -128,7 +138,9 @@ func (s *StatsCollector) ShouldSample(
 	return previouslySampled, savePlanForStats
 }
 
-// UpgradeImplicitTxn implements sqlstats.StatsCollector interface.
+// UpgradeImplicitTxn informs the StatsCollector that the current txn has been
+// upgraded to an explicit transaction, thus all previously recorded statements
+// should be updated accordingly.
 func (s *StatsCollector) UpgradeImplicitTxn(ctx context.Context) error {
 	err := s.ApplicationStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
 		func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {

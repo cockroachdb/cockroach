@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -117,7 +117,7 @@ func TestTelemetryLogging(t *testing.T) {
 		queryLevelStats         execstats.QueryLevelStats
 		enableTracing           bool
 		enableInjectTxErrors    bool
-		expectedStatsCollector  sqlstats.StatsCollector
+		expectedStatsCollector  *sslocal.StatsCollector
 	}{
 		{
 			// Test case with statement that is not of type DML.

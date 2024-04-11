@@ -88,9 +88,22 @@ const (
 	DefaultLeaseIOOverloadShedThreshold = 0.4
 
 	// IOOverloadMeanThreshold is the percentage above the mean after which a
-	// store could be conisdered IO overload if also exceeding the absolute IO
+	// store could be considered IO overload if also exceeding the absolute IO
 	// threshold.
 	IOOverloadMeanThreshold = 1.1
+
+	// IOOverloadMeanShedThreshold is the percentage above the mean after which a
+	// store could be considered IO overload if also exceeding the absolute IO
+	// threshold and looking to shed the lease. Typical clusters are not
+	// under-provisioned as a whole for the workload, and we observe the mean to
+	// be 0.1 or less, when a tiny minority of the stores (typically one store)
+	// are overloaded. In such cases, the DefaultLeaseIOOverloadThreshold of 0.4
+	// would be > 400% of the mean. So setting the value here to 175% will still
+	// allow shedding in such typical scenarios. We atypically observe clusters
+	// where the mean is high, i.e., above DefaultLeaseIOOverloadShedThreshold --
+	// in such cases setting this value to 175% prevents chronic cyclical
+	// sloshing of leases from one store to another.
+	IOOverloadMeanShedThreshold = 1.75
 
 	// L0SublevelTrackerRetention is the tracking period for statistics on the
 	// number of L0 sublevels within a store. The L0-sublevels are tracked by
@@ -2506,7 +2519,7 @@ func (o IOOverloadOptions) ExistingLeaseCheck(
 	avg := o.storeListAvgScore(storeList)
 
 	if ok, reason := ioOverloadCheck(score, avg,
-		o.LeaseIOOverloadShedThreshold, IOOverloadMeanThreshold,
+		o.LeaseIOOverloadShedThreshold, IOOverloadMeanShedThreshold,
 		o.LeaseEnforcementLevel,
 		IOOverloadThresholdShed,
 	); !ok {
