@@ -270,20 +270,19 @@ WHERE
 		killNodes <- struct{}{}
 		<-nodesKilled
 		for {
-			t.Status("Running schema change with lease held...")
+			t.Status("running schema change with lease held...")
 			_, err = db.Exec("ALTER TABLE foo ADD COLUMN newcol int")
 			// Confirm that we hit the expected error or no error.
 			if err != nil &&
 				!strings.Contains(err.Error(), "count-lease timed out reading from a region") {
 				// Unrelated error, so lets kill off the test.
-				return errors.CombineErrors(errors.AssertionFailedf("no time out detected because of dead region."),
-					err)
+				return errors.NewAssertionErrorWithWrappedErrf(err, "no time out detected because of dead region")
 			} else if err != nil {
-				t.Status("Waiting for schema change completion, hit expected error: ", err)
+				t.Status("waiting for schema change completion, found expected error: ", err)
 				continue
 			} else {
 				// Schema change compleded successfully.
-				t.Status("Schema change was successful")
+				t.Status("schema change was successful")
 				return err
 			}
 		}
@@ -295,7 +294,7 @@ WHERE
 	c.Run(ctx, install.WithNodes(c.Range(otherRegionNode, len(c.All())).InstallNodes()), "killall -9 cockroach")
 	nodesKilled <- struct{}{}
 
-	require.NoErrorf(t, grp.Wait(), "Waited for go routines, expected no error.")
+	require.NoErrorf(t, grp.Wait(), "waited for go routines, expected no error.")
 	t.Status("stopping the server ahead of checking for the tenant server")
 
 	// Restart the KV storage servers first.
