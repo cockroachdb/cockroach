@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 )
 
 type (
@@ -421,7 +422,9 @@ func (p *testPlanner) changeVersionSteps(
 	var steps []testStep
 	for j, node := range previousVersionNodes {
 		steps = append(steps, p.newSingleStep(
-			restartWithNewBinaryStep{version: to, node: node, rt: p.rt, settings: p.clusterSettings()},
+			restartWithNewBinaryStep{
+				version: to, node: node, rt: p.rt, settings: p.clusterSettings(clusterSettingsForUpgrade(from, to)...),
+			},
 		))
 		err := p.currentContext.System.changeVersion(node, to)
 		handleInternalError(err)
@@ -492,10 +495,13 @@ func (p *testPlanner) newSingleStep(impl singleStepProtocol) *singleStep {
 	return newSingleStep(p.currentContext, impl, p.newRNG())
 }
 
-func (p *testPlanner) clusterSettings() []install.ClusterSettingOption {
+func (p *testPlanner) clusterSettings(
+	extraSettings ...install.ClusterSettingOption,
+) []install.ClusterSettingOption {
 	cs := []install.ClusterSettingOption{}
 	cs = append(cs, defaultClusterSettings...)
 	cs = append(cs, p.options.settings...)
+	cs = append(cs, extraSettings...)
 	return cs
 }
 
@@ -1061,6 +1067,27 @@ func (u UpgradeStage) String() string {
 		return "after-upgrade-finished"
 	default:
 		return fmt.Sprintf("invalid upgrade stage (%d)", u)
+	}
+}
+
+// clusterSettingsForUpgrade returns a list of install.ClusterSetting
+// `options to be used when starting cockroach binaries when upgrading
+// `from` a given release `to` another release.
+func clusterSettingsForUpgrade(from, to *clusterupgrade.Version) []install.ClusterSettingOption {
+	// N.B.: it is safe to ignore the error here as we should always be
+	// able to determine the number of releases between two binaries
+	// used when upgrading: we keep release data starting from 21.2.
+	numReleases, _ := release.MajorReleasesBetween(&from.Version, &to.Version)
+	// If we are only upgrading a single major release, nothing to do.
+	if numReleases == 1 {
+		return nil
+	}
+
+	// Skip-version upgrades (more than one major release at a time) are
+	// still experimental and require an environment variable to be set
+	// when starting the nodes.
+	return []install.ClusterSettingOption{
+		install.EnvOption([]string{"COCKROACH_ALLOW_VERSION_SKIPPING=true"}),
 	}
 }
 

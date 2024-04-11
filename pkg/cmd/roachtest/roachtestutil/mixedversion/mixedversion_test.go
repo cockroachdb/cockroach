@@ -22,6 +22,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testPredecessorMapping is a test-only artificial mapping from
+// release series to an arbitrary release in the previous series.
+var testPredecessorMapping = map[string]*clusterupgrade.Version{
+	"19.2": clusterupgrade.MustParseVersion("v19.1.8"),
+	"21.1": clusterupgrade.MustParseVersion("v19.2.16"),
+	"21.2": clusterupgrade.MustParseVersion("v21.1.16"),
+	"22.1": clusterupgrade.MustParseVersion("v21.2.8"),
+	"22.2": clusterupgrade.MustParseVersion("v22.1.11"),
+	"23.1": clusterupgrade.MustParseVersion("v22.2.14"),
+	"23.2": clusterupgrade.MustParseVersion("v23.1.17"),
+	"24.1": clusterupgrade.MustParseVersion("v23.2.4"),
+	"24.2": clusterupgrade.MustParseVersion("v24.1.1"),
+}
+
 func Test_assertValidTest(t *testing.T) {
 	var fatalErr error
 	fatalFunc := func() func(...interface{}) {
@@ -101,51 +115,73 @@ func Test_assertValidTest(t *testing.T) {
 }
 
 func Test_choosePreviousReleases(t *testing.T) {
+	defer withTestBuildVersion("v24.1.0")()
+
 	testCases := []struct {
-		name               string
-		arch               vm.CPUArch
-		predecessorHistory []string
-		predecessorErr     error
-		expectedReleases   []string
-		expectedErr        string
+		name              string
+		arch              vm.CPUArch
+		enableSkipVersion bool
+		numUpgrades       int
+		predecessorErr    error
+		expectedReleases  []string
+		expectedErr       string
 	}{
 		{
 			name:           "errors from predecessorFunc are returned",
 			predecessorErr: fmt.Errorf("something went wrong"),
+			numUpgrades:    3,
 			expectedErr:    "something went wrong",
 		},
 		{
-			name:               "predecessor history is unmodified for non-ARM architectures",
-			arch:               vm.ArchAMD64,
-			predecessorHistory: []string{"22.1.3", "22.2.10", "23.1.3"},
-			expectedReleases:   []string{"22.1.3", "22.2.10", "23.1.3"},
+			name:             "predecessor history is unmodified for non-ARM architectures",
+			arch:             vm.ArchAMD64,
+			numUpgrades:      3,
+			expectedReleases: []string{"22.2.14", "23.1.17", "23.2.4"},
 		},
 		{
-			name:               "supported predecessor history is unmodified for ARM architectures",
-			arch:               vm.ArchARM64,
-			predecessorHistory: []string{"22.2.0", "23.1.10", "23.2.3"}, // all supported
-			expectedReleases:   []string{"22.2.0", "23.1.10", "23.2.3"},
+			name:             "supported predecessor history is unmodified for ARM architectures",
+			arch:             vm.ArchARM64,
+			numUpgrades:      3,
+			expectedReleases: []string{"22.2.14", "23.1.17", "23.2.4"},
 		},
 		{
-			name:               "predecessor history is filtered for ARM architectures",
-			arch:               vm.ArchARM64,
-			predecessorHistory: []string{"21.2.12", "22.1.10", "22.2.3", "23.1.0"},
-			expectedReleases:   []string{"22.2.3", "23.1.0"},
+			name:             "predecessor history is filtered for ARM architectures",
+			arch:             vm.ArchARM64,
+			numUpgrades:      4,
+			expectedReleases: []string{"22.2.14", "23.1.17", "23.2.4"},
+		},
+		{
+			name:              "skip-version upgrades",
+			arch:              vm.ArchAMD64,
+			numUpgrades:       3,
+			enableSkipVersion: true,
+			expectedReleases:  []string{"22.1.11", "22.2.14", "23.1.17"}, // 23.2.4 release skipped
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mvt := newTest()
-			mvt._arch = &tc.arch
-			mvt.predecessorFunc = func(_ *rand.Rand, _ *clusterupgrade.Version, _ int) ([]*clusterupgrade.Version, error) {
-				return parseVersions(tc.predecessorHistory), tc.predecessorErr
+			opts := []CustomOption{NumUpgrades(tc.numUpgrades)}
+			if tc.enableSkipVersion {
+				opts = append(opts, withSkipVersionProbability(1))
+			} else {
+				opts = append(opts, DisableSkipVersionUpgrades)
 			}
+
+			mvt := newTest(opts...)
+			mvt.predecessorFunc = func(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+				return testPredecessorMapping[v.Series()], tc.predecessorErr
+			}
+			mvt._arch = &tc.arch
 
 			releases, err := mvt.choosePreviousReleases()
 			if tc.expectedErr == "" {
 				require.NoError(t, err)
-				require.Equal(t, parseVersions(tc.expectedReleases), releases)
+				var expectedVersions []*clusterupgrade.Version
+				for _, er := range tc.expectedReleases {
+					expectedVersions = append(expectedVersions, clusterupgrade.MustParseVersion(er))
+				}
+				require.Equal(t, expectedVersions, releases)
 			} else {
 				require.Error(t, err)
 				require.Equal(t, tc.expectedErr, err.Error())
