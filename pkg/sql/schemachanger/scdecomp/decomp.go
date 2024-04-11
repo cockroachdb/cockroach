@@ -121,7 +121,7 @@ func (w *walkCtx) walkRoot() {
 	case catalog.TableDescriptor:
 		w.walkRelation(d)
 	case catalog.FunctionDescriptor:
-		if !w.clusterVersion.IsActive(clusterversion.V23_1) {
+		if !w.clusterVersion.IsActive(clusterversion.TODODelete_V23_1) {
 			panic(
 				scerrors.NotImplementedErrorf(
 					nil, // n
@@ -693,7 +693,7 @@ func (w *walkCtx) walkUniqueWithoutIndexConstraint(
 				c.GetName(), tbl.GetName(), tbl.GetID()))
 		}
 	}
-	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.TODODelete_V23_1) {
 		uwi := &scpb.UniqueWithoutIndexConstraintUnvalidated{
 			TableID:      tbl.GetID(),
 			ConstraintID: c.GetConstraintID(),
@@ -730,7 +730,7 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "check constraint %q in table %q (%d)",
 			c.GetName(), tbl.GetName(), tbl.GetID()))
 	}
-	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.TODODelete_V23_1) {
 		w.ev(scpb.Status_PUBLIC, &scpb.CheckConstraintUnvalidated{
 			TableID:      tbl.GetID(),
 			ConstraintID: c.GetConstraintID(),
@@ -763,7 +763,7 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 func (w *walkCtx) walkForeignKeyConstraint(
 	tbl catalog.TableDescriptor, c catalog.ForeignKeyConstraint,
 ) {
-	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.TODODelete_V23_1) {
 		w.ev(scpb.Status_PUBLIC, &scpb.ForeignKeyConstraintUnvalidated{
 			TableID:                 tbl.GetID(),
 			ConstraintID:            c.GetConstraintID(),

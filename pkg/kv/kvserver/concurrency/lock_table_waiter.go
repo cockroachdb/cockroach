@@ -452,7 +452,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// to abort the lock holder entirely so the write request can revoke and
 	// replace the lock with its own lock.
 	if req.WaitPolicy == lock.WaitPolicy_Error &&
-		!w.st.Version.IsActive(ctx, clusterversion.V23_2_RemoveLockTableWaiterTouchPush) {
+		!w.st.Version.IsActive(ctx, clusterversion.TODODelete_V23_2_RemoveLockTableWaiterTouchPush) {
 		// This wait policy signifies that the request wants to raise an error
 		// upon encountering a conflicting lock. We still need to push the lock
 		// holder to ensure that it is active and that this isn't an abandoned

@@ -442,7 +442,7 @@ func verifySpanStatsRequest(
 ) error {
 
 	// If the cluster's active version is less than 23.1 return a mixed version error.
-	if !version.IsActive(ctx, clusterversion.V23_1) {
+	if !version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 		return errors.New(MixedVersionErr)
 	}
 

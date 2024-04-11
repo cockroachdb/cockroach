@@ -148,7 +148,7 @@ func storageParamPreChecks(
 
 	for _, key := range keys {
 		if key == `schema_locked` {
-			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1) {
+			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 				return pgerror.Newf(pgcode.FeatureNotSupported, "cannot set/reset "+
 					"storage parameter %q until the cluster version is at least 23.1", key)
 			}

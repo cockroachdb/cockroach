@@ -1433,7 +1433,7 @@ func mergeTrigger(
 	if merge.RightRangeIDLocalMVCCStats != (enginepb.MVCCStats{}) {
 		ms.Subtract(merge.RightRangeIDLocalMVCCStats)
 	} else {
-		_ = clusterversion.V23_1 // remove this branch when 23.1 support is removed
+		_ = clusterversion.TODODelete_V23_1 // remove this branch when 23.1 support is removed
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
 		sysMS, err := storage.ComputeStats(
 			ctx, batch, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)

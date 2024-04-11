@@ -75,7 +75,7 @@ var initialValuesFactoryByKey = map[clusterversion.Key]initialValuesFactoryFn{
 		nonSystem:     v23_2_tenant_keys,
 		nonSystemHash: v23_2_tenant_sha256,
 	}.build,
-	clusterversion.V23_1: hardCodedInitialValues{
+	clusterversion.TODODelete_V23_1: hardCodedInitialValues{
 		system:        v23_1_system_keys,
 		systemHash:    v23_1_system_sha256,
 		nonSystem:     v23_1_tenant_keys,
