@@ -64,9 +64,8 @@ func newKVNative(b *testing.B) kvInterface {
 	}
 }
 
-func newKVNativeAndEngine(tb testing.TB, valueBlocks bool) (*kvNative, storage.Engine) {
+func newKVNativeAndEngine(tb testing.TB) (*kvNative, storage.Engine) {
 	st := cluster.MakeTestingClusterSettings()
-	storage.ValueBlocksEnabled.Override(context.Background(), &st.SV, valueBlocks)
 	s, _, db := serverutils.StartServer(tb, base.TestServerArgs{Settings: st})
 	engines := s.Engines()
 	if len(engines) != 1 {
@@ -493,35 +492,31 @@ func BenchmarkKVAndStorageMultipleVersions(b *testing.B) {
 					continue
 				}
 				b.Run(fmt.Sprintf("last-is-tombstone=%t", lastVersionIsTombstone), func(b *testing.B) {
-					for _, valueBlocks := range []bool{false, true} {
-						b.Run(fmt.Sprintf("value-blocks=%t", valueBlocks), func(b *testing.B) {
-							kv, eng := newKVNativeAndEngine(b, valueBlocks)
-							defer kv.done()
-							if err := kv.prepWithAdditionalLength(numRows, additionalLen); err != nil {
-								b.Fatal(err)
-							}
-							for i := 1; i < numVersions-1; i++ {
-								require.NoError(b, kv.Update(numRows, 0))
-							}
-							expectedRows := numRows
-							if numVersions > 1 {
-								if lastVersionIsTombstone {
-									require.NoError(b, kv.Delete(numRows, 0))
-									expectedRows = 0
-								} else {
-									require.NoError(b, kv.Update(numRows, 0))
-								}
-							}
-							require.NoError(b, eng.Flush())
-							b.ResetTimer()
-							for i := 0; i < b.N; i++ {
-								if err := kv.scanWithRowCountExpectation(numRows, expectedRows); err != nil {
-									b.Fatal(err)
-								}
-							}
-							b.StopTimer()
-						})
+					kv, eng := newKVNativeAndEngine(b)
+					defer kv.done()
+					if err := kv.prepWithAdditionalLength(numRows, additionalLen); err != nil {
+						b.Fatal(err)
 					}
+					for i := 1; i < numVersions-1; i++ {
+						require.NoError(b, kv.Update(numRows, 0))
+					}
+					expectedRows := numRows
+					if numVersions > 1 {
+						if lastVersionIsTombstone {
+							require.NoError(b, kv.Delete(numRows, 0))
+							expectedRows = 0
+						} else {
+							require.NoError(b, kv.Update(numRows, 0))
+						}
+					}
+					require.NoError(b, eng.Flush())
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						if err := kv.scanWithRowCountExpectation(numRows, expectedRows); err != nil {
+							b.Fatal(err)
+						}
+					}
+					b.StopTimer()
 				})
 			}
 		})
