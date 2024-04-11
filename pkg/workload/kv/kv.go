@@ -449,10 +449,6 @@ func (w *kv) Tables() []workload.Table {
 func (w *kv) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	_, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	cfg := workload.NewMultiConnPoolCfgFromFlags(w.connFlags)
 	cfg.MaxTotalConnections = w.connFlags.Concurrency + 1
 	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)

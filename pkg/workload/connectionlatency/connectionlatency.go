@@ -66,11 +66,6 @@ func (c *connectionLatency) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
 	ql := workload.QueryLoad{}
-	_, err := workload.SanitizeUrls(c, c.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
-
 	for _, url := range urls {
 		op := &connectionOp{
 			url:   url,

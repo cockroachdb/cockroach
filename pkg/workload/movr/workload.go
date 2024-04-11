@@ -303,10 +303,6 @@ func (m *movr) Ops(
 	m.fakerOnce.Do(func() {
 		m.faker = faker.NewFaker()
 	})
-	_, err := workload.SanitizeUrls(m, m.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	ql := workload.QueryLoad{}
 	db, err := workload.NewRoundRobinDB(urls)
 	if err != nil {
