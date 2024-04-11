@@ -123,6 +123,14 @@ var (
             by the operation. Note that this time does not count towards the timeout.`,
 	})
 
+	SkipDependencyCheck bool = false
+	_                        = registerRunOpsFlag(&SkipDependencyCheck, FlagInfo{
+		Name: "skip-dependency-check",
+		Usage: `Skips the pre-operation dependency check and runs the operation regardless of
+		whether its dependencies are met or not. Note that running operations with this flag could
+		lead to cluster unavailability or operation failures.`,
+	})
+
 	CockroachEAPath string
 	_               = registerRunFlag(&CockroachEAPath, FlagInfo{
 		Name: "cockroach-ea",
