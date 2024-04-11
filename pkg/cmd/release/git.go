@@ -58,7 +58,7 @@ func findNextRelease(releaseSeries string) (releaseInfo, error) {
 	if err != nil {
 		return releaseInfo{}, fmt.Errorf("cannot bump version: %w", err)
 	}
-	candidateCommits, err := findCandidateCommits(prevReleaseVersion, releaseSeries)
+	candidateCommits, err := findCandidateCommits(prevReleaseVersion, nextReleaseVersion)
 	if err != nil {
 		return releaseInfo{}, fmt.Errorf("cannot find candidate commits: %w", err)
 	}
@@ -219,10 +219,44 @@ func getCommonBaseRef(fromRef, toRef string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// findReleaseBranch finds the release branch for a version based on a list of branch patterns.
+func findReleaseBranch(version string) (string, error) {
+	semVersion, err := parseVersion(version)
+	if err != nil {
+		return "", fmt.Errorf("cannot parse version %s: %w", version, err)
+	}
+	// List of potential release branches by their priority. The first found will be used as the release branch.
+	maybeReleaseBranches := []string{
+		// staging-vx.y.z is usually used by extraordinary releases. Top priority.
+		fmt.Sprintf("staging-v%d.%d.%d", semVersion.Major(), semVersion.Minor(), semVersion.Patch()),
+		// release-x.y.z-rc us used by baking releases.
+		fmt.Sprintf("release-%d.%d.%d-rc", semVersion.Major(), semVersion.Minor(), semVersion.Patch()),
+		fmt.Sprintf("release-%d.%d", semVersion.Major(), semVersion.Minor()),
+		// TODO: add master for alphas
+	}
+	for _, branch := range maybeReleaseBranches {
+		remoteBranches, err := listRemoteBranches(branch)
+		if err != nil {
+			return "", fmt.Errorf("listing release branch %s: %w", branch, err)
+		}
+		if len(remoteBranches) > 1 {
+			return "", fmt.Errorf("found more than one release branches for %s: %s", branch, strings.Join(remoteBranches, ", "))
+		}
+		if len(remoteBranches) > 0 {
+			return remoteBranches[0], nil
+		}
+	}
+	return "", fmt.Errorf("cannot find release branch for %s", version)
+}
+
 // findCandidateCommits finds all potential merge commits that can be used for the current release.
 // It includes all merge commits since previous release.
-func findCandidateCommits(prevRelease string, releaseSeries string) ([]string, error) {
-	releaseBranch := fmt.Sprintf("%s/release-%s", remoteOrigin, releaseSeries)
+func findCandidateCommits(prevRelease string, version string) ([]string, error) {
+	releaseBranch, err := findReleaseBranch(version)
+	if err != nil {
+		return []string{}, fmt.Errorf("cannot find release branch for %s", version)
+	}
+	releaseBranch = fmt.Sprintf("%s/%s", remoteOrigin, releaseBranch)
 	commonBaseRef, err := getCommonBaseRef(prevRelease, releaseBranch)
 	if err != nil {
 		return []string{}, fmt.Errorf("cannot find common base ref: %w", err)
@@ -276,7 +310,6 @@ func listRemoteBranches(pattern string) ([]string, error) {
 		remoteBranches = append(remoteBranches, strings.TrimPrefix(fields[1], "refs/heads/"))
 	}
 	return remoteBranches, nil
-
 }
 
 // fileExistsInGit checks if a file exists in a local repository, assuming the remote name is `origin`.
