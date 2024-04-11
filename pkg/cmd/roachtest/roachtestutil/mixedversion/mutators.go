@@ -55,7 +55,8 @@ func (m preserveDowngradeOptionRandomizerMutator) Probability() float64 {
 // `preserve_downgrade_option` cluster setting, and reinserts it back
 // in some other point in the test, before all nodes are upgraded. Not
 // every upgrade in the test plan is affected, but the upgrade to the
-// current version is always mutated.
+// current version is always mutated. The length of the returned
+// mutations is always even.
 func (m preserveDowngradeOptionRandomizerMutator) Generate(
 	rng *rand.Rand, plan *TestPlan,
 ) []mutation {
