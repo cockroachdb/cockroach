@@ -44,7 +44,6 @@ type tpcc struct {
 	nowString        []byte
 	numConns         int
 	idleConns        int
-	isoLevel         string
 	txnRetries       bool
 
 	// Used in non-uniform random data generation. cLoad is the value of C at load
@@ -171,7 +170,6 @@ var tpccMeta = workload.Meta{
 			`workers`:                  {RuntimeOnly: true},
 			`conns`:                    {RuntimeOnly: true},
 			`idle-conns`:               {RuntimeOnly: true},
-			`isolation-level`:          {RuntimeOnly: true},
 			`txn-retries`:              {RuntimeOnly: true},
 			`expensive-checks`:         {RuntimeOnly: true, CheckConsistencyOnly: true},
 			`local-warehouses`:         {RuntimeOnly: true},
@@ -198,7 +196,6 @@ var tpccMeta = workload.Meta{
 			numConnsPerWarehouse,
 		))
 		g.flags.IntVar(&g.idleConns, `idle-conns`, 0, `Number of idle connections. Defaults to 0`)
-		g.flags.StringVar(&g.isoLevel, `isolation-level`, ``, `Isolation level to run workload transactions under [serializable, snapshot, read_committed]. If unset, the workload will run with the default isolation level of the database.`)
 		g.flags.BoolVar(&g.txnRetries, `txn-retries`, true, `Run transactions in a retry loop`)
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables`)
 		g.flags.IntVar(&g.clientPartitions, `client-partitions`, 0, `Make client behave as if the tables are partitioned, but does not actually partition underlying data. Requires --partition-affinity.`)
@@ -744,10 +741,6 @@ func (w *tpcc) Ops(
 	if w.reg == nil {
 		w.reg = reg
 		w.txCounters = setupTPCCMetrics(reg.Registerer())
-	}
-
-	if err := workload.SetDefaultIsolationLevel(urls, w.isoLevel); err != nil {
-		return workload.QueryLoad{}, err
 	}
 
 	// We can't use a single MultiConnPool because we want to implement partition
