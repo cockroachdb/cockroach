@@ -94,11 +94,15 @@ func TryFilterInvertedIndex(
 ) {
 	// Attempt to constrain the prefix columns, if there are any. If they cannot
 	// be constrained to single values, the index cannot be used.
-	constraint, filters, ok = constrainPrefixColumns(
-		evalCtx, factory, filters, optionalFilters, tabID, index, checkCancellation,
-	)
-	if !ok {
-		return nil, nil, nil, nil, false
+	columns, notNullCols := prefixCols(tabID, index)
+	if len(columns) > 0 {
+		constraint, filters, ok = constrainNonInvertedCols(
+			evalCtx, factory, columns, notNullCols, filters,
+			optionalFilters, tabID, index, checkCancellation,
+		)
+		if !ok {
+			return nil, nil, nil, nil, false
+		}
 	}
 
 	config := index.GeoConfig()
@@ -204,10 +208,8 @@ func TryFilterInvertedIndexBySimilarity(
 	checkCancellation func(),
 ) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	md := f.Metadata()
-	tabMeta := md.TableMeta(tabID)
 	columnCount := index.ExplicitColumnCount()
 	prefixColumnCount := index.NonInvertedPrefixColumnCount()
-	ps := tabMeta.IndexPartitionLocality(index.Ordinal())
 
 	// The indexed column must be of a string-like type.
 	srcColOrd := index.InvertedColumn().InvertedSourceColumnOrdinal()
@@ -293,47 +295,16 @@ func TryFilterInvertedIndexBySimilarity(
 
 	// If the index is a multi-column index, then we need to constrain the
 	// prefix columns.
-	//
-	// Consolidation of a constraint converts contiguous spans into a single
-	// span. By definition, the consolidated span would have different start and
-	// end keys and could not be used for multi-column inverted index scans.
-	// Therefore, we only generate and check the unconsolidated constraint,
-	// allowing the optimizer to plan multi-column inverted index scans in more
-	// cases.
-	//
-	// For example, the consolidated constraint for (x IN (1, 2, 3)) is:
-	//
-	//   /x: [/1 - /3]
-	//   Prefix: 0
-	//
-	// The unconsolidated constraint for the same expression is:
-	//
-	//   /x: [/1 - /1] [/2 - /2] [/3 - /3]
-	//   Prefix: 1
-	//
 	var prefixConstraint *constraint.Constraint
-	var ic idxconstraint.Instance
-	ic.Init(
-		filters, optionalFilters,
-		cols, notNullCols, tabMeta.ComputedCols,
-		tabMeta.ColsInComputedColsExpressions,
-		false, /* consolidate */
-		evalCtx, f, ps, checkCancellation,
+	prefixConstraint, remainingFilters, ok = constrainNonInvertedCols(
+		evalCtx, f, cols, notNullCols, filters,
+		optionalFilters, tabID, index, checkCancellation,
 	)
-	prefixConstraint = ic.UnconsolidatedConstraint()
-	if prefixConstraint.Prefix(evalCtx) != prefixColumnCount {
-		// The prefix columns must be constrained to single values.
+	if !ok {
 		return nil, nil, false
 	}
-
-	// The constraint is a pointer to a field of ic. Make a copy of the
-	// constraint so that we no longer reference ic and it can be GC'd.
-	prefixConstraintCopy := *prefixConstraint
-
-	// Combine the prefix constraint and the inverted column constraint.
-	prefixConstraintCopy.Combine(evalCtx, con, checkCancellation)
-	remainingFilters = ic.RemainingFilters()
-	return &prefixConstraintCopy, remainingFilters, true
+	prefixConstraint.Combine(evalCtx, con, checkCancellation)
+	return prefixConstraint, remainingFilters, true
 }
 
 func extractConstStringDatum(expr opt.ScalarExpr) (string, bool) {
@@ -660,19 +631,45 @@ func evalInvertedExpr(
 	}
 }
 
-// constrainPrefixColumns attempts to build a constraint for the non-inverted
+// prefixCols returns a slice of ordering columns for each of the non-inverted
+// prefix of the index. It also returns a set of those columns that are NOT
+// NULL. If the index is a single-column inverted index, the function returns
+// nil ordering columns.
+func prefixCols(
+	tabID opt.TableID, index cat.Index,
+) (_ []opt.OrderingColumn, notNullCols opt.ColSet) {
+	prefixColumnCount := index.NonInvertedPrefixColumnCount()
+
+	// If this is a single-column inverted index, there are no prefix columns.
+	// constrain.
+	if prefixColumnCount == 0 {
+		return nil, opt.ColSet{}
+	}
+
+	prefixColumns := make([]opt.OrderingColumn, prefixColumnCount)
+	for i := range prefixColumns {
+		col := index.Column(i)
+		colID := tabID.ColumnID(col.Ordinal())
+		prefixColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+		if !col.IsNullable() {
+			notNullCols.Add(colID)
+		}
+	}
+	return prefixColumns, notNullCols
+}
+
+// constrainNonInvertedCols attempts to build a constraint for the non-inverted
 // prefix columns of the given index. If a constraint is successfully built, it
 // is returned along with remaining filters and ok=true. The function is only
 // successful if it can generate a constraint where all spans have the same
 // start and end keys for all non-inverted prefix columns. This is required for
 // building spans for scanning multi-column inverted indexes (see
 // span.Builder.SpansFromInvertedSpans).
-//
-// If the index is a single-column inverted index, there are no prefix columns
-// to constrain, and ok=true is returned.
-func constrainPrefixColumns(
+func constrainNonInvertedCols(
 	evalCtx *eval.Context,
 	factory *norm.Factory,
+	columns []opt.OrderingColumn,
+	notNullCols opt.ColSet,
 	filters memo.FiltersExpr,
 	optionalFilters memo.FiltersExpr,
 	tabID opt.TableID,
@@ -682,23 +679,6 @@ func constrainPrefixColumns(
 	tabMeta := factory.Metadata().TableMeta(tabID)
 	prefixColumnCount := index.NonInvertedPrefixColumnCount()
 	ps := tabMeta.IndexPartitionLocality(index.Ordinal())
-
-	// If this is a single-column inverted index, there are no prefix columns to
-	// constrain.
-	if prefixColumnCount == 0 {
-		return nil, filters, true
-	}
-
-	prefixColumns := make([]opt.OrderingColumn, prefixColumnCount)
-	var notNullCols opt.ColSet
-	for i := range prefixColumns {
-		col := index.Column(i)
-		colID := tabID.ColumnID(col.Ordinal())
-		prefixColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
-		if !col.IsNullable() {
-			notNullCols.Add(colID)
-		}
-	}
 
 	// Consolidation of a constraint converts contiguous spans into a single
 	// span. By definition, the consolidated span would have different start and
@@ -720,15 +700,14 @@ func constrainPrefixColumns(
 	var ic idxconstraint.Instance
 	ic.Init(
 		filters, optionalFilters,
-		prefixColumns, notNullCols, tabMeta.ComputedCols,
+		columns, notNullCols, tabMeta.ComputedCols,
 		tabMeta.ColsInComputedColsExpressions,
 		false, /* consolidate */
 		evalCtx, factory, ps, checkCancellation,
 	)
 	constraint = ic.UnconsolidatedConstraint()
-	if constraint.Prefix(evalCtx) < prefixColumnCount {
-		// If all of the constraint spans do not have the same start and end keys
-		// for all columns, the index cannot be used.
+	if constraint.Prefix(evalCtx) != prefixColumnCount {
+		// The prefix columns must be constrained to single values.
 		return nil, nil, false
 	}
 
