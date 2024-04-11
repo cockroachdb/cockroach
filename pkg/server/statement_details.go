@@ -67,10 +67,6 @@ func getStatementDetails(
 	}
 
 	// Used for mixed cluster version, where we need to use the persisted view with _v22_2.
-	tableSuffix := ""
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddSQLStatsComputedIndexes) {
-		tableSuffix = "_v22_2"
-	}
 	// Check if the activity tables have data within the selected period.
 	activityHasData := false
 	reqStartTime := getTimeFromSeconds(req.Start)
@@ -89,7 +85,9 @@ func getStatementDetails(
 		}
 	}
 
-	statementTotal, err := getTotalStatementDetails(ctx, ie, whereClause, args, activityHasData, tableSuffix)
+	useBuiltinsWithArrayAgg := settings.Version.IsActive(ctx, clusterversion.V23_2)
+
+	statementTotal, err := getTotalStatementDetails(ctx, ie, whereClause, args, activityHasData, useBuiltinsWithArrayAgg)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -100,7 +98,7 @@ func getStatementDetails(
 		args,
 		limit,
 		activityHasData,
-		tableSuffix)
+		useBuiltinsWithArrayAgg)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -111,7 +109,7 @@ func getStatementDetails(
 		args,
 		limit,
 		activityHasData,
-		tableSuffix)
+		useBuiltinsWithArrayAgg)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -216,14 +214,19 @@ func getTotalStatementDetails(
 	whereClause string,
 	args []interface{},
 	activityTableHasAllData bool,
-	tableSuffix string,
+	useBuiltinsWithArrayAgg bool,
 ) (serverpb.StatementDetailsResponse_CollectedStatementSummary, error) {
 	const expectedNumDatums = 4
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
-	const queryFormat = `
+
+	statsColumn := `merge_statement_stats(statistics)`
+	if useBuiltinsWithArrayAgg {
+		statsColumn = `crdb_internal.merge_statement_stats(array_agg(statistics))`
+	}
+	queryFormat := `
 SELECT merge_stats_metadata(metadata)    AS metadata,
-       array_agg(app_name)               AS app_names,
-       merge_statement_stats(statistics) AS statistics,
+       array_agg(app_name)               AS app_names,` +
+		statsColumn + `AS statistics,
        encode(fingerprint_id, 'hex')     AS fingerprint_id
 FROM %s %s
 GROUP BY
@@ -254,7 +257,7 @@ LIMIT 1`, whereClause), args...)
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
 				queryFormat,
-				CrdbInternalStmtStatsPersisted+tableSuffix,
+				CrdbInternalStmtStatsPersisted,
 				whereClause), args...)
 		if err != nil {
 			return statement, srverrors.ServerError(ctx, err)
@@ -322,7 +325,7 @@ func getStatementDetailsPerAggregatedTs(
 	args []interface{},
 	limit int64,
 	activityTableHasAllData bool,
-	tableSuffix string,
+	useBuiltinsWithArrayAgg bool,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByAggregatedTs, error) {
 	const expectedNumDatums = 3
 	const queryFormat = `
@@ -368,7 +371,7 @@ LIMIT $%d`, whereClause, len(args)),
 		}
 		query = fmt.Sprintf(
 			queryFormat,
-			CrdbInternalStmtStatsPersisted+tableSuffix,
+			CrdbInternalStmtStatsPersisted,
 			whereClause,
 			len(args))
 
@@ -510,14 +513,19 @@ func getStatementDetailsPerPlanHash(
 	args []interface{},
 	limit int64,
 	activityTableHasAllData bool,
-	tableSuffix string,
+	useBuiltinsWithArrayAgg bool,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash, error) {
 	expectedNumDatums := 5
-	const queryFormat = `
+	metadataStatisticsColumns := `
+crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
+crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+`
+	if useBuiltinsWithArrayAgg {
+	}
+	queryFormat := `
 SELECT plan_hash,
-       (statistics -> 'statistics' -> 'planGists' ->> 0)   AS plan_gist,
-       merge_stats_metadata(metadata)                      AS metadata,
-       merge_statement_stats(statistics)                   AS statistics,
+       (statistics -> 'statistics' -> 'planGists' ->> 0)   AS plan_gist,` +
+		metadataStatisticsColumns + `
        index_recommendations
 FROM %s %s
 GROUP BY
@@ -566,7 +574,7 @@ LIMIT $%d`, whereClause, len(args)), args...)
 		}
 		query = fmt.Sprintf(
 			queryFormat,
-			"crdb_internal.statement_statistics_persisted"+tableSuffix,
+			"crdb_internal.statement_statistics_persisted",
 			whereClause,
 			len(args))
 		it, iterErr = ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-details-by-plan-hash", nil,

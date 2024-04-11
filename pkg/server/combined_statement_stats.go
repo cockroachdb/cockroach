@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"strings"
 	"time"
 
@@ -104,6 +105,9 @@ type statementStatsRunner struct {
 	txnSourceTable  string
 	ie              *sql.InternalExecutor
 	testingKnobs    *sqlstats.TestingKnobs
+
+	// If we're on 23.2 or later, we can use the latest aggregation functions for the metadata and statistics columns.
+	useLatestAggFns bool
 }
 
 func getCombinedStatementStats(
@@ -157,6 +161,7 @@ func getCombinedStatementStats(
 		txnSourceTable:  txnSourceTable,
 		ie:              ie,
 		testingKnobs:    testingKnobs,
+		useLatestAggFns: settings.Version.IsActive(ctx, clusterversion.V23_2),
 	}
 
 	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
@@ -188,7 +193,6 @@ func getCombinedStatementStats(
 			whereClause,
 			args,
 			orderAndLimit,
-			settings,
 		)
 	}
 
@@ -666,11 +670,19 @@ func (r *statementStatsRunner) collectCombinedStatements(
 	whereClause string,
 	args []interface{},
 	orderAndLimit string,
-	settings *cluster.Settings,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 	aostClause := r.testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 10
-	const queryFormat = `
+	metadataStatisticsColumns := `
+             merge_stats_metadata(metadata)               AS metadata,
+             merge_statement_stats(statistics)            AS statistics`
+	if !r.useLatestAggFns {
+		metadataStatisticsColumns = `
+						 crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata)) AS metadata,
+						 crdb_internal.merge_statement_stats(array_agg(statistics))        AS statistics`
+	}
+
+	queryFormat := `
 SELECT 
     fingerprint_id,
     app_name,
@@ -685,9 +697,8 @@ SELECT
     statistics
 FROM (SELECT fingerprint_id,
              app_name,
-             max(aggregated_ts)                           AS aggregated_ts,
-             merge_stats_metadata(metadata)               AS metadata,
-             merge_statement_stats(statistics)            AS statistics
+             max(aggregated_ts)                           AS aggregated_ts,` +
+		metadataStatisticsColumns + `
       FROM %s %s
       GROUP BY
           fingerprint_id,
@@ -711,7 +722,7 @@ FROM (SELECT fingerprint_id,
              app_name,
              max(aggregated_ts)                                                 AS aggregated_ts,
              crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata))  AS metadata,
-             merge_statement_stats(statistics)                                  AS statistics
+             crdb_internal.merge_statement_stats(array_agg(statistics))        AS statistics
       FROM %s %s
       GROUP BY
           fingerprint_id,
@@ -855,13 +866,19 @@ func (r *statementStatsRunner) collectCombinedTransactions(
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
 	aostClause := r.testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 5
-	const queryFormat = `
+	statisticsColumn := `
+             merge_transaction_stats(statistics)  AS statistics`
+	if !r.useLatestAggFns {
+		statisticsColumn = `
+             crdb_internal.merge_transaction_stats(array_agg(statistics))  AS statistics`
+	}
+	queryFormat := `
 SELECT *
 FROM (SELECT app_name,
              max(aggregated_ts)                   AS aggregated_ts,
              fingerprint_id,
-             max(metadata),
-             merge_transaction_stats(statistics)  AS statistics
+             max(metadata),` +
+		statisticsColumn + `
       FROM %s %s
       GROUP BY
           app_name,
@@ -951,11 +968,19 @@ func (r *statementStatsRunner) collectStmtsForTxns(
 
 	whereClause, args := buildWhereClauseForStmtsByTxn(req, transactions, r.testingKnobs)
 
-	const queryFormat = `
+	metadataStatisticsColumns := `
+             merge_stats_metadata(metadata)               AS metadata,
+             merge_statement_stats(statistics)            AS statistics,`
+	if !r.useLatestAggFns {
+		metadataStatisticsColumns = `
+						 crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata)) AS metadata,
+						 crdb_internal.merge_statement_stats(array_agg(statistics))        AS statistics,`
+	}
+
+	queryFormat := `
 SELECT fingerprint_id,
-       transaction_fingerprint_id,
-       merge_stats_metadata(metadata)    AS metadata,
-       merge_statement_stats(statistics) AS statistics,
+       transaction_fingerprint_id,` +
+		metadataStatisticsColumns + `
        app_name
 FROM %s %s
 GROUP BY
