@@ -666,12 +666,12 @@ database_name  schema_name          routine_id  routine_signature               
 test           sc_test_show_grants  100116      p_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
 test           sc_test_show_grants  100117      p_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
-query TTTTTB colnames
-SELECT * FROM [SHOW GRANTS FOR u_test_show_grants] ORDER BY relation_name
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS FOR u_test_show_grants] ORDER BY object_name
 ----
-database_name  schema_name          relation_name                        grantee             privilege_type  is_grantable
-test           sc_test_show_grants  p_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
-test           sc_test_show_grants  p_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+database_name  schema_name          object_name                          object_type  grantee             privilege_type  is_grantable
+test           sc_test_show_grants  p_test_show_grants(int8)             routine      u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  p_test_show_grants(int8, text, oid)  routine      u_test_show_grants  EXECUTE         false
 
 statement ok
 SET search_path = public;
