@@ -1937,12 +1937,12 @@ database_name  schema_name          function_id  function_signature             
 test           sc_test_show_grants  100205       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
 test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
-query TTTTTB colnames
+query TTTTTTB colnames
 SHOW GRANTS FOR u_test_show_grants;
 ----
-database_name  schema_name          relation_name                        grantee             privilege_type  is_grantable
-test           sc_test_show_grants  f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
-test           sc_test_show_grants  f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+database_name  schema_name          object_name                          object_type  grantee             privilege_type  is_grantable
+test           sc_test_show_grants  f_test_show_grants(int8)             routine      u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  f_test_show_grants(int8, text, oid)  routine      u_test_show_grants  EXECUTE         false
 
 statement ok
 SET search_path = public;
