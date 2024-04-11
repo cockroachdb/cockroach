@@ -205,7 +205,6 @@ func TestValidate(t *testing.T) {
 	makeAddSSTable := func(seq kvnemesisutil.Seq, kvs []sstKV) Operation {
 		f := &storage.MemObject{}
 		st := cluster.MakeTestingClusterSettings()
-		storage.ValueBlocksEnabled.Override(ctx, &st.SV, true)
 		w := storage.MakeIngestionSSTWriter(ctx, st, f)
 		defer w.Close()
 
