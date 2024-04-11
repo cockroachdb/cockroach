@@ -704,7 +704,7 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 	}
 }
 
-func testDecodeTenantPrefixShared(t *testing.T) {
+func TestDecodeTenantPrefix(t *testing.T) {
 	tIDs := []roachpb.TenantID{
 		roachpb.SystemTenantID,
 		roachpb.MustMakeTenantID(2),
@@ -737,16 +737,8 @@ func testDecodeTenantPrefixShared(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
-}
 
-func TestDecodeTenantPrefix(t *testing.T) {
-	testDecodeTenantPrefixShared(t)
-}
-
-func TestDecodeTenantPrefixE(t *testing.T) {
-	testDecodeTenantPrefixShared(t)
-
-	_, _, err := DecodeTenantPrefixE([]byte("\xfe\x88\x28\xa0\x9b"))
+	_, _, err := DecodeTenantPrefix([]byte("\xfe\x88\x28\xa0\x9b"))
 	require.Error(t, err, roachpb.ErrInvalidTenantID)
 }
 
