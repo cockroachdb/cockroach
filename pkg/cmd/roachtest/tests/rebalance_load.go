@@ -95,7 +95,15 @@ func registerRebalanceLoad(r registry.Registry) {
 
 		if mixedVersion {
 			mvt := mixedversion.NewTest(ctx, t, t.L(), c, roachNodes, mixedversion.NeverUseFixtures,
-				mixedversion.ClusterSettingOption(install.ClusterSettingsOption(settings.ClusterSettings)),
+				mixedversion.ClusterSettingOption(
+					install.ClusterSettingsOption(settings.ClusterSettings),
+					// In 23.1, the `user_id` field was added to `system.web_sessions`.
+					// If the cluster is migrating to 23.1, auth-session login will not
+					// be aware of this new field and authentication will fail.
+					// TODO(DarrylWong): When 22.2 is no longer supported, we won't run
+					// into the above issue anymore and can enable secure clusters.
+					install.SecureOption(false),
+				),
 			)
 			mvt.InMixedVersion("rebalance load run",
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
