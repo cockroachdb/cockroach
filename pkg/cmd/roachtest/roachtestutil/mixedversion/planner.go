@@ -421,7 +421,9 @@ func (p *testPlanner) changeVersionSteps(
 	var steps []testStep
 	for j, node := range previousVersionNodes {
 		steps = append(steps, p.newSingleStep(
-			restartWithNewBinaryStep{version: to, node: node, rt: p.rt, settings: p.clusterSettings()},
+			restartWithNewBinaryStep{
+				version: to, node: node, rt: p.rt,
+			},
 		))
 		err := p.currentContext.System.changeVersion(node, to)
 		handleInternalError(err)
@@ -492,10 +494,13 @@ func (p *testPlanner) newSingleStep(impl singleStepProtocol) *singleStep {
 	return newSingleStep(p.currentContext, impl, p.newRNG())
 }
 
-func (p *testPlanner) clusterSettings() []install.ClusterSettingOption {
+func (p *testPlanner) clusterSettings(
+	extraSettings ...install.ClusterSettingOption,
+) []install.ClusterSettingOption {
 	cs := []install.ClusterSettingOption{}
 	cs = append(cs, defaultClusterSettings...)
 	cs = append(cs, p.options.settings...)
+	cs = append(cs, extraSettings...)
 	return cs
 }
 
