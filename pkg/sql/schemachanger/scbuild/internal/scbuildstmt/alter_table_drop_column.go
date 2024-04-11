@@ -276,7 +276,7 @@ func dropColumn(
 		case *scpb.UniqueWithoutIndexConstraint:
 			// Until the appropriate version gate is hit, we still do not allow
 			// dropping unique without index constraints.
-			if !b.ClusterSettings().Version.IsActive(b, clusterversion.V23_1) {
+			if !b.ClusterSettings().Version.IsActive(b, clusterversion.TODODelete_V23_1) {
 				panic(scerrors.NotImplementedErrorf(nil, "dropping without"+
 					"index constraints is not allowed."))
 			}
@@ -290,7 +290,7 @@ func dropColumn(
 		case *scpb.UniqueWithoutIndexConstraintUnvalidated:
 			// Until the appropriate version gate is hit, we still do not allow
 			// dropping unique without index constraints.
-			if !b.ClusterSettings().Version.IsActive(b, clusterversion.V23_1) {
+			if !b.ClusterSettings().Version.IsActive(b, clusterversion.TODODelete_V23_1) {
 				panic(scerrors.NotImplementedErrorf(nil, "dropping without"+
 					"index constraints is not allowed."))
 			}

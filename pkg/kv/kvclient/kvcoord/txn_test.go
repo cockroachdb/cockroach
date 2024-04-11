@@ -1177,7 +1177,7 @@ func TestTxnErrorWaitPolicyWithOldVersionPushTouch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	cv := (clusterversion.V23_2_RemoveLockTableWaiterTouchPush - 1).Version()
+	cv := (clusterversion.TODODelete_V23_2_RemoveLockTableWaiterTouchPush - 1).Version()
 	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
 		InitialReplicaVersionOverride: &cv,
 	})
