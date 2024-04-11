@@ -118,6 +118,9 @@ func (*bulkingest) Meta() workload.Meta { return bulkingestMeta }
 // Flags implements the Flagser interface.
 func (w *bulkingest) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *bulkingest) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Hooks implements the Hookser interface.
 func (w *bulkingest) Hooks() workload.Hooks {
 	return workload.Hooks{}

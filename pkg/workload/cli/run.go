@@ -194,11 +194,9 @@ func CmdHelper(
 			}
 		}
 
-		// HACK: Steal the dbOverride out of flags. This should go away
-		// once more of run.go moves inside workload.
 		var dbOverride string
-		if dbFlag := cmd.Flag(`db`); dbFlag != nil {
-			dbOverride = dbFlag.Value.String()
+		if cf, ok := gen.(workload.ConnFlagser); ok {
+			dbOverride = cf.ConnFlags().DBOverride
 		}
 
 		urls := args

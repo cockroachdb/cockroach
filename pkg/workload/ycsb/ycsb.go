@@ -164,6 +164,9 @@ func (*ycsb) Meta() workload.Meta { return ycsbMeta }
 // Flags implements the Flagser interface.
 func (g *ycsb) Flags() workload.Flags { return g.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (g *ycsb) ConnFlags() *workload.ConnFlags { return g.connFlags }
+
 // Hooks implements the Hookser interface.
 func (g *ycsb) Hooks() workload.Hooks {
 	return workload.Hooks{

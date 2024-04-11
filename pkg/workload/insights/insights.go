@@ -126,6 +126,9 @@ func (*insights) Meta() workload.Meta { return insightsMeta }
 // Flags implements the Flagser interface.
 func (b *insights) Flags() workload.Flags { return b.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (b *insights) ConnFlags() *workload.ConnFlags { return b.connFlags }
+
 // Hooks implements the Hookser interface.
 func (b *insights) Hooks() workload.Hooks {
 	return workload.Hooks{

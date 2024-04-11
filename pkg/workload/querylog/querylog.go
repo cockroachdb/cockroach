@@ -134,6 +134,9 @@ func (*querylog) Meta() workload.Meta { return querylogMeta }
 // Flags implements the Flagser interface.
 func (w *querylog) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *querylog) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Tables implements the Generator interface.
 func (*querylog) Tables() []workload.Table {
 	// Assume the necessary tables are already present.

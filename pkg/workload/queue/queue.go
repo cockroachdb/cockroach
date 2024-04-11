@@ -59,6 +59,9 @@ func (*queue) Meta() workload.Meta { return queueMeta }
 // Flags implements the Flagser interface.
 func (w *queue) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *queue) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Tables implements the Generator interface.
 func (w *queue) Tables() []workload.Table {
 	table := workload.Table{

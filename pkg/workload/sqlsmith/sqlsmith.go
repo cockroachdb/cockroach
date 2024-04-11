@@ -71,6 +71,10 @@ func (*sqlSmith) Meta() workload.Meta { return sqlSmithMeta }
 // Flags implements the Flagser interface.
 func (g *sqlSmith) Flags() workload.Flags { return g.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (g *sqlSmith) ConnFlags() *workload.ConnFlags { return g.connFlags }
+
+// Hooks implements the Hookser interface.
 func (g *sqlSmith) Hooks() workload.Hooks {
 	return workload.Hooks{}
 }

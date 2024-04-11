@@ -82,6 +82,9 @@ func (*ledger) Meta() workload.Meta { return ledgerMeta }
 // Flags implements the Flagser interface.
 func (w *ledger) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *ledger) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Hooks implements the Hookser interface.
 func (w *ledger) Hooks() workload.Hooks {
 	return workload.Hooks{

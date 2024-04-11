@@ -73,13 +73,14 @@ var sqlStatsMeta = workload.Meta{
 	},
 }
 
-func (s *sqlStats) Meta() workload.Meta {
-	return sqlStatsMeta
-}
+// Meta implements the Generator interface.
+func (s *sqlStats) Meta() workload.Meta { return sqlStatsMeta }
 
-func (s *sqlStats) Flags() workload.Flags {
-	return s.flags
-}
+// Flags implements the Flagser interface.
+func (s *sqlStats) Flags() workload.Flags { return s.flags }
+
+// ConnFlags implements the ConnFlagser interface.
+func (s *sqlStats) ConnFlags() *workload.ConnFlags { return s.connFlags }
 
 func (s *sqlStats) Tables() []workload.Table {
 	return []workload.Table{{

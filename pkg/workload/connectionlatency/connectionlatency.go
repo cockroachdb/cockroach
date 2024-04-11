@@ -53,6 +53,9 @@ func (connectionLatency) Meta() workload.Meta { return connectionLatencyMeta }
 // Flags implements the Flagser interface.
 func (c *connectionLatency) Flags() workload.Flags { return c.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (c *connectionLatency) ConnFlags() *workload.ConnFlags { return c.connFlags }
+
 // Tables implements the Generator interface.
 func (connectionLatency) Tables() []workload.Table {
 	return nil

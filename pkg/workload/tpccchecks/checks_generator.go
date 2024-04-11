@@ -68,9 +68,13 @@ foreground TPC-C workload`,
 	},
 }
 
+// Flags implements the Flagser interface.
 func (w *tpccChecks) Flags() workload.Flags {
 	return w.flags
 }
+
+// ConnFlags implements the ConnFlagser interface.
+func (w *tpccChecks) ConnFlags() *workload.ConnFlags { return w.connFlags }
 
 func init() {
 	workload.Register(tpccChecksMeta)

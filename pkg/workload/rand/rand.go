@@ -87,6 +87,9 @@ func (w *random) Meta() workload.Meta {
 // Flags implements the Flagser interface.
 func (w *random) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *random) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Hooks implements the Hookser interface.
 func (w *random) Hooks() workload.Hooks {
 	return workload.Hooks{}
