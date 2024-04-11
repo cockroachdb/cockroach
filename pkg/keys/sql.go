@@ -59,28 +59,6 @@ func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
 	return rem, id, nil
 }
 
-// DecodeTenantPrefixE determines the tenant ID from the key prefix, returning
-// the remainder of the key (with the prefix removed) and the decoded tenant ID.
-// Unlike DecodeTenantPrefix, it returns an error rather than panicking if the
-// tenant ID is invalid.
-func DecodeTenantPrefixE(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
-	if len(key) == 0 { // key.Equal(roachpb.RKeyMin)
-		return nil, roachpb.SystemTenantID, nil
-	}
-	if key[0] != tenantPrefixByte {
-		return key, roachpb.SystemTenantID, nil
-	}
-	rem, tenID, err := encoding.DecodeUvarintAscending(key[1:])
-	if err != nil {
-		return nil, roachpb.TenantID{}, err
-	}
-	id, err := roachpb.MakeTenantID(tenID)
-	if err != nil {
-		return rem, roachpb.TenantID{}, err
-	}
-	return rem, id, nil
-}
-
 // StripTenantPrefix removes the tenant prefix from the provided key. This
 // function should be used instead of sqlDecoder.StripTenantPrefix, if the user
 // cannot instantiate a codec that operates on a single tenant.
