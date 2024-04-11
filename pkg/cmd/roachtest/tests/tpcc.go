@@ -111,6 +111,9 @@ type tpccOptions struct {
 	// these isolation levels and we are bootstrapping the cluster in an
 	// older version, where they are not supported.
 	DisableIsolationLevels bool
+	// If set, the enable_durable_locking_for_serializable session variable
+	// is configured to default to true.
+	EnableDurableLockingForSerializable bool
 }
 
 type workloadInstance struct {
@@ -211,6 +214,12 @@ func setupTPCC(
 		default:
 			t.Fatal("unknown tpcc setup type")
 		}
+
+		if opts.EnableDurableLockingForSerializable {
+			_, err := db.ExecContext(ctx, `ALTER DATABASE tpcc SET enable_durable_locking_for_serializable = true;`)
+			require.NoError(t, err)
+		}
+
 		l.Printf("finished tpc-c setup")
 	}()
 	return crdbNodes, workloadNode
@@ -637,11 +646,22 @@ func registerTPCC(r registry.Registry) {
 				// see a transaction retry error, we can debug it. This may affect perf,
 				// so we should not use this as a performance test.
 				ExtraStartArgs: []string{"--vmodule=cmd_push_txn=2,queue=2,transaction=2"},
+				// Enable durable locking for serializable transactions. This
+				// ensures that we do not run into issues with best-effort locks
+				// acquired by SELECT FOR UPDATE being lost and creating lock
+				// order inversions which lead to transaction deadlocks.
+				EnableDurableLockingForSerializable: true,
 				WorkloadInstances: func() (ret []workloadInstance) {
 					isoLevels := []string{"read_uncommitted", "read_committed", "repeatable_read", "snapshot", "serializable"}
 					for i, isoLevel := range isoLevels {
 						args := "--isolation-level=" + isoLevel
-						if i <= 1 { // read_uncommitted and read_committed
+						switch isoLevel {
+						case "read_uncommitted", "read_committed":
+							// Disable retries for read uncommitted and read committed. These
+							// isolation levels are weak enough that we don't expect 40001
+							// "serialization_failure" errors which would necessitate a
+							// transaction retry loop. If we do see a 40001 error when running
+							// at one of these isolation levels, fail the test.
 							args += " --txn-retries=false"
 						}
 						ret = append(ret, workloadInstance{
