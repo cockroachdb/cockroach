@@ -35,6 +35,20 @@ us-east-1
 us-east-1
 us-east-1
 
+exec-sql
+USE defaultdb
+----
+
+exec-sql
+INSERT INTO d.t VALUES (5);
+----
+pq: default_to_database_primary_region(): current database defaultdb is not multi-region enabled
+
+query-sql
+SELECT count(*) FROM d.t;
+----
+3
+
 # backup db, table, and cluster with regional by row table
 exec-sql
 BACKUP DATABASE d INTO 'nodelocal://1/rbr_database_backup/';
@@ -79,6 +93,14 @@ exec-sql
 INSERT INTO d.t VALUES (4)
 ----
 pq: default_to_database_primary_region(): current database defaultdb is not multi-region enabled
+
+exec-sql
+USE d;
+----
+
+exec-sql
+INSERT INTO d.t VALUES (4)
+----
 
 exec-sql
 CREATE DATABASE d3;
