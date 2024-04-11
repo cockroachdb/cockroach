@@ -3939,7 +3939,8 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	array_to_string(proargnames, ',') AS args
 FROM
 	functions
-	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000);`)
+	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000)
+	WHERE COALESCE((descriptor->'state')::STRING, 'PUBLIC') = 'PUBLIC'::STRING;`)
 	enums, err := Collect(ctx, og, tx, pgx.RowToMap, enumQuery)
 	if err != nil {
 		return nil, err
@@ -4269,7 +4270,10 @@ func (og *operationGenerator) alterFunctionSetSchema(
 		{"descriptors", descJSONQuery},
 		{"functions", functionDescsQuery},
 	}, `SELECT
-			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')'
+				quote_ident(schema_id::REGNAMESPACE::TEXT) AS schema,
+				quote_ident(name) AS name,
+				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')' AS qualified_name,
+				(id + 100000) as func_oid
 			FROM functions
 			JOIN LATERAL (
 				SELECT
@@ -4279,16 +4283,40 @@ func (og *operationGenerator) alterFunctionSetSchema(
 					SELECT unnest(proargtypes) AS oid FROM pg_catalog.pg_proc WHERE oid = (id + 100000)
 				) args ON args.oid = pg_type.oid
 			) funcargs ON TRUE
-			`,
-	)
+	`)
 
 	schemasQuery := With([]CTE{
 		{"descriptors", descJSONQuery},
 	}, `SELECT quote_ident(name) FROM descriptors WHERE descriptor ? 'schema'`)
 
-	functions, err := Collect(ctx, og, tx, pgx.RowTo[string], functionsQuery)
+	functions, err := Collect(ctx, og, tx, pgx.RowToMap, functionsQuery)
 	if err != nil {
 		return nil, err
+	}
+
+	functionDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"function_deps", functionDepsQuery},
+		},
+			`SELECT DISTINCT to_oid::INT8 FROM function_deps;`,
+		))
+	if err != nil {
+		return nil, err
+	}
+
+	functionDepsMap := make(map[int64]struct{})
+	for _, f := range functionDeps {
+		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+
+	functionWithDeps := make([]map[string]any, 0, len(functions))
+	functionWithoutDeps := make([]map[string]any, 0, len(functions))
+	for _, f := range functions {
+		if _, ok := functionDepsMap[f["func_oid"].(int64)]; ok {
+			functionWithDeps = append(functionWithDeps, f)
+		} else {
+			functionWithoutDeps = append(functionWithoutDeps, f)
+		}
 	}
 
 	schemas, err := Collect(ctx, og, tx, pgx.RowTo[string], schemasQuery)
@@ -4298,12 +4326,17 @@ func (og *operationGenerator) alterFunctionSetSchema(
 
 	stmt, expectedCode, err := Generate[*tree.AlterRoutineSetSchema](og.params.rng, og.produceError(), []GenerationCase{
 		{pgcode.UndefinedFunction, `ALTER FUNCTION "NoSuchFunction" SET SCHEMA "IrrelevantSchema"`},
-		{pgcode.InvalidSchemaName, `ALTER FUNCTION { Function } SET SCHEMA "NoSuchSchema"`},
+		{pgcode.InvalidSchemaName, `ALTER FUNCTION { (FunctionWithDeps).qualified_name  } SET SCHEMA "NoSuchSchema"`},
+		{pgcode.InvalidSchemaName, `ALTER FUNCTION { (FunctionWithoutDeps).qualified_name  } SET SCHEMA "NoSuchSchema"`},
 		// NB: It's considered valid to set a function's schema to the schema it already exists within.
-		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { Function } SET SCHEMA { Schema }`},
+		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { (FunctionWithoutDeps).qualified_name  } SET SCHEMA { Schema }`},
+		{pgcode.FeatureNotSupported, `ALTER FUNCTION { (FunctionWithDeps).qualified_name  } SET SCHEMA { Schema }`},
 	}, template.FuncMap{
-		"Function": func() (string, error) {
-			return PickOne(og.params.rng, functions)
+		"FunctionWithDeps": func() (map[string]any, error) {
+			return PickOne(og.params.rng, functionWithDeps)
+		},
+		"FunctionWithoutDeps": func() (map[string]any, error) {
+			return PickOne(og.params.rng, functionWithoutDeps)
 		},
 		"Schema": func() (string, error) {
 			return PickOne(og.params.rng, schemas)
