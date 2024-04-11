@@ -94,20 +94,6 @@ func TestMonitorTracer(t *testing.T) {
 				tracer.RecordEvent(event)
 			}
 			return ""
-		case "find":
-			var timeString string
-			td.ScanArgs(t, "time", &timeString)
-			lowerBoundTime, err := time.Parse(time.RFC3339, timeString)
-			require.NoError(t, err)
-
-			event, err := tracer.Find(lowerBoundTime)
-			buf.Reset()
-			if err != nil {
-				fmt.Fprint(&buf, err.Error())
-			} else {
-				fmt.Fprintf(&buf, "%q", event)
-			}
-			return buf.String()
 		case "latest":
 			event, err := tracer.Latest()
 			buf.Reset()
@@ -120,6 +106,18 @@ func TestMonitorTracer(t *testing.T) {
 		case "trace":
 			buf.Reset()
 			fmt.Fprint(&buf, tracer)
+			return buf.String()
+		case "rolling-window":
+			var timeString string
+			td.ScanArgs(t, "time", &timeString)
+			lowerBoundTime, err := time.Parse(time.RFC3339, timeString)
+			require.NoError(t, err)
+
+			events := tracer.RollingWindow(lowerBoundTime)
+			buf.Reset()
+			for _, event := range events {
+				fmt.Fprintf(&buf, "%q\n", event)
+			}
 			return buf.String()
 		default:
 			panic(fmt.Sprintf("unrecognized command %q", td.Cmd))

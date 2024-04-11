@@ -14,21 +14,14 @@
 package status
 
 import (
-	"context"
-
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 )
 
 // GetMonitorCounters returns DiskStats for all monitored disks.
-// TODO(cheranm): Filter disk counters by the monitored disk path for Darwin builds.
-func GetMonitorCounters(monitors map[string]disk.Monitor) (map[string]DiskStats, error) {
-	diskCounters, err := GetDiskCounters(context.Background())
-	if err != nil {
-		return map[string]DiskStats{}, err
-	}
-	output := make(map[string]DiskStats, len(diskCounters))
-	for _, stats := range diskCounters {
-		output[stats.Name] = stats
-	}
-	return output, nil
+// TODO(cheranm): Retrieve disk counters and filter by the monitored disk path for Darwin builds.
+func GetMonitorCounters(
+	monitors map[roachpb.StoreID]disk.Monitor,
+) (map[roachpb.StoreID]DiskStats, error) {
+	return map[roachpb.StoreID]DiskStats{}, nil
 }
