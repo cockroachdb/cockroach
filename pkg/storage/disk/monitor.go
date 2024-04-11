@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-var defaultDiskStatsPollingInterval = envutil.EnvOrDefaultDuration("COCKROACH_DISK_STATS_POLLING_INTERVAL", 100*time.Millisecond)
+var DefaultDiskStatsPollingInterval = envutil.EnvOrDefaultDuration("COCKROACH_DISK_STATS_POLLING_INTERVAL", 100*time.Millisecond)
 var defaultDiskTracePeriod = envutil.EnvOrDefaultDuration("COCKROACH_DISK_TRACE_PERIOD", 30*time.Second)
 
 // DeviceID uniquely identifies block devices.
@@ -82,7 +82,7 @@ func (m *MonitorManager) Monitor(path string) (*Monitor, error) {
 	if disk == nil {
 		disk = &monitoredDisk{
 			manager:  m,
-			tracer:   newMonitorTracer(int(defaultDiskTracePeriod / defaultDiskStatsPollingInterval)),
+			tracer:   newMonitorTracer(int(defaultDiskTracePeriod / DefaultDiskStatsPollingInterval)),
 			deviceID: dev,
 		}
 		m.mu.disks = append(m.mu.disks, disk)
@@ -143,7 +143,7 @@ type statsCollector interface {
 // race where the MonitorManager creates a new stop channel after unrefDisk sends a message
 // across the old stop channel.
 func (m *MonitorManager) monitorDisks(collector statsCollector, stop chan struct{}) {
-	ticker := time.NewTicker(defaultDiskStatsPollingInterval)
+	ticker := time.NewTicker(DefaultDiskStatsPollingInterval)
 	defer ticker.Stop()
 
 	for {
@@ -190,16 +190,44 @@ func (m *monitoredDisk) recordStats(t time.Time, stats Stats) {
 	})
 }
 
-// Monitor provides statistics for an individual disk.
-type Monitor struct {
-	*monitoredDisk
+// StatsWindow is a wrapper around a rolling window of disk stats, used to
+// apply common rudimentary computations or custom aggregation functions.
+type StatsWindow struct {
+	Stats []Stats
 }
 
-func (m *Monitor) Close() {
-	if m.monitoredDisk != nil {
-		m.manager.unrefDisk(m.monitoredDisk)
-		m.monitoredDisk = nil
+// Max returns the maximum change in stats for each field across the StatsWindow.
+func (s StatsWindow) Max() Stats {
+	var maxStats Stats
+	if len(s.Stats) > 0 {
+		// Since we compute diffs starting from index 1, the IOPS in progress count
+		// at index 0 would be lost.
+		maxStats = Stats{InProgressCount: s.Stats[0].InProgressCount}
 	}
+	var deltaStats Stats
+	for i := 1; i < len(s.Stats); i++ {
+		deltaStats = s.Stats[i].delta(&s.Stats[i-1])
+		maxStats = deltaStats.max(&maxStats)
+	}
+	return maxStats
+}
+
+// Latest returns the last stat collected in the StatsWindow.
+func (s StatsWindow) Latest() Stats {
+	n := len(s.Stats)
+	if n == 0 {
+		return Stats{}
+	}
+	return s.Stats[n-1]
+}
+
+// Monitor provides statistics for an individual disk. Note that an individual
+// monitor is not thread-safe.
+type Monitor struct {
+	*monitoredDisk
+
+	// Tracks the time of the last invocation of IncrementalStats.
+	lastIncrementedAt time.Time
 }
 
 // CumulativeStats returns the most-recent stats observed.
@@ -213,25 +241,34 @@ func (m *Monitor) CumulativeStats() (Stats, error) {
 	}
 }
 
-// IncrementalStats computes the change in stats over a period, delta.
-func (m *Monitor) IncrementalStats(delta time.Duration) (Stats, error) {
-	event, err := m.tracer.Latest()
-	if err != nil {
-		return Stats{}, err
+// IncrementalStats returns all stats observed since it's previous invocation.
+// Note that the tracer has a bounded capacity and the caller must invoke this
+// method at least as frequently as once every 30s to avoid missing events.
+func (m *Monitor) IncrementalStats() StatsWindow {
+	if m.lastIncrementedAt.IsZero() {
+		m.lastIncrementedAt = timeutil.Now()
+		return StatsWindow{}
 	}
-	if event.err != nil {
-		return Stats{}, event.err
+
+	events := m.tracer.RollingWindow(m.lastIncrementedAt)
+	m.lastIncrementedAt = timeutil.Now()
+	var stats []Stats
+	for _, event := range events {
+		// Ignore events where we were unable to collect disk stats.
+		if event.err == nil {
+			stats = append(stats, event.stats)
+		}
 	}
-	prevEvent, err := m.tracer.Find(timeutil.Now().Add(-delta))
-	if err != nil {
-		return Stats{}, err
-	}
-	if prevEvent.err != nil {
-		return Stats{}, prevEvent.err
-	}
-	return event.stats.delta(&prevEvent.stats), nil
+	return StatsWindow{stats}
 }
 
 func (m *Monitor) LogTrace() string {
 	return m.tracer.String()
+}
+
+func (m *Monitor) Close() {
+	if m.monitoredDisk != nil {
+		m.manager.unrefDisk(m.monitoredDisk)
+		m.monitoredDisk = nil
+	}
 }

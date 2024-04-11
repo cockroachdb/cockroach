@@ -70,7 +70,7 @@ func TestLinux_CollectDiskStats(t *testing.T) {
 				return err.Error()
 			}
 			for i := range disks {
-				monitor := Monitor{disks[i]}
+				monitor := Monitor{monitoredDisk: disks[i]}
 				stats, err := monitor.CumulativeStats()
 				require.NoError(t, err)
 
