@@ -35,9 +35,7 @@ foreground TPC-C workload`,
 		g := &tpccChecks{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:          {RuntimeOnly: true},
-			`concurrency`: {RuntimeOnly: true},
-			`as-of`:       {RuntimeOnly: true},
+			`as-of`: {RuntimeOnly: true},
 		}
 		g.flags.IntVar(&g.concurrency, `concurrency`, 1,
 			`Number of concurrent workers. Defaults to 1.`,
@@ -100,7 +98,7 @@ func (*tpccChecks) Meta() workload.Meta {
 func (w *tpccChecks) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(w, w.flags.Lookup("db").Value.String(), urls)
+	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, errors.Wrapf(err, "could not sanitize urls %v", urls)
 	}

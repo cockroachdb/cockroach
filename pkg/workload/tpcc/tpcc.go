@@ -60,7 +60,6 @@ type tpcc struct {
 	// deprecatedFKIndexes adds in foreign key indexes that are no longer needed
 	// due to origin index restrictions being lifted.
 	deprecatedFkIndexes bool
-	dbOverride          string
 
 	txInfos []txInfo
 	// deck contains indexes into the txInfos slice.
@@ -191,8 +190,6 @@ var tpccMeta = workload.Meta{
 			`Weights for the transaction mix. The default matches the TPCC spec.`)
 		g.waitFraction = 1.0
 		g.flags.Var(&waitSetter{&g.waitFraction}, `wait`, `Wait mode (include think/keying sleeps): 1/true for tpcc-standard wait, 0/false for no waits, other factors also allowed`)
-		g.flags.StringVar(&g.dbOverride, `db`, ``,
-			`Override for the SQL database to use. If empty, defaults to the generator name`)
 		g.flags.IntVar(&g.workers, `workers`, 0, fmt.Sprintf(
 			`Number of concurrent workers. Defaults to --warehouses * %d`, NumWorkersPerWarehouse,
 		))
@@ -746,7 +743,7 @@ func (w *tpcc) Ops(
 		w.txCounters = setupTPCCMetrics(reg.Registerer())
 	}
 
-	sqlDatabase, err := workload.SanitizeUrls(w, w.dbOverride, urls)
+	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}

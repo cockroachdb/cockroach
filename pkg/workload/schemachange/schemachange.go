@@ -82,7 +82,6 @@ type schemaChangeCounter struct {
 type schemaChange struct {
 	flags                           workload.Flags
 	connFlags                       *workload.ConnFlags
-	dbOverride                      string
 	maxOpsPerWorker                 int
 	errorRate                       int
 	enumPct                         int
@@ -112,8 +111,6 @@ var schemaChangeMeta = workload.Meta{
 	New: func() workload.Generator {
 		s := &schemaChange{}
 		s.flags.FlagSet = pflag.NewFlagSet(`schemachange`, pflag.ContinueOnError)
-		s.flags.StringVar(&s.dbOverride, `db`, ``,
-			`Override for the SQL database to use. If empty, defaults to the generator name`)
 		s.flags.IntVar(&s.maxOpsPerWorker, `max-ops-per-worker`, defaultMaxOpsPerWorker,
 			`Number of operations to execute in a single transaction`)
 		s.flags.IntVar(&s.errorRate, `error-rate`, defaultErrorRate,
@@ -215,7 +212,7 @@ func (s *schemaChange) Ops(
 	ctx, span := tracer.Start(ctx, "schemaChange.Ops")
 	defer func() { EndSpan(span, err) }()
 
-	sqlDatabase, err := workload.SanitizeUrls(s, s.dbOverride, urls)
+	sqlDatabase, err := workload.SanitizeUrls(s, s.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
