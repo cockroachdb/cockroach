@@ -1881,3 +1881,17 @@ statement error SUBJECT role option is only supported after v24.1 upgrade is fin
 ALTER ROLE testuser SUBJECT 'foo'
 
 subtest end
+
+statement ok
+create user roach;
+create type mood as enum ('sad','happy');
+grant usage on type mood to roach;
+create sequence test_sequence;
+grant usage on sequence test_sequence to roach;
+
+query TTTTTTB colnames,rowsort
+select * from [show grants for roach]
+----
+database_name  schema_name  object_type  object_name    grantee  privilege_type  is_grantable
+test           public       sequence     test_sequence  roach    USAGE           false
+test           public       type         mood           roach    USAGE           false
