@@ -1802,7 +1802,7 @@ func createRequests(index int, numOutstanding int, numKeys int, numReadKeys int)
 			lockSpans.Add(lock.None, span)
 		} else {
 			latchSpans.AddMVCC(spanset.SpanReadWrite, span, ts)
-			lockSpans.Add(lock.Intent, span)
+			lockSpans.Add(lock.Exclusive, span)
 			wi.locksToAcquire = append(wi.locksToAcquire, key)
 		}
 	}
