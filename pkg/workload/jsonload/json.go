@@ -93,6 +93,9 @@ func (*jsonLoad) Meta() workload.Meta { return jsonLoadMeta }
 // Flags implements the Flagser interface.
 func (w *jsonLoad) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *jsonLoad) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Hooks implements the Hookser interface.
 func (w *jsonLoad) Hooks() workload.Hooks {
 	return workload.Hooks{

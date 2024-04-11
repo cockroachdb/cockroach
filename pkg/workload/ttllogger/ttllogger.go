@@ -182,6 +182,8 @@ func (l ttlLogger) Tables() []workload.Table {
 	}
 }
 
-func (l ttlLogger) Flags() workload.Flags {
-	return l.flags
-}
+// Flags implements the Flagser interface.
+func (l ttlLogger) Flags() workload.Flags { return l.flags }
+
+// ConnFlags implements the ConnFlagser interface.
+func (l ttlLogger) ConnFlags() *workload.ConnFlags { return l.connFlags }

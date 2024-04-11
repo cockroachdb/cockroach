@@ -83,6 +83,12 @@ type Flagser interface {
 	Flags() Flags
 }
 
+// ConnFlagser returns the connection flags this Generator is configured with.
+type ConnFlagser interface {
+	Generator
+	ConnFlags() *ConnFlags
+}
+
 // Opser returns the work functions for this generator. The tables are required
 // to have been created and initialized before running these.
 type Opser interface {

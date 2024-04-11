@@ -170,19 +170,16 @@ func setupSchemaChangePromCounter(reg prometheus.Registerer) schemaChangeCounter
 }
 
 // Meta implements the workload.Generator interface.
-func (s *schemaChange) Meta() workload.Meta {
-	return schemaChangeMeta
-}
+func (s *schemaChange) Meta() workload.Meta { return schemaChangeMeta }
 
 // Flags implements the workload.Flagser interface.
-func (s *schemaChange) Flags() workload.Flags {
-	return s.flags
-}
+func (s *schemaChange) Flags() workload.Flags { return s.flags }
+
+// ConnFlags implements the ConnFlagser interface.
+func (s *schemaChange) ConnFlags() *workload.ConnFlags { return s.connFlags }
 
 // Tables implements the workload.Generator interface.
-func (s *schemaChange) Tables() []workload.Table {
-	return nil
-}
+func (s *schemaChange) Tables() []workload.Table { return nil }
 
 // Ops implements the workload.Opser interface.
 func (s *schemaChange) Ops(

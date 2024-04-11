@@ -111,6 +111,9 @@ func (m *roachmart) Meta() workload.Meta { return roachmartMeta }
 // Flags implements the Flagser interface.
 func (m *roachmart) Flags() workload.Flags { return m.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (m *roachmart) ConnFlags() *workload.ConnFlags { return m.connFlags }
+
 // Hooks implements the Hookser interface.
 func (m *roachmart) Hooks() workload.Hooks {
 	return workload.Hooks{

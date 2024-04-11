@@ -79,6 +79,9 @@ func (*tpcds) Meta() workload.Meta { return tpcdsMeta }
 // Flags implements the Flagser interface.
 func (w *tpcds) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *tpcds) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Hooks implements the Hookser interface.
 func (w *tpcds) Hooks() workload.Hooks {
 	return workload.Hooks{

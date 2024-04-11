@@ -196,6 +196,9 @@ func (*kv) Meta() workload.Meta { return kvMeta }
 // Flags implements the Flagser interface.
 func (w *kv) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *kv) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Hooks implements the Hookser interface.
 func (w *kv) Hooks() workload.Hooks {
 	return workload.Hooks{

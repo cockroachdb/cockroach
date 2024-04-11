@@ -89,6 +89,9 @@ func (*indexes) Meta() workload.Meta { return indexesMeta }
 // Flags implements the Flagser interface.
 func (w *indexes) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *indexes) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Hooks implements the Hookser interface.
 func (w *indexes) Hooks() workload.Hooks {
 	return workload.Hooks{

@@ -124,6 +124,9 @@ func (*tpch) Meta() workload.Meta { return tpchMeta }
 // Flags implements the Flagser interface.
 func (w *tpch) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *tpch) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Hooks implements the Hookser interface.
 func (w *tpch) Hooks() workload.Hooks {
 	return workload.Hooks{

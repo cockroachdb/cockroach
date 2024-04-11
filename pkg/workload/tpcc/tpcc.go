@@ -257,6 +257,9 @@ func (*tpcc) Meta() workload.Meta { return tpccMeta }
 // Flags implements the Flagser interface.
 func (w *tpcc) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *tpcc) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Hooks implements the Hookser interface.
 func (w *tpcc) Hooks() workload.Hooks {
 	return workload.Hooks{
