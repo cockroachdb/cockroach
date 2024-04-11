@@ -135,7 +135,7 @@ func genPermutations() *gen {
 func (s *sqlStats) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(s, s.connFlags.DBOverride, urls)
+	_, err := workload.SanitizeUrls(s, s.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -150,7 +150,6 @@ func (s *sqlStats) Ops(
 	gen := genPermutations()
 
 	ql := workload.QueryLoad{
-		SQLDatabase: sqlDatabase,
 		Close: func(_ context.Context) error {
 			return db.Close()
 		},

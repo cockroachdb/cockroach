@@ -137,7 +137,7 @@ func (w *jsonLoad) Tables() []workload.Table {
 func (w *jsonLoad) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
+	_, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -191,7 +191,7 @@ func (w *jsonLoad) Ops(
 		return workload.QueryLoad{}, err
 	}
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := jsonOp{
 			config:    w,

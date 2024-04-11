@@ -176,7 +176,7 @@ func (w *querylog) Hooks() workload.Hooks {
 func (w *querylog) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
+	_, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -214,7 +214,7 @@ func (w *querylog) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	if w.querybenchPath != `` {
 		conn, err := pgx.ConnectConfig(ctx, connCfg)
 		if err != nil {

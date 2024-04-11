@@ -214,7 +214,7 @@ func (b *insights) Tables() []workload.Table {
 func (b *insights) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(b, b.connFlags.DBOverride, urls)
+	_, err := workload.SanitizeUrls(b, b.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -226,7 +226,7 @@ func (b *insights) Ops(
 	db.SetMaxOpenConns(b.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(b.connFlags.Concurrency + 1)
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 
 	// Most of the insight queries are slow by design. This prevents them from

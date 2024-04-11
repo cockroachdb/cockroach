@@ -746,7 +746,7 @@ func (w *tpcc) Ops(
 		w.txCounters = setupTPCCMetrics(reg.Registerer())
 	}
 
-	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
+	_, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -830,7 +830,7 @@ func (w *tpcc) Ops(
 		}
 	}
 	fmt.Printf("Initializing %d workers and preparing statements...\n", w.workers)
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	ql.WorkerFns = make([]func(context.Context) error, 0, w.workers)
 	var group errgroup.Group
 

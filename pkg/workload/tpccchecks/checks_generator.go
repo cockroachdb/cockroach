@@ -102,7 +102,7 @@ func (*tpccChecks) Meta() workload.Meta {
 func (w *tpccChecks) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
+	_, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, errors.Wrapf(err, "could not sanitize urls %v", urls)
 	}
@@ -117,7 +117,7 @@ func (w *tpccChecks) Ops(
 		dbs[i].SetMaxOpenConns(3 * w.concurrency)
 		dbs[i].SetMaxIdleConns(3 * w.concurrency)
 	}
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	ql.WorkerFns = make([]func(context.Context) error, w.concurrency)
 	checks, err := filterChecks(tpcc.AllChecks(), w.checks)
 	if err != nil {

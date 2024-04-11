@@ -86,7 +86,7 @@ var logChars = []rune("abdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ !.")
 func (l *ttlLogger) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(l, l.connFlags.DBOverride, urls)
+	_, err := workload.SanitizeUrls(l, l.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -118,7 +118,7 @@ func (l *ttlLogger) Ops(
 		return workload.QueryLoad{}, errors.Newf("concurrency must be divisible by 2")
 	}
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	for len(ql.WorkerFns) < l.connFlags.Concurrency {
 		rng := rand.New(rand.NewSource(l.seed + int64(len(ql.WorkerFns))))
 		hists := reg.GetHandle()
