@@ -12,18 +12,22 @@ package tests
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/montanaflynn/stats"
@@ -47,6 +51,7 @@ var queriesThroughputAgg = clusterstats.AggQuery{
 }
 
 func registerOnlineRestore(r registry.Registry) {
+	registerOnlineRestoreRestartTests(r)
 	// This driver creates a variety of roachtests to benchmark online restore
 	// performance with the prefix
 	// restore/{online,offline}/<workload/scale>). For each
@@ -145,28 +150,7 @@ func registerOnlineRestore(r registry.Registry) {
 								defer db.Close()
 
 								if useWorkarounds {
-									// TODO(dt): what's the right value for this? How do we tune this
-									// on the fly automatically during the restore instead of by-hand?
-									// Context: We expect many operations to take longer than usual
-									// when some or all of the data they touch is remote. For now this
-									// is being blanket set to 1h manually, and a user's run-book
-									// would need to do this by hand before an online restore and
-									// reset it manually after, but ideally the queues would be aware
-									// of remote-ness when they pick their own timeouts and pick
-									// accordingly.
-									if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
-										return err
-									}
-									// TODO(dt): AC appears periodically reduce the workload to 0 QPS
-									// during the download phase (sudden jumps from 0 to 2k qps to 0).
-									// Disable for now until we figure out how to smooth this out.
-									if _, err := db.Exec("SET CLUSTER SETTING admission.disk_bandwidth_tokens.elastic.enabled=false"); err != nil {
-										return err
-									}
-									if _, err := db.Exec("SET CLUSTER SETTING admission.kv.enabled=false"); err != nil {
-										return err
-									}
-									if _, err := db.Exec("SET CLUSTER SETTING admission.sql_kv_response.enabled=false"); err != nil {
+									if err := applyOnlineRestoreWorkaroundSettings(db); err != nil {
 										return err
 									}
 								}
@@ -240,6 +224,159 @@ func registerOnlineRestore(r registry.Registry) {
 			}
 		}
 	}
+}
+
+func applyOnlineRestoreWorkaroundSettings(db *sql.DB) error {
+	// TODO(dt): what's the right value for this? How do we tune this
+	// on the fly automatically during the restore instead of by-hand?
+	// Context: We expect many operations to take longer than usual
+	// when some or all of the data they touch is remote. For now this
+	// is being blanket set to 1h manually, and a user's run-book
+	// would need to do this by hand before an online restore and
+	// reset it manually after, but ideally the queues would be aware
+	// of remote-ness when they pick their own timeouts and pick
+	// accordingly.
+	if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
+		return err
+	}
+	// TODO(dt): AC appears periodically reduce the workload to 0 QPS
+	// during the download phase (sudden jumps from 0 to 2k qps to 0).
+	// Disable for now until we figure out how to smooth this out.
+	if _, err := db.Exec("SET CLUSTER SETTING admission.disk_bandwidth_tokens.elastic.enabled=false"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING admission.kv.enabled=false"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING admission.sql_kv_response.enabled=false"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func registerOnlineRestoreRestartTests(r registry.Registry) {
+	sp := restoreSpecs{
+		// TODO(ssd): We should use the 15GB fixture here to
+		// avoid using too large of a cluster for this restart
+		// tests but it would be good to generate prefix-free
+		// fixtures before doing so.
+		//
+		// 	// 15GB tpce Online Restore
+		// 	hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */, workloadNode: true}),
+		// 	backup: makeRestoringBackupSpecs(backupSpecs{
+		// 		nonRevisionHistory: true,
+		// 		version:            "v23.1.11",
+		// 		workload:           tpceRestore{customers: 1000}}),
+		// 	timeout:                30 * time.Minute,
+		// 	suites:                 registry.Suites(registry.Nightly),
+		// 	restoreUptoIncremental: 1,
+		// 	skip:                   "used for ad hoc testing. NB this backup contains prefixes",
+		//
+		// 400GB tpce Online Restore
+		namePrefix:             "online/restart",
+		hardware:               makeHardwareSpecs(hardwareSpecs{ebsThroughput: 1000 /* MB/s */, workloadNode: true}),
+		backup:                 makeRestoringBackupSpecs(backupSpecs{nonRevisionHistory: true, version: fixtureFromMasterVersion, numBackupsInChain: 5}),
+		timeout:                1 * time.Hour,
+		suites:                 registry.Suites(registry.Nightly),
+		restoreUptoIncremental: 1,
+	}
+
+	sp.initTestName()
+	r.Add(registry.TestSpec{
+		Name:      sp.testName,
+		Owner:     registry.OwnerDisasterRecovery,
+		Benchmark: true,
+		Cluster:   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+		Timeout:   sp.timeout,
+		// These tests measure performance. To ensure consistent perf,
+		// disable metamorphic encryption.
+		EncryptionSupport: registry.EncryptionAlwaysDisabled,
+		CompatibleClouds:  sp.backup.CompatibleClouds(),
+		Suites:            sp.suites,
+		// Takes 10 minutes on OR tests for some reason.
+		SkipPostValidations: registry.PostValidationReplicaDivergence,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			testStartTime := timeutil.Now()
+
+			rd := makeRestoreDriver(t, c, sp)
+			rd.prepareCluster(ctx)
+
+			m := c.NewMonitor(ctx, sp.hardware.getCRDBNodes())
+			m.Go(func(ctx context.Context) error {
+				db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
+				if err != nil {
+					return err
+				}
+				defer db.Close()
+				if err := applyOnlineRestoreWorkaroundSettings(db); err != nil {
+					return err
+				}
+				restoreCmd := rd.restoreCmd("DATABASE tpce", "WITH EXPERIMENTAL DEFERRED COPY")
+				if _, err = db.ExecContext(ctx, restoreCmd); err != nil {
+					return err
+				}
+				return nil
+			})
+			m.Wait()
+
+			// Pause download job
+			jobID, err := pauseLatestRestoreJob(ctx, c, t.L())
+			require.NoError(t, err)
+
+			// Restart a random node.
+			restartTarget := c.All().RandNode()
+			rng, _ := randutil.NewTestRand()
+			err = stopNodeMaybeGracefully(ctx, t, c, rng, restartTarget)
+			require.NoError(t, err, "stopping node")
+
+			err = c.StartE(ctx, t.L(),
+				option.NewStartOpts(option.NoBackupSchedule),
+				install.MakeClusterSettings(rd.defaultClusterSettings()...),
+				restartTarget)
+			require.NoError(t, err, "restarting node")
+
+			workloadCtx, workloadCancel := context.WithCancel(ctx)
+			mDownload := c.NewMonitor(workloadCtx, sp.hardware.getCRDBNodes())
+			mDownload.Go(func(ctx context.Context) error {
+				err := sp.backup.workload.run(ctx, t, c, sp.hardware)
+				// We expect the workload to return a context cancelled error because
+				// the roachtest driver cancels the monitor's context after the download job completes
+				if err != nil && ctx.Err() == nil {
+					// Implies the workload context was not cancelled and the workload cmd returned a
+					// different error.
+					return errors.Wrapf(err, `workload context was not cancelled. Error returned by workload cmd`)
+				}
+				rd.t.L().Printf("workload successfully finished")
+				return nil
+			})
+			var downloadEndTimeLowerBound time.Time
+			mDownload.Go(func(ctx context.Context) error {
+				defer workloadCancel()
+				var err error
+				downloadEndTimeLowerBound, err = waitForDownloadJob(ctx, c, t.L())
+				if err != nil {
+					return err
+				}
+				// Run the workload for at most 10 minutes.
+				testRuntime := timeutil.Since(testStartTime)
+				workloadDuration := sp.timeout - (testRuntime + time.Minute)
+				maxWorkloadDuration := time.Minute * 10
+				if workloadDuration > maxWorkloadDuration {
+					workloadDuration = maxWorkloadDuration
+				}
+				t.L().Printf("let workload run for another %.2f minutes", workloadDuration.Minutes())
+				time.Sleep(workloadDuration)
+				return nil
+			})
+
+			conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+			require.NoError(t, err)
+			_, err = conn.Exec("RESUME JOB $1", jobID)
+			require.NoError(t, err)
+			mDownload.Wait()
+			require.NoError(t, postRestoreValidation(ctx, c, t.L(), rd.sp.backup.workload.DatabaseName(), downloadEndTimeLowerBound))
+		},
+	})
 }
 
 func postRestoreValidation(
@@ -375,6 +512,48 @@ func exportStats(
 		return errors.Wrap(err, "failed to export stats")
 	}
 	return nil
+}
+
+func pauseLatestRestoreJob(ctx context.Context, c cluster.Cluster, l *logger.Logger) (int, error) {
+	l.Printf("pausing latest RESTORE job")
+	conn, err := c.ConnE(ctx, l, c.Node(1)[0])
+	if err != nil {
+		return 0, err
+	}
+
+	var jobID int
+	if err := conn.QueryRow("SELECT id FROM crdb_internal.system_jobs WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1").Scan(&jobID); err != nil {
+		return 0, err
+	}
+
+	if _, err := conn.Exec("PAUSE JOB $1", jobID); err != nil {
+		return jobID, err
+	}
+
+	if err := waitForJobStatus(ctx, conn, jobID, "paused"); err != nil {
+		return jobID, err
+	}
+
+	return jobID, nil
+}
+
+func waitForJobStatus(ctx context.Context, db *sql.DB, jobID int, status string) error {
+	jobPollTick := time.NewTicker(10 * time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-jobPollTick.C:
+			var status string
+			err := db.QueryRow("SELECT status FROM crdb_internal.system_jobs WHERE id = $1", jobID).Scan(&status)
+			if err != nil {
+				return err
+			}
+			if status == "paused" {
+				return nil
+			}
+		}
+	}
 }
 
 func waitForDownloadJob(

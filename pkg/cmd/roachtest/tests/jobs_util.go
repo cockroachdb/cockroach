@@ -143,17 +143,8 @@ func executeNodeShutdown(
 		rng, _ := randutil.NewTestRand()
 		cfg.rng = rng
 	}
-	shouldUseSigKill := cfg.rng.Float64() > 0.5
-	if shouldUseSigKill {
-		t.L().Printf(`stopping node (using SIGKILL) %s`, target)
-		if err := c.StopE(ctx, t.L(), option.DefaultStopOpts(), target); err != nil {
-			return errors.Wrapf(err, "could not stop node %s", target)
-		}
-	} else {
-		t.L().Printf(`stopping node gracefully %s`, target)
-		if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), cfg.shutdownNode); err != nil {
-			return errors.Wrapf(err, "could not stop node %s", target)
-		}
+	if err := stopNodeMaybeGracefully(ctx, t, c, cfg.rng, target); err != nil {
+		return err
 	}
 	t.L().Printf("stopped node %s", target)
 
@@ -168,6 +159,24 @@ func executeNodeShutdown(
 	if err := c.StartE(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule),
 		install.MakeClusterSettings(cfg.restartSettings...), target); err != nil {
 		return errors.Wrapf(err, "could not restart node %s", target)
+	}
+	return nil
+}
+
+func stopNodeMaybeGracefully(
+	ctx context.Context, t test.Test, c cluster.Cluster, rng *rand.Rand, target option.NodeListOption,
+) error {
+	shouldUseSigKill := rng.Float64() > 0.5
+	if shouldUseSigKill {
+		t.L().Printf(`stopping node (using SIGKILL) %s`, target)
+		if err := c.StopE(ctx, t.L(), option.DefaultStopOpts(), target); err != nil {
+			return errors.Wrapf(err, "could not stop node %s", target)
+		}
+	} else {
+		t.L().Printf(`stopping node gracefully %s`, target)
+		if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), target[0]); err != nil {
+			return errors.Wrapf(err, "could not stop node %s", target)
+		}
 	}
 	return nil
 }
