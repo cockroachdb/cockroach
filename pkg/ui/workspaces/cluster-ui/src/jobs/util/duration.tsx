@@ -38,12 +38,20 @@ export class Duration extends React.PureComponent<{
       const fractionCompleted = job.fraction_completed;
       if (!startedAt || !modifiedAt || fractionCompleted === 0) {
         return null;
+      } else if (fractionCompleted < 0.05) {
+        return <span className={className}>Initializing...</span>;
       }
       const duration = modifiedAt.diff(startedAt);
-      const remaining = duration / fractionCompleted - duration;
+      const remaining = moment.duration(
+        duration / fractionCompleted - duration,
+      );
       return (
         <span className={className}>
-          {formatDuration(moment.duration(remaining)) + " remaining"}
+          {`${
+            remaining >= moment.duration(1, "minutes")
+              ? formatDuration(remaining)
+              : "Less than a minute"
+          } remaining`}
         </span>
       );
     } else if (
