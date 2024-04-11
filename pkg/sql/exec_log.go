@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -143,7 +144,7 @@ func (p *planner) maybeLogStatement(
 	telemetryLoggingMetrics *telemetryLoggingMetrics,
 	stmtFingerprintID appstatspb.StmtFingerprintID,
 	queryStats *topLevelQueryStats,
-	statsCollector sqlstats.StatsCollector,
+	statsCollector *sslocal.StatsCollector,
 	shouldLogToTelemetry bool,
 ) {
 	p.maybeAuditRoleBasedAuditEvent(ctx, execType)
@@ -164,7 +165,7 @@ func (p *planner) maybeLogStatementInternal(
 	telemetryMetrics *telemetryLoggingMetrics,
 	stmtFingerprintID appstatspb.StmtFingerprintID,
 	topLevelQueryStats *topLevelQueryStats,
-	statsCollector sqlstats.StatsCollector,
+	statsCollector *sslocal.StatsCollector,
 	shouldLogToTelemetry bool,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,

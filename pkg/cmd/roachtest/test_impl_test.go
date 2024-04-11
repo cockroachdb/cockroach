@@ -44,14 +44,23 @@ func TestTeamCityEscape(t *testing.T) {
 	require.Equal(t, "bb|0x00bfaaa", TeamCityEscape("bb\u00bfaaa"))
 }
 
-func Test_failuresContainsError(t *testing.T) {
+type targetError struct {
+	err error
+}
+
+func (te targetError) Error() string {
+	return "TARGET_ERROR"
+}
+
+func Test_failuresMatchingError(t *testing.T) {
 	createFailure := func(ref error, squashedErr error) failure {
 		return failure{errors: []error{ref}, squashedErr: squashedErr}
 	}
 	type args struct {
 		failures []failure
-		refError error
+		refError targetError
 	}
+
 	tests := []struct {
 		name string
 		args args
@@ -61,7 +70,7 @@ func Test_failuresContainsError(t *testing.T) {
 			name: "empty failures",
 			args: args{
 				failures: []failure{},
-				refError: errors.New("testerror"),
+				refError: targetError{errors.New("testerror")},
 			},
 			want: false,
 		},
@@ -69,53 +78,53 @@ func Test_failuresContainsError(t *testing.T) {
 			name: "failures contains expected error",
 			args: args{
 				failures: []failure{
-					createFailure(errors.New("testerror"), nil),
+					createFailure(targetError{errors.New("testerror")}, nil),
 				},
-				refError: errors.New("testerror"),
+				refError: targetError{errors.New("testerror")},
 			},
 			want: true,
 		},
 		{
-			name: "non first failures contains expected error",
+			name: "non first failure contains expected error",
 			args: args{
 				failures: []failure{
 					createFailure(errors.New("unexpected-error"), nil),
-					createFailure(errors.New("expected-error"), nil),
+					createFailure(targetError{errors.New("expected-error")}, nil),
 				},
-				refError: errors.New("expected-error"),
+				refError: targetError{errors.New("some error")},
 			},
 			want: true,
 		},
 		{
-			name: "first failures contains expected error",
+			name: "first failure contains expected error",
 			args: args{
 				failures: []failure{
-					createFailure(errors.New("expected-error"), nil),
+					createFailure(targetError{errors.New("expected-error")}, nil),
 					createFailure(errors.New("unexpected-error"), nil),
 				},
-				refError: errors.New("expected-error"),
+				refError: targetError{errors.New("some error")},
 			},
 			want: true,
 		},
 		{
-			name: "first failures squashedErr contains expected error",
+			name: "first failure's squashedErr contains expected error",
 			args: args{
 				failures: []failure{
-					createFailure(nil, errors.New("expected-error")),
+					createFailure(nil, targetError{errors.New("expected-error")}),
 					createFailure(errors.New("unexpected-error"), nil),
 				},
-				refError: errors.New("expected-error"),
+				refError: targetError{errors.New("some error")},
 			},
 			want: true,
 		},
 		{
-			name: "non first failures squashedErr contains expected error",
+			name: "non first failure's squashedErr contains expected error",
 			args: args{
 				failures: []failure{
 					createFailure(errors.New("unexpected-error"), errors.New("unexpected-squashed-error")),
-					createFailure(nil, errors.New("expected-error")),
+					createFailure(nil, targetError{errors.New("expected-error")}),
 				},
-				refError: errors.New("expected-error"),
+				refError: targetError{errors.New("some error")},
 			},
 			want: true,
 		},
@@ -123,9 +132,9 @@ func Test_failuresContainsError(t *testing.T) {
 			name: "both errors and squashedErr contains expected error",
 			args: args{
 				failures: []failure{
-					createFailure(errors.New("expected-error"), errors.New("expected-error")),
+					createFailure(targetError{errors.New("expected-error")}, targetError{errors.New("expected-error")}),
 				},
-				refError: errors.New("expected-error"),
+				refError: targetError{errors.New("some error")},
 			},
 			want: true,
 		},
@@ -135,7 +144,7 @@ func Test_failuresContainsError(t *testing.T) {
 				failures: []failure{
 					createFailure(errors.New("unexpected-error"), errors.New("unexpected-error1")),
 				},
-				refError: errors.New("expected-error"),
+				refError: targetError{errors.New("some error")},
 			},
 			want: false,
 		},
@@ -146,14 +155,14 @@ func Test_failuresContainsError(t *testing.T) {
 					createFailure(errors.New("unexpected-error"), errors.New("unexpected-error1")),
 					createFailure(errors.New("unexpected-error2"), errors.New("unexpected-error3")),
 				},
-				refError: errors.New("expected-error"),
+				refError: targetError{errors.New("some error")},
 			},
 			want: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equalf(t, tt.want, failuresContainsError(tt.args.failures, tt.args.refError), "failuresContainsError(%v, %v)", tt.args.failures, tt.args.refError)
+			assert.Equalf(t, tt.want, failuresMatchingError(tt.args.failures, &tt.args.refError), "failureMatchingError(%v, %v)", tt.args.failures, tt.args.refError)
 		})
 	}
 }

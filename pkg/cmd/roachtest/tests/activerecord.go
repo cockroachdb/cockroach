@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/errors"
 )
 
 var activerecordResultRegex = regexp.MustCompile(`^(?P<test>[^\s]+#[^\s]+) = (?P<timing>\d+\.\d+ s) = (?P<result>.)$`)
@@ -184,9 +183,9 @@ func registerActiveRecord(r registry.Registry) {
 					`sudo RAILS_VERSION=%s RUBYOPT="-W0" TESTOPTS="-v" bundle exec rake test`, supportedRailsVersion),
 		)
 
-		// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
+		// Fatal for a roachprod or transient error. A roachprod error is when result.Err==nil.
 		// Proceed for any other (command) errors
-		if err != nil && (result.Err == nil || errors.Is(err, rperrors.ErrSSH255)) {
+		if err != nil && (result.Err == nil || rperrors.IsTransient(err)) {
 			t.Fatal(err)
 		}
 

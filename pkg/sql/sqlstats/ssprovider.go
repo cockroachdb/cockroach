@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -137,39 +136,6 @@ type TransactionVisitor func(context.Context, *appstatspb.CollectedTransactionSt
 // IterateAggregatedTransactionStats(). If an error is encountered when calling
 // the visitor, the iteration is aborted.
 type AggregatedTransactionVisitor func(appName string, statistics *appstatspb.TxnStats) error
-
-// StatsCollector is an interface that collects statistics for transactions and
-// statements for the entire lifetime of a session.
-type StatsCollector interface {
-	Writer
-
-	// PhaseTimes returns the sessionphase.Times that this StatsCollector is
-	// currently tracking.
-	PhaseTimes() *sessionphase.Times
-
-	// PreviousPhaseTimes returns the sessionphase.Times that this StatsCollector
-	// was previously tracking before being Reset.
-	PreviousPhaseTimes() *sessionphase.Times
-
-	// Reset resets the StatsCollector with a new ApplicationStats and a new copy
-	// of the sessionphase.Times.
-	Reset(ApplicationStats, *sessionphase.Times)
-
-	// StartTransaction sets up the StatsCollector for a new transaction.
-	StartTransaction()
-
-	// EndTransaction informs the StatsCollector that the current txn has
-	// finished execution. (Either COMMITTED or ABORTED). This means the txn's
-	// fingerprint ID is now available. StatsCollector will now go back to update
-	// the transaction fingerprint ID field of all the statement statistics for that
-	// txn.
-	EndTransaction(ctx context.Context, transactionFingerprintID appstatspb.TransactionFingerprintID)
-
-	// UpgradeImplicitTxn informs the StatsCollector that the current txn has been
-	// upgraded to an explicit transaction, thus all previously recorded statements
-	// should be updated accordingly.
-	UpgradeImplicitTxn(ctx context.Context) error
-}
 
 // Storage provides clients with interface to perform read and write operations
 // to sql statistics.

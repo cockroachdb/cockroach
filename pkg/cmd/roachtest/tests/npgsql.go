@@ -23,7 +23,6 @@ import (
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/errors"
 )
 
 var npgsqlReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -143,9 +142,9 @@ echo '%s' | git apply --ignore-whitespace -`, fmt.Sprintf(npgsqlPatch, result.St
 		rawResults := "stdout:\n" + result.Stdout + "\n\nstderr:\n" + result.Stderr
 		t.L().Printf("Test results for npgsql: %s", rawResults)
 
-		// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
+		// Fatal for a roachprod or transient error. A roachprod error is when result.Err==nil.
 		// Proceed for any other (command) errors
-		if err != nil && (result.Err == nil || errors.Is(err, rperrors.ErrSSH255)) {
+		if err != nil && (result.Err == nil || rperrors.IsTransient(err)) {
 			t.Fatal(err)
 		}
 
@@ -201,11 +200,11 @@ index ecfdd85f..17527129 100644
      public const string DefaultConnectionString =
 -        "Server=localhost;Username=npgsql_tests;Password=npgsql_tests;Database=npgsql_tests;Timeout=0;Command Timeout=0;SSL Mode=Disable";
 +        "Server=127.0.0.1;Username=npgsql_tests;Password=npgsql_tests;Database=npgsql_tests;Port=%s;Timeout=0;Command Timeout=0;SSL Mode=Prefer;Include Error Detail=true";
- 
+
      /// <summary>
      /// The connection string that will be used when opening the connection to the tests database.
 @@ -186,7 +186,6 @@ internal static async Task<string> CreateTempTable(NpgsqlConnection conn, string
- 
+
          await conn.ExecuteNonQueryAsync(@$"
  START TRANSACTION;
 -SELECT pg_advisory_xact_lock(0);

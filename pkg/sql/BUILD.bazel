@@ -872,6 +872,7 @@ go_test(
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/sql/sqlstats/sslocal",
         "//pkg/sql/sqltestutils",
         "//pkg/sql/stats",
         "//pkg/sql/stmtdiagnostics",

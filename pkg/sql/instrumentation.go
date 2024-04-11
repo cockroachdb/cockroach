@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -407,7 +408,7 @@ func (ih *instrumentationHelper) finalizeSetup(ctx context.Context, cfg *Executo
 func (ih *instrumentationHelper) Setup(
 	ctx context.Context,
 	cfg *ExecutorConfig,
-	statsCollector sqlstats.StatsCollector,
+	statsCollector *sslocal.StatsCollector,
 	p *planner,
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
 	fingerprint string,
@@ -561,7 +562,7 @@ func (ih *instrumentationHelper) setupWithPlanGist(
 
 func (ih *instrumentationHelper) Finish(
 	cfg *ExecutorConfig,
-	statsCollector sqlstats.StatsCollector,
+	statsCollector *sslocal.StatsCollector,
 	txnStats *execstats.QueryLevelStats,
 	collectExecStats bool,
 	p *planner,

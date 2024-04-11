@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/stretchr/testify/require"
 )
@@ -203,7 +202,7 @@ func TestCreatePostRequest(t *testing.T) {
 		// `clusterImpl` are not dereferenced
 		{
 			clusterCreationFailed: true,
-			failures:              []failure{createFailure(rperrors.ErrSSH255)},
+			failures:              []failure{createFailure(rperrors.NewSSHError(errors.New("oops")))},
 			expectedPost:          true,
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 			expectedTeam:          "@cockroachdb/test-eng",
@@ -227,7 +226,7 @@ func TestCreatePostRequest(t *testing.T) {
 		// 5. Error during dns operation.
 		{
 			nonReleaseBlocker:     true,
-			failures:              []failure{createFailure(gce.ErrDNSOperation)},
+			failures:              []failure{createFailure(rperrors.TransientFailure(errors.New("oops"), "dns_problem"))},
 			expectedPost:          true,
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 			expectedTeam:          "@cockroachdb/test-eng",
@@ -327,12 +326,25 @@ func TestCreatePostRequest(t *testing.T) {
 		{
 			nonReleaseBlocker: true,
 			failures: []failure{
-				createFailure(gce.ErrDNSOperation),
+				createFailure(rperrors.TransientFailure(errors.New("oops"), "dns_problem")),
 				createFailure(registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.New("oops"))),
 			},
 			expectedPost:          true,
 			expectedTeam:          "@cockroachdb/test-eng",
 			expectedName:          "dns_problem",
+			expectedMessagePrefix: testName + " failed",
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+		},
+		// 12. Arbitrary transient failures lead to an issue assigned to
+		// test eng with the corresponding title override.
+		{
+			nonReleaseBlocker: true,
+			failures: []failure{
+				createFailure(rperrors.TransientFailure(errors.New("oops"), "some_problem")),
+			},
+			expectedPost:          true,
+			expectedTeam:          "@cockroachdb/test-eng",
+			expectedName:          "some_problem",
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},

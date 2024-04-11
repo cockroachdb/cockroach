@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -147,9 +146,9 @@ PGSSLCERT=$HOME/certs/client.%[1]s.crt PGSSLKEY=$HOME/certs/client.%[1]s.key PGS
 			),
 		)
 
-		// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
+		// Fatal for a roachprod or transient error. A roachprod error is when result.Err==nil.
 		// Proceed for any other (command) errors
-		if err != nil && (result.Err == nil || errors.Is(err, rperrors.ErrSSH255)) {
+		if err != nil && (result.Err == nil || rperrors.IsTransient(err)) {
 			t.Fatal(err)
 		}
 
