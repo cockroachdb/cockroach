@@ -1,7 +1,7 @@
 name: GitHub Actions Essential CI
 on:
   pull_request:
-    types: [ opened, reopened, synchronize, edited ]
+    types: [ opened, reopened, synchronize ]
     branches:
       - 'master'
       - 'release-*'
