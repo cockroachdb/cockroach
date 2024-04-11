@@ -23,44 +23,39 @@ ok
 
 plan
 ----
-mixed-version test plan for upgrading from "v22.2.8" to "<current>":
-├── install fixtures for version "v22.2.8" (1)
-├── start cluster at version "v22.2.8" (2)
-├── wait for nodes :1-4 to reach cluster version '22.2' (3)
+mixed-version test plan for upgrading from "v22.2.14" to "<current>":
+├── start cluster at version "v22.2.14" (1)
+├── wait for nodes :1-4 to reach cluster version '22.2' (2)
 ├── run startup hooks concurrently
-│   ├── run "initialize bank workload", after 0s delay (4)
-│   └── run "initialize rand workload", after 3m0s delay (5)
+│   ├── run "initialize bank workload", after 0s delay (3)
+│   └── run "initialize rand workload", after 30s delay (4)
 ├── start background hooks concurrently
-│   ├── run "bank workload", after 500ms delay (6)
-│   ├── run "rand workload", after 0s delay (7)
-│   └── run "csv server", after 0s delay (8)
-└── upgrade cluster from "v22.2.8" to "<current>"
-   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (9)
-   ├── upgrade nodes :1-4 from "v22.2.8" to "<current>"
-   │   ├── restart node 2 with binary version <current> (10)
-   │   ├── run mixed-version hooks concurrently
-   │   │   ├── run "mixed-version 1", after 3m0s delay (11)
-   │   │   └── run "mixed-version 2", after 5s delay (12)
-   │   ├── restart node 4 with binary version <current> (13)
-   │   ├── restart node 1 with binary version <current> (14)
-   │   └── restart node 3 with binary version <current> (15)
-   ├── downgrade nodes :1-4 from "<current>" to "v22.2.8"
-   │   ├── restart node 1 with binary version v22.2.8 (16)
-   │   ├── restart node 3 with binary version v22.2.8 (17)
-   │   ├── restart node 4 with binary version v22.2.8 (18)
-   │   ├── run mixed-version hooks concurrently
-   │   │   ├── run "mixed-version 1", after 500ms delay (19)
-   │   │   └── run "mixed-version 2", after 100ms delay (20)
-   │   └── restart node 2 with binary version v22.2.8 (21)
-   ├── upgrade nodes :1-4 from "v22.2.8" to "<current>"
+│   ├── run "bank workload", after 0s delay (5)
+│   ├── run "rand workload", after 0s delay (6)
+│   └── run "csv server", after 3m0s delay (7)
+└── upgrade cluster from "v22.2.14" to "<current>"
+   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (8)
+   ├── upgrade nodes :1-4 from "v22.2.14" to "<current>"
+   │   ├── restart node 4 with binary version <current> (9)
+   │   ├── run "mixed-version 1" (10)
+   │   ├── restart node 3 with binary version <current> (11)
+   │   ├── restart node 2 with binary version <current> (12)
+   │   ├── run "mixed-version 2" (13)
+   │   └── restart node 1 with binary version <current> (14)
+   ├── downgrade nodes :1-4 from "<current>" to "v22.2.14"
+   │   ├── restart node 3 with binary version v22.2.14 (15)
+   │   ├── run "mixed-version 1" (16)
+   │   ├── restart node 2 with binary version v22.2.14 (17)
+   │   ├── restart node 4 with binary version v22.2.14 (18)
+   │   ├── run "mixed-version 2" (19)
+   │   └── restart node 1 with binary version v22.2.14 (20)
+   ├── upgrade nodes :1-4 from "v22.2.14" to "<current>"
+   │   ├── restart node 1 with binary version <current> (21)
    │   ├── restart node 2 with binary version <current> (22)
-   │   ├── run "mixed-version 2" (23)
-   │   ├── restart node 3 with binary version <current> (24)
-   │   ├── restart node 1 with binary version <current> (25)
-   │   ├── restart node 4 with binary version <current> (26)
-   │   └── run "mixed-version 1" (27)
-   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (28)
-   ├── run mixed-version hooks concurrently
-   │   ├── run "mixed-version 1", after 30s delay (29)
-   │   └── run "mixed-version 2", after 5s delay (30)
-   └── wait for nodes :1-4 to reach cluster version <current> (31)
+   │   ├── restart node 4 with binary version <current> (23)
+   │   ├── run "mixed-version 1" (24)
+   │   ├── restart node 3 with binary version <current> (25)
+   │   └── run "mixed-version 2" (26)
+   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (27)
+   ├── run "mixed-version 2" (28)
+   └── wait for nodes :1-4 to reach cluster version <current> (29)

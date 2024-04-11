@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/stretchr/testify/require"
 )
@@ -83,6 +84,6 @@ func (tss *testSingleStep) Run(_ context.Context, _ *logger.Logger, _ *rand.Rand
 }
 
 func newTestStep(f func() error) *singleStep {
-	initialVersion := parseVersions([]string{predecessorVersion})[0]
+	initialVersion := clusterupgrade.MustParseVersion(predecessorVersion)
 	return newSingleStep(newInitialContext(initialVersion, nodes), &testSingleStep{runFunc: f}, newRand())
 }
