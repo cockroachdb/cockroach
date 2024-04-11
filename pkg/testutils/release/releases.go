@@ -56,6 +56,32 @@ func parseReleases() (map[string]Series, error) {
 	return result, nil
 }
 
+// MajorReleasesBetween returns the number of major releases betweeen
+// the two versions passed. Returns an error when there is no
+// predecessor information for a release in the chain (which should
+// only happen if one of the versions passed is very old).
+func MajorReleasesBetween(v1, v2 *version.Version) (int, error) {
+	older, newer := v1, v2
+	if v1.AtLeast(v2) {
+		older, newer = v2, v1
+	}
+
+	var count int
+	currentSeries := versionSeries(newer)
+
+	for currentSeries != versionSeries(older) {
+		count++
+		seriesData, ok := releaseData[currentSeries]
+		if !ok {
+			return -1, fmt.Errorf("no release data for release series %s", currentSeries)
+		}
+
+		currentSeries = seriesData.Predecessor
+	}
+
+	return count, nil
+}
+
 // LatestPatch returns the latest non-withdrawn patch release of
 // the series passed. For example, if the series is "23.1", this
 // will return the latest 23.1 patch release.
