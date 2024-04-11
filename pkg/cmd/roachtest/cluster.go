@@ -2365,7 +2365,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 	defer l.Close()
 
 	cmd := strings.Join(args, " ")
-	c.t.L().Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
+	l.Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
 	l.Printf("> %s", cmd)
 	if err := roachprod.Run(
 		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
