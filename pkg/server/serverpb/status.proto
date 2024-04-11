@@ -92,6 +92,9 @@ message DetailsRequest {
   // forwarding is necessary.
   string node_id = 1;
   reserved 2;
+  // redact, if true, requests redaction of sensitive data away
+  // from the API response.
+  bool redact = 3;
 }
 
 // SystemInfo contains information about the host system.
@@ -118,7 +121,11 @@ message DetailsResponse {
 // NodesRequest requests a copy of the node information as known to gossip
 // and the KV layer.
 // API: PUBLIC ALPHA
-message NodesRequest {}
+message NodesRequest {
+  // redact, if true, requests redaction of sensitive data away
+  // from the API response.
+  bool redact = 1;
+}
 
 // NodesResponse describe the nodes in the cluster.
 // API: PUBLIC ALPHA
@@ -315,7 +322,11 @@ message RegionsResponse {
 // clusters.
 // The nodes are SQL instances in case of multi-tenant
 // clusters.
-message NodesListRequest {}
+message NodesListRequest {
+  // redact, if true, requests redaction of sensitive data away
+  // from the API response.
+  bool redact = 1;
+}
 
 message NodeDetails {
   // node_id is a unique identifier for the node. This corresponds
@@ -347,6 +358,9 @@ message NodeRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
+  // redact, if true, requests redaction of sensitive data away
+  // from the API response.
+  bool redact = 2;
 }
 
 // RaftState gives internal details about a Raft group's state.
@@ -539,6 +553,9 @@ message RangesRequest {
   // The pagination offset to use, if set.
   // NB: Pagination is based on ascending RangeID.
   int32 offset = 4;
+  // redact, if true, requests redaction of sensitive data away
+  // from the API response.
+  bool redact = 5;
 }
 
 message RangesResponse {
@@ -577,6 +594,9 @@ message GossipRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
+  // redact, if true, requests redaction of sensitive data away
+  // from the API response.
+  bool redact = 2;
 }
 
 message EngineStatsInfo {
