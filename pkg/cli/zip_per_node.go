@@ -37,13 +37,13 @@ func makePerNodeZipRequests(prefix, id string, status serverpb.StatusClient) []z
 	return []zipRequest{
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
-				return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id})
+				return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Redact: zipCtx.redact})
 			},
 			pathName: prefix + "/details",
 		},
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
-				return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id})
+				return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id, Redact: zipCtx.redact})
 			},
 			pathName: prefix + "/gossip",
 		},
@@ -147,6 +147,7 @@ func (zc *debugZipContext) collectPerNodeData(
 	nodeDetails serverpb.NodeDetails,
 	nodeStatus *statuspb.NodeStatus,
 	livenessByNodeID nodeLivenesses,
+	redactedNodeDetails serverpb.NodeDetails,
 ) error {
 	nodeID := roachpb.NodeID(nodeDetails.NodeID)
 
@@ -184,7 +185,7 @@ func (zc *debugZipContext) collectPerNodeData(
 			return err
 		}
 	} else {
-		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", nodeDetails); err != nil {
+		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", redactedNodeDetails); err != nil {
 			return err
 		}
 	}
@@ -537,7 +538,7 @@ func (zc *debugZipContext) collectPerNodeData(
 		s = nodePrinter.start("requesting ranges")
 		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
 			var err error
-			ranges, err = zc.status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id})
+			ranges, err = zc.status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id, Redact: zipCtx.redact})
 			return err
 		}); requestErr != nil {
 			if err := zc.z.createError(s, prefix+"/ranges", requestErr); err != nil {
