@@ -381,10 +381,6 @@ func (g *ycsb) Tables() []workload.Table {
 func (g *ycsb) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	_, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	if err := workload.SetDefaultIsolationLevel(urls, g.isoLevel); err != nil {
 		return workload.QueryLoad{}, err
 	}

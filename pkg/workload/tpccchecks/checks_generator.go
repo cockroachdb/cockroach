@@ -102,12 +102,9 @@ func (*tpccChecks) Meta() workload.Meta {
 func (w *tpccChecks) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	_, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, errors.Wrapf(err, "could not sanitize urls %v", urls)
-	}
 	dbs := make([]*gosql.DB, len(urls))
 	for i, url := range urls {
+		var err error
 		dbs[i], err = gosql.Open(`cockroach`, url)
 		if err != nil {
 			return workload.QueryLoad{}, errors.Wrapf(err, "failed to dial %s", url)
