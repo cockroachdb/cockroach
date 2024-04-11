@@ -13,11 +13,7 @@
 
 package status
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/storage/disk"
-)
+import "github.com/cockroachdb/cockroach/pkg/storage/disk"
 
 // GetMonitorCounters returns DiskStats for all monitored disks.
 func GetMonitorCounters(monitors map[string]disk.Monitor) (map[string]DiskStats, error) {
@@ -31,12 +27,12 @@ func GetMonitorCounters(monitors map[string]disk.Monitor) (map[string]DiskStats,
 			Name:           stats.DeviceName,
 			ReadBytes:      int64(stats.BytesRead()),
 			readCount:      int64(stats.ReadsCount),
-			readTime:       stats.ReadsDuration * time.Millisecond,
+			readTime:       stats.ReadsDuration,
 			WriteBytes:     int64(stats.BytesWritten()),
 			writeCount:     int64(stats.WritesCount),
-			writeTime:      stats.WritesDuration * time.Millisecond,
-			ioTime:         stats.CumulativeDuration * time.Millisecond,
-			weightedIOTime: stats.WeightedIODuration * time.Millisecond,
+			writeTime:      stats.WritesDuration,
+			ioTime:         stats.CumulativeDuration,
+			weightedIOTime: stats.WeightedIODuration,
 			iopsInProgress: int64(stats.InProgressCount),
 		}
 	}
