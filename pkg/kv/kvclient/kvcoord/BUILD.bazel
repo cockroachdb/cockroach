@@ -202,6 +202,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/caller",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
