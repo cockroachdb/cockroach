@@ -3893,8 +3893,7 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 		//}
 	}
 
-	// TODO(arul): renumber.
-	// 5. Assert some invariants around the queuedLockingRequests wait queue if
+	// 4. Assert some invariants around the queuedLockingRequests wait queue if
 	// the lock isn't held.
 	if !kl.isLocked() {
 		if kl.queuedLockingRequests.Len() > 0 {
@@ -3913,7 +3912,7 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 		}
 	}
 
-	// 6. Verify the waiting state on each of the waiters.
+	// 5. Verify the waiting state on each of the waiters.
 	for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
 		claimantTxn, _ := kl.claimantTxnFor(e.Value)
 		e.Value.mu.Lock()
@@ -3942,6 +3941,23 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 			return errors.AssertionFailedf("mismatch between claimant txn ID and waiting state txn ID")
 		}
 		e.Value.guard.mu.Unlock()
+	}
+
+	// 6. Verify the lock promotion state for each of the waiters is copacetic.
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
+		// Handle non-transactional requests first. They should never consider
+		// themselves promoting.
+		if e.Value.guard.txn == nil {
+			if e.Value.order.isPromoting {
+				return errors.AssertionFailedf("non-locking transactions can't promote their locks")
+			}
+			continue // we're good
+		}
+		// Otherwise, requests that consider themselves promoters should hold locks,
+		// and requests that don't shouldn't.
+		if _, held := kl.heldBy[e.Value.guard.txnMeta().ID]; held != e.Value.order.isPromoting {
+			return errors.AssertionFailedf("mismatched notion of promoting and lock held status")
+		}
 	}
 
 	return nil
@@ -4647,9 +4663,12 @@ func (t *lockTableImpl) verifyKey(key roachpb.Key) {
 		return // no locks exist on this key
 	}
 	l := iter.Cur()
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if err := l.verify(t.settings); err != nil {
+	err := func() error {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		return l.verify(t.settings)
+	}()
+	if err != nil {
 		panic(fmt.Sprintf(
 			"error verifying key %s; lock table %s\nerror: %v", key, t.stringRLocked(), err,
 		))
