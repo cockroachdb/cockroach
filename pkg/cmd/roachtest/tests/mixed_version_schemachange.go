@@ -52,7 +52,10 @@ func runSchemaChangeMixedVersions(
 	numFeatureRuns := 0
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, c.All(),
+		// Disable version skipping and limit the test to only one upgrade as the workload is only
+		// compatible with the branch it was built from and the major version before that.
 		mixedversion.NumUpgrades(1),
+		mixedversion.DisableSkipVersionUpgrades,
 		// Always use latest predecessors, since mixed-version bug fixes only
 		// appear in the latest patch of the predecessor version.
 		// See: https://github.com/cockroachdb/cockroach/issues/121411.
