@@ -275,7 +275,7 @@ func backup(
 	// Create a channel that is large enough that it does not block.
 	perNodeProgressCh := make(chan map[execinfrapb.ComponentID]float32, numTotalSpans)
 	storePerNodeProgressLoop := func(ctx context.Context) error {
-		if !execCtx.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1) {
+		if !execCtx.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 			return nil
 		}
 		for {

@@ -575,7 +575,7 @@ Discarded live replicas: %d
 	v := clusterversion.ClusterVersion{
 		Version: plan.Version,
 	}
-	if v.IsActive(clusterversion.V23_1) {
+	if v.IsActive(clusterversion.TODODelete_V23_1) {
 		// No args means we collected connection info from cluster and need to
 		// preserve flags for subsequent invocation.
 		remoteArgs := getCLIClusterFlags(len(args) == 0, cmd, func(flag string) bool {

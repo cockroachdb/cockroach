@@ -2682,7 +2682,7 @@ func (r *Replica) getSenderReplicas(
 
 	// Unless all nodes are on V23.1, don't delegate. This prevents sending to a
 	// node that doesn't understand the request.
-	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1) {
+	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 		return []roachpb.ReplicaDescriptor{coordinator}, nil
 	}
 

@@ -1226,7 +1226,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	tsQueryNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.V23_1.Version())
+		clusterversion.TODODelete_V23_1.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -1264,7 +1264,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	forwardIndexesOnArraysNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.V23_1.Version())
+		clusterversion.TODODelete_V23_1.Version())
 	if err != nil {
 		return nil, err
 	}

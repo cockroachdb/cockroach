@@ -743,7 +743,7 @@ func (mgcq *mvccGCQueue) process(
 	maxLocksKeyBytesPerCleanupBatch := gc.MaxLockKeyBytesPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
 	txnCleanupThreshold := gc.TxnCleanupThreshold.Get(&repl.store.ClusterSettings().SV)
 	var clearRangeMinKeys int64 = 0
-	if repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1) {
+	if repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 		clearRangeMinKeys = gc.ClearRangeMinKeys.Get(&repl.store.ClusterSettings().SV)
 	}
 

@@ -141,7 +141,7 @@ func (s Server) ServeClusterReplicas(
 	// We can't assume that caller is up-to-date with cluster version and process
 	// regardless of version known by current node as recommended for RPC
 	// requests because caller is a CLI which that only knows its binary version.
-	if !s.settings.Version.IsActive(ctx, clusterversion.V23_1) {
+	if !s.settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 		return errors.Newf("loss of quorum recovery service requires cluster upgraded to 23.1")
 	}
 
@@ -265,7 +265,7 @@ func (s Server) StagePlan(
 	// We can't assume that caller is up-to-date with cluster version and process
 	// regardless of version known by current node as recommended for RPC
 	// requests because caller is a CLI which that only knows its binary version.
-	if !s.settings.Version.IsActive(ctx, clusterversion.V23_1) {
+	if !s.settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 		return nil, errors.Newf("loss of quorum recovery service requires cluster upgraded to 23.1")
 	}
 
@@ -472,7 +472,7 @@ func (s Server) Verify(
 	ctx context.Context, req *serverpb.RecoveryVerifyRequest, nl *liveness.NodeLiveness, db *kv.DB,
 ) (*serverpb.RecoveryVerifyResponse, error) {
 	// Block requests that require fan-out to other nodes until upgrade is finalized.
-	if !s.settings.Version.IsActive(ctx, clusterversion.V23_1) {
+	if !s.settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 		return nil, errors.Newf("loss of quorum recovery service requires cluster upgraded to 23.1")
 	}
 

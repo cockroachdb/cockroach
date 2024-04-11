@@ -289,7 +289,7 @@ func (r *Registry) insertRequestInternal(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (RequestID, error) {
-	if planGist != "" && !r.st.Version.IsActive(ctx, clusterversion.V23_2_StmtDiagForPlanGist) {
+	if planGist != "" && !r.st.Version.IsActive(ctx, clusterversion.TODODelete_V23_2_StmtDiagForPlanGist) {
 		return 0, errors.Newf("plan gists only supported after 23.2 version migrations have completed")
 	}
 	if samplingProbability != 0 {
@@ -654,7 +654,7 @@ func (r *Registry) InsertStatementDiagnostics(
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
-	isPlanGistSupported := r.st.Version.IsActive(ctx, clusterversion.V23_2_StmtDiagForPlanGist)
+	isPlanGistSupported := r.st.Version.IsActive(ctx, clusterversion.TODODelete_V23_2_StmtDiagForPlanGist)
 
 	// Loop until we run the query without straddling an epoch increment.
 	for {
