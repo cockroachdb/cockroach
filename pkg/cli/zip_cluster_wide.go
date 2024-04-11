@@ -111,13 +111,14 @@ func (zc *debugZipContext) collectClusterData(
 		var nodesStatus *serverpb.NodesResponse
 		err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
 			nodesList, err = zc.status.NodesList(ctx, &serverpb.NodesListRequest{})
-			nodesStatus, err = zc.status.Nodes(ctx, &serverpb.NodesRequest{})
+			nodesStatus, err = zc.status.Nodes(ctx, &serverpb.NodesRequest{Redact: zipCtx.redact})
 			return err
 		})
 
 		if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {
-			// running on non system tenant, use data from NodesList()
-			if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", nodesList, err); cErr != nil {
+			// running on non system tenant, use data from redacted NodesList()
+			nodesListRedacted, _ := zc.status.NodesList(ctx, &serverpb.NodesListRequest{Redact: zipCtx.redact})
+			if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", nodesListRedacted, err); cErr != nil {
 				return &serverpb.NodesListResponse{}, nil, cErr
 			}
 		} else {
@@ -130,7 +131,7 @@ func (zc *debugZipContext) collectClusterData(
 			// In case the NodesList() RPC failed), we still want to inspect the
 			// per-node endpoints on the head node.
 			s = zc.clusterPrinter.start("retrieving the node status")
-			firstNodeDetails, err := zc.status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
+			firstNodeDetails, err := zc.status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local", Redact: zipCtx.redact})
 			if err != nil {
 				return &serverpb.NodesListResponse{}, nil, err
 			}
