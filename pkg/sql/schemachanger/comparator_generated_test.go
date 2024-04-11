@@ -338,6 +338,11 @@ func TestSchemaChangeComparator_cross_join(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/cross_join"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_cross_version_tenant_backup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/cross_version_tenant_backup"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_cursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/cursor"
