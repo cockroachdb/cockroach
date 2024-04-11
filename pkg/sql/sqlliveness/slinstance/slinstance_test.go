@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -50,7 +53,39 @@ func TestSQLInstance(t *testing.T) {
 
 	fakeStorage := slstorage.NewFakeStorage()
 	sqlInstance := slinstance.NewSQLInstance(ambientCtx, stopper, clock, fakeStorage, settings, nil, nil)
+	// Ensure that the first iteration always fails with an artificial error, this
+	// should lead to a retry. Which confirms that the retry logic works correctly.
+	failureMu := syncutil.Mutex{}
+	numRetries := 0
+	initialTimestamp := hlc.Timestamp{}
+	nextTimestamp := hlc.Timestamp{}
+	fakeStorage.SetInjectedFailure(func(sid sqlliveness.SessionID, expiration hlc.Timestamp) error {
+		failureMu.Lock()
+		defer failureMu.Unlock()
+		numRetries++
+		if numRetries == 1 {
+			initialTimestamp = expiration
+			return kvpb.NewReplicaUnavailableError(errors.Newf("fake injected error"), &roachpb.RangeDescriptor{}, roachpb.ReplicaDescriptor{})
+		}
+		nextTimestamp = expiration
+		return nil
+	})
 	sqlInstance.Start(ctx, nil)
+	// We expect two attempts to insert, since we inject a replica unavailable
+	// error on the first attempt.
+	testutils.SucceedsSoon(t, func() error {
+		failureMu.Lock()
+		defer failureMu.Unlock()
+		if numRetries < 2 {
+			return errors.AssertionFailedf("unexpected number of retries on session insertion, "+
+				"expected at least 2, got %d", numRetries)
+		}
+		if !nextTimestamp.After(initialTimestamp) {
+			return errors.AssertionFailedf("timestamp should move forward on each retry, "+
+				"got %s. Previous timestamp was: %s", nextTimestamp, initialTimestamp)
+		}
+		return nil
+	})
 
 	// Add one more instance to introduce concurrent access to storage.
 	dummy := slinstance.NewSQLInstance(ambientCtx, stopper, clock, fakeStorage, settings, nil, nil)
