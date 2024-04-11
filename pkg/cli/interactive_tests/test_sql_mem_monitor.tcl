@@ -79,12 +79,13 @@ set spawn_id $shell_spawn_id
 # Error is either an explicit "out of memory" emitted by Go or one of the errors
 # thrown by CGo.
 #
-# "fatal error: unexpected signal during runtime execution" might seem like it
-# doesn't belong here, but it's an artifact of how we're limiting the memory
-# usage of the CRDB process. In particular, ulimit is a "user limit" which is
-# enforced not at the OS kernel level (i.e. not via oomkiller) but at the
-# process execution level. As a result, memory allocation error doesn't kill the
-# process, so it keeps on running and can hit this "fatal error" later on.
+# "fatal error: unexpected signal during runtime execution" and "segmentation
+# violation" might seem like they don't belong here, but it's an artifact of how
+# we're limiting the memory usage of the CRDB process. In particular, ulimit is
+# a "user limit" which is enforced not at the OS kernel level (i.e. not via
+# oomkiller) but at the process execution level. As a result, memory allocation
+# error doesn't kill the process, so it keeps on running and can hit this "fatal
+# error" or "segmentation violation" later on.
 expect {
     "out of memory" {}
     "cannot allocate memory" {}
@@ -92,6 +93,7 @@ expect {
     "Resource temporarily unavailable" {}
     "_Cfunc_calloc" {}
     "fatal error: unexpected signal during runtime execution" {}
+    "segmentation violation" {}
     timeout { handle_timeout "memory allocation error" }
 }
 # Stop the tail command.
