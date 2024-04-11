@@ -946,7 +946,6 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		bti.clock.AdvanceTo(lastRun)
 		<-bti.resumeCh
 		pauseOrCancelJob(t, ctx, bti.idb, bti.registry, jobID, cancel)
-		bti.errCh <- nil
 		<-bti.failOrCancelCh
 		bti.errCh <- MarkAsRetryJobError(errors.New("injecting error in reverting state"))
 		expectedResumed := bti.resumed.Count()
