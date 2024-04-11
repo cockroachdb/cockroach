@@ -177,25 +177,25 @@ const (
 
 	VBootstrapMax
 
-	// V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
-	V23_1
+	// TODODelete_V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
+	TODODelete_V23_1
 
-	// V23_2_UseSizedPebblePointTombstones enables the use of Pebble's new
+	// TODODelete_V23_2_UseSizedPebblePointTombstones enables the use of Pebble's new
 	// DeleteSized operations.
-	V23_2_UseSizedPebblePointTombstones
+	TODODelete_V23_2_UseSizedPebblePointTombstones
 
-	// V23_2_StmtDiagForPlanGist enables statement diagnostic feature to collect
+	// TODODelete_V23_2_StmtDiagForPlanGist enables statement diagnostic feature to collect
 	// the bundle for particular plan gist.
-	V23_2_StmtDiagForPlanGist
+	TODODelete_V23_2_StmtDiagForPlanGist
 
-	// V23_2_RemoveLockTableWaiterTouchPush simplifies the push logic in
+	// TODODelete_V23_2_RemoveLockTableWaiterTouchPush simplifies the push logic in
 	// lock_table_waiter by passing the wait policy of the pusher as part of the
 	// push request and leaving the push outcome to the server-side logic.
-	V23_2_RemoveLockTableWaiterTouchPush
+	TODODelete_V23_2_RemoveLockTableWaiterTouchPush
 
-	// V23_2_ChangefeedLaggingRangesOpts is used to version gate the changefeed
+	// TODODelete_V23_2_ChangefeedLaggingRangesOpts is used to version gate the changefeed
 	// options lagging_ranges_threshold and lagging_ranges_polling_interval.
-	V23_2_ChangefeedLaggingRangesOpts
+	TODODelete_V23_2_ChangefeedLaggingRangesOpts
 
 	// ***************************************************************************
 	//            WHERE TO ADD VERSION GATES DURING 23.2 STABILITY?
@@ -295,13 +295,13 @@ var versionTable = [numKeys]roachpb.Version{
 	VBootstrapTenant: {Major: 0, Minor: 0, Internal: 4},
 	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
 
-	V23_1: {Major: 23, Minor: 1, Internal: 0},
+	TODODelete_V23_1: {Major: 23, Minor: 1, Internal: 0},
 
 	// v23.2 versions. Internal versions must be even.
-	V23_2_UseSizedPebblePointTombstones:  {Major: 23, Minor: 1, Internal: 14},
-	V23_2_StmtDiagForPlanGist:            {Major: 23, Minor: 1, Internal: 18},
-	V23_2_RemoveLockTableWaiterTouchPush: {Major: 23, Minor: 1, Internal: 22},
-	V23_2_ChangefeedLaggingRangesOpts:    {Major: 23, Minor: 1, Internal: 24},
+	TODODelete_V23_2_UseSizedPebblePointTombstones:  {Major: 23, Minor: 1, Internal: 14},
+	TODODelete_V23_2_StmtDiagForPlanGist:            {Major: 23, Minor: 1, Internal: 18},
+	TODODelete_V23_2_RemoveLockTableWaiterTouchPush: {Major: 23, Minor: 1, Internal: 22},
+	TODODelete_V23_2_ChangefeedLaggingRangesOpts:    {Major: 23, Minor: 1, Internal: 24},
 
 	V23_2: {Major: 23, Minor: 2, Internal: 0},
 

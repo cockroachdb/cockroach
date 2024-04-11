@@ -969,7 +969,7 @@ func (s StatementOptions) GetLaggingRangesConfig(
 	// This version gate prevents the scenario where the changefeed is created
 	// with options on a 23.2 node and resumed on a node with an old version
 	// which does not have those options.
-	laggingRangesVersionIsActive := settings.Version.IsActive(ctx, clusterversion.V23_2_ChangefeedLaggingRangesOpts)
+	laggingRangesVersionIsActive := settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_2_ChangefeedLaggingRangesOpts)
 	threshold = DefaultLaggingRangesThreshold
 	pollingInterval = DefaultLaggingRangesPollingInterval
 	_, ok := s.m[OptLaggingRangesThreshold]

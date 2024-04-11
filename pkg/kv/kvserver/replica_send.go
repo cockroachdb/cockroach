@@ -322,7 +322,7 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 		}
 	} else if ba.IsSingleRequestLeaseRequest() {
 		// TODO(erikgrinaker): Remove this branch when 23.1 support is dropped.
-		_ = clusterversion.V23_1
+		_ = clusterversion.TODODelete_V23_1
 		return
 	}
 

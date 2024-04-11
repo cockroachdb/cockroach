@@ -119,7 +119,7 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 		}
 
 	case types.TSQueryFamily, types.TSVectorFamily:
-		if !version.IsActive(ctx, clusterversion.V23_1) {
+		if !version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 			return pgerror.Newf(pgcode.FeatureNotSupported,
 				"TSVector/TSQuery not supported until version 23.1")
 		}

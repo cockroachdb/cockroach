@@ -52,7 +52,7 @@ func TestGetEncoder(t *testing.T) {
 	tests := []testCase{
 		{
 			name:      "v23_1",
-			version:   clusterversion.V23_1,
+			version:   clusterversion.TODODelete_V23_1,
 			readCodec: isRbr,
 			dualCodec: isNil,
 		},

@@ -186,7 +186,7 @@ func visitStoreReplicas(
 		}
 
 		var localIsLeaseholder bool
-		if targetVersion.IsActive(clusterversion.V23_1) {
+		if targetVersion.IsActive(clusterversion.TODODelete_V23_1) {
 			localIsLeaseholder = rstate.Lease != nil && rstate.Lease.Replica.StoreID == storeID
 		}
 
