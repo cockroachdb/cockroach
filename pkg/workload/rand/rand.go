@@ -150,10 +150,6 @@ func typeForOid(db *gosql.DB, typeOid oid.Oid, tableName, columnName string) (*t
 func (w *random) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (ql workload.QueryLoad, retErr error) {
-	_, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err

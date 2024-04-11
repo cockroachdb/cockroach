@@ -209,10 +209,6 @@ func (s *schemaChange) Ops(
 	ctx, span := tracer.Start(ctx, "schemaChange.Ops")
 	defer func() { EndSpan(span, err) }()
 
-	_, err = workload.SanitizeUrls(s, s.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	cfg := workload.NewMultiConnPoolCfgFromFlags(s.connFlags)
 	// We will need double the concurrency, since we need watch
 	// dog connections. There is a danger of the pool emptying on

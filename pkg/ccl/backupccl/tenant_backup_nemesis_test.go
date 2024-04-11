@@ -181,7 +181,8 @@ func TestTenantBackupNemesis(t *testing.T) {
 			return err
 		}
 		defer cleanupGoDB()
-		reg := histogram.NewRegistry(20*time.Second, "bank")
+		pgURL.Path = bankData.Meta().Name
+		reg := histogram.NewRegistry(20*time.Second, bankData.Meta().Name)
 		ops, err := bankData.(workload.Opser).Ops(ctx, []string{pgURL.String()}, reg)
 		if err != nil {
 			return err

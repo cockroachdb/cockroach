@@ -100,6 +100,7 @@ func TestWorkload(t *testing.T) {
 
 	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).AdvSQLAddr(), t.Name(), url.User("testuser"))
 	defer cleanup()
+	pgURL.Path = wl.Meta().Name
 
 	const concurrency = 2
 	require.NoError(t, wl.Flags().Parse([]string{

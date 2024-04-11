@@ -746,10 +746,6 @@ func (w *tpcc) Ops(
 		w.txCounters = setupTPCCMetrics(reg.Registerer())
 	}
 
-	_, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	if err := workload.SetDefaultIsolationLevel(urls, w.isoLevel); err != nil {
 		return workload.QueryLoad{}, err
 	}
