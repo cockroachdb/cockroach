@@ -194,9 +194,9 @@ func CmdHelper(
 			}
 		}
 
-		var dbOverride string
+		var connFlags *workload.ConnFlags
 		if cf, ok := gen.(workload.ConnFlagser); ok {
-			dbOverride = cf.ConnFlags().DBOverride
+			connFlags = cf.ConnFlags()
 		}
 
 		urls := args
@@ -217,8 +217,11 @@ func CmdHelper(
 
 			urls = []string{crdbDefaultURL}
 		}
-		dbName, err := workload.SanitizeUrls(gen, dbOverride, urls)
+		dbName, err := workload.SanitizeUrls(gen, connFlags, urls)
 		if err != nil {
+			return err
+		}
+		if err := workload.SetUrlConnVars(gen, connFlags, urls); err != nil {
 			return err
 		}
 		return fn(gen, urls, dbName)
