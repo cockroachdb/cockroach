@@ -86,7 +86,6 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 			name: "with virtual sstables",
 			st: func() *cluster.Settings {
 				st := cluster.MakeTestingClusterSettings()
-				ValueBlocksEnabled.Override(context.Background(), &st.SV, true)
 				return st
 			}(),
 			want: sstable.TableFormatPebblev4,

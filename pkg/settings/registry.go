@@ -240,6 +240,9 @@ var retiredSettings = map[InternalKey]struct{}{
 	"sql.drop_virtual_cluster.enabled":                       {},
 	"cross_cluster_replication.enabled":                      {},
 	"server.controller.default_tenant.check_service.enabled": {},
+
+	// removed as of 24.2
+	"storage.value_blocks.enabled": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
