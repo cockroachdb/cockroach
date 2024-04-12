@@ -244,8 +244,15 @@ func DatumToHLC(
 	case *tree.DString:
 		s := string(*d)
 		// Attempt to parse as timestamp.
-		if dt, _, err := tree.ParseDTimestampTZ(evalCtx, s, time.Nanosecond); err == nil {
-			ts.WallTime = dt.Time.UnixNano()
+		//
+		// Disable error annotation since we don't care what the error is if it
+		// occurs.
+		defer func(origValue bool) {
+			evalCtx.GetDateHelper().SkipErrorAnnotation = origValue
+		}(evalCtx.GetDateHelper().SkipErrorAnnotation)
+		evalCtx.GetDateHelper().SkipErrorAnnotation = true
+		if t, _, err := tree.ParseTimestampTZ(evalCtx, s, time.Nanosecond); err == nil {
+			ts.WallTime = t.UnixNano()
 			break
 		}
 		// Attempt to parse as a decimal.
@@ -254,13 +261,13 @@ func DatumToHLC(
 			break
 		}
 		// Attempt to parse as an interval.
-		if iv, err := tree.ParseDInterval(evalCtx.GetIntervalStyle(), s); err == nil {
-			if (iv.Duration == duration.Duration{}) {
+		if iv, err := tree.ParseIntervalWithTypeMetadata(evalCtx.GetIntervalStyle(), s, types.DefaultIntervalTypeMetadata); err == nil {
+			if (iv == duration.Duration{}) {
 				convErr = errors.Errorf("interval value %v too small, absolute value must be >= %v", d, time.Microsecond)
-			} else if (usage == Split && iv.Duration.Compare(duration.Duration{}) < 0) {
+			} else if (usage == Split && iv.Compare(duration.Duration{}) < 0) {
 				convErr = errors.Errorf("interval value %v too small, SPLIT AT interval must be >= %v", d, time.Microsecond)
 			}
-			ts.WallTime = duration.Add(stmtTimestamp, iv.Duration).UnixNano()
+			ts.WallTime = duration.Add(stmtTimestamp, iv).UnixNano()
 			break
 		}
 		convErr = errors.Errorf("value is neither timestamp, decimal, nor interval")

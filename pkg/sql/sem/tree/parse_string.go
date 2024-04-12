@@ -257,20 +257,16 @@ func ParseAndRequireStringHandler(
 		s = truncateString(s, t)
 		vh.String(s)
 	case types.TimestampTZFamily:
-		// TODO(cucaroach): can we refactor the next 3 case arms to be simpler
+		var ts time.Time
+		if ts, _, err = ParseTimestampTZ(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision())); err == nil {
+			vh.TimestampTZ(ts)
+		}
+	case types.TimestampFamily:
+		// TODO(yuzefovich): can we refactor the next 2 case arms to be simpler
 		// and avoid code duplication?
 		now := relativeParseTime(ctx)
 		var ts time.Time
-		if ts, _, err = pgdate.ParseTimestamp(now, dateStyle(ctx), s); err == nil {
-			// Always normalize time to the current location.
-			if ts, err = checkTimeBounds(ts, TimeFamilyPrecisionToRoundDuration(t.Precision())); err == nil {
-				vh.TimestampTZ(ts)
-			}
-		}
-	case types.TimestampFamily:
-		now := relativeParseTime(ctx)
-		var ts time.Time
-		if ts, _, err = pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s); err == nil {
+		if ts, _, err = pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s, dateParseHelper(ctx)); err == nil {
 			// Always normalize time to the current location.
 			if ts, err = checkTimeBounds(ts, TimeFamilyPrecisionToRoundDuration(t.Precision())); err == nil {
 				vh.TimestampTZ(ts)

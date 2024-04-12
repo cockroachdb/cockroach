@@ -81,6 +81,10 @@ type fieldExtract struct {
 	currentTimeUsed bool
 	// Tracks whether the current timestamp is of db2 format.
 	isDB2 bool
+
+	// skipErrorAnnotation, if set, indicates that we should avoid allocating
+	// objects for error annotations as much as possible.
+	skipErrorAnnotation bool
 }
 
 func (fe *fieldExtract) now() time.Time {
@@ -789,6 +793,9 @@ func (fe *fieldExtract) Set(field field, v int) error {
 
 // decorateError adds context to an error object.
 func (fe *fieldExtract) decorateError(err error) error {
+	if fe.skipErrorAnnotation {
+		return err
+	}
 	return errors.WithDetailf(err,
 		"Wanted: %v\nAlready found in input: %v", &fe.wanted, &fe.has)
 }
@@ -888,20 +895,26 @@ func (fe *fieldExtract) SafeFormat(w redact.SafePrinter, _ rune) {
 
 func (fe *fieldExtract) String() string { return redact.StringWithoutMarkers(fe) }
 
+var (
+	missingRequiredDateFieldsErr    = inputErrorf("missing required date fields")
+	missingRequiredTimeFieldsErr    = inputErrorf("missing required time fields")
+	missingRequiredFieldsInInputErr = inputErrorf("missing required fields in input")
+)
+
 // validate ensures that the data in the extract is reasonable. It also
 // performs some field fixups, such as converting two-digit years
 // to actual values and adjusting for AM/PM.
 func (fe *fieldExtract) validate() error {
 	// If we have any of the required fields, we must have all of the required fields.
 	if fe.has.HasAny(dateRequiredFields) && !fe.has.HasAll(dateRequiredFields) {
-		return fe.decorateError(inputErrorf("missing required date fields"))
+		return fe.decorateError(missingRequiredDateFieldsErr)
 	}
 
 	if (fe.isDB2 && !fe.has.HasAll(db2TimeRequiredFields)) || (fe.has.HasAny(timeRequiredFields) && !fe.has.HasAll(timeRequiredFields)) {
-		return fe.decorateError(inputErrorf("missing required time fields"))
+		return fe.decorateError(missingRequiredTimeFieldsErr)
 	}
 	if !fe.has.HasAll(fe.required) {
-		return fe.decorateError(inputErrorf("missing required fields in input"))
+		return fe.decorateError(missingRequiredFieldsInInputErr)
 	}
 
 	if year, ok := fe.Get(fieldYear); ok {

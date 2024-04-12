@@ -165,7 +165,7 @@ func (td timeData) testParseTime(
 func (td timeData) testParseTimestamp(t *testing.T, info string, order pgdate.Order) {
 	info = fmt.Sprintf("%s ParseTimestamp", info)
 	exp, expErr := td.expected(order)
-	res, _, err := pgdate.ParseTimestamp(time.Time{}, pgdate.DateStyle{Order: order}, td.s)
+	res, _, err := pgdate.ParseTimestamp(time.Time{}, pgdate.DateStyle{Order: order}, td.s, nil /* h */)
 
 	// HACK: This is a format that parses as a date and timestamp,
 	// but is not a time.
@@ -187,7 +187,7 @@ func (td timeData) testParseTimestampWithoutTimezone(
 ) {
 	info = fmt.Sprintf("%s ParseTimestampWithoutTimezone", info)
 	exp, expErr := td.expected(order)
-	res, _, err := pgdate.ParseTimestampWithoutTimezone(time.Time{}, pgdate.DateStyle{Order: order}, td.s)
+	res, _, err := pgdate.ParseTimestampWithoutTimezone(time.Time{}, pgdate.DateStyle{Order: order}, td.s, nil /* h */)
 
 	// HACK: This is a format that parses as a date and timestamp,
 	// but is not a time.
@@ -845,7 +845,7 @@ func bench(b *testing.B, layout string, s string, locationName string) {
 
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
-					if _, _, err := pgdate.ParseTimestamp(time.Time{}, pgdate.DateStyle{Order: pgdate.Order_MDY}, benchS); err != nil {
+					if _, _, err := pgdate.ParseTimestamp(time.Time{}, pgdate.DateStyle{Order: pgdate.Order_MDY}, benchS, nil /* h */); err != nil {
 						b.Fatal(err)
 					}
 					b.SetBytes(bytes)
@@ -1075,11 +1075,11 @@ func TestDependsOnContext(t *testing.T) {
 			check("ParseTime", tc.time, toStr(pgdate.ParseTime(now, pgdate.DateStyle{Order: order}, tc.s, &ph)))
 			check(
 				"ParseTimeWithoutTimezone", tc.timeNoTZ,
-				toStr(pgdate.ParseTimeWithoutTimezone(now, pgdate.DateStyle{Order: order}, tc.s)),
+				toStr(pgdate.ParseTimeWithoutTimezone(now, pgdate.DateStyle{Order: order}, tc.s, nil /* h */)),
 			)
-			check("ParseTimestamp", tc.timestamp, toStr(pgdate.ParseTimestamp(now, pgdate.DateStyle{Order: order}, tc.s)))
+			check("ParseTimestamp", tc.timestamp, toStr(pgdate.ParseTimestamp(now, pgdate.DateStyle{Order: order}, tc.s, nil /* h */)))
 			check("ParseTimestampWithoutTimezone",
-				tc.timestampNoTZ, toStr(pgdate.ParseTimestampWithoutTimezone(now, pgdate.DateStyle{Order: order}, tc.s)),
+				tc.timestampNoTZ, toStr(pgdate.ParseTimestampWithoutTimezone(now, pgdate.DateStyle{Order: order}, tc.s, nil /* h */)),
 			)
 		})
 	}

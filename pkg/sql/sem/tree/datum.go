@@ -2094,7 +2094,7 @@ type ParseContext interface {
 	GetIntervalStyle() duration.IntervalStyle
 	// GetDateStyle returns the date style in the session.
 	GetDateStyle() pgdate.DateStyle
-	// GetParseHelper returns a helper to optmize date parsing.
+	// GetDateHelper returns a helper to optimize parsing of datetime types.
 	GetDateHelper() *pgdate.ParseHelper
 }
 
@@ -2383,7 +2383,7 @@ func ParseDTime(
 
 	s = timeutil.ReplaceLibPQTimePrefix(s)
 
-	t, dependsOnContext, err := pgdate.ParseTimeWithoutTimezone(now, dateStyle(ctx), s)
+	t, dependsOnContext, err := pgdate.ParseTimeWithoutTimezone(now, dateStyle(ctx), s, dateParseHelper(ctx))
 	if err != nil {
 		return nil, false, MakeParseError(s, types.Time, err)
 	}
@@ -2723,7 +2723,7 @@ func ParseDTimestamp(
 	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimestamp, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, dependsOnContext, err := pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s)
+	t, dependsOnContext, err := pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s, dateParseHelper(ctx))
 	if err != nil {
 		return nil, false, err
 	}
@@ -3012,25 +3012,39 @@ func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) (*DTimestampTZ, erro
 	return MakeDTimestampTZ(t.Add(time.Duration(-offset)*time.Second), time.Microsecond)
 }
 
+// ParseTimestampTZ parses and returns the time.Time value represented by the
+// provided string in the provided location, or an error if parsing is
+// unsuccessful.
+//
+// The dependsOnContext return value indicates if we had to consult the
+// ParseContext (either for the time or the local timezone).
+func ParseTimestampTZ(
+	ctx ParseContext, s string, precision time.Duration,
+) (_ time.Time, dependsOnContext bool, _ error) {
+	now := relativeParseTime(ctx)
+	t, dependsOnContext, err := pgdate.ParseTimestamp(now, dateStyle(ctx), s, dateParseHelper(ctx))
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if t, err = checkTimeBounds(t, precision); err != nil {
+		return time.Time{}, false, err
+	}
+	return t, dependsOnContext, nil
+}
+
 // ParseDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by
 // the provided string in the provided location, or an error if parsing is unsuccessful.
 //
 // The dependsOnContext return value indicates if we had to consult the
 // ParseContext (either for the time or the local timezone).
-//
-// Parts of this function are inlined into ParseAndRequireStringHandler, if this
-// changes materially the timestamp case arms there may need to change too.
 func ParseDTimestampTZ(
 	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimestampTZ, dependsOnContext bool, _ error) {
-	now := relativeParseTime(ctx)
-	t, dependsOnContext, err := pgdate.ParseTimestamp(now, dateStyle(ctx), s)
+	t, dependsOnContext, err := ParseTimestampTZ(ctx, s, precision)
 	if err != nil {
 		return nil, false, err
 	}
-	// Always normalize time to the current location.
-	d, err := MakeDTimestampTZ(t, precision)
-	return d, dependsOnContext, err
+	return &DTimestampTZ{Time: t}, dependsOnContext, err
 }
 
 // DZeroTimestampTZ is the zero-valued DTimestampTZ.

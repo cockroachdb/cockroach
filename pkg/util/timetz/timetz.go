@@ -120,7 +120,7 @@ func ParseTimeTZ(
 		s = timeutil.ReplaceLibPQTimePrefix(s)
 	}
 
-	t, dependsOnContext, err := pgdate.ParseTimestamp(now, dateStyle, s)
+	t, dependsOnContext, err := pgdate.ParseTimestamp(now, dateStyle, s, nil /* h */)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
 		return TimeTZ{}, false, pgerror.Newf(
