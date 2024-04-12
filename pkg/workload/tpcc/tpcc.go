@@ -14,6 +14,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -91,6 +93,8 @@ type tpcc struct {
 
 	replicateStaticColumns bool
 
+	queryTraceFile string
+
 	randomCIDsCache struct {
 		syncutil.Mutex
 		values [][]int
@@ -137,6 +141,61 @@ func (w *waitSetter) String() string {
 	}
 }
 
+var _ pgx.QueryTracer = fileLoggerQueryTracer{}
+
+type fileLoggerQueryTracer struct {
+	filePath string
+	file     *os.File
+}
+
+func newFileLoggerQueryTracer(filePath string) (*fileLoggerQueryTracer, error) {
+	tracer := &fileLoggerQueryTracer{filePath: filePath}
+	file, err := os.OpenFile(tracer.filePath, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0666)
+	if err != nil {
+		return nil, err
+	}
+	tracer.file = file
+	return tracer, nil
+}
+
+func (t *fileLoggerQueryTracer) Close() {
+	if t.file != nil {
+		t.file.Close()
+		t.file = nil
+	}
+}
+
+func (t fileLoggerQueryTracer) Write(p []byte) (n int, err error) {
+	if t.file == nil {
+		return 0, errors.New("file not initialized")
+	}
+	return t.file.Write(p)
+}
+
+func (t fileLoggerQueryTracer) TraceQueryStart(
+	ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryStartData,
+) context.Context {
+	if t.file == nil {
+		panic("file not initialized")
+	}
+	whitespacePattern := regexp.MustCompile(`\s+`)
+	fmt.Fprintf(t, "Query: %s\n", whitespacePattern.ReplaceAllString(strings.TrimSpace(data.SQL), " "))
+	return ctx
+}
+
+func (t fileLoggerQueryTracer) TraceQueryEnd(
+	ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryEndData,
+) {
+	if t.file == nil {
+		panic("file not initialized")
+	}
+	if data.Err != nil {
+		fmt.Fprintf(t, "Error: %s\n", data.Err)
+	} else {
+		fmt.Fprintf(t, "CommandTag: %s\n", data.CommandTag.String())
+	}
+}
+
 func init() {
 	workload.Register(tpccMeta)
 }
@@ -177,6 +236,7 @@ var tpccMeta = workload.Meta{
 			`survival-goal`:            {RuntimeOnly: true},
 			`replicate-static-columns`: {RuntimeOnly: true},
 			`deprecated-fk-indexes`:    {RuntimeOnly: true},
+			`query-trace-file`:         {RuntimeOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
@@ -213,6 +273,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.separateColumnFamilies, `families`, false, `Use separate column families for dynamic and static columns`)
 		g.flags.BoolVar(&g.replicateStaticColumns, `replicate-static-columns`, false, "Create duplicate indexes for all static columns in district, items and warehouse tables, such that each zone or rack has them locally.")
 		g.flags.BoolVar(&g.localWarehouses, `local-warehouses`, false, `Force transactions to use a local warehouse in all cases (in violation of the TPC-C specification)`)
+		g.flags.StringVar(&g.queryTraceFile, `query-trace-file`, ``, `File to write the query traces to. Defaults to no output`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
@@ -338,6 +399,10 @@ func (w *tpcc) Hooks() workload.Hooks {
 			if w.waitFraction > 0 && w.workers != w.activeWarehouses*NumWorkersPerWarehouse {
 				return errors.Errorf(`--wait > 0 and --warehouses=%d requires --workers=%d`,
 					w.activeWarehouses, w.warehouses*NumWorkersPerWarehouse)
+			}
+
+			if w.queryTraceFile != `` && w.workers != 1 {
+				return errors.Errorf(`--query-trace-file must be used with exactly one worker`)
 			}
 
 			w.auditor = newAuditor(w.activeWarehouses)
@@ -753,6 +818,17 @@ func (w *tpcc) Ops(
 	cfg.MaxConnsPerPool = w.connFlags.Concurrency
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
 
+	// Set up the query tracer.
+	var tracer *fileLoggerQueryTracer
+	if w.queryTraceFile != `` {
+		var err error
+		tracer, err = newFileLoggerQueryTracer(w.queryTraceFile)
+		if err != nil {
+			panic(err)
+		}
+		cfg.QueryTracer = tracer
+	}
+
 	dbs := make([]*workload.MultiConnPool, len(urls))
 	var g errgroup.Group
 	for i := range urls {
@@ -884,6 +960,9 @@ func (w *tpcc) Ops(
 			if err := conn.Close(ctx); err != nil {
 				log.Warningf(ctx, "%v", err)
 			}
+		}
+		if tracer != nil {
+			tracer.Close()
 		}
 		return nil
 	}
