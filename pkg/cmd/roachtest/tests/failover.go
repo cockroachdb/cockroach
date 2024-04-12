@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -339,10 +340,23 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 			sleepFor(ctx, t, time.Minute)
 
+			// Recover the failers on different goroutines. Otherwise, they
+			// might interact as certain failures can prevent other failures
+			// from recovering.
+			var wg sync.WaitGroup
 			for node, failer := range nodeFailers {
-				t.L().Printf("recovering n%d (%s)", node, failer)
-				failer.Recover(ctx, node)
+				wg.Add(1)
+				node := node
+				failer := failer
+				m.Go(func(ctx context.Context) error {
+					defer wg.Done()
+					t.L().Printf("recovering n%d (%s)", node, failer)
+					failer.Recover(ctx, node)
+
+					return nil
+				})
 			}
+			wg.Wait()
 		}
 
 		sleepFor(ctx, t, time.Minute) // let cluster recover
