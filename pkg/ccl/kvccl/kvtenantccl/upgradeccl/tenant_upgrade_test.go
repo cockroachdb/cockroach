@@ -479,7 +479,8 @@ func TestTenantUpgradeFailure(t *testing.T) {
 								) error {
 									t.Logf("v1 migration running")
 									return nil
-								}, "test"), true
+								}, upgrade.RestoreActionNotRequired("test"),
+							), true
 						case v2:
 							return upgrade.NewTenantUpgrade("testing next",
 								v2,
@@ -502,7 +503,8 @@ func TestTenantUpgradeFailure(t *testing.T) {
 										}
 									}
 									return nil
-								}, "test"), true
+								}, upgrade.RestoreActionNotRequired("test"),
+							), true
 						default:
 							return nil, false
 						}
