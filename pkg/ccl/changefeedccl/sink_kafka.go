@@ -1327,8 +1327,14 @@ type kafkaStats struct {
 func (s *kafkaStats) startMessage(sz int64) {
 	atomic.AddInt64(&s.outstandingBytes, sz)
 	atomic.AddInt64(&s.outstandingMessages, 1)
-	if atomic.LoadInt64(&s.largestMessageSize) < sz {
-		atomic.AddInt64(&s.largestMessageSize, sz)
+	for {
+		curLargest := atomic.LoadInt64(&s.largestMessageSize)
+		if curLargest >= sz {
+			break
+		}
+		if atomic.CompareAndSwapInt64(&s.largestMessageSize, curLargest, sz) {
+			break
+		}
 	}
 }
 
