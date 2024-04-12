@@ -412,7 +412,7 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING VOLATILE LANGUAGE SQL AS $$ S
 		ec.SessionData().Database = "defaultdb"
 
 		funcResolver := planner.(tree.FunctionReferenceResolver)
-		semaCtx := tree.MakeSemaContext()
+		semaCtx := tree.MakeSemaContext(nil /* typeResolver */)
 		semaCtx.FunctionResolver = funcResolver
 
 		for _, tc := range testCases {

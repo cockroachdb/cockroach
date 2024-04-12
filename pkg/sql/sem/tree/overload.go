@@ -1213,7 +1213,9 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 			constExpr := s.exprs[i].(Constant)
 			filter := makeFilter(i, func(params TypeList, ordinal int) bool {
-				semaCtx := MakeSemaContext()
+				// TODO(yuzefovich): why are we creating a fresh sema context
+				// here?
+				semaCtx := MakeSemaContext(semaCtx.TypeResolver)
 				_, err := constExpr.ResolveAsType(ctx, &semaCtx, params.GetAt(ordinal))
 				return err == nil
 			})

@@ -27,7 +27,7 @@ import (
 
 func TestIndexForDisplay(t *testing.T) {
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* typeResolver */)
 
 	database := tree.Name("foo")
 	table := tree.Name("bar")

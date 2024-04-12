@@ -453,8 +453,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	// Add rendering of virtual computed columns.
 	if len(virtComputedCols) != 0 {
 		// Resolve names and types.
-		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = planCtx.planner
+		semaCtx := tree.MakeSemaContext(planCtx.planner)
 		virtComputedExprs, _, err := schemaexpr.MakeComputedExprs(
 			ctx,
 			virtComputedCols,

@@ -50,7 +50,7 @@ func CreateTestTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* typeResolver */)
 	evalCtx := eval.MakeTestingEvalContext(st)
 	sessionData := &sessiondata.SessionData{
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{

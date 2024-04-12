@@ -277,7 +277,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 		catalog: catalog,
 		sql:     sql,
 		ctx:     ctx,
-		semaCtx: tree.MakeSemaContext(),
+		semaCtx: tree.MakeSemaContext(nil /* typeResolver */),
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 	ot.f = &norm.Factory{}

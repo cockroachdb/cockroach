@@ -263,8 +263,8 @@ func (s *ScalarAncestors) clear() {
 // expressions.
 // Note: if queries with placeholders are going to be used,
 // SemaContext.Placeholders.Init must be called separately.
-func MakeSemaContext() SemaContext {
-	return SemaContext{}
+func MakeSemaContext(typeResolver TypeReferenceResolver) SemaContext {
+	return SemaContext{TypeResolver: typeResolver}
 }
 
 // isUnresolvedPlaceholder provides a nil-safe method to determine whether expr is an

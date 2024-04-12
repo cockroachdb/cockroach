@@ -168,8 +168,7 @@ func (flowCtx *FlowCtx) NewTypeResolver(txn *kv.Txn) descs.DistSQLTypeResolver {
 // input transaction.
 func (flowCtx *FlowCtx) NewSemaContext(txn *kv.Txn) *tree.SemaContext {
 	resolver := flowCtx.NewTypeResolver(txn)
-	semaCtx := tree.MakeSemaContext()
-	semaCtx.TypeResolver = &resolver
+	semaCtx := tree.MakeSemaContext(&resolver)
 	return &semaCtx
 }
 

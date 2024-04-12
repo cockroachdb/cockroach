@@ -25,7 +25,7 @@ import (
 )
 
 func TestTryFilterTrigram(t *testing.T) {
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* typeResolver */)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
 

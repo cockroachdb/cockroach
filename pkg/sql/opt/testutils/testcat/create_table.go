@@ -963,7 +963,7 @@ func (tt *Table) addIndexWithVersion(
 	}
 	if partitionBy != nil {
 		ctx := context.Background()
-		semaCtx := tree.MakeSemaContext()
+		semaCtx := tree.MakeSemaContext(nil /* typeResolver */)
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		if len(partitionBy.List) > 0 {
