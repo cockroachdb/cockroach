@@ -56,19 +56,25 @@ type JobDeps interface {
 // If an upgrade migration only affects state that is not restored, such as the
 // system tables that contain instance information and liveness, it can use a
 // RestoreActionNotRequired string explaining this fact, e.g.
-// `RestoreActionNotRequired("liveness table is not restored").
-type RestoreBehavior string
+// RestoreActionNotRequired("liveness table is not restored").
+type RestoreBehavior struct {
+	msg string
+}
 
 // RestoreActionNotRequired is used to signal an upgrade migration only affects
 // persisted state that is not written by restore. The string should mention
 // why no action is required.
-type RestoreActionNotRequired = RestoreBehavior
+func RestoreActionNotRequired(msg string) RestoreBehavior {
+	return RestoreBehavior{msg: msg}
+}
 
 // RestoreActionImplemented is used to signal an upgrade migration affects state
 // that is written by restore and has implemented the requisite logic in restore
 // to perform the equivalent upgrade on restored data as it is restored. The
 // string should mention what is done during restore and where it is done.
-type RestoreActionImplemented = RestoreBehavior
+func RestoreActionImplemented(msg string) RestoreBehavior {
+	return RestoreBehavior{msg: msg}
+}
 
 type upgrade struct {
 	description string
@@ -99,5 +105,5 @@ func (m *upgrade) Name() string {
 }
 
 func (m *upgrade) RestoreBehavior() string {
-	return string(m.restore)
+	return m.restore.msg
 }
