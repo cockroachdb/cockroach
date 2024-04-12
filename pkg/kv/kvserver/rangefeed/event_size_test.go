@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -24,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -48,6 +46,7 @@ var (
 	testStartKey       = roachpb.Key("a")
 	testEndKey         = roachpb.Key("z")
 	testValue          = []byte("1")
+	testPrevValue      = []byte("1234")
 	testSSTKVs         = kvs{
 		pointKV("a", 1, "1"),
 		pointKV("b", 1, "2"),
@@ -63,12 +62,193 @@ type testData struct {
 	key              roachpb.Key
 	timestamp        hlc.Timestamp
 	value            []byte
+	prevValue        []byte
 	startKey, endKey roachpb.Key
 	txnID            uuid.UUID
 	txnKey           []byte
 	txnIsoLevel      isolation.Level
 	txnMinTimestamp  hlc.Timestamp
 	omitInRangefeeds bool
+}
+
+func generateStaticTestdata() testData {
+	return testData{
+		kvs:              testSSTKVs,
+		span:             testSpan,
+		key:              testKey,
+		timestamp:        testTs,
+		value:            testValue,
+		prevValue:        testPrevValue,
+		startKey:         testStartKey,
+		endKey:           testEndKey,
+		txnID:            testTxnID,
+		txnKey:           testKey,
+		txnIsoLevel:      testIsolationLevel,
+		txnMinTimestamp:  testTs,
+		omitInRangefeeds: false,
+	}
+}
+
+// TestEventSizeCalculation tests the memory usage of events. This test serves
+// as a reminder to update memory accounting MemUsage calculations when new
+// fields are added to event or  RangeFeedEvent. If this test fails, you need to
+// make sure MemUsage is updated accordingly to account the new field. If this
+// new field is a slice, map, pointer, string, or a nested struct, you need to
+// be careful and account the memory usage of the additional underlying data
+// structure. Otherwise, you can simply update the expected values in this test.
+func TestEventSizeCalculation(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	data := generateStaticTestdata()
+
+	key := data.key
+	timestamp := data.timestamp
+	value := data.value
+	prevValue := data.prevValue
+
+	startKey := data.startKey
+	endKey := data.endKey
+
+	txnID := data.txnID
+	txnKey := data.txnKey
+	txnIsoLevel := data.txnIsoLevel
+	txnMinTimestamp := data.txnMinTimestamp
+
+	omitInRangefeeds := data.omitInRangefeeds
+
+	span := data.span
+	sst, _, _ := storageutils.MakeSST(t, st, data.kvs)
+
+	for _, tc := range []struct {
+		name                   string
+		ev                     event
+		actualCurrMemUsage     int64
+		expectedCurrMemUsage   int64
+		actualFutureMemUsage   int64
+		expectedFutureMemUsage int64
+	}{
+		{
+			name: "write_value event",
+			ev: event{ops: []enginepb.MVCCLogicalOp{
+				writeValueOpWithPrevValue(key, timestamp, value, prevValue),
+			}},
+			expectedCurrMemUsage: int64(241),
+			actualCurrMemUsage: eventOverhead + mvccLogicalOp + mvccWriteValueOp +
+				int64(cap(key)) + int64(cap(value)) + int64(cap(prevValue)),
+			expectedFutureMemUsage: int64(201),
+			actualFutureMemUsage: futureEventBaseOverhead + rangefeedValueOverhead +
+				int64(cap(key)) + int64(cap(value)) + int64(cap(prevValue)),
+		},
+		{
+			name: "delete_range event",
+			ev: event{ops: []enginepb.MVCCLogicalOp{
+				deleteRangeOp(startKey, endKey, timestamp),
+			}},
+			expectedCurrMemUsage: int64(202),
+			actualCurrMemUsage: eventOverhead + mvccLogicalOp + mvccDeleteRangeOp +
+				int64(cap(startKey)) + int64(cap(endKey)),
+			expectedFutureMemUsage: int64(194),
+			actualFutureMemUsage: futureEventBaseOverhead + rangefeedValueOverhead +
+				int64(cap(startKey)) + int64(cap(endKey)),
+		},
+		{
+			name: "write_intent event",
+			ev: event{ops: []enginepb.MVCCLogicalOp{
+				writeIntentOpWithDetails(txnID, txnKey, txnIsoLevel, txnMinTimestamp, timestamp),
+			}},
+			expectedCurrMemUsage: int64(236),
+			actualCurrMemUsage: eventOverhead + mvccLogicalOp + mvccWriteIntentOp +
+				int64(cap(txnID)) + int64(cap(txnKey)),
+			expectedFutureMemUsage: int64(0),
+			actualFutureMemUsage:   int64(0), // No future events to publish.
+		},
+		{
+			name: "update_intent event",
+			ev: event{ops: []enginepb.MVCCLogicalOp{
+				updateIntentOp(txnID, timestamp),
+			}},
+			expectedCurrMemUsage:   int64(184),
+			actualCurrMemUsage:     eventOverhead + mvccLogicalOp + mvccUpdateIntentOp + int64(cap(txnID)),
+			expectedFutureMemUsage: int64(0),
+			actualFutureMemUsage:   int64(0), // No future events to publish.
+		},
+		{
+			name: "commit_intent event",
+			ev: event{ops: []enginepb.MVCCLogicalOp{
+				commitIntentOpWithPrevValue(txnID, key, timestamp, value, prevValue, omitInRangefeeds),
+			}},
+			expectedCurrMemUsage: int64(273),
+			actualCurrMemUsage: eventOverhead + mvccLogicalOp + mvccCommitIntentOp +
+				int64(cap(txnID)) + int64(cap(key)) + int64(cap(value)) + int64(cap(prevValue)),
+			expectedFutureMemUsage: int64(201),
+			actualFutureMemUsage: futureEventBaseOverhead + rangefeedValueOverhead +
+				int64(cap(key)) + int64(cap(value)) + int64(cap(prevValue)),
+		},
+		{
+			name: "abort_intent event",
+			ev: event{ops: []enginepb.MVCCLogicalOp{
+				abortIntentOp(txnID),
+			}},
+			expectedCurrMemUsage:   int64(168),
+			actualCurrMemUsage:     eventOverhead + mvccLogicalOp + mvccAbortIntentOp + int64(cap(txnID)),
+			expectedFutureMemUsage: int64(0),
+			actualFutureMemUsage:   int64(0), // No future events to publish.
+		},
+		{
+			name: "abort_txn event",
+			ev: event{ops: []enginepb.MVCCLogicalOp{
+				abortTxnOp(txnID),
+			}},
+			expectedCurrMemUsage:   int64(168),
+			actualCurrMemUsage:     eventOverhead + mvccLogicalOp + mvccAbortTxnOp + int64(cap(txnID)),
+			expectedFutureMemUsage: int64(0),
+			actualFutureMemUsage:   int64(0), // No future events to publish.
+		},
+		{
+			name:                   "ct event",
+			ev:                     event{ct: ctEvent{Timestamp: data.timestamp}},
+			expectedCurrMemUsage:   int64(80),
+			actualCurrMemUsage:     eventOverhead,
+			expectedFutureMemUsage: int64(152),
+			actualFutureMemUsage:   futureEventBaseOverhead + rangefeedCheckpointOverhead,
+		},
+		{
+			name:                   "initRTS event",
+			ev:                     event{initRTS: true},
+			expectedCurrMemUsage:   int64(80),
+			actualCurrMemUsage:     eventOverhead,
+			expectedFutureMemUsage: int64(152),
+			actualFutureMemUsage:   futureEventBaseOverhead + rangefeedCheckpointOverhead,
+		},
+		{
+			name:                 "sstEvent event",
+			ev:                   event{sst: &sstEvent{data: sst, span: span, ts: timestamp}},
+			expectedCurrMemUsage: int64(1962),
+			actualCurrMemUsage: eventOverhead + sstEventOverhead +
+				int64(cap(sst)+cap(span.Key)+cap(span.EndKey)),
+			expectedFutureMemUsage: int64(1970),
+			actualFutureMemUsage: futureEventBaseOverhead + rangefeedSSTTableOverhead +
+				int64(cap(sst)+cap(span.Key)+cap(span.EndKey)),
+		},
+		{
+			name:                   "syncEvent event",
+			ev:                     event{sync: &syncEvent{c: make(chan struct{})}},
+			expectedCurrMemUsage:   int64(96),
+			actualCurrMemUsage:     eventOverhead + syncEventOverhead,
+			expectedFutureMemUsage: int64(0),
+			actualFutureMemUsage:   int64(0), // No future events to publish.
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mem := tc.ev.MemUsage()
+			require.Equal(t, tc.expectedCurrMemUsage, tc.actualCurrMemUsage)
+			require.Equal(t, tc.expectedFutureMemUsage, tc.actualFutureMemUsage)
+			if tc.actualFutureMemUsage > tc.actualCurrMemUsage {
+				require.Equal(t, tc.actualFutureMemUsage, mem)
+			} else {
+				require.Equal(t, tc.actualCurrMemUsage, mem)
+			}
+		})
+	}
 }
 
 func generateRandomizedTs(rand *rand.Rand) hlc.Timestamp {
@@ -126,7 +306,7 @@ func generateRandomizedTxnId(rand *rand.Rand) uuid.UUID {
 		// rand.Intn(0) panics
 		n = 1
 	}
-	i := rand.Intn(n)
+	i := rand.Intn(n) // i must be in [0,n)
 	txnID.DeterministicV4(uint64(i), uint64(n))
 	return txnID
 }
@@ -142,7 +322,7 @@ func generateRandomizedSpan(rand *rand.Rand) roachpb.RSpan {
 func generateRandomTestData(rand *rand.Rand) testData {
 	startKey, endkey := generateStartAndEndKey(rand)
 	return testData{
-		numOfLogicalOps:  rand.Intn(100),
+		numOfLogicalOps:  rand.Intn(100) + 1, // Avoid 0 (empty event)
 		kvs:              testSSTKVs,
 		span:             generateRandomizedSpan(rand).AsRawSpanWithNoLocals(),
 		key:              generateRandomizedBytes(rand),
@@ -158,431 +338,59 @@ func generateRandomTestData(rand *rand.Rand) testData {
 	}
 }
 
-func writeValueOpEvent(
-	key roachpb.Key, timestamp hlc.Timestamp, value []byte,
-) (
-	op enginepb.MVCCLogicalOp,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	op = writeValueOpWithKV(key, timestamp, value)
-	futureEvent.MustSetValue(&kvpb.RangeFeedValue{
-		Key: key,
-		Value: roachpb.Value{
-			RawBytes:  value,
-			Timestamp: timestamp,
-		},
-	})
-	expectedMemUsage += mvccWriteValueOp + int64(cap(key)) + int64(cap(value))
-	expectedFutureMemUsage += futureEventBaseOverhead + rangefeedValueOverhead + int64(cap(key)) + int64(cap(value))
-	return op, futureEvent, expectedMemUsage, expectedFutureMemUsage
+type exampleOp struct {
+	op  enginepb.MVCCLogicalOp
+	mem int64
 }
 
-func deleteRangeOpEvent(
-	startKey, endKey roachpb.Key, timestamp hlc.Timestamp,
-) (
-	op enginepb.MVCCLogicalOp,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	op = deleteRangeOp(startKey, endKey, timestamp)
-	futureEvent.MustSetValue(&kvpb.RangeFeedDeleteRange{
-		Span:      roachpb.Span{Key: startKey, EndKey: endKey},
-		Timestamp: testTs,
-	})
-	expectedMemUsage += mvccDeleteRangeOp + int64(cap(startKey)) + int64(cap(endKey))
-	expectedFutureMemUsage += futureEventBaseOverhead + rangefeedDeleteRangeOverhead + int64(cap(startKey)) + int64(cap(endKey))
-	return op, futureEvent, expectedMemUsage, expectedFutureMemUsage
-}
-
-func writeIntentOpEvent(
-	txnID uuid.UUID,
-	txnKey []byte,
-	txnIsoLevel isolation.Level,
-	txnMinTimestamp hlc.Timestamp,
-	timestamp hlc.Timestamp,
-) (
-	op enginepb.MVCCLogicalOp,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	op = writeIntentOpWithDetails(txnID, txnKey, txnIsoLevel, txnMinTimestamp, timestamp)
-	expectedMemUsage += mvccWriteIntentOp + int64(cap(txnID)) + int64(cap(txnKey))
-	// No future event to publish.
-	return op, futureEvent, expectedMemUsage, 0
-}
-
-func updateIntentOpEvent(
-	txnID uuid.UUID, timestamp hlc.Timestamp,
-) (
-	op enginepb.MVCCLogicalOp,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	op = updateIntentOp(txnID, timestamp)
-	expectedMemUsage += mvccUpdateIntentOp + int64(cap(txnID))
-	// No future event to publish.
-	return op, futureEvent, expectedMemUsage, 0
-}
-
-func commitIntentOpEvent(
-	txnID uuid.UUID,
-	key roachpb.Key,
-	timestamp hlc.Timestamp,
-	value, prevValue []byte,
-	omitInRangefeeds bool,
-) (
-	op enginepb.MVCCLogicalOp,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	op = commitIntentOpWithKV(txnID, key, timestamp, value, omitInRangefeeds)
-
-	futureEvent.MustSetValue(&kvpb.RangeFeedValue{
-		Key: key,
-		Value: roachpb.Value{
-			RawBytes:  value,
-			Timestamp: timestamp,
-		},
-	})
-
-	expectedMemUsage += mvccCommitIntentOp + int64(cap(txnID)) + int64(cap(key)) + int64(cap(value)) + int64(cap(prevValue))
-	expectedFutureMemUsage += futureEventBaseOverhead + rangefeedValueOverhead + int64(cap(key)) + int64(cap(value))
-	return op, futureEvent, expectedMemUsage, expectedFutureMemUsage
-}
-
-func abortIntentOpEvent(
-	txnID uuid.UUID,
-) (
-	op enginepb.MVCCLogicalOp,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	op = abortIntentOp(txnID)
-	expectedMemUsage += mvccAbortIntentOp + int64(cap(txnID))
-	// No future event to publish.
-	return op, futureEvent, expectedMemUsage, 0
-}
-
-func abortTxnOpEvent(
-	txnID uuid.UUID,
-) (
-	op enginepb.MVCCLogicalOp,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	op = abortTxnOp(txnID)
-	expectedMemUsage += mvccAbortTxnOp + int64(cap(txnID))
-	// No future event to publish.
-	return op, futureEvent, expectedMemUsage, 0
-}
-
-func generateLogicalOpEvents(
-	data testData,
-) (ev event, expectedMemUsage int64, expectedFutureMemUsage int64) {
+func generateLogicalOpEvents(rand *rand.Rand, data testData) (ev event, expectedMemUsage int64) {
 	var ops []enginepb.MVCCLogicalOp
-	var mem, futureMem int64
 	expectedMemUsage += eventOverhead
+	exampleOps := [7]exampleOp{
+		{
+			op:  writeValueOpWithPrevValue(data.key, data.timestamp, data.value, data.prevValue),
+			mem: mvccWriteValueOp + int64(cap(data.key)) + int64(cap(data.value)) + int64(cap(data.prevValue)),
+		},
+		{
+			op:  deleteRangeOp(data.startKey, data.endKey, data.timestamp),
+			mem: mvccDeleteRangeOp + int64(cap(data.startKey)) + int64(cap(data.endKey)),
+		},
+		{
+			op:  writeIntentOpWithDetails(data.txnID, data.txnKey, data.txnIsoLevel, data.txnMinTimestamp, data.timestamp),
+			mem: mvccWriteIntentOp + int64(cap(data.txnID)) + int64(cap(data.txnKey)),
+		},
+		{
+			op:  updateIntentOp(data.txnID, data.timestamp),
+			mem: mvccUpdateIntentOp + int64(cap(data.txnID)),
+		},
+		{
+			op:  commitIntentOpWithPrevValue(data.txnID, data.key, data.timestamp, data.value, data.prevValue, data.omitInRangefeeds),
+			mem: mvccCommitIntentOp + int64(cap(data.txnID)) + int64(cap(data.key)) + int64(cap(data.value)) + int64(cap(data.prevValue)),
+		},
+		{
+			op:  abortIntentOp(data.txnID),
+			mem: mvccAbortIntentOp + int64(cap(data.txnID)),
+		},
+		{
+			op:  abortTxnOp(data.txnID),
+			mem: mvccAbortTxnOp + int64(cap(data.txnID)),
+		},
+	}
+
 	for i := 0; i < data.numOfLogicalOps; i++ {
-		var op enginepb.MVCCLogicalOp
-		switch i % 7 {
-		case 0:
-			op, _, mem, futureMem = writeValueOpEvent(data.key, data.timestamp, data.value)
-		case 1:
-			op, _, mem, futureMem = deleteRangeOpEvent(data.startKey, data.endKey, data.timestamp)
-		case 2:
-			op, _, mem, futureMem = writeIntentOpEvent(data.txnID, data.txnKey, data.txnIsoLevel, data.txnMinTimestamp, data.timestamp)
-		case 3:
-			op, _, mem, futureMem = updateIntentOpEvent(data.txnID, data.timestamp)
-		case 4:
-			op, _, mem, futureMem = commitIntentOpEvent(data.txnID, data.key, data.timestamp, data.value, nil, data.omitInRangefeeds)
-		case 5:
-			op, _, mem, futureMem = abortIntentOpEvent(data.txnID)
-		case 6:
-			op, _, mem, futureMem = abortTxnOpEvent(data.txnID)
-		}
-		ops = append(ops, op)
-		expectedMemUsage += mem
-		expectedFutureMemUsage += futureMem
+		randomlyPickedIndex := rand.Intn(len(exampleOps))
+		ops = append(ops, exampleOps[randomlyPickedIndex].op)
+		expectedMemUsage += exampleOps[randomlyPickedIndex].mem
 	}
 	ev = event{ops: ops}
 	expectedMemUsage += mvccLogicalOp * int64(cap(ev.ops))
-	return ev, expectedMemUsage, expectedFutureMemUsage
+	return ev, expectedMemUsage
 }
 
-func generateOneLogicalOpEvent(
-	typesOfOps string, data testData,
-) (
-	ev event,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedCurrMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	var op enginepb.MVCCLogicalOp
-	var mem, futureMem int64
-	switch typesOfOps {
-	case "write_value":
-		op, futureEvent, mem, futureMem = writeValueOpEvent(data.key, data.timestamp, data.value)
-	case "delete_range":
-		op, futureEvent, mem, futureMem = deleteRangeOpEvent(data.startKey, data.endKey, data.timestamp)
-	case "write_intent":
-		op, futureEvent, mem, futureMem = writeIntentOpEvent(data.txnID, data.txnKey, data.txnIsoLevel, data.txnMinTimestamp, data.timestamp)
-	case "update_intent":
-		op, futureEvent, mem, futureMem = updateIntentOpEvent(data.txnID, data.timestamp)
-	case "commit_intent":
-		op, futureEvent, mem, futureMem = commitIntentOpEvent(data.txnID, data.key, data.timestamp, data.value, nil, data.omitInRangefeeds)
-	case "abort_intent":
-		op, futureEvent, mem, futureMem = abortIntentOpEvent(data.txnID)
-	case "abort_txn":
-		op, futureEvent, mem, futureMem = abortTxnOpEvent(data.txnID)
-	}
-
-	ev = event{
-		ops: []enginepb.MVCCLogicalOp{op},
-	}
-	expectedCurrMemUsage += eventOverhead + mem + mvccLogicalOp
-	expectedFutureMemUsage += futureMem
-	return ev, futureEvent, expectedCurrMemUsage, expectedFutureMemUsage
-}
-
-func generateCtEvent(
-	data testData,
-) (
-	ev event,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	ev = event{
-		ct: ctEvent{
-			Timestamp: data.timestamp,
-		},
-	}
-	expectedMemUsage += eventOverhead
-	// Publish checkpoint event.
-	expectedFutureMemUsage += futureEventBaseOverhead + rangefeedCheckpointOverhead
-	return ev, futureEvent, expectedMemUsage, expectedFutureMemUsage
-}
-
-func generateInitRTSEvent() (
-	ev event,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	ev = event{
-		initRTS: true,
-	}
-	expectedMemUsage += eventOverhead
-	// Publish checkpoint event.
-	expectedFutureMemUsage += futureEventBaseOverhead + rangefeedCheckpointOverhead
-	return ev, futureEvent, expectedMemUsage, expectedFutureMemUsage
-}
-
-func generateSSTEvent(
-	t *testing.T, data testData, st *cluster.Settings,
-) (
-	ev event,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	sst, _, _ := storageutils.MakeSST(t, st, data.kvs)
-	ev = event{
-		sst: &sstEvent{
-			data: sst,
-			span: data.span,
-			ts:   data.timestamp,
-		},
-	}
-
-	futureEvent.MustSetValue(&kvpb.RangeFeedSSTable{
-		Data:    sst,
-		Span:    data.span,
-		WriteTS: data.timestamp,
-	})
-	expectedMemUsage += eventOverhead + sstEventOverhead + int64(cap(sst)+cap(data.span.Key)+cap(data.span.EndKey))
-	expectedFutureMemUsage += futureEventBaseOverhead + rangefeedSSTTableOverhead + int64(cap(sst)+cap(data.span.Key)+cap(data.span.EndKey))
-	return ev, futureEvent, expectedMemUsage, expectedFutureMemUsage
-}
-
-func generateSyncEvent() (
-	ev event,
-	futureEvent kvpb.RangeFeedEvent,
-	expectedMemUsage int64,
-	expectedFutureMemUsage int64,
-) {
-	ev = event{
-		sync: &syncEvent{c: make(chan struct{})},
-	}
-	expectedMemUsage += eventOverhead + syncEventOverhead
-	return
-}
-
-func generateRandomizedEventAndSend(
-	rand *rand.Rand,
-) (ev event, expectedMemUsage int64, randomlyChosenEvent string) {
-	// Opt out sst event since it requires testing.T to call
-	// storageutils.MakeSST(t, st, data.kvs)
-	typesOfEvents := []string{"logicalsOps", "ct", "initRTS", "sync"}
-	randomlyChosenEvent = typesOfEvents[rand.Intn(len(typesOfEvents))]
-	data := generateRandomTestData(rand)
-	switch randomlyChosenEvent {
-	case "logicalsOps":
-		e, mem, _ := generateLogicalOpEvents(data)
-		ev = e
-		expectedMemUsage = mem
-	case "ct":
-		e, _, _, futureEvent := generateCtEvent(data)
-		ev = e
-		expectedMemUsage = futureEvent
-	case "initRTS":
-		e, _, _, futureEvent := generateInitRTSEvent()
-		ev = e
-		expectedMemUsage = futureEvent
-	case "sync":
-		e, _, mem, _ := generateSyncEvent()
-		ev = e
-		expectedMemUsage = mem
-	}
-	return ev, expectedMemUsage, randomlyChosenEvent
-}
-
-func generateStaticTestdata() testData {
-	return testData{
-		kvs:              testSSTKVs,
-		span:             testSpan,
-		key:              testKey,
-		timestamp:        testTs,
-		value:            testValue,
-		startKey:         testStartKey,
-		endKey:           testEndKey,
-		txnID:            testTxnID,
-		txnKey:           testKey,
-		txnIsoLevel:      testIsolationLevel,
-		txnMinTimestamp:  testTs,
-		omitInRangefeeds: false,
-	}
-}
-
-func TestBasicEventSizeCalculation(t *testing.T) {
-	st := cluster.MakeTestingClusterSettings()
-	data := generateStaticTestdata()
-
-	t.Run("write_value event", func(t *testing.T) {
-		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("write_value", data)
-		mem := ev.MemUsage()
-		require.Equal(t, expectedCurrMemUsage, mem)
-	})
-
-	t.Run("delete_range event", func(t *testing.T) {
-		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("delete_range", data)
-		mem := ev.MemUsage()
-		require.Equal(t, expectedCurrMemUsage, mem)
-	})
-
-	t.Run("write_intent event", func(t *testing.T) {
-		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("write_intent", data)
-		mem := ev.MemUsage()
-		require.Equal(t, expectedCurrMemUsage, mem)
-	})
-
-	t.Run("update_intent event", func(t *testing.T) {
-		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("update_intent", data)
-		mem := ev.MemUsage()
-		require.Equal(t, expectedCurrMemUsage, mem)
-	})
-
-	t.Run("commit_intent event", func(t *testing.T) {
-		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("commit_intent", data)
-		mem := ev.MemUsage()
-		require.Equal(t, expectedCurrMemUsage, mem)
-	})
-
-	t.Run("abort_intent event", func(t *testing.T) {
-		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("abort_intent", data)
-		mem := ev.MemUsage()
-		require.Equal(t, expectedCurrMemUsage, mem)
-	})
-
-	t.Run("abort_txn event", func(t *testing.T) {
-		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("abort_txn", data)
-		mem := ev.MemUsage()
-		require.Equal(t, expectedCurrMemUsage, mem)
-	})
-
-	t.Run("ct event", func(t *testing.T) {
-		ev, _, _, expectedFutureMemUsage := generateCtEvent(data)
-		mem := ev.MemUsage()
-		require.Equal(t, expectedFutureMemUsage, mem)
-	})
-
-	t.Run("initRTS event", func(t *testing.T) {
-		generateOneLogicalOpEvent("write_intent", data)
-		ev, _, _, expectedFutureMemUsage := generateInitRTSEvent()
-		mem := ev.MemUsage()
-		require.Equal(t, expectedFutureMemUsage, mem)
-	})
-
-	t.Run("sst event", func(t *testing.T) {
-		ev, _, _, expectedFutureMemUsage := generateSSTEvent(t, data, st)
-		mem := ev.MemUsage()
-		require.Equal(t, expectedFutureMemUsage, mem)
-	})
-
-	t.Run("sync event", func(t *testing.T) {
-		ev, _, expectedCurrMemUsage, _ := generateSyncEvent()
-		mem := ev.MemUsage()
-		require.Equal(t, expectedCurrMemUsage, mem)
-	})
-}
-
-// BenchmarkMemoryAccounting benchmarks the memory accounting of the event
-// struct.
-func BenchmarkMemoryAccounting(b *testing.B) {
-	skip.WithIssue(b, 121087)
-	b.Run("memory_calculation", func(b *testing.B) {
-		b.ReportAllocs()
-		rand, _ := randutil.NewTestRand()
-		events := []event{}
-		type res struct {
-			memUsage    int64
-			chosenEvent string
-		}
-		expectedRes := []res{}
-		for i := 0; i < 20; i++ {
-			ev, mem, chosenEvent := generateRandomizedEventAndSend(rand)
-			expectedRes = append(expectedRes, res{
-				memUsage:    mem,
-				chosenEvent: chosenEvent,
-			})
-			events = append(events, ev)
-		}
-
-		// Reset the timer without the cost of generating the events.
-		b.ResetTimer()
-
-		for _, ev := range events {
-			ev.MemUsage()
-		}
-
-		b.StopTimer()
-
-		totalMemUsageSum := int64(0)
-		for i := 0; i < 20; i++ {
-			b.Logf("event %d: %+v\n", i+1, events[i])
-			b.Logf("chosen event: %s\n", expectedRes[i].chosenEvent)
-			memUsage := events[i].MemUsage()
-			require.Equal(b, expectedRes[i].memUsage, memUsage)
-			totalMemUsageSum += memUsage
-		}
-		b.Logf("total memory usage: %d\n", totalMemUsageSum)
-	})
+func TestMultipleLogicalOpsEventsSizeCalculation(t *testing.T) {
+	rng, _ := randutil.NewTestRand()
+	data := generateRandomTestData(rng)
+	ev, mem := generateLogicalOpEvents(rng, data)
+	t.Logf("chosen event: %v\n", &ev)
+	require.Equal(t, ev.MemUsage(), mem)
 }
