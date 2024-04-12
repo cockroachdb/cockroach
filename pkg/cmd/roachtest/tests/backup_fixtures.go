@@ -137,10 +137,8 @@ type backupDriver struct {
 }
 
 func (bd *backupDriver) prepareCluster(ctx context.Context) {
-
-	if bd.c.Cloud() != bd.sp.scheduledBackupSpecs.cloud {
-		// For now, only run the test on the cloud provider that also stores the backup.
-		bd.t.Skip(fmt.Sprintf("test configured to run on %s", bd.sp.scheduledBackupSpecs.cloud))
+	if err := bd.sp.scheduledBackupSpecs.CloudIsCompatible(bd.c.Cloud()); err != nil {
+		bd.t.Skip(err.Error())
 	}
 	version := clusterupgrade.CurrentVersion()
 	if bd.sp.scheduledBackupSpecs.version != fixtureFromMasterVersion {
@@ -387,7 +385,7 @@ func registerBackupFixtures(r registry.Registry) {
 			Cluster:           bf.hardware.makeClusterSpecs(r, bf.scheduledBackupSpecs.cloud),
 			Timeout:           bf.timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
-			CompatibleClouds:  registry.Clouds(bf.scheduledBackupSpecs.cloud),
+			CompatibleClouds:  bf.scheduledBackupSpecs.CompatibleClouds(),
 			Suites:            bf.suites,
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
