@@ -2584,7 +2584,6 @@ func (ds *DistSender) sendToReplicas(
 	}
 	// Rearrange the replicas so that they're ordered according to the routing
 	// policy.
-	var routeToLeaseholder bool
 	switch ba.RoutingPolicy {
 	case kvpb.RoutingPolicy_LEASEHOLDER:
 		// First order by latency, then move the leaseholder to the front of the
@@ -2601,7 +2600,6 @@ func (ds *DistSender) sendToReplicas(
 			if ds.routeToLeaseholderFirst {
 				replicas.MoveToFront(idx)
 			}
-			routeToLeaseholder = true
 		} else {
 			// The leaseholder node's info must have been missing from gossip when we
 			// created replicas.
@@ -2751,7 +2749,7 @@ func (ds *DistSender) sendToReplicas(
 			// of routing loops.
 			requestToSend = ba.ShallowCopy()
 			requestToSend.ProxyRangeInfo = nil
-		} else if !routeToLeaseholder {
+		} else if ba.RoutingPolicy != kvpb.RoutingPolicy_LEASEHOLDER {
 			// This request isn't intended for the leaseholder so we don't proxy it.
 		} else if routing.Leaseholder() == nil {
 			// NB: Normally we don't have both routeToLeaseholder and a nil
@@ -3059,8 +3057,13 @@ func (ds *DistSender) sendToReplicas(
 					// prevents accidentally returning a replica unavailable
 					// error too aggressively.
 					if updatedLeaseholder {
+						// After a NLHE we update our policy to attempt to route
+						// to the leaseholder first rather than trying the other
+						// followers. This will prioritize proxying a request
+						// rather than hitting additional NLHE errors on other
+						// stores.
+						ba.RoutingPolicy = kvpb.RoutingPolicy_LEASEHOLDER
 						leaseholderUnavailable = false
-						routeToLeaseholder = true
 						// If we changed the leaseholder, reset the transport to try all the
 						// replicas in order again. After a leaseholder change, requests to
 						// followers will be marked as potential proxy requests and point to
@@ -3112,7 +3115,7 @@ func (ds *DistSender) sendToReplicas(
 					// have a sufficient closed timestamp. In response, we should
 					// immediately redirect to the leaseholder, without a backoff
 					// period.
-					intentionallySentToFollower := first && !routeToLeaseholder
+					intentionallySentToFollower := first && ba.RoutingPolicy != kvpb.RoutingPolicy_LEASEHOLDER
 					// See if we want to backoff a little before the next attempt. If
 					// the lease info we got is stale and we were intending to send to
 					// the leaseholder, we backoff because it might be the case that
