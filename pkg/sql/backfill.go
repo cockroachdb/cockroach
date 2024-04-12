@@ -1553,7 +1553,6 @@ func ValidateConstraint(
 		// Use a schema resolver because we need to resolve types by ID and table by name.
 		resolver := NewSkippingCacheSchemaResolver(txn.Descriptors(), sessiondata.NewStack(sessionData), txn.KV(), nil /* authAccessor */)
 		semaCtx := tree.MakeSemaContext(resolver)
-		semaCtx.NameResolver = resolver
 		semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(txn.Descriptors(), txn.KV())
 		defer func() { txn.Descriptors().ReleaseAll(ctx) }()
 

@@ -62,7 +62,7 @@ func TestExprIsNeverNull(t *testing.T) {
 			switch d.Cmd {
 			case "scalar-is-not-nullable":
 				ctx := context.Background()
-				semaCtx := tree.MakeSemaContext(nil /* typeResolver */)
+				semaCtx := tree.MakeSemaContext(nil /* resolver */)
 				evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 				var o xform.Optimizer

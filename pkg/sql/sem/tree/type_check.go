@@ -258,13 +258,23 @@ func (s *ScalarAncestors) clear() {
 	*s = 0
 }
 
-// MakeSemaContext initializes a simple SemaContext suitable
-// for "lightweight" type checking such as the one performed for default
-// expressions.
+// MakeSemaContext initializes a simple SemaContext suitable for "lightweight"
+// type checking such as the one performed for default expressions.
+//
 // Note: if queries with placeholders are going to be used,
 // SemaContext.Placeholders.Init must be called separately.
-func MakeSemaContext(typeResolver TypeReferenceResolver) SemaContext {
-	return SemaContext{TypeResolver: typeResolver}
+//
+// resolver is optional and can implement any number of TypeReferenceResolver,
+// FunctionReferenceResolver, and QualifiedNameResolver interfaces.
+func MakeSemaContext(resolver interface{}) SemaContext {
+	typeResolver, _ := resolver.(TypeReferenceResolver)
+	functionResolver, _ := resolver.(FunctionReferenceResolver)
+	nameResolver, _ := resolver.(QualifiedNameResolver)
+	return SemaContext{
+		TypeResolver:     typeResolver,
+		FunctionResolver: functionResolver,
+		NameResolver:     nameResolver,
+	}
 }
 
 // isUnresolvedPlaceholder provides a nil-safe method to determine whether expr is an

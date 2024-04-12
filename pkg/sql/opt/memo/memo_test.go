@@ -67,7 +67,7 @@ func TestStatsQuality(t *testing.T) {
 
 func TestCompositeSensitive(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "composite_sensitive"), func(t *testing.T, d *datadriven.TestData) string {
-		semaCtx := tree.MakeSemaContext(nil /* typeResolver */)
+		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		var f norm.Factory

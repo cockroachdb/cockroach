@@ -43,7 +43,7 @@ func TestCastToCollatedString(t *testing.T) {
 				Type:       cas.typ,
 				SyntaxMode: tree.CastShort,
 			}
-			semaCtx := tree.MakeSemaContext(nil /* typeResolver */)
+			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			typedexpr, err := expr.TypeCheck(ctx, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)

@@ -531,7 +531,7 @@ func mysqlTableToCockroach(
 	if p != nil && p.SemaCtx() != nil {
 		semaCtxPtr = p.SemaCtx()
 	} else {
-		semaCtx := tree.MakeSemaContext(nil /* typeResolver */)
+		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		semaCtxPtr = &semaCtx
 	}
 
