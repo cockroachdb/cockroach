@@ -272,6 +272,10 @@ func (p *Provider) GetPreemptedSpotVMs(
 	return nil, nil
 }
 
+func (p *Provider) GetHostErrorVMs(l *logger.Logger, since time.Time) ([]vm.PreemptedVM, error) {
+	return nil, nil
+}
+
 const (
 	defaultSSDMachineType = "m6id.xlarge"
 	defaultMachineType    = "m6i.xlarge"

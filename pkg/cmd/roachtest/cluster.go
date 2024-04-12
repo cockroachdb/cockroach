@@ -3049,3 +3049,41 @@ func (c *clusterImpl) GetPreemptedVMs(
 	}
 	return allPreemptedVMs, nil
 }
+
+// GetHostErrorVMs gets any VMs that were part of the cluster but has a host error.
+func (c *clusterImpl) GetHostErrorVMs(
+	ctx context.Context, l *logger.Logger,
+) ([]vm.PreemptedVM, error) {
+	if c.IsLocal() || !c.spec.UseSpotVMs {
+		return nil, nil
+	}
+
+	cachedCluster, ok := roachprod.CachedCluster(c.name)
+	if !ok {
+		var availableClusters []string
+		roachprod.CachedClusters(func(name string, _ int) {
+			availableClusters = append(availableClusters, name)
+		})
+
+		err := errors.Wrapf(errClusterNotFound, "%q", c.name)
+		return nil, errors.WithHintf(err, "\nAvailable clusters:\n%s", strings.Join(availableClusters, "\n"))
+	}
+
+	// Bucket cachedCluster.VMs by provider.
+	providerToVMs := make(map[string][]vm.VM)
+	for _, vm := range cachedCluster.VMs {
+		providerToVMs[vm.Provider] = append(providerToVMs[vm.Provider], vm)
+	}
+
+	var allHostErrorVMs []vm.PreemptedVM
+	for provider := range providerToVMs {
+		p := vm.Providers[provider]
+		hostErrorVMS, err := p.GetHostErrorVMs(l, cachedCluster.CreatedAt)
+		if err != nil {
+			l.Errorf("failed to get preempted VMs for provider %s: %s", provider, err)
+			continue
+		}
+		allHostErrorVMs = append(allHostErrorVMs, hostErrorVMS...)
+	}
+	return allHostErrorVMs, nil
+}
