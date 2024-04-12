@@ -114,9 +114,50 @@ NOTICE: 2, 1
 NOTICE: final j: 2
 NOTICE: final i: 3
 
-subtest nested_block_cursors
+# Regression test for #122278 - a nested block with an exception handler inside
+# a loop should only rollback mutations from the current iteration.
+statement ok
+CREATE TABLE t122278(x INT);
+
 statement ok
 DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 5 LOOP
+      i := i + 1;
+      BEGIN
+        INSERT INTO t122278 VALUES (i);
+        IF i = 3 THEN
+          SELECT 1 // 0;
+        END IF;
+      EXCEPTION WHEN division_by_zero THEN
+        RAISE NOTICE 'saw exception';
+      END;
+    END LOOP;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: saw exception
+
+query I rowsort
+SELECT * FROM t122278;
+----
+1
+2
+4
+5
+
+statement ok
+DROP TABLE t122278 CASCADE;
+
+subtest nested_block_cursors
+
+statement ok
 CREATE PROCEDURE p() AS $$
   DECLARE
     curs1 CURSOR FOR SELECT 1 FROM generate_series(1, 10);
