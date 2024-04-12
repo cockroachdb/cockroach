@@ -1137,10 +1137,12 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
+
 	ex.applicationStats = applicationStats
 	ex.statsCollector = sslocal.NewStatsCollector(
 		s.cfg.Settings,
 		applicationStats,
+		ex.server.insights.Writer(ex.sessionData().Internal),
 		ex.phaseTimes,
 		s.cfg.SQLStatsTestingKnobs,
 	)
