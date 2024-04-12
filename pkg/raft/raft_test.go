@@ -19,6 +19,8 @@ package raft
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"math"
 	"math/rand"
 	"strings"
@@ -1135,19 +1137,29 @@ func TestHandleMsgApp(t *testing.T) {
 func TestHandleHeartbeat(t *testing.T) {
 	commit := uint64(2)
 	tests := []struct {
-		m       pb.Message
-		wCommit uint64
+		m         pb.Message
+		logSynced bool
+		wCommit   uint64
 	}{
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 1}, commit + 1},
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit - 1}, commit}, // do not decrease commit
+		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 1}, true, commit + 1},
+		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit - 1}, true, commit}, // do not decrease commit
+		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit - 1}, false, commit},
+
+		// Increase the commit index only if the log is in sync with the leader.
+		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 1}, false, commit},
+		// Do not increase the commit index beyond our log size.
+		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 10}, true, commit + 1},
 	}
 
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2))
+		storage.SetHardState(pb.HardState{
+			Term:   3,
+			Commit: commit,
+		})
 		require.NoError(t, storage.Append(index(1).terms(1, 2, 3)))
 		sm := newTestRaft(1, 5, 1, storage)
 		sm.becomeFollower(2, 2)
-		sm.raftLog.commitTo(commit)
 		sm.handleHeartbeat(tt.m)
 		assert.Equal(t, tt.wCommit, sm.raftLog.committed, "#%d", i)
 		m := sm.readMessages()
@@ -3863,6 +3875,10 @@ func SetRandomizedElectionTimeout(r *RawNode, v int) {
 }
 
 func newTestConfig(id uint64, election, heartbeat int, storage Storage) *Config {
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.V24_1_FlexibleFollowerCommitIndex.Version(),
+		clusterversion.MinSupported.Version(),
+		true /* initializeVersion */)
 	return &Config{
 		ID:              id,
 		ElectionTick:    election,
@@ -3870,6 +3886,7 @@ func newTestConfig(id uint64, election, heartbeat int, storage Storage) *Config 
 		Storage:         storage,
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
+		CRDBVersion:     settings.Version,
 	}
 }
 

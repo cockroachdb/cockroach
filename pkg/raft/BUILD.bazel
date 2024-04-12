@@ -50,10 +50,12 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":raft"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
         "//pkg/raft/rafttest",
         "//pkg/raft/tracker",
+        "//pkg/settings/cluster",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

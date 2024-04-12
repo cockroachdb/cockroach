@@ -19,6 +19,7 @@ package raft
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -350,6 +351,11 @@ type raft struct {
 
 	// the leader id
 	lead uint64
+	// logSynced is true if this node's log is guaranteed to be a prefix of the
+	// leader's log at this term. Always true for the leader. Always false for a
+	// candidate. For a follower, becomes true the first time a MsgApp append to
+	// the log succeeds.
+	logSynced bool
 	// leadTransferee is id of the leader transfer target when its value is not zero.
 	// Follow the procedure defined in raft thesis 3.10.
 	leadTransferee uint64
@@ -654,6 +660,11 @@ func (r *raft) sendHeartbeat(to uint64) {
 	// The leader MUST NOT forward the follower's commit to
 	// an unmatched index.
 	commit := min(pr.Match, r.raftLog.committed)
+	// If all cluster nodes are on the new version we can safely
+	// cut commit index to the leader's commit index in heartbeat.
+	if r.crdbVersion != nil && r.crdbVersion.IsActive(context.TODO(), clusterversion.V24_1_FlexibleFollowerCommitIndex) {
+		commit = r.raftLog.committed
+	}
 	r.send(pb.Message{
 		To:     to,
 		Type:   pb.MsgHeartbeat,
@@ -731,6 +742,7 @@ func (r *raft) reset(term uint64) {
 		r.Vote = None
 	}
 	r.lead = None
+	r.logSynced = false
 
 	r.electionElapsed = 0
 	r.heartbeatElapsed = 0
@@ -875,6 +887,7 @@ func (r *raft) becomeLeader() {
 	r.reset(r.Term)
 	r.tick = r.tickHeartbeat
 	r.lead = r.id
+	r.logSynced = true // the leader's log is in sync with itself
 	r.state = StateLeader
 	// Followers enter replicate mode when they've been successfully probed
 	// (perhaps after having received a snapshot as a result). The leader is
@@ -1675,6 +1688,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		return
 	}
 	if mlastIndex, ok := r.raftLog.maybeAppend(a, m.Commit); ok {
+		r.logSynced = true // from now on, the log is a prefix of the leader's log
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: mlastIndex})
 		return
 	}
@@ -1710,7 +1724,13 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 }
 
 func (r *raft) handleHeartbeat(m pb.Message) {
-	r.raftLog.commitTo(m.Commit)
+	if r.logSynced {
+		r.raftLog.commitTo(m.Commit)
+	} else {
+		// If our log is not a prefix of the leader's log, it is unsafe to advance the
+		// commit index, because the entries at this index may mismatch.
+		r.raftLog.commitTo(min(m.Commit, r.raftLog.lastIndex()))
+	}
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
 }
 

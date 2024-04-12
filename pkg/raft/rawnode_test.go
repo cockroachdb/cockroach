@@ -742,6 +742,7 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 
 	rawNode, err := NewRawNode(cfg)
 	require.NoError(t, err)
+	rawNode.raft.logSynced = true // needed to be able to advance the commit index
 
 	for highestApplied := uint64(0); highestApplied != 11; {
 		rd := rawNode.Ready()
