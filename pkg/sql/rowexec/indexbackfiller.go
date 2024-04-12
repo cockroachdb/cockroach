@@ -349,7 +349,7 @@ func (ib *indexBackfiller) Run(ctx context.Context, output execinfra.RowReceiver
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	if err := ib.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, ib.flowCtx.NewEvalCtx()); err != nil {
 		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 		return

@@ -31,12 +31,9 @@ func (b buildCtx) SemaCtx() *tree.SemaContext {
 }
 
 func newSemaCtx(d Dependencies) *tree.SemaContext {
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(d.CatalogReader())
 	semaCtx.Annotations = nil
 	semaCtx.SearchPath = &d.SessionData().SearchPath
-	semaCtx.TypeResolver = d.CatalogReader()
-	semaCtx.FunctionResolver = d.CatalogReader()
-	semaCtx.NameResolver = d.CatalogReader()
 	semaCtx.DateStyle = d.SessionData().GetDateStyle()
 	semaCtx.IntervalStyle = d.SessionData().GetIntervalStyle()
 	semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(d.ClusterSettings().Version)

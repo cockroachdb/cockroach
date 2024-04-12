@@ -716,7 +716,7 @@ type harness struct {
 func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 	h := &harness{
 		ctx:     context.Background(),
-		semaCtx: tree.MakeSemaContext(),
+		semaCtx: tree.MakeSemaContext(nil /* resolver */),
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 

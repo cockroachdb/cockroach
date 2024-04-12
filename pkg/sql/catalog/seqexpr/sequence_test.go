@@ -43,7 +43,7 @@ func TestGetSequenceFromFunc(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			semaCtx := tree.MakeSemaContext()
+			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			typedExpr, err := tree.TypeCheck(ctx, parsedExpr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
@@ -93,7 +93,7 @@ func TestGetUsedSequences(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			semaCtx := tree.MakeSemaContext()
+			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			typedExpr, err := tree.TypeCheck(ctx, parsedExpr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
@@ -144,7 +144,7 @@ func TestReplaceSequenceNamesWithIDs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			semaCtx := tree.MakeSemaContext()
+			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			typedExpr, err := tree.TypeCheck(ctx, parsedExpr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)

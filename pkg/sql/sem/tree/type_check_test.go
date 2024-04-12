@@ -233,9 +233,8 @@ func TestTypeCheck(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
-			semaCtx := tree.MakeSemaContext()
+			semaCtx := tree.MakeSemaContext(mapResolver)
 			semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */)
-			semaCtx.TypeResolver = mapResolver
 			typeChecked, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatalf("%s: unexpected error %s", d.expr, err)
@@ -356,8 +355,7 @@ func TestTypeCheckError(t *testing.T) {
 		t.Run(d.expr, func(t *testing.T) {
 			// Test with a nil and non-nil semaCtx.
 			t.Run("semaCtx not nil", func(t *testing.T) {
-				semaCtx := tree.MakeSemaContext()
-				semaCtx.TypeResolver = mapResolver
+				semaCtx := tree.MakeSemaContext(mapResolver)
 				expr, err := parser.ParseExpr(d.expr)
 				if err != nil {
 					t.Fatalf("%s: %v", d.expr, err)
@@ -410,7 +408,7 @@ func TestTypeCheckVolatility(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
 
 	typeCheck := func(sql string) error {
@@ -454,7 +452,7 @@ func TestTypeCheckCollatedString(t *testing.T) {
 	ctx := context.Background()
 
 	// Typecheck without any restrictions.
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	semaCtx.Properties.Require("", 0 /* flags */)
 
 	// Hint a normal string type for $1.
@@ -478,7 +476,7 @@ func TestTypeCheckCollatedStringNestedCaseComparison(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 
 	// The collated string constant must be on the LHS for this test, so that
 	// the type-checker chooses the collated string overload first.
@@ -506,7 +504,7 @@ func TestTypeCheckCaseExprWithPlaceholders(t *testing.T) {
 
 	// Typecheck without any restrictions.
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	semaCtx.Properties.Require("", 0 /* flags */)
 
 	// Hint all int4 types.
@@ -528,7 +526,7 @@ func TestTypeCheckCaseExprWithConstantsAndUnresolvedPlaceholders(t *testing.T) {
 
 	// Typecheck without any restrictions.
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	semaCtx.Properties.Require("", 0 /* flags */)
 
 	// Hint all int4 types, but leave one of the THEN branches unhinted.
@@ -559,7 +557,7 @@ func TestTypeCheckArrayWithNullAndPlaceholder(t *testing.T) {
 
 	// Typecheck without any restrictions.
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	semaCtx.Properties.Require("", 0 /* flags */)
 
 	placeholderTypes := []*types.T{types.Int}

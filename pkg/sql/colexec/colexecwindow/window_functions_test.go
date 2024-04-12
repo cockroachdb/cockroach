@@ -63,7 +63,7 @@ func TestWindowFunctions(t *testing.T) {
 		},
 		DiskMonitor: testDiskMonitor,
 	}
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
@@ -1102,7 +1102,7 @@ func BenchmarkWindowFunctions(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 
 	const (
 		memLimit        = 64 << 20

@@ -84,7 +84,7 @@ func descForTable(
 	} else {
 		stmt = parsed[0].AST.(*tree.CreateTable)
 	}
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	table, err := MakeTestingSimpleTableDescriptor(context.Background(), &semaCtx, settings, stmt, parent, parentSchemaID, id, fks, nanos)
 	if err != nil {
 		t.Fatalf("could not interpret %q: %v", create, err)

@@ -791,8 +791,7 @@ func (sc *SchemaChanger) validateConstraints(
 				// Use the DistSQLTypeResolver because we need to resolve types by ID.
 				collection := evalCtx.Descs
 				resolver := descs.NewDistSQLTypeResolver(collection, txn.KV())
-				semaCtx := tree.MakeSemaContext()
-				semaCtx.TypeResolver = &resolver
+				semaCtx := tree.MakeSemaContext(&resolver)
 				semaCtx.NameResolver = NewSkippingCacheSchemaResolver(
 					txn.Descriptors(),
 					sessiondata.NewStack(NewInternalSessionData(ctx, sc.settings, "validate constraint")),
@@ -1553,9 +1552,7 @@ func ValidateConstraint(
 	) error {
 		// Use a schema resolver because we need to resolve types by ID and table by name.
 		resolver := NewSkippingCacheSchemaResolver(txn.Descriptors(), sessiondata.NewStack(sessionData), txn.KV(), nil /* authAccessor */)
-		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = resolver
-		semaCtx.NameResolver = resolver
+		semaCtx := tree.MakeSemaContext(resolver)
 		semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(txn.Descriptors(), txn.KV())
 		defer func() { txn.Descriptors().ReleaseAll(ctx) }()
 

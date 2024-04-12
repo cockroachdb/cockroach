@@ -117,7 +117,7 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 		// Make sure it can be resolved as each of those types.
 		for _, availType := range avail {
 			ctx := context.Background()
-			semaCtx := tree.MakeSemaContext()
+			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			if res, err := c.ResolveAsType(ctx, &semaCtx, availType); err != nil {
 				t.Errorf("%d: expected resolving %v as available type %s would succeed, found %v",
 					i, c.ExactString(), availType, err)
@@ -219,7 +219,7 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 				continue
 			}
 
-			semaCtx := tree.MakeSemaContext()
+			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			if _, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType); err != nil {
 				if !strings.Contains(err.Error(), "could not parse") &&
 					!strings.Contains(err.Error(), "invalid input syntax") {
@@ -684,7 +684,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 					continue
 				}
 
-				semaCtx := tree.MakeSemaContext()
+				semaCtx := tree.MakeSemaContext(nil /* resolver */)
 				typedExpr, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType)
 				var res tree.Datum
 				if err == nil {

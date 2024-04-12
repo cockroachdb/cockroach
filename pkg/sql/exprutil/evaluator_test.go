@@ -28,7 +28,7 @@ func TestEvalAsString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	sc := tree.MakeSemaContext()
+	sc := tree.MakeSemaContext(nil /* resolver */)
 	s := cluster.MakeTestingClusterSettings()
 	exprEval := exprutil.MakeEvaluator(
 		"test", &sc, eval.NewTestingEvalContext(s),
