@@ -142,11 +142,13 @@ func (c *TenantStreamingClusters) setupSrcTenant() {
 
 func (c *TenantStreamingClusters) init(ctx context.Context) {
 	c.SrcSysSQL.ExecMultiple(c.T, ConfigureClusterSettings(c.Args.SrcClusterSettings)...)
-	c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled=true`, c.Args.SrcTenantName)
-	c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 GRANT CAPABILITY can_use_nodelocal_storage`, c.Args.SrcTenantName)
-	require.NoError(c.T, c.SrcCluster.Server(0).TenantController().WaitForTenantCapabilities(ctx, c.Args.SrcTenantID, map[tenantcapabilities.ID]string{
-		tenantcapabilities.CanUseNodelocalStorage: "true",
-	}, ""))
+	if !c.Args.SrcTenantID.IsSystem() {
+		c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled=true`, c.Args.SrcTenantName)
+		c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 GRANT CAPABILITY can_use_nodelocal_storage`, c.Args.SrcTenantName)
+		require.NoError(c.T, c.SrcCluster.Server(0).TenantController().WaitForTenantCapabilities(ctx, c.Args.SrcTenantID, map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanUseNodelocalStorage: "true",
+		}, ""))
+	}
 	if c.Args.SrcInitFunc != nil {
 		c.Args.SrcInitFunc(c.T, c.SrcSysSQL, c.SrcTenantSQL)
 	}
@@ -418,8 +420,15 @@ func CreateMultiTenantStreamingCluster(
 		DestSysServer: cluster.Server(destNodeIdx).SystemLayer(),
 		Rng:           rng,
 	}
-	tsc.setupSrcTenant()
+	if args.SrcTenantID.IsSystem() {
+		tsc.SrcTenantServer = tsc.SrcSysServer
+		tsc.SrcTenantConn = tsc.SrcCluster.ServerConn(0)
+		tsc.SrcTenantSQL = tsc.SrcSysSQL
+	} else {
+		tsc.setupSrcTenant()
+	}
 	tsc.init(ctx)
+
 	return tsc, func() {
 		require.NoError(t, tsc.SrcTenantConn.Close())
 		cleanup()
