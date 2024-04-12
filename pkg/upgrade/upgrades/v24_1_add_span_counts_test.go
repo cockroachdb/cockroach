@@ -47,7 +47,9 @@ func TestAddSpanCounts(t *testing.T) {
 	s, sqlDB := tc.Server(0), tc.ServerConn(0)
 
 	require.True(t, s.ExecutorConfig().(sql.ExecutorConfig).Codec.ForSystemTenant())
-	upgrades.Upgrade(t, sqlDB, clusterversion.V24_1_AddSpanCounts, nil, false)
 	_, err := sqlDB.Exec("SELECT * FROM system.public.span_count")
+	require.Error(t, err, "system.public.span_count should not exist")
+	upgrades.Upgrade(t, sqlDB, clusterversion.V24_1_AddSpanCounts, nil, false)
+	_, err = sqlDB.Exec("SELECT * FROM system.public.span_count")
 	require.NoError(t, err, "system.public.span_count exists")
 }
