@@ -165,7 +165,7 @@ var (
 		maxUpgrades:                    4,
 		minimumSupportedVersion:        OldestSupportedVersion,
 		predecessorFunc:                randomPredecessor,
-		skipVersionProbability:         0.5,
+		skipVersionProbability:         1, // TODO(renato): revert back to 0.5
 		overriddenMutatorProbabilities: make(map[string]float64),
 	}
 
