@@ -377,8 +377,7 @@ func createStatsDefaultColumns(
 	// local-only virtual computed column expression is needed.
 	cannotDistribute := make([]bool, len(desc.PublicColumns()))
 	if virtColEnabled {
-		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = evalCtx.Planner
+		semaCtx := tree.MakeSemaContext(evalCtx.Planner)
 		exprs, _, err := schemaexpr.MakeComputedExprs(
 			ctx,
 			desc.PublicColumns(),

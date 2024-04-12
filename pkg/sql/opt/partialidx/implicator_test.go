@@ -53,7 +53,7 @@ func TestImplicator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, tu.TestDataPath(t, "implicator"), func(t *testing.T, path string) {
-		semaCtx := tree.MakeSemaContext()
+		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -263,7 +263,7 @@ func BenchmarkImplicator(b *testing.B) {
 		testCases = append(testCases, tc)
 	}
 
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for _, tc := range testCases {

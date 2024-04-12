@@ -350,7 +350,7 @@ func (pt partitioningTest) parse() (parsed parsedPartitioningTest, _ error) {
 
 	{
 		ctx := context.Background()
-		semaCtx := tree.MakeSemaContext()
+		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		stmt, err := parser.ParseOne(parsed.createStmt)
 		if err != nil {
 			return parsed, errors.Wrapf(err, `parsing %s`, parsed.createStmt)

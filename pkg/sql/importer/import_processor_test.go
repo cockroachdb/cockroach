@@ -125,7 +125,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 				}
 
 				kvCh := make(chan row.KVBatch, batchSize)
-				semaCtx := tree.MakeSemaContext()
+				semaCtx := tree.MakeSemaContext(nil /* resolver */)
 				conv, err := makeInputConverter(ctx, &semaCtx, converterSpec, &evalCtx, kvCh,
 					nil /* seqChunkProvider */, db)
 				if err != nil {

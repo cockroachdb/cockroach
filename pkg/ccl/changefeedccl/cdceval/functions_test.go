@@ -53,7 +53,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	defer configSemaForCDC(&semaCtx, hlc.Timestamp{})()
 
 	t.Run("time", func(t *testing.T) {

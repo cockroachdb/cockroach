@@ -57,7 +57,7 @@ func TestLookupConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, tu.TestDataPath(t), func(t *testing.T, path string) {
-		semaCtx := tree.MakeSemaContext()
+		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 		evalCtx.SessionData().VariableInequalityLookupJoinEnabled = true
 
