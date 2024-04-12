@@ -238,6 +238,83 @@ NOTICE: a2
 NOTICE: a3
 NOTICE: a4
 
+# Regression test for #122278 - all cursors within the scope of a block
+# (including those in nested blocks or routines) should be closed when the block
+# catches an exception.
+statement ok
+CREATE PROCEDURE p_nested(curs REFCURSOR) AS $$
+  BEGIN
+    OPEN curs FOR SELECT -100;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    x REFCURSOR;
+    y REFCURSOR;
+  BEGIN
+    OPEN x FOR SELECT 100;
+    BEGIN
+      OPEN y FOR SELECT 200;
+      IF n = 0 THEN
+        RETURN 1 // 0;
+      END IF;
+      CALL p_nested('foo');
+      IF n = 1 THEN
+        RETURN 1 // 0;
+      END IF;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        RETURN (SELECT count(*) FROM pg_cursors);
+    END;
+    CALL p_nested('bar');
+    IF n = 2 THEN
+      RETURN 1 // 0;
+    END IF;
+    RETURN (SELECT count(*) FROM pg_cursors);
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN (SELECT count(*) FROM pg_cursors);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(0);
+----
+1
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(1);
+----
+1
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(2);
+----
+0
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(3);
+----
+4
+
+statement ok
+CLOSE ALL;
+
 subtest nested_block_exceptions
 
 # Don't catch an exception thrown from the variable declarations.
@@ -384,7 +461,7 @@ CALL p(1);
 ----
 NOTICE: 1
 
-statement error pgcode 34000 pq: cursor \"<unnamed portal 11>\" does not exist
+statement error pgcode 34000 pq: cursor \"<unnamed portal 19>\" does not exist
 CALL p(2);
 
 query T noticetrace
