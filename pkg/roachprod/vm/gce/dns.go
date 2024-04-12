@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -31,9 +32,11 @@ const (
 	dnsDomain                = "roachprod-managed.crdb.io"
 	dnsMaxResults            = 10000
 	dnsMaxConcurrentRequests = 4
-)
 
-var ErrDNSOperation = fmt.Errorf("error during Google Cloud DNS operation")
+	// dnsProblemLabel is the label used when we see transient DNS
+	// errors while making API calls to Cloud DNS.
+	dnsProblemLabel = "dns_problem"
+)
 
 var _ vm.DNSProvider = &dnsProvider{}
 
@@ -97,7 +100,7 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 		cmd := exec.CommandContext(ctx, "gcloud", args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return markDNSOperationError(errors.Wrapf(err, "output: %s", out))
+			return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", out), dnsProblemLabel)
 		}
 		n.updateCache(name, maps.Values(combinedRecords))
 	}
@@ -129,7 +132,7 @@ func (n *dnsProvider) DeleteRecordsByName(ctx context.Context, names ...string) 
 			cmd := exec.CommandContext(ctx, "gcloud", args...)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
-				return markDNSOperationError(errors.Wrapf(err, "output: %s", out))
+				return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", out), dnsProblemLabel)
 			}
 			n.clearCacheEntry(name)
 			return nil
@@ -213,7 +216,7 @@ func (n *dnsProvider) listSRVRecords(
 	cmd := exec.CommandContext(ctx, "gcloud", args...)
 	res, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, markDNSOperationError(errors.Wrapf(err, "output: %s", res))
+		return nil, rperrors.TransientFailure(errors.Wrapf(err, "output: %s", res), dnsProblemLabel)
 	}
 	var jsonList []struct {
 		Name       string   `json:"name"`
@@ -225,7 +228,7 @@ func (n *dnsProvider) listSRVRecords(
 
 	err = json.Unmarshal(res, &jsonList)
 	if err != nil {
-		return nil, markDNSOperationError(errors.Wrapf(err, "error unmarshalling output: %s", res))
+		return nil, rperrors.TransientFailure(errors.Wrapf(err, "error unmarshaling output: %s", res), dnsProblemLabel)
 	}
 
 	records := make([]vm.DNSRecord, 0)
@@ -267,10 +270,4 @@ func (n *dnsProvider) clearCacheEntry(name string) {
 // may or may not have a trailing dot.
 func (n *dnsProvider) normaliseName(name string) string {
 	return strings.TrimSuffix(name, ".")
-}
-
-// markDNSOperationError should be used to mark any external DNS API or Google
-// Cloud DNS CLI errors as DNS operation errors.
-func markDNSOperationError(err error) error {
-	return errors.Mark(err, ErrDNSOperation)
 }
