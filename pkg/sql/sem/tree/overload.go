@@ -1213,8 +1213,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 			constExpr := s.exprs[i].(Constant)
 			filter := makeFilter(i, func(params TypeList, ordinal int) bool {
-				semaCtx := MakeSemaContext()
-				_, err := constExpr.ResolveAsType(ctx, &semaCtx, params.GetAt(ordinal))
+				_, err := constExpr.ResolveAsType(ctx, semaCtx, params.GetAt(ordinal))
 				return err == nil
 			})
 			s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
