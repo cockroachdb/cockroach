@@ -181,12 +181,20 @@ func LoadClusters() error {
 // This function assumes the caller took a lock on a file to ensure that
 // multiple processes don't run through this code at the same time. However, it
 // is allowed for LoadClusters to run in another process at the same time.
-func syncClustersCache(l *logger.Logger, cloud *cloud.Cloud) error {
+//
+// overwriteMissingClusters indicates if clusters should be removed from the cache
+// if not present in cloud This is used when we have a potentially incomplete list
+// of all clusters due to a transient provider error.
+func syncClustersCache(l *logger.Logger, cloud *cloud.Cloud, overwriteMissingClusters bool) error {
 	// Write all cluster files.
 	for _, c := range cloud.Clusters {
 		if err := saveCluster(l, c); err != nil {
 			return err
 		}
+	}
+
+	if !overwriteMissingClusters {
+		return nil
 	}
 
 	// Remove any other files.

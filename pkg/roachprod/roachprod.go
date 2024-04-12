@@ -248,10 +248,13 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 	defer unlock()
 
 	cld, err := cloud.ListCloud(l, options)
-	if err != nil {
-		return nil, err
-	}
-	if err := syncClustersCache(l, cld); err != nil {
+	// ListCloud may fail for a provider, but we still want to continue as
+	// the cluster the caller is trying to add and use may have been found.
+	// Instead, we tell syncClustersCache not to remove any clusters as we
+	// can't tell if a cluster was deleted or not found due to the error.
+	// The next successful ListCloud call will clean it up.
+	overwriteMissingClusters := err == nil
+	if err := syncClustersCache(l, cld, overwriteMissingClusters); err != nil {
 		return nil, err
 	}
 
@@ -600,13 +603,9 @@ func Reset(l *logger.Logger, clusterName string) error {
 		return nil
 	}
 
-	cld, err := cloud.ListCloud(l, vm.ListOptions{})
+	c, err := getCluster(l, clusterName)
 	if err != nil {
 		return err
-	}
-	c, ok := cld.Clusters[clusterName]
-	if !ok {
-		return errors.New("cluster not found")
 	}
 
 	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
@@ -691,14 +690,9 @@ func Extend(l *logger.Logger, clusterName string, lifetime time.Duration) error 
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	cld, err := cloud.ListCloud(l, vm.ListOptions{})
+	c, err := getCluster(l, clusterName)
 	if err != nil {
 		return err
-	}
-
-	c, ok := cld.Clusters[clusterName]
-	if !ok {
-		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
 
 	if err := cloud.ExtendCluster(l, c, lifetime); err != nil {
@@ -706,14 +700,9 @@ func Extend(l *logger.Logger, clusterName string, lifetime time.Duration) error 
 	}
 
 	// Reload the clusters and print details.
-	cld, err = cloud.ListCloud(l, vm.ListOptions{})
+	c, err = getCluster(l, clusterName)
 	if err != nil {
 		return err
-	}
-
-	c, ok = cld.Clusters[clusterName]
-	if !ok {
-		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
 
 	return c.PrintDetails(l)
@@ -1344,10 +1333,10 @@ func Destroy(
 		if err != nil {
 			return err
 		}
-		cld, err = cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
-		if err != nil {
-			return err
-		}
+		// ListCloud may fail due to a transient provider error, but we may have still
+		// found the cluster(s) we care about. Destroy the cluster(s) we know about
+		// and let the caller retry.
+		cld, _ = cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
 		clusters := cld.Clusters.FilterByName(destroyPattern)
 		clusterNames = clusters.Names()
 
@@ -1373,11 +1362,10 @@ func Destroy(
 				return destroyLocalCluster(ctx, l, name)
 			}
 			if cld == nil {
-				var err error
-				cld, err = cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
-				if err != nil {
-					return err
-				}
+				// ListCloud may fail due to a transient provider error, but we may have still
+				// found the cluster(s) we care about. Destroy the cluster(s) we know about
+				// and let the caller retry.
+				cld, _ = cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
 			}
 			return destroyCluster(cld, l, name)
 		}); err != nil {
@@ -1426,14 +1414,11 @@ func (e *ClusterAlreadyExistsError) Error() string {
 }
 
 func cleanupFailedCreate(l *logger.Logger, clusterName string) error {
-	cld, err := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
+	c, err := getCluster(l, clusterName)
 	if err != nil {
-		return err
-	}
-	c, ok := cld.Clusters[clusterName]
-	if !ok {
 		// If the cluster doesn't exist, we didn't manage to create any VMs
 		// before failing. Not an error.
+		//nolint:returnerrcheck
 		return nil
 	}
 	return cloud.DestroyCluster(l, c)
@@ -1501,10 +1486,11 @@ func Create(
 	}
 
 	if !isLocal {
-		cld, err := cloud.ListCloud(l, vm.ListOptions{})
-		if err != nil {
-			return err
-		}
+		// ListCloud may fail due to a transient provider error, but
+		// we may not even be creating a cluster with that provider.
+		// If the cluster does exist, and we didn't find it, it will
+		// fail on the provider's end.
+		cld, _ := cloud.ListCloud(l, vm.ListOptions{})
 		if _, ok := cld.Clusters[clusterName]; ok {
 			return &ClusterAlreadyExistsError{name: clusterName}
 		}
@@ -1597,18 +1583,15 @@ func GC(l *logger.Logger, dryrun bool) error {
 		return cloud.GCAWSKeyPairs(l, dryrun)
 	})
 
-	// The operations below depend on ListCloud so only call it if ListCloud runs
-	// without errors.
-	cld, listErr := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
-	errorsChan <- listErr
-	if listErr == nil {
-		addOpFn(func() error {
-			return cloud.GCClusters(l, cld, dryrun)
-		})
-		addOpFn(func() error {
-			return cloud.GCDNS(l, cld, dryrun)
-		})
-	}
+	// ListCloud may fail for a provider, but we can still attempt GC on
+	// the clusters we do have.
+	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
+	addOpFn(func() error {
+		return cloud.GCClusters(l, cld, dryrun)
+	})
+	addOpFn(func() error {
+		return cloud.GCDNS(l, cld, dryrun)
+	})
 
 	// Wait for all operations to finish and combine all errors.
 	go func() {
@@ -2510,4 +2493,20 @@ func CreateLoadBalancer(
 		}
 	}
 	return nil
+}
+
+func getCluster(l *logger.Logger, clusterName string) (*cloud.Cluster, error) {
+	// ListCloud may fail due to a transient provider error, but
+	// we may have still found the cluster we care about. It will
+	// fail below if it can't find the cluster.
+	cld, err := cloud.ListCloud(l, vm.ListOptions{})
+	c, ok := cld.Clusters[clusterName]
+	if !ok {
+		if err != nil {
+			return &cloud.Cluster{}, errors.Wrapf(err, "cluster %s not found", clusterName)
+		}
+		return &cloud.Cluster{}, fmt.Errorf("cluster %s does not exist", clusterName)
+	}
+
+	return c, nil
 }
