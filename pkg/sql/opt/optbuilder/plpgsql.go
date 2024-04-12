@@ -385,6 +385,7 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		blockCon := b.makeContinuation("nested_block")
 		blockCon.def.ExceptionBlock = exceptionBlock
 		blockCon.def.Volatility = volatility.Volatile
+		blockCon.def.BlockStart = true
 		b.appendPlpgSQLStmts(&blockCon, astBlock.Body)
 		return b.callContinuation(&blockCon, s)
 	}

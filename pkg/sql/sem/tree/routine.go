@@ -128,6 +128,11 @@ type RoutineExpr struct {
 	// Procedure is true if the routine is a procedure being invoked by CALL.
 	Procedure bool
 
+	// BlockStart is true if this routine marks the start of a PL/pgSQL block with
+	// an exception handler. It determines when to initialize the state shared
+	// between sub-routines for the block.
+	BlockStart bool
+
 	// BlockState holds the information needed to coordinate error-handling
 	// between the sub-routines that make up a PLpgSQL exception block.
 	BlockState *BlockState
@@ -149,6 +154,7 @@ func NewTypedRoutineExpr(
 	generator bool,
 	tailCall bool,
 	procedure bool,
+	blockStart bool,
 	blockState *BlockState,
 	cursorDeclaration *RoutineOpenCursor,
 ) *RoutineExpr {
@@ -163,6 +169,7 @@ func NewTypedRoutineExpr(
 		Generator:         generator,
 		TailCall:          tailCall,
 		Procedure:         procedure,
+		BlockStart:        blockStart,
 		BlockState:        blockState,
 		CursorDeclaration: cursorDeclaration,
 	}

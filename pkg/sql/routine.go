@@ -439,19 +439,17 @@ func (g *routineGenerator) closeCursors(blockState *tree.BlockState) error {
 	return err
 }
 
-// maybeInitBlockState creates a savepoint if all the following are true:
-//  1. The current routine is within a PLpgSQL exception block.
-//  2. The current block has an exception handler
-//  3. The savepoint hasn't already been created for this block.
+// maybeInitBlockState creates a savepoint for a routine that marks a transition
+// into a PL/pgSQL block with an exception handler.
 //
 // Note that it is not necessary to explicitly release the savepoint at any
 // point, because it does not add any overhead.
 func (g *routineGenerator) maybeInitBlockState(ctx context.Context) error {
 	blockState := g.expr.BlockState
-	if blockState == nil {
+	if blockState == nil || !g.expr.BlockStart {
 		return nil
 	}
-	if blockState.ExceptionHandler != nil && blockState.SavepointTok == nil {
+	if blockState.ExceptionHandler != nil {
 		// Drop down a savepoint for the current scope.
 		var err error
 		if blockState.SavepointTok, err = g.p.Txn().CreateSavepoint(ctx); err != nil {

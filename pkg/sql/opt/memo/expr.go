@@ -709,9 +709,15 @@ type UDFDefinition struct {
 	// data source.
 	MultiColDataSource bool
 
-	// IsRecursive indicates whether the UDF recursively calls itself. This
+	// IsRecursive indicates whether the routine recursively calls itself. This
 	// applies to direct as well as indirect recursive calls (mutual recursion).
 	IsRecursive bool
+
+	// BlockStart indicates whether the routine marks the start of a PL/pgSQL
+	// block with an exception handler. This is used to determine when to
+	// initialize the common state held between sub-routines within the same
+	// block.
+	BlockStart bool
 
 	// RoutineType indicates whether this routine is a UDF, stored procedure, or
 	// builtin function.
