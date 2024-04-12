@@ -17,12 +17,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 )
 
 // StatsCollector is used to collect statement and transaction statistics
 // from connExecutor.
 type StatsCollector struct {
 	sqlstats.ApplicationStats
+
+	// Allows StatsCollector to send statement and transaction stats to the insights system.
+	insightsWriter insights.Writer
 
 	// phaseTimes tracks session-level phase times.
 	phaseTimes *sessionphase.Times
@@ -42,11 +46,13 @@ var _ sqlstats.ApplicationStats = &StatsCollector{}
 func NewStatsCollector(
 	st *cluster.Settings,
 	appStats sqlstats.ApplicationStats,
+	insights insights.Writer,
 	phaseTime *sessionphase.Times,
 	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
 	return &StatsCollector{
 		ApplicationStats: appStats,
+		insightsWriter:   insights,
 		phaseTimes:       phaseTime.Clone(),
 		st:               st,
 		knobs:            knobs,
