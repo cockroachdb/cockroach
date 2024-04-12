@@ -26,8 +26,6 @@ import (
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
-	"github.com/cockroachdb/errors"
 )
 
 type githubIssues struct {
@@ -170,25 +168,18 @@ func (g *githubIssues) createPostRequest(
 
 	issueClusterName := ""
 	errWithOwnership := failuresSpecifyOwner(failures)
-	switch {
-	case errWithOwnership != nil:
+	var transientError rperrors.TransientError
+	// If we find a failure that was labeled as a roachprod transient
+	// error, redirect that to Test Eng with the corresponding label as
+	// title override.
+	if failuresMatchingError(failures, &transientError) {
+		handleErrorWithOwnership(registry.ErrorWithOwner(
+			registry.OwnerTestEng, transientError,
+			registry.WithTitleOverride(transientError.Cause),
+			registry.InfraFlake,
+		))
+	} else if errWithOwnership != nil {
 		handleErrorWithOwnership(*errWithOwnership)
-
-	// The following error come from various entrypoints in roachprod,
-	// but we know that they should be handled by TestEng whenever they
-	// happen during a test.
-	case failuresContainsError(failures, rperrors.ErrSSH255):
-		handleErrorWithOwnership(registry.ErrorWithOwner(
-			registry.OwnerTestEng, errors.New("SSH problem"),
-			registry.WithTitleOverride("ssh_problem"),
-			registry.InfraFlake,
-		))
-	case failuresContainsError(failures, gce.ErrDNSOperation):
-		handleErrorWithOwnership(registry.ErrorWithOwner(
-			registry.OwnerTestEng, errors.New("DNS problem"),
-			registry.WithTitleOverride("dns_problem"),
-			registry.InfraFlake,
-		))
 	}
 
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers
