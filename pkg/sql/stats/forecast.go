@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"time"
 
@@ -51,6 +52,10 @@ const minObservationsForForecast = 3
 // minGoodnessOfFit is the minimum R² (goodness of fit) measurement all
 // predictive models in a forecast must have for us to use the forecast.
 const minGoodnessOfFit = 0.95
+
+// unknownFilterSelectivity is copied here from statistics builder to avoid a
+// circular dependency.
+const unknownFilterSelectivity = 1.0 / 3.0
 
 // ForecastTableStatistics produces zero or more statistics forecasts based on
 // the given observed statistics. The observed statistics must be ordered by
@@ -199,9 +204,15 @@ func forecastColumnStatistics(
 				"predicted %v R² %v below min required R² %v", name, r2, minRequiredFit,
 			)
 		}
-		// Clamp the predicted value to [0, MaxInt64] and round to nearest integer.
-		if yₙ < 0 {
-			return 0, nil
+		// Clamp the predicted value to [lowerBound, MaxInt64] and round to nearest
+		// integer. In general, it is worse to under-estimate counts than to
+		// over-estimate counts, so we pick a very conservative lowerBound of
+		// unknownFilterSelectivity times the minimum observation to avoid
+		// prematurely estimating zero rows for downward-trending counts.
+		lowerBound := math.Round(slices.Min(y) * unknownFilterSelectivity)
+		lowerBound = math.Max(0, lowerBound)
+		if yₙ < lowerBound {
+			return lowerBound, nil
 		}
 		if yₙ > math.MaxInt64 {
 			return math.MaxInt64, nil
