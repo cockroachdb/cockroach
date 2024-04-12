@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
@@ -51,7 +52,7 @@ var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
 	settings.PositiveInt,
 )
 
-// sendAddRemoteSSTs is a stubbed out, very simplisitic version of restore used
+// sendAddRemoteSSTs is a stubbed out, very simplistic version of restore used
 // to test out ingesting "remote" SSTs. It will be replaced with a real distsql
 // plan and processors in the future.
 func sendAddRemoteSSTs(
@@ -65,15 +66,15 @@ func sendAddRemoteSSTs(
 	requestFinishedCh chan<- struct{},
 	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
-) error {
+) (approxRows int64, approxDataSize int64, err error) {
 	defer close(requestFinishedCh)
 	defer close(tracingAggCh)
 
 	if encryption != nil {
-		return errors.AssertionFailedf("encryption not supported with online restore")
+		return 0, 0, errors.AssertionFailedf("encryption not supported with online restore")
 	}
 	if len(uris) > 1 {
-		return errors.AssertionFailedf("online restore can only restore data from a full backup")
+		return 0, 0, errors.AssertionFailedf("online restore can only restore data from a full backup")
 	}
 
 	restoreSpanEntriesCh := make(chan execinfrapb.RestoreSpanEntry, 1)
@@ -86,20 +87,20 @@ func sendAddRemoteSSTs(
 	kr, err := MakeKeyRewriterFromRekeys(execCtx.ExecCfg().Codec, dataToRestore.getRekeys(), dataToRestore.getTenantRekeys(),
 		false /* restoreTenantFromStream */)
 	if err != nil {
-		return errors.Wrap(err, "creating key rewriter from rekeys")
+		return 0, 0, errors.Wrap(err, "creating key rewriter from rekeys")
 	}
 
 	fromSystemTenant := isFromSystemTenant(dataToRestore.getTenantRekeys())
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, kr, fromSystemTenant))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, *kr, fromSystemTenant, &approxRows, &approxDataSize))
 	}
 
 	if err := grp.Wait(); err != nil {
-		return errors.Wrap(err, "failed to generate and send remote file spans")
+		return 0, 0, errors.Wrap(err, "failed to generate and send remote file spans")
 	}
-	return nil
+	return approxRows, approxDataSize, nil
 }
 
 func assertCommonPrefix(span roachpb.Span, elidedPrefixType execinfrapb.ElidePrefix) error {
@@ -144,8 +145,10 @@ func sendAddRemoteSSTWorker(
 	execCtx sql.JobExecContext,
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
 	requestFinishedCh chan<- struct{},
-	kr *KeyRewriter,
+	kr KeyRewriter,
 	fromSystemTenant bool,
+	approxRows *int64,
+	approxDataSize *int64,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		var toAdd []execinfrapb.RestoreFileSpec
@@ -219,7 +222,7 @@ func sendAddRemoteSSTWorker(
 				}
 				// Clone the key because rewriteSpan could modify the keys in place, but
 				// we reuse backup files across restore span entries.
-				restoringSubspan, err = rewriteSpan(kr, restoringSubspan.Clone(), entry.ElidedPrefix)
+				restoringSubspan, err = rewriteSpan(&kr, restoringSubspan.Clone(), entry.ElidedPrefix)
 				if err != nil {
 					return err
 				}
@@ -263,6 +266,13 @@ func sendAddRemoteSSTWorker(
 			if err := flush(rewrittenFlushKey, entry.ElidedPrefix); err != nil {
 				return err
 			}
+			var rows, dataSize int64
+			for _, file := range entry.Files {
+				rows += file.BackupFileEntryCounts.Rows
+				dataSize += int64(file.ApproximatePhysicalSize)
+			}
+			atomic.AddInt64(approxRows, rows)
+			atomic.AddInt64(approxDataSize, dataSize)
 			requestFinishedCh <- struct{}{}
 		}
 		return nil
@@ -537,8 +547,12 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 	return execConfig.InternalDB.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-		_, err := execConfig.JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, r.job.ID()+1, txn)
-		return err
+		downloadJobID := r.job.ID() + 1
+		if _, err := execConfig.JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, downloadJobID, txn); err != nil {
+			return err
+		}
+		r.downloadJobID = downloadJobID
+		return nil
 	})
 }
 
