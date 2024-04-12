@@ -517,12 +517,11 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 	op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", roachtestflags.WaitBeforeCleanup))
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
 	case <-time.After(roachtestflags.WaitBeforeCleanup):
 	}
 	op.Status("running cleanup")
 	func() {
-		ctx, cancel := context.WithTimeout(ctx, opSpec.Timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), opSpec.Timeout)
 		defer cancel()
 
 		cleanup.Cleanup(ctx, op, c)
