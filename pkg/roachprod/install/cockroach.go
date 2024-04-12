@@ -248,8 +248,11 @@ func (c *SyncedCluster) maybeRegisterServices(
 	switch startOpts.Target {
 	case StartDefault:
 		startOpts.VirtualClusterName = SystemInterfaceName
+		// The system interface on the storage cluster is always regarded as an
+		// external service. Only non-system virtual clusters, running on the
+		// storage cluster, are regarded as shared services.
 		servicesToRegister, err = c.servicesWithOpenPortSelection(
-			ctx, l, startOpts, ServiceModeShared, serviceMap, portFunc,
+			ctx, l, startOpts, ServiceModeExternal, serviceMap, portFunc,
 		)
 	case StartSharedProcessForVirtualCluster:
 		// Specifying a sql instance for shared process virtual clusters
@@ -304,7 +307,7 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 			services = append(services, ServiceDesc{
 				VirtualClusterName: startOpts.VirtualClusterName,
 				ServiceType:        ServiceTypeSQL,
-				ServiceMode:        ServiceModeExternal,
+				ServiceMode:        serviceMode,
 				Node:               node,
 				Port:               startOpts.SQLPort,
 				Instance:           startOpts.SQLInstance,
@@ -314,7 +317,7 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 			services = append(services, ServiceDesc{
 				VirtualClusterName: startOpts.VirtualClusterName,
 				ServiceType:        ServiceTypeUI,
-				ServiceMode:        ServiceModeExternal,
+				ServiceMode:        serviceMode,
 				Node:               node,
 				Port:               startOpts.AdminUIPort,
 				Instance:           startOpts.SQLInstance,
