@@ -39,3 +39,14 @@ SELECT CASE
   END
 ----
 true
+
+# Regression for not setting the TypeResolver on the SemaContext when dealing
+# with stats on virtual computed columns (#122312).
+statement ok
+CREATE TYPE greeting AS ENUM ('hello', 'hi', 'yo');
+
+statement ok
+CREATE TABLE t122312 (s STRING, g greeting AS (s::greeting) STORED);
+
+statement ok
+ANALYZE t122312;
