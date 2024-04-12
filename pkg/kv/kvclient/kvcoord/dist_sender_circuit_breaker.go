@@ -103,31 +103,39 @@ const (
 	cbProbeIdleTimeout = 10 * time.Second
 )
 
-// cbRequestKind classifies a batch request.
-type cbRequestKind int
+// cbRequestCancellationPolicy classifies a batch request.
+type cbRequestCancellationPolicy int
 
 const (
-	cbReadRequest cbRequestKind = iota
-	cbWriteRequest
+	cbCancelImmediately cbRequestCancellationPolicy = iota
+	cbCancelAfterGracePeriod
 	cbNumRequestKinds // must be last in list
 )
 
-func (k cbRequestKind) String() string {
+func (k cbRequestCancellationPolicy) String() string {
 	switch k {
-	case cbReadRequest:
-		return "read"
-	case cbWriteRequest:
-		return "write"
+	case cbCancelImmediately:
+		return "immediately"
+	case cbCancelAfterGracePeriod:
+		return "after grace period"
 	default:
 		panic(errors.AssertionFailedf("unknown request kind %d", k))
 	}
 }
 
-func cbRequestKindFromBatch(ba *kvpb.BatchRequest) cbRequestKind {
-	if ba.IsWrite() {
-		return cbWriteRequest
+func cbRequestCancellationPolicyFromBatch(
+	ba *kvpb.BatchRequest, withCommit bool,
+) cbRequestCancellationPolicy {
+	// If the batch request is writing or is part of a transaction commit, we
+	// can't automatically retry it without risking an ambiguous error, so we
+	// cancel it after a grace period. Otherwise, we cancel it immediately and
+	// allow DistSender to retry.
+	// TODO(nvanbenschoten): a batch request that is writing and is not part of a
+	// transaction commit can be retried. Do we need the IsWrite condition here?
+	if ba.IsWrite() || withCommit {
+		return cbCancelAfterGracePeriod
 	}
-	return cbReadRequest
+	return cbCancelImmediately
 }
 
 // cbKey is a key in the DistSender replica circuit breakers map.
@@ -461,6 +469,9 @@ type replicaCircuitBreakerToken struct {
 
 	// ba is the batch request being tracked.
 	ba *kvpb.BatchRequest
+
+	// withCommit denotes whether the request is part of a transaction commit.
+	withCommit bool
 }
 
 // Done records the result of the request and untracks it. If the request was
@@ -469,7 +480,7 @@ type replicaCircuitBreakerToken struct {
 func (t replicaCircuitBreakerToken) Done(
 	br *kvpb.BatchResponse, sendErr error, nowNanos int64,
 ) error {
-	return t.r.done(t.ctx, t.cancelCtx, t.ba, br, sendErr, nowNanos)
+	return t.r.done(t.ctx, t.cancelCtx, t.ba, t.withCommit, br, sendErr, nowNanos)
 }
 
 // id returns a string identifier for the replica.
@@ -546,7 +557,7 @@ func (r *ReplicaCircuitBreaker) isClosed() bool {
 // for the send and a token which the caller must call Done() on with the result
 // of the request.
 func (r *ReplicaCircuitBreaker) Track(
-	ctx context.Context, ba *kvpb.BatchRequest, nowNanos int64,
+	ctx context.Context, ba *kvpb.BatchRequest, withCommit bool, nowNanos int64,
 ) (context.Context, replicaCircuitBreakerToken, error) {
 	if r == nil {
 		return ctx, replicaCircuitBreakerToken{}, nil // circuit breakers disabled
@@ -566,9 +577,10 @@ func (r *ReplicaCircuitBreaker) Track(
 
 	// Set up the request token.
 	token := replicaCircuitBreakerToken{
-		r:   r,
-		ctx: ctx,
-		ba:  ba,
+		r:          r,
+		ctx:        ctx,
+		ba:         ba,
+		withCommit: withCommit,
 	}
 
 	// Record in-flight requests. If this is the only request, tentatively start
@@ -602,7 +614,7 @@ func (r *ReplicaCircuitBreaker) Track(
 			sendCtx, cancel = context.WithCancelCause(ctx)
 			token.cancelCtx = sendCtx
 
-			reqKind := cbRequestKindFromBatch(ba)
+			reqKind := cbRequestCancellationPolicyFromBatch(ba, withCommit)
 			r.mu.Lock()
 			r.mu.cancelFns[reqKind][ba] = cancel
 			r.mu.Unlock()
@@ -621,6 +633,7 @@ func (r *ReplicaCircuitBreaker) done(
 	ctx context.Context,
 	cancelCtx context.Context,
 	ba *kvpb.BatchRequest,
+	withCommit bool,
 	br *kvpb.BatchResponse,
 	sendErr error,
 	nowNanos int64,
@@ -647,7 +660,7 @@ func (r *ReplicaCircuitBreaker) done(
 		}
 
 		// Clean up the cancel function.
-		reqKind := cbRequestKindFromBatch(ba)
+		reqKind := cbRequestCancellationPolicyFromBatch(ba, withCommit)
 		r.mu.Lock()
 		cancel := r.mu.cancelFns[reqKind][ba]
 		delete(r.mu.cancelFns[reqKind], ba) // nolint:deferunlockcheck
@@ -839,12 +852,12 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 			// the cancel functions from the map (even though done() will also clean
 			// them up), in case another request makes it in after the breaker trips.
 			// There should typically never be any contention here.
-			cancelRequests := func(reqKind cbRequestKind) {
+			cancelRequests := func(reqKind cbRequestCancellationPolicy) {
 				r.mu.Lock()
 				defer r.mu.Unlock()
 
 				if l := len(r.mu.cancelFns[reqKind]); l > 0 {
-					log.VEventf(ctx, 2, "cancelling %d %s requests for %s", l, reqKind, r.id())
+					log.VEventf(ctx, 2, "cancelling %d requests %s for %s", l, reqKind, r.id())
 				}
 				for ba, cancel := range r.mu.cancelFns[reqKind] {
 					delete(r.mu.cancelFns[reqKind], ba)
@@ -853,9 +866,9 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				}
 			}
 
-			cancelRequests(cbReadRequest)
+			cancelRequests(cbCancelImmediately)
 			if writeGraceTimer.C == nil {
-				cancelRequests(cbWriteRequest)
+				cancelRequests(cbCancelAfterGracePeriod)
 			}
 
 			for !timer.Read { // select until probe interval timer fires
@@ -863,7 +876,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				case <-timer.C:
 					timer.Read = true
 				case <-writeGraceTimer.C:
-					cancelRequests(cbWriteRequest)
+					cancelRequests(cbCancelAfterGracePeriod)
 					writeGraceTimer.Read = true
 					writeGraceTimer.Stop() // sets C = nil
 				case <-r.closedC:
