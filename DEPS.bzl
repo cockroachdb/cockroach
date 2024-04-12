@@ -3435,6 +3435,14 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_go_rod_rod",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/go-rod/rod",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:2Mr2kO17blDAwWU4+eOBPgRf0w+6bfUxsPc7Nzd9VXk=",
+        version = "v0.114.8",
+    )
+    go_repository(
         name = "com_github_go_sql_driver_mysql",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/go-sql-driver/mysql",
@@ -8937,6 +8945,62 @@ def go_deps():
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/youmark/pkcs8/com_github_youmark_pkcs8-v0.0.0-20181117223130-1be2e3e5546d.zip",
         ],
+    )
+    go_repository(
+        name = "com_github_ysmood_fetchup",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ysmood/fetchup",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:ulX+SonA0Vma5zUFXtv52Kzip/xe7aj4vqT5AJwQ+ZQ=",
+        version = "v0.2.3",
+    )
+    go_repository(
+        name = "com_github_ysmood_goob",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ysmood/goob",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:HsxXhyLBeGzWXnqVKtmT9qM7EuVs/XOgkX7T6r1o1AQ=",
+        version = "v0.4.0",
+    )
+    go_repository(
+        name = "com_github_ysmood_gop",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ysmood/gop",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:VuWweTmXK+zedLqYufJdh3PlxDNBOfFHjIZlPT2T5nw=",
+        version = "v0.0.2",
+    )
+    go_repository(
+        name = "com_github_ysmood_got",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ysmood/got",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:IrV2uWLs45VXNvZqhJ6g2nIhY+pgIG1CUoOcqfXFl1s=",
+        version = "v0.34.1",
+    )
+    go_repository(
+        name = "com_github_ysmood_gotrace",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ysmood/gotrace",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:SyI1d4jclswLhg7SWTL6os3L1WOKeNn/ZtzVQF8QmdY=",
+        version = "v0.6.0",
+    )
+    go_repository(
+        name = "com_github_ysmood_gson",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ysmood/gson",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:QFkWbTH8MxyUTKPkVWAENJhxqdBa4lYTQWqZCiLG6kE=",
+        version = "v0.7.3",
+    )
+    go_repository(
+        name = "com_github_ysmood_leakless",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ysmood/leakless",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:BzLrVoiwxikpgEQR0Lk8NyBN5Cit2b1z+u0mgL4ZJak=",
+        version = "v0.8.0",
     )
     go_repository(
         name = "com_github_yudai_gojsondiff",
