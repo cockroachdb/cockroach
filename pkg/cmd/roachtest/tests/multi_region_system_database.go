@@ -47,7 +47,7 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 
-			_, err := conn.ExecContext(ctx, "SET CLUSTER SETTING sql.multiregion.preview_multiregion_system_database.enabled = true")
+			_, err := conn.ExecContext(ctx, "SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true")
 			require.NoError(t, err)
 
 			_, err = conn.ExecContext(ctx,
