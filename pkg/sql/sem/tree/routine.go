@@ -12,6 +12,7 @@ package tree
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -270,12 +271,10 @@ type BlockState struct {
 	// kv.SavepointToken to avoid import cycles.
 	SavepointTok interface{}
 
-	// Cursors is a list of the names of cursors that have been opened within the
-	// current block. If the exception handler catches an exception, these cursors
-	// must be closed before the handler can proceed.
-	// TODO(111139): Once we support nested routine calls, we may have to track
-	// newly opened cursors differently.
-	Cursors []Name
+	// CursorTimestamp is the timestamp at which control transitioned into this
+	// PL/pgSQL block. It is used to close (only) cursors which were opened within
+	// the scope of the block when an exception is caught.
+	CursorTimestamp *time.Time
 }
 
 // StoredProcTxnOp indicates whether a stored procedure has requested that the
