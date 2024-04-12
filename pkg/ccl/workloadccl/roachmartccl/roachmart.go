@@ -111,6 +111,9 @@ func (m *roachmart) Meta() workload.Meta { return roachmartMeta }
 // Flags implements the Flagser interface.
 func (m *roachmart) Flags() workload.Flags { return m.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (m *roachmart) ConnFlags() *workload.ConnFlags { return m.connFlags }
+
 // Hooks implements the Hookser interface.
 func (m *roachmart) Hooks() workload.Hooks {
 	return workload.Hooks{
@@ -203,10 +206,6 @@ func (m *roachmart) Tables() []workload.Table {
 func (m *roachmart) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(m, m.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -215,7 +214,7 @@ func (m *roachmart) Ops(
 	db.SetMaxOpenConns(m.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(m.connFlags.Concurrency + 1)
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 
 	const query = `SELECT * FROM orders WHERE user_zone = $1 AND user_email = $2`
 	for i := 0; i < m.connFlags.Concurrency; i++ {

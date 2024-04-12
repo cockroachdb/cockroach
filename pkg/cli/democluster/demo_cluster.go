@@ -1716,7 +1716,7 @@ func (c *transientCluster) SetupWorkload(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				sqlURLs = append(sqlURLs, sqlURL.ToPQ().String())
+				sqlURLs = append(sqlURLs, sqlURL.WithDatabase(gen.Meta().Name).ToPQ().String())
 			}
 			if err := c.runWorkload(ctx, c.demoCtx.WorkloadGenerator, sqlURLs); err != nil {
 				return errors.Wrapf(err, "starting background workload")

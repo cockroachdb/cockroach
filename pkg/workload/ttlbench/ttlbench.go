@@ -412,6 +412,8 @@ func (t *ttlBench) Tables() []workload.Table {
 	}
 }
 
-func (t *ttlBench) Flags() workload.Flags {
-	return t.flags
-}
+// Flags implements the Flagser interface.
+func (t *ttlBench) Flags() workload.Flags { return t.flags }
+
+// ConnFlags implements the ConnFlagser interface.
+func (t *ttlBench) ConnFlags() *workload.ConnFlags { return t.connFlags }

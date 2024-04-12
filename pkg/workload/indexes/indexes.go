@@ -89,6 +89,9 @@ func (*indexes) Meta() workload.Meta { return indexesMeta }
 // Flags implements the Flagser interface.
 func (w *indexes) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *indexes) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Hooks implements the Hookser interface.
 func (w *indexes) Hooks() workload.Hooks {
 	return workload.Hooks{
@@ -159,10 +162,6 @@ func (w *indexes) Tables() []workload.Table {
 func (w *indexes) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	cfg := workload.NewMultiConnPoolCfgFromFlags(w.connFlags)
 	cfg.MaxTotalConnections = w.connFlags.Concurrency + 1
 	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)
@@ -185,7 +184,7 @@ func (w *indexes) Ops(
 		return workload.QueryLoad{}, errors.Errorf("unknown workload: %q", w.workload)
 	}
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := &indexesOp{
 			config: w,

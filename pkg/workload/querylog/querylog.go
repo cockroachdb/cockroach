@@ -134,6 +134,9 @@ func (*querylog) Meta() workload.Meta { return querylogMeta }
 // Flags implements the Flagser interface.
 func (w *querylog) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *querylog) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Tables implements the Generator interface.
 func (*querylog) Tables() []workload.Table {
 	// Assume the necessary tables are already present.
@@ -173,10 +176,6 @@ func (w *querylog) Hooks() workload.Hooks {
 func (w *querylog) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -211,7 +210,7 @@ func (w *querylog) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	if w.querybenchPath != `` {
 		conn, err := pgx.ConnectConfig(ctx, connCfg)
 		if err != nil {
