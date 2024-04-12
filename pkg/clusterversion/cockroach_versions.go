@@ -313,6 +313,11 @@ const (
 	// the system tenant to ensure it is a superset of secondary tenants.
 	V24_1_AddSpanCounts
 
+	// V24_1_FlexibleFollowerCommitIndex teaches raft follower to accept larger
+	// commit index from the leader if its logs are in sync with leader and
+	// leader's log is up to date.
+	V24_1_FlexibleFollowerCommitIndex
+
 	numKeys
 )
 
@@ -382,6 +387,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 22},
 	V24_1_ReplicatedLockPipelining:             {Major: 23, Minor: 2, Internal: 24},
 	V24_1_AddSpanCounts:                        {Major: 23, Minor: 2, Internal: 26},
+	V24_1_FlexibleFollowerCommitIndex:          {Major: 23, Minor: 2, Internal: 28},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster
