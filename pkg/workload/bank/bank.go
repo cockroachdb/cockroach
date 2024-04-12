@@ -107,6 +107,9 @@ func (*bank) Meta() workload.Meta { return bankMeta }
 // Flags implements the Flagser interface.
 func (b *bank) Flags() workload.Flags { return b.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (b *bank) ConnFlags() *workload.ConnFlags { return b.connFlags }
+
 // Hooks implements the Hookser interface.
 func (b *bank) Hooks() workload.Hooks {
 	return workload.Hooks{
@@ -179,10 +182,6 @@ func (b *bank) Tables() []workload.Table {
 func (b *bank) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(b, b.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -202,7 +201,6 @@ func (b *bank) Ops(
 	}
 
 	ql := workload.QueryLoad{
-		SQLDatabase: sqlDatabase,
 		Close: func(_ context.Context) error {
 			return db.Close()
 		},

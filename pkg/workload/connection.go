@@ -14,16 +14,21 @@ import (
 	"fmt"
 	"net/url"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
 
 // ConnFlags is helper of common flags that are relevant to QueryLoads.
 type ConnFlags struct {
 	*pflag.FlagSet
-	DBOverride  string
+	DBOverride string
+	IsoLevel   string
+	ConnVars   []string
+
 	Concurrency int
 	Method      string // Method for issuing queries; see SQLRunner.
 
@@ -42,8 +47,11 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 	c.FlagSet = pflag.NewFlagSet(`conn`, pflag.ContinueOnError)
 	c.StringVar(&c.DBOverride, `db`, ``,
 		`Override for the SQL database to use. If empty, defaults to the generator name`)
-	c.IntVar(&c.Concurrency, `concurrency`, 2*runtime.GOMAXPROCS(0),
-		`Number of concurrent workers`)
+	c.StringVar(&c.IsoLevel, `isolation-level`, ``,
+		`Isolation level to run workload transactions under [serializable, snapshot, read_committed]. `+
+			`If unset, the workload will run with the default isolation level of the database.`)
+	c.StringSliceVar(&c.ConnVars, `conn-vars`, []string{}, `Session variables to configure on database connections`)
+	c.IntVar(&c.Concurrency, `concurrency`, 2*runtime.GOMAXPROCS(0), `Number of concurrent workers`)
 	c.StringVar(&c.Method, `method`, `cache_statement`, `SQL issue method (cache_statement, cache_describe, describe_exec, exec, simple_protocol)`)
 	c.DurationVar(&c.DNSRefreshInterval, `dns-refresh`, defaultDNSCacheRefresh, `Interval used to refresh cached DNS entries (<0 disables)`)
 	c.DurationVar(&c.ConnHealthCheckPeriod, `conn-healthcheck-period`, 30*time.Second, `Interval that health checks are run on connections`)
@@ -59,8 +67,10 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 	for _, k := range []string{
 		`concurrency`,
 		`conn-healthcheck-period`,
+		`conn-vars`,
 		`db`,
 		`dns-refresh`,
+		`isolation-level`,
 		`max-conn-idle-time`,
 		`max-conn-lifetime-jitter`,
 		`max-conn-lifetime`,
@@ -81,10 +91,10 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 // SanitizeUrls verifies that the give SQL connection strings have the correct
 // SQL database set, rewriting them in place if necessary. This database name is
 // returned.
-func SanitizeUrls(gen Generator, dbOverride string, urls []string) (string, error) {
+func SanitizeUrls(gen Generator, connFlags *ConnFlags, urls []string) (string, error) {
 	dbName := gen.Meta().Name
-	if dbOverride != `` {
-		dbName = dbOverride
+	if connFlags != nil && connFlags.DBOverride != `` {
+		dbName = connFlags.DBOverride
 	}
 	for i := range urls {
 		parsed, err := url.Parse(urls[i])
@@ -97,10 +107,6 @@ func SanitizeUrls(gen Generator, dbOverride string, urls []string) (string, erro
 		}
 		parsed.Path = dbName
 
-		q := parsed.Query()
-		q.Set("application_name", gen.Meta().Name)
-		parsed.RawQuery = q.Encode()
-
 		switch parsed.Scheme {
 		case "postgres", "postgresql":
 			urls[i] = parsed.String()
@@ -111,30 +117,45 @@ func SanitizeUrls(gen Generator, dbOverride string, urls []string) (string, erro
 	return dbName, nil
 }
 
-// SetDefaultIsolationLevel configures the provided URLs with the specified
-// default transaction isolation level, if any.
-func SetDefaultIsolationLevel(urls []string, isoLevel string) error {
-	if isoLevel == "" {
-		return nil
+// SetUrlConnVars augments the provided URLs with additional query parameters
+// which are used by the SQL server during connection establishment to configure
+// default session variables.
+func SetUrlConnVars(gen Generator, connFlags *ConnFlags, urls []string) error {
+	vars := make(map[string]string)
+	vars["application_name"] = gen.Meta().Name
+	if connFlags != nil {
+		if connFlags.IsoLevel != "" {
+			// As a convenience, replace underscores with spaces. This allows users of
+			// the workload tool to pass --isolation-level=read_committed instead of
+			// needing to pass --isolation-level="read committed".
+			isoLevel := strings.ReplaceAll(connFlags.IsoLevel, "_", " ")
+			// NOTE: validation of the isolation level value is done by the server during
+			// connection establishment.
+			vars["default_transaction_isolation"] = isoLevel
+		}
+		for _, v := range connFlags.ConnVars {
+			parts := strings.Split(v, "=")
+			if len(parts) != 2 {
+				return errors.Errorf(`expected "key=value" format for --conn-vars, got %q`, v)
+			}
+			vars[parts[0]] = parts[1]
+		}
 	}
-	// As a convenience, replace underscores with spaces. This allows users of the
-	// workload tool to pass --isolation-level=read_committed instead of needing
-	// to pass --isolation-level="read committed".
-	isoLevel = strings.ReplaceAll(isoLevel, "_", " ")
-	// NOTE: validation of the isolation level value is done by the server during
-	// connection establishment.
-	return setUrlParam(urls, "default_transaction_isolation", isoLevel)
-}
+	varKeys := make([]string, 0, len(vars))
+	for k := range vars {
+		varKeys = append(varKeys, k)
+	}
+	sort.Strings(varKeys)
 
-// setUrlParam sets the given parameter to the given value in the provided URLs.
-func setUrlParam(urls []string, param, value string) error {
 	for i := range urls {
 		parsed, err := url.Parse(urls[i])
 		if err != nil {
 			return err
 		}
 		q := parsed.Query()
-		q.Set(param, value)
+		for _, k := range varKeys {
+			q.Set(k, vars[k])
+		}
 		parsed.RawQuery = q.Encode()
 		urls[i] = parsed.String()
 	}
