@@ -49,7 +49,7 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 
 			require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
-			_, err := conn.ExecContext(ctx, "SET CLUSTER SETTING sql.multiregion.preview_multiregion_system_database.enabled = true")
+			_, err := conn.ExecContext(ctx, "SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true")
 			require.NoError(t, err)
 
 			_, err = conn.ExecContext(ctx,
