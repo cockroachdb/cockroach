@@ -708,48 +708,26 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
-		if isBackupOfSystemTenant {
-			sqlDBRestore.CheckQueryResults(t,
-				`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
-				[][]string{
-					{"bank"},
-					{"comments"},
-					{"database_role_settings"},
-					{"external_connections"},
-					{"locations"},
-					{"privileges"},
-					{"role_id_seq"},
-					{"role_members"},
-					{"role_options"},
-					{"scheduled_jobs"},
-					{"settings"},
-					{"tenant_settings"},
-					{"ui"},
-					{"users"},
-					{"zones"},
-				},
-			)
-		} else {
-			sqlDBRestore.CheckQueryResults(t,
-				`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
-				[][]string{
-					{"bank"},
-					{"comments"},
-					{"database_role_settings"},
-					{"external_connections"},
-					{"locations"},
-					{"privileges"},
-					{"role_id_seq"},
-					{"role_members"},
-					{"role_options"},
-					{"scheduled_jobs"},
-					{"settings"},
-					{"ui"},
-					{"users"},
-					{"zones"},
-				},
-			)
-		}
+		sqlDBRestore.CheckQueryResults(t,
+			`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
+			[][]string{
+				{"bank"},
+				{"comments"},
+				{"database_role_settings"},
+				{"external_connections"},
+				{"locations"},
+				{"privileges"},
+				{"role_id_seq"},
+				{"role_members"},
+				{"role_options"},
+				{"scheduled_jobs"},
+				{"settings"},
+				{"tenant_settings"},
+				{"ui"},
+				{"users"},
+				{"zones"},
+			},
+		)
 	})
 
 	// This test retries the job (by injected a retry error) after restoring a
@@ -824,47 +802,26 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
-		if isBackupOfSystemTenant {
-			sqlDBRestore.CheckQueryResults(t,
-				`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
-				[][]string{
-					{"bank"},
-					{"comments"},
-					{"database_role_settings"},
-					{"external_connections"},
-					{"locations"},
-					{"privileges"},
-					{"role_id_seq"},
-					{"role_members"},
-					{"role_options"},
-					{"scheduled_jobs"},
-					{"settings"},
-					{"tenant_settings"},
-					{"ui"},
-					{"users"},
-					{"zones"},
-				},
-			)
-		} else {
-			sqlDBRestore.CheckQueryResults(t,
-				`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
-				[][]string{
-					{"bank"},
-					{"comments"},
-					{"database_role_settings"},
-					{"external_connections"},
-					{"locations"},
-					{"privileges"},
-					{"role_id_seq"},
-					{"role_members"},
-					{"role_options"},
-					{"scheduled_jobs"},
-					{"settings"},
-					{"ui"},
-					{"users"},
-					{"zones"},
-				})
-		}
+		sqlDBRestore.CheckQueryResults(t,
+			`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
+			[][]string{
+				{"bank"},
+				{"comments"},
+				{"database_role_settings"},
+				{"external_connections"},
+				{"locations"},
+				{"privileges"},
+				{"role_id_seq"},
+				{"role_members"},
+				{"role_options"},
+				{"scheduled_jobs"},
+				{"settings"},
+				{"tenant_settings"},
+				{"ui"},
+				{"users"},
+				{"zones"},
+			},
+		)
 	})
 
 	t.Run("after offline tables", func(t *testing.T) {

@@ -571,6 +571,8 @@ INSERT INTO system.zones (id, config) VALUES
   ($testdb_foo_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   ($schema_bar_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
+skipif config local-mixed-23.2
+skipif config local-mixed-23.1
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
@@ -586,9 +588,9 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 42   TABLE system.public.statement_statistics
 43   TABLE system.public.transaction_statistics
 45   TABLE system.public.tenant_usage
-57   TABLE system.public.span_stats_tenant_boundaries
-60   TABLE system.public.statement_activity
-61   TABLE system.public.transaction_activity
+58   TABLE system.public.span_stats_tenant_boundaries
+61   TABLE system.public.statement_activity
+62   TABLE system.public.transaction_activity
 106  DATABASE testdb
 108  TABLE testdb.public.foo
 111  TABLE test.schema.bar
