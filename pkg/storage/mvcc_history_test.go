@@ -280,15 +280,15 @@ func TestMVCCHistories(t *testing.T) {
 				return err
 			}
 			defer func() { _ = iter.Close() }()
-			for k, lv := iter.SeekGE(nil, sstable.SeekGEFlags(0)); k != nil; k, lv = iter.Next() {
+			for kv := iter.SeekGE(nil, sstable.SeekGEFlags(0)); kv != nil; kv = iter.Next() {
 				if err := iter.Error(); err != nil {
 					return err
 				}
-				key, err := storage.DecodeMVCCKey(k.UserKey)
+				key, err := storage.DecodeMVCCKey(kv.K.UserKey)
 				if err != nil {
 					return err
 				}
-				v, _, err := lv.Value(nil)
+				v, _, err := kv.Value(nil)
 				if err != nil {
 					return err
 				}
@@ -296,7 +296,7 @@ func TestMVCCHistories(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				buf.Printf("%s: %s -> %s\n", strings.ToLower(k.Kind().String()), key, value)
+				buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), key, value)
 			}
 
 			// Dump rangedels.
