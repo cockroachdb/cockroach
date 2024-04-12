@@ -14,6 +14,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -91,6 +93,8 @@ type tpcc struct {
 
 	replicateStaticColumns bool
 
+	queryTraceFile string
+
 	randomCIDsCache struct {
 		syncutil.Mutex
 		values [][]int
@@ -137,6 +141,38 @@ func (w *waitSetter) String() string {
 	}
 }
 
+type FileLoggerQueryTracer struct {
+	filePath string
+}
+
+func (t FileLoggerQueryTracer) TraceQueryStart(
+	ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryStartData,
+) context.Context {
+	file, err := os.OpenFile(t.filePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	whitespacePattern := regexp.MustCompile(`\s+`)
+	fmt.Fprintf(file, "Query: %s\n", whitespacePattern.ReplaceAllString(strings.TrimSpace(data.SQL), " "))
+	return ctx
+}
+
+func (t FileLoggerQueryTracer) TraceQueryEnd(
+	ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryEndData,
+) {
+	file, err := os.OpenFile(t.filePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	if data.Err != nil {
+		fmt.Fprintf(file, "Error: %s\n", data.Err)
+	} else {
+		fmt.Fprintf(file, "CommandTag: %s\n", data.CommandTag.String())
+	}
+}
+
 func init() {
 	workload.Register(tpccMeta)
 }
@@ -177,6 +213,7 @@ var tpccMeta = workload.Meta{
 			`survival-goal`:            {RuntimeOnly: true},
 			`replicate-static-columns`: {RuntimeOnly: true},
 			`deprecated-fk-indexes`:    {RuntimeOnly: true},
+			`query-trace-file`:         {RuntimeOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
@@ -213,6 +250,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.separateColumnFamilies, `families`, false, `Use separate column families for dynamic and static columns`)
 		g.flags.BoolVar(&g.replicateStaticColumns, `replicate-static-columns`, false, "Create duplicate indexes for all static columns in district, items and warehouse tables, such that each zone or rack has them locally.")
 		g.flags.BoolVar(&g.localWarehouses, `local-warehouses`, false, `Force transactions to use a local warehouse in all cases (in violation of the TPC-C specification)`)
+		g.flags.StringVar(&g.queryTraceFile, `query-trace-file`, ``, `File to write the query traces to. Defaults to no output`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
@@ -747,6 +785,16 @@ func (w *tpcc) Ops(
 	// affinity. Instead we have one MultiConnPool per server.
 	cfg := workload.NewMultiConnPoolCfgFromFlags(w.connFlags)
 	cfg.MaxTotalConnections = (w.numConns + len(urls) - 1) / len(urls) // round up
+
+	if w.queryTraceFile != `` {
+		// Empty out the existing log file if it exists
+		file, err := os.OpenFile(w.queryTraceFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+		file.Close()
+		cfg.QueryTracer = FileLoggerQueryTracer{w.queryTraceFile}
+	}
 
 	// Limit the number of connections per pool (otherwise preparing statements at
 	// startup can be slow).
