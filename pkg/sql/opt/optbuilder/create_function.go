@@ -202,7 +202,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 		// The parameter type must be supported by the current cluster version.
 		checkUnsupportedType(b.ctx, b.semaCtx, typ)
-		if types.IsRecordType(typ) {
+		if typ.Identical(types.AnyTuple) {
 			if language == tree.RoutineLangSQL {
 				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
 					"SQL functions cannot have arguments of type record"))
@@ -398,8 +398,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// TODO(mgartner): stmtScope.cols does not describe the result
 		// columns of the statement. We should use physical.Presentation
 		// instead.
-		isSQLProcedure := cf.IsProcedure && language == tree.RoutineLangSQL
-		err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols, isSQLProcedure)
+		err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols)
 		if err != nil {
 			panic(err)
 		}
@@ -449,11 +448,7 @@ func formatFuncBodyStmt(
 }
 
 func validateReturnType(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	expected *types.T,
-	cols []scopeColumn,
-	isSQLProcedure bool,
+	ctx context.Context, semaCtx *tree.SemaContext, expected *types.T, cols []scopeColumn,
 ) error {
 	// The return type must be supported by the current cluster version.
 	checkUnsupportedType(ctx, semaCtx, expected)
@@ -478,30 +473,36 @@ func validateReturnType(
 
 	// If return type is RECORD and the tuple content types unspecified by OUT
 	// parameters, any column types are valid. This is the case when we have
-	// RETURNS RECORD without OUT params - we don't need to check the types
+	// RETURNS RECORD without OUT-params - we don't need to check the types
 	// below.
-	if types.IsRecordType(expected) && types.IsWildcardTupleType(expected) {
+	if expected.Identical(types.AnyTuple) {
 		return nil
 	}
 
 	if len(cols) == 1 {
-		typeToCheck := expected
-		if isSQLProcedure && types.IsRecordType(expected) && len(expected.TupleContents()) == 1 {
-			// For SQL procedures with output parameters we get a record type
-			// even with a single column.
-			typeToCheck = expected.TupleContents()[0]
+		if expected.Equivalent(cols[0].typ) ||
+			cast.ValidCast(cols[0].typ, expected, cast.ContextAssignment) {
+			// Postgres allows UDFs to coerce a single result column directly to the
+			// return type. Stored procedures are not allowed to do this (see below).
+			return nil
 		}
-		if !typeToCheck.Equivalent(cols[0].typ) &&
-			!cast.ValidCast(cols[0].typ, typeToCheck, cast.ContextAssignment) {
-			return pgerror.WithCandidateCode(
-				errors.WithDetailf(
-					errors.Newf("return type mismatch in function declared to return %s", expected.Name()),
-					"Actual return type is %s", cols[0].typ.Name(),
-				),
-				pgcode.InvalidFunctionDefinition,
-			)
+		if len(expected.TupleContents()) == 1 {
+			// The routine returns a composite type with one element. This is the case
+			// for a UDF with a composite return type, or a stored procedure with a
+			// single OUT-parameter. In either case, the column can be coerced to the
+			// tuple element type.
+			if expected.TupleContents()[0].Equivalent(cols[0].typ) ||
+				cast.ValidCast(cols[0].typ, expected.TupleContents()[0], cast.ContextAssignment) {
+				return nil
+			}
 		}
-		return nil
+		return pgerror.WithCandidateCode(
+			errors.WithDetailf(
+				errors.Newf("return type mismatch in function declared to return %s", expected.Name()),
+				"Actual return type is %s", cols[0].typ.Name(),
+			),
+			pgcode.InvalidFunctionDefinition,
+		)
 	}
 
 	// If the last statement return multiple columns, then the expected Family
