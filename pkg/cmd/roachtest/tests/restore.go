@@ -70,7 +70,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		Name:             "restore/nodeShutdown/worker",
 		Owner:            registry.OwnerDisasterRecovery,
 		Cluster:          sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
-		CompatibleClouds: registry.Clouds(sp.backup.cloud),
+		CompatibleClouds: sp.backup.CompatibleClouds(),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          sp.timeout,
@@ -93,7 +93,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		Name:             "restore/nodeShutdown/coordinator",
 		Owner:            registry.OwnerDisasterRecovery,
 		Cluster:          sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
-		CompatibleClouds: registry.Clouds(sp.backup.cloud),
+		CompatibleClouds: sp.backup.CompatibleClouds(),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          sp.timeout,
@@ -136,7 +136,7 @@ func registerRestore(r registry.Registry) {
 		Benchmark:        true,
 		Cluster:          withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
 		Timeout:          withPauseSpecs.timeout,
-		CompatibleClouds: registry.Clouds(withPauseSpecs.backup.cloud),
+		CompatibleClouds: withPauseSpecs.backup.CompatibleClouds(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
@@ -431,7 +431,7 @@ func registerRestore(r registry.Registry) {
 			// These tests measure performance. To ensure consistent perf,
 			// disable metamorphic encryption.
 			EncryptionSupport: registry.EncryptionAlwaysDisabled,
-			CompatibleClouds:  registry.Clouds(sp.backup.cloud),
+			CompatibleClouds:  sp.backup.CompatibleClouds(),
 			Suites:            sp.suites,
 			Skip:              sp.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -615,6 +615,11 @@ type backupSpecs struct {
 	// cloud is the cloud storage provider the backup is stored on.
 	cloud string
 
+	// allowLocal is true if the test should be allowed to run
+	// locally. We don't set this by default to avoid someone
+	// trying to run the very large roachtests locally.
+	allowLocal bool
+
 	// fullBackupDir specifies the full backup directory in the collection to restore from.
 	fullBackupDir string
 
@@ -633,6 +638,26 @@ type backupSpecs struct {
 	// TODO(msbutler): if another fixture requires a different backup option,
 	// create a new backupOpts struct.
 	nonRevisionHistory bool
+}
+
+func (bs backupSpecs) CloudIsCompatible(cloud string) error {
+	if cloud == spec.Local && bs.allowLocal {
+		return nil
+	}
+	if cloud != bs.cloud {
+		// For now, only run the test on the cloud provider
+		// that also stores the backup.
+		return errors.Newf("test configured to run on %q (not %q)", bs.cloud, cloud)
+	}
+	return nil
+}
+
+func (bs backupSpecs) CompatibleClouds() registry.CloudSet {
+	r := registry.Clouds(bs.cloud)
+	if bs.allowLocal {
+		r = registry.Clouds(bs.cloud, spec.Local)
+	}
+	return r
 }
 
 func (bs backupSpecs) storagePrefix() string {
