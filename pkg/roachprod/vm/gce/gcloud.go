@@ -338,8 +338,9 @@ type LogEntry struct {
 			InstanceID string `json:"instance_id"`
 		} `json:"labels"`
 	} `json:"resource"`
-	Timestamp    string `json:"timestamp"`
-	ProtoPayload struct {
+	Timestamp        string `json:"timestamp"`
+	ReceiveTimestamp string `json:"receiveTimestamp"`
+	ProtoPayload     struct {
 		ResourceName string `json:"resourceName"`
 	} `json:"protoPayload"`
 }
@@ -411,6 +412,52 @@ func buildFilterPreemptionCliArgs(
 		"--format=json",
 		fmt.Sprintf("--freshness=%dh", int(timeutil.Since(since).Hours()+1)), // only look at logs from the "since" specified
 		filter,
+	}
+	return args, nil
+}
+
+func (p *Provider) GetHostErrorVMs(l *logger.Logger, since time.Time) ([]vm.PreemptedVM, error) {
+	args, err := buildFilterHostErrorCliArgs(p.GetProject(), since)
+	if err != nil {
+		l.Printf("Error building gcloud cli command: %v\n", err)
+		return nil, err
+	}
+	l.Printf("gcloud cli for host error : " + strings.Join(append([]string{"gcloud"}, args...), " "))
+	var logEntries []LogEntry
+	if err := runJSONCommand(args, &logEntries); err != nil {
+		l.Printf("Error running gcloud cli command: %v\n", err)
+		return nil, err
+	}
+	// Extract the VM name and the time of host error from logs.
+	var hostErrorVMs []vm.PreemptedVM
+	for _, logEntry := range logEntries {
+		timestamp, err := time.Parse(time.RFC3339, logEntry.ReceiveTimestamp)
+		if err != nil {
+			l.Printf("Error parsing gcp log timestamp, Preemption time not available: %v", err)
+			hostErrorVMs = append(hostErrorVMs, vm.PreemptedVM{Name: logEntry.ProtoPayload.ResourceName})
+			continue
+		}
+		hostErrorVMs = append(hostErrorVMs, vm.PreemptedVM{Name: logEntry.ProtoPayload.ResourceName, PreemptedAt: timestamp})
+	}
+	return hostErrorVMs, nil
+}
+
+// buildFilterHostErrorCliArgs returns the arguments to be passed to gcloud cli to query the logs for host error events.
+func buildFilterHostErrorCliArgs(projectName string, since time.Time) ([]string, error) {
+	if projectName == "" {
+		return nil, errors.New("project name cannot be empty")
+	}
+	if since.After(timeutil.Now()) {
+		return nil, errors.New("since cannot be in the future")
+	}
+	// Create a filter to match hostError events for the specified projectName
+	filter := fmt.Sprintf("resource.type=gce_instance AND protoPayload.methodName=compute.instances.hostError AND logName=projects/%s/logs/cloudaudit.googleapis.com%%2Fsystem_event", projectName)
+	args := []string{
+		"logging",
+		"read",
+		filter,
+		fmt.Sprintf("--freshness=%dd", int(time.Since(since).Hours())), // change to days
+		"--format=json",
 	}
 	return args, nil
 }
