@@ -1569,14 +1569,19 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(sbhola): different test cases with different settings of the
-	// randomization parameters.
-	numRequests := 1000
-	numActiveTxns := 8
-	probTxnalReq := 0.9 // 10% of requests will be non-transactional
-	probCreateNewTxn := 0.75
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
+	possibleNumRequests := []int{1000, 3000, 10000}
+	possibleNumActiveTxns := []int{2, 4, 8, 16, 32}
+	possibleProbTxnalReq := []float64{0.9, 1, 0.75}
+	possibleProbCreateNewTxn := []float64{0.75, 0.25, 0.1}
+	possibleProbOnlyRead := []float64{0.5, 0.25}
+
+	numRequests := possibleNumRequests[rng.Intn(len(possibleNumRequests))]
+	numActiveTxns := possibleNumActiveTxns[rng.Intn(len(possibleNumActiveTxns))]
+	probTxnalReq := possibleProbTxnalReq[rng.Intn(len(possibleProbTxnalReq))] // rest will be non-txnal
+	probCreateNewTxn := possibleProbCreateNewTxn[rng.Intn(len(possibleProbTxnalReq))]
 	probDupAccessWithWeakerStr := 0.5
-	probOnlyRead := 0.5
+	probOnlyRead := possibleProbOnlyRead[rng.Intn(len(possibleProbOnlyRead))]
 	testLockTableConcurrentRequests(
 		t, numActiveTxns, numRequests, probTxnalReq, probCreateNewTxn,
 		probDupAccessWithWeakerStr, probOnlyRead,
@@ -1727,10 +1732,25 @@ func testLockTableConcurrentRequests(
 		}
 	}
 	t.Logf("txns creted: %d", numTxnsCreated) // avoid some multiplication
-	concurrency := []int{2, 8, 16, 32}
+	concurrency := []int{numActiveTxns / 4, numActiveTxns, numActiveTxns * 2, numActiveTxns * 4}
 	for _, c := range concurrency {
+		if c == 0 {
+			continue
+		}
 		t.Run(fmt.Sprintf("concurrency %d", c), func(t *testing.T) {
 			exec := newWorkLoadExecutor(items, c)
+			// TODO(arul): if the number of goroutines this test spawns becomes a
+			// problem, we'll have to rethink some of the randomized parameters we're
+			// giving it. In particular, as the number of pending transactions in the
+			// system increases[*], very quickly a single guy becomes the bottleneck.
+			// At that point, it's imperative for the test to make progress to uncork
+			// this transaction -- otherwise, everything will block and we'll get a
+			// timeout.
+			//
+			// [*] Note that this is an order of magnitude different from the number
+			// of active transactions. Transactions will remain pending as long as
+			// they have outstanding requests -- the number of pending transactions
+			// can get quite high once things start to block.
 			if err := exec.execute(false, numRequests); err != nil {
 				t.Fatal(err)
 			}
