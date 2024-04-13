@@ -196,16 +196,30 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 		return errors.AssertionFailedf("expected at least 1 span, got none")
 	}
 
-	if !atomic.CompareAndSwapInt32(&f.started, 0, 1) {
-		return errors.AssertionFailedf("rangefeed already started")
-	}
-
 	// Maintain a frontier in order to resume at a reasonable timestamp.
 	// TODO(ajwerner): Consider exposing the frontier through a RangeFeed method.
 	// Doing so would require some synchronization.
 	frontier, err := span.MakeFrontier(spans...)
 	if err != nil {
 		return err
+	}
+	return f.start(ctx, frontier, true)
+}
+
+// StartFromFrontier is like Start but allows passing a frontier containing the
+// spans on which to create the feed, which can reflect any previous progress,
+// unlike passing just the spans to Start().
+//
+// The rangefeed takes ownership of the passed frontier until it is closed; the
+// caller must not interact with it until Close returns. The caller remains
+// responsible for releasing the frontier thereafter however.
+func (f *RangeFeed) StartFromFrontier(ctx context.Context, frontier span.Frontier) error {
+	return f.start(ctx, frontier, false)
+}
+
+func (f *RangeFeed) start(ctx context.Context, frontier span.Frontier, ownsFrontier bool) error {
+	if !atomic.CompareAndSwapInt32(&f.started, 0, 1) {
+		return errors.AssertionFailedf("rangefeed already started")
 	}
 
 	// Frontier merges and de-dups passed in spans.  So, use frontier to initialize
@@ -216,8 +230,9 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 	})
 
 	runWithFrontier := func(ctx context.Context) {
-		defer frontier.Release()
-
+		if ownsFrontier {
+			defer frontier.Release()
+		}
 		// pprof.Do function does exactly what we do here, but it also results in
 		// pprof.Do function showing up in the stack traces -- so, just set and reset
 		// labels manually.
@@ -228,9 +243,9 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 	}
 
 	f.spansDebugStr = func() string {
-		n := len(spans)
+		n := len(f.spans)
 		if n == 1 {
-			return spans[0].String()
+			return f.spans[0].String()
 		}
 
 		return fmt.Sprintf("{%s}", frontier.String())
