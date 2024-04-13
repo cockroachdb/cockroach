@@ -454,6 +454,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if len(virtComputedCols) != 0 {
 		// Resolve names and types.
 		semaCtx := tree.MakeSemaContext()
+		semaCtx.TypeResolver = planCtx.planner
 		virtComputedExprs, _, err := schemaexpr.MakeComputedExprs(
 			ctx,
 			virtComputedCols,
