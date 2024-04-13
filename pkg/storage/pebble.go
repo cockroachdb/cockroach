@@ -1092,6 +1092,10 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		}
 	}
 
+	if buildutil.CrdbTestBuild {
+		cfg.opts.Experimental.CheckExternalIngestions = true
+	}
+
 	cfg.opts.EnsureDefaults()
 
 	// The context dance here is done so that we have a clean context without
