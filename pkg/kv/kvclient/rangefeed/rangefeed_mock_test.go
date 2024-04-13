@@ -372,7 +372,7 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 
 	f := rangefeed.NewFactoryWithDB(stopper, db, nil /* knobs */)
 	r, err := f.RangeFeed(ctx, "foo",
-		[]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}},
+		[]roachpb.Span{{Key: keys.TableDataMin, EndKey: keys.TableDataMax}},
 		hlc.Timestamp{},
 		func(ctx context.Context, value *kvpb.RangeFeedValue) {},
 		rangefeed.WithInitialScan(func(ctx context.Context) {}),
