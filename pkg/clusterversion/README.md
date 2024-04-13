@@ -116,7 +116,9 @@ upgrade as an experimental feature). Once `MinSupported` is advanced, all older
 non-permanent version keys are no longer necessary - Cockroach code will never
 deal with a cluster below `MinSupported`.
 
-**When**: Any time after forking the release branch.
+**When**: It is recommended to start this process when the first release
+candidate is cut (i.e. there are no open GA blockers). The main reason is to
+avoid large changes on `master` which might cause merge conflicts for backports.
 
 **Checklist**:
 
@@ -159,10 +161,9 @@ deal with a cluster below `MinSupported`.
   `clusterversion.SkipWhenMinSupportedVersionIsAtLeast()` so they can be removed
   later (as part of cleaning up the obsolete gates).
 
-**Example PR:** [#112122](https://github.com/cockroachdb/cockroach/pull/112122)
-(note that this particular PR required a lot of fixes that will no longer be
-necessary if the current runbooks are followed).
-<!--- TODO(radu): replace pointer with the next PR). --->
+**Example PRs:** [#121775](https://github.com/cockroachdb/cockroach/pull/121775)
+[#122062](https://github.com/cockroachdb/cockroach/pull/122062)
+[#122244](https://github.com/cockroachdb/cockroach/pull/122244)
 
 ### M.2: Bump current version
 
