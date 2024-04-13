@@ -208,13 +208,6 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 		return err
 	}
 
-	for _, sp := range spans {
-		if _, err := frontier.Forward(sp, f.initialTimestamp); err != nil {
-			frontier.Release() // release whatever was allocated.
-			return err
-		}
-	}
-
 	// Frontier merges and de-dups passed in spans.  So, use frontier to initialize
 	// sorted list of spans.
 	frontier.Entries(func(sp roachpb.Span, _ hlc.Timestamp) (done span.OpResult) {
@@ -280,8 +273,17 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier) {
 	restartLogEvery := log.Every(10 * time.Second)
 
 	if f.withInitialScan {
-		if failed := f.runInitialScan(ctx, &restartLogEvery, &r); failed {
+		if failed := f.runInitialScan(ctx, &restartLogEvery, &r, frontier); failed {
 			return
+		}
+	} else {
+		for _, sp := range f.spans {
+			if _, err := frontier.Forward(sp, f.initialTimestamp); err != nil {
+				if fn := f.onUnrecoverableError; fn != nil {
+					fn(ctx, err)
+				}
+				return
+			}
 		}
 	}
 
