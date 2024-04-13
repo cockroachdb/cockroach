@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "skip",
     srcs = [
+        "constants.go",
         "skip.go",
         "stress.go",
     ],
