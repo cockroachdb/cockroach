@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -340,6 +341,64 @@ func TestRangeFeedMock(t *testing.T) {
 		require.NoError(t, err)
 		<-done
 		r.Close()
+	})
+	t.Run("initial scan makes progress", func(t *testing.T) {
+		stopper := stop.NewStopper()
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
+
+		scanResults := []roachpb.Span{
+			{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			{},
+			{Key: roachpb.Key("c"), EndKey: roachpb.Key("f")},
+			{},
+			{},
+			{Key: roachpb.Key("f"), EndKey: roachpb.Key("g")},
+			{},
+			{Key: roachpb.Key("g"), EndKey: roachpb.Key("z")},
+		}
+		resultCh := make(chan roachpb.Span, len(scanResults))
+		for _, sp := range scanResults {
+			resultCh <- sp
+		}
+
+		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{
+			scan: func(ctx context.Context, _ []roachpb.Span, _ hlc.Timestamp,
+				rowFn func(_ roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), cfg rangefeed.ScanConfig) error {
+				res := <-resultCh
+				if res.Valid() {
+					if err := cfg.OnSpanDone(ctx, res); err != nil {
+						return err
+					}
+				}
+				return errors.New("err")
+			},
+		}, nil)
+
+		frontier, err := span.MakeFrontier(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")})
+		require.NoError(t, err)
+		defer frontier.Release()
+
+		var runs, errorsHit int
+		for done := false; !done && runs < 10; {
+			runs++
+			require.Greater(t, frontier.Len(), 0, frontier.String())
+			r := f.New(
+				"foo",
+				hlc.Timestamp{WallTime: 1},
+				func(_ context.Context, _ *kvpb.RangeFeedValue) {},
+				rangefeed.WithInitialScan(func(_ context.Context) { done = true }),
+				rangefeed.WithOnInitialScanError(func(_ context.Context, _ error) (shouldFail bool) {
+					errorsHit++
+					return errorsHit%2 == 0
+				}),
+			)
+			err := r.StartFromFrontier(ctx, frontier)
+			require.NoError(t, err)
+			r.Close()
+		}
+		require.Equal(t, 9, runs)
+		require.Equal(t, 8, errorsHit)
 	})
 }
 
