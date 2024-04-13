@@ -142,7 +142,6 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		log.Infof(ctx, "starting event stream with initial scan at %s", initialTimestamp)
 		opts = append(opts,
 			rangefeed.WithInitialScan(s.onInitialScanDone),
-			rangefeed.WithScanRetryBehavior(rangefeed.ScanRetryRemaining),
 			rangefeed.WithRowTimestampInInitialScan(true),
 			rangefeed.WithInitialScanParallelismFn(func() int {
 				return int(s.spec.Config.InitialScanParallelism)
