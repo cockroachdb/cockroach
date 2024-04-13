@@ -66,27 +66,39 @@ func (f *RangeFeed) runInitialScan(
 	getSpansToScan, cleanup := f.getSpansToScan(ctx)
 	defer cleanup()
 
+	// We will exit this for loop only when we return false for failed/cancelled
+	// from inside the loop, or when we break due to the callback or the retry
+	// helper returns false for Next (ctx cancel/retry limit).
 	r.Reset()
 	for r.Next() {
-		if err := f.client.Scan(ctx, getSpansToScan(), f.initialTimestamp, onValue, onValues, f.scanConfig); err != nil {
-			if f.onInitialScanError != nil {
-				if shouldStop := f.onInitialScanError(ctx, err); shouldStop {
-					log.VEventf(ctx, 1, "stopping due to error: %v", err)
-					return true
+		// Figure out what spans are left to scan.
+		toScan := getSpansToScan()
+
+		// Scan the spans.
+		if len(toScan) > 0 {
+			if err := f.client.Scan(ctx, toScan, f.initialTimestamp, onValue, onValues, f.scanConfig); err != nil {
+				if f.onInitialScanError != nil {
+					if shouldStop := f.onInitialScanError(ctx, err); shouldStop {
+						log.VEventf(ctx, 1, "stopping due to error: %v", err)
+						break
+					}
 				}
+				if n.ShouldLog() {
+					log.Warningf(ctx, "failed to perform initial scan: %v", err)
+				}
+				continue
 			}
-			if n.ShouldLog() {
-				log.Warningf(ctx, "failed to perform initial scan: %v", err)
-			}
-		} else /* err == nil */ {
-			if f.onInitialScanDone != nil {
-				f.onInitialScanDone(ctx)
-			}
-			break
 		}
+
+		// If we got here, we either had nothing to do or did it all; we're done.
+		if f.onInitialScanDone != nil {
+			f.onInitialScanDone(ctx)
+		}
+		return false
 	}
 
-	return false
+	// We left the for loop without returning false, so we were cancelled.
+	return true
 }
 
 func (f *RangeFeed) getSpansToScan(ctx context.Context) (func() []roachpb.Span, func()) {
