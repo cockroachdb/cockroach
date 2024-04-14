@@ -516,6 +516,7 @@ func (h *hasher) HashScanFlags(val ScanFlags) {
 	h.HashBool(val.NoZigzagJoin)
 	h.HashBool(val.NoFullScan)
 	h.HashBool(val.ForceIndex)
+	h.HashBool(val.ForceInvertedIndex)
 	h.HashBool(val.ForceZigzag)
 	h.HashInt(int(val.Direction))
 	h.HashUint64(uint64(val.Index))
