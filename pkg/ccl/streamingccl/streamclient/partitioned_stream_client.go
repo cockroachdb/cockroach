@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -223,6 +224,10 @@ func (p *partitionedStreamClient) Subscribe(
 	sps.InitialScanTimestamp = initialScanTime
 	if previousReplicatedTimes != nil {
 		sps.PreviousReplicatedTimestamp = previousReplicatedTimes.Frontier()
+		previousReplicatedTimes.Entries(func(s roachpb.Span, t hlc.Timestamp) (done span.OpResult) {
+			sps.Progress = append(sps.Progress, jobspb.ResolvedSpan{Span: s, Timestamp: t})
+			return span.ContinueMatch
+		})
 	}
 	sps.ConsumerID = consumerID
 
