@@ -101,7 +101,7 @@ func (dbc *dbAdapter) Scan(
 	// If we don't have parallelism configured, just scan each span in turn.
 	if cfg.scanParallelism == nil {
 		for _, sp := range spans {
-			if err := dbc.scanSpan(ctx, sp, asOf, rowFn, rowsFn, cfg.targetScanBytes, cfg.onSpanDone, cfg.overSystemTable, acc); err != nil {
+			if err := dbc.scanSpan(ctx, sp, asOf, rowFn, rowsFn, cfg.targetScanBytes, cfg.OnSpanDone, cfg.overSystemTable, acc); err != nil {
 				return err
 			}
 		}
@@ -137,7 +137,7 @@ func (dbc *dbAdapter) Scan(
 	g := ctxgroup.WithContext(ctx)
 	err := dbc.divideAndSendScanRequests(
 		ctx, &g, spans, asOf, rowFn, rowsFn,
-		parallelismFn, cfg.targetScanBytes, cfg.onSpanDone, cfg.overSystemTable, acc)
+		parallelismFn, cfg.targetScanBytes, cfg.OnSpanDone, cfg.overSystemTable, acc)
 	if err != nil {
 		cancel()
 	}

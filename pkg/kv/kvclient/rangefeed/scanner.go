@@ -72,8 +72,8 @@ func (f *RangeFeed) runInitialScan(
 	// Adjust the span completion callback to advance the frontier in addition to
 	// calling the user's callback, if any. We don't need to undo after we're done
 	// since it is never called again once we're done.
-	userSpanDoneCallback := f.onSpanDone
-	f.onSpanDone = func(ctx context.Context, sp roachpb.Span) error {
+	userSpanDoneCallback := f.scanConfig.OnSpanDone
+	f.scanConfig.OnSpanDone = func(ctx context.Context, sp roachpb.Span) error {
 		if userSpanDoneCallback != nil {
 			if err := userSpanDoneCallback(ctx, sp); err != nil {
 				return err
