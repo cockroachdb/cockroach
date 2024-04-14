@@ -20,7 +20,7 @@ import { GraphDashboardProps } from "./dashboardUtils";
 export default function (props: GraphDashboardProps) {
   const { nodeSources, tenantSource } = props;
 
-  const percentiles = ["p50", "p75", "p90", "p95", "p99"];
+  const percentiles = ["p50", "p75", "p90", "p99"];
 
   return [
     <LineGraph

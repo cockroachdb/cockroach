@@ -20,6 +20,7 @@ import {
 import uPlot from "uplot";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
+type TSQueryResult = protos.cockroach.ts.tspb.TimeSeriesQueryResponse.IResult;
 
 // Global set of colors for graph series.
 const seriesPalette = [
@@ -49,6 +50,11 @@ export type formattedSeries = {
   color?: string;
 };
 
+// logic to decide when to show a metric based on the query's result
+export function canShowMetric(result: TSQueryResult) {
+  return !_.isEmpty(result.datapoints);
+}
+
 export function formatMetricData(
   metrics: React.ReactElement<MetricProps>[],
   data: TSResponse,
@@ -57,7 +63,7 @@ export function formatMetricData(
 
   _.each(metrics, (s, idx) => {
     const result = data.results[idx];
-    if (result && !_.isEmpty(result.datapoints)) {
+    if (result && canShowMetric(result)) {
       const scaledValues = result.datapoints.map(v => ({
         ...v,
         // if defined scale it, otherwise remain undefined
