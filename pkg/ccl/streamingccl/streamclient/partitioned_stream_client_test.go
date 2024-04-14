@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -87,6 +88,8 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 	}()
 	require.NoError(t, err)
 
+	var emptyFrontier span.Frontier
+
 	expectStreamState := func(streamID streampb.StreamID, status jobs.Status) {
 		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
 			[][]string{{string(status)}})
@@ -114,7 +117,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 		})
 		t.Run("subscribe fails", func(t *testing.T) {
-			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, hlc.Timestamp{})
+			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
 			require.NoError(t, err)
 			err = subscription.Subscribe(ctx)
 			require.ErrorContains(t, err, expectedErr)
@@ -138,7 +141,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.ErrorContains(t, err, "not a replication stream job")
 		})
 		t.Run("subscribe fails", func(t *testing.T) {
-			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, hlc.Timestamp{})
+			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
 			require.NoError(t, err)
 			err = subscription.Subscribe(ctx)
 			require.ErrorContains(t, err, "not a replication stream job")
@@ -164,7 +167,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_PAUSED, status.StreamStatus)
 		})
 		t.Run("subscribe fails", func(t *testing.T) {
-			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, hlc.Timestamp{})
+			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
 			require.NoError(t, err)
 			err = subscription.Subscribe(ctx)
 			require.ErrorContains(t, err, "must be running")
@@ -192,7 +195,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 		})
 		t.Run("subscribe fails", func(t *testing.T) {
-			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, hlc.Timestamp{})
+			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
 			require.NoError(t, err)
 			err = subscription.Subscribe(ctx)
 			require.ErrorContains(t, err, "must be running")
@@ -326,7 +329,7 @@ INSERT INTO d.t2 VALUES (2);
 	}()
 	require.NoError(t, err)
 	sub, err := subClient.Subscribe(ctx, streamID, 1, encodeSpec("t1"),
-		initialScanTimestamp, hlc.Timestamp{})
+		initialScanTimestamp, nil)
 	require.NoError(t, err)
 
 	rf := replicationtestutils.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
