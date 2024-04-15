@@ -430,6 +430,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = false
 	notStale()
 
+	// Stale opt_split_scan_limit.
+	evalCtx.SessionData().OptSplitScanLimit = 100
+	stale()
+	evalCtx.SessionData().OptSplitScanLimit = 0
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
