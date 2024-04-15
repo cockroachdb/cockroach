@@ -18,6 +18,7 @@ import (
 	"encoding/asn1"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -110,6 +111,7 @@ func TestAuthenticateTenant(t *testing.T) {
 		commonName       string
 		rootDNString     string
 		nodeDNString     string
+		subjectRequired  bool
 		expTenID         roachpb.TenantID
 		expErr           string
 		tenantScope      uint64
@@ -192,6 +194,16 @@ func TestAuthenticateTenant(t *testing.T) {
 			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "foo" on all tenants, "bar" on all tenants\)`},
 		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "bar", certPrincipalMap: "bar:root"},
 		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "bar", certPrincipalMap: "bar:node"},
+		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true,
+			expErr: `root and node roles do not have valid DNs set which subject_required cluster setting mandates`},
+		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true, rootDNString: "CN=bar",
+			expErr: `need root or node client cert to perform RPCs on this server: cert dn did not match set root or node dn`},
+		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true, nodeDNString: "CN=bar",
+			expErr: `need root or node client cert to perform RPCs on this server: cert dn did not match set root or node dn`},
+		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true, rootDNString: "CN=foo"},
+		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true, nodeDNString: "CN=foo"},
+		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true,
+			rootDNString: "CN=foo", nodeDNString: "CN=bar"},
 	} {
 		t.Run(fmt.Sprintf("from %v to %v (md %q)", tc.commonName, tc.systemID, tc.clientTenantInMD), func(t *testing.T) {
 			err := security.SetCertPrincipalMap(strings.Split(tc.certPrincipalMap, ","))
@@ -248,7 +260,10 @@ func TestAuthenticateTenant(t *testing.T) {
 				ctx = metadata.NewIncomingContext(ctx, md)
 			}
 
-			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID)
+			clusterSettings := map[settings.InternalKey]settings.EncodedValue{
+				security.ClientCertSubjectRequiredSettingName: {Value: strconv.FormatBool(tc.subjectRequired), Type: "b"},
+			}
+			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, clusterSettings)
 
 			if tc.expErr == "" {
 				require.Equal(t, tc.expTenID, tenID)
