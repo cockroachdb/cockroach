@@ -2,10 +2,9 @@
 
 set -xeuo pipefail
 
-# TODO: We may want to fork this repo and keep it up to date.
 GO_FIPS_REPO=https://github.com/golang-fips/go
-GO_FIPS_COMMIT=go1.21-fips-release
-GO_VERSION=1.21.5
+GO_FIPS_COMMIT=556abee0da00b1c2ad965590d7793cd8d741b423
+GO_VERSION=1.22.2
 
 # Install build dependencies
 yum install git golang golang-bin openssl openssl-devel -y
@@ -25,8 +24,7 @@ sed -i "s/go mod tidy/go mod tidy -go=1.16/g" scripts/create-secondary-patch.sh
 ./scripts/full-initialize-repo.sh "go$GO_VERSION"
 cd go/src
 # Apply the CRL patch
-# TODO : enable the patch after go-fips is 1.22
-# patch -p1 < /bootstrap/diff.patch
+patch -p2 </bootstrap/diff.patch
 # add a special version modifier so we can explicitly use it in bazel
 sed -i '1 s/$/fips/' ../VERSION
 ./make.bash -v
