@@ -109,7 +109,8 @@ type backupFixtureSpecs struct {
 	initWorkloadViaRestore *restoreSpecs
 
 	timeout time.Duration
-	suites  registry.SuiteSet
+	// A no-op, used only to set larger timeouts due roachtests limiting timeouts based on the suite
+	suites registry.SuiteSet
 
 	testName string
 
@@ -374,6 +375,22 @@ func registerBackupFixtures(r registry.Registry) {
 			// Use weekly to allow an over 24 hour timeout.
 			suites:  registry.Suites(registry.Weekly),
 			timeout: 48 * time.Hour,
+			skip:    "only for fixture generation",
+		},
+		{
+			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
+			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
+				backupSpecs: backupSpecs{
+					workload:           tpccRestore{opts: tpccRestoreOptions{warehouses: 500}},
+					nonRevisionHistory: true,
+				},
+			}),
+			initWorkloadViaRestore: &restoreSpecs{
+				backup:                 backupSpecs{version: "v23.1.1", numBackupsInChain: 48},
+				restoreUptoIncremental: 48,
+			},
+			timeout: 1 * time.Hour,
+			suites:  registry.Suites(registry.Nightly),
 			skip:    "only for fixture generation",
 		},
 	} {
