@@ -25,6 +25,9 @@ type FakeStorage struct {
 	mu struct {
 		syncutil.Mutex
 		sessions map[sqlliveness.SessionID]hlc.Timestamp
+
+		// Used to inject errors into the storage layer.
+		insertError func(sid sqlliveness.SessionID, expiration hlc.Timestamp) error
 	}
 }
 
@@ -33,6 +36,16 @@ func NewFakeStorage() *FakeStorage {
 	fs := &FakeStorage{}
 	fs.mu.sessions = make(map[sqlliveness.SessionID]hlc.Timestamp)
 	return fs
+}
+
+// SetInjectedFailure adds support for injecting failures for different
+// operations.
+func (s *FakeStorage) SetInjectedFailure(
+	insertError func(sid sqlliveness.SessionID, expiration hlc.Timestamp) error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.insertError = insertError
 }
 
 // IsAlive implements the sqlliveness.Reader interface.
@@ -51,6 +64,12 @@ func (s *FakeStorage) Insert(
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Support injecting errors during the initial creation of the session.
+	if s.mu.insertError != nil {
+		if err := s.mu.insertError(sid, expiration); err != nil {
+			return err
+		}
+	}
 	if _, ok := s.mu.sessions[sid]; ok {
 		return errors.Errorf("session %s already exists", sid)
 	}

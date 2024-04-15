@@ -204,13 +204,9 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 		return nil, err
 	}
 
-	start := l.clock.Now()
-	exp := start.Add(l.ttl().Nanoseconds(), 0)
 	s := &session{
-		id:    id,
-		start: start,
+		id: id,
 	}
-	s.mu.exp = exp
 
 	opts := retry.Options{
 		InitialBackoff: 10 * time.Millisecond,
@@ -219,6 +215,14 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	}
 	everySecond := log.Every(time.Second)
 	for i, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
+		// If we fail to insert the session, then reset the start time
+		// and expiration, since otherwise there is a danger of inserting
+		// an expired session.
+		s.start = l.clock.Now()
+		// Note: Concurrent access is not possible at this point because
+		// the session has not been returned, so we have no need to acquire
+		// the lock.
+		s.mu.exp = s.start.Add(l.ttl().Nanoseconds(), 0)
 		i++
 		if err = l.storage.Insert(ctx, s.id, s.Expiration()); err != nil {
 			if ctx.Err() != nil {
