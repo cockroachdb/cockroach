@@ -258,15 +258,16 @@ project
  │    ├── cardinality: [0 - 5]
  │    ├── key: (2,3)
  │    ├── ordering: +3
- │    ├── sort
+ │    ├── distinct-on
  │    │    ├── columns: i:2 f:3
+ │    │    ├── grouping columns: i:2 f:3
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
  │    │    ├── limit hint: 5.00
- │    │    └── distinct-on
+ │    │    └── sort
  │    │         ├── columns: i:2 f:3
- │    │         ├── grouping columns: i:2 f:3
- │    │         ├── key: (2,3)
+ │    │         ├── ordering: +3
+ │    │         ├── limit hint: 6.02
  │    │         └── scan a
  │    │              └── columns: i:2 f:3
  │    └── 5
@@ -449,15 +450,16 @@ project
  │    │    ├── cardinality: [0 - 15]
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
- │    │    ├── sort
+ │    │    ├── distinct-on
  │    │    │    ├── columns: i:2 f:3
+ │    │    │    ├── grouping columns: i:2 f:3
  │    │    │    ├── key: (2,3)
  │    │    │    ├── ordering: +3
  │    │    │    ├── limit hint: 15.00
- │    │    │    └── distinct-on
+ │    │    │    └── sort
  │    │    │         ├── columns: i:2 f:3
- │    │    │         ├── grouping columns: i:2 f:3
- │    │    │         ├── key: (2,3)
+ │    │    │         ├── ordering: +3
+ │    │    │         ├── limit hint: 18.16
  │    │    │         └── scan a
  │    │    │              └── columns: i:2 f:3
  │    │    └── 15
