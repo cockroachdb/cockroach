@@ -126,6 +126,9 @@ func (*insights) Meta() workload.Meta { return insightsMeta }
 // Flags implements the Flagser interface.
 func (b *insights) Flags() workload.Flags { return b.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (b *insights) ConnFlags() *workload.ConnFlags { return b.connFlags }
+
 // Hooks implements the Hookser interface.
 func (b *insights) Hooks() workload.Hooks {
 	return workload.Hooks{
@@ -211,10 +214,6 @@ func (b *insights) Tables() []workload.Table {
 func (b *insights) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(b, b.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -223,7 +222,7 @@ func (b *insights) Ops(
 	db.SetMaxOpenConns(b.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(b.connFlags.Concurrency + 1)
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 
 	// Most of the insight queries are slow by design. This prevents them from

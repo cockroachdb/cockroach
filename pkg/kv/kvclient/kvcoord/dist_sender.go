@@ -2727,7 +2727,7 @@ func (ds *DistSender) sendToReplicas(
 
 		tBegin := timeutil.Now() // for slow log message
 		sendCtx, cbToken, cbErr := ds.circuitBreakers.ForReplica(desc, &curReplica).
-			Track(ctx, ba, tBegin.UnixNano())
+			Track(ctx, ba, withCommit, tBegin.UnixNano())
 		if cbErr != nil {
 			// Circuit breaker is tripped. err will be handled below.
 			err = cbErr

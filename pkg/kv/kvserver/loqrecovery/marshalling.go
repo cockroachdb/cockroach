@@ -30,7 +30,7 @@ func MarshalReplicaInfo(replicaInfo loqrecoverypb.ClusterReplicaInfo) ([]byte, e
 	v := clusterversion.ClusterVersion{
 		Version: replicaInfo.Version,
 	}
-	if v.IsActive(clusterversion.V23_1) {
+	if v.IsActive(clusterversion.TODODelete_V23_1) {
 		out, err := jsonpb.Marshal(&replicaInfo)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to marshal replica info")
@@ -90,7 +90,7 @@ func MarshalPlan(plan loqrecoverypb.ReplicaUpdatePlan) ([]byte, error) {
 	v := clusterversion.ClusterVersion{
 		Version: plan.Version,
 	}
-	if v.IsActive(clusterversion.V23_1) {
+	if v.IsActive(clusterversion.TODODelete_V23_1) {
 		out, err := jsonpb.Marshal(&plan)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to marshal recovery plan")

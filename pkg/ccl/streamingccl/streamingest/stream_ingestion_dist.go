@@ -386,7 +386,7 @@ func splitAndScatterWorker(
 	return func(ctx context.Context) error {
 		for spanNum, span := range spans {
 			startKey := span.Key.Clone()
-			splitKey, _, err := rekeyer.RewriteKey(startKey, 0 /* walltimeForImportElision */)
+			splitKey, _, err := rekeyer.RewriteTenant(startKey)
 			if err != nil {
 				return err
 			}

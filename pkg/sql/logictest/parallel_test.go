@@ -230,6 +230,7 @@ func TestParallel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	skip.UnderRace(t, "takes >1 min under race")
+	skip.UnderDeadlock(t, "too slow")
 
 	glob := *paralleltestdata
 	paths, err := filepath.Glob(glob)

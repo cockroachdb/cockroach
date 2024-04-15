@@ -924,7 +924,7 @@ func noteKeyVal(
 	validator *streamClientValidator, keyVal roachpb.KeyValue, spec streamclient.SubscriptionToken,
 ) {
 	if validator.rekeyer != nil {
-		rekey, _, err := validator.rekeyer.RewriteKey(keyVal.Key, 0 /* wallTimeForImportElision*/)
+		rekey, _, err := validator.rekeyer.RewriteTenant(keyVal.Key)
 		if err != nil {
 			panic(err.Error())
 		}

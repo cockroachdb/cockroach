@@ -1561,6 +1561,12 @@ func (n *Node) getLocalityComparison(
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
+	// In separate-process multi-tenant mode the gatewayNodeID is 0.
+	if gatewayNodeID == 0 {
+		if _, ok := roachpb.ClientTenantFromContext(ctx); ok {
+			return roachpb.LocalityComparisonType_UNDEFINED
+		}
+	}
 	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
 	if err != nil {
 		log.VInfof(ctx, 2,

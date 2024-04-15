@@ -416,6 +416,7 @@ func buildFilterPreemptionCliArgs(
 	return args, nil
 }
 
+// GetHostErrorVMs checks the host error status of the given VMs, by querying the GCP logging service.
 func (p *Provider) GetHostErrorVMs(l *logger.Logger, since time.Time) ([]vm.PreemptedVM, error) {
 	args, err := buildFilterHostErrorCliArgs(p.GetProject(), since)
 	if err != nil {
@@ -451,12 +452,13 @@ func buildFilterHostErrorCliArgs(projectName string, since time.Time) ([]string,
 		return nil, errors.New("since cannot be in the future")
 	}
 	// Create a filter to match hostError events for the specified projectName
-	filter := fmt.Sprintf("resource.type=gce_instance AND protoPayload.methodName=compute.instances.hostError AND logName=projects/%s/logs/cloudaudit.googleapis.com%%2Fsystem_event", projectName)
+	filter := fmt.Sprintf("resource.type=gce_instance AND protoPayload.methodName=compute.instances.hostError "+
+		"AND logName=projects/%s/logs/cloudaudit.googleapis.com%%2Fsystem_event", projectName)
 	args := []string{
 		"logging",
 		"read",
 		filter,
-		fmt.Sprintf("--freshness=%dd", int(time.Since(since).Hours())), // change to days
+		fmt.Sprintf("--freshness=%dd", int(timeutil.Since(since).Hours()/24)),
 		"--format=json",
 	}
 	return args, nil

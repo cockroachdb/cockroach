@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -202,12 +203,18 @@ func registerRebalanceLoad(r registry.Registry) {
 			},
 		},
 	)
-	cSpec := r.MakeClusterSpec(7, spec.SSD(2)) // the last node is just used to generate load
+
 	r.Add(
 		registry.TestSpec{
-			Name:             `rebalance/by-load/replicas/ssds=2`,
-			Owner:            registry.OwnerKV,
-			Cluster:          cSpec,
+			Name:  `rebalance/by-load/replicas/ssds=2`,
+			Owner: registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(7,
+				// When using ssd > 1, only local SSDs on AMD64 arch are compatible
+				// currently. See #121951.
+				spec.SSD(2),
+				spec.Arch(vm.ArchAMD64),
+				spec.PreferLocalSSD(),
+			), // the last node is just used to generate load
 			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,

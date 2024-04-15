@@ -1684,7 +1684,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 
 type benchWorkItem struct {
 	Request
-	locksToAcquire []roachpb.Key
+	locksToAcquire []lockToAcquire
 }
 
 type benchEnv struct {
@@ -1740,9 +1740,9 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 			}
 		}
 	}
-	for _, k := range item.locksToAcquire {
+	for _, toAcq := range item.locksToAcquire {
 		acq := roachpb.MakeLockAcquisition(
-			item.Txn.TxnMeta, k, lock.Unreplicated, lock.Exclusive, item.Txn.IgnoredSeqNums,
+			item.Txn.TxnMeta, toAcq.key, toAcq.dur, toAcq.str, item.Txn.IgnoredSeqNums,
 		)
 		if err = env.lt.AcquireLock(&acq); err != nil {
 			doneCh <- err
@@ -1760,9 +1760,9 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		doneCh <- err
 		return
 	}
-	for _, k := range item.locksToAcquire {
+	for _, toAcq := range item.locksToAcquire {
 		intent := roachpb.LockUpdate{
-			Span:   roachpb.Span{Key: k},
+			Span:   roachpb.Span{Key: toAcq.key},
 			Txn:    item.Request.Txn.TxnMeta,
 			Status: roachpb.COMMITTED,
 		}
@@ -1802,8 +1802,9 @@ func createRequests(index int, numOutstanding int, numKeys int, numReadKeys int)
 			lockSpans.Add(lock.None, span)
 		} else {
 			latchSpans.AddMVCC(spanset.SpanReadWrite, span, ts)
-			lockSpans.Add(lock.Intent, span)
-			wi.locksToAcquire = append(wi.locksToAcquire, key)
+			toAcq := lockToAcquire{key, lock.Exclusive, lock.Unreplicated}
+			lockSpans.Add(toAcq.str, span)
+			wi.locksToAcquire = append(wi.locksToAcquire, toAcq)
 		}
 	}
 	var result []benchWorkItem

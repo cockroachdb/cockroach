@@ -348,6 +348,30 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
+		// 13. Verify hostError failure are routed to test-eng and marked as infra-flake, when the
+		// first failure is a non-handled error.
+		{
+			nonReleaseBlocker:     true,
+			failures:              []failure{createFailure(errors.New("random")), createFailure(vmHostError("my_VM"))},
+			expectedPost:          true,
+			expectedTeam:          "@cockroachdb/test-eng",
+			expectedName:          "vm_host_error",
+			expectedMessagePrefix: testName + " failed",
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+		},
+		// 14. Verify hostError failure are routed to test-eng and marked as infra-flake, when the only error is
+		// hostError failure
+		{
+			nonReleaseBlocker: true,
+			failures: []failure{
+				{errors: []error{vmHostError("my_VM")}},
+			},
+			expectedPost:          true,
+			expectedTeam:          "@cockroachdb/test-eng",
+			expectedName:          "vm_host_error",
+			expectedMessagePrefix: testName + " failed",
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+		},
 	}
 
 	reg := makeTestRegistry()

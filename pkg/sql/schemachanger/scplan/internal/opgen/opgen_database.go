@@ -50,7 +50,7 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.Database, md *opGenContext) *scop.CreateGCJobForDatabase {
-					if !md.ActiveVersion.IsActive(clusterversion.V23_1) {
+					if !md.ActiveVersion.IsActive(clusterversion.TODODelete_V23_1) {
 						return &scop.CreateGCJobForDatabase{
 							DatabaseID:          this.DatabaseID,
 							StatementForDropJob: statementForDropJob(this, md),
