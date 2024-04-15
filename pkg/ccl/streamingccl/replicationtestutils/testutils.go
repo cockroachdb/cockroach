@@ -516,7 +516,21 @@ func WaitUntilReplicatedTime(
 	t *testing.T, targetTime hlc.Timestamp, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		return requireReplicatedTime(targetTime, jobutils.GetJobProgress(t, db, ingestionJobID))
+		err := requireReplicatedTime(targetTime, jobutils.GetJobProgress(t, db, ingestionJobID))
+		if err == nil {
+			return nil
+		}
+		// Check the job status to see if there is still anything to be waiting for.
+		jobStatus := db.QueryStr(t, "SELECT status, error FROM [SHOW JOB $1]", ingestionJobID)
+		if len(jobStatus) > 0 {
+			// Include job status in the error in case it is useful.
+			err = errors.Wrapf(err, "job status %s %s", jobStatus[0][0], jobStatus[0][1])
+			// Don't wait for an advance that is never happening if paused or failed.
+			if jobStatus[0][0] == string(jobs.StatusPaused) || jobStatus[0][0] == string(jobs.StatusFailed) {
+				t.Fatal(err)
+			}
+		}
+		return err
 	})
 }
 
