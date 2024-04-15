@@ -55,7 +55,7 @@ func registerAcceptance(r registry.Registry) {
 				fn:   runAcceptanceMultitenant,
 			},
 		},
-		registry.OwnerObsInf: {
+		registry.OwnerObservability: {
 			{name: "status-server", fn: runStatusServer},
 		},
 		registry.OwnerDevInf: {
