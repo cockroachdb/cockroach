@@ -216,7 +216,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 			}
 
 			generateFingerprints(t, sqlConn, tc.stmtCount)
-			serverSQLStats.Flush(ctx, server.AppStopper())
+			serverSQLStats.MaybeFlush(ctx, server.AppStopper())
 
 			sqlStatsKnobs := sqlstats.CreateTestingKnobs()
 			sqlStatsKnobs.OnCleanupStartForShard = cleanupInterceptor.intercept
