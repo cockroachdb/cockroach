@@ -125,7 +125,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	// This behavior is added in V23.1 and gated.
 	oldShardColToDrop := getprimaryIndexShardColumn(b, tbl.TableID, inflatedChain.oldSpec.primary.IndexID)
 	if checkIfColumnCanBeDropped(b, oldShardColToDrop) {
-		if b.EvalCtx().Settings.Version.IsActive(b, clusterversion.V23_1) {
+		if b.EvalCtx().Settings.Version.IsActive(b, clusterversion.TODODelete_V23_1) {
 			elts := b.QueryByID(oldShardColToDrop.TableID).Filter(hasColumnIDAttrFilter(oldShardColToDrop.ColumnID))
 			dropColumn(b, tn, tbl, t.n, oldShardColToDrop, elts, tree.DropRestrict)
 		}
@@ -732,7 +732,7 @@ func recreateAllSecondaryIndexes(
 			}
 		}
 		in, temp := makeSwapIndexSpec(b, out, sourcePrimaryIndex.IndexID, inColumns, false /* inUseTempIDs */)
-		if b.ClusterSettings().Version.IsActive(b, clusterversion.V23_1) {
+		if b.ClusterSettings().Version.IsActive(b, clusterversion.TODODelete_V23_1) {
 			in.secondary.RecreateSourceIndexID = out.indexID()
 		}
 		out.apply(b.Drop)

@@ -429,11 +429,11 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 				return upgrade.NewTenantUpgrade("testing",
 					v1,
 					upgrade.NoPrecondition,
-					func(
-						ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
-					) error {
+					func(ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps) error {
 						return nil
-					}, "test"), true
+					},
+					upgrade.RestoreActionNotRequired("test"),
+				), true
 			},
 		},
 	}

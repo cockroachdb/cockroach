@@ -42,7 +42,9 @@ func (p *provider) GetPreemptedSpotVMs(
 	return nil, nil
 }
 
-func (p *provider) GetHostErrorVMs(l *logger.Logger, since time.Time) ([]vm.PreemptedVM, error) {
+func (p *provider) GetHostErrorVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]string, error) {
 	return nil, nil
 }
 

@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "asof",
@@ -19,5 +19,18 @@ go_library(
         "//pkg/util/hlc",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "asof_test",
+    srcs = ["as_of_test.go"],
+    deps = [
+        ":asof",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
     ],
 )

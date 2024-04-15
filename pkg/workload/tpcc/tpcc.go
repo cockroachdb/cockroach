@@ -44,7 +44,6 @@ type tpcc struct {
 	nowString        []byte
 	numConns         int
 	idleConns        int
-	isoLevel         string
 	txnRetries       bool
 
 	// Used in non-uniform random data generation. cLoad is the value of C at load
@@ -60,7 +59,6 @@ type tpcc struct {
 	// deprecatedFKIndexes adds in foreign key indexes that are no longer needed
 	// due to origin index restrictions being lifted.
 	deprecatedFkIndexes bool
-	dbOverride          string
 
 	txInfos []txInfo
 	// deck contains indexes into the txInfos slice.
@@ -172,7 +170,6 @@ var tpccMeta = workload.Meta{
 			`workers`:                  {RuntimeOnly: true},
 			`conns`:                    {RuntimeOnly: true},
 			`idle-conns`:               {RuntimeOnly: true},
-			`isolation-level`:          {RuntimeOnly: true},
 			`txn-retries`:              {RuntimeOnly: true},
 			`expensive-checks`:         {RuntimeOnly: true, CheckConsistencyOnly: true},
 			`local-warehouses`:         {RuntimeOnly: true},
@@ -191,8 +188,6 @@ var tpccMeta = workload.Meta{
 			`Weights for the transaction mix. The default matches the TPCC spec.`)
 		g.waitFraction = 1.0
 		g.flags.Var(&waitSetter{&g.waitFraction}, `wait`, `Wait mode (include think/keying sleeps): 1/true for tpcc-standard wait, 0/false for no waits, other factors also allowed`)
-		g.flags.StringVar(&g.dbOverride, `db`, ``,
-			`Override for the SQL database to use. If empty, defaults to the generator name`)
 		g.flags.IntVar(&g.workers, `workers`, 0, fmt.Sprintf(
 			`Number of concurrent workers. Defaults to --warehouses * %d`, NumWorkersPerWarehouse,
 		))
@@ -201,7 +196,6 @@ var tpccMeta = workload.Meta{
 			numConnsPerWarehouse,
 		))
 		g.flags.IntVar(&g.idleConns, `idle-conns`, 0, `Number of idle connections. Defaults to 0`)
-		g.flags.StringVar(&g.isoLevel, `isolation-level`, ``, `Isolation level to run workload transactions under [serializable, snapshot, read_committed]. If unset, the workload will run with the default isolation level of the database.`)
 		g.flags.BoolVar(&g.txnRetries, `txn-retries`, true, `Run transactions in a retry loop`)
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables`)
 		g.flags.IntVar(&g.clientPartitions, `client-partitions`, 0, `Make client behave as if the tables are partitioned, but does not actually partition underlying data. Requires --partition-affinity.`)
@@ -259,6 +253,9 @@ func (*tpcc) Meta() workload.Meta { return tpccMeta }
 
 // Flags implements the Flagser interface.
 func (w *tpcc) Flags() workload.Flags { return w.flags }
+
+// ConnFlags implements the ConnFlagser interface.
+func (w *tpcc) ConnFlags() *workload.ConnFlags { return w.connFlags }
 
 // Hooks implements the Hookser interface.
 func (w *tpcc) Hooks() workload.Hooks {
@@ -746,14 +743,6 @@ func (w *tpcc) Ops(
 		w.txCounters = setupTPCCMetrics(reg.Registerer())
 	}
 
-	sqlDatabase, err := workload.SanitizeUrls(w, w.dbOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
-	if err := workload.SetDefaultIsolationLevel(urls, w.isoLevel); err != nil {
-		return workload.QueryLoad{}, err
-	}
-
 	// We can't use a single MultiConnPool because we want to implement partition
 	// affinity. Instead we have one MultiConnPool per server.
 	cfg := workload.NewMultiConnPoolCfgFromFlags(w.connFlags)
@@ -830,7 +819,7 @@ func (w *tpcc) Ops(
 		}
 	}
 	fmt.Printf("Initializing %d workers and preparing statements...\n", w.workers)
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	ql.WorkerFns = make([]func(context.Context) error, 0, w.workers)
 	var group errgroup.Group
 

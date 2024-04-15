@@ -1092,6 +1092,10 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		}
 	}
 
+	if buildutil.CrdbTestBuild {
+		cfg.opts.Experimental.CheckExternalIngestions = true
+	}
+
 	cfg.opts.EnsureDefaults()
 
 	// The context dance here is done so that we have a clean context without
@@ -1684,7 +1688,7 @@ func (p *Pebble) ClearEngineKey(key EngineKey, opts ClearOptions) error {
 		return emptyKeyError()
 	}
 	if !opts.ValueSizeKnown || !p.cfg.settings.Version.ActiveVersionOrEmpty(context.TODO()).
-		IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones) {
+		IsActive(clusterversion.TODODelete_V23_2_UseSizedPebblePointTombstones) {
 		return p.db.Delete(key.Encode(), pebble.Sync)
 	}
 	return p.db.DeleteSized(key.Encode(), opts.ValueSize, pebble.Sync)
@@ -1695,7 +1699,7 @@ func (p *Pebble) clear(key MVCCKey, opts ClearOptions) error {
 		return emptyKeyError()
 	}
 	if !opts.ValueSizeKnown || !p.cfg.settings.Version.ActiveVersionOrEmpty(context.TODO()).
-		IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones) {
+		IsActive(clusterversion.TODODelete_V23_2_UseSizedPebblePointTombstones) {
 		return p.db.Delete(EncodeMVCCKey(key), pebble.Sync)
 	}
 	// Use DeleteSized to propagate the value size.

@@ -82,7 +82,6 @@ type schemaChangeCounter struct {
 type schemaChange struct {
 	flags                           workload.Flags
 	connFlags                       *workload.ConnFlags
-	dbOverride                      string
 	maxOpsPerWorker                 int
 	errorRate                       int
 	enumPct                         int
@@ -112,8 +111,6 @@ var schemaChangeMeta = workload.Meta{
 	New: func() workload.Generator {
 		s := &schemaChange{}
 		s.flags.FlagSet = pflag.NewFlagSet(`schemachange`, pflag.ContinueOnError)
-		s.flags.StringVar(&s.dbOverride, `db`, ``,
-			`Override for the SQL database to use. If empty, defaults to the generator name`)
 		s.flags.IntVar(&s.maxOpsPerWorker, `max-ops-per-worker`, defaultMaxOpsPerWorker,
 			`Number of operations to execute in a single transaction`)
 		s.flags.IntVar(&s.errorRate, `error-rate`, defaultErrorRate,
@@ -173,19 +170,16 @@ func setupSchemaChangePromCounter(reg prometheus.Registerer) schemaChangeCounter
 }
 
 // Meta implements the workload.Generator interface.
-func (s *schemaChange) Meta() workload.Meta {
-	return schemaChangeMeta
-}
+func (s *schemaChange) Meta() workload.Meta { return schemaChangeMeta }
 
 // Flags implements the workload.Flagser interface.
-func (s *schemaChange) Flags() workload.Flags {
-	return s.flags
-}
+func (s *schemaChange) Flags() workload.Flags { return s.flags }
+
+// ConnFlags implements the ConnFlagser interface.
+func (s *schemaChange) ConnFlags() *workload.ConnFlags { return s.connFlags }
 
 // Tables implements the workload.Generator interface.
-func (s *schemaChange) Tables() []workload.Table {
-	return nil
-}
+func (s *schemaChange) Tables() []workload.Table { return nil }
 
 // Ops implements the workload.Opser interface.
 func (s *schemaChange) Ops(
@@ -215,10 +209,6 @@ func (s *schemaChange) Ops(
 	ctx, span := tracer.Start(ctx, "schemaChange.Ops")
 	defer func() { EndSpan(span, err) }()
 
-	sqlDatabase, err := workload.SanitizeUrls(s, s.dbOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	cfg := workload.NewMultiConnPoolCfgFromFlags(s.connFlags)
 	// We will need double the concurrency, since we need watch
 	// dog connections. There is a danger of the pool emptying on
@@ -260,7 +250,6 @@ func (s *schemaChange) Ops(
 	}
 
 	ql := workload.QueryLoad{
-		SQLDatabase: sqlDatabase,
 		Close: func(_ context.Context) error {
 			// Create a new context for shutting down the tracer provider. The
 			// provided context may be cancelled depending on why the workload is

@@ -315,10 +315,10 @@ func (p *planner) createUserDefinedType(params runParams, n *createTypeNode) err
 			params, id, n.n.EnumLabels, n.dbDesc, n.typeName, EnumTypeUserDefined,
 		)
 	case tree.Composite:
-		if !p.execCfg.Settings.Version.IsActive(params.ctx, clusterversion.V23_1) {
+		if !p.execCfg.Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V23_1) {
 			return pgerror.Newf(pgcode.FeatureNotSupported,
 				"version %v must be finalized to create composite types",
-				clusterversion.V23_1)
+				clusterversion.TODODelete_V23_1)
 		}
 		return params.p.createCompositeWithID(
 			params, id, n.n.CompositeTypeList, n.dbDesc, n.typeName,

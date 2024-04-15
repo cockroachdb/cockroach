@@ -33,7 +33,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// makeTenantSpan returns the span of all tables that make up the tenant, which
+// for non-system tenants is their whole span and for the system tenant is the
+// span in which its tables exist.
 func makeTenantSpan(tenantID uint64) roachpb.Span {
+	// TODO(dt): remove conditional if we make MakeTenantSpan do this.
+	if tenantID == 1 {
+		return roachpb.Span{
+			Key: keys.TableDataMin, EndKey: keys.TableDataMax,
+		}
+	}
 	tenID := roachpb.MustMakeTenantID(tenantID)
 	return keys.MakeTenantSpan(tenID)
 }

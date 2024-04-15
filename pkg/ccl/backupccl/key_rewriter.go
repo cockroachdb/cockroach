@@ -218,6 +218,25 @@ func MakeKeyRewriterPrefixIgnoringInterleaved(tableID descpb.ID, indexID descpb.
 	return keys.SystemSQLCodec.IndexPrefix(uint32(tableID), uint32(indexID))
 }
 
+// RewriteTenant rewrites a tenant key.
+func (kr *KeyRewriter) RewriteTenant(key []byte) ([]byte, bool, error) {
+	k, ok := kr.tenants.rewriteKey(key)
+	if ok {
+		// Skip keys from ephemeral cluster status tables so that the restored
+		// cluster does not observe stale leases/liveness until it expires.
+		noTenantPrefix, _, err := keys.DecodeTenantPrefix(key)
+		if err != nil {
+			return nil, false, err
+		}
+		_, tableID, _ := keys.SystemSQLCodec.DecodeTablePrefix(noTenantPrefix)
+
+		if tableID == keys.SQLInstancesTableID || tableID == keys.SqllivenessID || tableID == keys.LeaseTableID {
+			return k, false, nil
+		}
+	}
+	return k, ok, nil
+}
+
 // RewriteKey modifies key (possibly in place), changing all table IDs to their
 // new value.
 //
@@ -234,21 +253,7 @@ func (kr *KeyRewriter) RewriteKey(
 	// We also enable rekeying if we are restoring a tenant from a replication stream
 	// in which case we are restoring as a system tenant.
 	if kr.fromSystemTenant && bytes.HasPrefix(key, keys.TenantPrefix) {
-		k, ok := kr.tenants.rewriteKey(key)
-		if ok {
-			// Skip keys from ephemeral cluster status tables so that the restored
-			// cluster does not observe stale leases/liveness until it expires.
-			noTenantPrefix, _, err := keys.DecodeTenantPrefix(key)
-			if err != nil {
-				return nil, false, err
-			}
-			_, tableID, _ := keys.SystemSQLCodec.DecodeTablePrefix(noTenantPrefix)
-
-			if tableID == keys.SQLInstancesTableID || tableID == keys.SqllivenessID || tableID == keys.LeaseTableID {
-				return k, false, nil
-			}
-		}
-		return k, ok, nil
+		return kr.RewriteTenant(key)
 	}
 
 	// At this point we know we're not restoring a tenant, however the keys we're

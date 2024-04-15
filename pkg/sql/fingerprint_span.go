@@ -51,9 +51,9 @@ func (p *planner) FingerprintSpan(
 	defer sp.Finish()
 
 	evalCtx := p.EvalContext()
-	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1) {
+	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 		return 0, errors.Errorf("cannot fingeprint span until the cluster version is at least %s",
-			clusterversion.V23_1.String())
+			clusterversion.TODODelete_V23_1.String())
 	}
 
 	fingerprint, ssts, err := p.fingerprintSpanFanout(ctx, span, startTime, allRevisions, stripped)

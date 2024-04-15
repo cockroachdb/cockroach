@@ -246,7 +246,7 @@ func maybeDropDependentFKConstraints(
 	shouldDropFK := func(fkReferencedColIDs []catid.ColumnID) bool {
 		// Until the appropriate version gate is hit, we still do not allow
 		// dropping foreign keys in any the context of secondary indexes.
-		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V23_1) {
+		if !b.ClusterSettings().Version.IsActive(b, clusterversion.TODODelete_V23_1) {
 			panic(scerrors.NotImplementedErrorf(nil, "dropping FK constraints"+
 				" as a result of `DROP INDEX CASCADE` is not supported yet."))
 		}

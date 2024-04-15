@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -3010,6 +3011,32 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 	return arch
 }
 
+// bucketVMsByProvider buckets cachedCluster.VMs by provider.
+func bucketVMsByProvider(cachedCluster *cloud.Cluster) map[string][]vm.VM {
+	providerToVMs := make(map[string][]vm.VM)
+	for _, vm := range cachedCluster.VMs {
+		providerToVMs[vm.Provider] = append(providerToVMs[vm.Provider], vm)
+	}
+	return providerToVMs
+}
+
+// getCachedCluster checks if the passed cluster name is present in cached clusters
+// and returns an error if not found.
+func getCachedCluster(clusterName string) (*cloud.Cluster, error) {
+	cachedCluster, ok := roachprod.CachedCluster(clusterName)
+	if !ok {
+		var availableClusters []string
+		roachprod.CachedClusters(func(name string, _ int) {
+			availableClusters = append(availableClusters, name)
+		})
+
+		err := errors.Wrapf(errClusterNotFound, "%q", clusterName)
+		return nil, errors.WithHintf(err, "\nAvailable clusters:\n%s", strings.Join(availableClusters, "\n"))
+	}
+
+	return cachedCluster, nil
+}
+
 // GetPreemptedVMs gets any VMs that were part of the cluster but preempted by cloud vendor.
 func (c *clusterImpl) GetPreemptedVMs(
 	ctx context.Context, l *logger.Logger,
@@ -3018,22 +3045,11 @@ func (c *clusterImpl) GetPreemptedVMs(
 		return nil, nil
 	}
 
-	cachedCluster, ok := roachprod.CachedCluster(c.name)
-	if !ok {
-		var availableClusters []string
-		roachprod.CachedClusters(func(name string, _ int) {
-			availableClusters = append(availableClusters, name)
-		})
-
-		err := errors.Wrapf(errClusterNotFound, "%q", c.name)
-		return nil, errors.WithHintf(err, "\nAvailable clusters:\n%s", strings.Join(availableClusters, "\n"))
+	cachedCluster, err := getCachedCluster(c.name)
+	if err != nil {
+		return nil, err
 	}
-
-	// Bucket cachedCluster.VMs by provider.
-	providerToVMs := make(map[string][]vm.VM)
-	for _, vm := range cachedCluster.VMs {
-		providerToVMs[vm.Provider] = append(providerToVMs[vm.Provider], vm)
-	}
+	providerToVMs := bucketVMsByProvider(cachedCluster)
 
 	var allPreemptedVMs []vm.PreemptedVM
 	for provider, vms := range providerToVMs {
@@ -3051,36 +3067,23 @@ func (c *clusterImpl) GetPreemptedVMs(
 }
 
 // GetHostErrorVMs gets any VMs that were part of the cluster but has a host error.
-func (c *clusterImpl) GetHostErrorVMs(
-	ctx context.Context, l *logger.Logger,
-) ([]vm.PreemptedVM, error) {
-	if c.IsLocal() || !c.spec.UseSpotVMs {
+func (c *clusterImpl) GetHostErrorVMs(ctx context.Context, l *logger.Logger) ([]string, error) {
+	if c.IsLocal() {
 		return nil, nil
 	}
 
-	cachedCluster, ok := roachprod.CachedCluster(c.name)
-	if !ok {
-		var availableClusters []string
-		roachprod.CachedClusters(func(name string, _ int) {
-			availableClusters = append(availableClusters, name)
-		})
-
-		err := errors.Wrapf(errClusterNotFound, "%q", c.name)
-		return nil, errors.WithHintf(err, "\nAvailable clusters:\n%s", strings.Join(availableClusters, "\n"))
+	cachedCluster, err := getCachedCluster(c.name)
+	if err != nil {
+		return nil, err
 	}
+	providerToVMs := bucketVMsByProvider(cachedCluster)
 
-	// Bucket cachedCluster.VMs by provider.
-	providerToVMs := make(map[string][]vm.VM)
-	for _, vm := range cachedCluster.VMs {
-		providerToVMs[vm.Provider] = append(providerToVMs[vm.Provider], vm)
-	}
-
-	var allHostErrorVMs []vm.PreemptedVM
-	for provider := range providerToVMs {
+	var allHostErrorVMs []string
+	for provider, vms := range providerToVMs {
 		p := vm.Providers[provider]
-		hostErrorVMS, err := p.GetHostErrorVMs(l, cachedCluster.CreatedAt)
+		hostErrorVMS, err := p.GetHostErrorVMs(l, vms, cachedCluster.CreatedAt)
 		if err != nil {
-			l.Errorf("failed to get preempted VMs for provider %s: %s", provider, err)
+			l.Errorf("failed to get hostError VMs for provider %s: %s", provider, err)
 			continue
 		}
 		allHostErrorVMs = append(allHostErrorVMs, hostErrorVMS...)

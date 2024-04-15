@@ -347,7 +347,7 @@ func PushTxn(
 		// know to check the timestamp cache again on commit to learn about any
 		// successful timestamp pushes.
 		// TODO(nvanbenschoten): remove this logic in v23.2.
-		if ok && !cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1) {
+		if ok && !cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 			txnRecord := reply.PusheeTxn.AsRecord()
 			if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
 				storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: fs.BatchEvalReadCategory}); err != nil {

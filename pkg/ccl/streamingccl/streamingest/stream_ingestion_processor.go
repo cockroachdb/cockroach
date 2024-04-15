@@ -761,7 +761,7 @@ func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
 }
 
 func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, bool, error) {
-	return sip.rekeyer.RewriteKey(key, 0 /*wallTimeForImportElision*/)
+	return sip.rekeyer.RewriteTenant(key)
 }
 
 func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error {

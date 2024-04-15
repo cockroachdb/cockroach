@@ -190,7 +190,7 @@ func init() {
 			equiv(scpb.Status_BACKFILL_ONLY),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.CreateGCJobForIndex {
-					if !md.ActiveVersion.IsActive(clusterversion.V23_1) {
+					if !md.ActiveVersion.IsActive(clusterversion.TODODelete_V23_1) {
 						return &scop.CreateGCJobForIndex{
 							TableID:             this.TableID,
 							IndexID:             this.IndexID,

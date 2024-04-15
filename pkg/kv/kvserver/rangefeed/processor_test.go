@@ -56,6 +56,17 @@ func writeValueOpWithKV(key roachpb.Key, ts hlc.Timestamp, val []byte) enginepb.
 	})
 }
 
+func writeValueOpWithPrevValue(
+	key roachpb.Key, ts hlc.Timestamp, val, prevValue []byte,
+) enginepb.MVCCLogicalOp {
+	return makeLogicalOp(&enginepb.MVCCWriteValueOp{
+		Key:       key,
+		Timestamp: ts,
+		Value:     val,
+		PrevValue: prevValue,
+	})
+}
+
 func writeValueOp(ts hlc.Timestamp) enginepb.MVCCLogicalOp {
 	return writeValueOpWithKV(roachpb.Key("a"), ts, []byte("val"))
 }
@@ -102,6 +113,19 @@ func commitIntentOpWithKV(
 		Key:              key,
 		Timestamp:        ts,
 		Value:            val,
+		OmitInRangefeeds: omitInRangefeeds,
+	})
+}
+
+func commitIntentOpWithPrevValue(
+	txnID uuid.UUID, key roachpb.Key, ts hlc.Timestamp, val, prevValue []byte, omitInRangefeeds bool,
+) enginepb.MVCCLogicalOp {
+	return makeLogicalOp(&enginepb.MVCCCommitIntentOp{
+		TxnID:            txnID,
+		Key:              key,
+		Timestamp:        ts,
+		Value:            val,
+		PrevValue:        prevValue,
 		OmitInRangefeeds: omitInRangefeeds,
 	})
 }

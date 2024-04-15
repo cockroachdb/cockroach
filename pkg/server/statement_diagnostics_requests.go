@@ -145,7 +145,7 @@ func (s *statusServer) StatementDiagnosticsRequests(
 	var err error
 
 	var extraColumns string
-	if s.st.Version.IsActive(ctx, clusterversion.V23_2_StmtDiagForPlanGist) {
+	if s.st.Version.IsActive(ctx, clusterversion.TODODelete_V23_2_StmtDiagForPlanGist) {
 		extraColumns = `,
 			plan_gist,
 			anti_plan_gist`

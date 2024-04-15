@@ -60,7 +60,7 @@ func newWriteBatch(
 		// write the store identifer key; this is written before any cluster
 		// version has been initialized.
 		mayWriteSizedDeletes: settings.Version.ActiveVersionOrEmpty(context.TODO()).
-			IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones),
+			IsActive(clusterversion.TODODelete_V23_2_UseSizedPebblePointTombstones),
 	}
 	return wb
 }
@@ -496,7 +496,7 @@ func newPebbleBatch(
 			// write the store identifer key; this is written before any cluster
 			// version has been initialized.
 			mayWriteSizedDeletes: settings.Version.ActiveVersionOrEmpty(context.TODO()).
-				IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones),
+				IsActive(clusterversion.TODODelete_V23_2_UseSizedPebblePointTombstones),
 		},
 		prefixIter: pebbleIterator{
 			lowerBoundBuf: pb.prefixIter.lowerBoundBuf,

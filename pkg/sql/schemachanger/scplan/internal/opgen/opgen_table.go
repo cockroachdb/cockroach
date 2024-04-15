@@ -47,7 +47,7 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.Table, md *opGenContext) *scop.CreateGCJobForTable {
-					if !md.ActiveVersion.IsActive(clusterversion.V23_1) {
+					if !md.ActiveVersion.IsActive(clusterversion.TODODelete_V23_1) {
 						return &scop.CreateGCJobForTable{
 							TableID:             this.TableID,
 							DatabaseID:          databaseIDFromDroppedNamespaceTarget(md, this.TableID),

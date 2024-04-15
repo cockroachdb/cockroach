@@ -37,7 +37,7 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 ) {
 	var durations [2][]time.Duration
 	defaultOpts := install.MakeClusterSettings()
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), defaultOpts)
+	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), defaultOpts)
 	// Create 600 tables inside the database, which is above our default lease
 	// refresh limit of 500. This will only be done when session based leasing
 	// is enabled.
@@ -92,7 +92,7 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 		}
 	}
 
-	for numTestIters := 0; numTestIters < 3; numTestIters++ {
+	for numTestIters := 0; numTestIters < 5; numTestIters++ {
 		for modeIdx, sessionBasedLeasingEnabled := range []bool{true, false} {
 			func() {
 				// When session based leasing is disabled, force expiry based leasing.
@@ -121,7 +121,7 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 					}
 				}
 				c.Stop(ctx, t.L(), option.DefaultStopOpts())
-				c.Start(ctx, t.L(), option.DefaultStartOpts(), defaultOpts)
+				c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), defaultOpts)
 
 				// Next spawn a thread on each node to select from all the tables created
 				// above. We are going to do two passes, with multiple threads. After 30
@@ -231,8 +231,8 @@ func registerSchemaChangeMultiRegionBenchmarkLeasing(r registry.Registry) {
 		),
 		CompatibleClouds: registry.AllExceptLocal,
 		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
-		Timeout:          time.Hour,
+		Leases:           registry.DefaultLeases,
+		Timeout:          2 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeMultiRegionBenchmarkLeasing(ctx, t, c)
 		},

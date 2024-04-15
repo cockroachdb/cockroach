@@ -314,6 +314,12 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 	if err := jobExecCtx.ExecCfg().JobRegistry.CheckPausepoint("stream_ingestion.before_protection"); err != nil {
 		return err
 	}
+
+	// If we got replicated into another tenant, bail out.
+	if !jobExecCtx.ExecCfg().Codec.ForSystemTenant() {
+		return errors.New("replicated job only runs in system tenant")
+	}
+
 	err := s.protectDestinationTenant(ctx, jobExecCtx)
 	if err != nil {
 		return s.handleResumeError(ctx, jobExecCtx, err)
@@ -564,6 +570,10 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	execCfg := jobExecCtx.ExecCfg()
+	// If we got replicated into another tenant, bail out.
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
 	return execCfg.InternalDB.Txn(ctx, func(
 		ctx context.Context, txn isql.Txn,
 	) error {

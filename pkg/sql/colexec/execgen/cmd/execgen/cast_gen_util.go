@@ -589,7 +589,8 @@ func getStringToTimestampCastFunc(withoutTimezone bool) castFunc {
 		_roundTo := tree.TimeFamilyPrecisionToRoundDuration(%[4]s.Precision())
 		_now := %[3]s.GetRelativeParseTime()
 		_dateStyle := %[3]s.GetDateStyle()
-		_t, _, err := pgdate.ParseTimestamp%[5]s(_now, _dateStyle, string(%[2]s))
+		_h := %[3]s.GetDateHelper()
+		_t, _, err := pgdate.ParseTimestamp%[5]s(_now, _dateStyle, string(%[2]s), _h)
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
