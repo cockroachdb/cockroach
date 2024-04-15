@@ -120,7 +120,7 @@ func (b *restorationDataBase) getSystemTables() []catalog.TableDescriptor {
 // addTenant implements restorationData.
 func (b *restorationDataBase) addTenant(fromTenantID, toTenantID roachpb.TenantID) {
 	prefix := keys.MakeTenantPrefix(fromTenantID)
-	b.spans = append(b.spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+	b.spans = append(b.spans, backupTenantSpan(prefix))
 	b.tenantRekeys = append(b.tenantRekeys, execinfrapb.TenantRekey{
 		OldID: fromTenantID,
 		NewID: toTenantID,

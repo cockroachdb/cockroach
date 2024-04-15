@@ -1521,9 +1521,19 @@ func getTenantInfo(
 		// coming from the tenants table and we should only
 		// ever have valid tenant IDs returned to us.
 		prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenants[i].ID))
-		spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+
+		spans = append(spans, backupTenantSpan(prefix))
 	}
 	return spans, tenants, nil
+}
+
+// backupTenantSpan creates span to back up a whole tenant. We append MaxKey to
+// the tenant's prefix rather than using PrefixEnd since we want an EndKey that
+// remains within the tenant's prefix and does not equal the next tenant's start
+// key, as that can cause our spans to get merged but they need to remain
+// separate for backup prefix elision.
+func backupTenantSpan(prefix roachpb.Key) roachpb.Span {
+	return roachpb.Span{Key: prefix, EndKey: append(prefix, keys.MaxKey...)}
 }
 
 // checkForNewDatabases returns an error if any new complete databases were
