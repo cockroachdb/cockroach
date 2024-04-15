@@ -161,6 +161,14 @@ func TestValidator(t *testing.T) {
 			expectedErrorMsgStr: "",
 		},
 		{
+			description: "configuration for issue #122292",
+			constraint: "num_replicas=4 num_voters=3 " +
+				"constraints={'+region=US_East':1,'+zone=US_East_1':1,'+zone=US_East_2':1} " +
+				"voter_constraints={'+zone=US_East_2':2}",
+			expectedSuccess:     true,
+			expectedErrorMsgStr: "",
+		},
+		{
 			description:         "no voters or replicas needed to add for constraints",
 			constraint:          "num_replicas=0 constraints={'+zone=US_East_1':0}",
 			expectedSuccess:     true,
