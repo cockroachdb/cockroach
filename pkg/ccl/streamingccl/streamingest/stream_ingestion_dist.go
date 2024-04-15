@@ -73,12 +73,15 @@ func startDistIngestion(
 	if streamProgress.InitialRevertRequired {
 		updateRunningStatus(ctx, ingestionJob, jobspb.InitializingReplication, "reverting existing data to prepare for replication")
 
-		log.Infof(ctx, "reverting tenant %s to time %s before starting replication", details.DestinationTenantID, replicatedTime)
+		revertTo := replicatedTime
+		revertTo.Forward(streamProgress.InitialRevertTo)
+
+		log.Infof(ctx, "reverting tenant %s to time %s (via %s) before starting replication", details.DestinationTenantID, replicatedTime, revertTo)
 
 		spanToRevert := keys.MakeTenantSpan(details.DestinationTenantID)
 		if err := revertccl.RevertSpansFanout(ctx, execCtx.ExecCfg().DB, execCtx,
 			[]roachpb.Span{spanToRevert},
-			replicatedTime,
+			revertTo,
 			false, /* ignoreGCThreshold */
 			revertccl.RevertDefaultBatchSize,
 			nil, /* onCompletedCallback */
