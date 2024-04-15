@@ -3030,8 +3030,7 @@ limit
  ├── ordering: +9,-5
  ├── distinct-on
  │    ├── columns: t1.col5:5!null col9:9!null t2.col2:20
- │    ├── grouping columns: t1.col5:5!null col9:9!null
- │    ├── internal-ordering: +9,-5 opt(1,2)
+ │    ├── grouping columns: t1.col5:5!null
  │    ├── key: (5)
  │    ├── fd: (5)-->(9,20)
  │    ├── ordering: +9,-5
@@ -3041,7 +3040,7 @@ limit
  │    │    ├── key columns: [1 2 3 4 5] = [19 20 21 22 23]
  │    │    ├── fd: ()-->(1,2), (5)-->(3,4,9)
  │    │    ├── ordering: +9,-5 opt(1,2) [actual: +9,-5]
- │    │    ├── limit hint: 24.00
+ │    │    ├── limit hint: 24.01
  │    │    ├── sort
  │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null
  │    │    │    ├── key: (5)
@@ -3057,8 +3056,10 @@ limit
  │    │         ├── t2.col2:20 = 1 [outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
  │    │         └── t2.col1:19 = 1 [outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
  │    └── aggregations
- │         └── first-agg [as=t2.col2:20, outer=(20)]
- │              └── t2.col2:20
+ │         ├── first-agg [as=t2.col2:20, outer=(20)]
+ │         │    └── t2.col2:20
+ │         └── const-agg [as=col9:9, outer=(9)]
+ │              └── col9:9
  └── 20
 
 # This should generate a partial streaming aggregation.
