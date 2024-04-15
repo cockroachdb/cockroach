@@ -157,7 +157,12 @@ func resolveColumnForDropColumn(
 	})
 	var colTargetStatus scpb.TargetStatus
 	_, colTargetStatus, col = scpb.FindColumn(elts)
-	if col == nil || colTargetStatus == scpb.ToAbsent {
+
+	if col != nil && colTargetStatus == scpb.ToAbsent {
+		return nil, nil, true
+	}
+
+	if col == nil {
 		if !n.IfExists {
 			panic(errors.AssertionFailedf("failed to find column %v in %v which was already resolved",
 				n.Column, tn))
