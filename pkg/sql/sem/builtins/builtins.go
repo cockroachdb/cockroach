@@ -5754,7 +5754,7 @@ SELECT
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				key := tree.MustBeDBytes(args[0])
-				remainder, _, err := keys.DecodeTenantPrefixE([]byte(key))
+				remainder, _, err := keys.DecodeTenantPrefix([]byte(key))
 				if errors.Is(err, roachpb.ErrInvalidTenantID) {
 					return tree.NewDBytes(key), nil
 				} else if err != nil {
