@@ -684,8 +684,7 @@ func setDemoContextDefaults() {
 	demoCtx.SQLPort, _ = strconv.Atoi(base.DefaultPort)
 	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 	demoCtx.WorkloadMaxQPS = 25
-	// TODO(celia#122053): set .Multitenant back to clusterversion.DevelopmentBranch once test_demo tcl files have been updated as needed
-	demoCtx.Multitenant = true
+	demoCtx.Multitenant = clusterversion.DevelopmentBranch
 	demoCtx.DisableServerController = false
 	demoCtx.DefaultEnableRangefeeds = true
 
