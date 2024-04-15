@@ -163,16 +163,9 @@ type TestingKnobs struct {
 		UpgradeTo roachpb.Version
 	}
 
-	// As of September 2023, only `v23.1` and master support shared process tenants. `v23.2` is not
-	// cut yet so the difference between the current binary version on master and v23.1 is only in the
-	// Internal version (both are major=23 minor=1). We only trigger shared process tenant auto upgrade
-	// on changes to major/minor versions but since we can only start shared process tenants in `v23.1`,
-	// there will not be any change to major/minor versions when upgrading from `v23.1` to master and
-	// we won't be able to test this new feature. This testing knob allows `TestTenantAutoUpgrade` to
-	// auto upgrade on changes to the Internal version.
-	// // TODO(ahmad/healthy-pod): Remove this once `v23.2` is cut and update `TestTenantAutoUpgrade`
-	// to reflect the changes.
-	AllowTenantAutoUpgradeOnInternalVersionChanges bool
+	// TenantAutoUpgradeLoopFrequency indicates how often the tenant
+	// auto upgrade loop will check if the tenant can be auto-upgraded.
+	TenantAutoUpgradeLoopFrequency time.Duration
 
 	// EnvironmentSampleInterval overrides base.DefaultMetricsSampleInterval when used to construct sampleEnvironmentCfg.
 	EnvironmentSampleInterval time.Duration
