@@ -261,7 +261,7 @@ func TestAuthenticateTenant(t *testing.T) {
 			}
 
 			clusterSettings := map[settings.InternalKey]settings.EncodedValue{
-				security.ClientCertSubjectRequiredSettingName: {strconv.FormatBool(tc.subjectRequired), "b"},
+				security.ClientCertSubjectRequiredSettingName: {Value: strconv.FormatBool(tc.subjectRequired), Type: "b"},
 			}
 			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, clusterSettings)
 
