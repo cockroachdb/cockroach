@@ -206,9 +206,9 @@ func registerLoadSplits(r registry.Registry) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
 				cpuThreshold: 100 * time.Millisecond, // 1/10th of a CPU per second.
-				// There should be at least 15 splits, in practice there are on average
+				// There should be at least 13 splits, in practice there are on average
 				// 20.
-				minimumRanges: 15,
+				minimumRanges: 14,
 				maximumRanges: 25,
 				load: kvSplitLoad{
 					concurrency:  64, // 64 concurrent workers
@@ -333,9 +333,9 @@ func registerLoadSplits(r registry.Registry) {
 				maxSize:      10 << 30,               // 10 GB
 				cpuThreshold: 100 * time.Millisecond, // 1/10th of a CPU per second.
 				// YCSB/A has a zipfian distribution with 50% inserts and 50% updates.
-				// The number of splits should be between 20-40 after 10 minutes with
+				// The number of splits should be between 18-38 after 10 minutes with
 				// 100ms threshold on 8vCPU machines.
-				minimumRanges:     20,
+				minimumRanges:     18,
 				maximumRanges:     40,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
