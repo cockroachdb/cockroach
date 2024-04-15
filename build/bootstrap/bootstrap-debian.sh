@@ -35,7 +35,7 @@ echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
 
 # Upgrade cmake.
 trap 'rm -f /tmp/cmake.tgz' EXIT
-curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-3.20.3-Linux-x86_64.tar.gz > /tmp/cmake.tgz
+curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-3.20.3-Linux-x86_64.tar.gz >/tmp/cmake.tgz
 sha256sum -c - <<EOF
 97bf730372f9900b2dfb9206fccbcf92f5c7f3b502148b832e77451aa0f9e0e6  /tmp/cmake.tgz
 EOF
@@ -43,9 +43,9 @@ sudo tar -C /usr --strip-components=1 -zxf /tmp/cmake.tgz && rm /tmp/cmake.tgz
 
 # Install Go.
 trap 'rm -f /tmp/go.tgz' EXIT
-curl -fsSL https://dl.google.com/go/go1.22.1.linux-amd64.tar.gz > /tmp/go.tgz
+curl -fsSL https://dl.google.com/go/go1.22.2.linux-amd64.tar.gz >/tmp/go.tgz
 sha256sum -c - <<EOF
-aab8e15785c997ae20f9c88422ee35d962c4562212bb0f879d052a35c8307c7f  /tmp/go.tgz
+5901c52b7a78002aeff14a21f93e0f064f74ce1360fce51c6ee68cd471216a17  /tmp/go.tgz
 EOF
 sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
