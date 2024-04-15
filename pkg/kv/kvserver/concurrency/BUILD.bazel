@@ -60,6 +60,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":concurrency"],
+    exec_properties = {"test.Pool": "heavy"},
     shard_count = 16,
     deps = [
         "//pkg/clusterversion",
