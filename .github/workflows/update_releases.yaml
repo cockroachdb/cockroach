@@ -14,15 +14,15 @@
 
 on:
   schedule:
-     - cron: 0 0 * * *
+    - cron: 0 0 * * *
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-
 
 name: Update pkg/testutils/release/cockroach_releases.yaml
 jobs:
   update-crdb-releases-yaml:
     if: github.repository == 'cockroachdb/cockroach'
+    environment: ${{ github.ref_name == 'master' && 'master' || null }}
     strategy:
       matrix:
         branch: ["master", "release-23.1", "release-23.2", "release-24.1"]
@@ -46,9 +46,11 @@ jobs:
         uses: peter-evans/create-pull-request@v5
         with:
           base: "${{ matrix.branch }}"
-          branch: 'crdb-releases-yaml-update-${{ matrix.branch }}'
+          branch: "crdb-releases-yaml-update-${{ matrix.branch }}"
+          push-to-fork: "cockroach-teamcity/cockroach"
           title: "${{ matrix.branch }}: Update pkg/testutils/release/cockroach_releases.yaml"
           author: "CRL Release bot <teamcity@cockroachlabs.com>"
+          token: "${{ secrets.GH_TOKEN_PR }}"
           reviewers: rail,jlinder,celiala
           body: |
             Update pkg/testutils/release/cockroach_releases.yaml with recent values.
