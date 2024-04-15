@@ -855,36 +855,41 @@ build format=show-scalars
 SELECT get_abc(3)
 ----
 project
- ├── columns: get_abc:8
+ ├── columns: get_abc:9
  ├── values
  │    └── tuple
  └── projections
-      └── udf: get_abc [as=get_abc:8]
+      └── udf: get_abc [as=get_abc:9]
            ├── args
            │    └── const: 3
            ├── params: i:1
            └── body
                 └── project
-                     ├── columns: column7:7
-                     ├── limit
-                     │    ├── columns: a:2!null b:3 c:4!null
-                     │    ├── internal-ordering: -3
-                     │    ├── project
+                     ├── columns: column8:8
+                     ├── project
+                     │    ├── columns: column7:7
+                     │    ├── limit
                      │    │    ├── columns: a:2!null b:3 c:4!null
-                     │    │    └── select
-                     │    │         ├── columns: a:2!null b:3 c:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-                     │    │         ├── scan abc
-                     │    │         │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
-                     │    │         └── filters
-                     │    │              └── gt
-                     │    │                   ├── variable: c:4
-                     │    │                   └── variable: i:1
-                     │    └── const: 1
+                     │    │    ├── internal-ordering: -3
+                     │    │    ├── project
+                     │    │    │    ├── columns: a:2!null b:3 c:4!null
+                     │    │    │    └── select
+                     │    │    │         ├── columns: a:2!null b:3 c:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │    │    │         ├── scan abc
+                     │    │    │         │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │    │    │         └── filters
+                     │    │    │              └── gt
+                     │    │    │                   ├── variable: c:4
+                     │    │    │                   └── variable: i:1
+                     │    │    └── const: 1
+                     │    └── projections
+                     │         └── tuple [as=column7:7]
+                     │              ├── variable: a:2
+                     │              ├── variable: b:3
+                     │              └── variable: c:4
                      └── projections
-                          └── tuple [as=column7:7]
-                               ├── variable: a:2
-                               ├── variable: b:3
-                               └── variable: c:4
+                          └── assignment-cast: RECORD [as=column8:8]
+                               └── variable: column7:7
 
 exec-ddl
 CREATE FUNCTION get_abc_star(i INT) RETURNS abc LANGUAGE SQL AS $$
@@ -896,36 +901,41 @@ build format=show-scalars
 SELECT get_abc_star(3)
 ----
 project
- ├── columns: get_abc_star:8
+ ├── columns: get_abc_star:9
  ├── values
  │    └── tuple
  └── projections
-      └── udf: get_abc_star [as=get_abc_star:8]
+      └── udf: get_abc_star [as=get_abc_star:9]
            ├── args
            │    └── const: 3
            ├── params: i:1
            └── body
                 └── project
-                     ├── columns: column7:7
-                     ├── limit
-                     │    ├── columns: a:2!null b:3 c:4!null
-                     │    ├── internal-ordering: -3
-                     │    ├── project
+                     ├── columns: column8:8
+                     ├── project
+                     │    ├── columns: column7:7
+                     │    ├── limit
                      │    │    ├── columns: a:2!null b:3 c:4!null
-                     │    │    └── select
-                     │    │         ├── columns: a:2!null b:3 c:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-                     │    │         ├── scan abc
-                     │    │         │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
-                     │    │         └── filters
-                     │    │              └── gt
-                     │    │                   ├── variable: c:4
-                     │    │                   └── variable: i:1
-                     │    └── const: 1
+                     │    │    ├── internal-ordering: -3
+                     │    │    ├── project
+                     │    │    │    ├── columns: a:2!null b:3 c:4!null
+                     │    │    │    └── select
+                     │    │    │         ├── columns: a:2!null b:3 c:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │    │    │         ├── scan abc
+                     │    │    │         │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │    │    │         └── filters
+                     │    │    │              └── gt
+                     │    │    │                   ├── variable: c:4
+                     │    │    │                   └── variable: i:1
+                     │    │    └── const: 1
+                     │    └── projections
+                     │         └── tuple [as=column7:7]
+                     │              ├── variable: a:2
+                     │              ├── variable: b:3
+                     │              └── variable: c:4
                      └── projections
-                          └── tuple [as=column7:7]
-                               ├── variable: a:2
-                               ├── variable: b:3
-                               └── variable: c:4
+                          └── assignment-cast: RECORD [as=column8:8]
+                               └── variable: column7:7
 
 exec-ddl
 CREATE FUNCTION abc_b(i abc) RETURNS INT LANGUAGE SQL AS $$
@@ -1043,11 +1053,11 @@ build format=show-scalars
 SELECT retvoid(1)
 ----
 project
- ├── columns: retvoid:5
+ ├── columns: retvoid:4
  ├── values
  │    └── tuple
  └── projections
-      └── udf: retvoid [as=retvoid:5]
+      └── udf: retvoid [as=retvoid:4]
            ├── args
            │    └── const: 1
            ├── params: i:1
@@ -1058,18 +1068,13 @@ project
                 │    │    └── tuple
                 │    └── projections
                 │         └── variable: i:1 [as=i:2]
-                └── project
-                     ├── columns: column4:4
-                     ├── limit
+                └── limit
+                     ├── columns: column1:3
+                     ├── values
                      │    ├── columns: column1:3
-                     │    ├── values
-                     │    │    ├── columns: column1:3
-                     │    │    └── tuple
-                     │    │         └── null
-                     │    └── const: 1
-                     └── projections
-                          └── assignment-cast: VOID [as=column4:4]
-                               └── variable: column1:3
+                     │    └── tuple
+                     │         └── null
+                     └── const: 1
 
 
 # --------------------------------------------------
@@ -1243,11 +1248,11 @@ build format=show-scalars
 SELECT * FROM (SELECT strict_fn_record(1, 'foo', false)) as bar;
 ----
 project
- ├── columns: strict_fn_record:8
+ ├── columns: strict_fn_record:9
  ├── values
  │    └── tuple
  └── projections
-      └── udf: strict_fn_record [as=strict_fn_record:8]
+      └── udf: strict_fn_record [as=strict_fn_record:9]
            ├── strict
            ├── args
            │    ├── const: 1
@@ -1256,23 +1261,28 @@ project
            ├── params: i:1 t:2 b:3
            └── body
                 └── project
-                     ├── columns: column7:7
-                     ├── limit
-                     │    ├── columns: i:4 t:5 b:6
-                     │    ├── project
+                     ├── columns: column8:8
+                     ├── project
+                     │    ├── columns: column7:7
+                     │    ├── limit
                      │    │    ├── columns: i:4 t:5 b:6
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         ├── variable: i:1 [as=i:4]
-                     │    │         ├── variable: t:2 [as=t:5]
-                     │    │         └── variable: b:3 [as=b:6]
-                     │    └── const: 1
+                     │    │    ├── project
+                     │    │    │    ├── columns: i:4 t:5 b:6
+                     │    │    │    ├── values
+                     │    │    │    │    └── tuple
+                     │    │    │    └── projections
+                     │    │    │         ├── variable: i:1 [as=i:4]
+                     │    │    │         ├── variable: t:2 [as=t:5]
+                     │    │    │         └── variable: b:3 [as=b:6]
+                     │    │    └── const: 1
+                     │    └── projections
+                     │         └── tuple [as=column7:7]
+                     │              ├── variable: i:4
+                     │              ├── variable: t:5
+                     │              └── variable: b:6
                      └── projections
-                          └── tuple [as=column7:7]
-                               ├── variable: i:4
-                               ├── variable: t:5
-                               └── variable: b:6
+                          └── assignment-cast: RECORD [as=column8:8]
+                               └── variable: column7:7
 
 
 # --------------------------------------------------
@@ -1315,44 +1325,49 @@ CREATE TABLE tstar2 (
 ----
 
 exec-ddl
-CREATE FUNCTION fn_star2() RETURNS INT LANGUAGE SQL AS 'SELECT * FROM tstar, tstar2 WHERE tstar.a = tstar2.b'
+CREATE FUNCTION fn_star2() RETURNS RECORD LANGUAGE SQL AS 'SELECT * FROM tstar, tstar2 WHERE tstar.a = tstar2.b'
 ----
 
 build format=show-scalars
 SELECT fn_star2()
 ----
 project
- ├── columns: fn_star2:11
+ ├── columns: fn_star2:12
  ├── values
  │    └── tuple
  └── projections
-      └── udf: fn_star2 [as=fn_star2:11]
+      └── udf: fn_star2 [as=fn_star2:12]
            └── body
                 └── project
-                     ├── columns: column10:10
-                     ├── limit
-                     │    ├── columns: tstar.a:1!null tstar2.a:5 b:6!null
-                     │    ├── project
+                     ├── columns: column11:11
+                     ├── project
+                     │    ├── columns: column10:10
+                     │    ├── limit
                      │    │    ├── columns: tstar.a:1!null tstar2.a:5 b:6!null
-                     │    │    └── select
-                     │    │         ├── columns: tstar.a:1!null tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4 tstar2.a:5 b:6!null tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
-                     │    │         ├── inner-join (cross)
-                     │    │         │    ├── columns: tstar.a:1 tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4 tstar2.a:5 b:6 tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
-                     │    │         │    ├── scan tstar
-                     │    │         │    │    └── columns: tstar.a:1 tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4
-                     │    │         │    ├── scan tstar2
-                     │    │         │    │    └── columns: tstar2.a:5 b:6 tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
-                     │    │         │    └── filters (true)
-                     │    │         └── filters
-                     │    │              └── eq
-                     │    │                   ├── variable: tstar.a:1
-                     │    │                   └── variable: b:6
-                     │    └── const: 1
+                     │    │    ├── project
+                     │    │    │    ├── columns: tstar.a:1!null tstar2.a:5 b:6!null
+                     │    │    │    └── select
+                     │    │    │         ├── columns: tstar.a:1!null tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4 tstar2.a:5 b:6!null tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
+                     │    │    │         ├── inner-join (cross)
+                     │    │    │         │    ├── columns: tstar.a:1 tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4 tstar2.a:5 b:6 tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
+                     │    │    │         │    ├── scan tstar
+                     │    │    │         │    │    └── columns: tstar.a:1 tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4
+                     │    │    │         │    ├── scan tstar2
+                     │    │    │         │    │    └── columns: tstar2.a:5 b:6 tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
+                     │    │    │         │    └── filters (true)
+                     │    │    │         └── filters
+                     │    │    │              └── eq
+                     │    │    │                   ├── variable: tstar.a:1
+                     │    │    │                   └── variable: b:6
+                     │    │    └── const: 1
+                     │    └── projections
+                     │         └── tuple [as=column10:10]
+                     │              ├── variable: tstar.a:1
+                     │              ├── variable: tstar2.a:5
+                     │              └── variable: b:6
                      └── projections
-                          └── tuple [as=column10:10]
-                               ├── variable: tstar.a:1
-                               ├── variable: tstar2.a:5
-                               └── variable: b:6
+                          └── assignment-cast: RECORD [as=column11:11]
+                               └── variable: column10:10
 
 
 # --------------------------------------------------
@@ -1740,11 +1755,11 @@ build set=enable_multiple_modifications_of_table=true
 SELECT upd_ups(1, 2, 3)
 ----
 project
- ├── columns: upd_ups:29
+ ├── columns: upd_ups:28
  ├── values
  │    └── ()
  └── projections
-      └── upd_ups(1, 2, 3) [as=upd_ups:29]
+      └── upd_ups(1, 2, 3) [as=upd_ups:28]
 
 exec-ddl
 CREATE FUNCTION ups2(a1 INT, b1 INT, c1 INT, a2 INT, b2 INT, c2 INT) RETURNS BOOL LANGUAGE SQL AS $$
@@ -1803,7 +1818,7 @@ opt format=show-scalars
 SELECT f_fk(100, 1), f_fk(101, 2);
 ----
 values
- ├── columns: f_fk:14 f_fk:28
+ ├── columns: f_fk:15 f_fk:30
  └── tuple
       ├── udf: f_fk
       │    ├── args
@@ -1812,7 +1827,7 @@ values
       │    ├── params: k:1 r:2
       │    └── body
       │         └── project
-      │              ├── columns: column13:13!null
+      │              ├── columns: column14:14!null
       │              ├── insert child
       │              │    ├── columns: c:3!null child.p:4!null
       │              │    ├── insert-mapping:
@@ -1843,47 +1858,49 @@ values
       │              │                             ├── variable: p:9
       │              │                             └── variable: parent.p:10
       │              └── projections
-      │                   └── tuple [as=column13:13]
-      │                        ├── variable: c:3
-      │                        └── variable: child.p:4
+      │                   └── assignment-cast: RECORD [as=column14:14]
+      │                        └── tuple
+      │                             ├── variable: c:3
+      │                             └── variable: child.p:4
       └── udf: f_fk
            ├── args
            │    ├── const: 101
            │    └── const: 2
-           ├── params: k:15 r:16
+           ├── params: k:16 r:17
            └── body
                 └── project
-                     ├── columns: column27:27!null
+                     ├── columns: column29:29!null
                      ├── insert child
-                     │    ├── columns: c:17!null child.p:18!null
+                     │    ├── columns: c:18!null child.p:19!null
                      │    ├── insert-mapping:
-                     │    │    ├── column1:21 => c:17
-                     │    │    └── column2:22 => child.p:18
+                     │    │    ├── column1:22 => c:18
+                     │    │    └── column2:23 => child.p:19
                      │    ├── return-mapping:
-                     │    │    ├── column1:21 => c:17
-                     │    │    └── column2:22 => child.p:18
+                     │    │    ├── column1:22 => c:18
+                     │    │    └── column2:23 => child.p:19
                      │    ├── input binding: &2
                      │    ├── values
-                     │    │    ├── columns: column1:21 column2:22
+                     │    │    ├── columns: column1:22 column2:23
                      │    │    └── tuple
-                     │    │         ├── variable: k:15
-                     │    │         └── variable: r:16
+                     │    │         ├── variable: k:16
+                     │    │         └── variable: r:17
                      │    └── f-k-checks
                      │         └── f-k-checks-item: child(p) -> parent(p)
                      │              └── anti-join (hash)
-                     │                   ├── columns: p:23
+                     │                   ├── columns: p:24
                      │                   ├── with-scan &2
-                     │                   │    ├── columns: p:23
+                     │                   │    ├── columns: p:24
                      │                   │    └── mapping:
-                     │                   │         └──  column2:22 => p:23
+                     │                   │         └──  column2:23 => p:24
                      │                   ├── scan parent
-                     │                   │    ├── columns: parent.p:24!null
+                     │                   │    ├── columns: parent.p:25!null
                      │                   │    └── flags: disabled not visible index feature
                      │                   └── filters
                      │                        └── eq
-                     │                             ├── variable: p:23
-                     │                             └── variable: parent.p:24
+                     │                             ├── variable: p:24
+                     │                             └── variable: parent.p:25
                      └── projections
-                          └── tuple [as=column27:27]
-                               ├── variable: c:17
-                               └── variable: child.p:18
+                          └── assignment-cast: RECORD [as=column29:29]
+                               └── tuple
+                                    ├── variable: c:18
+                                    └── variable: child.p:19

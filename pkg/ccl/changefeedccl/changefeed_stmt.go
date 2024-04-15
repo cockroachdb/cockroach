@@ -683,11 +683,11 @@ func createChangefeedJobRecord(
 	details.Opts = opts.AsMap()
 
 	if locFilter := details.Opts[changefeedbase.OptExecutionLocality]; locFilter != "" {
-		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1) {
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
 			return nil, pgerror.Newf(
 				pgcode.FeatureNotSupported,
 				"cannot create new changefeed with %s until upgrade to version %s is complete",
-				changefeedbase.OptExecutionLocality, clusterversion.V23_1.String(),
+				changefeedbase.OptExecutionLocality, clusterversion.TODODelete_V23_1.String(),
 			)
 		}
 		if err := utilccl.CheckEnterpriseEnabled(

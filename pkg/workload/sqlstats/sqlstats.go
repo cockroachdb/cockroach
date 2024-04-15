@@ -73,13 +73,14 @@ var sqlStatsMeta = workload.Meta{
 	},
 }
 
-func (s *sqlStats) Meta() workload.Meta {
-	return sqlStatsMeta
-}
+// Meta implements the Generator interface.
+func (s *sqlStats) Meta() workload.Meta { return sqlStatsMeta }
 
-func (s *sqlStats) Flags() workload.Flags {
-	return s.flags
-}
+// Flags implements the Flagser interface.
+func (s *sqlStats) Flags() workload.Flags { return s.flags }
+
+// ConnFlags implements the ConnFlagser interface.
+func (s *sqlStats) ConnFlags() *workload.ConnFlags { return s.connFlags }
 
 func (s *sqlStats) Tables() []workload.Table {
 	return []workload.Table{{
@@ -134,10 +135,6 @@ func genPermutations() *gen {
 func (s *sqlStats) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(s, s.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -149,7 +146,6 @@ func (s *sqlStats) Ops(
 	gen := genPermutations()
 
 	ql := workload.QueryLoad{
-		SQLDatabase: sqlDatabase,
 		Close: func(_ context.Context) error {
 			return db.Close()
 		},

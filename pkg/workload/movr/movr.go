@@ -248,6 +248,9 @@ func (*movr) Meta() workload.Meta { return movrMeta }
 // Flags implements the Flagser interface.
 func (g *movr) Flags() workload.Flags { return g.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (g *movr) ConnFlags() *workload.ConnFlags { return g.connFlags }
+
 // Hooks implements the Hookser interface.
 func (g *movr) Hooks() workload.Hooks {
 	return workload.Hooks{

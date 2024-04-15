@@ -195,7 +195,7 @@ func PlanReplicas(
 	v := clusterversion.ClusterVersion{
 		Version: clusterInfo.Version,
 	}
-	if v.IsActive(clusterversion.V23_1) {
+	if v.IsActive(clusterversion.TODODelete_V23_1) {
 		return loqrecoverypb.ReplicaUpdatePlan{
 			Updates:                 updates,
 			PlanID:                  planID,

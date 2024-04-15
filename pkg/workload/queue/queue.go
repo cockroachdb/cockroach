@@ -59,6 +59,9 @@ func (*queue) Meta() workload.Meta { return queueMeta }
 // Flags implements the Flagser interface.
 func (w *queue) Flags() workload.Flags { return w.flags }
 
+// ConnFlags implements the ConnFlagser interface.
+func (w *queue) ConnFlags() *workload.ConnFlags { return w.connFlags }
+
 // Tables implements the Generator interface.
 func (w *queue) Tables() []workload.Table {
 	table := workload.Table{
@@ -72,10 +75,6 @@ func (w *queue) Tables() []workload.Table {
 func (w *queue) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -107,7 +106,7 @@ func (w *queue) Ops(
 
 	seqFunc := makeSequenceFunc()
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := queueOp{
 			workerID:   i + 1,

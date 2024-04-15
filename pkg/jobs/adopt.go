@@ -79,7 +79,7 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 		return
 	}
 
-	if !r.settings.Version.IsActive(dumpCtx, clusterversion.V23_1) {
+	if !r.settings.Version.IsActive(dumpCtx, clusterversion.TODODelete_V23_1) {
 		return
 	}
 

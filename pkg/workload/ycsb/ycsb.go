@@ -93,7 +93,6 @@ type ycsb struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	isoLevel    string
 	timeString  bool
 	insertHash  bool
 	zeroPadding int
@@ -126,11 +125,9 @@ var ycsbMeta = workload.Meta{
 		g := &ycsb{}
 		g.flags.FlagSet = pflag.NewFlagSet(`ycsb`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`isolation-level`:          {RuntimeOnly: true},
 			`read-modify-write-in-txn`: {RuntimeOnly: true},
 			`workload`:                 {RuntimeOnly: true},
 		}
-		g.flags.StringVar(&g.isoLevel, `isolation-level`, ``, `Isolation level to run workload transactions under [serializable, snapshot, read_committed]. If unset, the workload will run with the default isolation level of the database.`)
 		g.flags.BoolVar(&g.timeString, `time-string`, false, `Prepend field[0-9] data with current time in microsecond precision.`)
 		g.flags.BoolVar(&g.insertHash, `insert-hash`, true, `Key to be hashed or ordered.`)
 		g.flags.IntVar(&g.zeroPadding, `zero-padding`, 1, `Key using "insert-hash=false" has zeros padded to left to make this length of digits.`)
@@ -163,6 +160,9 @@ func (*ycsb) Meta() workload.Meta { return ycsbMeta }
 
 // Flags implements the Flagser interface.
 func (g *ycsb) Flags() workload.Flags { return g.flags }
+
+// ConnFlags implements the ConnFlagser interface.
+func (g *ycsb) ConnFlags() *workload.ConnFlags { return g.connFlags }
 
 // Hooks implements the Hookser interface.
 func (g *ycsb) Hooks() workload.Hooks {
@@ -378,14 +378,6 @@ func (g *ycsb) Tables() []workload.Table {
 func (g *ycsb) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
-	if err := workload.SetDefaultIsolationLevel(urls, g.isoLevel); err != nil {
-		return workload.QueryLoad{}, err
-	}
-
 	const readStmtStr = `SELECT * FROM usertable WHERE ycsb_key = $1`
 
 	readFieldForUpdateStmtStrs := make([]string, numTableFields)
@@ -439,6 +431,7 @@ func (g *ycsb) Ops(
 	rowCounter := NewAcknowledgedCounter((uint64)(g.recordCount))
 
 	var requestGen randGenerator
+	var err error
 	requestGenRng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	switch strings.ToLower(g.requestDistribution) {
 	case "zipfian":
@@ -475,7 +468,7 @@ func (g *ycsb) Ops(
 		return workload.QueryLoad{}, err
 	}
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{}
 
 	const (
 		readStmt                     stmtKey = "read"

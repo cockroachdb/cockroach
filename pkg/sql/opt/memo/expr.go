@@ -705,7 +705,7 @@ type UDFDefinition struct {
 	CalledOnNullInput bool
 
 	// MultiColDataSource is true if the function may return multiple columns.
-	// This is only the case if the UDF returns a RECORD type and is used as a
+	// This is only the case if the UDF returns a composite type and is used as a
 	// data source.
 	MultiColDataSource bool
 

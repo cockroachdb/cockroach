@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -205,8 +206,6 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster, and set up failers for all failure modes.
-	opts := option.DefaultStartOpts()
-	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
@@ -215,7 +214,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	failers := []Failer{}
 	for _, failureMode := range allFailureModes {
-		failer := makeFailerWithoutLocalNoop(t, c, m, failureMode, opts, settings, rng)
+		failer := makeFailerWithoutLocalNoop(t, c, m, failureMode, settings, rng)
 		if c.IsLocal() && !failer.CanUseLocal() {
 			t.L().Printf("skipping failure mode %q on local cluster", failureMode)
 			continue
@@ -225,7 +224,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		failers = append(failers, failer)
 	}
 
-	c.Start(ctx, t.L(), opts, settings, c.Range(1, 9))
+	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(1, 9))
 
 	conn := c.Conn(ctx, t.L(), 1)
 
@@ -339,10 +338,23 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 			sleepFor(ctx, t, time.Minute)
 
+			// Recover the failers on different goroutines. Otherwise, they
+			// might interact as certain failures can prevent other failures
+			// from recovering.
+			var wg sync.WaitGroup
 			for node, failer := range nodeFailers {
-				t.L().Printf("recovering n%d (%s)", node, failer)
-				failer.Recover(ctx, node)
+				wg.Add(1)
+				node := node
+				failer := failer
+				m.Go(func(ctx context.Context) error {
+					defer wg.Done()
+					t.L().Printf("recovering n%d (%s)", node, failer)
+					failer.Recover(ctx, node)
+
+					return nil
+				})
 			}
+			wg.Wait()
 		}
 
 		sleepFor(ctx, t, time.Minute) // let cluster recover
@@ -387,18 +399,16 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
-	opts := option.DefaultStartOpts()
-	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	m := c.NewMonitor(ctx, c.Range(1, 7))
 
-	failer := makeFailer(t, c, m, failureModeBlackhole, opts, settings, rng).(PartialFailer)
+	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
+	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(1, 7))
 
 	conn := c.Conn(ctx, t.L(), 1)
 
@@ -522,19 +532,17 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	// Create cluster, disabling leader/leaseholder colocation. We only start
 	// n1-n3, to precisely place system ranges, since we'll have to disable the
 	// replicate queue shortly.
-	opts := option.DefaultStartOpts()
-	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
-	failer := makeFailer(t, c, m, failureModeBlackhole, opts, settings, rng).(PartialFailer)
+	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Start(ctx, t.L(), opts, settings, c.Range(1, 3))
+	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(1, 3))
 
 	conn := c.Conn(ctx, t.L(), 1)
 
@@ -546,7 +554,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	require.NoError(t, WaitForReplication(ctx, t, t.L(), conn, 3, exactlyReplicationFactor))
 
 	// Now that system ranges are properly placed on n1-n3, start n4-n6.
-	c.Start(ctx, t.L(), opts, settings, c.Range(4, 6))
+	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(4, 6))
 
 	// Create the kv database on n4-n6.
 	t.L().Printf("creating workload database")
@@ -654,18 +662,16 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
-	opts := option.DefaultStartOpts()
-	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	m := c.NewMonitor(ctx, c.Range(1, 7))
 
-	failer := makeFailer(t, c, m, failureModeBlackhole, opts, settings, rng).(PartialFailer)
+	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
+	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(1, 7))
 
 	conn := c.Conn(ctx, t.L(), 1)
 
@@ -771,19 +777,17 @@ func runFailoverNonSystem(
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
-	opts := option.DefaultStartOpts()
-	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
-	failer := makeFailer(t, c, m, failureMode, opts, settings, rng)
+	failer := makeFailer(t, c, m, failureMode, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
+	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(1, 6))
 
 	conn := c.Conn(ctx, t.L(), 1)
 
@@ -880,19 +884,17 @@ func runFailoverLiveness(
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
-	opts := option.DefaultStartOpts()
-	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	m := c.NewMonitor(ctx, c.Range(1, 4))
 
-	failer := makeFailer(t, c, m, failureMode, opts, settings, rng)
+	failer := makeFailer(t, c, m, failureMode, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Start(ctx, t.L(), opts, settings, c.Range(1, 4))
+	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(1, 4))
 
 	conn := c.Conn(ctx, t.L(), 1)
 
@@ -995,19 +997,17 @@ func runFailoverSystemNonLiveness(
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
-	opts := option.DefaultStartOpts()
-	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
-	failer := makeFailer(t, c, m, failureMode, opts, settings, rng)
+	failer := makeFailer(t, c, m, failureMode, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
+	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(1, 6))
 
 	conn := c.Conn(ctx, t.L(), 1)
 
@@ -1117,11 +1117,10 @@ func makeFailer(
 	c cluster.Cluster,
 	m cluster.Monitor,
 	failureMode failureMode,
-	opts option.StartOpts,
 	settings install.ClusterSettings,
 	rng *rand.Rand,
 ) Failer {
-	f := makeFailerWithoutLocalNoop(t, c, m, failureMode, opts, settings, rng)
+	f := makeFailerWithoutLocalNoop(t, c, m, failureMode, settings, rng)
 	if c.IsLocal() && !f.CanUseLocal() {
 		t.L().Printf(
 			`failure mode %q not supported on local clusters, using "noop" failure mode instead`,
@@ -1136,7 +1135,6 @@ func makeFailerWithoutLocalNoop(
 	c cluster.Cluster,
 	m cluster.Monitor,
 	failureMode failureMode,
-	opts option.StartOpts,
 	settings install.ClusterSettings,
 	rng *rand.Rand,
 ) Failer {
@@ -1165,7 +1163,6 @@ func makeFailerWithoutLocalNoop(
 			t:             t,
 			c:             c,
 			m:             m,
-			startOpts:     opts,
 			startSettings: settings,
 		}
 	case failureModeDeadlock:
@@ -1174,7 +1171,6 @@ func makeFailerWithoutLocalNoop(
 			c:                c,
 			m:                m,
 			rng:              rng,
-			startOpts:        opts,
 			startSettings:    settings,
 			onlyLeaseholders: true,
 			numReplicas:      5,
@@ -1184,7 +1180,6 @@ func makeFailerWithoutLocalNoop(
 			t:             t,
 			c:             c,
 			m:             m,
-			startOpts:     opts,
 			startSettings: settings,
 			staller:       &dmsetupDiskStaller{t: t, c: c},
 		}
@@ -1363,7 +1358,6 @@ type crashFailer struct {
 	t             test.Test
 	c             cluster.Cluster
 	m             cluster.Monitor
-	startOpts     option.StartOpts
 	startSettings install.ClusterSettings
 }
 
@@ -1381,7 +1375,7 @@ func (f *crashFailer) Fail(ctx context.Context, nodeID int) {
 }
 
 func (f *crashFailer) Recover(ctx context.Context, nodeID int) {
-	f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
+	f.c.Start(ctx, f.t.L(), failoverRestartOpts(), f.startSettings, f.c.Node(nodeID))
 }
 
 // deadlockFailer deadlocks replicas. In addition to deadlocks, this failure
@@ -1392,7 +1386,6 @@ type deadlockFailer struct {
 	c                cluster.Cluster
 	m                cluster.Monitor
 	rng              *rand.Rand
-	startOpts        option.StartOpts
 	startSettings    install.ClusterSettings
 	onlyLeaseholders bool
 	numReplicas      int
@@ -1507,7 +1500,7 @@ func (f *deadlockFailer) Recover(ctx context.Context, nodeID int) {
 		f.t.L().Printf("failed to unlock replicas on n%d, restarting node: %s", nodeID, err)
 		f.m.ExpectDeath()
 		f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))
-		f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
+		f.c.Start(ctx, f.t.L(), failoverRestartOpts(), f.startSettings, f.c.Node(nodeID))
 	}
 	delete(f.locks, nodeID)
 }
@@ -1518,7 +1511,6 @@ type diskStallFailer struct {
 	t             test.Test
 	c             cluster.Cluster
 	m             cluster.Monitor
-	startOpts     option.StartOpts
 	startSettings install.ClusterSettings
 	staller       diskStaller
 }
@@ -1560,7 +1552,7 @@ func (f *diskStallFailer) Recover(ctx context.Context, nodeID int) {
 	// Pebble's disk stall detector should have terminated the node, but in case
 	// it didn't, we explicitly stop it first.
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))
-	f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
+	f.c.Start(ctx, f.t.L(), failoverRestartOpts(), f.startSettings, f.c.Node(nodeID))
 }
 
 // pauseFailer pauses the process, but keeps the OS (and thus network
@@ -1773,4 +1765,17 @@ func sleepFor(ctx context.Context, t test.Test, duration time.Duration) {
 	case <-ctx.Done():
 		t.Fatalf("sleep failed: %s", ctx.Err())
 	}
+}
+
+func failoverStartOpts() option.StartOpts {
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ScheduleBackups = false
+	return startOpts
+}
+
+func failoverRestartOpts() option.StartOpts {
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ScheduleBackups = false
+	startOpts.RoachprodOpts.SkipInit = true
+	return startOpts
 }

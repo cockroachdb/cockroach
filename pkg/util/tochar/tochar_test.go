@@ -47,7 +47,7 @@ func TestDataDriven(t *testing.T) {
 					if i > 0 {
 						ret.WriteString("\n")
 					}
-					ts, _, err := pgdate.ParseTimestamp(now, ds, in)
+					ts, _, err := pgdate.ParseTimestamp(now, ds, in, nil /* h */)
 					require.NoError(t, err)
 					r, err := TimeToChar(ts.In(tz), c, lines[0])
 					if err != nil {
@@ -61,7 +61,7 @@ func TestDataDriven(t *testing.T) {
 				// Input is timestamp, followed by formats separated by newlines.
 				// Output is the timestamp in the given formats.
 				lines := strings.Split(d.Input, "\n")
-				ts, _, err := pgdate.ParseTimestamp(now, ds, lines[0])
+				ts, _, err := pgdate.ParseTimestamp(now, ds, lines[0], nil /* h */)
 				for i, in := range lines[1:] {
 					if i > 0 {
 						ret.WriteString("\n")
