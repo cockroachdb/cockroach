@@ -813,6 +813,54 @@ func (tpce tpceRestore) DatabaseName() string {
 	return "tpce"
 }
 
+type tpccRestoreOptions struct {
+	warehouses     int
+	workers        int
+	waitFraction   float64
+	queryTraceFile string
+}
+
+type tpccRestore struct {
+	opts tpccRestoreOptions
+}
+
+func (tpcc tpccRestore) init(
+	ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs,
+) {
+	crdbNodes := sp.getCRDBNodes()
+	cmd := roachtestutil.NewCommand(`./cockroach workload init tpcc`).
+		MaybeFlag(tpcc.opts.warehouses > 0, "warehouses", tpcc.opts.warehouses).
+		MaybeFlag(tpcc.opts.workers > 0, "workers", tpcc.opts.workers).
+		MaybeFlag(tpcc.opts.waitFraction != 1, "wait", tpcc.opts.waitFraction).
+		Arg(fmt.Sprintf("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1]))
+	c.Run(ctx, option.WithNodes([]int{sp.getWorkloadNode()}), cmd.String())
+}
+
+func (tpcc tpccRestore) run(
+	ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs,
+) error {
+	crdbNodes := sp.getCRDBNodes()
+	cmd := roachtestutil.NewCommand(`./cockroach workload run tpcc`).
+		MaybeFlag(tpcc.opts.warehouses > 0, "warehouses", tpcc.opts.warehouses).
+		MaybeFlag(tpcc.opts.workers > 0, "workers", tpcc.opts.workers).
+		MaybeFlag(tpcc.opts.waitFraction != 1, "wait", tpcc.opts.waitFraction).
+		MaybeFlag(tpcc.opts.queryTraceFile != "", "query-trace-file", tpcc.opts.queryTraceFile).
+		Arg(fmt.Sprintf("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1]))
+	return c.RunE(ctx, option.WithNodes([]int{sp.getWorkloadNode()}), cmd.String())
+}
+
+func (tpcc tpccRestore) fixtureDir() string {
+	return fmt.Sprintf("tpc-c/warehouses=%d", tpcc.opts.warehouses)
+}
+
+func (tpcc tpccRestore) String() string {
+	return fmt.Sprintf("tpc-c/%d", tpcc.opts.warehouses)
+}
+
+func (tpcc tpccRestore) DatabaseName() string {
+	return "tpcc"
+}
+
 // restoreSpecs define input parameters to a restore roachtest set during
 // registration. They should not be modified within test_spec.run(), as they are shared
 // across driver runs.
