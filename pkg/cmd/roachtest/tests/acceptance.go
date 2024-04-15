@@ -55,7 +55,7 @@ func registerAcceptance(r registry.Registry) {
 			{name: "cluster-init", fn: runClusterInit},
 			{name: "rapid-restart", fn: runRapidRestart},
 		},
-		registry.OwnerObsInf: {
+		registry.OwnerObservability: {
 			{name: "status-server", fn: runStatusServer},
 		},
 		registry.OwnerDevInf: {
