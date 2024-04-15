@@ -256,6 +256,7 @@ func UserAuthCertHook(
 	tenantID roachpb.TenantID,
 	certManager *CertificateManager,
 	roleSubject *ldap.DN,
+	subjectRequired bool,
 ) (UserAuthHook, error) {
 	var certUserScope []CertificateUserScope
 	if !insecureMode {
@@ -299,6 +300,12 @@ func UserAuthCertHook(
 		}
 
 		roleSubject = applyRootOrNodeDNFlag(roleSubject, systemIdentity)
+		if subjectRequired && roleSubject == nil {
+			return errors.Newf(
+				"user %q does not have a distinguished name set which subject_required cluster setting mandates",
+				systemIdentity.Normalized(),
+			)
+		}
 
 		var certSubject *ldap.DN
 		if roleSubject != nil {
