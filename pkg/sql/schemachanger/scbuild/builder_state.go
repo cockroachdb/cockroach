@@ -1199,6 +1199,8 @@ func (b *builderState) ResolveIndexByName(
 }
 
 // ResolveColumn implements the scbuildstmt.NameResolver interface.
+// N.B. Column target statuses should be handled outside of this logic (ex. resolving a column by name that is in the
+// dropping state shouldn't prevent a column of the same name being added).
 func (b *builderState) ResolveColumn(
 	relationID catid.DescID, columnName tree.Name, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {

@@ -3841,3 +3841,18 @@ CREATE TABLE t_identity_drop_dependency(id INT PRIMARY KEY DEFAULT nextval('publ
 
 statement error pgcode 2BP01 pq: cannot drop table t_identity_drop because other objects depend on it
 ALTER TABLE t_identity_drop ALTER COLUMN b DROP IDENTITY;
+
+subtest comma_syntax
+
+statement ok
+CREATE TABLE foo (i int);
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE foo DROP COLUMN i, ADD COLUMN i bool;
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42703 pq: column "i" does not exist
+ALTER TABLE foo DROP COLUMN i, DROP COLUMN i;
+
+subtest end
