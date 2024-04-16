@@ -494,6 +494,9 @@ message LocalOnlySessionData {
   // statistics on virtual computed columns for cardinality estimation in the
   // optimizer.
   bool optimizer_use_virtual_computed_column_stats = 124;
+  // OptimizerUseImprovedZigzagJoinCosting, when true, indicates that the
+  // optimizer should use improved logic in the cost model for zigzag joins.
+  bool optimizer_use_improved_zigzag_join_costing = 125;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

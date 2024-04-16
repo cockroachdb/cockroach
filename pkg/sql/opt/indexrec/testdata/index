@@ -700,21 +700,14 @@ t1:
 index-recommendations
 SELECT k, i, f FROM t1 WHERE k = 1 AND i = 2 AND f > 0
 ----
-creation: CREATE INDEX ON t.public.t1 (k) STORING (i, f);
-creation: CREATE INDEX ON t.public.t1 (i) STORING (k, f);
+creation: CREATE INDEX ON t.public.t1 (k, i, f);
 --
 optimal plan:
-inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
+scan t1@_hyp_5
  ├── columns: k:1!null i:2!null f:3!null
- ├── eq columns: [5] = [5]
- ├── left fixed columns: [1] = [1]
- ├── right fixed columns: [2] = [2]
- ├── cost: 13.4131712
- ├── fd: ()-->(1,2)
- └── filters
-      ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-      ├── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
-      └── f:3 > 0.0 [outer=(3), constraints=(/3: [/5e-324 - ]; tight)]
+ ├── constraint: /1/2/3/5: [/1/2/5e-324 - /1/2]
+ ├── cost: 18.3187027
+ └── fd: ()-->(1,2)
 
 index-candidates
 SELECT  k, i, s FROM t1 WHERE k = 1 AND i = 2 AND s IS NOT NULL
@@ -1589,13 +1582,13 @@ inner-join (lookup t4)
  ├── key columns: [6] = [6]
  ├── lookup columns are key
  ├── immutable
- ├── cost: 237.980741
+ ├── cost: 245.980741
  ├── inner-join (zigzag t4@_hyp_1 t4@_hyp_1)
  │    ├── columns: rowid:6!null
  │    ├── eq columns: [6] = [6]
  │    ├── left fixed columns: [9] = ['\x37626172000112320001']
  │    ├── right fixed columns: [9] = ['\x37666f6f000112310001']
- │    ├── cost: 159.155802
+ │    ├── cost: 167.155802
  │    └── filters (true)
  └── filters (true)
 
@@ -1663,27 +1656,43 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1 AND i = 2
 ----
-creation: CREATE INDEX ON t.public.t4 (k) STORING (i, f, j);
-creation: CREATE INDEX ON t.public.t4 (i) STORING (k, f, j);
+creation: CREATE INVERTED INDEX ON t.public.t4 (k, i, j);
 --
 optimal plan:
 project
  ├── columns: k:1!null f:3
  ├── immutable
- ├── cost: 13.773964
+ ├── cost: 18.8406727
  ├── fd: ()-->(1)
- └── inner-join (zigzag t4@_hyp_1 t4@_hyp_2)
+ └── select
       ├── columns: k:1!null i:2!null f:3 j:4
-      ├── eq columns: [6] = [6]
-      ├── left fixed columns: [1] = [1]
-      ├── right fixed columns: [2] = [2]
       ├── immutable
-      ├── cost: 13.7509279
+      ├── cost: 18.8176366
       ├── fd: ()-->(1,2)
+      ├── index-join t4
+      │    ├── columns: k:1 i:2 f:3 j:4
+      │    ├── cost: 18.7866246
+      │    └── inverted-filter
+      │         ├── columns: rowid:6!null
+      │         ├── inverted expression: /12
+      │         │    ├── tight: false, unique: false
+      │         │    └── union spans
+      │         │         ├── ["7\x00\x019", "7\x00\x019"]
+      │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │         ├── cost: 18.1482853
+      │         ├── key: (6)
+      │         └── scan t4@_hyp_7
+      │              ├── columns: rowid:6!null j_inverted_key:12!null
+      │              ├── constraint: /1/2: [/1/2 - /1/2]
+      │              ├── inverted constraint: /12/6
+      │              │    └── spans
+      │              │         ├── ["7\x00\x019", "7\x00\x019"]
+      │              │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │              ├── cost: 18.1272733
+      │              ├── key: (6)
+      │              └── fd: (6)-->(12)
       └── filters
-           ├── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
-           ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-           └── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+           └── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
 
 index-candidates
 SELECT k, f FROM t4 WHERE j IS NULL
