@@ -3717,13 +3717,13 @@ project
       └── udf: f [as=f:6]
            └── body
                 └── limit
-                     ├── columns: exception_block_7:5
+                     ├── columns: nested_block_7:5
                      ├── project
-                     │    ├── columns: exception_block_7:5
+                     │    ├── columns: nested_block_7:5
                      │    ├── values
                      │    │    └── tuple
                      │    └── projections
-                     │         └── udf: exception_block_7 [as=exception_block_7:5]
+                     │         └── udf: nested_block_7 [as=nested_block_7:5]
                      │              ├── body
                      │              │    └── project
                      │              │         ├── columns: stmt_return_8:4!null
@@ -3786,13 +3786,13 @@ project
            ├── params: i:1
            └── body
                 └── limit
-                     ├── columns: exception_block_3:13
+                     ├── columns: nested_block_3:13
                      ├── project
-                     │    ├── columns: exception_block_3:13
+                     │    ├── columns: nested_block_3:13
                      │    ├── values
                      │    │    └── tuple
                      │    └── projections
-                     │         └── udf: exception_block_3 [as=exception_block_3:13]
+                     │         └── udf: nested_block_3 [as=nested_block_3:13]
                      │              ├── args
                      │              │    └── variable: i:1
                      │              ├── params: i:4
@@ -3875,13 +3875,13 @@ project
            ├── params: i:1
            └── body
                 └── limit
-                     ├── columns: exception_block_5:15
+                     ├── columns: nested_block_5:15
                      ├── project
-                     │    ├── columns: exception_block_5:15
+                     │    ├── columns: nested_block_5:15
                      │    ├── values
                      │    │    └── tuple
                      │    └── projections
-                     │         └── udf: exception_block_5 [as=exception_block_5:15]
+                     │         └── udf: nested_block_5 [as=nested_block_5:15]
                      │              ├── args
                      │              │    └── variable: i:1
                      │              ├── params: i:6
@@ -3960,13 +3960,13 @@ project
       └── udf: f [as=f:8]
            └── body
                 └── limit
-                     ├── columns: exception_block_7:7
+                     ├── columns: nested_block_7:7
                      ├── project
-                     │    ├── columns: exception_block_7:7
+                     │    ├── columns: nested_block_7:7
                      │    ├── values
                      │    │    └── tuple
                      │    └── projections
-                     │         └── udf: exception_block_7 [as=exception_block_7:7]
+                     │         └── udf: nested_block_7 [as=nested_block_7:7]
                      │              ├── body
                      │              │    └── project
                      │              │         ├── columns: "_stmt_raise_8":6
@@ -4045,9 +4045,9 @@ project
            ├── params: n:1
            └── body
                 └── limit
-                     ├── columns: exception_block_3:9
+                     ├── columns: nested_block_3:9
                      ├── project
-                     │    ├── columns: exception_block_3:9
+                     │    ├── columns: nested_block_3:9
                      │    ├── barrier
                      │    │    ├── columns: i:2
                      │    │    └── project
@@ -4059,7 +4059,7 @@ project
                      │    │                   ├── const: 100
                      │    │                   └── variable: n:1
                      │    └── projections
-                     │         └── udf: exception_block_3 [as=exception_block_3:9]
+                     │         └── udf: nested_block_3 [as=nested_block_3:9]
                      │              ├── args
                      │              │    ├── variable: n:1
                      │              │    └── variable: i:2
@@ -4114,9 +4114,9 @@ project
            ├── params: i:1 j:2 k:3
            └── body
                 └── limit
-                     ├── columns: exception_block_3:33
+                     ├── columns: nested_block_3:33
                      ├── project
-                     │    ├── columns: exception_block_3:33
+                     │    ├── columns: nested_block_3:33
                      │    ├── barrier
                      │    │    ├── columns: x:4!null
                      │    │    └── project
@@ -4126,7 +4126,7 @@ project
                      │    │         └── projections
                      │    │              └── const: 0 [as=x:4]
                      │    └── projections
-                     │         └── udf: exception_block_3 [as=exception_block_3:33]
+                     │         └── udf: nested_block_3 [as=nested_block_3:33]
                      │              ├── args
                      │              │    ├── variable: i:1
                      │              │    ├── variable: j:2
@@ -4250,9 +4250,9 @@ project
            ├── params: i:1
            └── body
                 └── limit
-                     ├── columns: exception_block_3:30
+                     ├── columns: nested_block_3:30
                      ├── project
-                     │    ├── columns: exception_block_3:30
+                     │    ├── columns: nested_block_3:30
                      │    ├── barrier
                      │    │    ├── columns: x:2
                      │    │    └── project
@@ -4263,7 +4263,7 @@ project
                      │    │              └── cast: INT8 [as=x:2]
                      │    │                   └── null
                      │    └── projections
-                     │         └── udf: exception_block_3 [as=exception_block_3:30]
+                     │         └── udf: nested_block_3 [as=nested_block_3:30]
                      │              ├── args
                      │              │    ├── variable: i:1
                      │              │    └── variable: x:2
@@ -4443,9 +4443,9 @@ project
            ├── params: n:1 a:2
            └── body
                 └── limit
-                     ├── columns: exception_block_3:44
+                     ├── columns: nested_block_3:44
                      ├── project
-                     │    ├── columns: exception_block_3:44
+                     │    ├── columns: nested_block_3:44
                      │    ├── barrier
                      │    │    ├── columns: x:3 i:4!null
                      │    │    └── project
@@ -4460,7 +4460,7 @@ project
                      │    │         └── projections
                      │    │              └── const: 0 [as=i:4]
                      │    └── projections
-                     │         └── udf: exception_block_3 [as=exception_block_3:44]
+                     │         └── udf: nested_block_3 [as=nested_block_3:44]
                      │              ├── args
                      │              │    ├── variable: n:1
                      │              │    ├── variable: a:2
@@ -5494,9 +5494,9 @@ project
       └── udf: f [as=f:19]
            └── body
                 └── limit
-                     ├── columns: exception_block_5:18
+                     ├── columns: nested_block_5:18
                      ├── project
-                     │    ├── columns: exception_block_5:18
+                     │    ├── columns: nested_block_5:18
                      │    ├── barrier
                      │    │    ├── columns: curs:1!null
                      │    │    └── project
@@ -5506,7 +5506,7 @@ project
                      │    │         └── projections
                      │    │              └── const: 'foo' [as=curs:1]
                      │    └── projections
-                     │         └── udf: exception_block_5 [as=exception_block_5:18]
+                     │         └── udf: nested_block_5 [as=nested_block_5:18]
                      │              ├── args
                      │              │    └── variable: curs:1
                      │              ├── params: curs:10
@@ -5942,13 +5942,13 @@ project
       └── udf: f [as=f:6]
            └── body
                 └── limit
-                     ├── columns: exception_block_7:5
+                     ├── columns: nested_block_7:5
                      ├── project
-                     │    ├── columns: exception_block_7:5
+                     │    ├── columns: nested_block_7:5
                      │    ├── values
                      │    │    └── tuple
                      │    └── projections
-                     │         └── udf: exception_block_7 [as=exception_block_7:5]
+                     │         └── udf: nested_block_7 [as=nested_block_7:5]
                      │              ├── body
                      │              │    └── project
                      │              │         ├── columns: stmt_return_8:4!null
@@ -6531,11 +6531,11 @@ project
                      │                                                           │              ├── const: ''
                      │                                                           │              └── const: '00000'
                      │                                                           └── project
-                     │                                                                ├── columns: nested_block_3:17
+                     │                                                                ├── columns: post_nested_block_3:17
                      │                                                                ├── values
                      │                                                                │    └── tuple
                      │                                                                └── projections
-                     │                                                                     └── udf: nested_block_3 [as=nested_block_3:17]
+                     │                                                                     └── udf: post_nested_block_3 [as=post_nested_block_3:17]
                      │                                                                          ├── tail-call
                      │                                                                          ├── args
                      │                                                                          │    └── variable: outer_quantity:14
@@ -6751,11 +6751,11 @@ project
                      │              │                                  └── null [type=unknown]
                      │              └── subquery [type=tuple{int, unknown, decimal}]
                      │                   └── project
-                     │                        ├── columns: nested_block_6:7(tuple{int, unknown, decimal})
+                     │                        ├── columns: post_nested_block_6:7(tuple{int, unknown, decimal})
                      │                        ├── values
                      │                        │    └── tuple [type=tuple]
                      │                        └── projections
-                     │                             └── udf: nested_block_6 [as=nested_block_6:7, type=tuple{int, unknown, decimal}]
+                     │                             └── udf: post_nested_block_6 [as=post_nested_block_6:7, type=tuple{int, unknown, decimal}]
                      │                                  └── body
                      │                                       └── project
                      │                                            ├── columns: stmt_if_1:5(tuple{int, unknown, decimal})

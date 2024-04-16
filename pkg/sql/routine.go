@@ -322,7 +322,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 			return err
 		}
 		if openCursor {
-			return cursorHelper.createCursor(g.p, g.expr.BlockState)
+			return cursorHelper.createCursor(g.p)
 		}
 		return nil
 	})
@@ -392,12 +392,12 @@ func (g *routineGenerator) handleException(ctx context.Context, err error) error
 			cursErr := g.closeCursors(blockState)
 			if cursErr != nil {
 				// This error is unexpected, so return immediately.
-				return errors.CombineErrors(err, cursErr)
+				return errors.CombineErrors(err, errors.WithAssertionFailure(cursErr))
 			}
 			spErr := g.p.Txn().RollbackToSavepoint(ctx, blockState.SavepointTok.(kv.SavepointToken))
 			if spErr != nil {
 				// This error is unexpected, so return immediately.
-				return errors.CombineErrors(err, spErr)
+				return errors.CombineErrors(err, errors.WithAssertionFailure(spErr))
 			}
 			// Truncate the arguments using the number of variables in scope for the
 			// current block. This is necessary because the error may originate from
@@ -422,41 +422,44 @@ func (g *routineGenerator) handleException(ctx context.Context, err error) error
 // closeCursors closes any cursors that were opened within the scope of the
 // current block. It is used for PLpgSQL exception handling.
 func (g *routineGenerator) closeCursors(blockState *tree.BlockState) error {
-	if blockState == nil {
+	if blockState == nil || blockState.CursorTimestamp == nil {
 		return nil
 	}
+	blockStart := *blockState.CursorTimestamp
+	blockState.CursorTimestamp = nil
 	var err error
-	for _, name := range blockState.Cursors {
-		if g.p.sqlCursors.getCursor(name) == nil {
-			// This cursor has already been closed.
-			continue
-		}
-		if curErr := g.p.sqlCursors.closeCursor(name); curErr != nil {
-			// Attempt to close all cursors in the block, even if one throws an error.
-			err = errors.CombineErrors(err, curErr)
+	for name, cursor := range g.p.sqlCursors.list() {
+		if cursor.created.After(blockStart) {
+			if curErr := g.p.sqlCursors.closeCursor(name); curErr != nil {
+				// Try to close all cursors in the scope, even if one throws an error.
+				err = errors.CombineErrors(err, curErr)
+			}
 		}
 	}
 	return err
 }
 
-// maybeInitBlockState creates a savepoint if all the following are true:
-//  1. The current routine is within a PLpgSQL exception block.
-//  2. The current block has an exception handler
-//  3. The savepoint hasn't already been created for this block.
+// maybeInitBlockState creates a savepoint for a routine that marks a transition
+// into a PL/pgSQL block with an exception handler. It also tracks the current
+// timestamp in order to correctly roll back cursors opened within the block.
 //
 // Note that it is not necessary to explicitly release the savepoint at any
 // point, because it does not add any overhead.
 func (g *routineGenerator) maybeInitBlockState(ctx context.Context) error {
 	blockState := g.expr.BlockState
-	if blockState == nil {
+	if blockState == nil || !g.expr.BlockStart {
 		return nil
 	}
-	if blockState.ExceptionHandler != nil && blockState.SavepointTok == nil {
+	if blockState.ExceptionHandler != nil {
 		// Drop down a savepoint for the current scope.
 		var err error
 		if blockState.SavepointTok, err = g.p.Txn().CreateSavepoint(ctx); err != nil {
 			return err
 		}
+		// Save the current timestamp, so that cursors opened from now on can be
+		// rolled back by the exception handler.
+		curTime := timeutil.Now()
+		blockState.CursorTimestamp = &curTime
 	}
 	return nil
 }
@@ -601,7 +604,7 @@ type plpgsqlCursorHelper struct {
 	rowsAffected int
 }
 
-func (h *plpgsqlCursorHelper) createCursor(p *planner, blockState *tree.BlockState) error {
+func (h *plpgsqlCursorHelper) createCursor(p *planner) error {
 	h.iter = newRowContainerIterator(h.ctx, h.container)
 	cursor := &sqlCursor{
 		Rows:           h,
@@ -617,11 +620,6 @@ func (h *plpgsqlCursorHelper) createCursor(p *planner, blockState *tree.BlockSta
 	}
 	if err := p.sqlCursors.addCursor(h.cursorName, cursor); err != nil {
 		return err
-	}
-	if blockState != nil {
-		// Add the cursor name to the block's state. This allows the exception handler
-		// to close it, if necessary.
-		blockState.Cursors = append(blockState.Cursors, h.cursorName)
 	}
 	h.addedCursor = true
 	return nil

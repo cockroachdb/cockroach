@@ -114,9 +114,50 @@ NOTICE: 2, 1
 NOTICE: final j: 2
 NOTICE: final i: 3
 
-subtest nested_block_cursors
+# Regression test for #122278 - a nested block with an exception handler inside
+# a loop should only rollback mutations from the current iteration.
+statement ok
+CREATE TABLE t122278(x INT);
+
 statement ok
 DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 5 LOOP
+      i := i + 1;
+      BEGIN
+        INSERT INTO t122278 VALUES (i);
+        IF i = 3 THEN
+          SELECT 1 // 0;
+        END IF;
+      EXCEPTION WHEN division_by_zero THEN
+        RAISE NOTICE 'saw exception';
+      END;
+    END LOOP;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: saw exception
+
+query I rowsort
+SELECT * FROM t122278;
+----
+1
+2
+4
+5
+
+statement ok
+DROP TABLE t122278 CASCADE;
+
+subtest nested_block_cursors
+
+statement ok
 CREATE PROCEDURE p() AS $$
   DECLARE
     curs1 CURSOR FOR SELECT 1 FROM generate_series(1, 10);
@@ -194,6 +235,83 @@ NOTICE: a1
 NOTICE: a2
 NOTICE: a3
 NOTICE: a4
+
+# Regression test for #122278 - all cursors within the scope of a block
+# (including those in nested blocks or routines) should be closed when the block
+# catches an exception.
+statement ok
+CREATE PROCEDURE p_nested(curs REFCURSOR) AS $$
+  BEGIN
+    OPEN curs FOR SELECT -100;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    x REFCURSOR;
+    y REFCURSOR;
+  BEGIN
+    OPEN x FOR SELECT 100;
+    BEGIN
+      OPEN y FOR SELECT 200;
+      IF n = 0 THEN
+        RETURN 1 // 0;
+      END IF;
+      CALL p_nested('foo');
+      IF n = 1 THEN
+        RETURN 1 // 0;
+      END IF;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        RETURN (SELECT count(*) FROM pg_cursors);
+    END;
+    CALL p_nested('bar');
+    IF n = 2 THEN
+      RETURN 1 // 0;
+    END IF;
+    RETURN (SELECT count(*) FROM pg_cursors);
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN (SELECT count(*) FROM pg_cursors);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(0);
+----
+1
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(1);
+----
+1
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(2);
+----
+0
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(3);
+----
+4
+
+statement ok
+CLOSE ALL;
 
 subtest nested_block_exceptions
 
@@ -341,7 +459,7 @@ CALL p(1);
 ----
 NOTICE: 1
 
-statement error pgcode 34000 pq: cursor \"<unnamed portal 11>\" does not exist
+statement error pgcode 34000 pq: cursor \"<unnamed portal 19>\" does not exist
 CALL p(2);
 
 query T noticetrace
@@ -433,6 +551,40 @@ NOTICE: outer block: 0
 NOTICE: inner block: 1
 NOTICE: inner handler: 2
 NOTICE: outer handler: 3
+
+# Regression test for #122278 - calling f(1) should result in the second
+# exception handler being triggered.
+statement ok
+CREATE TABLE t122278(x INT);
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    BEGIN
+      IF n = 0 THEN
+        RETURN 1 // 0;
+      END IF;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        RETURN (SELECT 100 + count(*) FROM t122278);
+    END;
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN (SELECT 200 + count(*) FROM t122278);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(0);
+----
+100
+
+query I
+SELECT f(1);
+----
+200
 
 subtest error
 
