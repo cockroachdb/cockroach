@@ -188,6 +188,7 @@ type Memo struct {
 	useProvidedOrderingFix                     bool
 	useVirtualComputedColumnStats              bool
 	useTrigramSimilarityOptimization           bool
+	useImprovedDistinctOnLimitHintCosting      bool
 	trigramSimilarityThreshold                 float64
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
@@ -263,6 +264,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useProvidedOrderingFix:                     evalCtx.SessionData().OptimizerUseProvidedOrderingFix,
 		useVirtualComputedColumnStats:              evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats,
 		useTrigramSimilarityOptimization:           evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization,
+		useImprovedDistinctOnLimitHintCosting:      evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting,
 		trigramSimilarityThreshold:                 evalCtx.SessionData().TrigramSimilarityThreshold,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
@@ -416,6 +418,7 @@ func (m *Memo) IsStale(
 		m.useProvidedOrderingFix != evalCtx.SessionData().OptimizerUseProvidedOrderingFix ||
 		m.useVirtualComputedColumnStats != evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats ||
 		m.useTrigramSimilarityOptimization != evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization ||
+		m.useImprovedDistinctOnLimitHintCosting != evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting ||
 		m.trigramSimilarityThreshold != evalCtx.SessionData().TrigramSimilarityThreshold ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
