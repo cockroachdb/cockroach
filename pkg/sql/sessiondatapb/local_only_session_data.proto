@@ -494,6 +494,9 @@ message LocalOnlySessionData {
   // statistics on virtual computed columns for cardinality estimation in the
   // optimizer.
   bool optimizer_use_virtual_computed_column_stats = 124;
+  // OptimizerUseTrigramSimilarityOptimization indicates whether the optimizer
+  // should generate improved plans for queries with trigram similarity filters.
+  bool optimizer_use_trigram_similarity_optimization = 125;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

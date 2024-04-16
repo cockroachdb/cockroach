@@ -35,7 +35,7 @@ var _ invertedFilterPlanner = &trigramFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf implements the invertedFilterPlanner
 // interface.
 func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	_ context.Context, _ *eval.Context, expr opt.ScalarExpr,
+	_ context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,
@@ -72,6 +72,11 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		// Equality is commutative.
 		commutative = true
 	case *memo.ModExpr:
+		// Do not generate legacy inverted constraints for similarity filters
+		// if the text similarity optimization is enabled.
+		if evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization {
+			return inverted.NonInvertedColExpression{}, expr, nil
+		}
 		// If we're doing a % expression (similarity threshold), we need to
 		// construct an OR out of the spans: we need to find results that match any
 		// of the trigrams in the constant datum, and we'll filter the results

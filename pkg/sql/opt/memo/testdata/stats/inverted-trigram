@@ -295,6 +295,60 @@ select
  └── filters
       └── a:1 LIKE '%zooo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
+# Test a trigram similarity filter.
+opt
+SELECT * FROM a WHERE a % 'blah'
+----
+select
+ ├── columns: a:1(string)
+ ├── stable
+ ├── stats: [rows=333.3333]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=8]
+ │    └── distinct-on
+ │         ├── columns: rowid:2(int!null)
+ │         ├── grouping columns: rowid:2(int!null)
+ │         ├── stats: [rows=8, distinct(2)=8, null(2)=0]
+ │         ├── key: (2)
+ │         └── scan a@inv
+ │              ├── columns: rowid:2(int!null)
+ │              ├── constraint: /5
+ │              │    ├── [/'\x1220626c0001' - /'\x1220626c0001']
+ │              │    ├── [/'\x126168200001' - /'\x126168200001']
+ │              │    ├── [/'\x12626c610001' - /'\x12626c610001']
+ │              │    └── [/'\x126c61680001' - /'\x126c61680001']
+ │              └── stats: [rows=40, distinct(2)=8, null(2)=0, distinct(5)=4, null(5)=0]
+ │                  histogram(5)=  0         10         0         10         0         10         0         10
+ │                               <--- '\x1220626c0001' --- '\x126168200001' --- '\x12626c610001' --- '\x126c61680001'
+ └── filters
+      └── a:1 % 'blah' [type=bool, outer=(1), stable]
+
+# Test a trigram similarity filter with a single span.
+opt set=(pg_trgm.similarity_threshold=1)
+SELECT * FROM a WHERE a % 'blah'
+----
+select
+ ├── columns: a:1(string)
+ ├── stable
+ ├── stats: [rows=333.3333]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=2]
+ │    └── distinct-on
+ │         ├── columns: rowid:2(int!null)
+ │         ├── grouping columns: rowid:2(int!null)
+ │         ├── stats: [rows=2, distinct(2)=2, null(2)=0]
+ │         ├── key: (2)
+ │         └── scan a@inv
+ │              ├── columns: rowid:2(int!null)
+ │              ├── constraint: /5: [/'\x126c61680001' - /'\x126c61680001']
+ │              └── stats: [rows=10, distinct(2)=2, null(2)=0, distinct(5)=1, null(5)=0]
+ │                  histogram(5)=  0         10
+ │                               <--- '\x126c61680001'
+ └── filters
+      └── a:1 % 'blah' [type=bool, outer=(1), stable]
+
 # Now, check what happens with a forward scan now that we have an inverted histogram.
 opt
 SELECT * FROM a WHERE a = 'blah'

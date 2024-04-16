@@ -83,6 +83,14 @@ CREATE TABLE g
 ----
 
 exec-ddl
+CREATE TABLE trgm (
+    k INT PRIMARY KEY,
+    s STRING,
+    INVERTED INDEX s_idx (s gin_trgm_ops)
+)
+----
+
+exec-ddl
 CREATE TABLE p (
     k INT PRIMARY KEY,
     i INT,
@@ -8279,6 +8287,55 @@ select
  │    └── columns: geom:1 geog:2 val:3
  └── filters
       └── val:3 > st_maxdistance(geom:1, '010100000000000000000000000000000000000000') [outer=(1,3), immutable, constraints=(/3: (/NULL - ])]
+
+opt expect=GenerateInvertedIndexScans set=(optimizer_use_trigram_similarity_optimization=off)
+SELECT * FROM trgm WHERE s % 'foo'
+----
+select
+ ├── columns: k:1!null s:2
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join trgm
+ │    ├── columns: k:1!null s:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["\x12  f\x00\x01", "\x12  f\x00\x01"]
+ │         │         ├── ["\x12 fo\x00\x01", "\x12 fo\x00\x01"]
+ │         │         ├── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │         │         └── ["\x12oo \x00\x01", "\x12oo \x00\x01"]
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx
+ │              ├── columns: k:1!null s_inverted_key:5!null
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── ["\x12  f\x00\x01", "\x12  f\x00\x01"]
+ │              │         ├── ["\x12 fo\x00\x01", "\x12 fo\x00\x01"]
+ │              │         ├── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │              │         └── ["\x12oo \x00\x01", "\x12oo \x00\x01"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(5)
+ └── filters
+      └── s:2 % 'foo' [outer=(2), stable]
+
+opt expect-not=GenerateInvertedIndexScans format=hide-all
+SELECT * FROM trgm WHERE s % 'foo'
+----
+select
+ ├── index-join trgm
+ │    └── distinct-on
+ │         └── scan trgm@s_idx
+ │              └── constraint: /5
+ │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
+ │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
+ │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
+ └── filters
+      └── s % 'foo'
 
 # Regression test for #111963. Do not plan inverted index scans on columns that
 # are not filtered in the query.

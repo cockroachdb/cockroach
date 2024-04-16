@@ -13,6 +13,9 @@ package invertedidx
 import (
 	"context"
 	"fmt"
+	"math"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
@@ -27,6 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/trigram"
+	"github.com/cockroachdb/errors"
 )
 
 // NewDatumsToInvertedExpr returns a new DatumsToInvertedExpr.
@@ -88,11 +94,15 @@ func TryFilterInvertedIndex(
 ) {
 	// Attempt to constrain the prefix columns, if there are any. If they cannot
 	// be constrained to single values, the index cannot be used.
-	constraint, filters, ok = constrainPrefixColumns(
-		evalCtx, factory, filters, optionalFilters, tabID, index, checkCancellation,
-	)
-	if !ok {
-		return nil, nil, nil, nil, false
+	columns, notNullCols := prefixCols(tabID, index)
+	if len(columns) > 0 {
+		constraint, filters, ok = constrainNonInvertedCols(
+			evalCtx, factory, columns, notNullCols, filters,
+			optionalFilters, tabID, index, checkCancellation,
+		)
+		if !ok {
+			return nil, nil, nil, nil, false
+		}
 	}
 
 	config := index.GeoConfig()
@@ -176,6 +186,253 @@ func TryFilterInvertedIndex(
 	}
 
 	return spanExpr, constraint, remainingFilters, pfState, true
+}
+
+// TryFilterInvertedIndexBySimilarity attempts to constrain an inverted trigram
+// index using a similarity filter. It returns the constraint and the set of
+// remaining filters which are not "tight" in the constraint. If no constraint
+// can be generated, then ok=false is returned.
+//
+// The returned constraint includes spans over the minimum number of trigrams in
+// a and b that must match in order to satisfy the similarity filter. This
+// optimization allows us to avoid scanning over some trigrams of the constant
+// string. See similarityTrigramsToScan for more details.
+func TryFilterInvertedIndexBySimilarity(
+	evalCtx *eval.Context,
+	f *norm.Factory,
+	filters memo.FiltersExpr,
+	optionalFilters memo.FiltersExpr,
+	tabID opt.TableID,
+	index cat.Index,
+	computedColumns map[opt.ColumnID]opt.ScalarExpr,
+	checkCancellation func(),
+) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
+	md := f.Metadata()
+	columnCount := index.ExplicitColumnCount()
+	prefixColumnCount := index.NonInvertedPrefixColumnCount()
+
+	// The indexed column must be of a string-like type.
+	srcColOrd := index.InvertedColumn().InvertedSourceColumnOrdinal()
+	if md.Table(tabID).Column(srcColOrd).DatumType().Family() != types.StringFamily {
+		return nil, nil, false
+	}
+
+	cols := make([]opt.OrderingColumn, columnCount)
+	var notNullCols opt.ColSet
+	for i := range cols {
+		col := index.Column(i)
+		colID := tabID.ColumnID(col.Ordinal())
+		cols[i] = opt.MakeOrderingColumn(colID, col.Descending)
+		if !col.IsNullable() {
+			notNullCols.Add(colID)
+		}
+	}
+
+	// First, we attempt to build a constraint from a similarity filter on the
+	// inverted column. We search for expressions of the form `s % 'foo'` or
+	// `'foo' % s`, where s is the indexed column.
+	var con *constraint.Constraint
+	for i := range filters {
+		sim, isSim := filters[i].Condition.(*memo.ModExpr)
+		if !isSim {
+			continue
+		}
+
+		var constStr opt.ScalarExpr
+		switch {
+		case isIndexColumn(tabID, index, sim.Left, computedColumns):
+			constStr = sim.Right
+		case isIndexColumn(tabID, index, sim.Right, computedColumns):
+			constStr = sim.Left
+		default:
+			continue
+		}
+
+		s, isConstStr := extractConstStringDatum(constStr)
+		if !isConstStr {
+			continue
+		}
+
+		// Generate trigrams to scan.
+		trgms := similarityTrigramsToScan(s, evalCtx.SessionData().TrigramSimilarityThreshold)
+		if len(trgms) == 0 {
+			continue
+		}
+
+		var keyCtx constraint.KeyContext
+		keyCtx.EvalCtx = evalCtx
+		keyCtx.Columns.Init(cols[prefixColumnCount:])
+
+		var spans constraint.Spans
+		spans.Alloc(len(trgms))
+		for j := range trgms {
+			// Create a key for the trigram. The trigram is encoded so that it
+			// can be correctly compared to histogram upper bounds, which are
+			// also encoded. The byte slice is pre-sized to hold the trigram
+			// plus two extra bytes for the prefix and terminator.
+			k := make([]byte, 0, len(trgms[j])+2)
+			k = encoding.EncodeStringAscending(k, trgms[j])
+			key := constraint.MakeKey(tree.NewDEncodedKey(tree.DEncodedKey(k)))
+
+			var span constraint.Span
+			span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+			spans.Append(&span)
+		}
+
+		con = &constraint.Constraint{}
+		con.Init(&keyCtx, &spans)
+		break
+	}
+
+	if con == nil {
+		return nil, nil, false
+	}
+
+	// If the index is a single-column index, then we are done.
+	if columnCount == 1 {
+		return con, filters, true
+	}
+
+	// If the index is a multi-column index, then we need to constrain the
+	// prefix columns.
+	var prefixConstraint *constraint.Constraint
+	prefixConstraint, remainingFilters, ok = constrainNonInvertedCols(
+		evalCtx, f, cols, notNullCols, filters,
+		optionalFilters, tabID, index, checkCancellation,
+	)
+	if !ok {
+		return nil, nil, false
+	}
+	prefixConstraint.Combine(evalCtx, con, checkCancellation)
+	return prefixConstraint, remainingFilters, true
+}
+
+func extractConstStringDatum(expr opt.ScalarExpr) (string, bool) {
+	if !memo.CanExtractConstDatum(expr) {
+		return "", false
+	}
+	d := tree.UnwrapDOidWrapper(memo.ExtractConstDatum(expr))
+	if ds, ok := d.(*tree.DString); ok {
+		return string(*ds), ok
+	}
+	return "", false
+}
+
+// similarityTrigramsToScan returns a minimum set of trigrams that must be
+// scanned in an inverted index to find all rows where `a % s` is true, where
+// `a` is the indexed column. The returned trigrams are sorted.
+//
+// A similarity filter `a % b` returns true if the ratio between the
+// cardinalities of the intersection and the union of trigrams of a and b is
+// greater than or equal to pg_trgm.similarity_threshold. Expressed as a formula
+// where T(a) and T(b) are the sets of trigrams of a and b, respectively:
+//
+// |T(a) ∩ T(b)|
+// -------------- >= pg_trgm.similarity_threshold
+// |T(a) ∪ T(b)|
+//
+// Observe that the denominator on the LHS is greater than or equal |T(b)|.
+// Therefore, the numerator, or the number of matching trigrams of a and b, must
+// be at least ⌈pg_trgm.similarity_threshold * |T(b)|⌉ for the expression to be
+// true.
+//
+// This realization allows us to reduce the number of trigrams scanned while
+// still guaranteeing that we scan at least one trigram for each row where the
+// similarity filter is true. The minimum number of trigrams to scan is:
+//
+// |T(b)| - (⌈pg_trgm.similarity_threshold * |T(b)|⌉ - 1)
+//
+// As a concrete example, consider the filter `a % 'xyz'` and
+// pg_trgm.similarity_threshold set to its default value of 0.3. The four
+// trigrams of "xyz" are "  x", " xy", "xyz", and "yz ". The minimum number of
+// matching trigrams of a and "xyz" required to satisfy the filter is 2=⌈0.3*4⌉.
+// If we scan 3=4-(2-1) trigrams of "xyz", then we are guaranteed to find
+// all rows that have at least 2 matching trigrams.
+//
+// Any of the trigrams can be discarded, as long as we include at least this
+// minimum number to scan. We prefer to discard trigrams with spaces because
+// they should always be more common than trigrams without spaces, e.g., all
+// words that start with "a" share the trigram "  a".
+func similarityTrigramsToScan(s string, similarityThreshold float64) []string {
+	if similarityThreshold == 0 {
+		// If the similarity threshold is 0, then all strings are similar, so
+		// all trigrams would need to be scanned. Return nil to avoid planning a
+		// constrained scan over the inverted index, since a full-table scan
+		// would be preferable.
+		return nil
+	}
+	if similarityThreshold < 0 || similarityThreshold > 1 {
+		panic(errors.AssertionFailedf(
+			"similarity threshold %f must be in the range [0, 1]", similarityThreshold,
+		))
+	}
+
+	trgms := trigram.MakeTrigrams(s, true /* pad */)
+	if len(trgms) == 0 {
+		// If there are no trigrams then the inverted index cannot be
+		// constrained, so return nil.
+		return nil
+	}
+
+	// Determine the minimum number of trigrams of s that need to match the
+	// trigrams of an arbitrary string in order to satisfy the similarity
+	// threshold.
+	minMatchingTrigrams := int(math.Ceil(similarityThreshold * float64(len(trgms))))
+	if minMatchingTrigrams < 1 {
+		// Ensure that minMatchingTrigrams is at least one.
+		minMatchingTrigrams = 1
+	}
+	if minMatchingTrigrams > len(trgms) {
+		// Ensure that minMatchingTrigrams is no more than the original number
+		// of trigrams.
+		minMatchingTrigrams = len(trgms)
+	}
+
+	// The minimum number of trigrams to scan is:
+	//
+	//   len(trgms) - (minMatchingTrigrams - 1)
+	//
+	// So we can remove:
+	//
+	//   len(trgms) - [len(trgms) - (minMatchingTrigrams - 1)]
+	//   => minMatchingTrigrams - 1
+	//
+	toRemove := minMatchingTrigrams - 1
+	switch toRemove {
+	case 0, 1, 2:
+		// Remove up to the first two trigrams which should always have leading
+		// spaces.
+		return trgms[toRemove:]
+
+	default:
+		// Remove the first two trigrams which should always have leading
+		// spaces.
+		trgms = trgms[2:]
+		toRemove -= 2
+
+		// Remove other trigrams containing spaces.
+		for i := 0; i < len(trgms) && toRemove > 0; {
+			if strings.ContainsRune(trgms[i], ' ') {
+				trgms[i] = trgms[len(trgms)-1]
+				trgms = trgms[:len(trgms)-1]
+				toRemove--
+				continue
+			}
+			i++
+		}
+
+		// If there are still trigrams to remove, remove trigrams as the end of
+		// the slice.
+		if toRemove > 0 {
+			trgms = trgms[:len(trgms)-toRemove]
+		}
+
+		// Sort the trigrams because they may have been re-ordered when trigrams
+		// with spaces were removed.
+		sort.Strings(trgms)
+
+		return trgms
+	}
 }
 
 // TryJoinInvertedIndex tries to create an inverted join with the given input
@@ -374,19 +631,45 @@ func evalInvertedExpr(
 	}
 }
 
-// constrainPrefixColumns attempts to build a constraint for the non-inverted
+// prefixCols returns a slice of ordering columns for each of the non-inverted
+// prefix of the index. It also returns a set of those columns that are NOT
+// NULL. If the index is a single-column inverted index, the function returns
+// nil ordering columns.
+func prefixCols(
+	tabID opt.TableID, index cat.Index,
+) (_ []opt.OrderingColumn, notNullCols opt.ColSet) {
+	prefixColumnCount := index.NonInvertedPrefixColumnCount()
+
+	// If this is a single-column inverted index, there are no prefix columns.
+	// constrain.
+	if prefixColumnCount == 0 {
+		return nil, opt.ColSet{}
+	}
+
+	prefixColumns := make([]opt.OrderingColumn, prefixColumnCount)
+	for i := range prefixColumns {
+		col := index.Column(i)
+		colID := tabID.ColumnID(col.Ordinal())
+		prefixColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+		if !col.IsNullable() {
+			notNullCols.Add(colID)
+		}
+	}
+	return prefixColumns, notNullCols
+}
+
+// constrainNonInvertedCols attempts to build a constraint for the non-inverted
 // prefix columns of the given index. If a constraint is successfully built, it
 // is returned along with remaining filters and ok=true. The function is only
 // successful if it can generate a constraint where all spans have the same
 // start and end keys for all non-inverted prefix columns. This is required for
 // building spans for scanning multi-column inverted indexes (see
 // span.Builder.SpansFromInvertedSpans).
-//
-// If the index is a single-column inverted index, there are no prefix columns
-// to constrain, and ok=true is returned.
-func constrainPrefixColumns(
+func constrainNonInvertedCols(
 	evalCtx *eval.Context,
 	factory *norm.Factory,
+	columns []opt.OrderingColumn,
+	notNullCols opt.ColSet,
 	filters memo.FiltersExpr,
 	optionalFilters memo.FiltersExpr,
 	tabID opt.TableID,
@@ -396,23 +679,6 @@ func constrainPrefixColumns(
 	tabMeta := factory.Metadata().TableMeta(tabID)
 	prefixColumnCount := index.NonInvertedPrefixColumnCount()
 	ps := tabMeta.IndexPartitionLocality(index.Ordinal())
-
-	// If this is a single-column inverted index, there are no prefix columns to
-	// constrain.
-	if prefixColumnCount == 0 {
-		return nil, filters, true
-	}
-
-	prefixColumns := make([]opt.OrderingColumn, prefixColumnCount)
-	var notNullCols opt.ColSet
-	for i := range prefixColumns {
-		col := index.Column(i)
-		colID := tabID.ColumnID(col.Ordinal())
-		prefixColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
-		if !col.IsNullable() {
-			notNullCols.Add(colID)
-		}
-	}
 
 	// Consolidation of a constraint converts contiguous spans into a single
 	// span. By definition, the consolidated span would have different start and
@@ -434,16 +700,15 @@ func constrainPrefixColumns(
 	var ic idxconstraint.Instance
 	ic.Init(
 		filters, optionalFilters,
-		prefixColumns, notNullCols, tabMeta.ComputedCols,
+		columns, notNullCols, tabMeta.ComputedCols,
 		tabMeta.ColsInComputedColsExpressions,
 		false, /* consolidate */
 		evalCtx, factory, ps, checkCancellation,
 	)
 	var c constraint.Constraint
 	ic.UnconsolidatedConstraint(&c)
-	if c.Prefix(evalCtx) < prefixColumnCount {
-		// If all of the constraint spans do not have the same start and end keys
-		// for all columns, the index cannot be used.
+	if c.Prefix(evalCtx) != prefixColumnCount {
+		// The prefix columns must be constrained to single values.
 		return nil, nil, false
 	}
 
