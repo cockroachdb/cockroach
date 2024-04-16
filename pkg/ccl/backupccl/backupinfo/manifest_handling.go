@@ -94,7 +94,7 @@ var WriteMetadataSST = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
-	util.ConstantWithMetamorphicTestBool("write-metadata-sst", false),
+	false,
 )
 
 // WriteMetadataWithExternalSSTsEnabled controls if we write a `BACKUP_METADATA`
