@@ -397,6 +397,9 @@ message LocalOnlySessionData {
   // internal errors due to incomplete functional dependencies, and also
   // fixes a bug that incorrectly truncated the provided ordering (see #113072).
   bool optimizer_use_provided_ordering_fix = 115;
+  // OptimizerUseImprovedZigzagJoinCosting, when true, indicates that the
+  // optimizer should use improved logic in the cost model for zigzag joins.
+  bool optimizer_use_improved_zigzag_join_costing = 128;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
