@@ -123,6 +123,7 @@ func (a *AggMetrics) MetricStruct() {}
 // sliMetrics holds all SLI related metrics aggregated into AggMetrics.
 type sliMetrics struct {
 	EmittedMessages             *aggmetric.Counter
+	EmittedResolvedMessages     *aggmetric.Counter
 	EmittedBatchSizes           *aggmetric.Histogram
 	FilteredMessages            *aggmetric.Counter
 	MessageSize                 *aggmetric.Histogram
@@ -273,7 +274,7 @@ func (m *sliMetrics) recordResolvedCallback() func() {
 	start := timeutil.Now()
 	return func() {
 		emitNanos := timeutil.Since(start).Nanoseconds()
-		m.EmittedMessages.Inc(1)
+		m.EmittedResolvedMessages.Inc(1)
 		m.BatchHistNanos.RecordValue(emitNanos)
 		m.EmittedBatchSizes.RecordValue(int64(1))
 	}
@@ -838,9 +839,10 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
+	emittedMessagesBuilder := aggmetric.MakeBuilder("scope", "message_type")
 	a := &AggMetrics{
 		ErrorRetries:    b.Counter(metaChangefeedErrorRetries),
-		EmittedMessages: b.Counter(metaChangefeedEmittedMessages),
+		EmittedMessages: emittedMessagesBuilder.Counter(metaChangefeedEmittedMessages),
 		EmittedBatchSizes: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedEmittedBatchSizes,
 			Duration:     histogramWindow,
@@ -961,7 +963,8 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 
 	sm := &sliMetrics{
-		EmittedMessages:             a.EmittedMessages.AddChild(scope),
+		EmittedMessages:             a.EmittedMessages.AddChild(scope, "row_update"),
+		EmittedResolvedMessages:     a.EmittedMessages.AddChild(scope, "resolved_timestamp"),
 		EmittedBatchSizes:           a.EmittedBatchSizes.AddChild(scope),
 		FilteredMessages:            a.FilteredMessages.AddChild(scope),
 		MessageSize:                 a.MessageSize.AddChild(scope),
