@@ -18,9 +18,9 @@ plan debug=true
 mixed-version test plan for upgrading from "v22.2.8" to "<current>" with mutators {concurrent_user_hooks_mutator}:
 ├── install fixtures for version "v22.2.8" (1) [stage=cluster-setup]
 ├── start cluster at version "v22.2.8" (2) [stage=cluster-setup]
-├── wait for nodes :1-4 to reach cluster version '22.2' (3) [stage=cluster-setup]
+├── wait for system tenant on nodes :1-4 to reach cluster version '22.2' (3) [stage=cluster-setup]
 └── upgrade cluster from "v22.2.8" to "<current>"
-   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (4) [stage=init]
+   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4) [stage=init]
    ├── upgrade nodes :1-4 from "v22.2.8" to "<current>"
    │   ├── restart node 3 with binary version <current> (5) [stage=temporary-upgrade]
    │   ├── restart node 2 with binary version <current> (6) [stage=temporary-upgrade]
@@ -46,4 +46,4 @@ mixed-version test plan for upgrading from "v22.2.8" to "<current>" with mutator
    │   │   └── testSingleStep, after 0s delay (21) [stage=last-upgrade]
    │   └── restart node 3 with binary version <current> (22) [stage=last-upgrade]
    ├── allow upgrade to happen by resetting `preserve_downgrade_option` (23) [stage=running-upgrade-migrations,finalizing]
-   └── wait for nodes :1-4 to reach cluster version <current> (24) [stage=running-upgrade-migrations,finalizing]
+   └── wait for system tenant on nodes :1-4 to reach cluster version <current> (24) [stage=running-upgrade-migrations,finalizing]
