@@ -83,6 +83,7 @@ func TestBuilder(t *testing.T) {
 				evalCtx.SessionData().OptimizerUseMultiColStats = true
 				evalCtx.SessionData().LocalityOptimizedSearch = true
 				evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = true
+				evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
 
 				var o xform.Optimizer
 				o.Init(ctx, &evalCtx, catalog)
