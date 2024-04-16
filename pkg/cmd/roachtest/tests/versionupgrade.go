@@ -117,9 +117,9 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.OnStartup(
 		"setup schema changer workload",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			node := h.RandomNode(rng, c.All())
+			node := c.All().SeededRandNode(rng)[0]
 			workloadPath, _, err := clusterupgrade.UploadWorkload(
-				ctx, t, l, c, c.Node(node), h.Context.ToVersion,
+				ctx, t, l, c, c.Node(node), h.Context().ToVersion,
 			)
 			if err != nil {
 				return errors.Wrap(err, "uploading workload binary")
@@ -155,12 +155,12 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			randomNode := h.RandomNode(rng, c.All())
+			randomNode := c.All().SeededRandNode(rng)[0]
 			// The schemachange workload is designed to work up to one
 			// version back. Therefore, we upload a compatible `workload`
 			// binary to `randomNode`, where the workload will run.
 			workloadPath, uploaded, err := clusterupgrade.UploadWorkload(
-				ctx, t, l, c, c.Node(randomNode), h.Context.ToVersion,
+				ctx, t, l, c, c.Node(randomNode), h.Context().ToVersion,
 			)
 			if err != nil {
 				return errors.Wrap(err, "uploading workload binary")
