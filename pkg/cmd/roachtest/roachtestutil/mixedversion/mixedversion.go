@@ -479,7 +479,7 @@ func (t *Test) InMixedVersion(desc string, fn stepFunc) {
 	predicate := func(testContext Context) bool {
 		// If the cluster is finalizing an upgrade, run this hook
 		// according to the probability defined in the package.
-		if testContext.Finalizing {
+		if testContext.Finalizing() {
 			return t.prng.Float64() < runWhileMigratingProbability
 		}
 
@@ -487,8 +487,8 @@ func (t *Test) InMixedVersion(desc string, fn stepFunc) {
 		// once while upgrading from one version to another. The number of
 		// nodes we wait to be running the new version is determined when
 		// the version changes for the first time.
-		if testContext.Stage != prevUpgradeStage {
-			prevUpgradeStage = testContext.Stage
+		if testContext.DefaultService().Stage != prevUpgradeStage {
+			prevUpgradeStage = testContext.DefaultService().Stage
 			numUpgradedNodes = t.prng.Intn(len(t.crdbNodes)) + 1
 		}
 
@@ -608,7 +608,7 @@ func (t *Test) plan() (*TestPlan, error) {
 	initialRelease := previousReleases[0]
 	planner := testPlanner{
 		versions:       append(previousReleases, clusterupgrade.CurrentVersion()),
-		currentContext: newInitialContext(initialRelease, t.crdbNodes),
+		currentContext: newInitialContext(initialRelease, t.crdbNodes, nil /* tenant */),
 		options:        t.options,
 		rt:             t.rt,
 		isLocal:        t.isLocal(),
@@ -853,7 +853,7 @@ func (th *testHooks) StartupSteps(testContext *Context, rng *rand.Rand, isLocal 
 func (th *testHooks) BackgroundSteps(
 	testContext *Context, stopChans []shouldStop, rng *rand.Rand, isLocal bool,
 ) []testStep {
-	testContext.Stage = BackgroundStage
+	testContext.SetStage(BackgroundStage)
 	return th.background.AsSteps(backgroundLabel, rng, testContext, stopChans, isLocal)
 }
 

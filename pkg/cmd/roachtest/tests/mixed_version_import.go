@@ -48,7 +48,7 @@ func runImportMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster,
 		if err := h.Exec(r, "DROP DATABASE IF EXISTS tpcc CASCADE;"); err != nil {
 			return err
 		}
-		node := h.RandomNode(r, c.All())
+		node := c.All().SeededRandNode(r)[0]
 		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, "", warehouses) + fmt.Sprintf(" {pgurl%s}", c.Node(node))
 		l.Printf("executing %q on node %d", cmd, node)
 		return c.RunE(ctx, option.WithNodes(c.Node(node)), cmd)

@@ -74,8 +74,10 @@ func TestClusterSettingMutator(t *testing.T) {
 
 		var nodesInValidVersion option.NodeListOption
 		stepContext := m.reference.context
-		for _, node := range stepContext.CockroachNodes {
-			if stepContext.NodeVersion(node).AtLeast(minVersion) {
+		for _, node := range stepContext.System.Descriptor.Nodes {
+			nodeV, err := stepContext.NodeVersion(node)
+			require.NoError(t, err)
+			if nodeV.AtLeast(minVersion) {
 				nodesInValidVersion = append(nodesInValidVersion, node)
 			}
 		}
