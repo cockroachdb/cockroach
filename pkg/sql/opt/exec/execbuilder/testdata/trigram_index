@@ -149,14 +149,13 @@ vectorized: true
 └── • index join
     │ table: a@a_pkey
     │
-    └── • inverted filter
-        │ inverted column: b_inverted_key
-        │ num spans: 4
+    └── • distinct
+        │ distinct on: a
         │
         └── • scan
               missing stats
               table: a@a_b_idx
-              spans: 4 spans
+              spans: [/'\x1220666f0001' - /'\x1220666f0001'] [/'\x12666f6f0001' - /'\x12666f6f0001'] [/'\x126f6f200001' - /'\x126f6f200001']
 
 # Test that trigram indexes accelerate the % operator with an OR if the
 # constant has more than one trigram.
@@ -172,14 +171,13 @@ vectorized: true
 └── • index join
     │ table: a@a_pkey
     │
-    └── • inverted filter
-        │ inverted column: b_inverted_key
-        │ num spans: 5
+    └── • distinct
+        │ distinct on: a
         │
         └── • scan
               missing stats
               table: a@a_b_idx
-              spans: 5 spans
+              spans: [/'\x1220666f0001' - /'\x1220666f0001'] [/'\x12666f6f0001' - /'\x12666f6f0001'] [/'\x126f62200001' - /'\x126f62200001'] [/'\x126f6f620001' - /'\x126f6f620001']
 
 # Test that trigram indexes can accelerate the % operator if there are fewer
 # than 3 characters in the constant by using padded trigrams.
@@ -195,14 +193,13 @@ vectorized: true
 └── • index join
     │ table: a@a_pkey
     │
-    └── • inverted filter
-        │ inverted column: b_inverted_key
-        │ num spans: 3
+    └── • distinct
+        │ distinct on: a
         │
         └── • scan
               missing stats
               table: a@a_b_idx
-              spans: 3 spans
+              spans: [/'\x122020660001' - /'\x122020660001'] [/'\x1220666f0001' - /'\x1220666f0001'] [/'\x12666f200001' - /'\x12666f200001']
 
 # Test that trigram indexes can accelerate the % operator in reverse order.
 query T
@@ -217,14 +214,13 @@ vectorized: true
 └── • index join
     │ table: a@a_pkey
     │
-    └── • inverted filter
-        │ inverted column: b_inverted_key
-        │ num spans: 5
+    └── • distinct
+        │ distinct on: a
         │
         └── • scan
               missing stats
               table: a@a_b_idx
-              spans: 5 spans
+              spans: [/'\x1220626c0001' - /'\x1220626c0001'] [/'\x126168200001' - /'\x126168200001'] [/'\x12626c610001' - /'\x12626c610001'] [/'\x126c61680001' - /'\x126c61680001']
 
 # Test that trigram indexes can't accelerate the % operator with no constant
 # columns.
@@ -301,14 +297,13 @@ vectorized: true
 └── • index join
     │ table: b@b_pkey
     │
-    └── • inverted filter
-        │ inverted column: a_inverted_key
-        │ num spans: 5
+    └── • distinct
+        │ distinct on: rowid
         │
         └── • scan
               missing stats
               table: b@b_a_idx
-              spans: 5 spans
+              spans: [/'\x1220666f0001' - /'\x1220666f0001'] [/'\x12666f6f0001' - /'\x12666f6f0001'] [/'\x126f62200001' - /'\x126f62200001'] [/'\x126f6f620001' - /'\x126f6f620001']
 
 # Regression test for #88925.
 statement ok
