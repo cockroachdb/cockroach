@@ -397,6 +397,10 @@ message LocalOnlySessionData {
   // internal errors due to incomplete functional dependencies, and also
   // fixes a bug that incorrectly truncated the provided ordering (see #113072).
   bool optimizer_use_provided_ordering_fix = 115;
+  // OptimizerUseImprovedDistinctOnLimitHintCosting indicates whether the
+  // optimizer should use an improved costing estimate for DistinctOn operators
+  // with limit hints.
+  bool optimizer_use_improved_distinct_on_limit_hint_costing = 126;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

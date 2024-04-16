@@ -379,6 +379,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseProvidedOrderingFix = false
 	notStale()
 
+	// Stale optimizer_use_distinct_on_limit_hint_costing.
+	evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
