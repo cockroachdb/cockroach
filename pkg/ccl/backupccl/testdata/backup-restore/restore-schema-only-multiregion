@@ -60,13 +60,13 @@ exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database_backup/' with schema_only;
 ----
 pq: detected a mismatch in regions between the restore cluster and the backup cluster, missing regions detected: us-east-1, us-west-1.
-HINT: there are two ways you can resolve this issue: 1) update the cluster to which you're restoring to ensure that the regions present on the nodes' --locality flags match those present in the backup image, or 2) restore with the "skip_localities_check" option
+HINT: there are two ways you can resolve this issue: 1) update the cluster to which you're restoring to ensure that the regions present on the nodes' --locality flags match those present in the backup image, or 2) restore with the "skip_localities_check" or the "remove_regions" option
 
 exec-sql
 RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/' with schema_only;
 ----
 pq: detected a mismatch in regions between the restore cluster and the backup cluster, missing regions detected: us-east-1, us-west-1.
-HINT: there are two ways you can resolve this issue: 1) update the cluster to which you're restoring to ensure that the regions present on the nodes' --locality flags match those present in the backup image, or 2) restore with the "skip_localities_check" option
+HINT: there are two ways you can resolve this issue: 1) update the cluster to which you're restoring to ensure that the regions present on the nodes' --locality flags match those present in the backup image, or 2) restore with the "skip_localities_check" or the "remove_regions" option
 
 # Create a database with no regions to check default primary regions.
 exec-sql

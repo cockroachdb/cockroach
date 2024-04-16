@@ -78,6 +78,7 @@ const (
 	restoreOptSkipMissingSequenceOwners = "skip_missing_sequence_owners"
 	restoreOptSkipMissingViews          = "skip_missing_views"
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
+	restoreOptRemoveRegions = "remove_regions"
 	restoreOptDebugPauseOn              = "debug_pause_on"
 	restoreOptAsTenant                  = "virtual_cluster_name"
 	restoreOptForceTenantID             = "virtual_cluster"
@@ -1619,10 +1620,10 @@ func checkClusterRegions(
 		sort.Strings(missingRegions)
 		mismatchErr := errors.Newf("detected a mismatch in regions between the restore cluster and the backup cluster, "+
 			"missing regions detected: %s.", strings.Join(missingRegions, ", "))
-		hintsMsg := fmt.Sprintf("there are two ways you can resolve this issue: "+
+		hintsMsg := fmt.Sprintf("there are three ways you can resolve this issue: "+
 			"1) update the cluster to which you're restoring to ensure that the regions present on the nodes' "+
-			"--locality flags match those present in the backup image, or "+
-			"2) restore with the %q option", restoreOptSkipLocalitiesCheck)
+			"--locality flags match those present in the backup image, "+
+			"2) restore with the %q or the %q option", restoreOptSkipLocalitiesCheck,restoreOptRemoveRegions)
 		return errors.WithHint(mismatchErr, hintsMsg)
 	}
 
