@@ -737,6 +737,7 @@ func init() {
 		f := drainNodeCmd.Flags()
 		cliflagcfg.DurationFlag(f, &drainCtx.drainWait, cliflags.DrainWait)
 		cliflagcfg.BoolFlag(f, &drainCtx.nodeDrainSelf, cliflags.NodeDrainSelf)
+		cliflagcfg.BoolFlag(f, &drainCtx.shutdown, cliflags.NodeDrainShutdown)
 	}
 
 	// Commands that establish a SQL connection.

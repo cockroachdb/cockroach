@@ -1352,7 +1352,12 @@ status, without actually decommissioning the node.`,
 	NodeDrainSelf = FlagInfo{
 		Name: "self",
 		Description: `Use the node ID of the node connected to via --host
-as target of the drain or quit command.`,
+as target of the drain command.`,
+	}
+
+	NodeDrainShutdown = FlagInfo{
+		Name:        "shutdown",
+		Description: `Shutdown the target node after it is drained.`,
 	}
 
 	SQLFmtLen = FlagInfo{
