@@ -578,6 +578,8 @@ var drainCtx struct {
 	// nodeDrainSelf indicates that the command should target
 	// the node we're connected to (this is the default behavior).
 	nodeDrainSelf bool
+	// shutdown is true if the node should be shutdown after draining.
+	shutdown bool
 }
 
 // setDrainContextDefaults set the default values in drainCtx.  This
@@ -586,6 +588,7 @@ var drainCtx struct {
 func setDrainContextDefaults() {
 	drainCtx.drainWait = 10 * time.Minute
 	drainCtx.nodeDrainSelf = false
+	drainCtx.shutdown = false
 }
 
 // nodeCtx captures the command-line parameters of the `node` command.
