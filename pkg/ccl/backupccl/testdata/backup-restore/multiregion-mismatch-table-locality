@@ -1,0 +1,101 @@
+# disabled to run within tenant for simplicity.
+new-cluster name=s1 allow-implicit-access disable-tenant localities=us-east-1
+----
+
+exec-sql
+CREATE DATABASE d PRIMARY REGION "us-east-1";
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
+----
+us-east-1
+
+query-sql
+SHOW DATABASES;
+----
+d root us-east-1  {us-east-1} zone
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
+
+# make our table regional by row
+exec-sql
+ALTER TABLE d.t SET LOCALITY REGIONAL BY ROW;
+----
+NOTICE: LOCALITY changes will be finalized asynchronously; further schema changes on this table may be restricted until the job completes
+
+query-sql
+SELECT crdb_region FROM d.t;
+----
+us-east-1
+us-east-1
+us-east-1
+
+exec-sql
+USE defaultdb
+----
+
+# backup db, table, and cluster with regional by row table
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/rbr_database_backup/';
+----
+
+exec-sql
+BACKUP TABLE d.t INTO 'nodelocal://1/rbr_table_backup/';
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/rbr_cluster_backup/';
+----
+
+
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access localities=us-west-1
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/rbr_cluster_backup/' with skip_localities_check;
+----
+
+
+query-sql
+SHOW DATABASES;
+----
+d root us-east-1  {us-east-1} zone
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
+
+
+query-sql
+SELECT count(*) FROM d.t;
+----
+3
+
+# Note that inserting into a rbr table requires connecting to the mr db
+exec-sql
+INSERT INTO d.t VALUES (4)
+----
+pq: default_to_database_primary_region(): current database defaultdb is not multi-region enabled
+
+exec-sql
+USE d;
+----
+
+exec-sql
+INSERT INTO d.t VALUES (4)
+----
+
+exec-sql
+CREATE DATABASE d3;
+----
+
+# Restoring an rbr table into a non-mr database should fail.
+exec-sql
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/rbr_table_backup/' with skip_localities_check, into_db='d3';
+----
+pq: cannot restore descriptor for multi-region table t into non-multi-region database d3
