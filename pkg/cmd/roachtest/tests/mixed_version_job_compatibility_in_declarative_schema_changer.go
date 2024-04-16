@@ -72,20 +72,20 @@ func executeSupportedDDLs(
 	r *rand.Rand,
 	testingUpgradedNodes bool,
 ) error {
-	nodes := option.NodeListOption{helper.RandomNode(r, c.All())}
+	nodes := c.All().SeededRandNode(r)
 	// We are not always guaranteed to be in a mixed-version binary state.
 	// If we are, update the set of nodes; otherwise, we will choose a random
 	// node.
-	if helper.Context.MixedBinary() {
+	if helper.Context().MixedBinary() {
 		if testingUpgradedNodes {
 			// In this case, we test that older nodes are able to adopt desc. jobs from newer nodes.
-			nodes = helper.Context.NodesInNextVersion() // N.B. this is the set of upgradedNodes.
+			nodes = helper.Context().NodesInNextVersion() // N.B. this is the set of upgradedNodes.
 		} else {
 			// In this case, we test that newer nodes are able to adopt desc. jobs from older nodes.
-			nodes = helper.Context.NodesInPreviousVersion() // N.B. this is the set of oldNodes.
+			nodes = helper.Context().NodesInPreviousVersion() // N.B. this is the set of oldNodes.
 		}
 	}
-	testUtils, err := newCommonTestUtils(ctx, t, c, helper.Context.CockroachNodes, false, false)
+	testUtils, err := newCommonTestUtils(ctx, t, c, helper.DefaultService().Descriptor.Nodes, false, false)
 	defer testUtils.CloseConnections()
 	if err != nil {
 		return err

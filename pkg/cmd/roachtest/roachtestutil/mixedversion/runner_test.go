@@ -84,5 +84,5 @@ func (tss *testSingleStep) Run(_ context.Context, _ *logger.Logger, _ *rand.Rand
 
 func newTestStep(f func() error) *singleStep {
 	initialVersion := parseVersions([]string{predecessorVersion})[0]
-	return newSingleStep(newInitialContext(initialVersion, nodes), &testSingleStep{runFunc: f}, newRand())
+	return newSingleStep(newInitialContext(initialVersion, nodes, nil), &testSingleStep{runFunc: f}, newRand())
 }
