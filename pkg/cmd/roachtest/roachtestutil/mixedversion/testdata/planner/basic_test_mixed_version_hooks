@@ -26,7 +26,7 @@ plan
 mixed-version test plan for upgrading from "v22.2.8" to "<current>":
 ├── install fixtures for version "v22.2.8" (1)
 ├── start cluster at version "v22.2.8" (2)
-├── wait for nodes :1-4 to reach cluster version '22.2' (3)
+├── wait for system tenant on nodes :1-4 to reach cluster version '22.2' (3)
 ├── run startup hooks concurrently
 │   ├── run "initialize bank workload", after 0s delay (4)
 │   └── run "initialize rand workload", after 3m0s delay (5)
@@ -35,7 +35,7 @@ mixed-version test plan for upgrading from "v22.2.8" to "<current>":
 │   ├── run "rand workload", after 0s delay (7)
 │   └── run "csv server", after 0s delay (8)
 └── upgrade cluster from "v22.2.8" to "<current>"
-   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (9)
+   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (9)
    ├── upgrade nodes :1-4 from "v22.2.8" to "<current>"
    │   ├── restart node 2 with binary version <current> (10)
    │   ├── run mixed-version hooks concurrently
@@ -63,4 +63,4 @@ mixed-version test plan for upgrading from "v22.2.8" to "<current>":
    ├── run mixed-version hooks concurrently
    │   ├── run "mixed-version 1", after 30s delay (29)
    │   └── run "mixed-version 2", after 5s delay (30)
-   └── wait for nodes :1-4 to reach cluster version <current> (31)
+   └── wait for system tenant on nodes :1-4 to reach cluster version <current> (31)

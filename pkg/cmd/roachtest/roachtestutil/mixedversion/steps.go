@@ -80,41 +80,49 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *H
 // the cluster and equal to the binary version of the first node in
 // the `nodes` field.
 type waitForStableClusterVersionStep struct {
-	nodes          option.NodeListOption
-	desiredVersion string
-	timeout        time.Duration
+	nodes              option.NodeListOption
+	desiredVersion     string
+	timeout            time.Duration
+	virtualClusterName string
 }
 
 func (s waitForStableClusterVersionStep) Background() shouldStop { return nil }
 
 func (s waitForStableClusterVersionStep) Description() string {
 	return fmt.Sprintf(
-		"wait for nodes %v to reach cluster version %s",
-		s.nodes, s.desiredVersion,
+		"wait for %s tenant on nodes %v to reach cluster version %s",
+		s.virtualClusterName, s.nodes, s.desiredVersion,
 	)
 }
 
 func (s waitForStableClusterVersionStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	return clusterupgrade.WaitForClusterUpgrade(ctx, l, s.nodes, h.Connect, s.timeout)
+	return clusterupgrade.WaitForClusterUpgrade(
+		ctx, l, s.nodes, serviceByName(h, s.virtualClusterName).Connect, s.timeout,
+	)
 }
 
 // preserveDowngradeOptionStep sets the `preserve_downgrade_option`
 // cluster setting to the binary version running in a random node in
 // the cluster.
-type preserveDowngradeOptionStep struct{}
+type preserveDowngradeOptionStep struct {
+	virtualClusterName string
+}
 
 func (s preserveDowngradeOptionStep) Background() shouldStop { return nil }
 
 func (s preserveDowngradeOptionStep) Description() string {
-	return "prevent auto-upgrades by setting `preserve_downgrade_option`"
+	return fmt.Sprintf(
+		"prevent auto-upgrades on %s tenant by setting `preserve_downgrade_option`",
+		s.virtualClusterName,
+	)
 }
 
 func (s preserveDowngradeOptionStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	node, db := h.RandomDB(rng, h.runner.crdbNodes)
+	node, db := serviceByName(h, s.virtualClusterName).RandomDB(rng)
 	l.Printf("checking binary version (via node %d)", node)
 	bv, err := clusterupgrade.BinaryVersion(db)
 	if err != nil {
@@ -216,15 +224,19 @@ func (s runHookStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand, 
 
 // setClusterSettingStep sets the cluster setting `name` to `value`.
 type setClusterSettingStep struct {
-	minVersion *clusterupgrade.Version
-	name       string
-	value      interface{}
+	minVersion         *clusterupgrade.Version
+	name               string
+	value              interface{}
+	virtualClusterName string
 }
 
 func (s setClusterSettingStep) Background() shouldStop { return nil }
 
 func (s setClusterSettingStep) Description() string {
-	return fmt.Sprintf("set cluster setting %q to %v", s.name, s.value)
+	return fmt.Sprintf(
+		"set cluster setting %q to %v on %s tenant",
+		s.name, s.value, s.virtualClusterName,
+	)
 }
 
 func (s setClusterSettingStep) Run(
@@ -249,43 +261,59 @@ func (s setClusterSettingStep) Run(
 		args = []interface{}{val}
 	}
 
-	return h.ExecWithGateway(rng, nodesRunningAtLeast(s.minVersion, h), stmt, args...)
+	return serviceByName(h, s.virtualClusterName).ExecWithGateway(
+		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt, args...,
+	)
 }
 
 // resetClusterSetting resets cluster setting `name`.
 type resetClusterSettingStep struct {
-	minVersion *clusterupgrade.Version
-	name       string
+	minVersion         *clusterupgrade.Version
+	name               string
+	virtualClusterName string
 }
 
 func (s resetClusterSettingStep) Background() shouldStop { return nil }
 
 func (s resetClusterSettingStep) Description() string {
-	return fmt.Sprintf("reset cluster setting %q", s.name)
+	return fmt.Sprintf("reset cluster setting %q on %s tenant", s.name, s.virtualClusterName)
 }
 
 func (s resetClusterSettingStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
 	stmt := fmt.Sprintf("RESET CLUSTER SETTING %s", s.name)
-	return h.ExecWithGateway(rng, nodesRunningAtLeast(s.minVersion, h), stmt)
+	return h.ExecWithGateway(rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt)
 }
 
-// nodesRunningAtLeast returns a list of nodes running a version that
-// is guaranteed to be at least `minVersion`. It assumes that the
-// caller made sure that there *is* one such node.
-func nodesRunningAtLeast(minVersion *clusterupgrade.Version, h *Helper) option.NodeListOption {
+// nodesRunningAtLeast returns a list of nodes running a system or
+// tenant virtual cluster in a version that is guaranteed to be at
+// least `minVersion`. It assumes that the caller made sure that there
+// *is* one such node.
+func nodesRunningAtLeast(
+	virtualClusterName string, minVersion *clusterupgrade.Version, h *Helper,
+) option.NodeListOption {
+	service := serviceByName(h, virtualClusterName)
+
 	// If we don't have a minimum version set, or if we are upgrading
 	// from a version that is at least `minVersion`, then every node is
 	// valid.
-	if minVersion == nil || h.Context.FromVersion.AtLeast(minVersion) {
-		return h.Context.CockroachNodes
+	if minVersion == nil || service.FromVersion.AtLeast(minVersion) {
+		return service.Descriptor.Nodes
 	}
 
 	// This case should correspond to the scenario where are upgrading
 	// from a release in the same series as `minVersion`. The valid
 	// nodes should be those that are running the next version.
-	return h.Context.NodesInNextVersion()
+	return service.NodesInNextVersion()
+}
+
+func serviceByName(h *Helper, virtualClusterName string) *Service {
+	if virtualClusterName == install.SystemInterfaceName {
+		return h.System
+	}
+
+	return h.Tenant
 }
 
 // startOpts returns the start options used when starting (or

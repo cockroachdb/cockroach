@@ -66,24 +66,26 @@ func Test_runSingleStep(t *testing.T) {
 // appropriately change ownership to Test Eng when no user provided
 // functions have run at the time the failure happened.
 func Test_run(t *testing.T) {
-	var numHooks int
-	hookStep := func(retErr error) *singleStep {
-		numHooks++
-
+	hookStep := func(name string, retErr error) *singleStep {
 		step := runHookStep{
 			hook: versionUpgradeHook{
-				name: fmt.Sprintf("hook %d", numHooks),
+				name: fmt.Sprintf("hook %s", name),
 				fn: func(_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper) error {
 					return retErr
 				},
 			},
 		}
 
-		return &singleStep{impl: step}
+		initialVersion := parseVersions([]string{predecessorVersion})[0]
+		return newSingleStep(
+			newInitialContext(initialVersion, nodes, nil),
+			step,
+			newRand(),
+		)
 	}
 
-	successfulHook := func() *singleStep { return hookStep(nil) }
-	buggyHook := func() *singleStep { return hookStep(errors.New("oops")) }
+	successfulHook := func() *singleStep { return hookStep("success", nil) }
+	buggyHook := func() *singleStep { return hookStep("buggy", errors.New("oops")) }
 
 	testCases := []struct {
 		name                  string
@@ -164,7 +166,7 @@ type testSingleStep struct {
 	runFunc func() error
 }
 
-func (*testSingleStep) Description() string    { return "testSingleStep" }
+func (s *testSingleStep) Description() string  { return "testSingleStep" }
 func (*testSingleStep) Background() shouldStop { return nil }
 
 func (tss *testSingleStep) Run(_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper) error {
@@ -173,5 +175,9 @@ func (tss *testSingleStep) Run(_ context.Context, _ *logger.Logger, _ *rand.Rand
 
 func newTestStep(f func() error) *singleStep {
 	initialVersion := parseVersions([]string{predecessorVersion})[0]
-	return newSingleStep(newInitialContext(initialVersion, nodes), &testSingleStep{runFunc: f}, newRand())
+	return newSingleStep(
+		newInitialContext(initialVersion, nodes, nil),
+		&testSingleStep{runFunc: f},
+		newRand(),
+	)
 }

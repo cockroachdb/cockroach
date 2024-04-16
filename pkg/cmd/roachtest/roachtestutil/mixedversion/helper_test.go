@@ -74,9 +74,9 @@ func TestClusterVersionAtLeast(t *testing.T) {
 			var clusterVersions atomic.Value
 			clusterVersions.Store([]roachpb.Version{currentVersion})
 			runner := testTestRunner()
-			runner.clusterVersions = clusterVersions
+			runner.clusterVersions = &clusterVersions
 
-			h := runner.newHelper(ctx, nilLogger, Context{Finalizing: false})
+			h := runner.newHelper(ctx, nilLogger, Context{System: &ServiceContext{Finalizing: false}})
 
 			supportedFeature, err := h.ClusterVersionAtLeast(rng, tc.minVersion)
 			if tc.expectedErr == "" {
