@@ -732,6 +732,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 	h.evalCtx.SessionData().VariableInequalityLookupJoinEnabled = true
 	h.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = true
 	h.evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization = true
+	h.evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = true
 
 	// Set up the test catalog.
 	h.testCat = testcat.New()
