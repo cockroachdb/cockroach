@@ -465,6 +465,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptSplitScanLimit = 0
 	notStale()
 
+	// Stale optimizer_use_improved_zigzag_join_costing.
+	evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)

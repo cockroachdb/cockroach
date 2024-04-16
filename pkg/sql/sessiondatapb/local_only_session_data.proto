@@ -501,6 +501,9 @@ message LocalOnlySessionData {
   // optimizer should use an improved costing estimate for DistinctOn operators
   // with limit hints.
   bool optimizer_use_improved_distinct_on_limit_hint_costing = 126;
+  // OptimizerUseImprovedZigzagJoinCosting, when true, indicates that the
+  // optimizer should use improved logic in the cost model for zigzag joins.
+  bool optimizer_use_improved_zigzag_join_costing = 127;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

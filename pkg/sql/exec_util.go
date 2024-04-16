@@ -3757,6 +3757,10 @@ func (m *sessionDataMutator) SetOptimizerUseImprovedDistinctOnLimitHintCosting(v
 	m.data.OptimizerUseImprovedDistinctOnLimitHintCosting = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseImprovedZigzagJoinCosting(val bool) {
+	m.data.OptimizerUseImprovedZigzagJoinCosting = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
