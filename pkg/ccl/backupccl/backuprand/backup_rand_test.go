@@ -44,6 +44,7 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
+	skip.WithIssue(t, 122341, "flaky test")
 	rng, _ := randutil.NewPseudoRand()
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
