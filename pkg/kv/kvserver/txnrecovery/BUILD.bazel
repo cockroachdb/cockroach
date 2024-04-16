@@ -29,7 +29,9 @@ go_test(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
+        "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
