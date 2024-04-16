@@ -2573,6 +2573,7 @@ limit
  ├── distinct-on
  │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
  │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
  │    ├── stats: [rows=1.9995]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
@@ -2582,28 +2583,33 @@ limit
  │    │    ├── left columns: k:7(int) a:8(string) b:9(string) c:10(string)
  │    │    ├── right columns: k:13(int) a:14(string) b:15(string) c:16(string)
  │    │    ├── stats: [rows=2]
+ │    │    ├── ordering: +1
  │    │    ├── index-join disjunction
  │    │    │    ├── columns: k:7(int!null) a:8(string!null) b:9(string) c:10(string)
  │    │    │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
  │    │    │    ├── key: (7)
  │    │    │    ├── fd: ()-->(8), (7)-->(9,10)
+ │    │    │    ├── ordering: +7 opt(8) [actual: +7]
  │    │    │    └── scan disjunction@a_idx
  │    │    │         ├── columns: k:7(int!null) a:8(string!null)
  │    │    │         ├── constraint: /8/7: [/'foo' - /'foo']
  │    │    │         ├── stats: [rows=1, distinct(8)=1, null(8)=0]
  │    │    │         ├── key: (7)
- │    │    │         └── fd: ()-->(8)
+ │    │    │         ├── fd: ()-->(8)
+ │    │    │         └── ordering: +7 opt(8) [actual: +7]
  │    │    └── index-join disjunction
  │    │         ├── columns: k:13(int!null) a:14(string) b:15(string!null) c:16(string)
  │    │         ├── stats: [rows=1, distinct(15)=1, null(15)=0]
  │    │         ├── key: (13)
  │    │         ├── fd: ()-->(15), (13)-->(14,16)
+ │    │         ├── ordering: +13 opt(15) [actual: +13]
  │    │         └── scan disjunction@b_idx
  │    │              ├── columns: k:13(int!null) b:15(string!null)
  │    │              ├── constraint: /15/13: [/'foo' - /'foo']
  │    │              ├── stats: [rows=1, distinct(15)=1, null(15)=0]
  │    │              ├── key: (13)
- │    │              └── fd: ()-->(15)
+ │    │              ├── fd: ()-->(15)
+ │    │              └── ordering: +13 opt(15) [actual: +13]
  │    └── aggregations
  │         ├── const-agg [as=a:2, type=string, outer=(2)]
  │         │    └── a:2 [type=string]
@@ -2626,6 +2632,7 @@ limit
  ├── distinct-on
  │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
  │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
  │    ├── stats: [rows=2.998501]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
@@ -2635,24 +2642,27 @@ limit
  │    │    ├── left columns: k:7(int) a:8(string) b:9(string) c:10(string)
  │    │    ├── right columns: k:13(int) a:14(string) b:15(string) c:16(string)
  │    │    ├── stats: [rows=2.999501]
+ │    │    ├── ordering: +1
  │    │    ├── index-join disjunction
  │    │    │    ├── columns: k:7(int!null) a:8(string!null) b:9(string) c:10(string)
  │    │    │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
  │    │    │    ├── key: (7)
  │    │    │    ├── fd: ()-->(8), (7)-->(9,10)
+ │    │    │    ├── ordering: +7 opt(8) [actual: +7]
  │    │    │    └── scan disjunction@a_idx
  │    │    │         ├── columns: k:7(int!null) a:8(string!null)
  │    │    │         ├── constraint: /8/7: [/'foo' - /'foo']
  │    │    │         ├── stats: [rows=1, distinct(8)=1, null(8)=0]
  │    │    │         ├── key: (7)
- │    │    │         └── fd: ()-->(8)
+ │    │    │         ├── fd: ()-->(8)
+ │    │    │         └── ordering: +7 opt(8) [actual: +7]
  │    │    └── distinct-on
  │    │         ├── columns: k:13(int!null) a:14(string) b:15(string) c:16(string)
  │    │         ├── grouping columns: k:13(int!null)
- │    │         ├── internal-ordering: +13
  │    │         ├── stats: [rows=1.9995]
  │    │         ├── key: (13)
  │    │         ├── fd: (13)-->(14-16)
+ │    │         ├── ordering: +13
  │    │         ├── union-all
  │    │         │    ├── columns: k:13(int!null) a:14(string) b:15(string) c:16(string)
  │    │         │    ├── left columns: k:19(int) a:20(string) b:21(string) c:22(string)
