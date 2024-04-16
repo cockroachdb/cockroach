@@ -378,7 +378,7 @@ ORDER BY created
 __auto__      {b}  1988-08-05 00:00:00 +0000 UTC  9  9  0  1
 __auto__      {b}  1988-08-06 00:00:00 +0000 UTC  6  6  0  1
 __auto__      {b}  1988-08-07 00:00:00 +0000 UTC  3  3  0  1
-__forecast__  {b}  1988-08-08 00:00:00 +0000 UTC  0  0  0  1
+__forecast__  {b}  1988-08-08 00:00:00 +0000 UTC  1  1  0  1
 
 query T
 SELECT jsonb_pretty(stat)
@@ -394,12 +394,32 @@ WHERE stat->>'name' = '__forecast__'
         "b"
     ],
     "created_at": "1988-08-08 00:00:00",
-    "distinct_count": 0,
+    "distinct_count": 1,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 0,
+            "num_range": 0,
+            "upper_bound": "-1"
+        },
+        {
+            "distinct_range": 0,
+            "num_eq": 1,
+            "num_range": 0,
+            "upper_bound": "0"
+        },
+        {
+            "distinct_range": 0,
+            "num_eq": 0,
+            "num_range": 0,
+            "upper_bound": "1"
+        }
+    ],
     "histo_col_type": "INT8",
     "histo_version": 3,
     "name": "__forecast__",
     "null_count": 0,
-    "row_count": 0
+    "row_count": 1
 }
 
 query T
@@ -421,7 +441,8 @@ scan s
  ├── constraint: /1: [/0 - /99]
  ├── cardinality: [0 - 100]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0]
- │   histogram(1)=
+ │   histogram(1)=  0  1  0  0
+ │                <--- 0 --- 1
  ├── cost: 14.02
  ├── key: (1)
  └── distribution: test
@@ -1056,7 +1077,8 @@ scan s
  ├── columns: b:1
  ├── constraint: /1: [ - /2]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0]
- │   histogram(1)=
+ │   histogram(1)=  0  1  0  0
+ │                <--- 0 --- 1
  ├── cost: 19.03
  ├── key: (1)
  └── distribution: test
@@ -1849,6 +1871,501 @@ vectorized: true
   estimated row count: 3,000 (100% of the table; stats collected <hidden> ago)
   table: t_103958@t_103958_pkey
   spans: FULL SCAN
+
+# Test for issue #119967: check that we don't prematurely estimate 0 rows from a
+# downward trend.
+
+statement ok
+CREATE TABLE st (s int, t timestamptz, INDEX (s), INDEX (t))
+WITH (sql_stats_histogram_buckets_count=4)
+
+# Inject statistics from:
+#   INSERT INTO st SELECT generate_series(0, 99999), NULL;
+# and then a steady rate of updates over time filling in column t:
+#   UPDATE st SET t = current_timestamp() WHERE s >= $1 AND s < $1 + 10 AND t IS NULL;
+statement ok
+ALTER TABLE st INJECT STATISTICS '[
+      {
+          "avg_size": 4,
+          "columns": [
+              "s"
+          ],
+          "created_at": "2024-04-09 16:00:00.000000",
+          "distinct_count": 100000,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "0"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "33333"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "66666"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "99999"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100000
+      },
+      {
+          "avg_size": 0,
+          "columns": [
+              "t"
+          ],
+          "created_at": "2024-04-09 16:00:00.000000",
+          "distinct_count": 1,
+          "histo_col_type": "TIMESTAMPTZ",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 100000,
+          "row_count": 100000
+      },
+      {
+          "avg_size": 9,
+          "columns": [
+              "rowid"
+          ],
+          "created_at": "2024-04-09 16:00:00.000000",
+          "distinct_count": 100000,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "958826497540358145"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826498669838337"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826500705484801"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826503229538305"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100000
+      },
+      {
+          "avg_size": 4,
+          "columns": [
+              "s"
+          ],
+          "created_at": "2024-04-09 17:00:00.000000",
+          "distinct_count": 100000,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "0"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "33333"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "66666"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "99999"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100000
+      },
+      {
+          "avg_size": 3,
+          "columns": [
+              "t"
+          ],
+          "created_at": "2024-04-09 17:00:00.000000",
+          "distinct_count": 2501,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 10,
+                  "num_range": 0,
+                  "upper_bound": "2024-04-09 16:00:00.000000+00"
+              },
+              {
+                  "distinct_range": 832,
+                  "num_eq": 10,
+                  "num_range": 8320,
+                  "upper_bound": "2024-04-09 16:20:00.000000+00"
+              },
+              {
+                  "distinct_range": 832,
+                  "num_eq": 10,
+                  "num_range": 8320,
+                  "upper_bound": "2024-04-09 16:40:00.000000+00"
+              },
+              {
+                  "distinct_range": 832,
+                  "num_eq": 10,
+                  "num_range": 8320,
+                  "upper_bound": "2024-04-09 17:00:00.000000+00"
+              }
+          ],
+          "histo_col_type": "TIMESTAMPTZ",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 75000,
+          "row_count": 100000
+      },
+      {
+          "avg_size": 9,
+          "columns": [
+              "rowid"
+          ],
+          "created_at": "2024-04-09 17:00:00.000000",
+          "distinct_count": 100000,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "958826497540358145"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826498669838337"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826500705484801"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826503229538305"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100000
+      },
+      {
+          "avg_size": 4,
+          "columns": [
+              "s"
+          ],
+          "created_at": "2024-04-09 18:00:00.000000",
+          "distinct_count": 100000,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "0"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "33333"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "66666"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "99999"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100000
+      },
+      {
+          "avg_size": 6,
+          "columns": [
+              "t"
+          ],
+          "created_at": "2024-04-09 18:00:00.000000",
+          "distinct_count": 5001,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 10,
+                  "num_range": 0,
+                  "upper_bound": "2024-04-09 16:00:00.000000+00"
+              },
+              {
+                  "distinct_range": 1666,
+                  "num_eq": 10,
+                  "num_range": 16660,
+                  "upper_bound": "2024-04-09 16:40:00.000000+00"
+              },
+              {
+                  "distinct_range": 1665,
+                  "num_eq": 10,
+                  "num_range": 16650,
+                  "upper_bound": "2024-04-09 17:20:00.000000+00"
+              },
+              {
+                  "distinct_range": 1665,
+                  "num_eq": 10,
+                  "num_range": 16650,
+                  "upper_bound": "2024-04-09 18:00:00.000000+00"
+              }
+          ],
+          "histo_col_type": "TIMESTAMPTZ",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 50000,
+          "row_count": 100000
+      },
+      {
+          "avg_size": 9,
+          "columns": [
+              "rowid"
+          ],
+          "created_at": "2024-04-09 18:00:00.000000",
+          "distinct_count": 100000,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "958826497540358145"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826498669838337"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826500705484801"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826503229538305"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100000
+      },
+      {
+          "avg_size": 4,
+          "columns": [
+              "s"
+          ],
+          "created_at": "2024-04-09 19:00:00.000000",
+          "distinct_count": 100000,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "0"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "33333"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "66666"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "99999"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100000
+      },
+      {
+          "avg_size": 9,
+          "columns": [
+              "t"
+          ],
+          "created_at": "2024-04-09 19:00:00.000000",
+          "distinct_count": 7501,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 10,
+                  "num_range": 0,
+                  "upper_bound": "2024-04-09 16:00:00.000000+00"
+              },
+              {
+                  "distinct_range": 2499,
+                  "num_eq": 10,
+                  "num_range": 24990,
+                  "upper_bound": "2024-04-09 17:00:00.000000+00"
+              },
+              {
+                  "distinct_range": 2499,
+                  "num_eq": 10,
+                  "num_range": 24990,
+                  "upper_bound": "2024-04-09 18:00:00.000000+00"
+              },
+              {
+                  "distinct_range": 2498,
+                  "num_eq": 10,
+                  "num_range": 24980,
+                  "upper_bound": "2024-04-09 19:00:00.000000+00"
+              }
+          ],
+          "histo_col_type": "TIMESTAMPTZ",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 25000,
+          "row_count": 100000
+      },
+      {
+          "avg_size": 9,
+          "columns": [
+              "rowid"
+          ],
+          "created_at": "2024-04-09 19:00:00.000000",
+          "distinct_count": 100000,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "958826497540358145"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826498669838337"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826500705484801"
+              },
+              {
+                  "distinct_range": 33332,
+                  "num_eq": 1,
+                  "num_range": 33332,
+                  "upper_bound": "958826503229538305"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100000
+      }
+]'
+
+query TTTIIII
+SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
+FROM [SHOW STATISTICS FOR TABLE st WITH FORECAST]
+WHERE column_names = ARRAY['t']
+ORDER BY created
+----
+__auto__      {t}  2024-04-09 16:00:00 +0000 UTC  100000  1      100000  0
+__auto__      {t}  2024-04-09 17:00:00 +0000 UTC  100000  2501   75000   3
+__auto__      {t}  2024-04-09 18:00:00 +0000 UTC  100000  5001   50000   6
+__auto__      {t}  2024-04-09 19:00:00 +0000 UTC  100000  7501   25000   9
+__forecast__  {t}  2024-04-09 20:00:00 +0000 UTC  100000  10001  8333    12
+
+query T
+EXPLAIN UPDATE st SET t = '2024-04-09 19:05:00.000000' WHERE s >= 0 AND s < 10 AND t IS NULL
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: st
+│ set: t
+│ auto commit
+│
+└── • render
+    │
+    └── • filter
+        │ estimated row count: 9
+        │ filter: t IS NULL
+        │
+        └── • index join
+            │ estimated row count: 10
+            │ table: st@st_pkey
+            │
+            └── • scan
+                  estimated row count: 10 (0.01% of the table; stats collected <hidden> ago; using stats forecast)
+                  table: st@st_s_idx
+                  spans: [/0 - /9]
 
 # Finally, restore forecasts setting to its previous value.
 statement ok
