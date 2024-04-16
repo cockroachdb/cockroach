@@ -452,6 +452,11 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().TrigramSimilarityThreshold = 0.5
 	stale()
 	evalCtx.SessionData().TrigramSimilarityThreshold = 0
+
+	// Stale opt_split_scan_limit.
+	evalCtx.SessionData().OptSplitScanLimit = 100
+	stale()
+	evalCtx.SessionData().OptSplitScanLimit = 0
 	notStale()
 
 	// User no longer has access to view.
