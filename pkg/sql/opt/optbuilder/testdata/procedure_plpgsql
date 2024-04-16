@@ -368,11 +368,11 @@ call
                 │                                       │              ├── const: ''
                 │                                       │              └── const: '00000'
                 │                                       └── project
-                │                                            ├── columns: nested_block_3:25
+                │                                            ├── columns: post_nested_block_3:25
                 │                                            ├── values
                 │                                            │    └── tuple
                 │                                            └── projections
-                │                                                 └── udf: nested_block_3 [as=nested_block_3:25]
+                │                                                 └── udf: post_nested_block_3 [as=post_nested_block_3:25]
                 │                                                      ├── tail-call
                 │                                                      ├── args
                 │                                                      │    ├── variable: x:21
@@ -502,11 +502,11 @@ call
                 │                   │              ├── const: ''
                 │                   │              └── const: '00000'
                 │                   └── project
-                │                        ├── columns: exception_block_7:17
+                │                        ├── columns: nested_block_7:17
                 │                        ├── values
                 │                        │    └── tuple
                 │                        └── projections
-                │                             └── udf: exception_block_7 [as=exception_block_7:17]
+                │                             └── udf: nested_block_7 [as=nested_block_7:17]
                 │                                  ├── tail-call
                 │                                  ├── args
                 │                                  │    └── variable: x:2
@@ -532,11 +532,11 @@ call
                 │                                  │                        │              ├── const: 1
                 │                                  │                        │              └── const: 0
                 │                                  │                        └── project
-                │                                  │                             ├── columns: nested_block_3:15
+                │                                  │                             ├── columns: post_nested_block_3:15
                 │                                  │                             ├── values
                 │                                  │                             │    └── tuple
                 │                                  │                             └── projections
-                │                                  │                                  └── udf: nested_block_3 [as=nested_block_3:15]
+                │                                  │                                  └── udf: post_nested_block_3 [as=post_nested_block_3:15]
                 │                                  │                                       ├── tail-call
                 │                                  │                                       ├── args
                 │                                  │                                       │    └── variable: x:13
@@ -581,7 +581,7 @@ call
                 │                                  └── exception-handler
                 │                                       └── SQLSTATE '22012'
                 │                                            └── project
-                │                                                 ├── columns: nested_block_3:11
+                │                                                 ├── columns: post_nested_block_3:11
                 │                                                 ├── barrier
                 │                                                 │    ├── columns: x:10!null
                 │                                                 │    └── project
@@ -591,7 +591,7 @@ call
                 │                                                 │         └── projections
                 │                                                 │              └── const: 100 [as=x:10]
                 │                                                 └── projections
-                │                                                      └── udf: nested_block_3 [as=nested_block_3:11]
+                │                                                      └── udf: post_nested_block_3 [as=post_nested_block_3:11]
                 │                                                           ├── args
                 │                                                           │    └── variable: x:10
                 │                                                           ├── params: x:4

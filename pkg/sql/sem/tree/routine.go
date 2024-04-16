@@ -12,6 +12,7 @@ package tree
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -128,6 +129,11 @@ type RoutineExpr struct {
 	// Procedure is true if the routine is a procedure being invoked by CALL.
 	Procedure bool
 
+	// BlockStart is true if this routine marks the start of a PL/pgSQL block with
+	// an exception handler. It determines when to initialize the state shared
+	// between sub-routines for the block.
+	BlockStart bool
+
 	// BlockState holds the information needed to coordinate error-handling
 	// between the sub-routines that make up a PLpgSQL exception block.
 	BlockState *BlockState
@@ -149,6 +155,7 @@ func NewTypedRoutineExpr(
 	generator bool,
 	tailCall bool,
 	procedure bool,
+	blockStart bool,
 	blockState *BlockState,
 	cursorDeclaration *RoutineOpenCursor,
 ) *RoutineExpr {
@@ -163,6 +170,7 @@ func NewTypedRoutineExpr(
 		Generator:         generator,
 		TailCall:          tailCall,
 		Procedure:         procedure,
+		BlockStart:        blockStart,
 		BlockState:        blockState,
 		CursorDeclaration: cursorDeclaration,
 	}
@@ -263,12 +271,10 @@ type BlockState struct {
 	// kv.SavepointToken to avoid import cycles.
 	SavepointTok interface{}
 
-	// Cursors is a list of the names of cursors that have been opened within the
-	// current block. If the exception handler catches an exception, these cursors
-	// must be closed before the handler can proceed.
-	// TODO(111139): Once we support nested routine calls, we may have to track
-	// newly opened cursors differently.
-	Cursors []Name
+	// CursorTimestamp is the timestamp at which control transitioned into this
+	// PL/pgSQL block. It is used to close (only) cursors which were opened within
+	// the scope of the block when an exception is caught.
+	CursorTimestamp *time.Time
 }
 
 // StoredProcTxnOp indicates whether a stored procedure has requested that the

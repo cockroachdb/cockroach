@@ -372,18 +372,20 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 	}
 	// Build the exception handler. This has to happen after building the variable
 	// declarations, since the exception handler can reference the block's vars.
-	if exceptions := b.buildExceptions(astBlock); exceptions != nil {
+	if len(astBlock.Exceptions) > 0 {
+		exceptionBlock := b.buildExceptions(astBlock)
+		block.hasExceptionHandler = true
+
 		// There is an implicit block around the body statements, with an optional
 		// exception handler. Note that the variable declarations are not in block
 		// scope, and exceptions thrown during variable declaration are not caught.
 		//
-		// The routine is volatile to prevent inlining. Only the block and
-		// variable-assignment routines need to be volatile; see the buildExceptions
+		// The routine is volatile to prevent inlining; see the buildExceptions
 		// comment for details.
-		block.hasExceptionHandler = true
-		blockCon := b.makeContinuation("exception_block")
-		blockCon.def.ExceptionBlock = exceptions
+		blockCon := b.makeContinuation("nested_block")
+		blockCon.def.ExceptionBlock = exceptionBlock
 		blockCon.def.Volatility = volatility.Volatile
+		blockCon.def.BlockStart = true
 		b.appendPlpgSQLStmts(&blockCon, astBlock.Body)
 		return b.callContinuation(&blockCon, s)
 	}
@@ -407,7 +409,15 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// For a nested block, push a continuation with the remaining statements
 			// before calling recursively into buildBlock. The continuation will be
 			// called when the control flow within the nested block terminates.
-			blockCon := b.makeContinuationWithTyp("nested_block", t.Label, continuationBlockExit)
+			blockCon := b.makeContinuationWithTyp("post_nested_block", t.Label, continuationBlockExit)
+			if len(t.Exceptions) > 0 {
+				// If the block has an exception handler, mark the continuation as
+				// volatile to prevent inlining. This is necessary to ensure that
+				// transitions out of a PL/pgSQL block are correctly tracked during
+				// execution. The transition *into* the block is marked volatile for the
+				// same reason; see also buildBlock and buildExceptions.
+				blockCon.def.Volatility = volatility.Volatile
+			}
 			b.appendPlpgSQLStmts(&blockCon, stmts[i+1:])
 			b.pushContinuation(blockCon)
 			return b.buildBlock(t, s)
@@ -1375,13 +1385,16 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 // cannot throw an exception, and so the "i := 2" assignment will never become
 // visible.
 //
-// The block and assignment continuations must be volatile to prevent inlining.
-// The presence of an exception handler does not impose restrictions on inlining
-// for other continuations.
+// The block entry/exit and assignment continuations for a block with an
+// exception handler must be volatile to prevent inlining. The presence of an
+// exception handler does not impose restrictions on inlining for other types of
+// continuations.
+//
+// Inlining is disabled for the block-exit continuation to ensure that the
+// statements following the nested block are correctly handled as part of the
+// parent block. Otherwise, an error thrown from the parent block could
+// incorrectly be caught by the exception handler of the nested block.
 func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock {
-	if len(block.Exceptions) == 0 {
-		return nil
-	}
 	codes := make([]pgcode.Code, 0, len(block.Exceptions))
 	handlers := make([]*memo.UDFDefinition, 0, len(block.Exceptions))
 	addHandler := func(codeStr string, handler *memo.UDFDefinition) {
