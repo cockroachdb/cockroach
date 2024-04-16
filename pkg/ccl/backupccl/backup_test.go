@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -9473,6 +9474,7 @@ CREATE SCHEMA db.s;
 func TestBackupRestoreSeparateIncrementalPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
 	const numAccounts = 1
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
@@ -9519,6 +9521,9 @@ func TestBackupRestoreSeparateIncrementalPrefix(t *testing.T) {
 		fb := fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", dest)
 		sqlDB.Exec(t, fb)
 
+		irOr := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'or_fkdb', experimental deferred copy", dest)
+		sqlDB.Exec(t, irOr)
+
 		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, 200)
 
 		sib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location = %s", dest, inc)
@@ -9536,6 +9541,7 @@ func TestBackupRestoreSeparateIncrementalPrefix(t *testing.T) {
 		sqlDB.Exec(t, "DROP DATABASE fkdb")
 		sqlDB.Exec(t, "DROP DATABASE trad_fkdb;")
 		sqlDB.Exec(t, "DROP DATABASE inc_fkdb;")
+		sqlDB.Exec(t, "DROP DATABASE or_fkdb;")
 	}
 }
 
