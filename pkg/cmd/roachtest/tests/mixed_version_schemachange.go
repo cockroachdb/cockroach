@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	//"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -80,7 +79,7 @@ func runSchemaChangeMixedVersions(
 			return err
 		}
 
-		randomNode := h.RandomNode(r, c.All())
+		randomNode := c.All().SeededRandNode(r)
 		doctorURL := fmt.Sprintf("{pgurl:%d}", randomNode)
 		// Now we validate that nothing is broken after the random schema changes have been run.
 		runCmd = roachtestutil.NewCommand("%s debug doctor examine cluster", test.DefaultCockroachPath).

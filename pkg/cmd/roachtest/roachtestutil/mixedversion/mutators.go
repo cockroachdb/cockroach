@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"golang.org/x/exp/maps"
 )
 
@@ -29,6 +30,11 @@ const (
 	// that only manifested when this setting was reset at different
 	// times in the test (e.g., #111610); this mutator exists to catch
 	// regressions of this type.
+	//
+	// Note that this mutator only applies to the system tenant. For
+	// other virtual clusters, the upgrade performs an explicit `SET` on
+	// the cluster version since the auto upgrades feature has been
+	// broken for tenants in several published releases (see #121858).
 	PreserveDowngradeOptionRandomizer = "preserve_downgrade_option_randomizer"
 )
 
@@ -67,11 +73,11 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 				// It is valid to reset the cluster setting when we are
 				// performing a rollback (as we know the next upgrade will be
 				// the final one); or during the final upgrade itself.
-				return (s.context.Stage == LastUpgradeStage || s.context.Stage == RollbackUpgradeStage) &&
+				return (s.context.System.Stage == LastUpgradeStage || s.context.System.Stage == RollbackUpgradeStage) &&
 					// We also don't want all nodes to be running the latest
 					// binary, as that would be equivalent to the test plan
 					// without this mutator.
-					len(s.context.NodesInNextVersion()) < len(s.context.CockroachNodes)
+					len(s.context.System.NodesInNextVersion()) < len(s.context.System.Descriptor.Nodes)
 			}).
 			RandomStep(rng).
 			// Note that we don't attempt a concurrent insert because the
@@ -87,10 +93,10 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 		// next version.
 		for _, step := range upgradeSelector.
 			Filter(func(s *singleStep) bool {
-				return s.context.Stage == LastUpgradeStage &&
-					len(s.context.NodesInNextVersion()) == len(s.context.CockroachNodes)
+				return s.context.System.Stage == LastUpgradeStage &&
+					len(s.context.System.NodesInNextVersion()) == len(s.context.System.Descriptor.Nodes)
 			}) {
-			step.context.Finalizing = true
+			step.context.System.Finalizing = true
 		}
 
 		mutations = append(mutations, removeExistingStep...)
@@ -114,7 +120,7 @@ func randomUpgrades(rng *rand.Rand, plan *TestPlan) []stepSelector {
 
 	byUpgrade := func(upgrade *upgradePlan) func(*singleStep) bool {
 		return func(s *singleStep) bool {
-			return s.context.FromVersion.Equal(upgrade.from)
+			return s.context.System.FromVersion.Equal(upgrade.from)
 		}
 	}
 
@@ -140,6 +146,10 @@ func ClusterSettingMutator(name string) string {
 
 // clusterSettingMutator implements a mutator that randomly sets (or
 // resets) a cluster setting during a mixed-version test.
+//
+// TODO(renato): currently this can only be used for changing settings
+// on the system tenant; support for non-system virtual clusters will
+// be added in the future.
 type clusterSettingMutator struct {
 	// The name of the cluster setting.
 	name string
@@ -227,7 +237,7 @@ func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutati
 			if m.minVersion != nil {
 				// If we have a minimum version set, we need to make sure we
 				// are upgrading to a supported version.
-				if !s.context.ToVersion.AtLeast(m.minVersion) {
+				if !s.context.System.ToVersion.AtLeast(m.minVersion) {
 					return false
 				}
 
@@ -235,7 +245,7 @@ func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutati
 				// minimum supported version, then only upgraded nodes are
 				// able to service the cluster setting change request. In that
 				// case, we ensure there is at least one such node.
-				if !s.context.FromVersion.AtLeast(m.minVersion) && len(s.context.NodesInNextVersion()) == 0 {
+				if !s.context.System.FromVersion.AtLeast(m.minVersion) && len(s.context.System.NodesInNextVersion()) == 0 {
 					return false
 				}
 			}
@@ -243,7 +253,7 @@ func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutati
 			// We skip restart steps as we might insert the cluster setting
 			// change step concurrently with the selected step.
 			_, isRestartNode := s.impl.(restartWithNewBinaryStep)
-			return s.context.Stage >= OnStartupStage && !isRestartNode
+			return s.context.System.Stage >= OnStartupStage && !isRestartNode
 		})
 
 	for _, changeStep := range m.changeSteps(rng, len(possiblePointsInTime)) {
@@ -320,9 +330,10 @@ func (m clusterSettingMutator) changeSteps(
 		newValue := possibleValues[rng.Intn(len(possibleValues))]
 		steps = append(steps, clusterSettingChangeStep{
 			impl: setClusterSettingStep{
-				minVersion: m.minVersion,
-				name:       m.name,
-				value:      newValue,
+				minVersion:         m.minVersion,
+				name:               m.name,
+				value:              newValue,
+				virtualClusterName: install.SystemInterfaceName,
 			},
 			slot: nextSlot(),
 		})
@@ -335,8 +346,9 @@ func (m clusterSettingMutator) changeSteps(
 	resetClusterSettingTransition := func() {
 		steps = append(steps, clusterSettingChangeStep{
 			impl: resetClusterSettingStep{
-				minVersion: m.minVersion,
-				name:       m.name,
+				minVersion:         m.minVersion,
+				name:               m.name,
+				virtualClusterName: install.SystemInterfaceName,
 			},
 			slot: nextSlot(),
 		})
