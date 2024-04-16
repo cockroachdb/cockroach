@@ -31,8 +31,11 @@ import (
 type client struct {
 	log.AmbientContext
 
-	createdAt             time.Time
-	peerID                roachpb.NodeID           // Peer node ID; 0 until first gossip response
+	createdAt time.Time
+	// peerID is the node ID of the peer we're connected to. This is set when we
+	// receive a response from the peer. The gossip mu should be held when
+	// accessing.
+	peerID                roachpb.NodeID
 	resolvedPlaceholder   bool                     // Whether we've resolved the nodeSet's placeholder for this client
 	addr                  net.Addr                 // Peer node network address
 	forwardAddr           *util.UnresolvedAddr     // Set if disconnected with an alternate addr
@@ -129,7 +132,7 @@ func (c *client) startLocked(
 					defer g.mu.RUnlock()
 					return c.peerID, c.addr
 				}()
-				if c.peerID != 0 {
+				if peerID != 0 {
 					log.Infof(ctx, "closing client to n%d (%s): %s", peerID, addr, err)
 				} else {
 					log.Infof(ctx, "closing client to %s: %s", addr, err)
@@ -315,8 +318,6 @@ func (c *client) gossip(
 		defer wg.Done()
 
 		errCh <- func() error {
-			var peerID roachpb.NodeID
-
 			initCh := initCh
 			for init := true; ; init = false {
 				reply, err := stream.Recv()
@@ -328,9 +329,6 @@ func (c *client) gossip(
 				}
 				if init {
 					initCh <- struct{}{}
-				}
-				if peerID == 0 && c.peerID != 0 {
-					peerID = c.peerID
 				}
 			}
 		}()
