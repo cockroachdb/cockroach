@@ -489,6 +489,9 @@ message LocalOnlySessionData {
   // optimizer should use an improved selectivitiy estimate for trigram
   // similarity filters.
   bool optimizer_use_improved_trigram_similarity_selectivity = 127;
+  // OptimizerUseImprovedZigzagJoinCosting, when true, indicates that the
+  // optimizer should use improved logic in the cost model for zigzag joins.
+  bool optimizer_use_improved_zigzag_join_costing = 128;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
