@@ -642,11 +642,11 @@ job paused at pausepoint
 # https://github.com/cockroachdb/cockroach/issues/106370 was a bug where
 # this would fail with `schema "public" is offline: restoring`.
 query-sql
-SELECT * FROM [SHOW GRANTS] WHERE relation_name = 'testtable_simple';
+SELECT * FROM [SHOW GRANTS] WHERE object_name = 'testtable_simple';
 ----
-testdb public testtable_simple admin ALL true
-testdb public testtable_simple root ALL true
-testdb public testtable_simple testuser ALL true
+testdb public testtable_simple table admin ALL true
+testdb public testtable_simple table root ALL true
+testdb public testtable_simple table testuser ALL true
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = ''
@@ -663,9 +663,9 @@ USE bar;
 ----
 
 query-sql
-SELECT * FROM [SHOW GRANTS] WHERE relation_name = 'testtable_simple';
+SELECT * FROM [SHOW GRANTS] WHERE object_name = 'testtable_simple';
 ----
-bar public testtable_simple admin ALL true
-bar public testtable_simple root ALL true
+bar public testtable_simple table admin ALL true
+bar public testtable_simple table root ALL true
 
 subtest end
