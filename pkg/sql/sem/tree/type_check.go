@@ -1168,7 +1168,9 @@ func (expr *FuncExpr) TypeCheck(
 	searchPath := EmptySearchPath
 	var resolver FunctionReferenceResolver
 	if semaCtx != nil {
-		searchPath = semaCtx.SearchPath
+		if semaCtx.SearchPath != nil {
+			searchPath = semaCtx.SearchPath
+		}
 		resolver = semaCtx.FunctionResolver
 	}
 
