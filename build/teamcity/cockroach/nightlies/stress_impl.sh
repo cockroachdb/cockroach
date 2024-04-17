@@ -11,6 +11,14 @@ else
     TAGS="bazel,gss,$TAGS"
 fi
 
+GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$TC_BUILD_BRANCH" != "$GIT_BRANCH" ]; then
+    echo "Skipping test $TARGET, as the expected branch is $TC_BUILD_BRANCH, but actual branch is $GIT_BRANCH"
+    exit 0
+else
+    echo "Confirmed that git branch is $GIT_BRANCH matches build branch $TC_BUILD_BRANCH"
+fi
+
 bazel build //pkg/cmd/bazci --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 ARTIFACTS_DIR=/artifacts
