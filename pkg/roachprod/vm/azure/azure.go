@@ -642,10 +642,6 @@ func (p *Provider) createVM(
 		startupArgs.AttachedDiskLun = &lun
 	}
 
-	// In the future, when all tests are run on Ubuntu 22.04, we can remove this
-	// check and always enable RSA SHA1 and create a tcpdump symlink.
-	startupArgs.IsUbuntu22 = !opts.UbuntuVersion.IsOverridden()
-
 	startupScript, err := evalStartupTemplate(startupArgs)
 	if err != nil {
 		return machine, err

@@ -319,7 +319,6 @@ func writeStartupScript(
 		EnableFIPS:           enableFIPS,
 		SharedUser:           config.SharedUser,
 		PublicKey:            publicKey,
-		EnableCron:           enableCron,
 		OSInitializedFile:    vm.OSInitializedFile,
 		DisksInitializedFile: vm.DisksInitializedFile,
 	}
