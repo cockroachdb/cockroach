@@ -551,9 +551,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStress(t, "test is too large to run under stress")
-	skip.UnderDeadlock(t, "test is too large to run under deadlock")
-	skip.UnderRace(t, "test is too large to run under race")
+	skip.UnderDuress(t, "test is very large")
 
 	const numAccounts = 1000
 	ctx := context.Background()
@@ -627,18 +625,16 @@ func TestBackupRestoreAppend(t *testing.T) {
 		sqlDB.ExpectErr(t, "A full backup cannot be written to \"/subdir\", a user defined subdirectory",
 			"BACKUP INTO $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore, append(test.collectionsWithSubdir, specifiedSubdir)...)
 
-		sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
-			return txn.QueryRow("UPDATE data.bank SET balance = 100 RETURNING cluster_logical_timestamp()").Scan(&ts1)
-		})
+		sqlDB.Exec(t, "UPDATE data.bank SET balance = 100")
+		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1)
 		sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1, test.collections...)
 
 		// Append to latest again, just to prove we can append to an appended one and
 		// that appended didn't e.g. mess up LATEST.
 		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1again)
 		sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1again, test.collections...)
-		sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
-			return txn.QueryRow("UPDATE data.bank SET balance = 200 RETURNING cluster_logical_timestamp()").Scan(&ts2)
-		})
+		sqlDB.Exec(t, "UPDATE data.bank SET balance = 200")
+		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts2)
 		rowsTS2 := sqlDB.QueryStr(t, "SELECT * from data.bank ORDER BY id")
 
 		// Start a new full-backup in the collection version.
@@ -7199,7 +7195,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`SELECT id, active, name, data_state, service_mode, 
+			`SELECT id, active, name, data_state, service_mode,
 				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities',
 				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'previousSourceTenant'->'clusterId',
 				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'previousSourceTenant'->'cutoverTimestamp'->'wallTime'
@@ -7244,8 +7240,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `ALTER TENANT [10] STOP SERVICE`)
 		restoreDB.Exec(t, `DROP TENANT [10]`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, 
-				service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities', 
+			`select id, active, name, data_state,
+				service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities',
 				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'droppedName' from system.tenants`,
 			[][]string{
 				{
@@ -7281,7 +7277,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, 
+			`select id, active, name, data_state, service_mode,
 				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities'
 			from system.tenants`,
 			[][]string{
@@ -7324,7 +7320,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, 
+			`select id, active, name, data_state, service_mode,
 				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities'
 			from system.tenants`,
 			[][]string{
@@ -7337,7 +7333,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, 
+			`select id, active, name, data_state, service_mode,
 				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities'
 			from system.tenants`,
 			[][]string{
@@ -7368,8 +7364,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, 
-				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities' 
+			`select id, active, name, data_state, service_mode,
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities'
 			from system.tenants`,
 			[][]string{
 				{
@@ -7381,8 +7377,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, 
-				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities' 
+			`select id, active, name, data_state, service_mode,
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities'
 			from system.tenants`,
 			[][]string{
 				{
