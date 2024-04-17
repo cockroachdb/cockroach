@@ -11,6 +11,7 @@ package spanconfigreconcilerccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"sort"
 	"testing"
 	"time"
@@ -106,6 +107,9 @@ func TestDataDriven(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig:       scKnobs,
+					SQLExecutor: &sql.ExecutorTestingKnobs{
+						UseTransactionalDescIDGenerator: true,
+					},
 				},
 			},
 		})
