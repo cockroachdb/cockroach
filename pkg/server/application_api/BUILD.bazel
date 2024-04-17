@@ -39,6 +39,7 @@ go_test(
     shard_count = 8,
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/ccl/streamingccl",
         "//pkg/config/zonepb",
         "//pkg/jobs",
