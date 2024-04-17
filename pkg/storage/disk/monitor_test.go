@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -47,9 +48,80 @@ func TestMonitorManager_monitorDisks(t *testing.T) {
 	stop := make(chan struct{})
 	go manager.monitorDisks(testCollector, stop)
 
-	time.Sleep(2 * defaultDiskStatsPollingInterval)
+	time.Sleep(2 * DefaultDiskStatsPollingInterval)
 	stop <- struct{}{}
 	require.Greater(t, testCollector.collectCount, 0)
+}
+
+func TestMonitor_StatsWindow(t *testing.T) {
+	window := StatsWindow{
+		Stats: []Stats{
+			{
+				ReadsCount:      1,
+				InProgressCount: 3,
+			},
+			{
+				ReadsCount:      4,
+				InProgressCount: 1,
+			},
+			{
+				ReadsCount:      9,
+				InProgressCount: 7,
+			},
+		},
+	}
+
+	maxStats := window.Max()
+	expectedMaxStats := Stats{ReadsCount: 5, InProgressCount: 7}
+	require.Equal(t, expectedMaxStats, maxStats)
+
+	latestStats := window.Latest()
+	expectedLatestStats := Stats{ReadsCount: 9, InProgressCount: 7}
+	require.Equal(t, expectedLatestStats, latestStats)
+}
+
+func TestMonitor_IncrementalStats(t *testing.T) {
+	now := time.Now()
+	tracer := newMonitorTracer(4)
+	events := []traceEvent{
+		{
+			time:  now.Add(-4 * time.Minute),
+			stats: Stats{ReadsCount: 1, InProgressCount: 7},
+			err:   nil,
+		},
+		{
+			time:  now.Add(-2 * time.Minute),
+			stats: Stats{ReadsCount: 4, InProgressCount: 5},
+			err:   nil,
+		},
+		{
+			time:  now.Add(-time.Minute),
+			stats: Stats{ReadsCount: 9, InProgressCount: 1},
+			err:   nil,
+		},
+		{
+			time:  now,
+			stats: Stats{},
+			err:   errors.New("failed to collect disk stats"),
+		},
+	}
+	for _, event := range events {
+		tracer.RecordEvent(event)
+	}
+	monitor := Monitor{
+		monitoredDisk:     &monitoredDisk{tracer: tracer},
+		lastIncrementedAt: now.Add(-3 * time.Minute),
+	}
+
+	rollingWindow := monitor.IncrementalStats()
+	// Skip the event collected 4 minutes ago since we last incremented 3 minutes ago.
+	expectedWindow := StatsWindow{
+		Stats: []Stats{
+			{ReadsCount: 4, InProgressCount: 5},
+			{ReadsCount: 9, InProgressCount: 1},
+		},
+	}
+	require.Equal(t, expectedWindow, rollingWindow)
 }
 
 func TestMonitor_Close(t *testing.T) {
@@ -86,36 +158,4 @@ func TestMonitor_Close(t *testing.T) {
 		t.Fatal("Failed to receive stop signal")
 	}
 	require.Equal(t, 0, testDisk.refCount)
-}
-
-func TestMonitor_IncrementalStats(t *testing.T) {
-	now := time.Now()
-	testDisk := monitoredDisk{
-		tracer: newMonitorTracer(3),
-	}
-	monitor := Monitor{monitoredDisk: &testDisk}
-
-	testDisk.recordStats(now.Add(-10*time.Second), Stats{
-		ReadsCount:      1,
-		InProgressCount: 3,
-	})
-	// First attempt at getting incremental stats should fail since no data was
-	// collected at the specified time.
-	stats, err := monitor.IncrementalStats(time.Minute)
-	require.Error(t, err)
-	require.Equal(t, Stats{}, stats)
-
-	testDisk.recordStats(now, Stats{
-		ReadsCount:      2,
-		InProgressCount: 2,
-	})
-	wantIncremental := Stats{
-		ReadsCount: 1,
-		// InProgressCount is a gauge so the increment should not be computed.
-		InProgressCount: 2,
-	}
-	// Tracer should compute diff using data recorded over 10 seconds ago.
-	stats, err = monitor.IncrementalStats(5 * time.Second)
-	require.NoError(t, err)
-	require.Equal(t, wantIncremental, stats)
 }

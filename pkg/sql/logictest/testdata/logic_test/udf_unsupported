@@ -134,7 +134,16 @@ CREATE FUNCTION rec(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT CASE i WHEN 0 THE
 statement ok
 CREATE FUNCTION other_udf() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 
+skipif config local-mixed-23.2
 statement ok
+CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT other_udf()'
+
+onlyif config config local-mixed-23.2
+statement error pgcode 0A000 user defined functions cannot reference other user defined functions
+CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT other_udf()'
+
+onlyif config config local-mixed-23.1
+statement error pgcode 0A000 user defined functions cannot reference other user defined functions
 CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT other_udf()'
 
 subtest end

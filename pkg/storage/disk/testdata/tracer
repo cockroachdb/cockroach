@@ -3,9 +3,8 @@
 record capacity=3
 ----
 
-find time=2024-03-27T12:00:00.5Z
+rolling-window time=2024-03-27T12:00:00.5Z
 ----
-trace is empty
 
 latest
 ----
@@ -39,17 +38,13 @@ record capacity=3
 2024-03-27T12:00:00.3Z sda 14 0 150 7ms 10 0 20 5ms 2 45ms 9ms
 ----
 
-find time=2024-03-27T12:00:00.5Z
+rolling-window time=2024-03-27T12:00:00.15Z
 ----
+"2024-03-27T12:00:00.2Z\tsda\t14\t0\t150\t7ms\t0\t0\t0\t0s\t0\t35ms\t7ms\t0\t0\t0\t0s\t0\t0s\tnil"
 "2024-03-27T12:00:00.3Z\tsda\t14\t0\t150\t7ms\t10\t0\t20\t5ms\t2\t45ms\t9ms\t0\t0\t0\t0s\t0\t0s\tnil"
 
-find time=2024-03-27T12:00:00.15Z
+rolling-window time=2024-03-27T12:00:00.4Z
 ----
-"2024-03-27T12:00:00.1Z\tsda\t12\t0\t120\t5ms\t0\t0\t0\t0s\t0\t25ms\t5ms\t0\t0\t0\t0s\t0\t0s\tnil"
-
-find time=2024-03-27T12:00:00.0Z
-----
-no event found in trace before or at time 2024-03-27 12:00:00 +0000 UTC
 
 latest
 ----

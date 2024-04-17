@@ -188,6 +188,7 @@ CREATE FUNCTION nested_func() RETURNS INT AS $$
   SELECT 1;
 $$ LANGUAGE SQL
 
+skipif config local-mixed-23.2
 statement ok
 CREATE PROCEDURE p_rewrite() AS $$
   SELECT nested_func();
@@ -195,6 +196,7 @@ CREATE PROCEDURE p_rewrite() AS $$
 $$ LANGUAGE SQL
 
 # TODO(fqazi): Renaming function calls will break today until #120351 is completed.
+skipif config local-mixed-23.2
 query T
 SELECT get_body_str('p_rewrite');
 ----

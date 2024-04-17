@@ -781,9 +781,11 @@ DROP FUNCTION f;
 statement ok
 CREATE FUNCTION f1(a INT, b INT = 2) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
 
+skipif config local-mixed-23.2
 statement ok
 CREATE FUNCTION f2(a INT, b INT = f1(1)) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
 
+skipif config local-mixed-23.2
 query III
 SELECT f1(1), f2(1), f2(1, 1);
 ----
@@ -792,14 +794,17 @@ SELECT f1(1), f2(1), f2(1, 1);
 statement ok
 CREATE OR REPLACE FUNCTION f1 (a INT, b INT = 2) RETURNS INT LANGUAGE SQL AS $$ SELECT a * b; $$;
 
+skipif config local-mixed-23.2
 query III
 SELECT f1(1), f2(1), f2(1, 1);
 ----
 2  3  2
 
+skipif config local-mixed-23.2
 statement error pgcode 2BP01 cannot drop function "f1" because other objects \(\[test.public.f2\]\) still depend on it
 DROP FUNCTION f1;
 
+skipif config local-mixed-23.2
 statement ok
 DROP FUNCTION f2;
 
