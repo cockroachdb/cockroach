@@ -814,13 +814,18 @@ func TestToOverload(t *testing.T) {
 	}
 }
 
-func TestStripDanglingBackReferences(t *testing.T) {
+func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 	type testCase struct {
 		name                  string
 		input, expectedOutput descpb.FunctionDescriptor
 		validIDs              catalog.DescriptorIDSet
 	}
 
+	badPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
+	goodPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
+	badPrivilege.Users = append(badPrivilege.Users, catpb.UserPrivileges{
+		UserProto: username.TestUserName().EncodeProto(),
+	})
 	testData := []testCase{
 		{
 			name: "depended on by",
@@ -837,9 +842,7 @@ func TestStripDanglingBackReferences(t *testing.T) {
 						ColumnIDs: []descpb.ColumnID{1},
 					},
 				},
-				Privileges: &catpb.PrivilegeDescriptor{
-					Version: catpb.Version23_2,
-				},
+				Privileges: badPrivilege,
 			},
 			expectedOutput: descpb.FunctionDescriptor{
 				Name: "foo",
@@ -850,9 +853,7 @@ func TestStripDanglingBackReferences(t *testing.T) {
 						ColumnIDs: []descpb.ColumnID{1},
 					},
 				},
-				Privileges: &catpb.PrivilegeDescriptor{
-					Version: catpb.Version23_2,
-				},
+				Privileges: goodPrivilege,
 			},
 			validIDs: catalog.MakeDescriptorIDSet(104, 105),
 		},
@@ -867,8 +868,12 @@ func TestStripDanglingBackReferences(t *testing.T) {
 			require.NoError(t, b.StripDanglingBackReferences(test.validIDs.Contains, func(id jobspb.JobID) bool {
 				return false
 			}))
+			require.NoError(t, b.StripNonExistentRoles(func(role username.SQLUsername) bool {
+				return role.IsAdminRole() || role.IsPublicRole() || role.IsRootUser()
+			}))
 			desc := b.BuildCreatedMutableFunction()
 			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
+			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedNonExistentRoles))
 			require.Equal(t, out.BuildCreatedMutableFunction().FuncDesc(), desc.FuncDesc())
 		})
 	}
