@@ -75,7 +75,7 @@ do so:
 
 # Updating the golang version
 
-Please copy this checklist into the relevant commit messageand perform these
+Please copy this checklist into the relevant commit message and perform these
 steps:
 
 * [ ] Adjust the Pebble tests to run in new version.
