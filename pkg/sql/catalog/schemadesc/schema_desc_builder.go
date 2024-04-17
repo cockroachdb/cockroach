@@ -13,7 +13,9 @@ package schemadesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -135,6 +137,23 @@ func (sdb *schemaDescriptorBuilder) StripDanglingBackReferences(
 	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 ) error {
 	// There's nothing we can do for schemas here.
+	return nil
+}
+
+func (sdb *schemaDescriptorBuilder) StripNonExistentRoles(
+	roleExists func(role username.SQLUsername) bool,
+) error {
+	newPrivs := make([]catpb.UserPrivileges, 0, len(sdb.maybeModified.Privileges.Users))
+	for _, priv := range sdb.maybeModified.Privileges.Users {
+		exists := roleExists(priv.UserProto.Decode())
+		if exists {
+			newPrivs = append(newPrivs, priv)
+		}
+	}
+	if len(newPrivs) != len(sdb.maybeModified.Privileges.Users) {
+		sdb.maybeModified.Privileges.Users = newPrivs
+		sdb.changes.Add(catalog.StrippedNonExistentRoles)
+	}
 	return nil
 }
 
