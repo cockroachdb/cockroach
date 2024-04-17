@@ -90,8 +90,8 @@ case $1 in
         roachprod create drt-chaos \
           --clouds gce \
           --gce-managed \
-          --gce-zones "us-east1-b" \
-          --nodes 5 \
+          --gce-zones "us-east1-d,us-east1-b,us-east1-c" \
+          --nodes 6 \
           --gce-machine-type n2-standard-8 \
           --gce-pd-volume-size 3000 --local-ssd=false \
           --username drt \
