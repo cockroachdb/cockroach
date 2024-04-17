@@ -818,6 +818,8 @@ type tpccRestoreOptions struct {
 	workers        int
 	waitFraction   float64
 	queryTraceFile string
+	seed           uint64
+	fakeTime       uint32
 }
 
 type tpccRestore struct {
@@ -832,6 +834,8 @@ func (tpcc tpccRestore) init(
 		MaybeFlag(tpcc.opts.warehouses > 0, "warehouses", tpcc.opts.warehouses).
 		MaybeFlag(tpcc.opts.workers > 0, "workers", tpcc.opts.workers).
 		MaybeFlag(tpcc.opts.waitFraction != 1, "wait", tpcc.opts.waitFraction).
+		MaybeFlag(tpcc.opts.seed != 0, "seed", tpcc.opts.seed).
+		MaybeFlag(tpcc.opts.fakeTime != 0, "fake-time", tpcc.opts.fakeTime).
 		Arg(fmt.Sprintf("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1]))
 	c.Run(ctx, option.WithNodes([]int{sp.getWorkloadNode()}), cmd.String())
 }
@@ -844,6 +848,8 @@ func (tpcc tpccRestore) run(
 		MaybeFlag(tpcc.opts.warehouses > 0, "warehouses", tpcc.opts.warehouses).
 		MaybeFlag(tpcc.opts.workers > 0, "workers", tpcc.opts.workers).
 		MaybeFlag(tpcc.opts.waitFraction != 1, "wait", tpcc.opts.waitFraction).
+		MaybeFlag(tpcc.opts.seed != 0, "seed", tpcc.opts.seed).
+		MaybeFlag(tpcc.opts.fakeTime != 0, "fake-time", tpcc.opts.fakeTime).
 		MaybeFlag(tpcc.opts.queryTraceFile != "", "query-trace-file", tpcc.opts.queryTraceFile).
 		Arg(fmt.Sprintf("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1]))
 	return c.RunE(ctx, option.WithNodes([]int{sp.getWorkloadNode()}), cmd.String())
