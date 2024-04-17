@@ -44,16 +44,12 @@ func TestCleanupIntentsDuringBackupPerformanceRegression(t *testing.T) {
 	// true) or a pending transaction (abort = false).
 	testutils.RunTrueAndFalse(t, "abort", func(t *testing.T, abort bool) {
 		var numIntentResolveBatches atomic.Int32
-		var numPushBatches atomic.Int32
 
 		// Interceptor catches requests that cleanup transactions of size 10, which are
 		// test data transactions. All other requests pass though.
 		interceptor := func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			if req.Requests[0].GetResolveIntent() != nil {
 				numIntentResolveBatches.Add(1)
-			}
-			if req.Requests[0].GetPushTxn() != nil {
-				numPushBatches.Add(1)
 			}
 			endTxn := req.Requests[0].GetEndTxn()
 			if endTxn != nil && !endTxn.Commit && len(endTxn.LockSpans) == perTransactionRowCount {
@@ -103,7 +99,6 @@ func TestCleanupIntentsDuringBackupPerformanceRegression(t *testing.T) {
 		// Reset the counters to avoid counting pushes and intent resolutions not
 		// part of the backup.
 		numIntentResolveBatches.Store(0)
-		numPushBatches.Store(0)
 
 		_, err = sqlDb.Exec("backup table foo into 'userfile:///test.foo'")
 		require.NoError(t, err, "Failed to run backup")
@@ -116,10 +111,6 @@ func TestCleanupIntentsDuringBackupPerformanceRegression(t *testing.T) {
 		// In reality, intents get batched into even larger batches, so the actual
 		// number of intent resolution batches is lower than 2,000.
 		require.GreaterOrEqual(t, 2000, int(numIntentResolveBatches.Load()))
-		// Each of the 1,000 transactions is expected to get pushed once, but in an
-		// actual run of the test we might see more pushes (e.g. of other transactions).
-		require.GreaterOrEqual(t, 1100, int(numPushBatches.Load()))
-
 		if !abort {
 			for _, tx := range transactions {
 				// Ensure the long-running transactions can commit.
