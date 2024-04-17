@@ -563,7 +563,7 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 			}
 		} else {
 			rmCmds := []string{
-				`sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \;`,
+				`sudo find /mnt/data* -maxdepth 1 -type f -not -name .roachprod-initialized -exec rm -f {} \;`,
 				`sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data}`,
 				`sudo rm -fr logs* data*`,
 			}
