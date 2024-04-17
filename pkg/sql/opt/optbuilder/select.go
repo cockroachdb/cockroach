@@ -661,6 +661,7 @@ func (b *Builder) buildScan(
 		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
 		private.Flags.NoZigzagJoin = indexFlags.NoZigzagJoin
 		private.Flags.NoFullScan = indexFlags.NoFullScan
+		private.Flags.ForceInvertedIndex = indexFlags.ForceInvertedIndex
 		if indexFlags.Index != "" || indexFlags.IndexID != 0 {
 			idx := -1
 			for i := 0; i < tab.IndexCount(); i++ {
