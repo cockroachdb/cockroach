@@ -29,7 +29,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),
-				to.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithIndexName)),
+				to.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithoutIndexName)),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},
@@ -42,7 +42,7 @@ func init() {
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithIndexName)),
+				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithoutIndexName)),
 				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
@@ -61,7 +61,7 @@ func init() {
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithIndexName)),
+				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithoutIndexName)),
 				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, Not(isSubjectTo2VersionInvariant)),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
