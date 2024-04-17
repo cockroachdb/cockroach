@@ -272,6 +272,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "//pkg/util/version",
+        "//pkg/workload",
         "//pkg/workload/histogram",
         "//pkg/workload/querybench",
         "//pkg/workload/tpcc",

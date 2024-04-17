@@ -816,8 +816,11 @@ func (tpce tpceRestore) DatabaseName() string {
 type tpccRestoreOptions struct {
 	warehouses     int
 	workers        int
+	maxOps         int
 	waitFraction   float64
 	queryTraceFile string
+	seed           uint64
+	fakeTime       uint32
 }
 
 type tpccRestore struct {
@@ -830,8 +833,8 @@ func (tpcc tpccRestore) init(
 	crdbNodes := sp.getCRDBNodes()
 	cmd := roachtestutil.NewCommand(`./cockroach workload init tpcc`).
 		MaybeFlag(tpcc.opts.warehouses > 0, "warehouses", tpcc.opts.warehouses).
-		MaybeFlag(tpcc.opts.workers > 0, "workers", tpcc.opts.workers).
-		MaybeFlag(tpcc.opts.waitFraction != 1, "wait", tpcc.opts.waitFraction).
+		MaybeFlag(tpcc.opts.seed != 0, "seed", tpcc.opts.seed).
+		MaybeFlag(tpcc.opts.fakeTime != 0, "fake-time", tpcc.opts.fakeTime).
 		Arg(fmt.Sprintf("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1]))
 	c.Run(ctx, option.WithNodes([]int{sp.getWorkloadNode()}), cmd.String())
 }
@@ -841,9 +844,11 @@ func (tpcc tpccRestore) run(
 ) error {
 	crdbNodes := sp.getCRDBNodes()
 	cmd := roachtestutil.NewCommand(`./cockroach workload run tpcc`).
-		MaybeFlag(tpcc.opts.warehouses > 0, "warehouses", tpcc.opts.warehouses).
 		MaybeFlag(tpcc.opts.workers > 0, "workers", tpcc.opts.workers).
 		MaybeFlag(tpcc.opts.waitFraction != 1, "wait", tpcc.opts.waitFraction).
+		MaybeFlag(tpcc.opts.maxOps != 0, "max-ops", tpcc.opts.maxOps).
+		MaybeFlag(tpcc.opts.seed != 0, "seed", tpcc.opts.seed).
+		MaybeFlag(tpcc.opts.fakeTime != 0, "fake-time", tpcc.opts.fakeTime).
 		MaybeFlag(tpcc.opts.queryTraceFile != "", "query-trace-file", tpcc.opts.queryTraceFile).
 		Arg(fmt.Sprintf("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1]))
 	return c.RunE(ctx, option.WithNodes([]int{sp.getWorkloadNode()}), cmd.String())
@@ -854,7 +859,21 @@ func (tpcc tpccRestore) fixtureDir() string {
 }
 
 func (tpcc tpccRestore) String() string {
-	return fmt.Sprintf("tpc-c/%d", tpcc.opts.warehouses)
+	var builder strings.Builder
+	builder.WriteString("tpcc/")
+	switch tpcc.opts.warehouses {
+	case 10:
+		builder.WriteString("150MB")
+	case 500:
+		builder.WriteString("8GB")
+	case 7000:
+		builder.WriteString("115GB")
+	case 25000:
+		builder.WriteString("400GB")
+	default:
+		panic("tpcc warehouse count not recognized")
+	}
+	return builder.String()
 }
 
 func (tpcc tpccRestore) DatabaseName() string {
