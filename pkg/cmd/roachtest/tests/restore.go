@@ -368,11 +368,9 @@ func registerRestore(r registry.Registry) {
 			// The weekly 32TB, 400 incremental layer Restore test on AWS.
 			//
 			// NB: Prior to 23.1, restore would OOM on backups that had many
-			// incremental layers and many import spans. This test disables span
-			// target size so restore can process the maximum number of import
-			// spans. Together with having a 400 incremental chain, this
-			// regression tests against the OOMs that we've seen in previous
-			// versions.
+			// incremental layers and many import spans. Together with having a 400
+			// incremental chain, this regression tests against the OOMs that we've
+			// seen in previous versions.
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000,
 				ebsThroughput: 250 /* MB/s */}),
 			backup: makeRestoringBackupSpecs(backupSpecs{
@@ -383,7 +381,7 @@ func registerRestore(r registry.Registry) {
 			timeout: 30 * time.Hour,
 			suites:  registry.Suites(registry.Weekly),
 			setUpStmts: []string{
-				`SET CLUSTER SETTING backup.restore_span.target_size = '0'`,
+				`SET CLUSTER SETTING backup.restore_span.max_file_count = 800`,
 			},
 			restoreUptoIncremental: 400,
 		},
