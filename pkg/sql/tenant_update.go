@@ -148,11 +148,11 @@ func (p *planner) UpdateTenantResourceLimits(
 	)
 }
 
-// ActivateTenant marks a tenant active.
+// ActivateRestoredTenant marks a restored tenant active.
 //
 // The caller is responsible for checking that the user is authorized
 // to take this action.
-func ActivateTenant(
+func ActivateRestoredTenant(
 	ctx context.Context,
 	settings *cluster.Settings,
 	codec keys.SQLCodec,
@@ -177,6 +177,7 @@ func ActivateTenant(
 	// Mark the tenant as active.
 	info.DataState = mtinfopb.DataStateReady
 	info.ServiceMode = serviceMode
+	info.PreviousSourceTenant.CutoverAsOf = txn.KV().DB().Clock().Now()
 	if err := UpdateTenantRecord(ctx, settings, txn, info); err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}

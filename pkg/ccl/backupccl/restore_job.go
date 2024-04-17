@@ -2418,7 +2418,7 @@ func (r *restoreResumer) publishDescriptors(
 			// If the tenant was backed up in the `READY` state then we must activate
 			// the tenant as the final step of the restore. The tenant has already
 			// been created at an earlier stage in the restore in an `ADD` state.
-			if err := sql.ActivateTenant(
+			if err := sql.ActivateRestoredTenant(
 				ctx, r.execCfg.Settings, r.execCfg.Codec, txn, tenant.ID, tenant.ServiceMode,
 			); err != nil {
 				return err

@@ -195,6 +195,10 @@ message StreamIngestionProgress {
   // the start time before it can continue (e.g. when reusing a tenant's data).
   bool initial_revert_required = 10;
 
+  // InitialRevertTo is a timestamp to which the initial revert should be done
+  // if different than ReplicatedTime.
+  util.hlc.Timestamp initial_revert_to = 11 [(gogoproto.nullable) = false];
+
   // Next Id: 10
 }
 
