@@ -214,6 +214,7 @@ func ingestionPlanHook(
 			destinationTenantID,
 			retentionTTLSeconds,
 			options.resumeTimestamp,
+			hlc.Timestamp{},
 			noRevertFirst,
 			jobID,
 			ingestionStmt,
@@ -231,6 +232,7 @@ func createReplicationJob(
 	destinationTenantID roachpb.TenantID,
 	retentionTTLSeconds int32,
 	resumeTimestamp hlc.Timestamp,
+	revertToTimestamp hlc.Timestamp,
 	revertFirst bool,
 	jobID jobspb.JobID,
 	stmt *tree.CreateTenantFromReplication,
@@ -291,6 +293,7 @@ func createReplicationJob(
 			ReplicatedTime:        resumeTimestamp,
 			InitialSplitComplete:  revertFirst,
 			InitialRevertRequired: revertFirst,
+			InitialRevertTo:       revertToTimestamp,
 		},
 		Details: streamIngestionDetails,
 	}
