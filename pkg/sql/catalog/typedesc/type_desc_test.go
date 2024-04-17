@@ -848,13 +848,17 @@ func TestValidateTypeDesc(t *testing.T) {
 	}
 }
 
-func TestStripDanglingBackReferences(t *testing.T) {
+func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 	type testCase struct {
 		name                  string
 		input, expectedOutput descpb.TypeDescriptor
 		validIDs              catalog.DescriptorIDSet
 	}
-
+	badPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
+	goodPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
+	badPrivilege.Users = append(badPrivilege.Users, catpb.UserPrivileges{
+		UserProto: username.TestUserName().EncodeProto(),
+	})
 	testData := []testCase{
 		{
 			name: "referencing descriptor IDs",
@@ -866,6 +870,7 @@ func TestStripDanglingBackReferences(t *testing.T) {
 				ArrayTypeID:              105,
 				Kind:                     descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE,
 				ReferencingDescriptorIDs: []descpb.ID{12345, 105, 5678},
+				Privileges:               badPrivilege,
 			},
 			expectedOutput: descpb.TypeDescriptor{
 				Name:                     "foo",
@@ -875,6 +880,7 @@ func TestStripDanglingBackReferences(t *testing.T) {
 				ArrayTypeID:              105,
 				Kind:                     descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE,
 				ReferencingDescriptorIDs: []descpb.ID{105},
+				Privileges:               goodPrivilege,
 			},
 			validIDs: catalog.MakeDescriptorIDSet(100, 101, 104, 105),
 		},
@@ -889,8 +895,12 @@ func TestStripDanglingBackReferences(t *testing.T) {
 			require.NoError(t, b.StripDanglingBackReferences(test.validIDs.Contains, func(id jobspb.JobID) bool {
 				return false
 			}))
+			require.NoError(t, b.StripNonExistentRoles(func(role username.SQLUsername) bool {
+				return role.IsAdminRole() || role.IsPublicRole() || role.IsRootUser()
+			}))
 			desc := b.BuildCreatedMutableType()
 			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
+			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedNonExistentRoles))
 			require.Equal(t, out.BuildCreatedMutableType().TypeDesc(), desc.TypeDesc())
 		})
 	}

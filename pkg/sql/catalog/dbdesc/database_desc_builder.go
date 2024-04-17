@@ -183,6 +183,25 @@ func (ddb *databaseDescriptorBuilder) StripDanglingBackReferences(
 	return nil
 }
 
+// StripNonExistentRoles implements the catalog.DescriptorBuilder
+// interface.
+func (ddb *databaseDescriptorBuilder) StripNonExistentRoles(
+	roleExists func(role username.SQLUsername) bool,
+) error {
+	newPrivs := make([]catpb.UserPrivileges, 0, len(ddb.maybeModified.Privileges.Users))
+	for _, priv := range ddb.maybeModified.Privileges.Users {
+		exists := roleExists(priv.UserProto.Decode())
+		if exists {
+			newPrivs = append(newPrivs, priv)
+		}
+	}
+	if len(newPrivs) != len(ddb.maybeModified.Privileges.Users) {
+		ddb.maybeModified.Privileges.Users = newPrivs
+		ddb.changes.Add(catalog.StrippedNonExistentRoles)
+	}
+	return nil
+}
+
 // SetRawBytesInStorage implements the catalog.DescriptorBuilder interface.
 func (ddb *databaseDescriptorBuilder) SetRawBytesInStorage(rawBytes []byte) {
 	ddb.rawBytesInStorage = append([]byte(nil), rawBytes...) // deep-copy
