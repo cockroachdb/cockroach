@@ -168,6 +168,7 @@ go_test(
         "//pkg/build",
         "//pkg/cli/exit",
         "//pkg/settings/cluster",
+        "//pkg/testutils/skip",
         "//pkg/util/caller",
         "//pkg/util/ctxgroup",
         "//pkg/util/leaktest",

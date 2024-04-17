@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
@@ -218,6 +219,8 @@ func TestMessageReceived(t *testing.T) {
 // to much longer than the configured timeout.
 func TestHTTPSinkTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	skip.WithIssue(t, 121822)
 
 	address := "http://localhost" // testBase appends the port
 	timeout := time.Millisecond
