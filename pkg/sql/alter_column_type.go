@@ -111,10 +111,23 @@ func AlterColumnType(
 
 	var kind schemachange.ColumnConversionKind
 	if t.Using != nil {
-		// If an expression is provided, we always need to try a general conversion.
-		// We have to follow the process to create a new column and backfill it
-		// using the expression.
-		kind = schemachange.ColumnConversionGeneral
+		// If Using is provided and the experssion is identitcal to the new type cast,
+		// we use ClassifyConversion to determine the difficulty.
+		// Otherwise, we always need to try a general conversion and follow the process
+		// to create a new column and backfill it using the expression.
+		newColCast := tree.CastExpr{
+			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.GetName())},
+			Type:       typ,
+			SyntaxMode: tree.CastShort,
+		}
+		if tree.Serialize(&newColCast) == tree.Serialize(t.Using) {
+			kind, err = schemachange.ClassifyConversion(ctx, col.GetType(), typ)
+			if err != nil {
+				return err
+			}
+		} else {
+			kind = schemachange.ColumnConversionGeneral
+		}
 	} else {
 		kind, err = schemachange.ClassifyConversion(ctx, col.GetType(), typ)
 		if err != nil {
