@@ -86,6 +86,19 @@ case $1 in
         # setup dns
         $0 dns drt-main create
         ;;
+      "drt-chaos")
+        roachprod create drt-chaos \
+          --clouds gce \
+          --gce-managed \
+          --gce-zones "us-east1-b" \
+          --nodes 5 \
+          --gce-machine-type n2-standard-8 \
+          --gce-pd-volume-size 3000 --local-ssd=false \
+          --username drt \
+          --lifetime 8760h
+        # setup dns
+        $0 dns drt-chaos create
+        ;;
       "drt-ua1")
         roachprod create drt-ua1 \
           --clouds="gce" \

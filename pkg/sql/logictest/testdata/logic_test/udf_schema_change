@@ -209,7 +209,6 @@ ALTER PROCEDURE f_test_sc(INT) SET SCHEMA test_alter_sc;
 statement ok
 ALTER FUNCTION f_test_sc(INT) SET SCHEMA public;
 
-skipif config local-mixed-23.1
 query TT
   WITH fns AS (
             SELECT crdb_internal.pb_to_json(
