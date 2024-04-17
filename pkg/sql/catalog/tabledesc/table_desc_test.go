@@ -14,7 +14,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/stretchr/testify/require"
 )
@@ -58,7 +60,7 @@ func (desc *Mutable) TestingSetClusterVersion(d descpb.TableDescriptor) {
 	desc.original = makeImmutable(&d)
 }
 
-func TestStripDanglingBackReferences(t *testing.T) {
+func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 	type testCase struct {
 		name                  string
 		input, expectedOutput descpb.TableDescriptor
@@ -66,6 +68,11 @@ func TestStripDanglingBackReferences(t *testing.T) {
 		validJobIDs           map[jobspb.JobID]struct{}
 	}
 
+	badPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
+	goodPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
+	badPrivilege.Users = append(badPrivilege.Users, catpb.UserPrivileges{
+		UserProto: username.TestUserName().EncodeProto(),
+	})
 	testData := []testCase{
 		{
 			name: "descriptor IDs",
@@ -85,6 +92,7 @@ func TestStripDanglingBackReferences(t *testing.T) {
 					{OriginTableID: 105},
 				},
 				ReplacementOf: descpb.TableDescriptor_Replacement{ID: 12345},
+				Privileges:    badPrivilege,
 			},
 			expectedOutput: descpb.TableDescriptor{
 				Name: "foo",
@@ -96,6 +104,7 @@ func TestStripDanglingBackReferences(t *testing.T) {
 				InboundFKs: []descpb.ForeignKeyConstraint{
 					{OriginTableID: 105},
 				},
+				Privileges: goodPrivilege,
 			},
 			validDescIDs: catalog.MakeDescriptorIDSet(100, 101, 104, 105),
 			validJobIDs:  map[jobspb.JobID]struct{}{},
@@ -114,7 +123,8 @@ func TestStripDanglingBackReferences(t *testing.T) {
 					{MutationID: 1},
 					{MutationID: 2},
 				},
-				DropJobID: 1,
+				DropJobID:  1,
+				Privileges: badPrivilege,
 			},
 			expectedOutput: descpb.TableDescriptor{
 				Name: "foo",
@@ -126,6 +136,7 @@ func TestStripDanglingBackReferences(t *testing.T) {
 					{MutationID: 1},
 					{MutationID: 2},
 				},
+				Privileges: goodPrivilege,
 			},
 			validDescIDs: catalog.MakeDescriptorIDSet(100, 101, 104, 105),
 			validJobIDs:  map[jobspb.JobID]struct{}{111222333444: {}},
@@ -142,8 +153,12 @@ func TestStripDanglingBackReferences(t *testing.T) {
 				_, ok := test.validJobIDs[id]
 				return ok
 			}))
+			require.NoError(t, b.StripNonExistentRoles(func(role username.SQLUsername) bool {
+				return role.IsAdminRole() || role.IsPublicRole() || role.IsRootUser()
+			}))
 			desc := b.BuildCreatedMutableTable()
 			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
+			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedNonExistentRoles))
 			require.Equal(t, out.BuildCreatedMutableTable().TableDesc(), desc.TableDesc())
 		})
 	}
