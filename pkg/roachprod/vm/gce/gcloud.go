@@ -312,6 +312,8 @@ type ProviderOpts struct {
 	// Use an instance template and a managed instance group to create VMs. This
 	// enables cluster resizing, load balancing, and health monitoring.
 	Managed bool
+	// Enable the cron service. It is disabled by default.
+	EnableCron bool
 
 	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
 	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
@@ -951,6 +953,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"use 'TERMINATE' maintenance policy (for GCE live migrations)")
 	flags.BoolVar(&o.Managed, ProviderName+"-managed", false,
 		"use a managed instance group (enables resizing, load balancing, and health monitoring)")
+	flags.BoolVar(&o.EnableCron, ProviderName+"-enable-cron",
+		false, "Enables the cron service (it is disabled by default)")
 }
 
 // ConfigureClusterFlags implements vm.ProviderFlags.
@@ -1222,7 +1226,11 @@ func (p *Provider) computeInstanceArgs(
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
+	filename, err := writeStartupScript(
+		extraMountOpts, opts.SSDOpts.FileSystem,
+		providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS),
+		providerOpts.EnableCron,
+	)
 	if err != nil {
 		return nil, cleanUpFn, errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
