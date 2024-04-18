@@ -179,6 +179,10 @@ func TestMultiRegionDataDriven(t *testing.T) {
 									}
 								},
 							},
+							// NB: This test is asserting on whether it reads from the leaseholder
+							// or the follower first, so it has to route to leaseholder when
+							// requested.
+							KVClient: &kvcoord.ClientTestingKnobs{RouteToLeaseholderFirst: true},
 						},
 					}
 				}
