@@ -13,6 +13,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -37,6 +38,23 @@ var (
 	DisableCheckSSTRangeKeyMasking = util.ConstantWithMetamorphicTestBool(
 		"disable-checksstconflicts-range-key-masking", false)
 )
+
+// KeyCollisionError represents a failed attempt to ingest the same key twice
+type KeyCollisionError struct {
+	Key roachpb.Key
+}
+
+func (d *KeyCollisionError) Error() string {
+	return fmt.Sprintf("ingested key collides with an existing one: %s", d.Key)
+}
+
+// NewKeyCollisionError constructs a KeyCollisionError, copying its input.
+func NewKeyCollisionError(key roachpb.Key) error {
+	ret := &KeyCollisionError{
+		Key: key.Clone(),
+	}
+	return ret
+}
 
 // NewSSTIterator returns an MVCCIterator for the provided "levels" of
 // SST files. The SSTs are merged during iteration. Each subslice's sstables
@@ -346,8 +364,7 @@ func CheckSSTConflicts(
 			allowShadow := !disallowShadowingBelow.IsEmpty() &&
 				disallowShadowingBelow.LessEq(extKey.Timestamp) && bytes.Equal(extValueRaw, sstValueRaw)
 			if !allowShadow {
-				return errors.Errorf(
-					"ingested key collides with an existing one: %s", sstKey.Key)
+				return NewKeyCollisionError(sstKey.Key)
 			}
 		}
 

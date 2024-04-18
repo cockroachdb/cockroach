@@ -58,7 +58,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 	case *kvpb.WriteIntentError:
 		key := v.Locks[0].Key
 		decodeKeyFn := func() (tableName string, indexName string, colNames []string, values []string, err error) {
-			codec, index, err := decodeKeyCodecAndIndex(tableDesc, key)
+			codec, index, err := DecodeKeyCodecAndIndex(tableDesc, key)
 			if err != nil {
 				return "", "", nil, nil, err
 			}
@@ -67,7 +67,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 				return "", "", nil, nil, err
 			}
 
-			colNames, values, err = decodeKeyValsUsingSpec(&spec, key)
+			colNames, values, err = DecodeKeyValsUsingSpec(&spec, key)
 			return spec.TableName, spec.IndexName, colNames, values, err
 		}
 		return newLockNotAvailableError(v.Reason, decodeKeyFn)
@@ -86,7 +86,7 @@ func ConvertFetchError(spec *fetchpb.IndexFetchSpec, err error) error {
 	case errors.As(err, &errs.wi):
 		key := errs.wi.Locks[0].Key
 		decodeKeyFn := func() (tableName string, indexName string, colNames []string, values []string, err error) {
-			colNames, values, err = decodeKeyValsUsingSpec(spec, key)
+			colNames, values, err = DecodeKeyValsUsingSpec(spec, key)
 			return spec.TableName, spec.IndexName, colNames, values, err
 		}
 		return newLockNotAvailableError(errs.wi.Reason, decodeKeyFn)
@@ -135,7 +135,7 @@ func NewUniquenessConstraintViolationError(
 
 // decodeKeyValsUsingSpec decodes an index key and returns the key column names
 // and values.
-func decodeKeyValsUsingSpec(
+func DecodeKeyValsUsingSpec(
 	spec *fetchpb.IndexFetchSpec, key roachpb.Key,
 ) (colNames []string, values []string, err error) {
 	// We want the key columns without the suffix columns.
@@ -183,7 +183,7 @@ func newLockNotAvailableError(
 
 // decodeKeyCodecAndIndex extracts the codec and index from a key (for a
 // particular table).
-func decodeKeyCodecAndIndex(
+func DecodeKeyCodecAndIndex(
 	tableDesc catalog.TableDescriptor, key roachpb.Key,
 ) (keys.SQLCodec, catalog.Index, error) {
 	_, tenantID, err := keys.DecodeTenantPrefix(key)
@@ -213,7 +213,7 @@ func DecodeRowInfo(
 	value *roachpb.Value,
 	allColumns bool,
 ) (_ catalog.Index, columnNames []string, columnValues []string, _ error) {
-	codec, index, err := decodeKeyCodecAndIndex(tableDesc, key)
+	codec, index, err := DecodeKeyCodecAndIndex(tableDesc, key)
 	if err != nil {
 		return nil, nil, nil, err
 	}

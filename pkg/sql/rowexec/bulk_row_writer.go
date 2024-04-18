@@ -12,18 +12,22 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -132,11 +136,12 @@ func (sp *bulkRowWriter) wrapDupError(ctx context.Context, orig error) error {
 }
 
 func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) error {
+	tableDesc := sp.tableDesc
 	writeTS := sp.spec.Table.CreateAsOfTime
 	const bufferSize = 64 << 20
 	adder, err := sp.flowCtx.Cfg.BulkAdder(
 		ctx, sp.flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
-			Name:          sp.tableDesc.GetName(),
+			Name:          tableDesc.GetName(),
 			MinBufferSize: bufferSize,
 			// We disallow shadowing here to ensure that we report errors when builds
 			// of unique indexes fail when there are duplicate values. Note that while
@@ -153,12 +158,42 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 	}
 	defer adder.Close(ctx)
 
+	decodeKeyFn := func(origErr *storage.KeyCollisionError) (tableName string, indexName string, colNames []string, values []string, err error) {
+		key := origErr.Key
+		codec, index, err := row.DecodeKeyCodecAndIndex(tableDesc, key)
+		if err != nil {
+			return "", "", nil, nil, err
+		}
+		var spec fetchpb.IndexFetchSpec
+		if err := rowenc.InitIndexFetchSpec(&spec, codec, tableDesc, index, nil /* fetchColumnIDs */); err != nil {
+			return "", "", nil, nil, err
+		}
+
+		colNames, values, err = row.DecodeKeyValsUsingSpec(&spec, key)
+		return spec.TableName, spec.IndexName, colNames, values, err
+	}
+
 	// ingestKvs drains kvs from the channel until it closes, ingesting them using
 	// the BulkAdder. It handles the required buffering/sorting/etc.
 	ingestKvs := func() error {
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
 				if err := adder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
+					if errors.HasType(err, (*storage.KeyCollisionError)(nil)) {
+						var typed *storage.KeyCollisionError
+						errors.As(err, &typed)
+						tableName, indexName, colNames, values, decodeErr := decodeKeyFn(typed)
+						if decodeErr != nil {
+							return decodeErr
+						}
+						return fmt.Errorf("%s (%s)=(%s) in %s@%s",
+							"key collision",
+							strings.Join(colNames, ","),
+							strings.Join(values, ","),
+							tableName,
+							indexName,
+						)
+					}
 					return sp.wrapDupError(ctx, err)
 				}
 			}
