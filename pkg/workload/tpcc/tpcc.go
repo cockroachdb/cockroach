@@ -586,7 +586,7 @@ func (w *tpcc) Tables() []workload.Table {
 			New: func() interface{} {
 				return &generateLocals{
 					rng: tpccRand{
-						Rand: rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
+						Rand: rand.New(rand.NewSource(seed)),
 						// Intentionally wait until here to initialize the precomputed rands
 						// so a caller of Tables that only wants schema doesn't compute
 						// them.

@@ -147,10 +147,8 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 	return p, nil
 }
 
-func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
+func (p *payment) run(ctx context.Context, wID int, rng *rand.Rand) (interface{}, error) {
 	p.config.auditor.paymentTransactions.Add(1)
-
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	d := paymentData{
 		dID: rng.Intn(10) + 1,

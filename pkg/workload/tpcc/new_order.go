@@ -128,10 +128,8 @@ func createNewOrder(
 	return n, nil
 }
 
-func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
+func (n *newOrder) run(ctx context.Context, wID int, rng *rand.Rand) (interface{}, error) {
 	n.config.auditor.newOrderTransactions.Add(1)
-
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	d := newOrderData{
 		wID:    wID,

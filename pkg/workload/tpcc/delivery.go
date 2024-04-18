@@ -78,10 +78,8 @@ func createDelivery(
 	return del, nil
 }
 
-func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
+func (del *delivery) run(ctx context.Context, wID int, rng *rand.Rand) (interface{}, error) {
 	del.config.auditor.deliveryTransactions.Add(1)
-
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	oCarrierID := rng.Intn(10) + 1
 	olDeliveryD := timeutil.Now()
