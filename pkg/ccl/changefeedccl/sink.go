@@ -235,7 +235,9 @@ func getSink(
 			return makeNullSink(sinkURL{URL: u}, metricsBuilder(nullIsAccounted))
 		case isKafkaSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
-				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
+				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
+					numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+					serverCfg.Settings, metricsBuilder)
 			})
 		case isPulsarSink(u):
 			var testingKnobs *TestingKnobs

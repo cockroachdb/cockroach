@@ -1271,7 +1271,7 @@ func buildKafkaConfig(
 	return config, nil
 }
 
-func makeKafkaSink(
+func makeDeprecatedKafkaSink(
 	ctx context.Context,
 	u sinkURL,
 	targets changefeedbase.Targets,
