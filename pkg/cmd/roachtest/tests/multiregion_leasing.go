@@ -13,7 +13,9 @@ package tests
 import (
 	"context"
 	"fmt"
-	"sort"
+	"os"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -21,13 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lib/pq"
 )
 
@@ -35,13 +34,14 @@ import (
 func runSchemaChangeMultiRegionBenchmarkLeasing(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
-	var durations [2][]time.Duration
+	var durations [2]int64
 	defaultOpts := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), defaultOpts)
 	// Create 600 tables inside the database, which is above our default lease
 	// refresh limit of 500. This will only be done when session based leasing
 	// is enabled.
 	numTables := 600 / len(c.All())
+	const selectQueryFileName = "out.sql"
 	{
 		t.Status("Creating tables for benchmark")
 		grp := ctxgroup.WithContext(ctx)
@@ -90,130 +90,122 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 		if err := grp.Wait(); err != nil {
 			t.Fatal(err)
 		}
+		// Generate a file to select from all tables that will only get a lease on
+		// a table.
+		selectQueryFile := strings.Builder{}
+		selectFilePath := t.ArtifactsDir() + string(os.PathSeparator) + selectQueryFileName
+		for i := 0; i < numTables; i++ {
+			for j := 1; j <= len(c.All()); j++ {
+				// Select the OID for the table, which should involve no communication
+				// with other nodes.
+				createTbl := fmt.Sprintf("SELECT 'table_%d_%d'::REGCLASS::OID;", j, i)
+				selectQueryFile.WriteString(createTbl)
+				selectQueryFile.WriteString(";\n")
+			}
+		}
+		err := os.WriteFile(selectFilePath, []byte(selectQueryFile.String()), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.Put(ctx, selectFilePath, selectQueryFileName)
 	}
 
-	for numTestIters := 0; numTestIters < 5; numTestIters++ {
-		for modeIdx, sessionBasedLeasingEnabled := range []bool{true, false} {
-			func() {
-				// When session based leasing is disabled, force expiry based leasing.
-				var options map[string]string
-				if !sessionBasedLeasingEnabled {
-					// Note: After flipping the cluster settings we need to restart all nodes,
-					// since the leasing code is not designed switch to session based leasing
-					// to expiry based (in an online manner). Only the reverse direction is
-					// supported online with a migration.
-					options = map[string]string{
-						"sql.catalog.experimental_use_session_based_leasing": "off",
-						"sql.catalog.descriptor_lease_duration":              "30s",
-						"sql.catalog.descriptor_lease_renewal_fraction":      "6s",
-					}
+	for modeIdx, sessionBasedLeasingEnabled := range []bool{true, false} {
+		func() {
+			// When session based leasing is disabled, force expiry based leasing.
+			var options map[string]string
+			if !sessionBasedLeasingEnabled {
+				// Note: After flipping the cluster settings we need to restart all nodes,
+				// since the leasing code is not designed switch to session based leasing
+				// to expiry based (in an online manner). Only the reverse direction is
+				// supported online with a migration.
+				options = map[string]string{
+					"sql.catalog.experimental_use_session_based_leasing": "off",
+					"sql.catalog.descriptor_lease_duration":              "30s",
+					"sql.catalog.descriptor_lease_renewal_fraction":      "6s",
+				}
 
-				} else {
-					options = map[string]string{
-						"sql.catalog.experimental_use_session_based_leasing": "auto",
-					}
+			} else {
+				options = map[string]string{
+					"sql.catalog.experimental_use_session_based_leasing": "auto",
 				}
-				conn := c.Conn(ctx, t.L(), c.Node(1)[0])
-				defer conn.Close()
-				for s, v := range options {
-					if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING %s='%s'", s, v)); err != nil {
-						t.Fatal(err)
-					}
-				}
-				c.Stop(ctx, t.L(), option.DefaultStopOpts())
-				c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), defaultOpts)
-
-				// Next spawn a thread on each node to select from all the tables created
-				// above. We are going to do two passes, with multiple threads. After 30
-				// seconds the lease will expire in the expiry based model, and checking
-				// all of these tables will take more than the expiry time. Additionally,
-				// a 100 tables will *never* be auto-refreshed.
-				const numWorkersPerNode = 8
-				connPoolPerNode := make([]*pgxpool.Pool, 0, len(c.All()))
-				defer func() {
-					for _, pool := range connPoolPerNode {
-						pool.Close()
-					}
-				}()
-				for _, node := range c.All() {
-					url, err := c.ExternalPGUrl(ctx, t.L(), c.Node(node), roachprod.PGURLOptions{Secure: true})
-					if err != nil {
-						t.Fatal(err)
-					}
-					config, err := pgxpool.ParseConfig(url[0])
-					if err != nil {
-						t.Fatal(err)
-					}
-					config.MinConns = numWorkersPerNode
-					connPool, err := pgxpool.NewWithConfig(ctx, config)
-					if err != nil {
-						t.Fatal(err)
-					}
-					connPoolPerNode = append(connPoolPerNode, connPool)
-				}
-				grp := ctxgroup.WithContext(ctx)
-				startTime := timeutil.Now()
-				for nodeIdx := range c.All() {
-					nodeIdx := nodeIdx
-					tablesPerWorker := numTables / numWorkersPerNode
-					for workerId := 0; workerId < numWorkersPerNode; workerId++ {
-						workerId := workerId
-						grp.GoCtx(func(ctx context.Context) error {
-							conn, err := connPoolPerNode[nodeIdx].Acquire(ctx)
-							if err != nil {
-								return err
-							}
-							defer conn.Release()
-							const numIterations = 8
-							for iter := 0; iter < numIterations; iter++ {
-								for i := workerId * tablesPerWorker; i < (workerId+1)*tablesPerWorker; i++ {
-									for j := 1; j <= len(c.All()); j++ {
-										createTbl := fmt.Sprintf("SELECT * FROM table_%d_%d;", j, i)
-										_, err := conn.Exec(ctx, createTbl)
-										if err != nil {
-											return err
-										}
-									}
-								}
-							}
-							return nil
-						})
-					}
-				}
-				t.Status(fmt.Sprintf("starting benchmark for session_based_leasing=%t", sessionBasedLeasingEnabled))
-				if err := grp.Wait(); err != nil {
+			}
+			conn := c.Conn(ctx, t.L(), c.Node(1)[0])
+			defer conn.Close()
+			for s, v := range options {
+				if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING %s='%s'", s, v)); err != nil {
 					t.Fatal(err)
 				}
-				elapsedTime := timeutil.Since(startTime)
-				durations[modeIdx] = append(durations[modeIdx], elapsedTime)
-				t.Status(fmt.Sprintf("benchmark completed for session_based_leasing=%t in %s", sessionBasedLeasingEnabled, elapsedTime))
-			}()
-		}
+			}
+			c.Stop(ctx, t.L(), option.DefaultStopOpts())
+			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), defaultOpts)
+
+			grp := ctxgroup.WithContext(ctx)
+			totalTime := atomic.Int64{}
+			// Start one thread per-node that will execute the cockroach sql command
+			// with a script that selects from each table. The number of tables that
+			// we have is high so the lease manager can't keep everything refreshed
+			// intentionally. The session based leasing will not have to deal with
+			// renewals and take a shorter execution time.
+			for _, node := range c.All() {
+				nodeIdx := node
+				grp.GoCtx(func(ctx context.Context) error {
+					numIterations := 4
+					for iter := 0; iter < numIterations; iter++ {
+						output, err := c.RunWithDetailsSingleNode(ctx,
+							t.L(),
+							install.WithNodes(install.Nodes{install.Node(nodeIdx)}),
+							fmt.Sprintf(
+								"time -p ./cockroach sql -f %s --url={pgurl:%d} > /dev/null",
+								selectQueryFileName,
+								nodeIdx),
+						)
+						if err != nil {
+							return err
+						}
+						// Output will contain lines from the `time -p` command of the format:
+						// 	real 173.58
+						// 	user 0.47
+						// 	sys 0.16
+						// We are going to intentionally extract the first line to get the
+						// elapsed time for the set of queries.
+						outputSlice := strings.Split(output.Output(false), "\n")
+						realExecTime := 0.0
+						realPrefix := ""
+						_, err = fmt.Sscanf(outputSlice[len(outputSlice)-4], "%s%f", &realPrefix, &realExecTime)
+						if err != nil {
+							return err
+						}
+						// Update our tally of execution time for this set of queries.
+						totalTime.Add(int64(realExecTime))
+					}
+					return nil
+				})
+			}
+			t.Status(fmt.Sprintf("starting benchmark for session_based_leasing=%t", sessionBasedLeasingEnabled))
+			if err := grp.Wait(); err != nil {
+				t.Fatal(err)
+			}
+			durations[modeIdx] = int64(time.Duration(totalTime.Load()) * time.Millisecond)
+			t.Status(fmt.Sprintf("benchmark completed for session_based_leasing=%t in %d", sessionBasedLeasingEnabled, durations[modeIdx]))
+		}()
 	}
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 
-	percentages := make([]int, len(durations[0]))
-	for i := range percentages {
-		percentages[i] = int((durations[1][i]*100)/durations[0][i]) - 100
-	}
-	sort.SliceStable(percentages, func(i, j int) bool {
-		return percentages[i] < percentages[j]
-	})
-	// Confirm that session based leasing took less time for the selects.
-	medianPercentage := percentages[len(percentages)/2]
-	t.Status(fmt.Sprintf("Observed the following percentage(%v), "+
-		"session based leasing time(%v), expiry based leasing time (%v)",
-		percentages, durations[0], durations[1]))
-	if medianPercentage < 0 {
+	percentage := int((durations[1]*100)/durations[0]) - 100
+	t.Status(fmt.Sprintf("Observed the following percentage(%d), "+
+		"session based leasing time(%d), expiry based leasing time (%d)",
+		percentage, durations[0], durations[1]))
+	if percentage < 0 {
 		t.Fatal(fmt.Sprintf("Expected session based leasing to be faster with many descriptors (%d%%).",
-			medianPercentage))
+			percentage))
 	}
 	// Track the percentage improvement between the two.
 	t.Status(fmt.Sprintf("session based leasing produced a median improvement of %d%% ",
-		medianPercentage))
-	// We see an up to 50% improvement in this scenario, so fail fatally if we miss
+		percentage))
+	// We see an at least a 15% improvement in this scenario, so fail fatally if we miss
 	// a percentage of that mark.
-	if medianPercentage < 15 {
+	if percentage < 15 {
 		t.Fatal("lower than expected improvement in execution time")
 	}
 }
