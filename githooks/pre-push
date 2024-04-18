@@ -8,11 +8,17 @@ set -uo pipefail
 # deny push of a head but not a tag to cockroachdb/cochroach ssh and http URLs.
 while read local_ref local_sha remote_ref remote_sha
 do 
-  if [[ "$remote_ref" == "refs/heads/"* ]] && [[ "$2" == *"cockroachdb/cockroach"* ]]; then
+  if [[ "$remote_ref" == "refs/heads/"* ]] && [[ "$2" == *"cockroachdb/cockroach"* ]] && [[ "$remote_ref" != "refs/heads/blathers/backport-"* ]]; then
     echo "Refusing to push to $remote_ref on $2."
     echo "Push your branch to your own fork and open a PR from there."
     echo "If you just want to see what CI thinks, you can push branch:refs/ci/branch to trigger a CI run."
-    echo "If this is an emergency or unusual circumstance that requires a branch on origin, push with --no-verify."
+    if [[ "$remote_ref" != "refs/heads/release-"* ]] && [[ "$remote_ref" != "refs/heads/staging" ]] && [[ "$remote_ref" != "refs/heads/trying" ]]; then
+      echo "If this is an emergency or unusual circumstance that requires a branch on origin, push with --no-verify."
+    fi
+    if [[ "$remote_ref" != "refs/heads/custombuild"* ]]; then
+      echo "Consider using the prefix custombuild- for your branch name to help distinguish this branch from legitimate release branches."
+    fi
+    echo "If you push a branch to origin, delete it as soon as possible."
     exit 1
   fi
 done
