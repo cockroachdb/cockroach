@@ -501,6 +501,10 @@ message LocalOnlySessionData {
   // optimizer should use an improved costing estimate for DistinctOn operators
   // with limit hints.
   bool optimizer_use_improved_distinct_on_limit_hint_costing = 126;
+  // OptimizerUseImprovedTrigramSimilaritySelectivity indicates whether the
+  // optimizer should use an improved selectivitiy estimate for trigram
+  // similarity filters.
+  bool optimizer_use_improved_trigram_similarity_selectivity = 127;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

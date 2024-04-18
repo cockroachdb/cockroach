@@ -191,6 +191,7 @@ type Memo struct {
 	useVirtualComputedColumnStats              bool
 	useTrigramSimilarityOptimization           bool
 	useImprovedDistinctOnLimitHintCosting      bool
+	useImprovedTrigramSimilaritySelectivity    bool
 	trigramSimilarityThreshold                 float64
 	splitScanLimit                             int32
 
@@ -270,6 +271,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useVirtualComputedColumnStats:              evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats,
 		useTrigramSimilarityOptimization:           evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization,
 		useImprovedDistinctOnLimitHintCosting:      evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting,
+		useImprovedTrigramSimilaritySelectivity:    evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity,
 		trigramSimilarityThreshold:                 evalCtx.SessionData().TrigramSimilarityThreshold,
 		splitScanLimit:                             evalCtx.SessionData().OptSplitScanLimit,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
@@ -427,6 +429,7 @@ func (m *Memo) IsStale(
 		m.useVirtualComputedColumnStats != evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats ||
 		m.useTrigramSimilarityOptimization != evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization ||
 		m.useImprovedDistinctOnLimitHintCosting != evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting ||
+		m.useImprovedTrigramSimilaritySelectivity != evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity ||
 		m.trigramSimilarityThreshold != evalCtx.SessionData().TrigramSimilarityThreshold ||
 		m.splitScanLimit != evalCtx.SessionData().OptSplitScanLimit ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
