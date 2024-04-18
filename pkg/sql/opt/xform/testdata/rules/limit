@@ -2880,19 +2880,19 @@ project
  │    │    │    ├── key: (5,21,23,24)
  │    │    │    ├── fd: ()-->(1,2), (5)-->(3,4,6-16), (21,23,24)-->(22), (5,21,23,24)-->(19,20)
  │    │    │    ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
- │    │    │    ├── limit hint: 20.00
+ │    │    │    ├── limit hint: 120.95
  │    │    │    ├── index-join t93410
  │    │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16
  │    │    │    │    ├── key: (5)
  │    │    │    │    ├── fd: ()-->(1,2), (5)-->(3,4,6-16)
  │    │    │    │    ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
- │    │    │    │    ├── limit hint: 100.00
+ │    │    │    │    ├── limit hint: 200.00
  │    │    │    │    └── sort
  │    │    │    │         ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null
  │    │    │    │         ├── key: (5)
  │    │    │    │         ├── fd: ()-->(1,2), (5)-->(3,4,9)
  │    │    │    │         ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
- │    │    │    │         ├── limit hint: 100.00
+ │    │    │    │         ├── limit hint: 200.00
  │    │    │    │         └── scan t93410@t93410_col1_col2_col5_col9_key [as=t1]
  │    │    │    │              ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null
  │    │    │    │              ├── constraint: /1/2/5/9: [/1/1 - /1/1]
@@ -3030,7 +3030,8 @@ limit
  ├── ordering: +9,-5
  ├── distinct-on
  │    ├── columns: t1.col5:5!null col9:9!null t2.col2:20
- │    ├── grouping columns: t1.col5:5!null
+ │    ├── grouping columns: t1.col5:5!null col9:9!null
+ │    ├── internal-ordering: +9,-5 opt(1,2)
  │    ├── key: (5)
  │    ├── fd: (5)-->(9,20)
  │    ├── ordering: +9,-5
@@ -3056,10 +3057,8 @@ limit
  │    │         ├── t2.col2:20 = 1 [outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
  │    │         └── t2.col1:19 = 1 [outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
  │    └── aggregations
- │         ├── first-agg [as=t2.col2:20, outer=(20)]
- │         │    └── t2.col2:20
- │         └── const-agg [as=col9:9, outer=(9)]
- │              └── col9:9
+ │         └── first-agg [as=t2.col2:20, outer=(20)]
+ │              └── t2.col2:20
  └── 20
 
 # This should generate a partial streaming aggregation.
