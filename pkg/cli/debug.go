@@ -922,6 +922,8 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 
 var debugPebbleOpts = struct {
 	sharedStorageURI string
+	exciseTenantID   uint64
+	exciseTableID    uint32
 }{}
 
 // DebugPebbleCmd is the root of all debug pebble commands.
@@ -1470,6 +1472,7 @@ func init() {
 			return err
 		}),
 		tool.OpenOptions(pebbleOpenOptionLockDir{pebbleToolFS}),
+		tool.WithDBExciseSpanFn(pebbleExciseSpanFn),
 	)
 	DebugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	f := DebugPebbleCmd.PersistentFlags()
@@ -1631,8 +1634,35 @@ func initPebbleCmds(cmd *cobra.Command, pebbleTool *tool.T) {
 			pebbleCryptoInitializer(cmd.Context())
 			return nil
 		}
+		if c.Name() == "excise" {
+			f := c.Flags()
+			f.Uint64Var(&debugPebbleOpts.exciseTenantID, "tenant-id", 0, "tenant ID for table to excise (must be used in conjunction with --table-id)")
+			f.Uint32Var(&debugPebbleOpts.exciseTableID, "table-id", 0, "table ID to excise (must be used in conjunction with --tenant-id)")
+		}
 		initPebbleCmds(c, pebbleTool)
 	}
+}
+
+// pebbleExciseSpanFn implements tool.DBExciseSpanFn. It returns a span
+// for a table if the table/tenant ID flags are used.
+func pebbleExciseSpanFn() (pebble.KeyRange, error) {
+	if debugPebbleOpts.exciseTenantID == 0 && debugPebbleOpts.exciseTableID == 0 {
+		return pebble.KeyRange{}, nil
+	}
+	if debugPebbleOpts.exciseTenantID == 0 || debugPebbleOpts.exciseTableID == 0 {
+		return pebble.KeyRange{}, errors.Errorf("--tenant-id and --table-id must be specified together")
+	}
+	tenantID, err := roachpb.MakeTenantID(debugPebbleOpts.exciseTenantID)
+	if err != nil {
+		return pebble.KeyRange{}, err
+	}
+	codec := keys.MakeSQLCodec(tenantID)
+	start := storage.EngineKey{Key: codec.TablePrefix(debugPebbleOpts.exciseTableID)}
+	end := storage.EngineKey{Key: start.Key.PrefixEnd()}
+	return pebble.KeyRange{
+		Start: start.Encode(),
+		End:   end.Encode(),
+	}, nil
 }
 
 func pebbleCryptoInitializer(ctx context.Context) {
