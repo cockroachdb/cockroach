@@ -983,6 +983,7 @@ func changefeedJobDescription(
 		changefeedbase.SinkParamSASLPassword,
 		changefeedbase.SinkParamCACert,
 		changefeedbase.SinkParamClientCert,
+		changefeedbase.SinkParamClientKey,
 		changefeedbase.SinkParamConfluentAPISecret,
 		changefeedbase.SinkParamAzureAccessKey,
 	})
