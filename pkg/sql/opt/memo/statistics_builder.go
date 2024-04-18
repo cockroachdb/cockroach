@@ -956,7 +956,7 @@ func (sb *statisticsBuilder) constrainScan(
 	relProps *props.Relational,
 	s *props.Statistics,
 ) {
-	var numUnappliedConjuncts float64
+	var unapplied filterCount
 	var constrainedCols, histCols opt.ColSet
 	idx := sb.md.Table(scan.Table).Index(scan.Index)
 
@@ -993,11 +993,11 @@ func (sb *statisticsBuilder) constrainScan(
 				// Just assume a single closed span such as ["\xfd", "\xfe").
 				// This corresponds to two "conjuncts" as defined in
 				// numConjunctsInConstraint.
-				numUnappliedConjuncts += 2
+				unapplied.unknown += 2
 			}
 		} else {
 			// Assume a single closed span.
-			numUnappliedConjuncts += 2
+			unapplied.unknown += 2
 		}
 	}
 
@@ -1012,9 +1012,8 @@ func (sb *statisticsBuilder) constrainScan(
 	// Calculate distinct counts and histograms for the partial index predicate
 	// ------------------------------------------------------------------------
 	if pred != nil {
-		predUnappliedConjucts, predConstrainedCols, predHistCols :=
-			sb.applyFilters(pred, scan, relProps, false /* skipOrTermAccounting */)
-		numUnappliedConjuncts += predUnappliedConjucts
+		predConstrainedCols, predHistCols :=
+			sb.applyFilters(pred, scan, relProps, false /* skipOrTermAccounting */, &unapplied)
 		constrainedCols.UnionWith(predConstrainedCols)
 		constrainedCols = sb.tryReduceCols(constrainedCols, s, MakeTableFuncDep(sb.md, scan.Table))
 		histCols.UnionWith(predHistCols)
@@ -1039,7 +1038,7 @@ func (sb *statisticsBuilder) constrainScan(
 	// -----------------------------------
 	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, scan, s)
 	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, scan, s, corr))
-	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(unapplied))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
 }
 
@@ -1362,8 +1361,9 @@ func (sb *statisticsBuilder) buildJoin(
 
 	// Calculate distinct counts for constrained columns in the ON conditions
 	// ----------------------------------------------------------------------
-	numUnappliedConjuncts, constrainedCols, histCols :=
-		sb.applyFilters(h.filters, join, relProps, true /* skipOrTermAccounting */)
+	var unapplied filterCount
+	constrainedCols, histCols :=
+		sb.applyFilters(h.filters, join, relProps, true /* skipOrTermAccounting */, &unapplied)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -1391,8 +1391,8 @@ func (sb *statisticsBuilder) buildJoin(
 			equivReps, leftCols, rightCols, &h.filtersFD, join, s,
 		))
 		var oredTermSelectivity props.Selectivity
-		oredTermSelectivity, numUnappliedConjuncts =
-			sb.selectivityFromOredEquivalencies(h, join, s, numUnappliedConjuncts, true /* semiJoin */)
+		oredTermSelectivity =
+			sb.selectivityFromOredEquivalencies(h, join, s, &unapplied, true /* semiJoin */)
 		s.ApplySelectivity(oredTermSelectivity)
 
 	default:
@@ -1411,8 +1411,7 @@ func (sb *statisticsBuilder) buildJoin(
 
 		s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
 		var oredTermSelectivity props.Selectivity
-		oredTermSelectivity, numUnappliedConjuncts =
-			sb.selectivityFromOredEquivalencies(h, join, s, numUnappliedConjuncts, false /* semiJoin */)
+		oredTermSelectivity = sb.selectivityFromOredEquivalencies(h, join, s, &unapplied, false /* semiJoin */)
 		s.ApplySelectivity(oredTermSelectivity)
 	}
 
@@ -1421,7 +1420,7 @@ func (sb *statisticsBuilder) buildJoin(
 	}
 	corr := sb.correlationFromMultiColDistinctCountsForJoin(constrainedCols, leftCols, rightCols, join, s)
 	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, join, s, corr))
-	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(unapplied))
 
 	// Ignore columns that are already null in the input when calculating
 	// selectivity from null-removing filters - the selectivity would always be
@@ -1915,8 +1914,9 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// still have corresponding filters in zigzag.On. So we don't need
 	// to iterate through FixedCols here if we are already processing the ON
 	// clause.
-	numUnappliedConjuncts, constrainedCols, histCols :=
-		sb.applyFilters(zigzag.On, zigzag, relProps, false /* skipOrTermAccounting */)
+	var unapplied filterCount
+	constrainedCols, histCols :=
+		sb.applyFilters(zigzag.On, zigzag, relProps, false /* skipOrTermAccounting */, &unapplied)
 
 	// Application of constraints on inverted indexes needs to be handled a
 	// little differently since a constraint on an inverted index key column
@@ -1937,10 +1937,10 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	leftIndexInverted := tab.Index(zigzag.LeftIndex).IsInverted()
 	rightIndexInverted := tab.Index(zigzag.RightIndex).IsInverted()
 	if leftIndexInverted {
-		numUnappliedConjuncts += float64(len(zigzag.LeftFixedCols) * 2)
+		unapplied.unknown += len(zigzag.LeftFixedCols) * 2
 	}
 	if rightIndexInverted {
-		numUnappliedConjuncts += float64(len(zigzag.RightFixedCols) * 2)
+		unapplied.unknown += len(zigzag.RightFixedCols) * 2
 	}
 
 	// Try to reduce the number of columns used for selectivity
@@ -1973,7 +1973,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 		s.ApplySelectivity(multiColSelectivity)
 	}
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, zigzag, s))
-	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(unapplied))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(zigzag, relProps.NotNullCols, constrainedCols))
 
 	// Update distinct counts based on equivalencies; this should happen after
@@ -3277,8 +3277,9 @@ func (sb *statisticsBuilder) filterRelExpr(
 
 	// Calculate distinct counts and histograms for constrained columns
 	// ----------------------------------------------------------------
-	numUnappliedConjuncts, constrainedCols, histCols :=
-		sb.applyFilters(filters, e, relProps, false /* skipOrTermAccounting */)
+	var unapplied filterCount
+	constrainedCols, histCols :=
+		sb.applyFilters(filters, e, relProps, false /* skipOrTermAccounting */, &unapplied)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -3293,7 +3294,7 @@ func (sb *statisticsBuilder) filterRelExpr(
 	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, e, s)
 	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, e, s, corr))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, e, s))
-	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(unapplied))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
 
 	// Update distinct and null counts based on equivalencies; this should
@@ -3310,8 +3311,12 @@ func (sb *statisticsBuilder) filterRelExpr(
 //
 // See applyFiltersItem for more details.
 func (sb *statisticsBuilder) applyFilters(
-	filters FiltersExpr, e RelExpr, relProps *props.Relational, skipOrTermAccounting bool,
-) (numUnappliedConjuncts float64, constrainedCols, histCols opt.ColSet) {
+	filters FiltersExpr,
+	e RelExpr,
+	relProps *props.Relational,
+	skipOrTermAccounting bool,
+	unapplied *filterCount,
+) (constrainedCols, histCols opt.ColSet) {
 	// Special hack for inverted joins. Add constant filters from the equality
 	// conditions.
 	// TODO(rytaft): the correct way to do this is probably to fully implement
@@ -3323,18 +3328,19 @@ func (sb *statisticsBuilder) applyFilters(
 	}
 
 	for i := range filters {
-		numUnappliedConjunctsLocal, constrainedColsLocal, histColsLocal :=
-			sb.applyFiltersItem(&filters[i], e, relProps)
+		var unappliedLocal filterCount
+		constrainedColsLocal, histColsLocal :=
+			sb.applyFiltersItem(&filters[i], e, relProps, &unappliedLocal)
 		// Selectivity from OrExprs is computed elsewhere when skipOrTermAccounting
 		// is true.
 		if _, ok := filters[i].Condition.(*OrExpr); !skipOrTermAccounting || !ok {
-			numUnappliedConjuncts += numUnappliedConjunctsLocal
+			unapplied.add(unappliedLocal)
 		}
 		constrainedCols.UnionWith(constrainedColsLocal)
 		histCols.UnionWith(histColsLocal)
 	}
 
-	return numUnappliedConjuncts, constrainedCols, histCols
+	return constrainedCols, histCols
 }
 
 // applyFiltersItem uses constraints to update the distinct counts and
@@ -3358,8 +3364,8 @@ func (sb *statisticsBuilder) applyFilters(
 // Inverted join conditions are handled separately. See
 // selectivityFromInvertedJoinCondition.
 func (sb *statisticsBuilder) applyFiltersItem(
-	filter *FiltersItem, e RelExpr, relProps *props.Relational,
-) (numUnappliedConjuncts float64, constrainedCols, histCols opt.ColSet) {
+	filter *FiltersItem, e RelExpr, relProps *props.Relational, unapplied *filterCount,
+) (constrainedCols, histCols opt.ColSet) {
 	// Before checking anything, try to replace any virtual computed column
 	// expressions with the corresponding virtual column.
 	if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
@@ -3375,13 +3381,13 @@ func (sb *statisticsBuilder) applyFiltersItem(
 
 	if isEqualityWithTwoVars(filter.Condition) {
 		// Equalities are handled by applyEquivalencies.
-		return 0, opt.ColSet{}, opt.ColSet{}
+		return opt.ColSet{}, opt.ColSet{}
 	}
 
 	// Special case: The current conjunct is an inverted join condition which is
 	// handled by selectivityFromInvertedJoinCondition.
 	if isInvertedJoinCond(filter.Condition) {
-		return 0, opt.ColSet{}, opt.ColSet{}
+		return opt.ColSet{}, opt.ColSet{}
 	}
 
 	// Special case: The current conjunct is a JSON or Array Contains
@@ -3398,7 +3404,7 @@ func (sb *statisticsBuilder) applyFiltersItem(
 		(filterOp == opt.EqOp && filter.Condition.Child(0).Op() == opt.FetchValOp) {
 		numPaths := countPaths(filter)
 		if numPaths == 0 {
-			numUnappliedConjuncts++
+			unapplied.unknown++
 		} else {
 			// Multiply the number of paths by 2 to mimic the logic in
 			// numConjunctsInConstraint, for constraints like
@@ -3406,9 +3412,9 @@ func (sb *statisticsBuilder) applyFiltersItem(
 			// this as 2 conjuncts, and to keep row counts as consistent
 			// as possible between competing filtered selects and
 			// constrained scans, we apply the same logic here.
-			numUnappliedConjuncts += 2 * float64(numPaths)
+			unapplied.unknown += 2 * numPaths
 		}
-		return numUnappliedConjuncts, opt.ColSet{}, opt.ColSet{}
+		return opt.ColSet{}, opt.ColSet{}
 	}
 
 	// Update constrainedCols after the above check for isEqualityWithTwoVars.
@@ -3426,15 +3432,18 @@ func (sb *statisticsBuilder) applyFiltersItem(
 		)
 		histCols.UnionWith(histColsLocal)
 		if !scalarProps.TightConstraints {
-			numUnappliedConjuncts++
+			unapplied.unknown++
 			// Mimic constrainScan in the case of no histogram information
 			// that assumes a geo function is a single closed span that
 			// corresponds to two "conjuncts".
 			if isGeoIndexScanCond(filter.Condition) {
-				numUnappliedConjuncts++
+				unapplied.unknown++
 			}
 		}
-	} else if constraintUnion, numUnappliedDisjuncts := sb.buildDisjunctionConstraints(filter); len(constraintUnion) > 0 {
+		return constrainedCols, histCols
+	}
+
+	if constraintUnion, numUnappliedDisjuncts := sb.buildDisjunctionConstraints(filter); len(constraintUnion) > 0 {
 		if sb.evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats {
 			// The filters are one or more disjuncts and tight constraint sets
 			// could be built for at least one disjunct. numUnappliedDisjuncts
@@ -3482,13 +3491,13 @@ func (sb *statisticsBuilder) applyFiltersItem(
 			s.Selectivity = props.MinSelectivity(s.Selectivity, unionStats.Selectivity)
 			s.RowCount = min(s.RowCount, unionStats.RowCount)
 		} else {
-			numUnappliedConjuncts++
+			unapplied.unknown++
 		}
 	} else {
-		numUnappliedConjuncts++
+		unapplied.unknown++
 	}
 
-	return numUnappliedConjuncts, constrainedCols, histCols
+	return constrainedCols, histCols
 }
 
 // buildDisjunctionConstraints returns a slice of tight constraint sets that are
@@ -4454,13 +4463,8 @@ func (sb *statisticsBuilder) selectivityFromEquivalencies(
 // estimation is improved, this method can be updated to handle those predicates
 // as well.
 func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
-	h *joinPropsHelper,
-	e RelExpr,
-	s *props.Statistics,
-	numUnappliedConjunctsIn float64,
-	semiJoin bool,
-) (selectivity props.Selectivity, numUnappliedConjuncts float64) {
-	numUnappliedConjuncts = numUnappliedConjunctsIn
+	h *joinPropsHelper, e RelExpr, s *props.Statistics, unapplied *filterCount, semiJoin bool,
+) (selectivity props.Selectivity) {
 	selectivity = props.OneSelectivity
 	var conjunctSelectivity props.Selectivity
 
@@ -4490,19 +4494,19 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 			switch disjuncts[i].(type) {
 			case *EqExpr, *AndExpr:
 				if andFilters, ok = addEqExprConjuncts(disjuncts[i], andFilters, e.Memo()); !ok {
-					numUnappliedConjuncts++
+					unapplied.unknown++
 					continue
 				}
 				e.Memo().logPropsBuilder.addFiltersToFuncDep(andFilters, &filtersFD)
 			default:
-				numUnappliedConjuncts++
+				unapplied.unknown++
 				ok = false
 				continue
 			}
 			// If no column equivalencies are found, we know nothing about this term,
 			// so should skip selectivity estimation on the entire conjunct.
 			if filtersFD.Empty() || filtersFD.EquivReps().Empty() {
-				numUnappliedConjuncts++
+				unapplied.unknown++
 				ok = false
 				break
 			}
@@ -4537,7 +4541,7 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 		// Combine this disjunction's selectivity with that of other disjunctions.
 		selectivity.Multiply(conjunctSelectivity)
 	}
-	return selectivity, numUnappliedConjuncts
+	return selectivity
 }
 
 // combineOredSelectivities iteratively applies the General Disjunction Rule
@@ -4718,10 +4722,9 @@ func (sb *statisticsBuilder) selectivityFromInvertedJoinCondition(
 }
 
 func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
-	numUnappliedConjuncts float64,
+	c filterCount,
 ) (selectivity props.Selectivity) {
-	selectivity = props.MakeSelectivity(math.Pow(unknownFilterSelectivity, numUnappliedConjuncts))
-
+	selectivity = props.MakeSelectivity(math.Pow(unknownFilterSelectivity, float64(c.unknown)))
 	return selectivity
 }
 
@@ -5079,4 +5082,16 @@ func (sb *statisticsBuilder) factorOutVirtualCols(
 		return m.replacer(e, replace)
 	}
 	return replace(e)
+}
+
+// filterCount tracks counts of different types of filters. It is used to track
+// the number of filters which are not applied to selectivities via more exact
+// means like constraints and histogram filtering.
+type filterCount struct {
+	unknown int
+}
+
+// add adds the counts of other to c.
+func (c *filterCount) add(other filterCount) {
+	c.unknown += other.unknown
 }
