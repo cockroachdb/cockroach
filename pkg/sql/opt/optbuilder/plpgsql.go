@@ -285,6 +285,15 @@ func (b *plpgsqlBuilder) buildRootBlock(
 		var tc transactionControlVisitor
 		ast.Walk(&tc, astBlock)
 		if tc.foundTxnControlStatement {
+			if b.ob.insideNestedPLpgSQLCall {
+				// Disallow transaction control statements in nested routines for now.
+				// TODO(#122266): once we support this, make sure to validate that
+				// transaction control statements are only allowed in a nested procedure
+				// when all ancestors are procedures or DO blocks.
+				panic(unimplemented.NewWithIssue(122266,
+					"transaction control statements in nested routines",
+				))
+			}
 			// Disable stable folding, since different parts of the routine can be run
 			// in different transactions.
 			b.ob.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
@@ -942,8 +951,10 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			procTyp := proc.ResolvedType()
 			colName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_call"))
 			col := b.ob.synthesizeColumn(callScope, colName, procTyp, nil /* expr */, nil /* scalar */)
-			procScalar, _ := b.ob.buildRoutine(proc, def, callCon.s, callScope, b.colRefs)
-			col.scalar = procScalar
+			b.ob.withinNestedPLpgSQLCall(func() {
+				procScalar, _ := b.ob.buildRoutine(proc, def, callCon.s, callScope, b.colRefs)
+				col.scalar = procScalar
+			})
 			b.ob.constructProjectForScope(callCon.s, callScope)
 
 			// Collect any target variables in OUT-parameter position. The result of

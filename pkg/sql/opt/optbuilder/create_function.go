@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql"
 	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -371,6 +372,18 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		stmt, err := plpgsqlparser.Parse(funcBodyStr)
 		if err != nil {
 			panic(err)
+		}
+
+		// Check for transaction control statements in UDFs.
+		if !cf.IsProcedure {
+			var tc transactionControlVisitor
+			plpgsqltree.Walk(&tc, stmt.AST)
+			if tc.foundTxnControlStatement {
+				panic(errors.WithDetailf(
+					pgerror.Newf(pgcode.InvalidTransactionTermination, "invalid transaction termination"),
+					"transaction control statements are only allowed in procedures",
+				))
+			}
 		}
 
 		// We need to disable stable function folding because we want to catch the

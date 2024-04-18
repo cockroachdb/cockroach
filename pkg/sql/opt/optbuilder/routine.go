@@ -594,3 +594,11 @@ func (b *Builder) withinSQLRoutine(fn func()) {
 	b.insideSQLRoutine = true
 	fn()
 }
+
+func (b *Builder) withinNestedPLpgSQLCall(fn func()) {
+	defer func(origValue bool) {
+		b.insideNestedPLpgSQLCall = origValue
+	}(b.insideNestedPLpgSQLCall)
+	b.insideNestedPLpgSQLCall = true
+	fn()
+}
