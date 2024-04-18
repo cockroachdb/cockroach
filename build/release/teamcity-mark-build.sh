@@ -34,11 +34,11 @@ mark_build() {
 
 # Publish potential release metadata to a stable location.
 publish_qualify_metadata() {
-  gcs_bucket="release-automation-dev"
-  google_credentials=$GOOGLE_RELEASE_AUTOMATION_CREDENTIALS_DEV
+  gcs_bucket="cockroach-release-qualification-test"
+  google_credentials=$GCS_CREDENTIALS_DEV
   if [[ -z "${DRY_RUN}" ]] ; then
-    gcs_bucket="release-automation-prod"
-    google_credentials=$GOOGLE_RELEASE_AUTOMATION_CREDENTIALS_PROD
+    gcs_bucket="cockroach-release-qualification-prod"
+    google_credentials=$GCS_CREDENTIALS_PROD
   fi
 
   tc_start_block "Metadata"
