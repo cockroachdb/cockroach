@@ -6,6 +6,7 @@ import (
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+  "github.com/cockroachdb/cockroach/pkg/sql/types"
   "github.com/cockroachdb/errors"
   "github.com/cockroachdb/redact"
 )
@@ -555,11 +556,20 @@ decl_datatype:
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    typ, err := plpgsqllex.(*lexer).GetTypeFromValidSQLSyntax(sqlStr)
+    // This is an inlined version of GetTypeFromValidSQLSyntax which doesn't
+    // return an assertion failure.
+    castExpr, err := plpgsqllex.(*lexer).ParseExpr("1::" + sqlStr)
     if err != nil {
-      return setErr(plpgsqllex, err)
+      return setErr(plpgsqllex, errors.New("unable to parse type of variable declaration"))
     }
-    $$.val = typ
+    switch t := castExpr.(type) {
+    case *tree.CollateExpr:
+      $$.val = types.MakeCollatedString(types.String, t.Locale)
+    case *tree.CastExpr:
+      $$.val = t.Type
+    default:
+      return setErr(plpgsqllex, errors.New("unable to parse type of variable declaration"))
+    }
   }
 ;
 
