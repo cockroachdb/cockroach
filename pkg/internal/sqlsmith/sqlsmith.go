@@ -84,33 +84,34 @@ type Smither struct {
 	scalarExprWeights, boolExprWeights []scalarExprWeight
 	scalarExprSampler, boolExprSampler *scalarExprSampler
 
-	disableWith                bool
-	disableNondeterministicFns bool
-	disableLimits              bool
-	disableWindowFuncs         bool
-	disableAggregateFuncs      bool
-	disableMutations           bool
-	simpleDatums               bool
-	simpleNames                bool
-	avoidConsts                bool
-	outputSort                 bool
-	postgres                   bool
-	ignoreFNs                  []*regexp.Regexp
-	complexity                 float64
-	scalarComplexity           float64
-	unlikelyConstantPredicate  bool
-	favorCommonData            bool
-	unlikelyRandomNulls        bool
-	stringConstPrefix          string
-	disableJoins               bool
-	disableCrossJoins          bool
-	disableIndexHints          bool
-	lowProbWhereWithJoinTables bool
-	disableInsertSelect        bool
-	disableDivision            bool
-	disableDecimals            bool
-	disableOIDs                bool
-	disableUDFs                bool
+	disableWith                   bool
+	disableNondeterministicFns    bool
+	disableLimits                 bool
+	disableNondeterministicLimits bool
+	disableWindowFuncs            bool
+	disableAggregateFuncs         bool
+	disableMutations              bool
+	simpleDatums                  bool
+	simpleNames                   bool
+	avoidConsts                   bool
+	outputSort                    bool
+	postgres                      bool
+	ignoreFNs                     []*regexp.Regexp
+	complexity                    float64
+	scalarComplexity              float64
+	unlikelyConstantPredicate     bool
+	favorCommonData               bool
+	unlikelyRandomNulls           bool
+	stringConstPrefix             string
+	disableJoins                  bool
+	disableCrossJoins             bool
+	disableIndexHints             bool
+	lowProbWhereWithJoinTables    bool
+	disableInsertSelect           bool
+	disableDivision               bool
+	disableDecimals               bool
+	disableOIDs                   bool
+	disableUDFs                   bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -436,6 +437,12 @@ var DisableLimits = simpleOption("disable LIMIT", func(s *Smither) {
 	s.disableLimits = true
 })
 
+// DisableNondeterministicLimits causes the Smither to disable non-deterministic
+// LIMIT clauses.
+var DisableNondeterministicLimits = simpleOption("disable non-deterministic LIMIT", func(s *Smither) {
+	s.disableNondeterministicLimits = true
+})
+
 // AvoidConsts causes the Smither to prefer column references over generating
 // constants.
 var AvoidConsts = simpleOption("avoid consts", func(s *Smither) {
@@ -550,7 +557,7 @@ var CompareMode = multiOption(
 	DisableNondeterministicFns(),
 	DisableCRDBFns(),
 	IgnoreFNs("^version"),
-	DisableLimits(),
+	DisableNondeterministicLimits(),
 	OutputSort(),
 )
 
