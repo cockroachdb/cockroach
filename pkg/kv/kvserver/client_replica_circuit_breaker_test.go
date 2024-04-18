@@ -754,6 +754,11 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 				Server: &server.TestingKnobs{
 					WallClock: manualClock,
 				},
+				// This test is requiring clients to go to the leaseholder first
+				// to get URE errors in the case of a partial partition. If this
+				// is not set, the test fails because it is counting the number
+				// of URE errors it encounters.
+				KVClient: &kvcoord.ClientTestingKnobs{RouteToLeaseholderFirst: true},
 			},
 			Settings: st,
 			RaftConfig: base.RaftConfig{
