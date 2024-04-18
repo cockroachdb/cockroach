@@ -77,6 +77,7 @@ func registerOnlineRestorePerf(r registry.Registry) {
 			timeout:                1 * time.Hour,
 			suites:                 registry.Suites(registry.Nightly),
 			restoreUptoIncremental: 1,
+			skip:                   "fails because of #118283",
 		},
 		{
 			// 8TB tpce Online Restore
@@ -311,6 +312,7 @@ func exportStats(ctx context.Context, rd restoreDriver, restoreStats restoreStat
 	endTime := timeutil.Now()
 	latencyQueryKey := sqlServiceLatency.Query
 	statsCollector := restoreStats.collector
+	qpsQueryKey := queriesThroughput.Query
 	exportingStats, err := statsCollector.Exporter().Export(ctx, rd.c, rd.t, true, /* dryRun */
 		restoreStats.workloadStartTime,
 		endTime,
@@ -353,6 +355,14 @@ func exportStats(ctx context.Context, rd restoreDriver, restoreStats restoreStat
 	outlier, err := stats.Percentile(exportingStats.Stats[latencyQueryKey].Value, 95)
 	if err != nil {
 		return errors.Wrap(err, "could not compute latency outliers")
+	}
+
+	medianQPS, err := stats.Median(exportingStats.Stats[qpsQueryKey].Value)
+	if err != nil {
+		return errors.Wrap(err, "could not compute median QPS")
+	}
+	if medianQPS < 10 {
+		return errors.Errorf("median QPS %.2f < 10. Check test.log if workload silently failed", medianQPS)
 	}
 
 	for i, val := range exportingStats.Stats[latencyQueryKey].Value {

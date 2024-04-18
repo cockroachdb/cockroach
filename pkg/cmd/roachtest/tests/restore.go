@@ -774,7 +774,7 @@ func (tpce tpceRestore) run(
 	ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs,
 ) error {
 	spec := tpce.getSpec(ctx, t, c, sp)
-	_, err := spec.run(ctx, t, c, tpceCmdOptions{
+	details, err := spec.run(ctx, t, c, tpceCmdOptions{
 		// Set the duration to be a week to ensure the workload never exits early.
 		duration:       time.Hour * 7 * 24,
 		customers:      tpce.customers,
@@ -782,6 +782,9 @@ func (tpce tpceRestore) run(
 		threads:        sp.cpus * sp.nodes,
 		connectionOpts: tpceConnectionOpts{fixtureBucket: defaultFixtureBucket},
 	})
+	out := details.Output(true)
+	t.L().Printf("TPCE run details: \n%s\n", out)
+	t.L().Printf("TPCE run error: %s\n", err)
 	return err
 }
 
