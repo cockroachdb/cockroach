@@ -16,6 +16,7 @@ import * as protos from "src/js/protos";
 import { hoverOff, hoverOn, HoverState } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
+  canShowMetric,
   configureUPlotLineChart,
   formatMetricData,
   formattedSeries,
@@ -394,23 +395,24 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
     ) : null;
     // Extend tooltip to include metrics names
     if (showMetricsInTooltip) {
-      if (data?.results?.length === 1) {
+      const metrics = _.filter(data?.results, canShowMetric);
+      if (metrics.length === 1) {
         tt = (
           <>
             {tt}
             {addLines}
-            Metric: {data.results[0].query.name}
+            Metric: {metrics[0].query.name}
           </>
         );
-      } else if (data?.results?.length > 1) {
-        const metrics = unique(data.results.map(m => m.query.name));
+      } else if (metrics.length > 1) {
+        const metricNames = unique(metrics.map(m => m.query.name));
         tt = (
           <>
             {tt}
             {addLines}
             Metrics:
             <ul>
-              {metrics.map(m => (
+              {metricNames.map(m => (
                 <li key={m}>{m}</li>
               ))}
             </ul>
