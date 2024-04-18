@@ -34,7 +34,9 @@ func (s *SQLServer) startTenantAutoUpgradeLoop(ctx context.Context) error {
 	return s.stopper.RunAsyncTask(ctx, "tenant-auto-upgrade-checker", func(ctx context.Context) {
 		loopFrequency := 30 * time.Second
 		if k := s.cfg.TestingKnobs.Server; k != nil {
-			loopFrequency = k.(*TestingKnobs).TenantAutoUpgradeLoopFrequency
+			if override := k.(*TestingKnobs).TenantAutoUpgradeLoopFrequency; override > 0 {
+				loopFrequency = override
+			}
 		}
 
 		for {
