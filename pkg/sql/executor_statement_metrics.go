@@ -255,9 +255,7 @@ func (ex *connExecutor) recordStatementSummary(
 		}
 	}
 
-	if stmtFingerprintID != 0 {
-		ex.statsCollector.ObserveStatement(stmtFingerprintID, recordedStmtStats)
-	}
+	ex.statsCollector.ObserveStatement(stmtFingerprintID, recordedStmtStats)
 
 	// Do some transaction level accounting for the transaction this statement is
 	// a part of.
