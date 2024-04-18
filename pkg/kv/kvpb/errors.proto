@@ -638,6 +638,8 @@ message RangeFeedRetryError {
     // should not happen unless it was explicitly requested by client and in
     // that case client is free not to retry.
     REASON_RANGEFEED_CLOSED = 7;
+    // The range was manually split in two.
+    REASON_MANUAL_RANGE_SPLIT = 8;
   }
   optional Reason reason = 1 [(gogoproto.nullable) = false];
 }
