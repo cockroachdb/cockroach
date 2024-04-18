@@ -6,7 +6,7 @@ WORKLOAD_PORT_RANGE=(2112 2120)
 REGIONS=(
 "northamerica-northeast1-a" "northamerica-northeast1-b" "northamerica-northeast1-c"
 "northamerica-northeast2-a" "northamerica-northeast2-b" "northamerica-northeast2-c"
-"us-east1-a" "us-east1-b" "us-east1-c"
+"us-east1-d" "us-east1-b" "us-east1-c"
 "us-west1-a" "us-west1-b" "us-west1-c"
 "europe-west2-a" "europe-west2-b" "europe-west2-c"
 "europe-central2-a" "europe-central2-b" "europe-central2-c"
