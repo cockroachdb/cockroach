@@ -497,6 +497,10 @@ message LocalOnlySessionData {
   // OptimizerUseTrigramSimilarityOptimization indicates whether the optimizer
   // should generate improved plans for queries with trigram similarity filters.
   bool optimizer_use_trigram_similarity_optimization = 125;
+  // OptimizerUseImprovedDistinctOnLimitHintCosting indicates whether the
+  // optimizer should use an improved costing estimate for DistinctOn operators
+  // with limit hints.
+  bool optimizer_use_improved_distinct_on_limit_hint_costing = 126;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

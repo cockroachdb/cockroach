@@ -1405,12 +1405,18 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 	// Normally, a grouping expression must process each input row once.
 	inputRowCount := grouping.Child(0).(memo.RelExpr).Relational().Statistics().RowCount
 
-	// If this is a streaming GroupBy with a limit hint, l, we only need to
-	// process enough input rows to output l rows.
+	// If this is a streaming GroupBy or a DistinctOn with a limit hint, l, we
+	// only need to process enough input rows to output l rows.
 	streamingType := private.GroupingOrderType(&required.Ordering)
-	if (streamingType != memo.NoStreaming) && grouping.Op() == opt.GroupByOp && required.LimitHint > 0 {
-		inputRowCount = streamingGroupByInputLimitHint(inputRowCount, outputRowCount, required.LimitHint)
-		outputRowCount = math.Min(outputRowCount, required.LimitHint)
+	if required.LimitHint > 0 {
+		if grouping.Op() == opt.GroupByOp && streamingType != memo.NoStreaming {
+			inputRowCount = streamingGroupByInputLimitHint(inputRowCount, outputRowCount, required.LimitHint)
+			outputRowCount = math.Min(outputRowCount, required.LimitHint)
+		} else if grouping.Op() == opt.DistinctOnOp &&
+			c.evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting {
+			inputRowCount = distinctOnLimitHint(outputRowCount, required.LimitHint)
+			outputRowCount = math.Min(outputRowCount, required.LimitHint)
+		}
 	}
 
 	// Cost per row depends on the number of grouping columns and the number of
