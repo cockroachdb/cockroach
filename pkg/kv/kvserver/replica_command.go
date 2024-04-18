@@ -104,6 +104,8 @@ var EnableEstimatedStatsForExternalBytes = settings.RegisterBoolSetting(
 var sendSnapshotTimeout = envutil.EnvOrDefaultDuration(
 	"COCKROACH_RAFT_SEND_SNAPSHOT_TIMEOUT", 1*time.Hour)
 
+const manualAdminReason = "manual"
+
 // AdminSplit divides the range into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
 	ctx context.Context, args kvpb.AdminSplitRequest, reason redact.RedactableString,
@@ -270,6 +272,7 @@ func splitTxnAttempt(
 				PreSplitLeftUserStats: preSplitLeftUserStats,
 				PreSplitStats:         preSplitStats,
 				UseEstimatesBecauseExternalBytesArePresent: useEstimatedStatsForExternalBytes,
+				ManualSplit: string(reason) == manualAdminReason,
 			},
 		},
 	})
