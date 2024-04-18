@@ -3753,6 +3753,10 @@ func (m *sessionDataMutator) SetOptimizerUseTrigramSimilarityOptimization(val bo
 	m.data.OptimizerUseTrigramSimilarityOptimization = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseImprovedDistinctOnLimitHintCosting(val bool) {
+	m.data.OptimizerUseImprovedDistinctOnLimitHintCosting = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

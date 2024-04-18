@@ -129,6 +129,113 @@ limit
  │         └── count-rows [as=count_rows:7]
  └── 10
 
+opt
+SELECT DISTINCT a FROM b
+----
+distinct-on
+ ├── columns: a:2
+ ├── grouping columns: a:2
+ ├── internal-ordering: +2
+ ├── stats: [rows=100, distinct(2)=100, null(2)=1]
+ ├── cost: 1079.45
+ ├── key: (2)
+ └── scan b@b_a_b_idx
+      ├── columns: a:2
+      ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
+      ├── cost: 1068.42
+      └── ordering: +2
+
+opt
+SELECT DISTINCT a FROM b LIMIT 10
+----
+limit
+ ├── columns: a:2
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 32.5488337
+ ├── key: (2)
+ ├── distinct-on
+ │    ├── columns: a:2
+ │    ├── grouping columns: a:2
+ │    ├── internal-ordering: +2
+ │    ├── stats: [rows=100, distinct(2)=100, null(2)=1]
+ │    ├── cost: 32.4388337
+ │    ├── key: (2)
+ │    ├── limit hint: 10.00
+ │    └── scan b@b_a_b_idx
+ │         ├── columns: a:2
+ │         ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
+ │         ├── cost: 31.281321
+ │         ├── ordering: +2
+ │         └── limit hint: 12.75
+ └── 10
+
+opt set=(optimizer_use_improved_distinct_on_limit_hint_costing=false)
+SELECT DISTINCT a FROM b LIMIT 10
+----
+limit
+ ├── columns: a:2
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 42.421321
+ ├── key: (2)
+ ├── distinct-on
+ │    ├── columns: a:2
+ │    ├── grouping columns: a:2
+ │    ├── internal-ordering: +2
+ │    ├── stats: [rows=100, distinct(2)=100, null(2)=1]
+ │    ├── cost: 42.311321
+ │    ├── key: (2)
+ │    ├── limit hint: 10.00
+ │    └── scan b@b_a_b_idx
+ │         ├── columns: a:2
+ │         ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
+ │         ├── cost: 31.281321
+ │         ├── ordering: +2
+ │         └── limit hint: 12.75
+ └── 10
+
+opt
+SELECT DISTINCT a, b FROM b
+----
+distinct-on
+ ├── columns: a:2 b:3
+ ├── grouping columns: a:2 b:3
+ ├── internal-ordering: +2,+3
+ ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
+ ├── cost: 1108.55
+ ├── key: (2,3)
+ └── scan b@b_a_b_idx
+      ├── columns: a:2 b:3
+      ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
+      ├── cost: 1078.52
+      └── ordering: +2,+3
+
+opt
+SELECT DISTINCT a, b FROM b LIMIT 10
+----
+limit
+ ├── columns: a:2 b:3
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 41.0744319
+ ├── key: (2,3)
+ ├── distinct-on
+ │    ├── columns: a:2 b:3
+ │    ├── grouping columns: a:2 b:3
+ │    ├── internal-ordering: +2,+3
+ │    ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
+ │    ├── cost: 40.9644319
+ │    ├── key: (2,3)
+ │    ├── limit hint: 10.00
+ │    └── scan b@b_a_b_idx
+ │         ├── columns: a:2 b:3
+ │         ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
+ │         ├── cost: 30.6930407
+ │         ├── ordering: +2,+3
+ │         └── limit hint: 12.07
+ └── 10
+
 # Partially ordered group by with a limit hint.
 opt
 SELECT a, c, count(*) FROM c GROUP BY a, c LIMIT 10
