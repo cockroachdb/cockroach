@@ -108,9 +108,10 @@ case $1 in
           --local-ssd="true"  \
           --gce-local-ssd-count="16" \
           --username="drt" \
-          --lifetime="8760h"
+          --lifetime="8760h" \
+          --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
-        $0 dns drt-ua1 create
+        $0 dns drt-ua1 create || $0 dns drt-ua1
         ;;
       "drt-ua2")
       set -x
@@ -122,9 +123,10 @@ case $1 in
           --local-ssd="true"  \
           --gce-local-ssd-count="16" \
           --username="drt" \
-          --lifetime="8760h"
+          --lifetime="8760h" \
+          --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
-        $0 dns drt-ua2 create
+        $0 dns drt-ua2 create || $0 dns drt-ua2
         ;;
       *)
         echo
