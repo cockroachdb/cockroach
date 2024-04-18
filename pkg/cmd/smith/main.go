@@ -63,6 +63,7 @@ var (
 		"DisableLimits":                           sqlsmith.DisableLimits(),
 		"DisableMutations":                        sqlsmith.DisableMutations(),
 		"DisableNondeterministicFns":              sqlsmith.DisableNondeterministicFns(),
+		"DisableNondeterministicLimits":           sqlsmith.DisableNondeterministicLimits(),
 		"DisableWindowFuncs":                      sqlsmith.DisableWindowFuncs(),
 		"DisableWith":                             sqlsmith.DisableWith(),
 		"EnableAlters":                            sqlsmith.EnableAlters(),
