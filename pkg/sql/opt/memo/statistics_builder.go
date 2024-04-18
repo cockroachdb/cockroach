@@ -41,6 +41,10 @@ const (
 	// by Pat Selinger et al.
 	unknownFilterSelectivity = 1.0 / 3.0
 
+	// This is the selectivity used for trigram similarity filters, like s %
+	// 'foo'.
+	similarityFilterSelectivity = 1.0 / 100.0
+
 	// TODO(rytaft): Add other selectivities for other types of predicates.
 
 	// This is an arbitrary row count used in the absence of any real statistics.
@@ -3173,6 +3177,13 @@ func (sb *statisticsBuilder) applyFiltersItem(
 		return opt.ColSet{}, opt.ColSet{}
 	}
 
+	// Special case: a trigram similarity filter.
+	if isSimilarityFilter(filter.Condition) &&
+		sb.evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity {
+		unapplied.similarity++
+		return opt.ColSet{}, opt.ColSet{}
+	}
+
 	// Special case: The current conjunct is an inverted join condition which is
 	// handled by selectivityFromInvertedJoinCondition.
 	if isInvertedJoinCond(filter.Condition) {
@@ -4506,8 +4517,9 @@ func (sb *statisticsBuilder) selectivityFromInvertedJoinCondition(
 func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
 	c filterCount,
 ) (selectivity props.Selectivity) {
-	selectivity = props.MakeSelectivity(math.Pow(unknownFilterSelectivity, float64(c.unknown)))
-	return selectivity
+	s := math.Pow(unknownFilterSelectivity, float64(c.unknown)) *
+		math.Pow(similarityFilterSelectivity, float64(c.similarity))
+	return props.MakeSelectivity(s)
 }
 
 // tryReduceCols is used to determine which columns to use for selectivity
@@ -4563,6 +4575,16 @@ func (sb *statisticsBuilder) tryReduceJoinCols(
 func isEqualityWithTwoVars(cond opt.ScalarExpr) bool {
 	if eq, ok := cond.(*EqExpr); ok {
 		return eq.Left.Op() == opt.VariableOp && eq.Right.Op() == opt.VariableOp
+	}
+	return false
+}
+
+// isSimilarityFilter returns true if the given condition is a trigram
+// similarity filter.
+func isSimilarityFilter(e opt.ScalarExpr) bool {
+	if sim, ok := e.(*ModExpr); ok {
+		return sim.Left.DataType().Family() == types.StringFamily &&
+			sim.Right.DataType().Family() == types.StringFamily
 	}
 	return false
 }
@@ -4816,10 +4838,12 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 // the number of filters which are not applied to selectivities via more exact
 // means like constraints and histogram filtering.
 type filterCount struct {
-	unknown int
+	unknown    int
+	similarity int
 }
 
 // add adds the counts of other to c.
 func (c *filterCount) add(other filterCount) {
 	c.unknown += other.unknown
+	c.similarity += other.similarity
 }
