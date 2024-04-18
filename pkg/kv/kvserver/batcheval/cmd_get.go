@@ -56,6 +56,8 @@ func Get(
 		TargetBytes:           cArgs.Header.TargetBytes,
 		AllowEmpty:            cArgs.Header.AllowEmpty,
 		ReadCategory:          fs.BatchEvalReadCategory,
+		GetIter:               cArgs.GetIter,
+		KeepIter:              cArgs.KeepIter,
 	})
 	if err != nil {
 		return result.Result{}, err

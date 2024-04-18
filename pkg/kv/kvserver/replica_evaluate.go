@@ -248,6 +248,23 @@ func evaluateBatch(
 		}()
 	}
 
+	var lastIter storage.MVCCIterator
+	defer func() {
+		if lastIter != nil {
+			lastIter.Close()
+		}
+	}()
+	getIter := func() storage.MVCCIterator {
+		return lastIter
+	}
+	keepIter := func(iter storage.MVCCIterator) {
+		lastIter = iter
+	}
+	if len(baReqs) < 2 {
+		getIter = nil
+		keepIter = nil
+	}
+
 	// TODO(tbg): if we introduced an "executor" helper here that could carry state
 	// across the slots in the batch while we execute them, this code could come
 	// out a lot less ad-hoc.
@@ -305,6 +322,7 @@ func evaluateBatch(
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
 			ctx, readWriter, rec, ms, ss, baHeader, args, reply, g, st, ui, evalPath, omitInRangefeeds,
+			getIter, keepIter,
 		)
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
@@ -463,6 +481,8 @@ func evaluateCommand(
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
 	omitInRangefeeds bool,
+	getIter func() storage.MVCCIterator,
+	keepIter func(iterator storage.MVCCIterator),
 ) (result.Result, error) {
 	var err error
 	var pd result.Result
@@ -483,6 +503,8 @@ func evaluateCommand(
 			Uncertainty:           ui,
 			DontInterleaveIntents: evalPath == readOnlyWithoutInterleavedIntents,
 			OmitInRangefeeds:      omitInRangefeeds,
+			GetIter:               getIter,
+			KeepIter:              keepIter,
 		}
 
 		if cmd.EvalRW != nil {
