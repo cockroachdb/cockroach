@@ -707,6 +707,7 @@ func handleRangefeedError(
 			return rangefeedErrorInfo{}, nil
 		case kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
 			kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+			kvpb.RangeFeedRetryError_REASON_MANUAL_RANGE_SPLIT,
 			kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER:
 			return rangefeedErrorInfo{evict: true, resolveSpan: true}, nil
 		default:
