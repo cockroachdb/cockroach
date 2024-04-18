@@ -3661,7 +3661,8 @@ func TestReplicaErrorsMerged(t *testing.T) {
 		},
 	}
 
-	notLeaseHolderErr := kvpb.NewError(kvpb.NewNotLeaseHolderError(lease3, 0, &descriptor2, ""))
+	notLeaseHolderNewLeaseErr := kvpb.NewError(kvpb.NewNotLeaseHolderError(lease3, 0, &initDescriptor, ""))
+	notLeaseHolderNewTransportErr := kvpb.NewError(kvpb.NewNotLeaseHolderError(roachpb.Lease{}, 0, &descriptor2, ""))
 	startedRequestError := errors.New("request might have started")
 	unavailableError1 := kvpb.NewError(kvpb.NewReplicaUnavailableError(errors.New("unavailable"), &initDescriptor, initDescriptor.InternalReplicas[0]))
 	unavailableError2 := kvpb.NewError(kvpb.NewReplicaUnavailableError(errors.New("unavailable"), &initDescriptor, initDescriptor.InternalReplicas[1]))
@@ -3677,62 +3678,71 @@ func TestReplicaErrorsMerged(t *testing.T) {
 		withCommit         bool
 		sendErr1, sendErr2 error
 		err1, err2         *kvpb.Error
-		expErr             string
+		expErr             error
 	}{
 		// The ambiguous error is returned with higher priority for withCommit.
 		{
 			withCommit: true,
 			sendErr1:   startedRequestError,
-			err2:       notLeaseHolderErr,
-			expErr:     "result is ambiguous",
+			err2:       notLeaseHolderNewLeaseErr,
+			expErr:     &kvpb.AmbiguousResultError{},
 		},
 		// The not leaseholder errors is the last error.
 		{
 			withCommit: false,
 			sendErr1:   startedRequestError,
-			err2:       notLeaseHolderErr,
-			expErr:     "leaseholder not found in transport",
+			err2:       notLeaseHolderNewLeaseErr,
+			expErr:     &kvpb.NotLeaseHolderError{},
+		},
+		// The ambiguous error is returned with higher priority for withCommit.
+		{
+			withCommit: true,
+			sendErr1:   startedRequestError,
+			err2:       notLeaseHolderNewTransportErr,
+			expErr:     &kvpb.AmbiguousResultError{},
+		},
+		// The not leaseholder errors is the last error.
+		{
+			withCommit: false,
+			sendErr1:   startedRequestError,
+			err2:       notLeaseHolderNewTransportErr,
+			expErr:     &kvpb.NotLeaseHolderError{},
 		},
 		// The ambiguous error is returned with higher priority for withCommit.
 		{
 			withCommit: true,
 			sendErr1:   startedRequestError,
 			err2:       unavailableError2,
-			expErr:     "result is ambiguous",
+			expErr:     &kvpb.AmbiguousResultError{},
 		},
 		// The unavailable error is the last error.
 		{
 			withCommit: false,
 			sendErr1:   startedRequestError,
 			err2:       unavailableError2,
-			expErr:     "unavailable",
+			expErr:     &kvpb.ReplicaUnavailableError{},
 		},
 		// The unavailable error is returned with higher priority regardless of withCommit.
 		{
 			withCommit: true,
 			err1:       unavailableError1,
-			err2:       notLeaseHolderErr,
-			expErr:     "unavailable",
+			err2:       notLeaseHolderNewLeaseErr,
+			expErr:     &kvpb.ReplicaUnavailableError{},
 		},
 		// The unavailable error is returned with higher priority regardless of withCommit.
 		{
 			withCommit: false,
 			err1:       unavailableError1,
-			err2:       notLeaseHolderErr,
-			expErr:     "unavailable",
+			err2:       notLeaseHolderNewLeaseErr,
+			expErr:     &kvpb.ReplicaUnavailableError{},
 		},
 	}
 	clock := hlc.NewClockForTesting(nil)
 	ns := &mockNodeStore{
 		nodes: []roachpb.NodeDescriptor{
-			{
-				NodeID:  1,
-				Address: util.UnresolvedAddr{},
-			},
-			{
-				NodeID:  2,
-				Address: util.UnresolvedAddr{},
-			},
+			{NodeID: 1, Address: util.UnresolvedAddr{}},
+			{NodeID: 2, Address: util.UnresolvedAddr{}},
+			{NodeID: 3, Address: util.UnresolvedAddr{}},
 		},
 	}
 	ctx := context.Background()
@@ -3759,7 +3769,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 							br.Error = tc.err1
 						}
 						return br, nil
-					case 2:
+					case 2, 3:
 						if tc.sendErr2 != nil {
 							return nil, tc.sendErr2
 						} else {
@@ -3768,7 +3778,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 						return br, nil
 					default:
 						assert.Fail(t, "Unexpected replica n%d", ba.Replica.NodeID)
-						return nil, nil
+						return br, nil
 					}
 				}
 				cfg := DistSenderConfig{
@@ -3795,7 +3805,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 				require.NoError(t, err)
 				br, err := ds.sendToReplicas(ctx, ba, tok, tc.withCommit)
 				log.Infof(ctx, "Error is %v", err)
-				require.ErrorContains(t, err, tc.expErr)
+				require.ErrorAs(t, err, &tc.expErr)
 				require.Nil(t, br)
 			})
 		})
