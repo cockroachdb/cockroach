@@ -5,18 +5,18 @@ set -xeuo pipefail
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
 source "$dir/teamcity-support.sh"  # For log_into_gcloud
 
-google_credentials="$METADATA_PUBLISHER_GOOGLE_CREDENTIALS_DEV"
+google_credentials="$GCS_CREDENTIALS_DEV"
 to=dev-inf+release-dev@cockroachlabs.com
-qualify_bucket=release-automation-dev
-release_bucket=release-automation-dev
+qualify_bucket=cockroach-release-qualification-test
+release_bucket=cockroach-release-qualification-test
 
 # override dev defaults with production values
 if [[ -z "${DRY_RUN}" ]] ; then
   echo "Setting production values"
-  google_credentials="$METADATA_PUBLISHER_GOOGLE_CREDENTIALS_PROD"
+  google_credentials="$GCS_CREDENTIALS_PROD"
   to=releases@cockroachlabs.com
-  qualify_bucket=release-automation-prod
-  release_bucket=release-automation-prod
+  qualify_bucket=cockroach-release-qualification-prod
+  release_bucket=cockroach-release-qualification-prod
 fi
 
 log_into_gcloud
