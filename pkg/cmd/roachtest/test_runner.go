@@ -85,6 +85,17 @@ var (
 		)
 	}
 
+	// vmHostError is the error that indicates that a test failed
+	// a result of VM host error. These errors are directed to Test Eng
+	// instead of owning teams.
+	vmHostError = func(hostErrorVMs string) error {
+		return registry.ErrorWithOwner(
+			registry.OwnerTestEng, fmt.Errorf("hostError VMs: %s", hostErrorVMs),
+			registry.WithTitleOverride("vm_host_error"),
+			registry.InfraFlake,
+		)
+	}
+
 	prng, _ = randutil.NewLockedPseudoRand()
 
 	runID string
@@ -1045,6 +1056,13 @@ func (r *testRunner) runTest(
 					t.resetFailures()
 					t.Error(vmPreemptionError(preemptedVMNames))
 				}
+				hostErrorVMNames := getHostErrorVMNames(ctx, c, l)
+				if hostErrorVMNames != "" {
+					failureMsg = fmt.Sprintf("VMs received host error during the test run: %s\n\n**Other Failures:**\n%s", hostErrorVMNames, failureMsg)
+					t.resetFailures()
+					t.Error(vmHostError(hostErrorVMNames))
+				}
+
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
 
 				issue, err := github.MaybePost(t, l, output)
@@ -1238,6 +1256,28 @@ func (r *testRunner) runTest(
 	}
 }
 
+// getVMNames returns a comma separated list of VM names.
+func getVMNames(fullVMNames []string) string {
+	var vmNames []string
+	for _, name := range fullVMNames {
+		// Expected format: projects/{project}/zones/{zone}/instances/{name}
+		parts := strings.Split(name, "/")
+
+		// If the instance name is in the expected format, only include
+		// the VM name and the zone, to make it easier to for a human
+		// reading the output.
+		if len(parts) == 6 {
+			instanceName := parts[5]
+			zone := parts[3]
+			vmNames = append(vmNames, fmt.Sprintf("%s (%s)", instanceName, zone))
+		} else {
+			vmNames = append(vmNames, name)
+		}
+	}
+
+	return strings.Join(vmNames, ", ")
+}
+
 // getPreemptedVMNames returns a comma separated list of preempted VM
 // names, or an empty string if no VM was preempted or an error was found.
 func getPreemptedVMNames(ctx context.Context, c *clusterImpl, l *logger.Logger) string {
@@ -1247,24 +1287,24 @@ func getPreemptedVMNames(ctx context.Context, c *clusterImpl, l *logger.Logger) 
 		return ""
 	}
 
-	var preemptedVMNames []string
-	for _, item := range preemptedVMs {
-		// Expected format: projects/{project}/zones/{zone}/instances/{name}
-		parts := strings.Split(item.Name, "/")
-
-		// If the instance name is in the expected format, only include
-		// the VM name and the zone, to make it easier to for a human
-		// reading the output.
-		if len(parts) == 6 {
-			instanceName := parts[5]
-			zone := parts[3]
-			preemptedVMNames = append(preemptedVMNames, fmt.Sprintf("%s (%s)", instanceName, zone))
-		} else {
-			preemptedVMNames = append(preemptedVMNames, item.Name)
-		}
+	preemptedVMNames := make([]string, len(preemptedVMs))
+	for _, preemptedVM := range preemptedVMs {
+		preemptedVMNames = append(preemptedVMNames, preemptedVM.Name)
 	}
 
-	return strings.Join(preemptedVMNames, ", ")
+	return getVMNames(preemptedVMNames)
+}
+
+// getHostErrorVMNames returns a comma separated list of host error VM
+// names, or an empty string if no VM had a host error.
+func getHostErrorVMNames(ctx context.Context, c *clusterImpl, l *logger.Logger) string {
+	hostErrorVMs, err := c.GetHostErrorVMs(ctx, l)
+	if err != nil {
+		l.Printf("failed to check hostError VMs:\n%+v", err)
+		return ""
+	}
+
+	return getVMNames(hostErrorVMs)
 }
 
 // The assertions here are executed after each test, and may result in a test failure. Test authors

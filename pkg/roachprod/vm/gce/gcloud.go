@@ -379,11 +379,32 @@ func (p *Provider) GetPreemptedSpotVMs(
 	return preemptedVMs, nil
 }
 
-// buildFilterPreemptionCliArgs returns the arguments to be passed to gcloud cli to query the logs for preemption events.
-func buildFilterPreemptionCliArgs(
-	vms vm.List, projectName string, since time.Time,
+// GetHostErrorVMs checks the host error status of the given VMs, by querying the GCP logging service.
+func (p *Provider) GetHostErrorVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
 ) ([]string, error) {
-	vmFullResourceNames := make([]string, len(vms))
+	args, err := buildFilterHostErrorCliArgs(vms, since, p.GetProject())
+	if err != nil {
+		l.Printf("Error building gcloud cli command: %v\n", err)
+		return nil, err
+	}
+	l.Printf("gcloud cli for host error : " + strings.Join(append([]string{"gcloud"}, args...), " "))
+	var logEntries []LogEntry
+	if err := runJSONCommand(args, &logEntries); err != nil {
+		l.Printf("Error running gcloud cli command: %v\n", err)
+		return nil, err
+	}
+	// Extract the name of the VM with host error from logs.
+	var hostErrorVMs []string
+	for _, logEntry := range logEntries {
+		hostErrorVMs = append(hostErrorVMs, logEntry.ProtoPayload.ResourceName)
+	}
+	return hostErrorVMs, nil
+}
+
+func buildFilterCliArgs(
+	vms vm.List, projectName string, since time.Time, filter string,
+) ([]string, error) {
 	if projectName == "" {
 		return nil, errors.New("project name cannot be empty")
 	}
@@ -394,6 +415,7 @@ func buildFilterPreemptionCliArgs(
 		return nil, errors.New("vms cannot be nil")
 	}
 	// construct full resource names
+	vmFullResourceNames := make([]string, len(vms))
 	for i, vmNode := range vms {
 		// example format : projects/cockroach-ephemeral/zones/us-east1-b/instances/test-name
 		vmFullResourceNames[i] = "projects/" + projectName + "/zones/" + vmNode.Zone + "/instances/" + vmNode.Name
@@ -403,9 +425,7 @@ func buildFilterPreemptionCliArgs(
 	for i, vmID := range vmFullResourceNames {
 		vmIDFilter[i] = fmt.Sprintf("protoPayload.resourceName=%s", vmID)
 	}
-	// Create a filter to match preemption events for the specified VM IDs
-	filter := fmt.Sprintf(`resource.type=gce_instance AND (protoPayload.methodName=compute.instances.preempted) AND (%s)`,
-		strings.Join(vmIDFilter, " OR "))
+	filter += fmt.Sprintf(` AND (%s)`, strings.Join(vmIDFilter, " OR "))
 	args := []string{
 		"logging",
 		"read",
@@ -415,6 +435,25 @@ func buildFilterPreemptionCliArgs(
 		filter,
 	}
 	return args, nil
+}
+
+// buildFilterPreemptionCliArgs returns the arguments to be passed to gcloud cli to query the logs for preemption events.
+func buildFilterPreemptionCliArgs(
+	vms vm.List, projectName string, since time.Time,
+) ([]string, error) {
+	// Create a filter to match preemption events
+	filter := `resource.type=gce_instance AND (protoPayload.methodName=compute.instances.preempted)`
+	return buildFilterCliArgs(vms, projectName, since, filter)
+}
+
+// buildFilterHostErrorCliArgs returns the arguments to be passed to gcloud cli to query the logs for host error events.
+func buildFilterHostErrorCliArgs(
+	vms vm.List, since time.Time, projectName string,
+) ([]string, error) {
+	// Create a filter to match hostError events for the specified projectName
+	filter := fmt.Sprintf(`resource.type=gce_instance AND protoPayload.methodName=compute.instances.hostError 
+		AND logName=projects/%s/logs/cloudaudit.googleapis.com%%2Fsystem_event`, projectName)
+	return buildFilterCliArgs(vms, projectName, since, filter)
 }
 
 type snapshotJson struct {

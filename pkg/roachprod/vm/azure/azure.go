@@ -106,6 +106,12 @@ func (p *Provider) GetPreemptedSpotVMs(
 	return nil, nil
 }
 
+func (p *Provider) GetHostErrorVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]string, error) {
+	return nil, nil
+}
+
 func (p *Provider) CreateVolumeSnapshot(
 	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
 ) (vm.VolumeSnapshot, error) {
