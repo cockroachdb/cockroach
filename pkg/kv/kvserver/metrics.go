@@ -941,6 +941,14 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaSSTableZombieBytes = metric.Metadata{
+		Name: "storage.sstable.zombie.bytes",
+		Help: "Bytes in SSTables that have been logically deleted, " +
+			"but can't yet be physically deleted because an " +
+			"open iterator may be reading them.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 var (
@@ -2589,6 +2597,7 @@ type StoreMetrics struct {
 	BatchCommitL0StallDuration        *metric.Gauge
 	BatchCommitWALRotWaitDuration     *metric.Gauge
 	BatchCommitCommitWaitDuration     *metric.Gauge
+	SSTableZombieBytes                *metric.Gauge
 	categoryIterMetrics               pebbleCategoryIterMetricsContainer
 	WALBytesWritten                   *metric.Gauge
 	WALBytesIn                        *metric.Gauge
@@ -3291,6 +3300,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BatchCommitL0StallDuration:        metric.NewGauge(metaBatchCommitL0StallDuration),
 		BatchCommitWALRotWaitDuration:     metric.NewGauge(metaBatchCommitWALRotDuration),
 		BatchCommitCommitWaitDuration:     metric.NewGauge(metaBatchCommitCommitWaitDuration),
+		SSTableZombieBytes:                metric.NewGauge(metaSSTableZombieBytes),
 		categoryIterMetrics: pebbleCategoryIterMetricsContainer{
 			registry: storeRegistry,
 		},
@@ -3718,6 +3728,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitL0StallDuration.Update(int64(m.BatchCommitStats.L0ReadAmpWriteStallDuration))
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
+	sm.SSTableZombieBytes.Update(int64(m.Table.ZombieSize))
 	sm.categoryIterMetrics.update(m.CategoryStats)
 
 	for level, stats := range m.Levels {
