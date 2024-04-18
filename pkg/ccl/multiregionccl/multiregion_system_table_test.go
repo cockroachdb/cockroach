@@ -11,6 +11,7 @@ package multiregionccl
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"testing"
 	"time"
 
@@ -105,7 +106,7 @@ func TestMrSystemDatabase(t *testing.T) {
 		},
 	}
 	for _, testCase := range testCases {
-		t.Run("Sqlliveness", func(t *testing.T) {
+		t.Run(fmt.Sprintf("Sqlliveness %s", testCase.name), func(t *testing.T) {
 			row := testCase.database.QueryRow(t, `SELECT crdb_region, session_id, expiration FROM system.sqlliveness LIMIT 1`)
 			var sessionID string
 			var crdbRegion string
@@ -114,7 +115,7 @@ func TestMrSystemDatabase(t *testing.T) {
 			require.Equal(t, "us-east1", crdbRegion)
 		})
 
-		t.Run("Sqlinstances", func(t *testing.T) {
+		t.Run(fmt.Sprintf("Sqlinstances %s", testCase.name), func(t *testing.T) {
 			t.Run("InUse", func(t *testing.T) {
 				query := `
                 SELECT id, addr, session_id, locality, crdb_region
@@ -146,7 +147,7 @@ func TestMrSystemDatabase(t *testing.T) {
 				require.NoError(t, rows.Close())
 			})
 
-			t.Run("Preallocated", func(t *testing.T) {
+			t.Run(fmt.Sprintf("Preallocated %s", testCase.name), func(t *testing.T) {
 				query := `
                 SELECT id, addr, session_id, locality, crdb_region
                 FROM system.sql_instances
@@ -210,7 +211,7 @@ func TestMrSystemDatabase(t *testing.T) {
 				})
 			})
 
-			t.Run("Reclaim", func(t *testing.T) {
+			t.Run(fmt.Sprintf("Reclaim %s", testCase.name), func(t *testing.T) {
 				id := uuid.MakeV4()
 				s1, err := slstorage.MakeSessionID(make([]byte, 100), id)
 				require.NoError(t, err)
@@ -236,7 +237,7 @@ func TestMrSystemDatabase(t *testing.T) {
 			})
 		})
 
-		t.Run("GlobalTables", func(t *testing.T) {
+		t.Run(fmt.Sprintf("GlobalTables %s", testCase.name), func(t *testing.T) {
 			query := `
 		    SELECT target
 			FROM [SHOW ALL ZONE CONFIGURATIONS]
@@ -351,7 +352,7 @@ func TestMrSystemDatabase(t *testing.T) {
 			})
 		})
 
-		t.Run("QueryByEnum", func(t *testing.T) {
+		t.Run(fmt.Sprintf("QueryByEnum %s", testCase.name), func(t *testing.T) {
 			// This is a regression test for a bug triggered by setting up the system
 			// database. If the operation to configure the does not clear table
 			// statistics, this query will fail in the optimizer, because the stats will
