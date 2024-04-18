@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -314,52 +313,6 @@ func (s *Container) RecordTransaction(
 		stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeySkippedPoints))
 	}
 
-	var retryReason string
-	if value.AutoRetryReason != nil {
-		retryReason = value.AutoRetryReason.Error()
-	}
-
-	var cpuSQLNanos int64
-	if value.ExecStats.CPUTime.Nanoseconds() >= 0 {
-		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
-	}
-
-	var errorCode string
-	var errorMsg redact.RedactableString
-	if value.TxnErr != nil {
-		errorCode = pgerror.GetPGCode(value.TxnErr).String()
-		errorMsg = redact.Sprint(value.TxnErr)
-	}
-
-	status := insights.Transaction_Failed
-	if value.Committed {
-		status = insights.Transaction_Completed
-	}
-
-	insight := insights.Transaction{
-		ID:              value.TransactionID,
-		FingerprintID:   key,
-		UserPriority:    value.Priority.String(),
-		ImplicitTxn:     value.ImplicitTxn,
-		Contention:      &value.ExecStats.ContentionTime,
-		StartTime:       value.StartTime,
-		EndTime:         value.EndTime,
-		User:            value.SessionData.User().Normalized(),
-		ApplicationName: value.SessionData.ApplicationName,
-		RowsRead:        value.RowsRead,
-		RowsWritten:     value.RowsWritten,
-		RetryCount:      value.RetryCount,
-		AutoRetryReason: retryReason,
-		CPUSQLNanos:     cpuSQLNanos,
-		LastErrorCode:   errorCode,
-		LastErrorMsg:    errorMsg,
-		Status:          status,
-	}
-	if s.knobs != nil && s.knobs.InsightsWriterTxnInterceptor != nil {
-		s.knobs.InsightsWriterTxnInterceptor(ctx, value.SessionID, &insight)
-	} else {
-		s.insights.ObserveTransaction(value.SessionID, &insight)
-	}
 	return nil
 }
 
