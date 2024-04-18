@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -315,6 +316,11 @@ func (r *testRunner) Run(
 			}
 		}
 	}
+	l := lopt.l
+	// Attempt to sync the cache and delete old clusters. We don't clear
+	// the cache after this (see roachprod.Sync), so attempt it here to
+	// clean up from previous runs.
+	_, _ = roachprod.Sync(l, true /*overwriteMissingClusters*/, vm.ListOptions{})
 
 	clusterFactory := newClusterFactory(
 		clustersOpt.user, clustersOpt.clusterID, lopt.artifactsDir,
@@ -336,7 +342,6 @@ func (r *testRunner) Run(
 	errs := &workerErrors{}
 
 	qp := quotapool.NewIntPool("cloud cpu", uint64(clustersOpt.cpuQuota))
-	l := lopt.l
 	runID = generateRunID(clustersOpt)
 	shout(ctx, l, lopt.stdout, "%s: %s", VmLabelTestRunID, runID)
 	var wg sync.WaitGroup

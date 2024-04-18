@@ -64,7 +64,7 @@ func init() {
 		fmt.Fprintf(os.Stderr, "unable to configure logger: %s\n", loggerError)
 		os.Exit(1)
 	}
-	if _, err := roachprod.Sync(l, vm.ListOptions{}); err != nil {
+	if _, err := roachprod.Sync(l, true /*overwriteMissingClusters*/, vm.ListOptions{}); err != nil {
 		l.Printf("Failed to sync roachprod data - %v", err)
 		os.Exit(1)
 	}

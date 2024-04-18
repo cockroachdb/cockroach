@@ -276,7 +276,7 @@ hosts file.
 		if listJSON && listDetails {
 			return errors.New("'json' option cannot be combined with 'details' option")
 		}
-		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern, vm.ListOptions{ComputeEstimatedCost: true})
+		filteredCloud, err := roachprod.List(config.Logger, listMine, true /*overwriteMissingClusters*/, listPattern, vm.ListOptions{ComputeEstimatedCost: true})
 
 		if err != nil {
 			return err
@@ -437,7 +437,7 @@ var syncCmd = &cobra.Command{
 	Long:  ``,
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		_, err := roachprod.Sync(config.Logger, vm.ListOptions{IncludeVolumes: listOpts.IncludeVolumes})
+		_, err := roachprod.Sync(config.Logger, true /*overwriteMissingClusters*/, vm.ListOptions{IncludeVolumes: listOpts.IncludeVolumes})
 		_ = rootCmd.GenBashCompletionFile(bashCompletion)
 		return err
 	}),

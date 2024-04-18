@@ -79,7 +79,7 @@ func getRegexExclusionPairs(excludeList []string) [][]*regexp.Regexp {
 
 func initRoachprod(l *logger.Logger) error {
 	_ = roachprod.InitProviders()
-	_, err := roachprod.Sync(l, vm.ListOptions{})
+	_, err := roachprod.Sync(l, true /*overwriteMissingClusters*/, vm.ListOptions{})
 	return err
 }
 

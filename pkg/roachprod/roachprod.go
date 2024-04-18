@@ -237,7 +237,18 @@ func CachedCluster(name string) (*cloud.Cluster, bool) {
 // protects both the reading and the writing in order to prevent the hazard
 // caused by concurrent goroutines reading cloud state in a different order
 // than writing it to disk.
-func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
+//
+// overwriteMissingClusters indicates if the local cluster cache should be
+// updated to remove any clusters not returned from ListCloud. Because Azure
+// can sometimes return stale VM information, we cannot trust that missing
+// clusters are actually deleted. We should only delete clusters from the
+// cache when we know no one is using it, i.e. the start of a roachtest
+// run or a roachprod CLI invocation. This approach is best effort, it
+// is still possible for the caller to concurrently call roachprod sync
+// while a roachtest suite is running.
+func Sync(
+	l *logger.Logger, overwriteMissingClusters bool, options vm.ListOptions,
+) (*cloud.Cloud, error) {
 	if !config.Quiet {
 		l.Printf("Syncing...")
 	}
@@ -253,8 +264,8 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 	// Instead, we tell syncClustersCache not to remove any clusters as we
 	// can't tell if a cluster was deleted or not found due to the error.
 	// The next successful ListCloud call will clean it up.
-	overwriteMissingClusters := err == nil
-	if err := syncClustersCache(l, cld, overwriteMissingClusters); err != nil {
+	shouldOverwrite := err == nil && overwriteMissingClusters
+	if err := syncClustersCache(l, cld, shouldOverwrite); err != nil {
 		return nil, err
 	}
 
@@ -315,7 +326,11 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 // Alternatively, the 'listMine' option can be provided to get the clusters that are owned
 // by the current user.
 func List(
-	l *logger.Logger, listMine bool, clusterNamePattern string, opts vm.ListOptions,
+	l *logger.Logger,
+	listMine bool,
+	overwriteMissingClusters bool,
+	clusterNamePattern string,
+	opts vm.ListOptions,
 ) (cloud.Cloud, error) {
 	if err := LoadClusters(); err != nil {
 		return cloud.Cloud{}, err
@@ -340,7 +355,7 @@ func List(
 		}
 	}
 
-	cld, err := Sync(l, opts)
+	cld, err := Sync(l, overwriteMissingClusters, opts)
 	if err != nil {
 		return cloud.Cloud{}, err
 	}
@@ -618,7 +633,7 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	cld, err := Sync(l, vm.ListOptions{})
+	cld, err := Sync(l, false /*overwriteMissingClusters*/, vm.ListOptions{})
 	if err != nil {
 		return err
 	}
