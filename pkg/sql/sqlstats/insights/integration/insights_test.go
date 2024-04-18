@@ -696,6 +696,8 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 121986)
+
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
