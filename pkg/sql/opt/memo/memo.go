@@ -168,6 +168,7 @@ type Memo struct {
 	useImprovedComputedColumnFiltersDerivation bool
 	useProvidedOrderingFix                     bool
 	useTrigramSimilarityOptimization           bool
+	useImprovedTrigramSimilaritySelectivity    bool
 	trigramSimilarityThreshold                 float64
 
 	// curRank is the highest currently in-use scalar expression rank.
@@ -232,6 +233,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useImprovedComputedColumnFiltersDerivation: evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation,
 		useProvidedOrderingFix:                     evalCtx.SessionData().OptimizerUseProvidedOrderingFix,
 		useTrigramSimilarityOptimization:           evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization,
+		useImprovedTrigramSimilaritySelectivity:    evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity,
 		trigramSimilarityThreshold:                 evalCtx.SessionData().TrigramSimilarityThreshold,
 	}
 	m.metadata.Init()
@@ -380,6 +382,7 @@ func (m *Memo) IsStale(
 		m.useImprovedComputedColumnFiltersDerivation != evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation ||
 		m.useProvidedOrderingFix != evalCtx.SessionData().OptimizerUseProvidedOrderingFix ||
 		m.useTrigramSimilarityOptimization != evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization ||
+		m.useImprovedTrigramSimilaritySelectivity != evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity ||
 		m.trigramSimilarityThreshold != evalCtx.SessionData().TrigramSimilarityThreshold {
 		return true, nil
 	}
