@@ -2485,12 +2485,8 @@ parse-no-verify
 CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3 NOT VISIBLE)
 ----
 
-# The following test cases make sure that creating an invisible primary index is
+# The following test case makes sure that creating an invisible primary index is
 # not supported by the parser.
-parse-no-verify
-CREATE TABLE a (b INT8 PRIMARY KEY NOT VISIBLE)
-----
-
 error
 CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0") NOT VISIBLE)
 ----
@@ -2519,6 +2515,16 @@ DETAIL: source SQL:
 CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c) NOT VISIBLE)
                                                                                ^
 HINT: try \h CREATE TABLE
+
+# NOT VISIBLE here applies to the column, not the primary index, so it is
+# allowed.
+parse
+CREATE TABLE a (b INT8 PRIMARY KEY NOT VISIBLE)
+----
+CREATE TABLE a (b INT8 NOT VISIBLE PRIMARY KEY) -- normalized!
+CREATE TABLE a (b INT8 NOT VISIBLE PRIMARY KEY) -- fully parenthesized
+CREATE TABLE a (b INT8 NOT VISIBLE PRIMARY KEY) -- literals removed
+CREATE TABLE _ (_ INT8 NOT VISIBLE PRIMARY KEY) -- identifiers removed
 
 # Regression test for #95238
 parse
