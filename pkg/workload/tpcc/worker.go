@@ -36,7 +36,7 @@ const (
 // tpccTX is an interface for running a TPCC transaction.
 type tpccTx interface {
 	// run executes the TPCC transaction against the given warehouse ID.
-	run(ctx context.Context, wID int) (interface{}, error)
+	run(ctx context.Context, wID int, tpccTime *tpccTime, rng *rand.Rand) (interface{}, error)
 }
 
 type createTxFn func(ctx context.Context, config *tpcc, mcp *workload.MultiConnPool) (tpccTx, error)
@@ -200,12 +200,24 @@ func newWorker(
 }
 
 func (w *worker) run(ctx context.Context) error {
+	rng := rand.New(new(rand.LockedSource))
+	rng.Seed(RandomSeed.Seed())
+	// Default tpccTime uses actual time
+	tpccTime := &tpccTime{}
+	if w.config.fakeTime != 0 {
+		tpccTime = newTpccTime(
+			timeutil.Unix(int64(w.config.fakeTime), 0),
+			10*time.Second,
+			RandomSeed.Seed(),
+		)
+	}
+
 	// 5.2.4.2: the required mix is achieved by selecting each new transaction
 	// uniformly at random from a deck whose content guarantees the required
 	// transaction mix. Each pass through a deck must be made in a different
 	// uniformly random order.
 	if w.permIdx == len(w.deckPerm) {
-		rand.Shuffle(len(w.deckPerm), func(i, j int) {
+		rng.Shuffle(len(w.deckPerm), func(i, j int) {
 			w.deckPerm[i], w.deckPerm[j] = w.deckPerm[j], w.deckPerm[i]
 		})
 		w.permIdx = 0
@@ -228,7 +240,7 @@ func (w *worker) run(ctx context.Context) error {
 	// cancel them when the context expires. Instead, let them finish normally
 	// but don't account for them in the histogram.
 	start := timeutil.Now()
-	if _, err := tx.run(context.Background(), warehouseID); err != nil {
+	if _, err := tx.run(context.Background(), warehouseID, tpccTime, rng); err != nil {
 		w.counters[txInfo.name].error.Inc()
 		return errors.Wrapf(err, "error in %s", txInfo.name)
 	}
@@ -245,7 +257,7 @@ func (w *worker) run(ctx context.Context) error {
 	// distribution. Think time = -log(r) * u, where r is a uniform random number
 	// between 0 and 1 and u is the mean think time per operation.
 	// Each distribution is truncated at 10 times its mean value.
-	thinkTime := -math.Log(rand.Float64()) * txInfo.thinkTime
+	thinkTime := -math.Log(rng.Float64()) * txInfo.thinkTime
 	if thinkTime > (txInfo.thinkTime * 10) {
 		thinkTime = txInfo.thinkTime * 10
 	}
