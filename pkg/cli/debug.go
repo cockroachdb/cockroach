@@ -921,7 +921,10 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 }
 
 var debugPebbleOpts = struct {
-	sharedStorageURI string
+	sharedStorageURI   string
+	exciseTenantID     uint64
+	exciseTableID      uint32
+	exciseEntireTenant bool
 }{}
 
 // DebugPebbleCmd is the root of all debug pebble commands.
@@ -1470,6 +1473,7 @@ func init() {
 			return err
 		}),
 		tool.OpenOptions(pebbleOpenOptionLockDir{pebbleToolFS}),
+		tool.WithDBExciseSpanFn(pebbleExciseSpanFn),
 	)
 	DebugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	f := DebugPebbleCmd.PersistentFlags()
@@ -1631,8 +1635,60 @@ func initPebbleCmds(cmd *cobra.Command, pebbleTool *tool.T) {
 			pebbleCryptoInitializer(cmd.Context())
 			return nil
 		}
+		if c.Name() == "excise" {
+			f := c.Flags()
+			f.Uint64Var(&debugPebbleOpts.exciseTenantID, "tenant-id", 0, "tenant ID for table to excise (must be used in conjunction with --table-id or --entire-tenant)")
+			f.Uint32Var(&debugPebbleOpts.exciseTableID, "table-id", 0, "table ID to excise (must be used in conjunction with --tenant-id)")
+			f.BoolVar(&debugPebbleOpts.exciseEntireTenant, "entire-tenant", false, "excise the entire tenant (must be used in conjunction with --tenant-id)")
+		}
 		initPebbleCmds(c, pebbleTool)
 	}
+}
+
+// pebbleExciseSpanFn implements tool.DBExciseSpanFn. It returns a span
+// for a table if the table/tenant ID flags are used.
+func pebbleExciseSpanFn() (pebble.KeyRange, error) {
+	tenant := debugPebbleOpts.exciseTenantID
+	tableID := debugPebbleOpts.exciseTableID
+
+	if tableID != 0 && debugPebbleOpts.exciseEntireTenant {
+		return pebble.KeyRange{}, errors.Errorf("--table-id and --entire-tenant cannot be used together")
+	}
+
+	if tenant == 0 {
+		if tableID != 0 {
+			return pebble.KeyRange{}, errors.Errorf("--table-id must be used with --tenant-id")
+		}
+		if debugPebbleOpts.exciseEntireTenant {
+			return pebble.KeyRange{}, errors.Errorf("--entire-tenant must be used with --tenant-id")
+		}
+		// Fall back to using the normal flags.
+		return pebble.KeyRange{}, nil
+	}
+
+	if tableID == 0 && !debugPebbleOpts.exciseEntireTenant {
+		return pebble.KeyRange{}, errors.Errorf("--tenant-id must be used with either --table-id or --entire-tenant")
+	}
+	tenantID, err := roachpb.MakeTenantID(tenant)
+	if err != nil {
+		return pebble.KeyRange{}, err
+	}
+	codec := keys.MakeSQLCodec(tenantID)
+	var start, end storage.EngineKey
+	if tableID != 0 {
+		start.Key = codec.TablePrefix(tableID)
+		end.Key = start.Key.PrefixEnd()
+	} else {
+		if codec.ForSystemTenant() {
+			return pebble.KeyRange{}, errors.Errorf("cannot excise the entire system tenant")
+		}
+		start.Key = codec.TenantPrefix()
+		end.Key = codec.TenantEndKey()
+	}
+	return pebble.KeyRange{
+		Start: start.Encode(),
+		End:   end.Encode(),
+	}, nil
 }
 
 func pebbleCryptoInitializer(ctx context.Context) {
