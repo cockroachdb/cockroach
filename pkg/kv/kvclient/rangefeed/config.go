@@ -48,6 +48,7 @@ type config struct {
 	onSSTable            OnSSTable
 	onValues             OnValues
 	onDeleteRange        OnDeleteRange
+	onMetadata           OnMetadata
 	extraPProfLabels     []string
 }
 
@@ -204,6 +205,19 @@ type OnSSTable func(
 func WithOnSSTable(f OnSSTable) Option {
 	return optionFunc(func(c *config) {
 		c.onSSTable = f
+	})
+}
+
+// OnMetadata is called when a RangefeedMetadata event is passed to the eventCh.
+// This occurs when a partial rangefeed begins, and if the the rangefeed client
+// was initialized with an OnMetadata function.
+type OnMetadata func(ctx context.Context, value *kvpb.RangeFeedMetadata)
+
+// WithOnMetadata sets up a callback that's invoked when a partial rangefeed is
+// spawned.
+func WithOnMetadata(fn OnMetadata) Option {
+	return optionFunc(func(c *config) {
+		c.onMetadata = fn
 	})
 }
 

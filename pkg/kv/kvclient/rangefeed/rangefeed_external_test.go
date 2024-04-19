@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1644,4 +1645,230 @@ func (c *channelSink) Send(e *kvpb.RangeFeedEvent) error {
 	case <-c.ctx.Done():
 		return c.ctx.Err()
 	}
+}
+
+// TestRangeFeedMetadataManualSplit tests that a spawned rangefeed emits a
+// metadata event which indicates if it spawned to due a manual split. The
+// test specifically conducts the following:
+// 1) set up a rangefeed over some key space
+// 2) manually split the key space
+// 3) Verify that 2 metadata events are sent for the LHS and RHS rangefeeds.
+func TestRangeFeedMetadataManualSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+		ctx := context.Background()
+		settings := cluster.MakeTestingClusterSettings()
+		// We must enable desired scheduler settings before we start cluster,
+		// otherwise we will trigger processor restarts later and this test can't
+		// handle duplicated events.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
+		kvserver.RangefeedEnabled.Override(ctx, &settings.SV, true)
+		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
+			Settings: settings,
+		})
+		defer srv.Stopper().Stop(ctx)
+		ts := srv.ApplicationLayer()
+
+		scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+		_, _, err := srv.SplitRange(scratchKey)
+		require.NoError(t, err)
+		scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+		mkKey := func(k string) roachpb.Key {
+			return encoding.EncodeStringAscending(scratchKey, k)
+		}
+
+		sp := roachpb.Span{
+			Key:    scratchKey,
+			EndKey: scratchKey.PrefixEnd(),
+		}
+
+		f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
+		require.NoError(t, err)
+
+		metadata := make(chan *kvpb.RangeFeedMetadata)
+		initialScanDone := make(chan struct{})
+		rows := make(chan *kvpb.RangeFeedValue)
+		r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, ts.DB().Clock().Now(),
+			func(ctx context.Context, value *kvpb.RangeFeedValue) {
+				select {
+				case rows <- value:
+				case <-ctx.Done():
+				}
+			},
+			rangefeed.WithInitialScan(func(ctx context.Context) {
+				close(initialScanDone)
+			}),
+			rangefeed.WithOnMetadata(func(ctx context.Context, value *kvpb.RangeFeedMetadata) {
+				select {
+				case metadata <- value:
+				case <-ctx.Done():
+					return
+				}
+			}),
+		)
+		require.NoError(t, err)
+
+		defer func() {
+			r.Close()
+			close(metadata)
+			close(rows)
+		}()
+		{
+			// First meta msg for the new rangefeed.
+			meta := <-metadata
+			t.Logf("initial span %s-%s", meta.Span.Key, meta.Span.EndKey)
+			require.False(t, meta.FromManualSplit)
+			require.Equal(t, sp.Key, meta.Span.Key)
+			require.Equal(t, sp.EndKey, meta.Span.EndKey)
+			require.Empty(t, meta.ParentStartKey)
+		}
+		<-initialScanDone
+
+		// Confirm the rangefeed is running on the expected range.
+		require.NoError(t, db.Put(ctx, mkKey("c"), 2))
+		val := <-rows
+		require.Equal(t, mkKey("c"), val.Key)
+
+		go func() {
+			// The key above may be emitted again due to rangefeed semantics. Receive
+			// these repeat updates to ensure the rows channel is never blocked.
+			for range rows {
+			}
+		}()
+
+		splitKey := mkKey("b")
+		_, _, err = srv.SplitRange(splitKey)
+		require.NoError(t, err)
+		for {
+			// Expect a metadata event from the manual split.
+			meta := <-metadata
+			t.Logf("manual split new range key span %s-%s; manual split %t", meta.Span.Key, meta.Span.EndKey, meta.FromManualSplit)
+			require.Equal(t, true, meta.FromManualSplit)
+			if !meta.Span.EndKey.Equal(sp.EndKey) {
+				// New Rangefeed for LHS.
+				require.Equal(t, splitKey, meta.Span.EndKey)
+				require.Equal(t, sp.Key, meta.Span.Key)
+				require.Equal(t, sp.Key, meta.ParentStartKey)
+				break
+			}
+			// Due to outdated rangefeed cache, we could spawn a rangefeed with the og
+			// span induced by manual split. We expect this rangefeed to error before
+			// starting with a rangekey mismatch error, which should spawn the correct
+			// rangefeeds with the manual split flag.
+			require.Equal(t, sp.Key, meta.Span.Key)
+			require.Equal(t, sp.EndKey, meta.Span.EndKey)
+		}
+		{
+			// New Rangefeed for the RHS.
+			meta := <-metadata
+			t.Logf("another split new range key span %s-%s; manual %t", meta.Span.Key, meta.Span.EndKey, meta.FromManualSplit)
+			require.True(t, meta.FromManualSplit)
+			require.Equal(t, splitKey, meta.Span.Key)
+			require.Equal(t, sp.EndKey, meta.Span.EndKey)
+			require.Equal(t, sp.Key, meta.ParentStartKey)
+		}
+
+	})
+}
+
+// TestRangeFeedMetadataAutoSplit tests that a spawned rangefeed emits metadata
+// events which indicates if a rangefeed spawned _not_ due to a manual split.
+// This test relies on the fact that a newly created table with data will be
+// automatically split into its own range.
+func TestRangeFeedMetadataAutoSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+		ctx := context.Background()
+		settings := cluster.MakeTestingClusterSettings()
+		// We must enable desired scheduler settings before we start cluster,
+		// otherwise we will trigger processor restarts later and this test can't
+		// handle duplicated events.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
+		kvserver.RangefeedEnabled.Override(ctx, &settings.SV, true)
+		// Lower the closed timestamp target duration to speed up the test.
+		closedts.TargetDuration.Override(ctx, &settings.SV, 100*time.Millisecond)
+		srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Settings: settings,
+		})
+		sql := sqlutils.MakeSQLRunner(conn)
+
+		defer srv.Stopper().Stop(ctx)
+		ts := srv.ApplicationLayer()
+
+		var maxTableID uint32
+		sql.QueryRow(t, "SELECT max(id) FROM system.namespace").Scan(&maxTableID)
+		tenantPrefixEnd := srv.Codec().TenantPrefix().PrefixEnd()
+
+		// Create a rangefeed that listens to key updates at the highest table in
+		// system key space and above.
+		sp := roachpb.Span{
+			Key:    ts.Codec().TablePrefix(maxTableID),
+			EndKey: tenantPrefixEnd,
+		}
+
+		// Wait for foo to have its own range.
+		f, err := rangefeed.NewFactory(ts.AppStopper(), ts.DB(), ts.ClusterSettings(), nil)
+		require.NoError(t, err)
+
+		metadata := make(chan *kvpb.RangeFeedMetadata)
+		initialScanDone := make(chan struct{})
+		r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, ts.DB().Clock().Now(),
+			func(ctx context.Context, value *kvpb.RangeFeedValue) {
+			},
+			rangefeed.WithInitialScan(func(ctx context.Context) {
+				close(initialScanDone)
+			}),
+			rangefeed.WithOnMetadata(func(ctx context.Context, value *kvpb.RangeFeedMetadata) {
+				select {
+				case metadata <- value:
+				case <-ctx.Done():
+					return
+				}
+			}),
+		)
+
+		require.NoError(t, err)
+		defer r.Close()
+		<-initialScanDone
+		{
+			// First meta msg for the new rangefeed.
+			meta := <-metadata
+			require.False(t, meta.FromManualSplit)
+			require.Equal(t, sp.Key, meta.Span.Key)
+			require.Equal(t, sp.EndKey, meta.Span.EndKey)
+			require.Empty(t, meta.ParentStartKey)
+		}
+
+		sql.Exec(t, "CREATE TABLE foo (key INT PRIMARY KEY)")
+		for {
+			meta := <-metadata
+			t.Logf("new range key span %s-%s; manual split %t", meta.Span.Key, meta.Span.EndKey, meta.FromManualSplit)
+			require.False(t, meta.FromManualSplit)
+			if !meta.Span.EndKey.Equal(sp.EndKey) {
+				// Verify metadata for LHS rangefeed.
+				require.Equal(t, sp.Key, meta.Span.Key)
+				require.Equal(t, sp.Key, meta.ParentStartKey)
+				break
+			}
+			// Due to an outdated rangefeed cache, we could spawn a rangefeed with the
+			// og span induced by the split. We expect this rangefeed to error before
+			// starting with a rangekey mismatch error, which should spawn the correct
+			// rangefeeds with the manual split flag.
+			require.Equal(t, sp.Key, meta.Span.Key)
+			require.Equal(t, sp.EndKey, meta.Span.EndKey)
+			require.Equal(t, sp.Key, meta.ParentStartKey)
+		}
+		{
+			// Verify the RHS rangefeed metadata.
+			meta := <-metadata
+			require.False(t, meta.FromManualSplit)
+			require.NotEqual(t, sp.Key, meta.Span.Key)
+			require.Equal(t, sp.EndKey, meta.Span.EndKey)
+			require.Equal(t, sp.Key, meta.ParentStartKey)
+		}
+	})
 }
