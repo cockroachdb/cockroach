@@ -13,10 +13,15 @@
 
 package status
 
-import "github.com/cockroachdb/cockroach/pkg/storage/disk"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+)
 
 // GetMonitorCounters returns DiskStats for all monitored disks.
 // TODO(cheranm): Retrieve disk counters and filter by the monitored disk path for Darwin builds.
-func GetMonitorCounters(monitors map[string]disk.Monitor) (map[string]DiskStats, error) {
-	return map[string]DiskStats{}, nil
+func GetMonitorCounters(
+	monitors map[roachpb.StoreID]disk.Monitor,
+) (map[roachpb.StoreID]DiskStats, error) {
+	return map[roachpb.StoreID]DiskStats{}, nil
 }

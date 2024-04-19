@@ -361,18 +361,21 @@ func TestRegisterDiskMonitors(t *testing.T) {
 	ls.AddStore(stores[1])
 
 	defaultFS := vfs.Default
-	pathToStore := make(map[string]roachpb.StoreID, len(stores))
+	diskManager := disk.NewMonitorManager(defaultFS)
+	diskMonitors := make(map[roachpb.StoreID]disk.Monitor, len(stores))
 	for i, store := range stores {
 		storePath := path.Join(dir, strconv.Itoa(i))
-		pathToStore[storePath] = store.StoreID()
-
 		_, err := defaultFS.Create(storePath, fs.UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		require.Nil(t, store.diskMonitor)
+
+		monitor, err := diskManager.Monitor(storePath)
+		require.NoError(t, err)
+		defer monitor.Close()
+		diskMonitors[store.StoreID()] = *monitor
 	}
 
-	diskManager := disk.NewMonitorManager(defaultFS)
-	err := ls.RegisterDiskMonitors(diskManager, pathToStore)
+	err := ls.RegisterDiskMonitors(diskMonitors)
 	require.NoError(t, err)
 	for _, store := range stores {
 		require.NotNil(t, store.diskMonitor)

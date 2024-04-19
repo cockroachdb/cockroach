@@ -13,17 +13,22 @@
 
 package status
 
-import "github.com/cockroachdb/cockroach/pkg/storage/disk"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+)
 
 // GetMonitorCounters returns DiskStats for all monitored disks.
-func GetMonitorCounters(monitors map[string]disk.Monitor) (map[string]DiskStats, error) {
-	output := make(map[string]DiskStats, len(monitors))
-	for path, monitor := range monitors {
+func GetMonitorCounters(
+	monitors map[roachpb.StoreID]disk.Monitor,
+) (map[roachpb.StoreID]DiskStats, error) {
+	output := make(map[roachpb.StoreID]DiskStats, len(monitors))
+	for id, monitor := range monitors {
 		stats, err := monitor.CumulativeStats()
 		if err != nil {
-			return map[string]DiskStats{}, err
+			return map[roachpb.StoreID]DiskStats{}, err
 		}
-		output[path] = DiskStats{
+		output[id] = DiskStats{
 			Name:           stats.DeviceName,
 			ReadBytes:      int64(stats.BytesRead()),
 			readCount:      int64(stats.ReadsCount),

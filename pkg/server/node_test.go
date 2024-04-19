@@ -1025,19 +1025,22 @@ func TestDiskStatsMap(t *testing.T) {
 	require.NoError(t, dsm.initDiskStatsMap(specs, engines, diskManager))
 
 	// diskStatsFunc returns stats for these two stores, and an unknown store.
-	diskStatsFunc := func(map[string]disk.Monitor) (map[string]status.DiskStats, error) {
-		return map[string]status.DiskStats{
-			path.Join(dir, "baz"): {
+	diskStatsFunc := func(map[roachpb.StoreID]disk.Monitor) (map[roachpb.StoreID]status.DiskStats, error) {
+		return map[roachpb.StoreID]status.DiskStats{
+			// unknown store
+			1: {
 				ReadBytes:  100,
 				WriteBytes: 200,
 			},
-			path.Join(dir, "foo"): {
-				ReadBytes:  500,
-				WriteBytes: 1000,
-			},
-			path.Join(dir, "bar"): {
+			// "bar"
+			5: {
 				ReadBytes:  2000,
 				WriteBytes: 2500,
+			},
+			// "foo"
+			10: {
+				ReadBytes:  500,
+				WriteBytes: 1000,
 			},
 		}, nil
 	}
@@ -1050,22 +1053,22 @@ func TestDiskStatsMap(t *testing.T) {
 		require.True(t, ok)
 		var expectedDS admission.DiskStats
 		switch engineIDs[i] {
-		// "foo"
-		case 10:
-			expectedDS = admission.DiskStats{
-				BytesRead: 500, BytesWritten: 1000, ProvisionedBandwidth: clusterProvisionedBW}
 		// "bar"
 		case 5:
 			expectedDS = admission.DiskStats{
 				BytesRead: 2000, BytesWritten: 2500, ProvisionedBandwidth: 200}
+		// "foo"
+		case 10:
+			expectedDS = admission.DiskStats{
+				BytesRead: 500, BytesWritten: 1000, ProvisionedBandwidth: clusterProvisionedBW}
 		}
 		require.Equal(t, expectedDS, ds)
 	}
 
 	// disk stats are only retrieved for "foo".
-	diskStatsFunc = func(map[string]disk.Monitor) (map[string]status.DiskStats, error) {
-		return map[string]status.DiskStats{
-			path.Join(dir, "foo"): {
+	diskStatsFunc = func(map[roachpb.StoreID]disk.Monitor) (map[roachpb.StoreID]status.DiskStats, error) {
+		return map[roachpb.StoreID]status.DiskStats{
+			10: {
 				ReadBytes:  3500,
 				WriteBytes: 4500,
 			},
@@ -1079,14 +1082,14 @@ func TestDiskStatsMap(t *testing.T) {
 		require.True(t, ok)
 		var expectedDS admission.DiskStats
 		switch engineIDs[i] {
-		// "foo"
-		case 10:
-			expectedDS = admission.DiskStats{
-				BytesRead: 3500, BytesWritten: 4500, ProvisionedBandwidth: clusterProvisionedBW}
 		// "bar". The read and write bytes are 0.
 		case 5:
 			expectedDS = admission.DiskStats{
 				BytesRead: 0, BytesWritten: 0, ProvisionedBandwidth: 200}
+		// "foo"
+		case 10:
+			expectedDS = admission.DiskStats{
+				BytesRead: 3500, BytesWritten: 4500, ProvisionedBandwidth: clusterProvisionedBW}
 		}
 		require.Equal(t, expectedDS, ds)
 	}

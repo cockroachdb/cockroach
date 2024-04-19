@@ -1065,14 +1065,13 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // diskStatsMap encapsulates all the logic for populating DiskStats for
 // admission.StoreMetrics.
 type diskStatsMap struct {
-	provisionedRate   map[roachpb.StoreID]base.ProvisionedRateSpec
-	diskPathToStoreID map[string]roachpb.StoreID
-	diskMonitors      map[string]disk.Monitor
+	provisionedRate map[roachpb.StoreID]base.ProvisionedRateSpec
+	diskMonitors    map[roachpb.StoreID]disk.Monitor
 }
 
 func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
 	clusterProvisionedBandwidth int64,
-	diskStatsFunc func(map[string]disk.Monitor) (map[string]status.DiskStats, error),
+	diskStatsFunc func(map[roachpb.StoreID]disk.Monitor) (map[roachpb.StoreID]status.DiskStats, error),
 ) (stats map[roachpb.StoreID]admission.DiskStats, err error) {
 	if dsm.empty() {
 		return stats, nil
@@ -1089,8 +1088,8 @@ func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
 		}
 		stats[id] = s
 	}
-	for path, diskStat := range diskStats {
-		if id, ok := dsm.diskPathToStoreID[path]; ok {
+	for id, diskStat := range diskStats {
+		if _, ok := dsm.diskMonitors[id]; ok {
 			s := stats[id]
 			s.BytesRead = uint64(diskStat.ReadBytes)
 			s.BytesWritten = uint64(diskStat.WriteBytes)
@@ -1108,9 +1107,8 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 	specs []base.StoreSpec, engines []storage.Engine, diskManager *disk.MonitorManager,
 ) error {
 	*dsm = diskStatsMap{
-		provisionedRate:   make(map[roachpb.StoreID]base.ProvisionedRateSpec),
-		diskPathToStoreID: make(map[string]roachpb.StoreID),
-		diskMonitors:      make(map[string]disk.Monitor),
+		provisionedRate: make(map[roachpb.StoreID]base.ProvisionedRateSpec),
+		diskMonitors:    make(map[roachpb.StoreID]disk.Monitor),
 	}
 	for i := range engines {
 		if specs[i].Path == "" || specs[i].InMemory {
@@ -1125,8 +1123,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 			return err
 		}
 		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
-		dsm.diskPathToStoreID[specs[i].Path] = id.StoreID
-		dsm.diskMonitors[specs[i].Path] = *monitor
+		dsm.diskMonitors[id.StoreID] = *monitor
 	}
 	return nil
 }
@@ -1143,7 +1140,7 @@ func (n *Node) registerEnginesForDiskStatsMap(
 	if err := n.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {
 		return err
 	}
-	if err := n.stores.RegisterDiskMonitors(diskManager, n.diskStatsMap.diskPathToStoreID); err != nil {
+	if err := n.stores.RegisterDiskMonitors(n.diskStatsMap.diskMonitors); err != nil {
 		return err
 	}
 	return nil
