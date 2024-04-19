@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -5366,8 +5367,11 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 				jobIDAlwaysValid := func(id jobspb.JobID) bool {
 					return true
 				}
+				roleAlwaysValid := func(username username.SQLUsername) bool {
+					return true
+				}
 				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
-					ctx, []byte(s), descIDAlwaysValid, jobIDAlwaysValid,
+					ctx, []byte(s), descIDAlwaysValid, jobIDAlwaysValid, roleAlwaysValid,
 				)
 				if err != nil {
 					return nil, err
@@ -5389,6 +5393,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 				{Name: "descriptor", Typ: types.Bytes},
 				{Name: "valid_descriptor_ids", Typ: types.IntArray},
 				{Name: "valid_job_ids", Typ: types.IntArray},
+				{Name: "valid_roles", Typ: types.StringArray},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5434,8 +5439,31 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 						return found
 					}
 				}
+
+				roleMightExist := func(username username.SQLUsername) bool {
+					return true
+				}
+				if args[3] != tree.DNull {
+					roles, ok := tree.AsDArray(args[3])
+					if !ok {
+						return nil, errors.Newf("expected array value, got %T", args[3])
+					}
+					roleMap := make(map[username.SQLUsername]struct{})
+					for _, roleDatum := range (*roles).Array {
+						role := tree.MustBeDString(roleDatum)
+						roleName, err := username.MakeSQLUsernameFromUserInput(string(role), username.PurposeValidation)
+						if err != nil {
+							return nil, err
+						}
+						roleMap[roleName] = struct{}{}
+					}
+					roleMightExist = func(username username.SQLUsername) bool {
+						_, ok := roleMap[username]
+						return ok
+					}
+				}
 				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
-					ctx, []byte(s), descIDMightExist, nonTerminalJobIDMightExist,
+					ctx, []byte(s), descIDMightExist, nonTerminalJobIDMightExist, roleMightExist,
 				)
 				if err != nil {
 					return nil, err
@@ -5479,6 +5507,12 @@ SELECT
 								system.jobs
 							WHERE
 								status NOT IN ('failed', 'succeeded', 'canceled', 'revert-failed')
+						),
+						( SELECT
+							array_agg(username) as username_array FROM
+							(SELECT username
+							FROM system.users UNION
+							SELECT 'public' as username)
 						)
 					),
 					true

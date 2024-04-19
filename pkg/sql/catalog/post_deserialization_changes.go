@@ -132,4 +132,8 @@ const (
 	// GrantExecuteOnFunctionToPublicRole indicates that EXECUTE was granted
 	// to the public role for a function.
 	GrantExecuteOnFunctionToPublicRole
+
+	// StrippedNonExistentRoles indicates that at least one role identified did
+	// not exist.
+	StrippedNonExistentRoles
 )

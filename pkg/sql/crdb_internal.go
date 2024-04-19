@@ -6176,6 +6176,21 @@ CREATE TABLE crdb_internal.invalid_objects (
 			for _, validationError := range ve {
 				doError(validationError)
 			}
+			doError(catalog.ValidateRolesInDescriptor(descriptor, func(username username.SQLUsername) (bool, error) {
+				if username.IsRootUser() ||
+					username.IsAdminRole() ||
+					username.IsPublicRole() {
+					return true, nil
+				}
+				err := p.CheckRoleExists(ctx, username)
+				if err != nil && pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+					err = nil
+					return false, err
+				} else if err != nil {
+					return false, err
+				}
+				return true, nil
+			}))
 			jobs.ValidateJobReferencesInDescriptor(descriptor, jmg, doError)
 			return err
 		}
@@ -6622,6 +6637,12 @@ CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
 								system.jobs
 							WHERE
 								status NOT IN ('failed', 'succeeded', 'canceled', 'revert-failed')
+						),
+						( SELECT
+							array_agg(username) as username_array FROM
+							(SELECT username
+							FROM system.users UNION
+							SELECT 'public' as username)
 						)
 					)
 						AS repaired_descriptor

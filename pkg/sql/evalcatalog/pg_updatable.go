@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -64,6 +65,7 @@ func (b *Builtins) RepairedDescriptor(
 	encodedDescriptor []byte,
 	descIDMightExist func(id descpb.ID) bool,
 	nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
+	roleExists func(username username.SQLUsername) bool,
 ) ([]byte, error) {
 	// Use the largest-possible timestamp as a sentinel value when decoding the
 	// descriptor bytes. This will be used to set the modification time field in
@@ -80,6 +82,9 @@ func (b *Builtins) RepairedDescriptor(
 		return nil, pgerror.New(pgcode.InvalidBinaryRepresentation, "empty descriptor")
 	}
 	if err := db.StripDanglingBackReferences(descIDMightExist, nonTerminalJobIDMightExist); err != nil {
+		return nil, err
+	}
+	if err := db.StripNonExistentRoles(roleExists); err != nil {
 		return nil, err
 	}
 	mut := db.BuildCreatedMutable()

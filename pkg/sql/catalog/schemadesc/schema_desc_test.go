@@ -243,3 +243,42 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestStripNonExistentRoles(t *testing.T) {
+	badPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
+	goodPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
+	badPrivilege.Users = append(badPrivilege.Users, catpb.UserPrivileges{
+		UserProto: username.TestUserName().EncodeProto(),
+	})
+	tests := []struct {
+		desc    descpb.SchemaDescriptor
+		expDesc descpb.SchemaDescriptor
+	}{
+		{ // 0
+			desc: descpb.SchemaDescriptor{
+				ID:         52,
+				ParentID:   51,
+				Name:       "schema1",
+				Privileges: badPrivilege,
+			},
+			expDesc: descpb.SchemaDescriptor{
+				ID:         52,
+				ParentID:   51,
+				Name:       "schema1",
+				Privileges: goodPrivilege,
+			},
+		},
+	}
+	for _, test := range tests {
+		b := schemadesc.NewBuilder(&test.desc)
+		require.NoError(t, b.RunPostDeserializationChanges())
+		out := schemadesc.NewBuilder(&test.expDesc)
+		require.NoError(t, out.RunPostDeserializationChanges())
+		require.NoError(t, b.StripNonExistentRoles(func(role username.SQLUsername) bool {
+			return role.IsAdminRole() || role.IsPublicRole() || role.IsRootUser()
+		}))
+		desc := b.BuildCreatedMutableSchema()
+		require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedNonExistentRoles))
+		require.Equal(t, out.BuildCreatedMutableSchema().SchemaDesc(), desc.SchemaDesc())
+	}
+}

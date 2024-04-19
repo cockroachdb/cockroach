@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -107,6 +108,10 @@ type DescriptorBuilder interface {
 		descIDMightExist func(id descpb.ID) bool,
 		nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 	) error
+
+	// StripNonExistentRoles removes any privileges granted to roles that
+	// don't exist.
+	StripNonExistentRoles(roleExists func(role username.SQLUsername) bool) error
 
 	// SetRawBytesInStorage sets `rawBytesInStorage` field by deep-copying `rawBytes`.
 	SetRawBytesInStorage(rawBytes []byte)
