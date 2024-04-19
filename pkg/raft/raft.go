@@ -345,6 +345,16 @@ type raft struct {
 
 	// the leader id
 	lead uint64
+	// accTerm is the term of the leader whose append was accepted into the log
+	// last. The log is a prefix of the accTerm's leader log.
+	//
+	// Invariant: raftLog.lastEntryID().term <= accTerm <= Term
+	//
+	// NB: the log can be partially or fully compacted. When we say "log" above,
+	// we logically include all the entries that were the pre-image of a snapshot,
+	// as well as the entries that are still physically in the log.
+	// TODO(pav-kv): refactor accTerm into raftLog field.
+	accTerm uint64
 	// leadTransferee is id of the leader transfer target when its value is not zero.
 	// Follow the procedure defined in raft thesis 3.10.
 	leadTransferee uint64
@@ -418,8 +428,10 @@ func newRaft(c *Config) *raft {
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		stepDownOnRemoval:           c.StepDownOnRemoval,
 	}
-
 	lastID := r.raftLog.lastEntryID()
+	// Invariant: accTerm needs to be initialized as the term of last raft entry
+	// to make sure restarted nodes can advance commit index immediately.
+	r.accTerm = lastID.term
 	cfg, trk, err := confchange.Restore(confchange.Changer{
 		Tracker:   r.trk,
 		LastIndex: lastID.index,
@@ -891,6 +903,8 @@ func (r *raft) becomeLeader() {
 		// This won't happen because we just called reset() above.
 		r.logger.Panic("empty entry was dropped")
 	}
+	// the leader's log is consistent with itself.
+	r.accTerm = r.Term
 	// The payloadSize of an empty entry is 0 (see TestPayloadSizeOfEmptyEntry),
 	// so the preceding log append does not count against the uncommitted log
 	// quota of the new leader. In other words, after the call to appendEntry,
@@ -1668,6 +1682,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		return
 	}
 	if mlastIndex, ok := r.raftLog.maybeAppend(a, m.Commit); ok {
+		r.accTerm = m.Term
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: mlastIndex})
 		return
 	}
@@ -1703,7 +1718,16 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 }
 
 func (r *raft) handleHeartbeat(m pb.Message) {
-	r.raftLog.commitTo(m.Commit)
+	// It is only safe to advance the commit index if our log is a prefix of the
+	// leader's log. Otherwise, entries at this index may mismatch.
+	//
+	// TODO(pav-kv): move this logic to r.raftLog, which is more appropriate for
+	// handling safety. The raftLog can use accTerm for other safety checks.
+	// For example, unstable.truncateAndAppend currently may override a suffix of
+	// the log unconditionally, but it can only be done if m.Term > accTerm.
+	if m.Term == r.accTerm {
+		r.raftLog.commitTo(min(m.Commit, r.raftLog.lastIndex()))
+	}
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
 }
 
@@ -1718,6 +1742,8 @@ func (r *raft) handleSnapshot(m pb.Message) {
 	if r.restore(s) {
 		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, sindex, sterm)
+		// log is now consistent with leader
+		r.accTerm = sterm
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex()})
 	} else {
 		r.logger.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
