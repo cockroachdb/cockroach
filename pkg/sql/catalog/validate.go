@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
@@ -195,4 +196,23 @@ func ValidateOutboundTypeRefBackReference(selfID descpb.ID, typ TypeDescriptor) 
 	}
 	return errors.AssertionFailedf("depends-on type %q (%d) has no corresponding referencing-descriptor back references",
 		typ.GetName(), typ.GetID())
+}
+
+// ValidateRolesInDescriptor validates roles within a descriptor.
+func ValidateRolesInDescriptor(
+	descriptor Descriptor, RoleExists func(username username.SQLUsername) (bool, error),
+) error {
+	for _, priv := range descriptor.GetPrivileges().Users {
+		exists, err := RoleExists(priv.User())
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.AssertionFailedf("descriptor %q (%d) has privilege on a role %q that doesn't exist",
+				descriptor.GetName(),
+				descriptor.GetID(),
+				priv.User())
+		}
+	}
+	return nil
 }

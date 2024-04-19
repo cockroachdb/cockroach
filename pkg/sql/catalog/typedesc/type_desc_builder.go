@@ -13,7 +13,9 @@ package typedesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -145,6 +147,25 @@ func (tdb *typeDescriptorBuilder) StripDanglingBackReferences(
 	if sliceIdx < len(tdb.maybeModified.ReferencingDescriptorIDs) {
 		tdb.maybeModified.ReferencingDescriptorIDs = tdb.maybeModified.ReferencingDescriptorIDs[:sliceIdx]
 		tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+	}
+	return nil
+}
+
+// StripNonExistentRoles implements the catalog.DescriptorBuilder
+// interface.
+func (tdb *typeDescriptorBuilder) StripNonExistentRoles(
+	roleExists func(role username.SQLUsername) bool,
+) error {
+	newPrivs := make([]catpb.UserPrivileges, 0, len(tdb.maybeModified.Privileges.Users))
+	for _, priv := range tdb.maybeModified.Privileges.Users {
+		exists := roleExists(priv.UserProto.Decode())
+		if exists {
+			newPrivs = append(newPrivs, priv)
+		}
+	}
+	if len(newPrivs) != len(tdb.maybeModified.Privileges.Users) {
+		tdb.maybeModified.Privileges.Users = newPrivs
+		tdb.changes.Add(catalog.StrippedNonExistentRoles)
 	}
 	return nil
 }
