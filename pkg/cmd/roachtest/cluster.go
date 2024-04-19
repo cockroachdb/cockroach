@@ -639,6 +639,7 @@ type clusterImpl struct {
 	cloud string
 	spec  spec.ClusterSpec
 	t     test.Test
+	f     roachtestutil.Fataler
 	// r is the registry tracking this cluster. Destroying the cluster will
 	// unregister it.
 	r *clusterRegistry
@@ -1052,6 +1053,7 @@ func attachToExistingCluster(
 // TODO(andrei): Get rid of c.t, c.l and of this method.
 func (c *clusterImpl) setTest(t test.Test) {
 	c.t = t
+	c.f = t
 	c.l = t.L()
 }
 
@@ -1129,8 +1131,8 @@ func (c *clusterImpl) validate(
 
 func (c *clusterImpl) lister() option.NodeLister {
 	fatalf := func(string, ...interface{}) {}
-	if c.t != nil { // accommodates poorly set up tests
-		fatalf = c.t.Fatalf
+	if c.f != nil { // accommodates poorly set up tests
+		fatalf = c.f.Fatalf
 	}
 	return option.NodeLister{NodeCount: c.spec.NodeCount, Fatalf: fatalf}
 }
@@ -1819,7 +1821,7 @@ func (c *clusterImpl) ApplySnapshots(ctx context.Context, snapshots []vm.VolumeS
 // Put is DEPRECATED. Use PutE instead.
 func (c *clusterImpl) Put(ctx context.Context, src, dest string, nodes ...option.Option) {
 	if err := c.PutE(ctx, c.l, src, dest, nodes...); err != nil {
-		c.t.Fatal(err)
+		c.f.Fatal(err)
 	}
 }
 
@@ -2132,7 +2134,7 @@ func (c *clusterImpl) StartServiceForVirtualCluster(
 	settings install.ClusterSettings,
 ) {
 	if err := c.StartServiceForVirtualClusterE(ctx, l, startOpts, settings); err != nil {
-		c.t.Fatal(err)
+		c.f.Fatal(err)
 	}
 }
 
@@ -2159,7 +2161,7 @@ func (c *clusterImpl) StopServiceForVirtualCluster(
 	ctx context.Context, l *logger.Logger, stopOpts option.StopOpts,
 ) {
 	if err := c.StopServiceForVirtualClusterE(ctx, l, stopOpts); err != nil {
-		c.t.Fatal(err)
+		c.f.Fatal(err)
 	}
 }
 
@@ -2232,7 +2234,7 @@ func (c *clusterImpl) Start(
 	opts ...option.Option,
 ) {
 	if err := c.StartE(ctx, l, startOpts, settings, opts...); err != nil {
-		c.t.Fatal(err)
+		c.f.Fatal(err)
 	}
 }
 
@@ -2274,7 +2276,7 @@ func (c *clusterImpl) StopE(
 }
 
 // Stop is like StopE, except instead of returning an error, it does
-// c.t.Fatal(). c.t needs to be set.
+// c.f.Fatal(). c.t needs to be set.
 func (c *clusterImpl) Stop(
 	ctx context.Context, l *logger.Logger, stopOpts option.StopOpts, opts ...option.Option,
 ) {
@@ -2283,7 +2285,7 @@ func (c *clusterImpl) Stop(
 		return
 	}
 	if err := c.StopE(ctx, l, stopOpts, opts...); err != nil {
-		c.t.Fatal(err)
+		c.f.Fatal(err)
 	}
 }
 
@@ -2301,7 +2303,7 @@ func (c *clusterImpl) SignalE(
 }
 
 // Signal is like SignalE, except instead of returning an error, it does
-// c.t.Fatal(). c.t needs to be set.
+// c.f.Fatal(). c.t needs to be set.
 func (c *clusterImpl) Signal(
 	ctx context.Context, l *logger.Logger, sig int, nodes ...option.Option,
 ) {
@@ -2310,7 +2312,7 @@ func (c *clusterImpl) Signal(
 		return
 	}
 	if err := c.SignalE(ctx, l, sig, nodes...); err != nil {
-		c.t.Fatal(err)
+		c.f.Fatal(err)
 	}
 }
 
@@ -2332,13 +2334,13 @@ func (c *clusterImpl) WipeE(
 }
 
 // Wipe is like WipeE, except instead of returning an error, it does
-// c.t.Fatal(). c.t needs to be set.
+// c.f.Fatal(). c.t needs to be set.
 func (c *clusterImpl) Wipe(ctx context.Context, nodes ...option.Option) {
 	if ctx.Err() != nil {
 		return
 	}
 	if err := c.WipeE(ctx, c.l, nodes...); err != nil {
-		c.t.Fatal(err)
+		c.f.Fatal(err)
 	}
 }
 
@@ -2346,7 +2348,7 @@ func (c *clusterImpl) Wipe(ctx context.Context, nodes ...option.Option) {
 func (c *clusterImpl) Run(ctx context.Context, options install.RunOptions, args ...string) {
 	err := c.RunE(ctx, options, args...)
 	if err != nil {
-		c.t.Fatal(err)
+		c.f.Fatal(err)
 	}
 }
 
@@ -2366,10 +2368,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 	defer l.Close()
 
 	cmd := strings.Join(args, " ")
-	// TODO(bilal): Remove the need to check for nil.
-	if c.t != nil {
-		c.t.L().Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
-	}
+	c.f.L().Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
 	l.Printf("> %s", cmd)
 	if err := roachprod.Run(
 		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
@@ -2736,7 +2735,7 @@ func (c *clusterImpl) Conn(
 ) *gosql.DB {
 	db, err := c.ConnE(ctx, l, node, opts...)
 	if err != nil {
-		c.t.Fatal(err)
+		c.f.Fatal(err)
 	}
 	return db
 }
