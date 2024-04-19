@@ -50,9 +50,10 @@ import (
 )
 
 type singleRangeInfo struct {
-	rs         roachpb.RSpan
-	startAfter hlc.Timestamp
-	token      rangecache.EvictionToken
+	rs              roachpb.RSpan
+	startAfter      hlc.Timestamp
+	token           rangecache.EvictionToken
+	fromManualSplit bool
 }
 
 // defRangefeedConnClass is the default rpc.ConnectionClass used for rangefeed
@@ -90,6 +91,7 @@ type rangeFeedConfig struct {
 	overSystemTable     bool
 	withDiff            bool
 	withFiltering       bool
+	emitMetadata        bool
 	rangeObserver       func(ForEachRangeFn)
 
 	knobs struct {
@@ -264,8 +266,8 @@ func (ds *DistSender) RangeFeedSpans(
 					return err
 				}
 				if log.V(1) {
-					log.Infof(ctx, "RangeFeed starting for span %s@%s (quota acquired in %s)",
-						span, sri.startAfter, timeutil.Since(acquireStart))
+					log.Infof(ctx, "RangeFeed starting for span %s@%s from manual split %t (quota acquired in %s)",
+						span, sri.startAfter, sri.fromManualSplit, timeutil.Since(acquireStart))
 				}
 
 				// Spawn a child goroutine to process this feed.
@@ -275,6 +277,10 @@ func (ds *DistSender) RangeFeedSpans(
 					return ds.partialRangeFeed(ctx, active, sri.rs, sri.startAfter,
 						sri.token, rangeCh, eventCh, cfg, metrics)
 				})
+
+				if cfg.emitMetadata {
+					sendMetadata(eventCh, span, sri.fromManualSplit)
+				}
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -313,7 +319,7 @@ func divideAllSpansOnRangeBoundaries(
 		if err != nil {
 			return err
 		}
-		if err := divideSpanOnRangeBoundaries(ctx, ds, rs, stp.StartAfter, onRange); err != nil {
+		if err := divideSpanOnRangeBoundaries(ctx, ds, rs, stp.StartAfter, onRange, false); err != nil {
 			return err
 		}
 	}
@@ -476,12 +482,13 @@ func newRangeFeedRegistry(ctx context.Context, withDiff bool) *rangeFeedRegistry
 }
 
 func sendSingleRangeInfo(rangeCh chan<- singleRangeInfo) onRangeFn {
-	return func(ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken) error {
+	return func(ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken, fromManualSplit bool) error {
 		select {
 		case rangeCh <- singleRangeInfo{
-			rs:         rs,
-			startAfter: startAfter,
-			token:      token,
+			rs:              rs,
+			startAfter:      startAfter,
+			token:           token,
+			fromManualSplit: fromManualSplit,
 		}:
 			return nil
 		case <-ctx.Done():
@@ -491,8 +498,20 @@ func sendSingleRangeInfo(rangeCh chan<- singleRangeInfo) onRangeFn {
 }
 
 type onRangeFn func(
-	ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken,
+	ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken, emitStartKey bool,
 ) error
+
+func sendMetadata(eventCh chan<- RangeFeedMessage, span roachpb.Span, fromManualSplit bool) {
+	eventCh <- RangeFeedMessage{
+		RangeFeedEvent: &kvpb.RangeFeedEvent{
+			Metadata: &kvpb.RangeFeedMetadata{
+				Span:            span,
+				FromManualSplit: fromManualSplit,
+			},
+		},
+		RegisteredSpan: span,
+	}
+}
 
 func divideSpanOnRangeBoundaries(
 	ctx context.Context,
@@ -500,6 +519,7 @@ func divideSpanOnRangeBoundaries(
 	rs roachpb.RSpan,
 	startAfter hlc.Timestamp,
 	onRange onRangeFn,
+	fromManualSplit bool,
 ) error {
 	// As RangeIterator iterates, it can return overlapping descriptors (and
 	// during splits, this happens frequently), but divideAndSendRangeFeedToRanges
@@ -515,7 +535,7 @@ func divideSpanOnRangeBoundaries(
 			return err
 		}
 		nextRS.Key = partialRS.EndKey
-		if err := onRange(ctx, partialRS, startAfter, ri.Token()); err != nil {
+		if err := onRange(ctx, partialRS, startAfter, ri.Token(), fromManualSplit); err != nil {
 			return err
 		}
 		if !ri.NeedAnother(nextRS) {
@@ -633,7 +653,7 @@ func (ds *DistSender) partialRangeFeed(
 			// re-resolve since this will attempt to acquire 1 or more catchup
 			// scan reservations.
 			active.releaseCatchupScan()
-			return divideSpanOnRangeBoundaries(ctx, ds, rs, startAfter, sendSingleRangeInfo(rangeCh))
+			return divideSpanOnRangeBoundaries(ctx, ds, rs, startAfter, sendSingleRangeInfo(rangeCh), errInfo.manualSplit)
 		}
 	}
 	return ctx.Err()
@@ -642,6 +662,7 @@ func (ds *DistSender) partialRangeFeed(
 type rangefeedErrorInfo struct {
 	resolveSpan bool // true if the span resolution needs to be performed, and rangefeed restarted.
 	evict       bool // true if routing info needs to be updated prior to retry.
+	manualSplit bool // true if the rangefeed restarted from a manual split.
 }
 
 // handleRangefeedError handles an error that occurred while running rangefeed.
@@ -707,9 +728,10 @@ func handleRangefeedError(
 			return rangefeedErrorInfo{}, nil
 		case kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
 			kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,
-			kvpb.RangeFeedRetryError_REASON_MANUAL_RANGE_SPLIT,
 			kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER:
 			return rangefeedErrorInfo{evict: true, resolveSpan: true}, nil
+		case kvpb.RangeFeedRetryError_REASON_MANUAL_RANGE_SPLIT:
+			return rangefeedErrorInfo{evict: true, resolveSpan: true, manualSplit: true}, nil
 		default:
 			return rangefeedErrorInfo{}, errors.AssertionFailedf("unrecognized retryable error type: %T", err)
 		}

@@ -208,7 +208,11 @@ type muxRangeFeedEventReceiver interface {
 // startSingleRangeFeed looks up routing information for the
 // span, and begins execution of rangefeed.
 func (m *rangefeedMuxer) startSingleRangeFeed(
-	ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken,
+	ctx context.Context,
+	rs roachpb.RSpan,
+	startAfter hlc.Timestamp,
+	token rangecache.EvictionToken,
+	fromManualSplit bool,
 ) error {
 	// Bound the partial rangefeed to the partial span.
 	span := rs.AsRawSpanWithNoLocals()
@@ -224,6 +228,10 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 	if err := stream.start(ctx, m); err != nil {
 		stream.release()
 		return err
+	}
+
+	if m.cfg.emitMetadata {
+		sendMetadata(m.eventCh, span, fromManualSplit)
 	}
 
 	return nil
@@ -543,7 +551,7 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 	}
 
 	if errInfo.resolveSpan {
-		return divideSpanOnRangeBoundaries(ctx, m.ds, active.rSpan, active.startAfter, m.startSingleRangeFeed)
+		return divideSpanOnRangeBoundaries(ctx, m.ds, active.rSpan, active.startAfter, m.startSingleRangeFeed, errInfo.manualSplit)
 	}
 
 	if err := active.start(ctx, m); err != nil {
