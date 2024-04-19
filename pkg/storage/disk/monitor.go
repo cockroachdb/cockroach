@@ -222,7 +222,7 @@ func (s StatsWindow) Latest() Stats {
 }
 
 // Monitor provides statistics for an individual disk. Note that an individual
-// monitor is not thread-safe.
+// monitor is not thread-safe, however, it can be cloned to be used in parallel.
 type Monitor struct {
 	*monitoredDisk
 
@@ -243,7 +243,8 @@ func (m *Monitor) CumulativeStats() (Stats, error) {
 
 // IncrementalStats returns all stats observed since it's previous invocation.
 // Note that the tracer has a bounded capacity and the caller must invoke this
-// method at least as frequently as once every 30s to avoid missing events.
+// method at least as frequently as every COCKROACH_DISK_TRACE_PERIOD to avoid
+// missing events.
 func (m *Monitor) IncrementalStats() StatsWindow {
 	if m.lastIncrementedAt.IsZero() {
 		m.lastIncrementedAt = timeutil.Now()
@@ -260,6 +261,14 @@ func (m *Monitor) IncrementalStats() StatsWindow {
 		}
 	}
 	return StatsWindow{stats}
+}
+
+// Clone returns a new monitor that monitors the same disk.
+func (m *Monitor) Clone() *Monitor {
+	m.manager.mu.Lock()
+	defer m.manager.mu.Unlock()
+	m.refCount++
+	return &Monitor{monitoredDisk: m.monitoredDisk}
 }
 
 func (m *Monitor) LogTrace() string {
