@@ -2373,6 +2373,13 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaStorageWALFailoverWriteAndSyncLatency = metric.Metadata{
+		Name: "storage.wal.failover.write_and_sync.latency",
+		Help: "The observed latency for writing and syncing to the write ahead log. Only populated " +
+			"when WAL failover is configured",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaReplicaReadBatchDroppedLatchesBeforeEval = metric.Metadata{
 		Name:        "kv.replica_read_batch_evaluate.dropped_latches_before_eval",
 		Help:        `Number of times read-only batches dropped latches before evaluation.`,
@@ -2604,6 +2611,7 @@ type StoreMetrics struct {
 	WALFailoverSwitchCount            *metric.Gauge
 	WALFailoverPrimaryDuration        *metric.Gauge
 	WALFailoverSecondaryDuration      *metric.Gauge
+	WALFailoverWriteAndSyncLatency    *metric.ManualWindowHistogram
 
 	RdbCheckpoints *metric.Gauge
 
@@ -3309,6 +3317,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		WALFailoverSwitchCount:       metric.NewGauge(metaStorageWALFailoverSwitchCount),
 		WALFailoverPrimaryDuration:   metric.NewGauge(metaStorageWALFailoverPrimaryDuration),
 		WALFailoverSecondaryDuration: metric.NewGauge(metaStorageWALFailoverSecondaryDuration),
+		WALFailoverWriteAndSyncLatency: metric.NewManualWindowHistogram(
+			metaStorageWALFailoverWriteAndSyncLatency,
+			pebble.FsyncLatencyBuckets,
+			false, /* withRotate */
+		),
 
 		// Ingestion metrics
 		IngestCount: metric.NewGauge(metaIngestCount),
