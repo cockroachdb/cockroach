@@ -1179,7 +1179,7 @@ func splitTriggerHelper(
 	// modifications to the right hand side are accounted for by updating the
 	// helper's AbsPostSplitRight() reference.
 	var h splitStatsHelper
-	// There are three conditions under which we want to fall back to accurate
+	// There are a few conditions under which we want to fall back to accurate
 	// stats computation:
 	// 1. There are no pre-computed stats for the LHS. This can happen if
 	// kv.split.estimated_mvcc_stats.enabled is disabled, or if the leaseholder
@@ -1190,27 +1190,36 @@ func splitTriggerHelper(
 	// to accurate stats computation because scanning the empty LHS is not
 	// expensive.
 	noPreComputedStats := split.PreSplitLeftUserStats == enginepb.MVCCStats{}
-	// 2. If either side contains no user data; scanning the empty ranges is
+	// 2. This is a manual split. Manual splits issued via AdminSplit are used in
+	// bulk operations, like import, and tests to split many ranges out of the
+	// same original range. Pre-computing the LHS user stats for each of these
+	// ranges concurrently causes CPU spikes and split slowness; issuing repeated
+	// RecomputeStats requests for the same range contributes even more and can
+	// cause contention on the range descriptor.
+	manualSplit := split.ManualSplit
+	// 3. If either side contains no user data; scanning the empty ranges is
 	// cheap.
 	emptyLeftOrRight := statsInput.LeftUserIsEmpty || statsInput.RightUserIsEmpty
-	// 3. If the user pre-split stats differ significantly from the current stats
+	// 4. If the user pre-split stats differ significantly from the current stats
 	// stored on disk. Note that the current stats on disk were corrected in
 	// AdminSplit, so any differences we see here are due to writes concurrent
 	// with this split (not compounded estimates from previous splits).
 	preComputedStatsDiff := !statsInput.AbsPreSplitBothStored.HasUserDataCloseTo(
 		statsInput.PreSplitStats, statsInput.MaxCountDiff, statsInput.MaxBytesDiff)
-	// 4. If we haven't been asked to use estimated stats because of
+	// 5. If we haven't been asked to use estimated stats because of
 	// external bytes being present in the underlying store. This should
 	// only be true when an online restore has recently been performed.
 	shouldUseCrudeEstimates := statsInput.UseEstimatesBecauseExternalBytesArePresent &&
 		statsInput.AbsPreSplitBothStored.ContainsEstimates > 0
 
-	computeAccurateStats := (noPreComputedStats || emptyLeftOrRight || preComputedStatsDiff)
+	computeAccurateStats := (noPreComputedStats || manualSplit || emptyLeftOrRight || preComputedStatsDiff)
 	computeAccurateStats = computeAccurateStats && !shouldUseCrudeEstimates
 	if computeAccurateStats {
 		var reason redact.RedactableString
 		if noPreComputedStats {
 			reason = "there are no pre-split LHS stats (or they're empty)"
+		} else if manualSplit {
+			reason = "this is a manual split"
 		} else if emptyLeftOrRight {
 			reason = "the in-split LHS or RHS is empty"
 		} else {

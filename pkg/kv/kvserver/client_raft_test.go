@@ -5832,11 +5832,7 @@ func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
 		require.Len(t, ccResp.Result, 1)
 		result := ccResp.Result[0]
 		require.Equal(t, desc.RangeID, result.RangeID)
-		if kvserver.EnableEstimatedMVCCStatsInSplit.Get(&ts.ClusterSettings().SV) {
-			require.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED, result.Status, "%+v", result)
-		} else {
-			require.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
-		}
+		require.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
 	}
 
 	checkConsistency(descA)
