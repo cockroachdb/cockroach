@@ -85,7 +85,7 @@ func executeSupportedDDLs(
 			nodes = helper.Context.NodesInPreviousVersion() // N.B. this is the set of oldNodes.
 		}
 	}
-	testUtils, err := newCommonTestUtils(ctx, t, c, helper.Context.CockroachNodes, false)
+	testUtils, err := newCommonTestUtils(ctx, t, c, helper.Context.CockroachNodes, false, false)
 	defer testUtils.CloseConnections()
 	if err != nil {
 		return err

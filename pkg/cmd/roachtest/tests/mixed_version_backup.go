@@ -467,10 +467,11 @@ func (ep encryptionPassphrase) String() string {
 // newBackupOptions returns a list of backup options to be used when
 // creating a new backup. Each backup option has a 50% chance of being
 // included.
-func newBackupOptions(rng *rand.Rand) []backupOption {
-	possibleOpts := []backupOption{
-		revisionHistory{},
-		newEncryptionPassphrase(rng),
+func newBackupOptions(rng *rand.Rand, onlineRestoreExpected bool) []backupOption {
+	possibleOpts := []backupOption{}
+	if !onlineRestoreExpected {
+		possibleOpts = append(possibleOpts, revisionHistory{})
+		possibleOpts = append(possibleOpts, newEncryptionPassphrase(rng))
 	}
 
 	var options []backupOption
@@ -1788,7 +1789,7 @@ func (d *BackupRestoreTestDriver) runBackup(
 	case fullBackup:
 		btype := d.newBackupScope(rng)
 		name := d.backupCollectionName(d.nextBackupID(), b.namePrefix, btype)
-		createOptions := newBackupOptions(rng)
+		createOptions := newBackupOptions(rng, d.testUtils.onlineRestore)
 		collection = newBackupCollection(name, btype, createOptions, d.cluster.IsLocal())
 		l.Printf("creating full backup for %s", collection.name)
 	case incrementalBackup:
@@ -1952,6 +1953,9 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	numIncrementals := possibleNumIncrementalBackups[rng.Intn(len(possibleNumIncrementalBackups))]
 	if d.testUtils.mock {
 		numIncrementals = 1
+	}
+	if d.testUtils.onlineRestore {
+		numIncrementals = 0
 	}
 	l.Printf("creating %d incremental backups", numIncrementals)
 	for i := 0; i < numIncrementals; i++ {
@@ -2242,6 +2246,9 @@ func (bc *backupCollection) verifyBackupCollection(
 	// need to include it when restoring as well.
 	if opt := bc.encryptionOption(); opt != nil {
 		restoreOptions = append(restoreOptions, opt.String())
+	}
+	if d.testUtils.onlineRestore {
+		restoreOptions = append(restoreOptions, "experimental deferred copy")
 	}
 
 	var optionsStr string
@@ -2637,10 +2644,11 @@ func prepSchemaChangeWorkload(
 }
 
 type CommonTestUtils struct {
-	t          test.Test
-	cluster    cluster.Cluster
-	roachNodes option.NodeListOption
-	mock       bool
+	t             test.Test
+	cluster       cluster.Cluster
+	roachNodes    option.NodeListOption
+	mock          bool
+	onlineRestore bool
 
 	connCache struct {
 		mu    syncutil.Mutex
@@ -2652,7 +2660,12 @@ type CommonTestUtils struct {
 // and puts these connections in a cache for reuse. The caller should remember to close all connections
 // once done with them to prevent any goroutine leaks (CloseConnections).
 func newCommonTestUtils(
-	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption, mock bool,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	mock bool,
+	onlineRestore bool,
 ) (*CommonTestUtils, error) {
 	cc := make([]*gosql.DB, len(nodes))
 	for _, node := range nodes {
@@ -2669,10 +2682,11 @@ func newCommonTestUtils(
 	}
 
 	u := &CommonTestUtils{
-		t:          t,
-		cluster:    c,
-		roachNodes: nodes,
-		mock:       mock,
+		t:             t,
+		cluster:       c,
+		roachNodes:    nodes,
+		mock:          mock,
+		onlineRestore: onlineRestore,
 	}
 	u.connCache.cache = cc
 	return u, nil
@@ -2681,7 +2695,7 @@ func newCommonTestUtils(
 func (mvb *mixedVersionBackup) CommonTestUtils(ctx context.Context) (*CommonTestUtils, error) {
 	var err error
 	mvb.utilsOnce.Do(func() {
-		mvb.commonTestUtils, err = newCommonTestUtils(ctx, mvb.t, mvb.cluster, mvb.roachNodes, false)
+		mvb.commonTestUtils, err = newCommonTestUtils(ctx, mvb.t, mvb.cluster, mvb.roachNodes, false, false)
 	})
 	return mvb.commonTestUtils, err
 }
