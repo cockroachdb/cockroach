@@ -238,7 +238,6 @@ func TestDBClientScan(t *testing.T) {
 		feed, err := f.RangeFeed(ctx, "foo-feed", []roachpb.Span{fooSpan}, db.Clock().Now(),
 			func(ctx context.Context, value *kvpb.RangeFeedValue) {},
 
-			rangefeed.WithScanRetryBehavior(rangefeed.ScanRetryRemaining),
 			rangefeed.WithInitialScanParallelismFn(func() int { return parallelism }),
 
 			rangefeed.WithInitialScan(func(ctx context.Context) {

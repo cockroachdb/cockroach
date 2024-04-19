@@ -22,14 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 )
 
-// runInitialScan will attempt to perform an initial data scan.
+// runInitialScan will attempt to perform an initial data scan of all spans in
+// the passed frontier that are below f.initialTimestamp.
+//
 // It will retry in the face of errors and will only return upon
 // success, context cancellation, or an error handling function which indicates
 // that an error is unrecoverable. The return value will be true if the context
 // was canceled or if the OnInitialScanError function indicated that the
 // RangeFeed should stop.
 func (f *RangeFeed) runInitialScan(
-	ctx context.Context, n *log.EveryN, r *retry.Retry,
+	ctx context.Context, n *log.EveryN, r *retry.Retry, frontier span.Frontier,
 ) (canceled bool) {
 	onValue := func(kv roachpb.KeyValue) {
 		v := kvpb.RangeFeedValue{
@@ -63,86 +65,69 @@ func (f *RangeFeed) runInitialScan(
 		}
 	}
 
-	getSpansToScan, cleanup := f.getSpansToScan(ctx)
-	defer cleanup()
-
-	r.Reset()
-	for r.Next() {
-		if err := f.client.Scan(ctx, getSpansToScan(), f.initialTimestamp, onValue, onValues, f.scanConfig); err != nil {
-			if f.onInitialScanError != nil {
-				if shouldStop := f.onInitialScanError(ctx, err); shouldStop {
-					log.VEventf(ctx, 1, "stopping due to error: %v", err)
-					return true
-				}
-			}
-			if n.ShouldLog() {
-				log.Warningf(ctx, "failed to perform initial scan: %v", err)
-			}
-		} else /* err == nil */ {
-			if f.onInitialScanDone != nil {
-				f.onInitialScanDone(ctx)
-			}
-			break
-		}
-	}
-
-	return false
-}
-
-func (f *RangeFeed) getSpansToScan(ctx context.Context) (func() []roachpb.Span, func()) {
-	retryAll := func() []roachpb.Span {
-		return f.spans
-	}
-
-	noCleanup := func() {}
-	if f.retryBehavior == ScanRetryAll {
-		return retryAll, noCleanup
-	}
-
-	// We want to retry remaining spans.
-	// Maintain a frontier in order to keep track of which spans still need to be scanned.
-	frontier, err := span.MakeFrontier(f.spans...)
-	if err != nil {
-		// Frontier construction shouldn't really fail. The spans have already
-		// been validated by frontier constructed when starting rangefeed.
-		// We don't really have a good mechanism to return an initialization error from here,
-		// so, log it and fall back to retrying all spans.
-		log.Errorf(ctx, "failed to build frontier for the initial scan; "+
-			"falling back to retry all behavior: err=%v", err)
-		return retryAll, noCleanup
-	}
+	// Ensure the frontier is compatible with scan parallelism, which could be
+	// enabled mid-call since it is controlled via callback.
 	frontier = span.MakeConcurrentFrontier(frontier)
 
-	userSpanDoneCallback := f.onSpanDone
-	f.onSpanDone = func(ctx context.Context, sp roachpb.Span) error {
+	// Adjust the span completion callback to advance the frontier in addition to
+	// calling the user's callback, if any. We don't need to undo after we're done
+	// since it is never called again once we're done.
+	userSpanDoneCallback := f.scanConfig.OnSpanDone
+	f.scanConfig.OnSpanDone = func(ctx context.Context, sp roachpb.Span) error {
 		if userSpanDoneCallback != nil {
 			if err := userSpanDoneCallback(ctx, sp); err != nil {
 				return err
 			}
 		}
 		advanced, err := frontier.Forward(sp, f.initialTimestamp)
+		if err != nil {
+			return err
+		}
 		if f.frontierVisitor != nil {
 			f.frontierVisitor(ctx, advanced, frontier)
 		}
-
-		return err
+		return nil
 	}
 
-	isRetry := false
-	var retrySpans []roachpb.Span
-	return func() []roachpb.Span {
-		if !isRetry {
-			isRetry = true
-			return f.spans
-		}
+	toScan := make(roachpb.Spans, 0, frontier.Len())
 
-		retrySpans = retrySpans[:0]
+	// We will exit this for loop only when we return false for failed/cancelled
+	// from inside the loop, or when we break due to the callback or the retry
+	// helper returns false for Next (ctx cancel/retry limit).
+	r.Reset()
+	for r.Next() {
+		// Figure out what spans are left to scan.
+		toScan = toScan[:0]
 		frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
-			if ts.IsEmpty() {
-				retrySpans = append(retrySpans, sp)
+			if ts.IsEmpty() || ts.Less(f.initialTimestamp) {
+				toScan = append(toScan, sp)
 			}
 			return span.ContinueMatch
 		})
-		return retrySpans
-	}, frontier.Release
+
+		// Scan the spans.
+		if len(toScan) > 0 {
+			if err := f.client.Scan(ctx, toScan, f.initialTimestamp, onValue, onValues, f.scanConfig); err != nil {
+				if f.onInitialScanError != nil {
+					if shouldStop := f.onInitialScanError(ctx, err); shouldStop {
+						log.VEventf(ctx, 1, "stopping due to error: %v", err)
+						break
+					}
+				}
+				if n.ShouldLog() {
+					log.Warningf(ctx, "failed to perform initial scan: %v", err)
+				}
+				continue
+			}
+		}
+
+		// If we got here, we either had nothing to do or did it all; we're done.
+		if f.onInitialScanDone != nil {
+			f.onInitialScanDone(ctx)
+		}
+		return false
+	}
+
+	// We left the for loop without returning false, so we were cancelled.
+	return true
 }
