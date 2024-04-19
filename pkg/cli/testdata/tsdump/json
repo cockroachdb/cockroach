@@ -1,0 +1,34 @@
+
+format-json bytes-threshold=500
+cr.node.admission.admitted.elastic.cpu 1 0.000000 1711130470
+cr.node.admission.admitted.elastic.cpu 1 1.000000 1711130480
+cr.node.admission.admitted.elastic.cpu 1 1.000000 1711130490
+cr.node.admission.admitted.elastic.cpu 1 1.000000 1711130500
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130510
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130520
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130530
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130540
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130550
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130560
+----
+POST: https://example.com/data
+X-Crl-Token: test-token
+Body: {"metric":{"__name__":"admission_admitted_elastic_cpu","cluster":"test-cluster","cluster_type":"SELF_HOSTED","job":"cockroachdb","node_id":"1","region":"local"},"values":[0,1,1,1],"timestamps":[17111304700,17111304800,17111304900,17111305000]}
+{"metric":{"__name__":"admission_admitted_elastic_cpu","cluster":"test-cluster","cluster_type":"SELF_HOSTED","job":"cockroachdb","node_id":"2","region":"local"},"values":[1,1,1,1,1,1],"timestamps":[17111305100,17111305200,17111305300,17111305400,17111305500,17111305600]}
+
+
+format-datadog series-threshold=1
+cr.node.admission.admitted.elastic.cpu 1 0.000000 1711130470
+cr.node.admission.admitted.elastic.cpu 1 1.000000 1711130480
+cr.node.admission.admitted.elastic.cpu 1 1.000000 1711130490
+cr.node.admission.admitted.elastic.cpu 1 1.000000 1711130500
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130510
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130520
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130530
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130540
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130550
+cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130560
+----
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.admission.admitted.elastic.cpu","type":0,"points":[{"timestamp":17111304,"value":0},{"timestamp":17111304,"value":1},{"timestamp":17111304,"value":1},{"timestamp":17111305,"value":1}],"resources":null,"tags":["cluster_type:SELF_HOSTED","job:cockroachdb","region:local","cluster:test-cluster","node_id:1"]},{"metric":"crdb.tsdump.admission.admitted.elastic.cpu","type":0,"points":[{"timestamp":17111305,"value":1},{"timestamp":17111305,"value":1},{"timestamp":17111305,"value":1},{"timestamp":17111305,"value":1},{"timestamp":17111305,"value":1},{"timestamp":17111305,"value":1}],"resources":null,"tags":["cluster_type:SELF_HOSTED","job:cockroachdb","region:local","cluster:test-cluster","node_id:2"]}]}

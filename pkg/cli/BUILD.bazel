@@ -193,6 +193,7 @@ go_library(
         "//pkg/util/flagutil",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
+        "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
         "//pkg/util/ioctx",
         "//pkg/util/iterutil",
