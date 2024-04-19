@@ -539,7 +539,7 @@ func TestBackupManifestFileCount(t *testing.T) {
 	const numAccounts = 1000
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	sqlDB.Exec(t, "BACKUP INTO 'userfile:///backup'")
+	sqlDB.Exec(t, "BACKUP DATABASE data INTO 'userfile:///backup'")
 	rows := sqlDB.QueryRow(t, "SELECT count(distinct(path)) FROM [SHOW BACKUP FILES FROM LATEST IN 'userfile:///backup']")
 	var count int
 	rows.Scan(&count)
@@ -6290,7 +6290,7 @@ func TestPublicIndexTableSpans(t *testing.T) {
 			pkIndex:             getMockIndexDesc(1),
 			indexes:             []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
 			expectedSpans:       []string{"/Table/55/{1-2}", "/Table/55/{2-3}"},
-			expectedMergedSpans: []string{"/Table/55/{1-3}"},
+			expectedMergedSpans: []string{"/Table/55/{1-2}", "/Table/55/{2-3}"},
 		},
 		{
 			name:                "dropped-span-between-two-spans",
@@ -6356,7 +6356,7 @@ func TestPublicIndexTableSpans(t *testing.T) {
 			},
 			addingIndexes:       []descpb.IndexDescriptor{getMockIndexDesc(2)},
 			expectedSpans:       []string{"/Table/61/{1-2}", "/Table/61/{3-4}", "/Table/61/{4-5}"},
-			expectedMergedSpans: []string{"/Table/61/{1-2}", "/Table/61/{3-5}"},
+			expectedMergedSpans: []string{"/Table/61/{1-2}", "/Table/61/{3-4}", "/Table/61/{4-5}"},
 		},
 	}
 
@@ -8913,18 +8913,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		inc3Loc, fullBackup, inc1Loc, inc2Loc)
 	inc3Spans := getSpansFromManifest(ctx, t, locationToDir(inc3Loc))
 	require.Equal(t, 1, len(inc3Spans))
-	// NB: When running in a tenant, we don't add a split point
-	// for an index. As a result, we end up issuing a single
-	// export request for /Table/*/1-3 and while /Table/*/1-2 has
-	// no data in it, the start key is based on the start key of
-	// our request.
-	// TODO(ssd): figure out why enabling SCATTER setting in #109449 changed the
-	// span in the default test tenant case.
-	if tc.StartedDefaultTestTenant() {
-		require.Regexp(t, fmt.Sprintf(".*/Table/%d/{1/900-3}", dataBankTableID), inc3Spans[0].String())
-	} else {
-		require.Regexp(t, fmt.Sprintf(".*/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
-	}
+	require.Regexp(t, fmt.Sprintf(".*/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
 
 	// Drop the index.
 	sqlDB.Exec(t, `DROP INDEX new_balance_idx`)
