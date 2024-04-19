@@ -32,6 +32,11 @@ var (
 		Usage: `Cloud provider to use ("local", "gce", "aws", or "azure"); by
 		        default, only tests compatible with the given cloud are run`,
 	})
+	_ = registerRunOpsFlag(&Cloud, FlagInfo{
+		Name: "cloud",
+		Usage: `Cloud provider that the cluster is running on. Used by operations
+		        to tailor behaviour to that cloud.`,
+	})
 
 	Suite string
 	_     = registerListFlag(&Suite, FlagInfo{

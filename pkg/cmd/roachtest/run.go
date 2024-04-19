@@ -463,9 +463,15 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 	}
 
 	cSpec := spec.ClusterSpec{NodeCount: len(nodes)}
+	op := &operationImpl{
+		cockroach: roachtestflags.CockroachBinaryPath,
+		l:         l,
+	}
 	c := &clusterImpl{
 		name:       clusterName,
+		cloud:      roachtestflags.Cloud,
 		spec:       cSpec,
+		f:          op,
 		l:          l,
 		expiration: cSpec.Expiration(),
 		destroyState: destroyState{
@@ -487,17 +493,13 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 	} else {
 		return errors.Errorf("no operations found for filter %s", filter)
 	}
+	op.spec = opSpec
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// Cancel this context if we get an interrupt.
 	CtrlC(ctx, l, cancel, nil /* registry */)
 
-	op := &operationImpl{
-		spec:      opSpec,
-		cockroach: roachtestflags.CockroachBinaryPath,
-		l:         l,
-	}
 	op.mu.cancel = cancel
 	op.Status(fmt.Sprintf("checking if operation %s dependencies are met", opSpec.Name))
 
