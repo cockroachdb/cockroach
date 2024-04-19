@@ -4007,8 +4007,6 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 119230)
-
 	// Detect splits and merges over the global read ranges. Assert that the split
 	// and merge transactions commit with pushed write timestamps, and that the
 	// commit-wait sleep for these transactions is performed before running their
@@ -4043,12 +4041,29 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 		return nil
 	}
 
+	descID := bootstrap.TestingUserDescID(0)
+	descKey := keys.SystemSQLCodec.TablePrefix(descID)
+	splitKey := append(descKey, []byte("split")...)
+
+	// Set global reads for the test ranges.
+	spanConfig := zonepb.DefaultZoneConfig().AsSpanConfig()
+	spanConfig.GlobalReads = true
+	overrides := []spanconfig.ConfigOverride{
+		{Key: roachpb.RKey(descKey), Config: spanConfig},
+		{Key: roachpb.RKey(splitKey), Config: spanConfig},
+	}
+
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue:     true,
 				TestingResponseFilter: respFilter,
+			},
+			SpanConfig: &spanconfig.TestingKnobs{
+				StoreKVSubscriberOverride: func(original spanconfig.KVSubscriber) spanconfig.KVSubscriber {
+					return &spanconfig.WrappingKVSubscriber{Wrapped: original, Overrides: overrides}
+				},
 			},
 		},
 	})
@@ -4062,11 +4077,8 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	config.TestingSetupZoneConfigHook(s.Stopper())
 
 	// Split off the range for the test.
-	descID := bootstrap.TestingUserDescID(0)
-	descKey := keys.SystemSQLCodec.TablePrefix(descID)
 	splitArgs := adminSplitArgs(descKey)
 	_, pErr := kv.SendWrapped(ctx, store.TestSender(), splitArgs)
 	require.Nil(t, pErr)
@@ -4075,21 +4087,9 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	// response filter.
 	clockPtr.Store(s.Clock())
 
-	// Set global reads.
-	zoneConfig := zonepb.DefaultZoneConfig()
-	zoneConfig.GlobalReads = proto.Bool(true)
-	config.TestingSetZoneConfig(config.ObjectID(descID), zoneConfig)
-
-	// Perform a write to the system config span being watched by
-	// the SystemConfigProvider.
-	tdb.Exec(t, "CREATE TABLE foo ()")
-	testutils.SucceedsSoon(t, func() error {
-		repl := store.LookupReplica(roachpb.RKey(descKey))
-		if repl.ClosedTimestampPolicy() != roachpb.LEAD_FOR_GLOBAL_READS {
-			return errors.Errorf("expected LEAD_FOR_GLOBAL_READS policy")
-		}
-		return nil
-	})
+	// Verify that the closed timestamp policy is set up.
+	repl := store.LookupReplica(roachpb.RKey(descKey))
+	require.Equal(t, repl.ClosedTimestampPolicy(), roachpb.LEAD_FOR_GLOBAL_READS)
 
 	// Write to the range, which has the effect of bumping the closed timestamp.
 	pArgs := putArgs(descKey, []byte("foo"))
@@ -4097,14 +4097,13 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	require.Nil(t, pErr)
 
 	// Split the range. Should succeed.
-	splitKey := append(descKey, []byte("split")...)
 	splitArgs = adminSplitArgs(splitKey)
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), splitArgs)
 	require.Nil(t, pErr)
 	require.Equal(t, int64(1), store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
 	require.Equal(t, int64(1), atomic.LoadInt64(&splits))
 
-	repl := store.LookupReplica(roachpb.RKey(splitKey))
+	repl = store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, splitKey, repl.Desc().StartKey.AsRawKey())
 
 	// Merge the range. Should succeed.
