@@ -160,6 +160,9 @@ func (f *Factory) New(
 		onValue:          onValue,
 	}
 	initConfig(&r.config, options)
+	if name == "test" {
+		fmt.Println("test")
+	}
 	return &r
 }
 
@@ -321,6 +324,9 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier) {
 	if f.withDiff {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithDiff())
 	}
+	if f.onMetadata != nil {
+		rangefeedOpts = append(rangefeedOpts, kvcoord.WithMetadata())
+	}
 
 	for i := 0; r.Next(); i++ {
 		ts := frontier.Frontier()
@@ -416,6 +422,11 @@ func (f *RangeFeed) processEvents(
 						"received unexpected rangefeed DeleteRange event with no OnDeleteRange handler: %s", ev)
 				}
 				f.onDeleteRange(ctx, ev.DeleteRange)
+			case ev.Metadata != nil:
+				if f.onMetadata == nil {
+					return errors.AssertionFailedf("received unexpected metadata event with no OnMetadata handler")
+				}
+				f.onMetadata(ctx, ev.Metadata)
 			case ev.Error != nil:
 				// Intentionally do nothing, we'll get an error returned from the
 				// call to RangeFeed.

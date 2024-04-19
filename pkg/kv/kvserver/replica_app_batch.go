@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	fmt "fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -315,6 +316,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// are only interested in keys that are still on the original range running.
 		reason := kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT
 		if res.Split.SplitTrigger.ManualSplit {
+			fmt.Printf("\t Manual Split Point %s\n", res.Split.RightDesc.StartKey)
 			reason = kvpb.RangeFeedRetryError_REASON_MANUAL_RANGE_SPLIT
 		}
 		b.r.disconnectRangefeedWithReason(
