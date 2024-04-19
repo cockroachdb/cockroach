@@ -886,7 +886,7 @@ func (s *Smither) makeSelectList(
 }
 
 func makeCreateFunc(s *Smither) (tree.Statement, bool) {
-	if s.disableUDFs {
+	if s.disableUDFCreation {
 		return nil, false
 	}
 	return s.makeCreateFunc()
@@ -1018,16 +1018,16 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 
 	// Disable CTEs temporarily, since they are not currently supported in UDFs.
 	// TODO(92961): Allow CTEs in generated statements in UDF bodies.
-	// TODO(93049): Allow UDFs to call other UDFs, as well as create other UDFs.
+	// TODO(93049): Allow UDFs to create other UDFs.
 	oldDisableWith := s.disableWith
 	oldDisableMutations := s.disableMutations
 	defer func() {
 		s.disableWith = oldDisableWith
-		s.disableUDFs = false
+		s.disableUDFCreation = false
 		s.disableMutations = oldDisableMutations
 	}()
 	s.disableWith = true
-	s.disableUDFs = true
+	s.disableUDFCreation = true
 	s.disableMutations = (funcVol != tree.RoutineVolatile) || s.disableMutations
 
 	// RoutineBodyStr
