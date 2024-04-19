@@ -114,6 +114,7 @@ func (s *MockWebhookSink) SetStatusCodes(statusCodes []int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.statusCodes = statusCodes
+	s.mu.statusCodesIndex = 0
 }
 
 // Close closes the mock Webhook sink.

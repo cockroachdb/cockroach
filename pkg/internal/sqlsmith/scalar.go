@@ -752,11 +752,16 @@ func makeScalarSubquery(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr,
 		// This query must use a LIMIT, so bail if they are disabled.
 		return nil, false
 	}
-	selectStmt, _, ok := s.makeSelect([]*types.T{typ}, refs)
+	selectStmt, selectRefs, ok := s.makeSelect([]*types.T{typ}, refs)
 	if !ok {
 		return nil, false
 	}
 	selectStmt.Limit = &tree.Limit{Count: tree.NewDInt(1)}
+	if s.disableNondeterministicLimits {
+		// The ORDER BY clause must be fully specified with all select list columns
+		// in order to make a LIMIT clause deterministic.
+		selectStmt.OrderBy = s.makeOrderByWithAllCols(selectRefs)
+	}
 
 	subq := &tree.Subquery{
 		Select: &tree.ParenSelect{Select: selectStmt},
