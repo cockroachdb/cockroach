@@ -166,7 +166,8 @@ type activeMuxRangeFeed struct {
 	*activeRangeFeed
 	rSpan roachpb.RSpan
 	roachpb.ReplicaDescriptor
-	startAfter hlc.Timestamp
+	startAfter              hlc.Timestamp
+	parentRangeFeedMetadata parentRangeFeedMetadata
 
 	// State pertaining to execution of rangefeed call.
 	token     rangecache.EvictionToken
@@ -208,22 +209,35 @@ type muxRangeFeedEventReceiver interface {
 // startSingleRangeFeed looks up routing information for the
 // span, and begins execution of rangefeed.
 func (m *rangefeedMuxer) startSingleRangeFeed(
-	ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken,
+	ctx context.Context,
+	rs roachpb.RSpan,
+	startAfter hlc.Timestamp,
+	token rangecache.EvictionToken,
+	parentRangefeedMetadata parentRangeFeedMetadata,
 ) error {
 	// Bound the partial rangefeed to the partial span.
 	span := rs.AsRawSpanWithNoLocals()
 
 	// Register active mux range feed.
 	stream := &activeMuxRangeFeed{
-		activeRangeFeed: newActiveRangeFeed(span, startAfter, m.registry, m.metrics),
-		rSpan:           rs,
-		startAfter:      startAfter,
-		token:           token,
+		// TODO(msbutler): It's sad that there's a bunch of repeat metadata.
+		// Deduplicate once old style rangefeed code is banished from the codebase.
+		activeRangeFeed:         newActiveRangeFeed(span, startAfter, m.registry, m.metrics, parentRangefeedMetadata),
+		rSpan:                   rs,
+		startAfter:              startAfter,
+		token:                   token,
+		parentRangeFeedMetadata: parentRangefeedMetadata,
 	}
 
 	if err := stream.start(ctx, m); err != nil {
 		stream.release()
 		return err
+	}
+
+	if m.cfg.withMetadata {
+		// Send metadata after the stream successfully registers to avoid sending
+		// metadata about a rangefeed that never starts.
+		sendMetadata(m.eventCh, span, parentRangefeedMetadata)
 	}
 
 	return nil
@@ -403,7 +417,7 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 		// make sure that the underlying error is not fatal. If it is, there is no
 		// reason to restart each rangefeed, so just bail out.
-		if _, err := handleRangefeedError(ctx, m.metrics, recvErr); err != nil {
+		if _, err := handleRangefeedError(ctx, m.metrics, recvErr, false); err != nil {
 			// Regardless of an error, release any resources (i.e. metrics) still
 			// being held by active stream.
 			for _, s := range toRestart {
@@ -526,7 +540,7 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 		}
 	}()
 
-	errInfo, err := handleRangefeedError(ctx, m.metrics, reason)
+	errInfo, err := handleRangefeedError(ctx, m.metrics, reason, active.ParentRangefeedMetadata.fromManualSplit)
 	if err != nil {
 		// If this is an error we cannot recover from, terminate the rangefeed.
 		return err
@@ -543,7 +557,11 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 	}
 
 	if errInfo.resolveSpan {
-		return divideSpanOnRangeBoundaries(ctx, m.ds, active.rSpan, active.startAfter, m.startSingleRangeFeed)
+		parentMetadata := parentRangeFeedMetadata{
+			fromManualSplit: errInfo.manualSplit,
+			startKey:        active.rSpan.Key.AsRawKey(),
+		}
+		return divideSpanOnRangeBoundaries(ctx, m.ds, active.rSpan, active.startAfter, m.startSingleRangeFeed, parentMetadata)
 	}
 
 	if err := active.start(ctx, m); err != nil {
