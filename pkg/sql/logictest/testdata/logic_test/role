@@ -1889,10 +1889,13 @@ create type mood as enum ('sad','happy');
 grant usage on type mood to roach;
 create sequence test_sequence;
 grant usage on sequence test_sequence to roach;
+CREATE EXTERNAL CONNECTION connection1 AS 'nodelocal://1/foo';
+grant usage on EXTERNAL CONNECTION connection1 to roach;
 
 query TTTTTTB colnames,rowsort
 show grants for roach
 ----
-database_name  schema_name  object_name    object_type  grantee  privilege_type  is_grantable
-test           public       mood           type         roach    USAGE           false
-test           public       test_sequence  sequence     roach    USAGE           false
+database_name  schema_name  object_name    object_type          grantee  privilege_type  is_grantable
+NULL           NULL         connection1    external_connection  roach    USAGE           false
+test           public       mood           type                 roach    USAGE           false
+test           public       test_sequence  sequence             roach    USAGE           false

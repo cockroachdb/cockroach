@@ -88,18 +88,18 @@ SELECT a.username AS grantee,
   FROM (
         SELECT username, unnest(privileges) AS privilege
           FROM crdb_internal.kv_system_privileges
-       ) AS a
-`
+       ) AS a`
 	const externalConnectionPrivilegeQuery = `
 SELECT *
   FROM (
         SELECT name AS connection_name,
+               'external_connection' AS object_type,
                a.username AS grantee,
                crdb_internal.privilege_name(privilege_key) AS privilege_type,
                a.privilege_key
                IN (
                   SELECT unnest(grant_options)
-                    FROM system.privileges
+                    FROM crdb_internal.kv_system_privileges
                    WHERE username = a.username
                 ) AS is_grantable
           FROM (
@@ -109,11 +109,11 @@ SELECT *
                        ) AS name,
                        username,
                        unnest(privileges) AS privilege_key
-                  FROM system.privileges
+                  FROM crdb_internal.kv_system_privileges
                  WHERE path ~* '^/externalconn/'
                ) AS a
-       )
-`
+       )`
+
 	// Query grants data for user-defined functions and procedures. Builtin
 	// functions are not included.
 	routineQuery := fmt.Sprintf(`
@@ -362,9 +362,13 @@ SELECT database_name,
 			`SELECT database_name, schema_name, routine_signature AS object_name, object_type , grantee, privilege_type, is_grantable FROM (`)
 		source.WriteString(routineQuery)
 		source.WriteByte(')')
+		source.WriteString(` UNION ALL ` +
+			`SELECT NULL::STRING AS database_name, NULL::STRING AS schema_name, connection_name AS object_name, object_type , grantee, privilege_type, is_grantable FROM (`)
+		source.WriteString(externalConnectionPrivilegeQuery)
+		source.WriteByte(')')
 		// If the current database is set, restrict the command to it.
 		if currDB := d.evalCtx.SessionData().Database; currDB != "" {
-			fmt.Fprintf(&cond, ` WHERE database_name = %s`, lexbase.EscapeSQLString(currDB))
+			fmt.Fprintf(&cond, ` WHERE database_name = %s OR object_type = 'external_connection'`, lexbase.EscapeSQLString(currDB))
 		} else {
 			cond.WriteString(`WHERE true`)
 		}
@@ -425,6 +429,5 @@ ORDER BY
 			}
 		}
 	}
-
 	return d.parse(query)
 }
