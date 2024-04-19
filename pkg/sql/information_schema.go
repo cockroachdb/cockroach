@@ -457,6 +457,9 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
 			ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor,
 		) error {
+			if table.IsSequence() {
+				return nil
+			}
 			// Push all comments of columns into map.
 			commentMap := make(map[descpb.PGAttributeNum]string)
 			if err := allComments.ForEachCommentOnDescriptor(
