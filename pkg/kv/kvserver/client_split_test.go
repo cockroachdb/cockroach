@@ -4051,7 +4051,8 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	spanConfig.GlobalReads = true
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DisableSQLServer: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue:     true,
@@ -4071,10 +4072,6 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	// Set the closed_timestamp interval to be short to shorten the test duration
 	// because we need to wait for a checkpoint on the system config.
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
