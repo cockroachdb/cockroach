@@ -233,6 +233,9 @@ func BuildChildPhysicalProps(
 // As a result, cases where this limit hint may be poor (too low or more than
 // twice as high as needed) tend to occur when distinctCount is very close to
 // neededRows.
+//
+// TODO(mgartner): This function should probably consider the input row count in
+// order to make more accurate estimates. See streamingGroupByInputLimitHint.
 func distinctOnLimitHint(distinctCount, neededRows float64) float64 {
 	// The harmonic function below is not intended for values under 1 (for one,
 	// it's not monotonic until 0.5); make sure we never return negative results.

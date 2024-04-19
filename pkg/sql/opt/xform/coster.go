@@ -1414,7 +1414,9 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 			outputRowCount = math.Min(outputRowCount, required.LimitHint)
 		} else if grouping.Op() == opt.DistinctOnOp &&
 			c.evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting {
-			inputRowCount = distinctOnLimitHint(outputRowCount, required.LimitHint)
+			if d := distinctOnLimitHint(outputRowCount, required.LimitHint); d > 0 {
+				inputRowCount = d
+			}
 			outputRowCount = math.Min(outputRowCount, required.LimitHint)
 		}
 	}
