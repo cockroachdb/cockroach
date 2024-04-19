@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1564,14 +1563,56 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 	}
 }
 
-// General randomized test.
+// TestLockTableConcurrentRequests is a general randomized test for the lock
+// table.
 func TestLockTableConcurrentRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(sbhola): different test cases with different settings of the
-	// randomization parameters.
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
+	possibleNumRequests := []int{1000, 3000, 10000}
+	possibleNumActiveTxns := []int{2, 4, 8, 16, 32}
+	possibleProbTxnalReq := []float64{0.9, 1, 0.75}
+	possibleProbCreateNewTxn := []float64{0.75, 0.25, 0.1}
+	possibleProbOnlyRead := []float64{0.5, 0.25}
+
+	numRequests := possibleNumRequests[rng.Intn(len(possibleNumRequests))]
+	numActiveTxns := possibleNumActiveTxns[rng.Intn(len(possibleNumActiveTxns))]
+	probTxnalReq := possibleProbTxnalReq[rng.Intn(len(possibleProbTxnalReq))] // rest will be non-txnal
+	probCreateNewTxn := possibleProbCreateNewTxn[rng.Intn(len(possibleProbTxnalReq))]
+	probDupAccessWithWeakerStr := 0.5
+	probOnlyRead := possibleProbOnlyRead[rng.Intn(len(possibleProbOnlyRead))]
+	testLockTableConcurrentRequests(
+		t, numActiveTxns, numRequests, probTxnalReq, probCreateNewTxn,
+		probDupAccessWithWeakerStr, probOnlyRead,
+	)
+}
+
+// testLockTableConcurrencyRequests runs a randomized test on the lock table
+// with the specified number of transactions and requests. The caller can vary
+// probabilities of various randomized parameters, such as:
+// - the probability of creating transactional requests (as opposed to
+// non-transactional ones).
+// - the probability of creating a new transaction in favor of using an existing
+// one.
+// - probability of accessing a key that's being locked with duplicate access.
+// - probability of creating read-only requests.
+func testLockTableConcurrentRequests(
+	t *testing.T,
+	numActiveTxns int,
+	numRequests int,
+	probTxnalReq float64,
+	probCreateNewTxn float64,
+	probDupAccessWithWeakerStr float64,
+	probOnlyRead float64,
+) {
+	t.Logf(
+		"numRequests: %d; numActiveTxns: %d; probability(txn-al reqs): %.2f; "+
+			"probability(new txns): %.2f; probability(duplicate access): %.2f",
+		numRequests, numActiveTxns, probTxnalReq, probCreateNewTxn, probDupAccessWithWeakerStr,
+	)
 	txnCounter := uint128.FromInts(0, 0)
+	numTxnsCreated := 0
 	var timestamps []hlc.Timestamp
 	for i := 0; i < 2; i++ {
 		timestamps = append(timestamps, hlc.Timestamp{WallTime: int64(i + 1)})
@@ -1582,38 +1623,45 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	}
 	strs := []lock.Strength{lock.None, lock.Shared, lock.Exclusive, lock.Intent}
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
-	const numActiveTxns = 8
-	var activeTxns [numActiveTxns]*enginepb.TxnMeta
+	activeTxns := make([]*enginepb.TxnMeta, 0, numActiveTxns)
 	var items []workloadItem
-	const numRequests = 1000
 	for i := 0; i < numRequests; i++ {
 		var txnMeta *enginepb.TxnMeta
 		var ts hlc.Timestamp
-		if rng.Intn(10) != 0 {
-			txnIndex := rng.Intn(len(activeTxns))
-			newTxn := rng.Intn(4) != 0 || activeTxns[txnIndex] == nil
-			if newTxn {
+
+		if rng.Float64() < probTxnalReq {
+			// Transactional request.
+			shouldCreateNewTxn := len(activeTxns) < numActiveTxns || rng.Float64() < probCreateNewTxn
+			if shouldCreateNewTxn {
+				numTxnsCreated++
 				ts = timestamps[rng.Intn(len(timestamps))]
 				txnMeta = &enginepb.TxnMeta{
 					ID:             nextUUID(&txnCounter),
 					WriteTimestamp: ts,
 				}
-				oldTxn := activeTxns[txnIndex]
-				if oldTxn != nil {
+				if len(activeTxns) == numActiveTxns {
+					txnIndex := rng.Intn(numActiveTxns)
+					// We've reached the maximum number of active transactions the test
+					// desires; replace an existing transaction.
+					oldTxn := activeTxns[txnIndex]
 					items = append(items, workloadItem{finish: oldTxn.ID})
+					activeTxns[txnIndex] = txnMeta
+				} else {
+					activeTxns = append(activeTxns, txnMeta)
 				}
-				activeTxns[txnIndex] = txnMeta
 			} else {
+				txnIndex := rng.Intn(numActiveTxns)
 				txnMeta = activeTxns[txnIndex]
 				ts = txnMeta.WriteTimestamp
 			}
 		} else {
+			// Create a non-transactional request.
 			ts = timestamps[rng.Intn(len(timestamps))]
 		}
 		keysPerm := rng.Perm(len(keys))
 		latchSpans := &spanset.SpanSet{}
 		lockSpans := &lockspanset.LockSpanSet{}
-		onlyReads := txnMeta == nil && rng.Intn(2) != 0
+		onlyReads := txnMeta == nil && rng.Float64() < probOnlyRead
 		numKeys := rng.Intn(len(keys)-1) + 1
 		ba := &kvpb.BatchRequest{}
 		ba.Timestamp = ts
@@ -1652,13 +1700,28 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 				wi.locksToAcquire = append(wi.locksToAcquire, toAcq)
 			}
 
-			dupRead := str != lock.None && rng.Intn(2) == 0
-			if dupRead {
-				// Also include the key as a non-locking read.
-				str = lock.None
-				sa, latchTs := latchAccessForLockStrength(str, ts)
+			dupAccess := str != lock.None && // nothing weaker than lock.None
+				rng.Float64() < probDupAccessWithWeakerStr
+
+			if dupAccess {
+				dupStr := lock.None // only thing weaker
+				switch str {
+				case lock.Shared:
+				case lock.Exclusive:
+					if rng.Intn(2) == 0 {
+						dupStr = lock.Shared
+					}
+				case lock.Intent:
+					rn := rng.Intn(3)
+					if rn == 0 {
+						dupStr = lock.Shared
+					} else if rn == 1 {
+						dupStr = lock.Exclusive
+					}
+				}
+				sa, latchTs := latchAccessForLockStrength(dupStr, ts)
 				latchSpans.AddMVCC(sa, span, latchTs)
-				lockSpans.Add(str, span)
+				lockSpans.Add(dupStr, span)
 			}
 		}
 		items = append(items, wi)
@@ -1668,15 +1731,28 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 			items = append(items, workloadItem{finish: txnMeta.ID})
 		}
 	}
-	concurrency := []int{2, 8, 16, 32}
+	t.Logf("txns creted: %d", numTxnsCreated) // avoid some multiplication
+	concurrency := []int{numActiveTxns / 4, numActiveTxns, numActiveTxns * 2, numActiveTxns * 4}
 	for _, c := range concurrency {
+		if c == 0 {
+			continue
+		}
 		t.Run(fmt.Sprintf("concurrency %d", c), func(t *testing.T) {
 			exec := newWorkLoadExecutor(items, c)
-			if err := exec.execute(false, 200); err != nil {
-				// TODO(nvanbenschoten): remove this once #110435 is fixed.
-				if !testutils.IsError(err, "lock promotion from Shared to .* is not allowed") {
-					t.Fatal(err)
-				}
+			// TODO(arul): if the number of goroutines this test spawns becomes a
+			// problem, we'll have to rethink some of the randomized parameters we're
+			// giving it. In particular, as the number of pending transactions in the
+			// system increases[*], very quickly a single guy becomes the bottleneck.
+			// At that point, it's imperative for the test to make progress to uncork
+			// this transaction -- otherwise, everything will block and we'll get a
+			// timeout.
+			//
+			// [*] Note that this is an order of magnitude different from the number
+			// of active transactions. Transactions will remain pending as long as
+			// they have outstanding requests -- the number of pending transactions
+			// can get quite high once things start to block.
+			if err := exec.execute(false, numRequests); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}

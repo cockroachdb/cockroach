@@ -569,6 +569,7 @@ func (c rangeFeedErrorCounters) GetRangeFeedRetryCounter(
 	switch reason {
 	case kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
 		kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
+		kvpb.RangeFeedRetryError_REASON_MANUAL_RANGE_SPLIT,
 		kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,
 		kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
 		kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,

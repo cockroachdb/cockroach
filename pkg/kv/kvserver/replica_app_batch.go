@@ -313,8 +313,12 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// TODO(nvanbenschoten): It should be possible to only reject registrations
 		// that overlap with the new range of the split and keep registrations that
 		// are only interested in keys that are still on the original range running.
+		reason := kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT
+		if res.Split.SplitTrigger.ManualSplit {
+			reason = kvpb.RangeFeedRetryError_REASON_MANUAL_RANGE_SPLIT
+		}
 		b.r.disconnectRangefeedWithReason(
-			kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
+			reason,
 		)
 	}
 
