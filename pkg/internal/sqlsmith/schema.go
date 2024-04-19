@@ -72,6 +72,10 @@ func (s *Smither) ReloadSchemas() error {
 	if err != nil {
 		return err
 	}
+	s.sequences, err = s.extractSequences()
+	if err != nil {
+		return err
+	}
 	s.indexes, err = s.extractIndexes(s.tables)
 	s.columns = make(map[tree.TableName]map[tree.Name]*tree.ColumnTableDef)
 	for _, ref := range s.tables {
@@ -460,6 +464,28 @@ func (s *Smither) extractIndexes(
 	return ret, nil
 }
 
+type sequenceRef struct {
+	SequenceName tree.TableName
+}
+
+func (s *Smither) extractSequences() ([]*sequenceRef, error) {
+	rows, err := s.db.Query(`SELECT sequence_catalog, sequence_schema, sequence_name FROM information_schema.sequences`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ret []*sequenceRef
+	for rows.Next() {
+		var db, schema, name tree.Name
+		if err = rows.Scan(&db, &schema, &name); err != nil {
+			return nil, err
+		}
+		ret = append(ret, &sequenceRef{SequenceName: tree.MakeTableNameWithSchema(db, schema, name)})
+	}
+	return ret, nil
+}
+
 type operator struct {
 	*tree.BinOp
 	Operator treebin.BinaryOperator
@@ -494,16 +520,6 @@ type functionsMu struct {
 var functions = func() *functionsMu {
 	m := map[tree.FunctionClass]map[oid.Oid][]function{}
 	for _, def := range tree.FunDefs {
-		switch def.Name {
-		case "pg_sleep":
-			continue
-		case "st_frechetdistance", "st_buffer":
-			// Some spatial functions can be very computationally expensive and
-			// run for a long time or never finish, so we avoid generating them.
-			// See #69213.
-			continue
-		}
-
 		if n := tree.Name(def.Name); n.String() != def.Name {
 			// sqlsmith doesn't know how to quote function names, e.g. for
 			// the numeric cast, we need to use `"numeric"(val)`, but sqlsmith
@@ -513,6 +529,12 @@ var functions = func() *functionsMu {
 
 		skip := false
 		for _, substr := range []string{
+			"pg_sleep",
+			// Some spatial functions can be very computationally expensive and
+			// run for a long time or never finish, so we avoid generating them.
+			// See #69213.
+			"st_frechetdistance",
+			"st_buffer",
 			"stream_ingestion",
 			"crdb_internal.force_",
 			"crdb_internal.unsafe_",
