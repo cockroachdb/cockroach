@@ -105,6 +105,7 @@ type statementStatsRunner struct {
 	txnSourceTable  string
 	ie              *sql.InternalExecutor
 	testingKnobs    *sqlstats.TestingKnobs
+	settings        *cluster.Settings
 }
 
 func getCombinedStatementStats(
@@ -157,6 +158,7 @@ func getCombinedStatementStats(
 		txnSourceTable:  txnSourceTable,
 		ie:              ie,
 		testingKnobs:    testingKnobs,
+		settings:        settings,
 	}
 
 	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
@@ -209,6 +211,73 @@ func getCombinedStatementStats(
 	}
 
 	return response, nil
+}
+
+// ErrMaxResultsSize is an error indicates that returned result exceeds the max allowed
+// number of rows.
+var errMaxResultsSize = errors.New("max results size exceeded")
+
+// validateSizeOfResult checks if number of results of query with provided conditions
+// exceeds the max limit defined in `sql.stats.response.max` cluster setting.
+func validateSizeOfResult(
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	settings *cluster.Settings,
+	tableName string,
+	whereClause string,
+	aostClause string,
+	limit string,
+	args []interface{},
+	queryFormat string,
+) error {
+	if queryFormat == "" {
+		// Default query format is based on a structure of queries defined in `statementStatsRunner`
+		// methods to match with order of parameters.
+		queryFormat = `SELECT * FROM (SELECT COUNT(1) FROM %s %s) %s %s`
+	}
+	opName := `console-combined-stmts-size-check`
+	maxResultsLimit := SQLStatsResponseMax.Get(&settings.SV)
+
+	iter, err := getIterator(
+		ctx,
+		ie,
+		queryFormat,
+		tableName,
+		opName,
+		whereClause,
+		args,
+		aostClause,
+		limit,
+	)
+	if err != nil {
+		return srverrors.ServerError(ctx, err)
+	}
+	defer func() {
+		err = closeIterator(iter, err)
+	}()
+	if !iter.HasResults() {
+		return errors.Newf("%s: no results received for %s table", opName, tableName)
+	}
+	ok, err := iter.Next(ctx)
+	if err != nil {
+		return srverrors.ServerError(ctx, err)
+	}
+	if !ok {
+		return errors.Newf("%s: no results received for %s table", opName, tableName)
+	}
+	var row tree.Datums
+	if row = iter.Cur(); row == nil {
+		return errors.Newf("%s: unexpected null row on %s table", opName, tableName)
+	}
+	if row.Len() != 1 {
+		return errors.Newf("%s: expected %d columns on collectCombinedTransactions, received %d", opName, 1, row.Len())
+	}
+	count := int64(*row[0].(*tree.DInt))
+	if count > maxResultsLimit {
+		return errors.Wrapf(errMaxResultsSize, "%s: expected query result (%d rows) exceeds the limit of %d rows. "+
+			"\nMax results limit can be changed by sql.stats.response.max cluster setting.", opName, count, maxResultsLimit)
+	}
+	return nil
 }
 
 func activityTablesHaveFullData(
@@ -702,6 +771,11 @@ FROM (SELECT fingerprint_id,
 		// Use the older, less performant metadata aggregation function for versions below 24.1.
 		metadataAggFn = mergeAggStmtMetadata_V23_2
 	}
+	err := validateSizeOfResult(ctx, r.ie, r.settings, r.stmtSourceTable, whereClause, aostClause, orderAndLimit, args, "")
+	if err != nil {
+		return nil, err
+	}
+
 	activityQuery := strings.Join([]string{`
 SELECT 
     fingerprint_id,
@@ -726,7 +800,6 @@ FROM (SELECT fingerprint_id,
 %s`}, "")
 
 	var it isql.Rows
-	var err error
 	defer func() {
 		err = closeIterator(it, err)
 	}()
@@ -859,6 +932,12 @@ func (r *statementStatsRunner) collectCombinedTransactions(
 	ctx context.Context, whereClause string, args []interface{}, orderAndLimit string,
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
 	aostClause := r.testingKnobs.GetAOSTClause()
+
+	err := validateSizeOfResult(ctx, r.ie, r.settings, r.txnSourceTable, whereClause, aostClause, orderAndLimit, args, "")
+	if err != nil {
+		return nil, err
+	}
+
 	const expectedNumDatums = 5
 	const queryFormat = `
 SELECT *
@@ -874,8 +953,6 @@ FROM (SELECT app_name,
 %s`
 
 	var it isql.Rows
-	var err error
-
 	it, err = getIterator(
 		ctx,
 		r.ie,
@@ -974,11 +1051,29 @@ GROUP BY
 	var err error
 
 	if r.stmtSourceTable == CrdbInternalStmtStatsCombined {
+		err = validateSizeOfResult(
+			ctx,
+			r.ie,
+			r.settings,
+			r.stmtSourceTable,
+			whereClause,
+			"",
+			"",
+			args,
+			"SELECT COUNT(1) FROM %s %s %s %s",
+		)
+		if err != nil {
+			return nil, err
+		}
 		query := fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, whereClause)
 
 		it, err = r.ie.QueryIteratorEx(ctx, "console-combined-stmts-with-memory-for-txn", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 	} else {
+		err = validateSizeOfResult(ctx, r.ie, r.settings, CrdbInternalStmtStatsPersisted, whereClause, "", "", args, "")
+		if err != nil {
+			return nil, srverrors.ServerError(ctx, err)
+		}
 		query := fmt.Sprintf(
 			queryFormat,
 			CrdbInternalStmtStatsPersisted,
