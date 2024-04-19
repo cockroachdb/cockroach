@@ -325,7 +325,8 @@ func runOneRoundQueryComparison(
 
 		// Initialize a smither that generates only deterministic SELECT statements.
 		smither, err := sqlsmith.NewSmither(conn, rnd,
-			sqlsmith.DisableMutations(), sqlsmith.DisableNondeterministicFns(), sqlsmith.DisableLimits(),
+			sqlsmith.DisableMutations(), sqlsmith.DisableNondeterministicFns(),
+			sqlsmith.DisableNondeterministicLimits(),
 			sqlsmith.UnlikelyConstantPredicate(), sqlsmith.FavorCommonData(),
 			sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
 			sqlsmith.DisableIndexHints(), sqlsmith.DisableWith(), sqlsmith.DisableDecimals(),

@@ -834,11 +834,21 @@ func (s *Smither) makeSelect(desiredTypes []*types.T, refs colRefs) (*tree.Selec
 		return nil, nil, ok
 	}
 
+	var orderBy tree.OrderBy
+	limit := makeLimit(s)
+	if limit != nil && s.disableNondeterministicLimits {
+		// The ORDER BY clause must be fully specified with all select list columns
+		// in order to make a LIMIT clause deterministic.
+		orderBy = s.makeOrderByWithAllCols(orderByRefs.extend(selectRefs...))
+	} else {
+		orderBy = s.makeOrderBy(orderByRefs)
+	}
+
 	stmt := tree.Select{
 		Select:  clause,
 		With:    withStmt,
-		OrderBy: s.makeOrderBy(orderByRefs),
-		Limit:   makeLimit(s),
+		OrderBy: orderBy,
+		Limit:   limit,
 	}
 
 	return &stmt, selectRefs, true
@@ -1193,12 +1203,22 @@ func (s *Smither) makeDelete(refs colRefs) (*tree.Delete, []*tableRef, bool) {
 		cols = append(cols, c...)
 	}
 
+	var orderBy tree.OrderBy
+	limit := makeLimit(s)
+	if limit != nil && s.disableNondeterministicLimits {
+		// The ORDER BY clause must be fully specified with all columns in order to
+		// make a LIMIT clause deterministic.
+		orderBy = s.makeOrderByWithAllCols(cols)
+	} else {
+		orderBy = s.makeOrderBy(cols)
+	}
+
 	del := &tree.Delete{
 		Table:     table,
 		Where:     s.makeWhere(cols, hasJoinTable),
-		OrderBy:   s.makeOrderBy(cols),
+		OrderBy:   orderBy,
 		Using:     using,
-		Limit:     makeLimit(s),
+		Limit:     limit,
 		Returning: &tree.NoReturningClause{},
 	}
 	if del.Limit == nil {
@@ -1259,12 +1279,22 @@ func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, []*tableRef, bool) {
 		cols = append(cols, c...)
 	}
 
+	var orderBy tree.OrderBy
+	limit := makeLimit(s)
+	if limit != nil && s.disableNondeterministicLimits {
+		// The ORDER BY clause must be fully specified with all columns in order to
+		// make a LIMIT clause deterministic.
+		orderBy = s.makeOrderByWithAllCols(cols)
+	} else {
+		orderBy = s.makeOrderBy(cols)
+	}
+
 	update := &tree.Update{
 		Table:     table,
 		From:      from,
 		Where:     s.makeWhere(cols, hasJoinTable),
-		OrderBy:   s.makeOrderBy(cols),
-		Limit:     makeLimit(s),
+		OrderBy:   orderBy,
+		Limit:     limit,
 		Returning: &tree.NoReturningClause{},
 	}
 	colByName := make(map[tree.Name]*tree.ColumnTableDef)
@@ -1630,6 +1660,28 @@ func (s *Smither) makeOrderBy(refs colRefs) tree.OrderBy {
 			NullsOrder: s.randNullsOrder(),
 		})
 	}
+	return ob
+}
+
+func (s *Smither) makeOrderByWithAllCols(refs colRefs) tree.OrderBy {
+	if len(refs) == 0 {
+		return nil
+	}
+	var ob tree.OrderBy
+	for _, ref := range refs {
+		// PostGIS cannot order box2d types.
+		if s.postgres && ref.typ.Family() == types.Box2DFamily {
+			continue
+		}
+		ob = append(ob, &tree.Order{
+			Expr:       ref.item,
+			Direction:  s.randDirection(),
+			NullsOrder: s.randNullsOrder(),
+		})
+	}
+	s.rnd.Shuffle(len(ob), func(i, j int) {
+		ob[i], ob[j] = ob[j], ob[i]
+	})
 	return ob
 }
 

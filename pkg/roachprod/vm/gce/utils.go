@@ -174,8 +174,8 @@ sudo sh -c 'echo "root - nofile 1048576\n* - nofile 1048576" > /etc/security/lim
 # N.B. Ubuntu 22.04 changed the location of tcpdump to /usr/bin. Since existing tooling, e.g.,
 # jepsen uses /usr/sbin, we create a symlink.
 # See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html
-# FIPS is still on Ubuntu 20.04 however, so don't enable if using FIPS.
-{{ if .EnableFIPS }}
+# FIPS is still on Ubuntu 20.04 however, so don't create if using FIPS.
+{{ if not .EnableFIPS }}
 sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 {{ end }}
 
