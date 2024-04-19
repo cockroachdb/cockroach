@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -328,16 +330,30 @@ func (u Updater) FractionProgressed(ctx context.Context, progressedFn FractionPr
 			return err
 		}
 		fractionCompleted := progressedFn(ctx, md.Progress.Details)
-		// allow for slight floating-point rounding inaccuracies
-		if fractionCompleted > 1.0 && fractionCompleted < 1.01 {
+
+		if !build.IsRelease() {
+			// We allow for slight floating-point rounding
+			// inaccuracies. We only want to error in non-release
+			// builds because in large production installations the
+			// method at least one job uses to calculate process can
+			// result in substantial floating point inaccuracy.
+			if fractionCompleted < 0.0 || fractionCompleted > 1.01 {
+				return errors.Errorf(
+					"fraction completed %f is outside allowable range [0.0, 1.01]",
+					fractionCompleted,
+				)
+			}
+		}
+
+		// Clamp to [0.0, 1.0].
+		if fractionCompleted > 1.0 {
+			log.VInfof(ctx, 1, "clamping fraction completed %f to [0.0, 1.0]", fractionCompleted)
 			fractionCompleted = 1.0
+		} else if fractionCompleted < 0.0 {
+			log.VInfof(ctx, 1, "clamping fraction completed %f to [0.0, 1.0]", fractionCompleted)
+			fractionCompleted = 0
 		}
-		if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
-			return errors.Errorf(
-				"job %d: fractionCompleted %f is outside allowable range [0.0, 1.0]",
-				u.j.ID(), fractionCompleted,
-			)
-		}
+
 		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
 			FractionCompleted: fractionCompleted,
 		}
