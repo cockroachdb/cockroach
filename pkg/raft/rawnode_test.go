@@ -741,6 +741,7 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 	})
 
 	rawNode, err := NewRawNode(cfg)
+	rawNode.raft.accTerm = 1
 	require.NoError(t, err)
 
 	for highestApplied := uint64(0); highestApplied != 11; {
