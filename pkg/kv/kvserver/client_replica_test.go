@@ -4540,6 +4540,9 @@ func TestProposalOverhead(t *testing.T) {
 func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 122629)
+
 	ctx := context.Background()
 
 	// Use a manual clock so we can efficiently force leases to expire.
