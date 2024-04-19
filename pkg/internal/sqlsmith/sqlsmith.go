@@ -115,7 +115,10 @@ type Smither struct {
 	disableDivision               bool
 	disableDecimals               bool
 	disableOIDs                   bool
-	disableUDFs                   bool
+	// disableUDFCreation indicates whether we're not allowed to create UDFs.
+	// It follows that if we haven't created any UDFs, we have no UDFs to invoke
+	// too.
+	disableUDFCreation bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -553,7 +556,7 @@ var DisableOIDs = simpleOption("disable OIDs", func(s *Smither) {
 
 // DisableUDFs causes the Smither to disable user-defined functions.
 var DisableUDFs = simpleOption("disable udfs", func(s *Smither) {
-	s.disableUDFs = true
+	s.disableUDFCreation = true
 })
 
 // CompareMode causes the Smither to generate statements that have
