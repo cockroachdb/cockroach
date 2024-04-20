@@ -589,6 +589,7 @@ func ingestKvs(
 				_ = indexAdder.Flush(ctx)
 				pushProgress(ctx)
 			}
+			kvBatch.Close() // return slice to this converter's pool.
 		}
 		return nil
 	})

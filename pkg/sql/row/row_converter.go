@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -106,6 +107,7 @@ func GenerateInsertRow(
 	tableDesc catalog.TableDescriptor,
 	rowVals tree.Datums,
 	rowContainerForComputedVals *schemaexpr.RowIndexedVarContainer,
+	alloc *tree.DatumAlloc,
 ) (tree.Datums, error) {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
@@ -174,7 +176,7 @@ func GenerateInsertRow(
 
 	// Ensure that the values honor the specified column widths.
 	for i := 0; i < len(insertCols); i++ {
-		outVal, err := tree.AdjustValueToType(insertCols[i].GetType(), rowVals[i])
+		outVal, err := tree.AdjustValueToType(insertCols[i].GetType(), rowVals[i], alloc)
 		if err != nil {
 			return nil, err
 		}
@@ -193,8 +195,20 @@ type KVBatch struct {
 	// Progress represents the fraction of the input that generated this row.
 	Progress float32
 	// KVs is the actual converted KV data.
-	KVs     []roachpb.KeyValue
 	MemSize int64
+	*KVSlice
+	pool *sync.Pool
+}
+
+type KVSlice struct {
+	KVs []roachpb.KeyValue
+}
+
+func (k KVBatch) Close() {
+	if k.pool != nil {
+		k.KVs = k.KVs[:0]
+		k.pool.Put(k.KVSlice)
+	}
 }
 
 // DatumRowConverter converts Datums into kvs and streams it to the destination
@@ -231,6 +245,15 @@ type DatumRowConverter struct {
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
 	FractionFn     func() float32
+	kvInserter     KVInserter
+
+	alloc      tree.DatumAlloc
+	allocPools struct {
+		strings []string
+		ints    []tree.DInt
+		dec     []tree.DDecimal
+		uuids   []tree.DUuid
+	}
 
 	db *kv.DB
 }
@@ -323,7 +346,28 @@ func NewDatumRowConverter(
 		KvCh:      kvCh,
 		EvalCtx:   evalCtx.Copy(),
 		db:        db,
+		KvBatch: KVBatch{
+			KVSlice: &KVSlice{},
+			pool: &sync.Pool{New: func() interface{} {
+				return &KVSlice{}
+			}},
+		},
 	}
+	c.kvInserter = func(kv roachpb.KeyValue) {
+		kv.Value.InitChecksum(kv.Key)
+		c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
+		c.KvBatch.MemSize += int64(cap(kv.Key) + cap(kv.Value.RawBytes))
+	}
+	// The ones below will reuse after each reset, but for types that don't get
+	// reused we want a large alloc size. We don't worry about lifetime/aliasing
+	// with a large alloc since we know they're all being fed straight to encoding
+	// and then freed at the same time.
+	c.alloc.AllocSize = 256
+	c.allocPools.strings = make([]string, 32)
+	c.allocPools.ints = make([]tree.DInt, 32)
+	c.allocPools.dec = make([]tree.DDecimal, 32)
+	c.allocPools.uuids = make([]tree.DUuid, 32)
+	c.resetAllocBufs()
 
 	var targetCols []catalog.Column
 	var err error
@@ -445,8 +489,9 @@ func NewDatumRowConverter(
 	}
 
 	padding := 2 * (len(tableDesc.PublicNonPrimaryIndexes()) + len(tableDesc.GetFamilies()))
-	c.BatchCap = kvDatumRowConverterBatchSize + padding
-	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
+	if sz := kvDatumRowConverterBatchSize + padding; cap(c.KvBatch.KVs) < sz {
+		c.KvBatch.KVs = make([]roachpb.KeyValue, 0, sz)
+	}
 	c.KvBatch.MemSize = 0
 
 	colsOrdered := make([]catalog.Column, len(cols))
@@ -498,6 +543,9 @@ const rowIDBits = 64 - builtinconstants.UniqueIntNodeIDBits
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
 func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
+	// Our datums don't live past the encoding into a KV so we can reset the alloc
+	// pool with the same backing slice to reuse them rather than allocating new
+	// datums for every call.
 	getCellInfoAnnotation(c.EvalCtx.Annotations).reset(sourceID, rowIndex)
 	for i, col := range c.cols {
 		if col.HasDefault() {
@@ -525,7 +573,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 
 	insertRow, err := GenerateInsertRow(
 		ctx, c.defaultCache, c.computedExprs, c.cols, computedColsLookup, c.EvalCtx,
-		c.tableDesc, c.Datums, &c.computedIVarContainer)
+		c.tableDesc, c.Datums, &c.computedIVarContainer, &c.alloc)
 	if err != nil {
 		return errors.Wrap(err, "generate insert row")
 	}
@@ -556,11 +604,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 
 	if err := c.ri.InsertRow(
 		ctx,
-		KVInserter(func(kv roachpb.KeyValue) {
-			kv.Value.InitChecksum(kv.Key)
-			c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
-			c.KvBatch.MemSize += int64(cap(kv.Key) + cap(kv.Value.RawBytes))
-		}),
+		c.kvInserter,
 		insertRow,
 		pm,
 		true,  /* ignoreConflicts */
@@ -574,7 +618,15 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 			return err
 		}
 	}
+	c.resetAllocBufs()
 	return nil
+}
+
+func (c *DatumRowConverter) resetAllocBufs() {
+	c.alloc.ResetStrings(c.allocPools.strings)
+	c.alloc.ResetInts(c.allocPools.ints)
+	c.alloc.ResetDecimals(c.allocPools.dec)
+	c.alloc.ResetUUIDs(c.allocPools.uuids)
 }
 
 // SendBatch streams kv operations from the current KvBatch to the destination
@@ -594,7 +646,7 @@ func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
+	c.KvBatch.KVSlice = c.KvBatch.pool.Get().(*KVSlice)
 	c.KvBatch.MemSize = 0
 	return nil
 }

@@ -1064,6 +1064,10 @@ func AsDDecimal(e Expr) (*DDecimal, bool) {
 	return nil, false
 }
 
+func NewDDecimal(d DDecimal) *DDecimal {
+	return &d
+}
+
 // ParseDDecimal parses and returns the *DDecimal Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDDecimal(s string) (*DDecimal, error) {
@@ -6379,7 +6383,7 @@ func InferTypes(vals []string) []types.Family {
 // type. An assignment cast to "char" does not error and truncates a value if
 // the width of the value is wider than a single character. For this exception,
 // AdjustValueToType performs the truncation itself.
-func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
+func AdjustValueToType(typ *types.T, inVal Datum, alloc *DatumAlloc) (outVal Datum, err error) {
 	switch typ.Family() {
 	case types.StringFamily, types.CollatedStringFamily:
 		var sv string
@@ -6423,6 +6427,9 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 
 		if typ.Oid() == oid.T_bpchar || typ.Oid() == oid.T_char || typ.Oid() == oid.T_varchar {
 			if _, ok := AsDString(inVal); ok {
+				if alloc != nil {
+					return alloc.NewDString(DString(sv)), nil
+				}
 				return NewDString(sv), nil
 			} else if _, ok := inVal.(*DCollatedString); ok {
 				return NewDCollatedString(sv, typ.Locale(), &CollationEnvironment{})
@@ -6483,14 +6490,17 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 			if err != nil {
 				return nil, errors.Wrapf(err, "type %s", typ.SQLString())
 			}
-			return &outDec, nil
+			if alloc != nil {
+				return alloc.NewDDecimal(outDec), nil
+			}
+			return NewDDecimal(outDec), nil
 		}
 	case types.ArrayFamily:
 		if inArr, ok := inVal.(*DArray); ok {
 			var outArr *DArray
 			elementType := typ.ArrayContents()
 			for i, inElem := range inArr.Array {
-				outElem, err := AdjustValueToType(elementType, inElem)
+				outElem, err := AdjustValueToType(elementType, inElem, alloc)
 				if err != nil {
 					return nil, err
 				}
@@ -6516,7 +6526,12 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		}
 	case types.TimestampFamily:
 		if in, ok := inVal.(*DTimestamp); ok {
-			return in.Round(TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+			p := TimeFamilyPrecisionToRoundDuration(typ.Precision())
+			// If we don't need to round, skip calling it an allocating a new Datum.
+			if in.Time.Round(p).Equal(in.Time) {
+				return in, nil
+			}
+			return in.Round(p)
 		}
 	case types.TimestampTZFamily:
 		if in, ok := inVal.(*DTimestampTZ); ok {

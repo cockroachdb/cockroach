@@ -491,3 +491,31 @@ func (a *DatumAlloc) NewDOid(v DOid) Datum {
 	*buf = (*buf)[1:]
 	return r
 }
+
+// ResetStrings can be used to reset the backing buffer of strings to the passed
+// buffer; this can be used -- with care -- to reuse a backing buffer when the
+// lifetimes of datums allocated from it are managed.
+func (s *DatumAlloc) ResetStrings(buf []string) {
+	s.stringAlloc = buf
+}
+
+// ResetInts can be used to reset the backing buffer of ints to the passed
+// buffer; this can be used -- with care -- to reuse a backing buffer when the
+// lifetimes of datums allocated from it are managed.
+func (s *DatumAlloc) ResetInts(buf []DInt) {
+	s.dintAlloc = buf
+}
+
+// ResetDecimals can be used to reset the backing buffer of decimals to the
+// passed buffer; this can be used -- with care -- to reuse a backing buffer
+// when the lifetimes of datums allocated from it are managed.
+func (s *DatumAlloc) ResetDecimals(buf []DDecimal) {
+	s.ddecimalAlloc = buf
+}
+
+// ResetUUIDs can be used to reset the backing buffer of uuids to the passed
+// buffer; this can be used -- with care -- to reuse a backing buffer when the
+// lifetimes of datums allocated from it are managed.
+func (s *DatumAlloc) ResetUUIDs(buf []DUuid) {
+	s.duuidAlloc = buf
+}

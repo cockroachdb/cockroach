@@ -1286,6 +1286,28 @@ func MakeNullPKError(
 	return errors.AssertionFailedf("NULL value in unknown key column")
 }
 
+type IndexEntryAlloc struct {
+	a []IndexEntry
+}
+
+const indexEntryAllocMax = 2048
+
+// Alloc allocates a new chunk of memory with the specified length. extraCap
+// indicates additional zero bytes that will be present in the returned []byte,
+// but not part of the length.
+func (a *IndexEntryAlloc) Alloc(n int) []IndexEntry {
+	if a == nil {
+		return make([]IndexEntry, 0, n)
+	}
+	if cap(a.a)-len(a.a) < n {
+		a.a = make([]IndexEntry, 0, max(min(cap(a.a)*2, indexEntryAllocMax), n))
+	}
+	p := len(a.a)
+	r := a.a[p : p : p+n]
+	a.a = a.a[:p+n]
+	return r
+}
+
 // EncodeSecondaryIndex encodes key/values for a secondary
 // index. colMap maps descpb.ColumnIDs to indices in `values`. This returns a
 // slice of IndexEntry. includeEmpty controls whether or not
@@ -1300,6 +1322,19 @@ func EncodeSecondaryIndex(
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	includeEmpty bool,
+) ([]IndexEntry, error) {
+	return EncodeSecondaryIndexAlloc(ctx, codec, tableDesc, secondaryIndex, colMap, values, includeEmpty, nil)
+}
+
+func EncodeSecondaryIndexAlloc(
+	ctx context.Context,
+	codec keys.SQLCodec,
+	tableDesc catalog.TableDescriptor,
+	secondaryIndex catalog.Index,
+	colMap catalog.TableColMap,
+	values []tree.Datum,
+	includeEmpty bool,
+	alloc *IndexEntryAlloc,
 ) ([]IndexEntry, error) {
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
 
@@ -1339,7 +1374,7 @@ func EncodeSecondaryIndex(
 
 	// entries is the resulting array that we will return. We allocate upfront at least
 	// len(secondaryKeys) positions to avoid allocations from appending.
-	entries := make([]IndexEntry, 0, len(secondaryKeys))
+	entries := alloc.Alloc(len(secondaryKeys))
 	for _, key := range secondaryKeys {
 		if !secondaryIndex.IsUnique() || containsNull {
 			// If the index is not unique or it contains a NULL value, append

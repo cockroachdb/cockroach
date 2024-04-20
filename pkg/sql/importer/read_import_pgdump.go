@@ -1401,7 +1401,7 @@ func (m *pgDumpReader) readFile(
 				kv := roachpb.KeyValue{Key: key}
 				kv.Value.SetInt(val)
 				m.kvCh <- row.KVBatch{
-					Source: inputIdx, KVs: []roachpb.KeyValue{kv}, Progress: input.ReadFraction(),
+					Source: inputIdx, KVSlice: &row.KVSlice{KVs: []roachpb.KeyValue{kv}}, Progress: input.ReadFraction(),
 				}
 			case "addgeometrycolumn":
 				// handled during schema extraction.
