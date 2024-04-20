@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package validator
+package scheduled
 
 import (
 	"testing"
@@ -21,7 +21,7 @@ import (
 // TestValidator validates the correctness of span configuration satisfiability
 // check in Validator.
 func TestValidator(t *testing.T) {
-	zoneToRegion, zone, region, total := processClusterInfo(state.ComplexConfig.Regions)
+	validator := NewValidator(state.ComplexConfig.Regions)
 	// ComplexConfig Topology:
 	// EU
 	//  EU_1
@@ -240,7 +240,7 @@ func TestValidator(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			ma := newMockAllocator(zoneToRegion, zone, region, total)
+			ma := validator.newMockAllocator()
 			config := spanconfigtestutils.ParseZoneConfig(t, tc.constraint).AsSpanConfig()
 			success, actualError := ma.isSatisfiable(config)
 			require.Equal(t, tc.expectedSuccess, success)

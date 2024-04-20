@@ -1,10 +1,12 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scheduled",
     srcs = [
+        "config_validator.go",
         "scheduled_event.go",
         "scheduled_event_executor.go",
+        "validator.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled",
     visibility = ["//visibility:public"],
@@ -12,6 +14,19 @@ go_library(
         "//pkg/kv/kvserver/asim/event",
         "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/state",
+        "//pkg/roachpb",
         "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "scheduled_test",
+    srcs = ["validator_test.go"],
+    embed = [":scheduled"],
+    deps = [
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/spanconfig/spanconfigtestutils",
+        "@com_github_stretchr_testify//require",
     ],
 )

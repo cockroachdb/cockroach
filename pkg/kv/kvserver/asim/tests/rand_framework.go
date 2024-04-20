@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 type testRandOptions struct {
@@ -138,6 +139,7 @@ func (f randTestingFramework) runRandTest() testResult {
 		eventGen:        staticEvents,
 		initialStateStr: initialStateStr,
 		initialTime:     initialTime,
+		regions:         cluster.Regions(),
 		history:         history,
 		eventExecutor:   simulator.EventExecutor(),
 	}
@@ -265,6 +267,25 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 	}
 }
 
+func generateInterestingEvents(
+	startTime time.Time, durationToAssert time.Duration,
+) gen.StaticEvents {
+	eventGen := gen.NewStaticEventsWithNoEvents()
+	span := roachpb.Span{
+		Key:    state.MinKey.ToRKey().AsRawKey(),
+		EndKey: state.MaxKey.ToRKey().AsRawKey(),
+	}
+
+	delay := time.Duration(0)
+	// TODO(wenyihu6): enable adding event name tag when registering events for better format span config in output
+	for _, eachConfig := range GetInterestingSpanConfigs() {
+		eventGen.ScheduleMutationWithAssertionEvent(startTime, delay,
+			constructSetZoneConfigEventWithConformanceAssertion(span, eachConfig, durationToAssert))
+		delay += durationToAssert
+	}
+	return eventGen
+}
+
 func (f randTestingFramework) randomEventSeriesGen(
 	cluster gen.ClusterGen, settings gen.StaticSettings,
 ) gen.StaticEvents {
@@ -273,6 +294,8 @@ func (f randTestingFramework) randomEventSeriesGen(
 		return generateHardcodedSurvivalGoalsEvents(cluster.Regions(), settings.Settings.StartTime, f.s.eventGen.durationToAssertOnEvent)
 	case cycleViaRandomSurvivalGoals:
 		return generateRandomSurvivalGoalsEvents(cluster.Regions(), settings.Settings.StartTime, f.s.eventGen.durationToAssertOnEvent, f.s.duration, f.s.randSource)
+	case cycleViaInterestingCases:
+		return generateInterestingEvents(settings.Settings.StartTime, f.s.eventGen.durationToAssertOnEvent)
 	default:
 		panic("unknown event series type")
 	}

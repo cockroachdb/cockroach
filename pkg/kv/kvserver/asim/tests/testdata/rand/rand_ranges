@@ -188,8 +188,6 @@ US
   US_3
     └── [11 12 13 14 15]
 no events were scheduled
-validation result:
-	valid
 sample2: failed assertion
   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
   actual unavailable=0 under=0, over=27 violating=0 lease-violating=0 lease-less-preferred=0

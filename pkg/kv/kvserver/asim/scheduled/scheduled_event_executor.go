@@ -40,7 +40,7 @@ type EventExecutor interface {
 	// PrintEventsExecuted returns a detailed string representation of executed
 	// events including details of mutation events, assertion checks, and assertion
 	// results.
-	PrintEventsExecuted() string
+	PrintEventsExecuted(bool, []state.Region, bool) string
 	// ScheduledEvents returns the list of scheduled events.
 	ScheduledEvents() ScheduledEventList
 }
@@ -107,7 +107,9 @@ func (e *eventExecutor) PrintEventSummary() string {
 //			result=
 //			2.assertion=
 //			result
-func (e *eventExecutor) PrintEventsExecuted() string {
+func (e *eventExecutor) PrintEventsExecuted(
+	failed bool, regions []state.Region, withValidator bool,
+) string {
 	if e.scheduledEvents == nil {
 		panic("unexpected")
 	}
@@ -116,8 +118,21 @@ func (e *eventExecutor) PrintEventsExecuted() string {
 	} else {
 		buf := strings.Builder{}
 		buf.WriteString(fmt.Sprintf("%d events executed:\n", len(e.scheduledEvents)))
-		for _, event := range e.scheduledEvents {
-			buf.WriteString(fmt.Sprintln(event.String()))
+		validator := NewValidator(regions)
+		for _, ev := range e.scheduledEvents {
+			buf.WriteString(fmt.Sprintln(ev.String()))
+			if withValidator {
+				satisfiable, err := validator.ValidateEvent(ev)
+				if satisfiable && !failed {
+					buf.WriteString("\t\t\texpected: satisfiable and conformed\n")
+				} else if !satisfiable && failed {
+					buf.WriteString(fmt.Sprintf("\t\t\texpected: unsatisfiable and didn't conform to %s\n", err))
+				} else if satisfiable && failed {
+					buf.WriteString("\t\t\tFAILEDDDD: satisfiable but didn't conform\n")
+				} else {
+					buf.WriteString(fmt.Sprintf("\t\t\tunexpected: unsatisfiable but still conformed %s\n", err))
+				}
+			}
 		}
 		return buf.String()
 	}

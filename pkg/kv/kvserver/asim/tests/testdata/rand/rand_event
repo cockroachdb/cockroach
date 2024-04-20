@@ -14,30 +14,40 @@ sample1: start running
 24 events executed:
 	executed at: 2022-03-21 11:00:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:05:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:05:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	passed
 	executed at: 2022-03-21 11:10:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:10:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:15:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:15:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	passed
 	executed at: 2022-03-21 11:20:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:20:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	failed
+		unsatisfiable configuration but still conformed: failed to satisfy constraints for region US_West
 	executed at: 2022-03-21 11:25:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
@@ -45,384 +55,494 @@ sample1: start running
   actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
 violating constraints:
   r1:{0000000000-9999999999} [(n17,s17):14, (n18,s18):13, (n22,s22):7] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}]
+	passed
 	executed at: 2022-03-21 11:25:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:30:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:30:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:35:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:35:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	passed
 	executed at: 2022-03-21 11:40:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:40:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:45:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:45:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	passed
 	executed at: 2022-03-21 11:50:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:50:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:55:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:55:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 12:00:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
-validation result:
-	event scheduled at 2022-03-21 11:20:00 is expected to lead to failure
-		unsatisfiable: failed to satisfy constraints for region US_West
+	passed
 sample1: pass
 ----------------------------------
 sample2: start running
 24 events executed:
 	executed at: 2022-03-21 11:00:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:05:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:05:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:10:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:10:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	failed
+		unsatisfiable configuration but still conformed: failed to satisfy constraints for region US_West
 	executed at: 2022-03-21 11:15:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
-			passed
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1:{0000000000-9999999999} [(n18,s18):10, (n17,s17):9, (n21,s21):5, (n16,s16):7NON_VOTER, (n28,s28):11NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East:1 +region=US_West:1 +region=EU:1] voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}]
+	passed
 	executed at: 2022-03-21 11:15:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 11:20:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:20:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	passed
 	executed at: 2022-03-21 11:25:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:25:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:30:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:30:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 11:35:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:35:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	failed
+		unsatisfiable configuration but still conformed: failed to satisfy constraints for region US_West
 	executed at: 2022-03-21 11:40:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
-			passed
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1:{0000000000-9999999999} [(n9,s9):20, (n18,s18):21, (n17,s17):22] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}]
+	passed
 	executed at: 2022-03-21 11:40:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:45:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:45:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:50:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:50:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	failed
+		unsatisfiable configuration but still conformed: failed to satisfy constraints for region US_West
 	executed at: 2022-03-21 11:55:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
-			passed
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1:{0000000000-9999999999} [(n28,s28):23, (n18,s18):30, (n17,s17):29] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}]
+	passed
 	executed at: 2022-03-21 11:55:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 12:00:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
-validation result:
-	valid
+	passed
 sample2: pass
 ----------------------------------
 sample3: start running
 24 events executed:
 	executed at: 2022-03-21 11:00:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:05:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:05:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 11:10:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:10:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	failed
+		unsatisfiable configuration but still conformed: failed to satisfy constraints for region US_West
 	executed at: 2022-03-21 11:15:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
-			failed:   conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=0 violating=1
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:{0000000000-9999999999} [(n1,s1):1, (n17,s17):4, (n18,s18):9, (n13,s13):7NON_VOTER, (n28,s28):10NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East:1 +region=US_West:1 +region=EU:1] voter_constraints=[+region=US_West] lease_preferences=[+region=US_West]
+  r1:{0000000000-9999999999} [(n1,s1):1, (n17,s17):4, (n18,s18):9, (n13,s13):7NON_VOTER, (n28,s28):10NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East:1 +region=US_West:1 +region=EU:1] voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}]
+	passed
 	executed at: 2022-03-21 11:15:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:20:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:20:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	failed
+		unsatisfiable configuration but still conformed: failed to satisfy constraints for region US_West
 	executed at: 2022-03-21 11:25:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
-			failed:   conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=0 violating=1
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:{0000000000-9999999999} [(n17,s17):18, (n23,s23):13, (n18,s18):16, (n7,s7):14NON_VOTER, (n19,s19):17NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East:1 +region=US_West:1 +region=EU:1] voter_constraints=[+region=US_West] lease_preferences=[+region=US_West]
+  r1:{0000000000-9999999999} [(n17,s17):18, (n23,s23):13, (n18,s18):16, (n7,s7):14NON_VOTER, (n19,s19):17NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East:1 +region=US_West:1 +region=EU:1] voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}]
+	passed
 	executed at: 2022-03-21 11:25:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	passed
 	executed at: 2022-03-21 11:30:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:30:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:35:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:35:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:40:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:40:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 11:45:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:45:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:50:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:50:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:55:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:55:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 12:00:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
-validation result:
-	event scheduled at 2022-03-21 11:10:00 is expected to lead to failure
-		unsatisfiable: failed to satisfy constraints for region US_West
-	event scheduled at 2022-03-21 11:20:00 is expected to lead to failure
-		unsatisfiable: failed to satisfy constraints for region US_West
+	passed
 sample3: pass
 ----------------------------------
 sample4: start running
 24 events executed:
 	executed at: 2022-03-21 11:00:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	passed
 	executed at: 2022-03-21 11:05:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:05:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 11:10:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:10:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:15:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:15:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	passed
 	executed at: 2022-03-21 11:20:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:20:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:25:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:25:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:30:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:30:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:35:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:35:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	failed
+		unsatisfiable configuration but still conformed: failed to satisfy constraints for region US_West
 	executed at: 2022-03-21 11:40:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
-			failed:   conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=0 violating=1
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:{0000000000-9999999999} [(n26,s26):12, (n17,s17):17, (n18,s18):18] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[+region=US_West]
+  r1:{0000000000-9999999999} [(n28,s28):16, (n18,s18):18, (n17,s17):17] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}]
+	passed
 	executed at: 2022-03-21 11:40:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:45:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:45:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	passed
 	executed at: 2022-03-21 11:50:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:50:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 11:55:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:55:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 12:00:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
-validation result:
-	event scheduled at 2022-03-21 11:35:00 is expected to lead to failure
-		unsatisfiable: failed to satisfy constraints for region US_West
+	passed
 sample4: pass
 ----------------------------------
 sample5: start running
 24 events executed:
 	executed at: 2022-03-21 11:00:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	passed
 	executed at: 2022-03-21 11:05:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:05:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:10:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:10:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:15:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:15:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 11:20:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:20:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 11:25:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:25:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	passed
 	executed at: 2022-03-21 11:30:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:30:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 11:35:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:35:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	failed
+		unsatisfiable configuration but still conformed: failed to satisfy constraints for region US_West
 	executed at: 2022-03-21 11:40:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
-			failed:   conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=0 violating=1
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:{0000000000-9999999999} [(n17,s17):15, (n8,s8):12, (n18,s18):16] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[+region=US_West]
+  r1:{0000000000-9999999999} [(n17,s17):15, (n13,s13):13, (n18,s18):16] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}]
+	passed
 	executed at: 2022-03-21 11:40:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:3 num_voters:3 voter_constraints:<constraints:<key:"region" value:"US_West" > > lease_preferences:<constraints:<key:"region" value:"US_West" > > 
+	failed
+		unsatisfiable configuration but still conformed: failed to satisfy constraints for region US_West
 	executed at: 2022-03-21 11:45:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
-			failed:   conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=0 violating=1
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:{0000000000-9999999999} [(n17,s17):15, (n8,s8):12, (n18,s18):16] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[+region=US_West]
+  r1:{0000000000-9999999999} [(n17,s17):15, (n13,s13):13, (n18,s18):16] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}]
+	passed
 	executed at: 2022-03-21 11:45:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 11:50:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:50:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
+	passed
 	executed at: 2022-03-21 11:55:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
+	passed
 	executed at: 2022-03-21 11:55:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_East" > > lease_preferences:<constraints:<key:"region" value:"US_East" > > 
+	passed
 	executed at: 2022-03-21 12:00:00
 		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
-validation result:
-	event scheduled at 2022-03-21 11:35:00 is expected to lead to failure
-		unsatisfiable: failed to satisfy constraints for region US_West
-	event scheduled at 2022-03-21 11:40:00 is expected to lead to failure
-		unsatisfiable: failed to satisfy constraints for region US_West
+	passed
 sample5: pass
 ----------------------------------
