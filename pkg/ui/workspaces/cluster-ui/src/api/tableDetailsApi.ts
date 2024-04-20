@@ -344,7 +344,7 @@ const getTableHeuristicsDetails: TableDetailsQuery<TableHeuristicDetailsRow> = {
     );
     return {
       sql: Format(
-        `SELECT max(created) AS created FROM [SHOW STATISTICS FOR TABLE %1]`,
+        `SELECT max(created) AS stats_last_created_at FROM [SHOW STATISTICS FOR TABLE %1]`,
         [escFullTableName],
       ),
     };
