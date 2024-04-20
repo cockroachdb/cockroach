@@ -454,6 +454,14 @@ func authCert(
 		}
 		return hook(ctx, systemIdentity, clientConnection)
 	})
+	if len(tlsState.PeerCertificates) > 0 && hbaEntry.GetOption("map") != "" {
+		// The common name in the certificate is set as the system identity in case we have an HBAEntry for db user.
+		commonName, err := username.MakeSQLUsernameFromUserInput(tlsState.PeerCertificates[0].Subject.CommonName, username.PurposeValidation)
+		if err != nil {
+			return nil, err
+		}
+		b.SetReplacementIdentity(commonName)
+	}
 	return b, nil
 }
 
