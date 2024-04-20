@@ -1058,14 +1058,14 @@ func (s *adminServer) tableDetailsHelper(
 	row, cols, err = s.internalExecutor.QueryRowExWithCols(
 		ctx, "admin-show-statistics", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
-		fmt.Sprintf("SELECT max(created) AS created FROM [SHOW STATISTICS FOR TABLE %s]", escQualTable),
+		fmt.Sprintf("SELECT max(created) AS stats_last_created_at FROM [SHOW STATISTICS FOR TABLE %s]", escQualTable),
 	)
 	if err != nil {
 		return nil, err
 	}
 	if row != nil {
 		scanner := makeResultScanner(cols)
-		const createdCol = "created"
+		const createdCol = "stats_last_created_at"
 		var createdTs *time.Time
 		if err := scanner.Scan(row, createdCol, &createdTs); err != nil {
 			return nil, err
