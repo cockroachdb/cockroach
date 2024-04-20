@@ -99,7 +99,7 @@ func TestEval(t *testing.T) {
 				t.Fatal(err)
 			}
 			// expr.TypeCheck to avoid constant folding.
-			semaCtx := tree.MakeSemaContext()
+			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			typedExpr, err := expr.TypeCheck(ctx, &semaCtx, types.Any)
 			if err != nil {
 				// An error here should have been found above by QueryRow.
@@ -161,7 +161,7 @@ func TestEval(t *testing.T) {
 				// method returns an error, so skip it for execution.
 				return strings.TrimSpace(d.Expected)
 			}
-			semaCtx := tree.MakeSemaContext()
+			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			typedExpr, err := expr.TypeCheck(ctx, &semaCtx, types.Any)
 			if err != nil {
 				// Skip this test as it's testing an expected error which would be

@@ -763,7 +763,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		}
 		serializedGen := tree.Serialize(generated)
 
-		sema := tree.MakeSemaContext()
+		sema := tree.MakeSemaContext(nil /* resolver */)
 		// We don't care about errors below because they are often
 		// caused by sqlsmith generating bogus queries. We're just
 		// looking for datums that don't match.

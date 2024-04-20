@@ -1196,8 +1196,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 			numOldMonitors := len(s.monitorRegistry.GetMonitors())
 			if args.ExprHelper.SemaCtx == nil {
-				semaCtx := tree.MakeSemaContext()
-				semaCtx.TypeResolver = &s.typeResolver
+				semaCtx := tree.MakeSemaContext(&s.typeResolver)
 				args.ExprHelper.SemaCtx = &semaCtx
 			}
 			var result *colexecargs.NewColOperatorResult

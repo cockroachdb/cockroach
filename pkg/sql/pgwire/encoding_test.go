@@ -58,7 +58,7 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 	f.Close()
 
 	ctx := context.Background()
-	sema := tree.MakeSemaContext()
+	sema := tree.MakeSemaContext(nil /* resolver */)
 	evalCtx := eval.MakeTestingEvalContext(nil)
 
 	for _, tc := range tests {

@@ -35,8 +35,7 @@ func BuildQuery(
 	}
 
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
-	semaCtx.FunctionResolver = catalog
+	semaCtx := tree.MakeSemaContext(catalog)
 	semaCtx.SearchPath = &evalCtx.SessionData().SearchPath
 	semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */)
 	semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)

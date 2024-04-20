@@ -209,7 +209,7 @@ func ClassifyConversion(
 	}
 
 	// See if there's existing cast logic.  If so, return general.
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */)
 
 	// Use a placeholder just to sub in the original type.

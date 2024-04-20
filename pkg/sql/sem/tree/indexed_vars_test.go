@@ -58,7 +58,7 @@ func TestIndexedVars(t *testing.T) {
 
 	// Verify the expression evaluates correctly.
 	ctx := context.Background()
-	semaContext := tree.MakeSemaContext()
+	semaContext := tree.MakeSemaContext(nil /* resolver */)
 	semaContext.IVarContainer = c
 	typedExpr, err := expr.TypeCheck(ctx, &semaContext, types.Any)
 	if err != nil {

@@ -57,7 +57,7 @@ func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 // injectTableStats sets the table statistics as specified by a JSON object.
 func injectTableStats(tt *Table, statsExpr tree.Expr, tc *Catalog) {
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	typedExpr, err := tree.TypeCheckAndRequire(ctx, statsExpr, &semaCtx, types.Jsonb, "INJECT STATISTICS")
 	if err != nil {

@@ -74,7 +74,7 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 	tableID := parentID + 2
 
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	st := cluster.MakeTestingClusterSettings()
 	for _, tc := range tests {
 		t.Run(tc.stmt, func(t *testing.T) {

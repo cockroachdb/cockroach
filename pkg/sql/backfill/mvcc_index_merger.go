@@ -159,7 +159,7 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 		output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
 	}
 
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	if err := ibm.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, ibm.flowCtx.NewEvalCtx()); err != nil {
 		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 		return

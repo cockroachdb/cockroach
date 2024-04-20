@@ -362,6 +362,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 func (dsp *DistSQLPlanner) createStatsPlan(
 	ctx context.Context,
 	planCtx *PlanningCtx,
+	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	reqStats []requestedStat,
 	jobID jobspb.JobID,
@@ -453,8 +454,6 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	// Add rendering of virtual computed columns.
 	if len(virtComputedCols) != 0 {
 		// Resolve names and types.
-		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = planCtx.planner
 		virtComputedExprs, _, err := schemaexpr.MakeComputedExprs(
 			ctx,
 			virtComputedCols,
@@ -462,7 +461,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			desc,
 			tree.NewUnqualifiedTableName(tree.Name(desc.GetName())),
 			planCtx.EvalContext(),
-			&semaCtx,
+			semaCtx,
 		)
 		if err != nil {
 			return nil, err
@@ -597,7 +596,11 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 }
 
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
-	ctx context.Context, planCtx *PlanningCtx, jobID jobspb.JobID, details jobspb.CreateStatsDetails,
+	ctx context.Context,
+	planCtx *PlanningCtx,
+	semaCtx *tree.SemaContext,
+	jobID jobspb.JobID,
+	details jobspb.CreateStatsDetails,
 ) (*PhysicalPlan, error) {
 	reqStats := make([]requestedStat, len(details.ColumnStats))
 	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
@@ -628,13 +631,14 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	if details.UsingExtremes {
 		return dsp.createPartialStatsPlan(ctx, planCtx, tableDesc, reqStats, jobID, details)
 	}
-	return dsp.createStatsPlan(ctx, planCtx, tableDesc, reqStats, jobID, details)
+	return dsp.createStatsPlan(ctx, planCtx, semaCtx, tableDesc, reqStats, jobID, details)
 }
 
 func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	planCtx *PlanningCtx,
+	semaCtx *tree.SemaContext,
 	txn *kv.Txn,
 	job *jobs.Job,
 	resultWriter *RowResultWriter,
@@ -642,7 +646,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
 
 	details := job.Details().(jobspb.CreateStatsDetails)
-	physPlan, err := dsp.createPlanForCreateStats(ctx, planCtx, job.ID(), details)
+	physPlan, err := dsp.createPlanForCreateStats(ctx, planCtx, semaCtx, job.ID(), details)
 	if err != nil {
 		return err
 	}

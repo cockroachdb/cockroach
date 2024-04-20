@@ -234,8 +234,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.
-		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = &resolver
+		semaCtx := tree.MakeSemaContext(&resolver)
 		semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(evalCtx.Settings.Version)
 		var err error
 		defaultExprs, err = schemaexpr.MakeDefaultExprs(
@@ -669,8 +668,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.
-		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = &resolver
+		semaCtx := tree.MakeSemaContext(&resolver)
 		semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(evalCtx.Settings.Version)
 		// Convert any partial index predicate strings into expressions.
 		predicates, colExprs, referencedColumns, err = constructExprs(

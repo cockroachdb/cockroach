@@ -136,7 +136,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 	aggMemAcc := evalCtx.TestingMon.MakeBoundAccount()
 	defer aggMemAcc.Close(context.Background())
 	evalCtx.SingleDatumAggMemAccount = &aggMemAcc
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	for _, agg := range aggTypes {
 		for _, tc := range testCases {
 			t.Run(fmt.Sprintf("%s/%s", agg.name, tc.name), func(t *testing.T) {

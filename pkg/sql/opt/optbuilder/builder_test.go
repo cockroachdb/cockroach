@@ -76,7 +76,7 @@ func TestBuilder(t *testing.T) {
 				tester.Flags.ExprFormat &= ^(memo.ExprFmtHideScalars | memo.ExprFmtHideTypes)
 
 				ctx := context.Background()
-				semaCtx := tree.MakeSemaContext()
+				semaCtx := tree.MakeSemaContext(nil /* resolver */)
 				evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 				evalCtx.SessionData().OptimizerUseForecasts = true
 				evalCtx.SessionData().OptimizerUseHistograms = true

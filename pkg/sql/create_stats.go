@@ -377,8 +377,7 @@ func createStatsDefaultColumns(
 	// local-only virtual computed column expression is needed.
 	cannotDistribute := make([]bool, len(desc.PublicColumns()))
 	if virtColEnabled {
-		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = evalCtx.Planner
+		semaCtx := tree.MakeSemaContext(evalCtx.Planner)
 		exprs, _, err := schemaexpr.MakeComputedExprs(
 			ctx,
 			desc.PublicColumns(),
@@ -671,7 +670,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		// metadata, so we can use a nil rowContainerHelper.
 		resultWriter := NewRowResultWriter(nil /* rowContainer */)
 		if err := dsp.planAndRunCreateStats(
-			ctx, evalCtx, planCtx, txn.KV(), r.job, resultWriter,
+			ctx, evalCtx, planCtx, p.SemaCtx(), txn.KV(), r.job, resultWriter,
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
 			if grpcutil.IsContextCanceled(err) {

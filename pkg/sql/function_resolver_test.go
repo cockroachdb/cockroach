@@ -411,9 +411,7 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING VOLATILE LANGUAGE SQL AS $$ S
 		// Set "defaultdb" as current database.
 		ec.SessionData().Database = "defaultdb"
 
-		funcResolver := planner.(tree.FunctionReferenceResolver)
-		semaCtx := tree.MakeSemaContext()
-		semaCtx.FunctionResolver = funcResolver
+		semaCtx := tree.MakeSemaContext(planner)
 
 		for _, tc := range testCases {
 			t.Run(tc.testName, func(t *testing.T) {

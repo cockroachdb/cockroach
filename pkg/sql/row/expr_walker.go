@@ -803,7 +803,7 @@ func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr)
 func sanitizeExprsForImport(
 	ctx context.Context, evalCtx *eval.Context, expr tree.Expr, targetType *types.T,
 ) (tree.TypedExpr, overrideVolatility, error) {
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 
 	// If we have immutable expressions, then we can just return it right away.
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(

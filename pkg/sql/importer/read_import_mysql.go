@@ -526,11 +526,13 @@ func mysqlTableToCockroach(
 		stmt.Defs = append(stmt.Defs, c)
 	}
 
-	semaCtx := tree.MakeSemaContext()
-	semaCtxPtr := &semaCtx
+	var semaCtxPtr *tree.SemaContext
 	// p is nil in some tests.
 	if p != nil && p.SemaCtx() != nil {
 		semaCtxPtr = p.SemaCtx()
+	} else {
+		semaCtx := tree.MakeSemaContext(nil /* resolver */)
+		semaCtxPtr = &semaCtx
 	}
 
 	// Bundle imports do not support user defined types, and so we nil out the
