@@ -126,7 +126,7 @@ func (e *eventExecutor) PrintEventsExecuted(
 				if satisfiable {
 					buf.WriteString("\t\t\tsatisfiable\n")
 				} else {
-					buf.WriteString(fmt.Sprintf("\t\t\tunexpected: unsatisfiable but still conformed %s\n", err))
+					buf.WriteString(fmt.Sprintf("\t\t\tunsatisfiable: %s\n", err))
 				}
 				// todo: wenyi make this logic back by adding 1 to 1 correspondance to assertion
 				//if !satisfiable && !history.AssertionResults[i] {
