@@ -364,6 +364,24 @@ func TestMultiQueueFull(t *testing.T) {
 	queue.Cancel(task5)
 }
 
+func TestMultiQueueUpdateConcurrencLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	queue := NewMultiQueue(1)
+	// grow the concurrency limit.
+	queue.UpdateConcurrencyLimit(5)
+	require.Equal(t, 5, queue.remainingRuns)
+	// shrink the concurrency limit.
+	queue.UpdateConcurrencyLimit(2)
+	require.Equal(t, 2, queue.remainingRuns)
+	// decrease the remaining runs
+	_, _ = queue.Add(1, 1, -1)
+	_, _ = queue.Add(2, 1, -1)
+	// shrink the limit gain, make sure the remainingRuns is non-negative.
+	queue.UpdateConcurrencyLimit(1)
+	require.Equal(t, 0, queue.remainingRuns)
+}
+
 // verifyOrder makes sure that the chans are called in the specified order.
 func verifyOrder(t *testing.T, queue *MultiQueue, tasks ...*Task) {
 	// each time, verify that the only available channel is the "next" one in order

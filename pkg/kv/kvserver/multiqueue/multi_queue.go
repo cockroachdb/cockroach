@@ -96,23 +96,43 @@ func (h *notifyHeap) tryRemove(task *Task) bool {
 // be run. Once the job is completed, MultiQueue.TaskDone must be called to
 // return the Permit to the queue so that the next Task can be started.
 type MultiQueue struct {
-	mu             syncutil.Mutex
-	remainingRuns  int
-	mapping        map[int]int
-	lastQueueIndex int
-	outstanding    []notifyHeap
+	mu               syncutil.Mutex
+	concurrencyLimit int
+	remainingRuns    int
+	mapping          map[int]int
+	lastQueueIndex   int
+	outstanding      []notifyHeap
 }
 
 // NewMultiQueue creates a new queue. The queue is not started, and start needs
 // to be called on it first.
 func NewMultiQueue(maxConcurrency int) *MultiQueue {
 	queue := MultiQueue{
-		remainingRuns: maxConcurrency,
-		mapping:       make(map[int]int),
+		concurrencyLimit: maxConcurrency,
+		remainingRuns:    maxConcurrency,
+		mapping:          make(map[int]int),
 	}
 	queue.lastQueueIndex = -1
 
 	return &queue
+}
+
+// UpdateConcurrencyLimit updates the concurrencyLimit and remainingRuns field.
+// We add the delta from new and old concurrencyLimit to remainingRuns and cap
+// remainingRuns as non-negative integer.
+func (m *MultiQueue) UpdateConcurrencyLimit(newLimit int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.updateConcurrencyLimitLocked(newLimit)
+}
+
+func (m *MultiQueue) updateConcurrencyLimitLocked(newLimit int) {
+	diff := newLimit - m.concurrencyLimit
+	m.remainingRuns += diff
+	if m.remainingRuns < 0 {
+		m.remainingRuns = 0
+	}
+	m.concurrencyLimit = newLimit
 }
 
 // Permit is a token which is returned from a Task.GetWaitChan call.
