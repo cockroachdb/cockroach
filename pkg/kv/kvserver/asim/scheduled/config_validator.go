@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package validator
+package scheduled
 
 import (
 	"math"
@@ -88,14 +88,33 @@ type mockAllocator struct {
 	cluster      allocationDetailsAtEachLevel
 }
 
+func DeepCopyMap(original interface{}) interface{} {
+	switch orig := original.(type) {
+	case map[string]string:
+		newMap := make(map[string]string)
+		for key, value := range orig {
+			newMap[key] = value
+		}
+		return newMap
+	case map[string]int:
+		newMap := make(map[string]int)
+		for key, value := range orig {
+			newMap[key] = value
+		}
+		return newMap
+	default:
+		panic("unsupported type for DeepCopyMap")
+	}
+}
+
 // newMockAllocator creates a mock allocator based on the provided cluster
 // setup. mockAllocator is designed to determine if a config can be satisfied by
 // trying to assign replicas in a way that meet the constraints. Note that since
 // isSatisfiable directly alters mockAlloactor fields, a new mock allocator
 // should be initialized for each isSatisfiable call.
-func newMockAllocator(
-	zoneToRegion map[string]string, zone map[string]int, region map[string]int, total int,
-) mockAllocator {
+func (v Validator) newMockAllocator() mockAllocator {
+	zoneToRegion, zone, region, total := DeepCopyMap(v.zoneToRegion).(map[string]string),
+		DeepCopyMap(v.zone).(map[string]int), DeepCopyMap(v.region).(map[string]int), v.total
 	m := mockAllocator{
 		zoneToRegion: zoneToRegion,
 		zone:         map[string]allocationDetailsAtEachLevel{},

@@ -21,7 +21,7 @@ import (
 )
 
 var SingleRegionClusterOptions = [...]string{"single_region", "single_region_multi_store"}
-var MultiRegionClusterOptions = [...]string{"multi_region", "complex"}
+var MultiRegionClusterOptions = [...]string{"complex"}
 var AllClusterOptions = [...]string{"single_region", "single_region_multi_store", "multi_region", "complex"}
 
 // TODO(kvoli): Add a loader/translator for the existing

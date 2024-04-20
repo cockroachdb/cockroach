@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/validator"
 )
 
 // OutputFlags sets flags for what to output in tests. If you want to add a flag
@@ -79,6 +78,7 @@ type testResult struct {
 	loadGen         gen.LoadGen
 	eventGen        gen.EventGen
 	initialTime     time.Time
+	regions         []state.Region
 	initialStateStr string
 	eventExecutor   scheduled.EventExecutor
 	history         history.History
@@ -172,10 +172,7 @@ func (tr testResultsReport) String() string {
 			buf.WriteString(fmt.Sprintf("topology:\n%s", topology.String()))
 		}
 		if failed || tr.flags.Has(OutputEvents) {
-			buf.WriteString(output.eventExecutor.PrintEventsExecuted())
-		}
-		if failed || tr.flags.Has(OutputValidationResult) {
-			buf.WriteString(validator.Validate(output.initialState, output.eventExecutor))
+			buf.WriteString(output.eventExecutor.PrintEventsExecuted(failed, output.regions, tr.flags.Has(OutputValidationResult)))
 		}
 		if failed {
 			buf.WriteString(fmt.Sprintf("sample%d: failed assertion\n%s\n", nthSample, output.reason))
