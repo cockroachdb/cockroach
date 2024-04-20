@@ -101,7 +101,7 @@ var InterestingCases = []struct {
 		expectedErrorMsgStr: "",
 	},
 	{
-		// failed 12:50
+		// 12:50
 		description:         "having unconstrained replicas + fully constrained voters",
 		constraint:          "num_replicas=27 num_voters=16 voter_constraints={'+region=US_East':16}",
 		expectedSuccess:     true,
