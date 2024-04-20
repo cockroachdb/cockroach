@@ -254,7 +254,7 @@ func (th *testHelper) newRecordStream(
 		opts.SchemaJSON = th.schemaJSON
 		th.genRecordsData(t, format, numRecords, opts.RecordSeparator, records)
 	}
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 
 	avro, err := newAvroInputReader(&semaCtx, nil, th.schemaTable, opts, 0, 1, &th.evalCtx, db)
 	require.NoError(t, err)
@@ -590,7 +590,7 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 
 	create := stmt.AST.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	evalCtx := eval.MakeTestingEvalContext(st)
 
 	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)

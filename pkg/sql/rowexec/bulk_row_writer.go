@@ -100,7 +100,7 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	kvCh := make(chan row.KVBatch, 10)
 	var g ctxgroup.Group
 
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	conv, err := row.NewDatumRowConverter(
 		ctx, &semaCtx, sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh, nil,
 		/* seqChunkProvider */ sp.flowCtx.GetRowMetrics(), sp.flowCtx.Cfg.DB.KV(),

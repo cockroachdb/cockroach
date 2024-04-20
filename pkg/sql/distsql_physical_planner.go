@@ -3719,8 +3719,9 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			if err != nil {
 				return nil, err
 			}
-			plan, err = dsp.createPlanForCreateStats(ctx, planCtx, 0, /* jobID */
-				record.Details.(jobspb.CreateStatsDetails))
+			plan, err = dsp.createPlanForCreateStats(
+				ctx, planCtx, planCtx.planner.SemaCtx(), 0 /* jobID */, record.Details.(jobspb.CreateStatsDetails),
+			)
 		}
 
 	case *distinctNode:

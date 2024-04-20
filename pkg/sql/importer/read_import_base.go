@@ -71,8 +71,7 @@ func runImport(
 
 	evalCtx := flowCtx.NewEvalCtx()
 	evalCtx.Regions = makeImportRegionOperator(spec.DatabasePrimaryRegion)
-	semaCtx := tree.MakeSemaContext()
-	semaCtx.TypeResolver = importResolver
+	semaCtx := tree.MakeSemaContext(importResolver)
 	conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider, flowCtx.Cfg.DB.KV())
 	if err != nil {
 		return nil, err

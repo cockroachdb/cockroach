@@ -1182,7 +1182,7 @@ func makeTrigramBinOp(
 	expr, err := parser.ParseExpr(fmt.Sprintf("'%s' %s '%s'", indexedValue, opstr, value))
 	require.NoError(t, err)
 
-	semaContext := tree.MakeSemaContext()
+	semaContext := tree.MakeSemaContext(nil /* resolver */)
 	typedExpr, err = tree.TypeCheck(context.Background(), expr, &semaContext, types.Bool)
 	require.NoError(t, err)
 	return typedExpr

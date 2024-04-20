@@ -114,7 +114,7 @@ func (*columnBackfiller) Resume(output execinfra.RowReceiver) {
 }
 
 func (cb *columnBackfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	if err := cb.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, cb.flowCtx.NewEvalCtx()); err != nil {
 		return &execinfrapb.ProducerMetadata{Err: err}
 	}

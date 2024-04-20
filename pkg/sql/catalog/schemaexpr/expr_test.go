@@ -26,7 +26,7 @@ import (
 
 func TestValidateExpr(t *testing.T) {
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 
 	// Trick to get the init() for the builtins package to run.
 	_ = builtins.AllBuiltinNames()

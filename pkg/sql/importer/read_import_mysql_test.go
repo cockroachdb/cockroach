@@ -62,7 +62,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	opts := roachpb.MysqldumpOptions{}
 
 	kvCh := make(chan row.KVBatch, 50)
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	// When creating a new dump reader, we need to pass in the walltime that will be used as
 	// a parameter used for generating unique rowid, random, and gen_random_uuid as default
 	// expressions. Here, the parameter doesn't matter so we pass in 0.
@@ -302,7 +302,7 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 	sd := &sessiondata.SessionData{}
 	for i := range expected.Indexes {
 		ctx := context.Background()
-		semaCtx := tree.MakeSemaContext()
+		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		tableName := &descpb.AnonymousTable
 		expectedDesc := tabledesc.NewBuilder(expected).BuildImmutableTable()
 		gotDesc := tabledesc.NewBuilder(got).BuildImmutableTable()

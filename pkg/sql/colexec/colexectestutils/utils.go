@@ -740,7 +740,7 @@ func stringToDatum(val string, typ *types.T, evalCtx *eval.Context) tree.Datum {
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	typedExpr, err := tree.TypeCheck(context.Background(), expr, &semaCtx, typ)
 	if err != nil {
 		colexecerror.InternalError(err)

@@ -326,7 +326,7 @@ WHERE id = '%v'::REGCLASS;`, name.String()))
 		sameShardBuckets := func(
 			currShardBuckets int32, newPKShardingDef *tree.ShardedIndexDef, newPKStorageParams tree.StorageParams,
 		) bool {
-			semaCtx := tree.MakeSemaContext()
+			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			evalCtx := eval.Context{
 				Settings: cluster.MakeTestingClusterSettings(),
 			}

@@ -56,9 +56,7 @@ var testTypeResolver = tree.MakeTestingMapTypeResolver(testTypes)
 const primary = descpb.FamilyID(0)
 
 func makeTestSemaCtx() tree.SemaContext {
-	testSemaCtx := tree.MakeSemaContext()
-	testSemaCtx.TypeResolver = testTypeResolver
-	return testSemaCtx
+	return tree.MakeSemaContext(testTypeResolver)
 }
 
 func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {

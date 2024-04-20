@@ -4062,7 +4062,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 
 	create := stmt.AST.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	evalCtx := eval.MakeTestingEvalContext(st)
 
 	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaIDForBackup, descpb.ID(100), NoFKs, 1)
@@ -5013,7 +5013,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	}
 	create := stmt.AST.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	evalCtx := eval.MakeTestingEvalContext(st)
 
 	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaIDForBackup, descpb.ID(100), NoFKs, 1)
@@ -5115,7 +5115,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 	create := stmt.AST.(*tree.CreateTable)
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 

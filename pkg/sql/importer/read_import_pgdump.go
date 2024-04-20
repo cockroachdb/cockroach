@@ -783,7 +783,7 @@ func readPostgresStmt(
 				switch expr := selExpr.Expr.(type) {
 				case *tree.FuncExpr:
 					// Look for function calls that mutate schema (this is actually a thing).
-					semaCtx := tree.MakeSemaContext()
+					semaCtx := tree.MakeSemaContext(nil /* resolver */)
 					semaCtx.Properties.Require("pg_dump function arguments", tree.RejectSubqueries)
 					if _, err := expr.TypeCheck(ctx, &semaCtx, nil /* desired */); err != nil {
 						// If the expression does not type check, it may be a case of using
@@ -1065,7 +1065,7 @@ func (m *pgDumpReader) readFile(
 	var inserts, count int64
 	rowLimit := m.opts.RowLimit
 	ps := newPostgreStream(ctx, input, int(m.opts.MaxRowSize), m.unsupportedStmtLogger)
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	for _, conv := range m.tables {
 		conv.KvBatch.Source = inputIdx
 		conv.FractionFn = input.ReadFraction

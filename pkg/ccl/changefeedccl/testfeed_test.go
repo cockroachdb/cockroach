@@ -1750,7 +1750,7 @@ func makeKafkaFeedFactory(srvOrCluster interface{}, rootDB *gosql.DB) cdctest.Te
 
 func exprAsString(expr tree.Expr) (string, error) {
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	te, err := expr.TypeCheck(context.Background(), &semaCtx, types.String)
 	if err != nil {
 		return "", err

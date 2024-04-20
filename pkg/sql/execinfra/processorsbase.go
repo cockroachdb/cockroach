@@ -786,8 +786,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	if err := resolver.HydrateTypeSlice(ctx, coreOutputTypes); err != nil {
 		return err
 	}
-	pb.SemaCtx = tree.MakeSemaContext()
-	pb.SemaCtx.TypeResolver = &resolver
+	pb.SemaCtx = tree.MakeSemaContext(&resolver)
 
 	return pb.OutputHelper.Init(ctx, post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx)
 }
