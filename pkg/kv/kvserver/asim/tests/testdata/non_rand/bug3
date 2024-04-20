@@ -1,0 +1,39 @@
+load_cluster config=complex
+----
+
+#ComplexConfig Topology:
+# EU
+#  EU_1
+#  │ └── [19 20 21]
+#  EU_2
+#  │ └── [22 23 24]
+#  EU_3
+#  │ └── [25 26 27 28]
+# US_East
+#  US_East_1
+#  │ └── [1]
+#  US_East_2
+#  │ └── [2 3]
+#  US_East_3
+#  │ └── [4 5 6]
+#  US_East_4
+#  │ └── [7 8 9 10 11 12 13 14 15 16]
+# US_West
+#  US_West_1
+#    └── [17 18]
+
+set_span_config delay=2m
+[0,9999999999): num_replicas=28 num_voters=28 constraints={'+region=US_East':16,'+region=US_West':2,'+region=EU':10,'+zone=US_East_1':1,'+zone=US_East_2':2,'+zone=US_East_3':3,'+zone=US_East_4':10,'+zone=US_West_1':2,'+zone=EU_1':3,'+zone=EU_2':3,'+zone=EU_3':4} voter_constraints={'+region=US_East':16,'+region=US_West':2,'+region=EU':10,'+zone=US_East_1':1,'+zone=US_East_2':2,'+zone=US_East_3':3,'+zone=US_East_4':10,'+zone=US_West_1':2,'+zone=EU_1':3,'+zone=EU_2':3,'+zone=EU_3':4}
+----
+
+assertion type=conformance under=0 over=0 unavailable=0 violating=0
+----
+
+eval duration=60m
+----
+failed assertion sample 1
+  conformance unavailable=0 under=0 over=0 violating=0 
+  actual unavailable=0 under=0, over=0 violating=2 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1:{0000000000-9999999999} [(n1,s1):1, (n17,s17):2, (n26,s26):3, (n13,s13):4, (n23,s23):5, (n11,s11):6, (n27,s27):7, (n8,s8):8, (n12,s12):9, (n14,s14):10, (n4,s4):11, (n5,s5):12, (n16,s16):13, (n21,s21):14, (n7,s7):15, (n19,s19):16, (n9,s9):17, (n18,s18):18, (n6,s6):19, (n2,s2):20, (n20,s20):21, (n15,s15):22, (n22,s22):23, (n10,s10):24, (n24,s24):25, (n3,s3):26, (n25,s25):27, (n28,s28):28] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
+  r1:{0000000000-9999999999} [(n1,s1):1, (n17,s17):2, (n26,s26):3, (n13,s13):4, (n23,s23):5, (n11,s11):6, (n27,s27):7, (n8,s8):8, (n12,s12):9, (n14,s14):10, (n4,s4):11, (n5,s5):12, (n16,s16):13, (n21,s21):14, (n7,s7):15, (n19,s19):16, (n9,s9):17, (n18,s18):18, (n6,s6):19, (n2,s2):20, (n20,s20):21, (n15,s15):22, (n22,s22):23, (n10,s10):24, (n24,s24):25, (n3,s3):26, (n25,s25):27, (n28,s28):28] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
