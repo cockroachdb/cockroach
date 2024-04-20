@@ -172,7 +172,7 @@ func (tr testResultsReport) String() string {
 			buf.WriteString(fmt.Sprintf("topology:\n%s", topology.String()))
 		}
 		if failed || tr.flags.Has(OutputEvents) {
-			buf.WriteString(output.eventExecutor.PrintEventsExecuted(failed, output.regions, tr.flags.Has(OutputValidationResult)))
+			buf.WriteString(output.eventExecutor.PrintEventsExecuted(output.history, output.regions, tr.flags.Has(OutputValidationResult)))
 		}
 		if failed {
 			buf.WriteString(fmt.Sprintf("sample%d: failed assertion\n%s\n", nthSample, output.reason))
