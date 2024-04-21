@@ -1287,7 +1287,7 @@ func getPreemptedVMNames(ctx context.Context, c *clusterImpl, l *logger.Logger) 
 		return ""
 	}
 
-	preemptedVMNames := make([]string, len(preemptedVMs))
+	var preemptedVMNames []string
 	for _, preemptedVM := range preemptedVMs {
 		preemptedVMNames = append(preemptedVMNames, preemptedVM.Name)
 	}
