@@ -231,6 +231,13 @@ func TryFilterInvertedIndexBySimilarity(
 	// First, we attempt to build a constraint from a similarity filter on the
 	// inverted column. We search for expressions of the form `s % 'foo'` or
 	// `'foo' % s`, where s is the indexed column.
+	//
+	// TODO(mgartner): Currently we only look for the first similarity filter.
+	// We could improve query plans in some cases by looking for multiple
+	// similarity filters and picking the one that requires the fewest trigrams
+	// to be scanned, or by building a constrained scan for each similarity
+	// filter and letting the optimizer determine the lowest cost trigrams to
+	// scan.
 	var con *constraint.Constraint
 	for i := range filters {
 		sim, isSim := filters[i].Condition.(*memo.ModExpr)
