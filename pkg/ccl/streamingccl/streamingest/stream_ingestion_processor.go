@@ -897,7 +897,7 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 		// same resolved timestamp -- even if they were individually resolved to
 		// _slightly_ different/newer timestamps -- to allow them to merge into
 		// fewer and larger spans in the frontier.
-		if d > 0 {
+		if d > 0 && resolvedSpan.Timestamp.After(sip.spec.InitialScanTimestamp) {
 			resolvedSpan.Timestamp.Logical = 0
 			resolvedSpan.Timestamp.WallTime -= resolvedSpan.Timestamp.WallTime % int64(d)
 		}
