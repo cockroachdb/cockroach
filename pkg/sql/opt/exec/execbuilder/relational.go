@@ -756,12 +756,12 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		}
 	}
 
-	if scan.Flags.ForceInvertedIndex && !scan.IsInvertedScan() {
+	if scan.Flags.ForceInvertedIndex && !scan.IsInvertedScan(md) {
 		return execPlan{}, fmt.Errorf("could not produce a query plan conforming to the FORCE_INVERTED_INDEX hint")
 	}
 
 	idx := tab.Index(scan.Index)
-	if idx.IsInverted() && len(scan.InvertedConstraint) == 0 {
+	if idx.IsInverted() && len(scan.InvertedConstraint) == 0 && scan.Constraint == nil {
 		return execPlan{},
 			errors.AssertionFailedf("expected inverted index scan to have an inverted constraint")
 	}

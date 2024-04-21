@@ -167,6 +167,8 @@ type Memo struct {
 	hoistUncorrelatedEqualitySubqueries        bool
 	useImprovedComputedColumnFiltersDerivation bool
 	useProvidedOrderingFix                     bool
+	useTrigramSimilarityOptimization           bool
+	trigramSimilarityThreshold                 float64
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -229,6 +231,8 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		hoistUncorrelatedEqualitySubqueries:        evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries,
 		useImprovedComputedColumnFiltersDerivation: evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation,
 		useProvidedOrderingFix:                     evalCtx.SessionData().OptimizerUseProvidedOrderingFix,
+		useTrigramSimilarityOptimization:           evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization,
+		trigramSimilarityThreshold:                 evalCtx.SessionData().TrigramSimilarityThreshold,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
@@ -374,7 +378,9 @@ func (m *Memo) IsStale(
 		m.alwaysUseHistograms != evalCtx.SessionData().OptimizerAlwaysUseHistograms ||
 		m.hoistUncorrelatedEqualitySubqueries != evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries ||
 		m.useImprovedComputedColumnFiltersDerivation != evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation ||
-		m.useProvidedOrderingFix != evalCtx.SessionData().OptimizerUseProvidedOrderingFix {
+		m.useProvidedOrderingFix != evalCtx.SessionData().OptimizerUseProvidedOrderingFix ||
+		m.useTrigramSimilarityOptimization != evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization ||
+		m.trigramSimilarityThreshold != evalCtx.SessionData().TrigramSimilarityThreshold {
 		return true, nil
 	}
 
