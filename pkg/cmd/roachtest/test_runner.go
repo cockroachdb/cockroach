@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -334,7 +333,7 @@ func (r *testRunner) Run(
 	r.status.fail = make(map[*testImpl]struct{})
 	r.status.skip = make(map[*testImpl]struct{})
 
-	r.work = newWorkPool(tests, count)
+	r.work = newWorkPool(ctx, tests, count, lopt.l)
 	errs := &workerErrors{}
 
 	qp := quotapool.NewIntPool("cloud cpu", uint64(clustersOpt.cpuQuota))
@@ -675,20 +674,6 @@ func (r *testRunner) runWorker(
 				// Switch architecture of local cluster (see above).
 				c.arch = arch
 			}
-		}
-
-		//  TODO(babusrithar): remove this once we see enough data in
-		//  nightly runs. This is a temp logic to test spot VMs.
-		if roachtestflags.Cloud == spec.GCE &&
-			testToRun.spec.Benchmark &&
-			!testToRun.spec.Suites.Contains(registry.Weekly) &&
-			rand.Float64() <= 0.5 {
-			l.PrintfCtx(ctx, "using spot VMs to run test %s", testToRun.spec.Name)
-			testToRun.spec.Cluster.UseSpotVMs = true
-		}
-
-		if roachtestflags.UseSpotVM {
-			testToRun.spec.Cluster.UseSpotVMs = true
 		}
 
 		// Verify that required native libraries are available.

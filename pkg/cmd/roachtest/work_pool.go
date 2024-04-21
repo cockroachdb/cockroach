@@ -14,9 +14,11 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,10 +40,26 @@ type workPool struct {
 	}
 }
 
-func newWorkPool(tests []registry.TestSpec, count int) *workPool {
+func newWorkPool(
+	ctx context.Context, tests []registry.TestSpec, count int, l *logger.Logger,
+) *workPool {
 	p := &workPool{count: count}
-	for _, spec := range tests {
-		p.mu.tests = append(p.mu.tests, testWithCount{spec: spec, count: count})
+	for _, testSpec := range tests {
+		//  TODO(babusrithar): remove this once we see enough data in
+		//  nightly runs. This is a temp logic to test spot VMs.
+		if roachtestflags.Cloud == spec.GCE &&
+			testSpec.Benchmark &&
+			!testSpec.Suites.Contains(registry.Weekly) &&
+			rand.Float64() <= 0.5 {
+			l.PrintfCtx(ctx, "using spot VMs to run test %s", testSpec.Name)
+			testSpec.Cluster.UseSpotVMs = true
+		}
+
+		if roachtestflags.UseSpotVM {
+			testSpec.Cluster.UseSpotVMs = true
+		}
+
+		p.mu.tests = append(p.mu.tests, testWithCount{spec: testSpec, count: count})
 	}
 	return p
 }
