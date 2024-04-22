@@ -84,6 +84,10 @@ type operationGenerator struct {
 
 	// useDeclarativeSchemaChanger indices if the declarative schema changer is used.
 	useDeclarativeSchemaChanger bool
+
+	// specifiedTable does its best to constrain the ops to a specific table. This is particularly useful
+	// if we want to test that a sequence of ops on a table leave it sane.
+	specifiedTable *tree.TableName
 }
 
 // OpGenLogQuery a query with a single value result.
@@ -222,10 +226,13 @@ func (og *operationGenerator) randOp(
 }
 
 func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
-
-	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
-	if err != nil {
-		return nil, err
+	tableName := og.specifiedTable
+	if tableName == nil {
+		var err error
+		tableName, err = og.randTable(ctx, tx, og.pctExisting(true), "")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	tableExists, err := og.tableExists(ctx, tx, tableName)
@@ -247,14 +254,20 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 		return nil, err
 	}
 
+	var colTyp tree.ResolvableTypeReference
 	typName, typ, err := og.randType(ctx, tx, og.pctExisting(true))
 	if err != nil {
 		return nil, err
 	}
 
+	colTyp = typ
+	if typ == nil {
+		colTyp = typName
+	}
+
 	def := &tree.ColumnTableDef{
 		Name: tree.Name(columnName),
-		Type: typName,
+		Type: colTyp,
 	}
 	def.Nullable.Nullability = tree.Nullability(og.randIntn(1 + int(tree.SilentNull)))
 
@@ -298,7 +311,13 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 			code:      pgcode.FeatureNotSupported,
 			condition: def.Unique.IsUnique && typ != nil && !colinfo.ColumnTypeIsIndexable(typ),
 		},
+		// JSON arrays are not supported as a column type (#23468).
+		{
+			code:      pgcode.FeatureNotSupported,
+			condition: typ != nil && typ.Family() == types.ArrayFamily && typ.ArrayContents().Family() == types.JsonFamily,
+		},
 	})
+
 	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def))
 	return op, nil
 }
@@ -1004,6 +1023,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	duplicateStore := false
 	virtualComputedStored := false
 	regionColStored := false
+	virtualColStored := false
 	columnNames = columnNames[len(def.Columns):]
 	if n := len(columnNames); n > 0 {
 		def.Storing = make(tree.NameList, og.randIntn(1+n))
@@ -1013,6 +1033,17 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			// The region column can not be stored.
 			if tableIsRegionalByRow && columnNames[i].name == regionColumn {
 				regionColStored = true
+			}
+
+			// Virtual columns are not allowed to be stored.
+			if columnNames[i].generated && !virtualColStored {
+				isVirtual, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnNames[i].name)
+				if err != nil {
+					return nil, err
+				}
+				if isVirtual {
+					virtualColStored = true
+				}
 			}
 
 			// Virtual computed columns are not allowed to be indexed
@@ -1086,10 +1117,14 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			{code: pgcode.FeatureNotSupported, condition: duplicateRegionColumn},
 			{code: pgcode.Uncategorized, condition: virtualComputedStored},
 			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
+			{code: pgcode.FeatureNotSupported, condition: virtualColStored},
 		})
 	}
 
-	stmt.sql = tree.Serialize(def)
+	// N.B. Our columns are already properly quoted. There is no need to wrap them with more quotes.
+	fmtCtx := tree.NewFmtCtx(tree.FmtBareIdentifiers)
+	def.Format(fmtCtx)
+	stmt.sql = fmtCtx.CloseAndGetString()
 	return stmt, nil
 }
 
@@ -1509,9 +1544,13 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 }
 
 func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
-	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
-	if err != nil {
-		return nil, err
+	tableName := og.specifiedTable
+	if tableName == nil {
+		var err error
+		tableName, err = og.randTable(ctx, tx, og.pctExisting(true), "")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	tableExists, err := og.tableExists(ctx, tx, tableName)
@@ -1552,16 +1591,33 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
+	colIsRefByComputed, err := og.colIsRefByComputed(ctx, tx, tableName, columnName)
+	if err != nil {
+		return nil, err
+	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
-		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey},
+		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey || colIsRefByComputed},
 		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 	})
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName)
+	// TODO(before merge): IIUC, the crdb_internal_idx_expr prefixed columns
+	// do not appear in any tables we can query.
+	// TODO(sql-foundations): We need to add a check for the column being in
+	// an expression to an index. In the case where the expression does not exist,
+	// we add a crdb_internal_idx_expr prefixed column to the table.
+	stmt.potentialExecErrors.add(pgcode.InvalidColumnReference)
+	// ERROR: index "crdb_internal_index_17_name_placeholder" in the middle of
+	// being added, try again later
+	stmt.potentialExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
+	columnName, err = og.quoteIdentName(ctx, tx, columnName)
+	if err != nil {
+		return nil, err
+	}
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, columnName)
 	return stmt, nil
 }
 
@@ -1595,7 +1651,11 @@ func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) 
 	if !columnExists {
 		stmt.expectedExecErrors.add(pgcode.UndefinedColumn)
 	}
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName)
+	columnName, err = og.quoteIdentName(ctx, tx, columnName)
+	if err != nil {
+		return nil, err
+	}
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT`, tableName, columnName)
 	return stmt, nil
 }
 
@@ -1640,7 +1700,11 @@ func (og *operationGenerator) dropColumnNotNull(ctx context.Context, tx pgx.Tx) 
 		{pgcode.UndefinedColumn, !columnExists},
 		{pgcode.InvalidTableDefinition, colIsPrimaryKey},
 	})
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName)
+	columnName, err = og.quoteIdentName(ctx, tx, columnName)
+	if err != nil {
+		return nil, err
+	}
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL`, tableName, columnName)
 	return stmt, nil
 }
 
@@ -1683,7 +1747,7 @@ func (og *operationGenerator) dropColumnStored(ctx context.Context, tx pgx.Tx) (
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 	})
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP STORED`, tableName, columnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP STORED`, tableName, columnName)
 	return stmt, nil
 }
 
@@ -1743,7 +1807,9 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (*o
 		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT "%s"`, tableName, constraintName)
+	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
+	fmtCtx.FormatName(constraintName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT %s`, tableName, fmtCtx.CloseAndGetString())
 	return stmt, nil
 }
 
@@ -2415,25 +2481,40 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		"UuidFamily",
 	}
 
+	tableQuery := tableDescQuery
+	if og.specifiedTable != nil {
+		tableQuery = specificTableDescQuery(og.specifiedTable.Table())
+		tableExists, err := og.tableExists(ctx, tx, og.specifiedTable)
+		if err != nil {
+			return nil, err
+		}
+		if !tableExists {
+			return makeOpStmtForSingleError(OpStmtDDL,
+				`ALTER TABLE "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`,
+				pgcode.UndefinedTable), nil
+		}
+		fmt.Println("table exists")
+	}
+
 	q := With([]CTE{
 		{"descriptors", descJSONQuery},
-		{"tables", tableDescQuery},
+		{"tables", tableQuery},
 		{"columns", colDescQuery},
 	}, `
 		SELECT
-			json_array_length(table_descriptor->'mutation') > 0 AS table_undergoing_schema_change,
+			COALESCE(json_array_length(table_descriptor->'mutations'), 0) > 0 AS table_undergoing_schema_change,
 			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(table_name) AS table_name,
-			quote_ident("column"->>'name') AS column_name,
-			COALESCE(("column"->'nullable')::bool, false) AS is_nullable,
-			("column"->>'computedExpr' = '') AS is_computed,
-			(("column"->'type'->>'family') = ANY($1)) AS is_indexable,
-			(NOT EXISTS(
+			quote_ident(col->>'name') AS column_name,
+			COALESCE((col->'nullable')::bool, false) AS is_nullable,
+			(col->>'computeExpr' IS NOT NULL) AS is_computed,
+			COALESCE((col->'type'->>'family') = ANY($1), false) AS is_indexable,
+			(EXISTS(
 				SELECT *
 				FROM crdb_internal.table_indexes
 				JOIN crdb_internal.index_columns USING (descriptor_id)
 				WHERE table_indexes.is_inverted
 				AND table_indexes.descriptor_id = columns.table_id
-				AND index_columns.column_id = (columns."column"->'id')::int8
+				AND index_columns.column_id = (columns.col->'id')::int8
 			)) AS is_in_inverted_index,
 			(EXISTS(
 				SELECT *
@@ -2441,13 +2522,17 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 				JOIN crdb_internal.index_columns USING (descriptor_id)
 				WHERE table_indexes.is_unique
 				AND table_indexes.descriptor_id = columns.table_id
-				AND index_columns.column_id = (columns."column"->'id')::int8
+				AND index_columns.column_id = (columns.col->'id')::int8
 			)) AS is_unique
 		FROM columns
 		WHERE NOT (
-			COALESCE(("column"->'hidden')::bool, false)
-			OR  COALESCE(("column"->'inaccessible')::bool, false)
+			COALESCE((col->'hidden')::bool, false)
+			OR COALESCE((col->'inaccessible')::bool, false)
 		)`)
+
+	if og.specifiedTable != nil {
+		fmt.Println("here", q)
+	}
 
 	columns, err := Collect(ctx, og, tx, pgx.RowToMap, q, indexableFamilies)
 	if err != nil {
@@ -2487,18 +2572,23 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		table["unique_check"] = true
 
 		var b strings.Builder
-		fmt.Fprintf(&b, `SELECT * FROM VALUES (`)
-		for _, column := range table["columns"].([]map[string]any) {
+		fmt.Fprintf(&b, `SELECT * FROM (VALUES `)
+		columns := table["columns"].([]map[string]any)
+		for i, column := range columns {
 			// If this column is already known to be unique, don't bother checking
 			// it. This should only happen if there's a unique constraint on the
 			// column.
 			if column["is_unique"].(bool) {
-				fmt.Fprintf(&b, `(SELECT true)`)
+				fmt.Fprintf(&b, `((SELECT true))`)
 			} else {
-				fmt.Fprintf(&b, `(SELECT EXISTS(SELECT 1 FROM %s GROUP BY %s HAVING count(*) > 1))`, table["table_name"], column["column_name"])
+				fmt.Fprintf(&b, `((SELECT EXISTS(SELECT 1 FROM %s GROUP BY %s HAVING count(*) > 1)))`,
+					table["table_name"], column["column_name"])
+			}
+			if i < len(columns)-1 {
+				fmt.Fprint(&b, `,`)
 			}
 		}
-		fmt.Fprintf(&b, `)`)
+		fmt.Fprintf(&b, `) as t (res)`)
 
 		results, err := Collect(ctx, og, tx, pgx.RowTo[bool], b.String())
 		if err != nil {
@@ -2512,11 +2602,7 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		return nil
 	}
 
-	stmt, code, err := Generate[*tree.AlterTable](og.params.rng, og.produceError(), []GenerationCase{
-		// IF EXISTS should noop if the table doesn't exist.
-		{pgcode.SuccessfulCompletion, `ALTER TABLE IF EXISTS "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
-		// Targeting a table that doesn't exist should error out.
-		{pgcode.UndefinedTable, `ALTER TABLE "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
+	generationCases := []GenerationCase{
 		// Targeting a column that doesn't exist should error out.
 		{pgcode.UndefinedColumn, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ("NonExistentColumn") { end }`},
 		// NonUniqueColumns can't be used as PKs.
@@ -2537,58 +2623,75 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		{pgcode.SuccessfulCompletion, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable true | InInvertedIndex false | Columns }) { end }`},
 		{pgcode.SuccessfulCompletion, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable true | InInvertedIndex false | Columns }) USING HASH { end }`},
 		// TODO(sql-foundations): Add support for hash parameters and storage parameters.
-	}, template.FuncMap{
-		"TableNotUnderGoingSchemaChange": func() (map[string]any, error) {
-			tbls := util.Filter(tables, func(table map[string]any) bool {
-				return !table["table_undergoing_schema_change"].(bool)
-			})
-			return PickOne(og.params.rng, tbls)
-		},
-		"TableUnderGoingSchemaChange": func() (map[string]any, error) {
-			tbls := util.Filter(tables, func(table map[string]any) bool {
-				return table["table_undergoing_schema_change"].(bool)
-			})
-			return PickOne(og.params.rng, tbls)
-		},
-		"Columns": func(table map[string]any) (string, error) {
-			selected, err := PickAtLeast(og.params.rng, 1, table["columns"].([]map[string]any))
-			names := util.Map(selected, func(col map[string]any) string { return col["column_name"].(string) })
-			return strings.Join(names, ", "), err
-		},
-		"Nullable": func(nullable bool, table map[string]any) map[string]any {
-			table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
-				return col["is_nullable"].(bool) == nullable
-			})
-			return table
-		},
-		"Unique": func(unique bool, table map[string]any) (map[string]any, error) {
-			if err := fillIsUnique(table); err != nil {
-				return nil, err
-			}
-			table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
-				return col["is_unique"].(bool) == unique
-			})
-			return table, nil
-		},
-		"Generated": func(unique bool, table map[string]any) map[string]any {
-			table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
-				return col["is_unique"].(bool) == unique
-			})
-			return table
-		},
-		"Indexable": func(indexable bool, table map[string]any) map[string]any {
-			table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
-				return col["is_indexable"].(bool) == indexable
-			})
-			return table
-		},
-		"InInvertedIndex": func(inIndex bool, table map[string]any) map[string]any {
-			table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
-				return col["is_in_inverted_index"].(bool) == inIndex
-			})
-			return table
-		},
-	})
+	}
+
+	// If we aren't targeting a specific table, we can generate error statements
+	// for tables that do not exist.
+	if og.specifiedTable == nil {
+		// IF EXISTS should noop if the table doesn't exist.
+		generationCases = append(generationCases,
+			GenerationCase{pgcode.SuccessfulCompletion,
+				`ALTER TABLE IF EXISTS "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
+			// Targeting a table that doesn't exist should error out.
+			GenerationCase{pgcode.UndefinedTable,
+				`ALTER TABLE "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
+		)
+	}
+
+	stmt, code, err := Generate[*tree.AlterTable](og.params.rng, og.produceError(), generationCases,
+		template.FuncMap{
+			"TableNotUnderGoingSchemaChange": func() (map[string]any, error) {
+				tbls := util.Filter(tables, func(table map[string]any) bool {
+					return !table["table_undergoing_schema_change"].(bool)
+				})
+				test, err := PickOne(og.params.rng, tbls)
+				return test, err
+			},
+			"TableUnderGoingSchemaChange": func() (map[string]any, error) {
+				tbls := util.Filter(tables, func(table map[string]any) bool {
+					return table["table_undergoing_schema_change"].(bool)
+				})
+				return PickOne(og.params.rng, tbls)
+			},
+			"Columns": func(table map[string]any) (string, error) {
+				selected, err := PickAtLeast(og.params.rng, 1, table["columns"].([]map[string]any))
+				names := util.Map(selected, func(col map[string]any) string { return col["column_name"].(string) })
+				return strings.Join(names, ", "), err
+			},
+			"Nullable": func(nullable bool, table map[string]any) map[string]any {
+				table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
+					return col["is_nullable"].(bool) == nullable
+				})
+				return table
+			},
+			"Unique": func(unique bool, table map[string]any) (map[string]any, error) {
+				if err := fillIsUnique(table); err != nil {
+					return nil, err
+				}
+				table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
+					return col["is_unique"].(bool) == unique
+				})
+				return table, nil
+			},
+			"Generated": func(computed bool, table map[string]any) map[string]any {
+				table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
+					return col["is_computed"].(bool) == computed
+				})
+				return table
+			},
+			"Indexable": func(indexable bool, table map[string]any) map[string]any {
+				table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
+					return col["is_indexable"].(bool) == indexable
+				})
+				return table
+			},
+			"InInvertedIndex": func(inIndex bool, table map[string]any) map[string]any {
+				table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
+					return col["is_in_inverted_index"].(bool) == inIndex
+				})
+				return table
+			},
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -2596,6 +2699,141 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 	return newOpStmt(stmt, codesWithConditions{
 		{code, true},
 	}), nil
+}
+
+func (og *operationGenerator) alterTableCommaSyntax(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	var ast *tree.AlterTable
+	expectedExecErrors := makeExpectedErrorSet()
+	potentialExecErrors := makeExpectedErrorSet()
+	colsWithStates := make(map[tree.Name]commaOpType)
+
+	isMultiplePksAllowed := og.randIntn(2)
+	alterPkExists := false
+	getExpectedErrCodes := func(previous commaOpType, target commaOpType) codesWithConditions {
+		addingSameCol := previous == alterTableAddColumnForComma &&
+			target == alterTableAddColumnForComma
+		droppingSameCol := previous == alterTableDropColumnForComma &&
+			target == alterTableDropColumnForComma
+		pkOnDroppingCol := previous == alterTableDropColumnForComma &&
+			target == alterTableAlterPrimaryKeyForComma
+		pkOnAddingCol := previous == alterTableAddColumnForComma &&
+			target == alterTableAlterPrimaryKeyForComma
+		//multiplePks := previous == alterTableAlterPrimaryKeyForComma && target == alterTableAlterPrimaryKeyForComma
+
+		return codesWithConditions{
+			{code: pgcode.DuplicateColumn, condition: addingSameCol},
+			{code: pgcode.UndefinedColumn, condition: droppingSameCol},
+			{code: pgcode.ObjectNotInPrerequisiteState, condition: pkOnDroppingCol},
+			{code: pgcode.ObjectNotInPrerequisiteState, condition: pkOnAddingCol},
+		}
+	}
+
+	// updateColsWithStates updates our colsWithStates map, returning the
+	// expectedErrCodes associated with the change
+	updateColsWithStates := func(cmds tree.AlterTableCmds) (errCodes codesWithConditions, err error) {
+		for _, cmd := range cmds {
+			switch cmd := cmd.(type) {
+			case *tree.AlterTableAddColumn:
+				val, exists := colsWithStates[cmd.ColumnDef.Name]
+				if exists {
+					errCodes = errCodes.addAll(getExpectedErrCodes(val, alterTableAddColumnForComma))
+				}
+				colsWithStates[cmd.ColumnDef.Name] = alterTableAddColumnForComma
+			case *tree.AlterTableAlterPrimaryKey:
+				alterPkExists = true
+				for _, col := range cmd.Columns {
+					val, exists := colsWithStates[col.Column]
+					if exists {
+						errCodes = errCodes.addAll(getExpectedErrCodes(val, alterTableAlterPrimaryKeyForComma))
+					}
+					colsWithStates[col.Column] = alterTableAlterPrimaryKeyForComma
+				}
+			case *tree.AlterTableDropColumn:
+				val, exists := colsWithStates[cmd.Column]
+				if exists {
+					errCodes = errCodes.addAll(getExpectedErrCodes(val, alterTableDropColumnForComma))
+				}
+				colsWithStates[cmd.Column] = alterTableDropColumnForComma
+			default:
+				return nil, errors.Newf("unsupported AlterTableCmd %T in alterTableCommaSyntax", cmd)
+			}
+		}
+		return errCodes, nil
+	}
+
+	// TODO(before merge) i picked a random number here
+	amtCmds := og.randIntn(12) + 2
+	for i := 0; i < amtCmds; i++ {
+		op := commaOpType(og.randIntn(numCommaOpTypes))
+		if (op == alterTableAlterPrimaryKeyForComma) && (isMultiplePksAllowed == 0) && alterPkExists {
+			continue
+		}
+
+		stmt, err := commaOpFuncs[op](og, ctx, tx)
+		if err != nil {
+			// We can only ignore this error if no other PgErrors
+			// were set in the cleanup process.
+			if errors.Is(err, pgx.ErrNoRows) &&
+				!errors.HasType(err, &pgconn.PgError{}) {
+				continue
+			}
+			return nil, err
+		}
+
+		parsedStmts, err := parser.Parse(stmt.sql)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, s := range parsedStmts {
+			alterTable, ok := s.AST.(*tree.AlterTable)
+			if !ok {
+				return nil, errors.New("failed to cast to *tree.AlterTable: invalid type assertion")
+			}
+			if ast != nil {
+				ast.Cmds = append(ast.Cmds, alterTable.Cmds...)
+				// If the table is dropped mid-constructing and we expect a no-op,
+				// keep the IfExists flag up-to-date.
+				ast.IfExists = ast.IfExists || alterTable.IfExists
+			} else {
+				ast = alterTable
+				tableName := ast.Table.ToTableName()
+				og.specifiedTable = &tableName
+			}
+			// There are several cases where we need to update the list of expectedExecErrors. Do that now and keep our
+			// map up to date.
+			if !ast.IfExists {
+				errCodes, err := updateColsWithStates(alterTable.Cmds)
+				if err != nil {
+					return nil, err
+				}
+				expectedExecErrors.addAll(errCodes)
+			}
+		}
+		if ast != nil && !ast.IfExists {
+			potentialExecErrors.merge(stmt.potentialExecErrors)
+			expectedExecErrors.merge(stmt.expectedExecErrors)
+		}
+	}
+
+	// If we are unsuccessful generating a statement
+	// (likely due to a lack of tables) -- let's do this for now.
+	if ast == nil {
+		return makeOpStmtForSingleError(OpStmtDDL,
+				`ALTER TABLE "NonexistentTable" DROP COLUMN "NonexistentColumn1", DROP COLUMN "NonexistentColumn2"`,
+				pgcode.UndefinedTable),
+			nil
+	}
+
+	alterOpStmt := makeOpStmt(OpStmtDDL)
+	alterOpStmt.sql = ast.String()
+	alterOpStmt.expectedExecErrors = expectedExecErrors
+	alterOpStmt.potentialExecErrors = potentialExecErrors
+	og.specifiedTable = nil
+
+	return alterOpStmt, nil
 }
 
 func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -2875,9 +3113,7 @@ func makeOpStmt(queryType opStmtType) *opStmt {
 	}
 }
 
-// opStmtFromTree constructs an operation from the provide tree.Statement.
-//
-//lint:ignore U1000 Used in future commits. TODO(chrisseto): Remove the ignore.
+// newOpStmt constructs an operation from the provide tree.Statement.
 func newOpStmt(stmt tree.Statement, expectedExecErrors codesWithConditions) *opStmt {
 	var queryType opStmtType
 	switch stmt.StatementType() {

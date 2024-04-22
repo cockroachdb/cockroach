@@ -2584,6 +2584,7 @@ var builtinOidsArray = []string{
 	2616: `crdb_internal.start_logical_replication_job(conn_str: string, table_names: string[]) -> int`,
 	2617: `crdb_internal.partition_spans(spans: bytes[]) -> bytes`,
 	2618: `crdb_internal.start_replication_stream_for_tables(req: bytes) -> bytes`,
+	2619: `crdb_internal.is_column_active(table_name: string, column_name: string) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

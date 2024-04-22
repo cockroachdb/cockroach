@@ -73,7 +73,7 @@ const (
 		tables.id AS table_id,
 		tables.name AS table_name,
 		tables.descriptor AS table_descriptor,
-		json_array_elements(descriptor->'columns') AS column
+		json_array_elements(descriptor->'table'->'columns') AS col
 	FROM tables`
 
 	// enumDescsQuery returns the JSONified version of all enum descriptors in
@@ -109,6 +109,14 @@ WHERE
 	d.classid = 'pg_catalog.pg_proc'::REGCLASS::INT8
 	AND d.refclassid = 'pg_catalog.pg_proc'::REGCLASS::INT8`
 )
+
+// TODO(annie): There might be a problem with how we are selecting
+// this table if we have multiple tables with the same name in different
+// schemas.
+func specificTableDescQuery(tableName string) string {
+	return fmt.Sprintf(`SELECT * FROM descriptors WHERE descriptor ? 'table' AND name = '%s' AND NOT
+(descriptor->'table' ? 'viewQuery' OR descriptor->'table' ? 'sequenceOpts')`, tableName)
+}
 
 func regionsFromDatabaseQuery(database string) string {
 	return fmt.Sprintf(`SELECT * FROM [SHOW REGIONS FROM DATABASE %q]`, database)
