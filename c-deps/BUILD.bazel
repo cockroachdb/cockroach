@@ -225,6 +225,7 @@ configure_make(
     configure_command = "src/configure",
     configure_in_place = True,
     configure_options = [
+        "--sysconfdir=/etc",
         "--enable-static",
         "--disable-shared",
     ] + select({
