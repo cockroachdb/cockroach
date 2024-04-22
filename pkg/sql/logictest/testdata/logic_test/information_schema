@@ -2837,7 +2837,6 @@ system         public        database_role_settings           role_name         
 system         public        database_role_settings           settings                                                                                                  3
 system         public        descriptor                       descriptor                                                                                                2
 system         public        descriptor                       id                                                                                                        1
-system         public        descriptor_id_seq                value                                                                                                     1
 system         public        eventlog                         eventType                                                                                                 2
 system         public        eventlog                         info                                                                                                      5
 system         public        eventlog                         reportingID                                                                                               4
@@ -2956,7 +2955,6 @@ system         public        replication_stats                under_replicated_r
 system         public        replication_stats                zone_id                                                                                                   1
 system         public        reports_meta                     generated                                                                                                 2
 system         public        reports_meta                     id                                                                                                        1
-system         public        role_id_seq                      value                                                                                                     1
 system         public        role_members                     isAdmin                                                                                                   3
 system         public        role_members                     member                                                                                                    2
 system         public        role_members                     member_id                                                                                                 5
@@ -3116,7 +3114,6 @@ system         public        task_payloads                    owner             
 system         public        task_payloads                    owner_id                                                                                                  4
 system         public        task_payloads                    type                                                                                                      7
 system         public        task_payloads                    value                                                                                                     8
-system         public        tenant_id_seq                    value                                                                                                     1
 system         public        tenant_settings                  last_updated                                                                                              4
 system         public        tenant_settings                  name                                                                                                      2
 system         public        tenant_settings                  reason                                                                                                    6
