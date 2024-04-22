@@ -28,31 +28,32 @@ func _() {
 	_ = x[alterTableAddConstraintUnique-17]
 	_ = x[alterTableAlterColumnType-18]
 	_ = x[alterTableAlterPrimaryKey-19]
-	_ = x[alterTableDropColumn-20]
-	_ = x[alterTableDropColumnDefault-21]
-	_ = x[alterTableDropConstraint-22]
-	_ = x[alterTableDropNotNull-23]
-	_ = x[alterTableDropStored-24]
-	_ = x[alterTableLocality-25]
-	_ = x[alterTableRenameColumn-26]
-	_ = x[alterTableSetColumnDefault-27]
-	_ = x[alterTableSetColumnNotNull-28]
-	_ = x[alterTypeDropValue-29]
-	_ = x[createTypeEnum-30]
-	_ = x[createIndex-31]
-	_ = x[createSchema-32]
-	_ = x[createSequence-33]
-	_ = x[createTable-34]
-	_ = x[createTableAs-35]
-	_ = x[createView-36]
-	_ = x[createFunction-37]
-	_ = x[commentOn-38]
-	_ = x[dropFunction-39]
-	_ = x[dropIndex-40]
-	_ = x[dropSchema-41]
-	_ = x[dropSequence-42]
-	_ = x[dropTable-43]
-	_ = x[dropView-44]
+	_ = x[alterTableCommaSyntax-20]
+	_ = x[alterTableDropColumn-21]
+	_ = x[alterTableDropColumnDefault-22]
+	_ = x[alterTableDropConstraint-23]
+	_ = x[alterTableDropNotNull-24]
+	_ = x[alterTableDropStored-25]
+	_ = x[alterTableLocality-26]
+	_ = x[alterTableRenameColumn-27]
+	_ = x[alterTableSetColumnDefault-28]
+	_ = x[alterTableSetColumnNotNull-29]
+	_ = x[alterTypeDropValue-30]
+	_ = x[createTypeEnum-31]
+	_ = x[createIndex-32]
+	_ = x[createSchema-33]
+	_ = x[createSequence-34]
+	_ = x[createTable-35]
+	_ = x[createTableAs-36]
+	_ = x[createView-37]
+	_ = x[createFunction-38]
+	_ = x[commentOn-39]
+	_ = x[dropFunction-40]
+	_ = x[dropIndex-41]
+	_ = x[dropSchema-42]
+	_ = x[dropSequence-43]
+	_ = x[dropTable-44]
+	_ = x[dropView-45]
 }
 
 func (i opType) String() string {
@@ -97,6 +98,8 @@ func (i opType) String() string {
 		return "alterTableAlterColumnType"
 	case alterTableAlterPrimaryKey:
 		return "alterTableAlterPrimaryKey"
+	case alterTableCommaSyntax:
+		return "alterTableCommaSyntax"
 	case alterTableDropColumn:
 		return "alterTableDropColumn"
 	case alterTableDropColumnDefault:

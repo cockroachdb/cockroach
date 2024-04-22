@@ -110,6 +110,10 @@ WHERE
 	AND d.refclassid = 'pg_catalog.pg_proc'::REGCLASS::INT8`
 )
 
+func specificTableDescQuery(tableName string) string {
+	return fmt.Sprintf(`SELECT * FROM descriptors WHERE descriptor ? 'table' AND name = %q AND NOT (descriptor->'table' ? 'viewQuery' OR descriptor->'table' ? 'sequenceOpts')`, tableName)
+}
+
 func regionsFromDatabaseQuery(database string) string {
 	return fmt.Sprintf(`SELECT * FROM [SHOW REGIONS FROM DATABASE %q]`, database)
 }
