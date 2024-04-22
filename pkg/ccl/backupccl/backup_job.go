@@ -191,8 +191,8 @@ func backup(
 	}
 
 	// Subtract out any completed spans.
-	spans := roachpb.SubtractSpans(backupManifest.Spans, completedSpans)
-	introducedSpans := roachpb.SubtractSpans(backupManifest.IntroducedSpans, completedIntroducedSpans)
+	spans := roachpb.SubtractSpansWithCopy(backupManifest.Spans, completedSpans)
+	introducedSpans := roachpb.SubtractSpansWithCopy(backupManifest.IntroducedSpans, completedIntroducedSpans)
 
 	pkIDs := make(map[uint64]bool)
 	for i := range backupManifest.Descriptors {
@@ -1649,7 +1649,7 @@ func createBackupManifest(
 			}
 		}
 
-		newSpans = roachpb.SubtractSpans(spans, prevBackups[len(prevBackups)-1].Spans)
+		newSpans = roachpb.SubtractSpansWithCopy(spans, prevBackups[len(prevBackups)-1].Spans)
 	}
 
 	// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion
