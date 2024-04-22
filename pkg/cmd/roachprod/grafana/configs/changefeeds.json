@@ -260,9 +260,9 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(rate(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum by (message_type) (rate(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\", scope!=\"\"}[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "Messages",
+          "legendFormat": "Messages ({{message_type}})",
           "refId": "B"
         },
         {
@@ -361,9 +361,9 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(rate(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum by (message_type) (rate(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\",scope!=\"\"}[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "Message Emit Time",
+          "legendFormat": "Message Emit Time ({{message_type}})",
           "refId": "B"
         },
         {

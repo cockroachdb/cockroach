@@ -520,8 +520,8 @@
             "uid": "localprom"
           },
           "editorMode": "code",
-          "expr": "sum by (scope) (rate(changefeed_emitted_messages{scope!=\"\"}[$__rate_interval]))",
-          "legendFormat": "__auto",
+          "expr": "sum by (scope, message_type) (rate(changefeed_emitted_messages{scope!=\"\"}[$__rate_interval]))",
+          "legendFormat": "scope={{scope}}, type={{message_type}}",
           "range": true,
           "refId": "A"
         }
@@ -766,9 +766,9 @@
             "uid": "localprom"
           },
           "editorMode": "code",
-          "expr": "sum by(node) (rate(changefeed_emitted_messages{scope!=\"\"}[$__rate_interval]))",
+          "expr": "sum by(node, message_type) (rate(changefeed_emitted_messages{scope!=\"\"}[$__rate_interval]))",
           "hide": false,
-          "legendFormat": "node={{node}}",
+          "legendFormat": "node={{node}}, type={{message_type}}",
           "range": true,
           "refId": "B"
         }
