@@ -24,6 +24,28 @@ SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)-
 ----
 true
 
+# Test that granting a role with admin option to a user that is already a member of the role and has admin option on the role does not perform a schema change.
+subtest no_op_grant_role_admin_option
+
+# Grant admin option to user 'roach' on role 'developer' for the first time.
+statement ok
+GRANT developer TO roach WITH ADMIN OPTION
+
+# Remember the current table version for 'system.role_members'
+let $role_members_version
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' FROM system.descriptor WHERE id = 'system.public.role_members'::REGCLASS
+
+# Repeatedly grant admin option to user 'roach' on role 'developer'
+repeat 10
+statement ok
+GRANT developer TO roach WITH ADMIN OPTION
+
+# Assert that it is indeed a no-op by checking the 'role_members' table version is the same as before
+query B
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' = $role_members_version::STRING FROM system.descriptor WHERE id = 'system.public.role_members'::REGCLASS
+----
+true
+
 # GRANT or REVOKE on the public role should result in "not exists"
 subtest grant_revoke_public
 
