@@ -34,8 +34,8 @@ go_library(
         "txn_interceptor_write_buffer.go",
         "txn_lock_gatekeeper.go",
         "txn_metrics.go",
-        ":gen-txnstate-stringer",  # keep
         ":bufferedwrite_interval_btree.go",  # keep
+        ":gen-txnstate-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
     visibility = ["//visibility:public"],
@@ -154,8 +154,8 @@ go_test(
         "txn_interceptor_seq_num_allocator_test.go",
         "txn_interceptor_span_refresher_test.go",
         "txn_test.go",
-        ":mock_kvcoord",  # keep
         ":bufferedwrite_interval_btree.go",  # keep
+        ":mock_kvcoord",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":kvcoord"],

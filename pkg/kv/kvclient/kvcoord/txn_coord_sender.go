@@ -161,9 +161,10 @@ type TxnCoordSender struct {
 	// additional heap allocations necessary.
 	interceptorStack []txnInterceptor
 	interceptorAlloc struct {
-		arr [6]txnInterceptor
+		arr [7]txnInterceptor
 		txnHeartbeater
 		txnSeqNumAllocator
+		txnWriteBuffer
 		txnPipeliner
 		txnCommitter
 		txnSpanRefresher
@@ -275,6 +276,7 @@ func newRootTxnCoordSender(
 		// Various interceptors below rely on sequence number allocation,
 		// so the sequence number allocator is near the top of the stack.
 		&tcs.interceptorAlloc.txnSeqNumAllocator,
+		&tcs.interceptorAlloc.txnWriteBuffer,
 		// The pipeliner sits above the span refresher because it will
 		// never generate transaction retry errors that could be avoided
 		// with a refresh.
@@ -311,6 +313,9 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 	var riGen rangeIteratorFactory
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
 		riGen.ds = ds
+	}
+	tc.interceptorAlloc.txnWriteBuffer = txnWriteBuffer{
+		enabled: bufferedWritesEnabled.Get(&tcf.st.SV),
 	}
 	tc.interceptorAlloc.txnPipeliner = txnPipeliner{
 		st:                       tcf.st,
@@ -500,7 +505,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
-	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() {
+	if ba.IsSingleEndTxnRequest() && (!tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() && tc.interceptorAlloc.txnWriteBuffer.buf.Len() == 0) {
 		return nil, tc.finalizeNonLockingTxnLocked(ctx, ba)
 	}
 
