@@ -62,7 +62,7 @@ type TestingKnobs struct {
 
 	// StoreKVSubscriberOverride is used to override the KVSubscriber used when
 	// setting up a new store.
-	StoreKVSubscriberOverride KVSubscriber
+	StoreKVSubscriberOverride func(KVSubscriber) KVSubscriber
 
 	// KVAccessorPaginationInterceptor, if set, is invoked on every pagination
 	// event.

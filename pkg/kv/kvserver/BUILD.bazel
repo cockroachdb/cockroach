@@ -454,6 +454,7 @@ go_test(
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigptsreader",
         "//pkg/spanconfig/spanconfigstore",
+        "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/sql",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",

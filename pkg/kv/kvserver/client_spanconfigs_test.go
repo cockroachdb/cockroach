@@ -55,7 +55,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 				DisableGCQueue:    true,
 			},
 			SpanConfig: &spanconfig.TestingKnobs{
-				StoreKVSubscriberOverride: mockSubscriber,
+				StoreKVSubscriberOverride: func(spanconfig.KVSubscriber) spanconfig.KVSubscriber { return mockSubscriber },
 			},
 		},
 	}
@@ -120,7 +120,7 @@ func TestFallbackSpanConfigOverride(t *testing.T) {
 				DisableGCQueue:    true,
 			},
 			SpanConfig: &spanconfig.TestingKnobs{
-				StoreKVSubscriberOverride: mockSubscriber,
+				StoreKVSubscriberOverride: func(spanconfig.KVSubscriber) spanconfig.KVSubscriber { return mockSubscriber },
 			},
 		},
 	}

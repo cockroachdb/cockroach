@@ -88,6 +88,7 @@ SELECT a.username AS grantee,
   FROM (
         SELECT username, unnest(privileges) AS privilege
           FROM crdb_internal.kv_system_privileges
+          WHERE path LIKE '/global%'
        ) AS a`
 	const externalConnectionPrivilegeQuery = `
 SELECT *
