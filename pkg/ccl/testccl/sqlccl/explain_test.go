@@ -12,13 +12,17 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -125,4 +129,189 @@ func TestExplainRedactDDL(t *testing.T) {
 	defer smith.Close()
 
 	tests.GenerateAndCheckRedactedExplainsForPII(t, smith, numStatements, conn, containsPII)
+}
+
+// TestExplainGist is a randomized test for plan-gist logic.
+func TestExplainGist(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "the test is too slow")
+	skip.UnderRace(t, "the test is too slow")
+
+	ctx := context.Background()
+	rng, _ := randutil.NewTestRand()
+
+	const numStatements = 500
+	var gists []string
+
+	t.Run("main", func(t *testing.T) {
+		srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		runner := sqlutils.MakeSQLRunner(sqlDB)
+
+		// Set up some initial state.
+		setup := sqlsmith.Setups["seed"](rng)
+		setup = append(setup, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off;")
+		if rng.Float64() < 0.5 {
+			// In some cases have stats on the seed table.
+			setup = append(setup, "ANALYZE seed;")
+		}
+		runner.ExecMultiple(t, setup...)
+
+		// Given that statement timeout might apply differently between test
+		// runs with the same seed (e.g. because of different CPU load), we'll
+		// accumulate all successful statements for ease of reproduction.
+		var successfulStmts strings.Builder
+		logStmt := func(stmt string) {
+			successfulStmts.WriteString(stmt)
+			successfulStmts.WriteString(";\n")
+		}
+		for _, stmt := range setup {
+			logStmt(stmt)
+		}
+
+		smither, err := sqlsmith.NewSmither(sqlDB, rng, sqlsmith.SimpleNames())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer smither.Close()
+
+		// Always set the statement timeout - we actually execute the stmts on
+		// the best effort basis to evolve the state of the DB. Note that we do
+		// this after having set up the smither since it itself can issue some
+		// statements.
+		//
+		// Note that we don't include this statement into successfulStmts since
+		// all that are included there must have not timed out.
+		timeoutStmt := "SET statement_timeout = '0.1s';"
+		runner.Exec(t, timeoutStmt)
+
+		checkErr := func(err error, stmt string) {
+			if err != nil && strings.Contains(err.Error(), "internal error") {
+				// Ignore all errors except the internal ones.
+				for _, knownErr := range []string{
+					"ALTER TABLE: failed to type check the cast of",     // #114316
+					"invalid datum type given: RECORD, expected RECORD", // #117101
+					"expected equivalence dependants to be its closure", // #119045
+				} {
+					if strings.Contains(err.Error(), knownErr) {
+						// Don't fail the test on a set of known errors.
+						return
+					}
+				}
+				t.Log(successfulStmts.String())
+				t.Fatalf("%v: %s", err, stmt)
+			}
+		}
+
+		for i := 0; i < numStatements; i++ {
+			stmt := func() string {
+				for {
+					stmt := smither.Generate()
+					switch stmt {
+					case "BEGIN TRANSACTION", "COMMIT TRANSACTION", "ROLLBACK TRANSACTION":
+						// Ignore frequently generated statements that result in
+						// a syntax error with EXPLAIN.
+					default:
+						return stmt
+					}
+				}
+			}()
+
+			row := sqlDB.QueryRow("EXPLAIN (GIST) " + stmt)
+			if err = row.Err(); err != nil {
+				checkErr(err, stmt)
+				continue
+			}
+			var gist string
+			err = row.Scan(&gist)
+			if err != nil {
+				if !sqltestutils.IsClientSideQueryCanceledErr(err) {
+					t.Fatal(err)
+				}
+				// Short statement timeout might exceed planning time. Let's
+				// retry this statement with longer timeout.
+				if ok := func() bool {
+					runner.Exec(t, "SET statement_timeout = '1s'")
+					defer runner.Exec(t, timeoutStmt)
+					row = sqlDB.QueryRow("EXPLAIN (GIST) " + stmt)
+					if err = row.Err(); err != nil {
+						checkErr(err, stmt)
+						return false
+					}
+					err = row.Scan(&gist)
+					if err != nil {
+						t.Fatalf("when re-running EXPLAIN (GIST) with 1s timeout: %+v", err)
+					}
+					return true
+				}(); !ok {
+					continue
+				}
+			}
+			_, err = sqlDB.Exec("SELECT crdb_internal.decode_plan_gist($1);", gist)
+			if err != nil {
+				// We might be still in the process of cancelling the previous
+				// DROP operation - ignore this particular error.
+				if !errors.Is(err, catalog.ErrDescriptorDropped) {
+					t.Fatal(err)
+				}
+				continue
+			}
+			// Store the gist to be run against empty DB.
+			gists = append(gists, gist)
+
+			if shouldSkip := func() bool {
+				// Executing these statements is out of scope for this test
+				// (skipping them makes reproduction easier).
+				for _, toSkipPrefix := range []string{"BACKUP", "EXPORT", "IMPORT", "RESTORE"} {
+					if strings.HasPrefix(stmt, toSkipPrefix) {
+						return true
+					}
+				}
+				for _, toSkipSubstring := range []string{
+					"ALTER PRIMARY KEY", // #123017
+				} {
+					if strings.Contains(stmt, toSkipSubstring) {
+						return true
+					}
+				}
+				return false
+			}(); shouldSkip {
+				continue
+			}
+
+			// Execute the stmt with short timeout so that the table schema is
+			// modified. We do so in a separate goroutine to ensure that we fail
+			// the test if the stmt doesn't respect the timeout (if we didn't
+			// use a separate goroutine, then the main test goroutine would be
+			// blocked until either the stmt is completed or is canceled,
+			// possibly timing out the test run).
+			errCh := make(chan error)
+			go func() {
+				_, err := sqlDB.Exec(stmt)
+				errCh <- err
+			}()
+			select {
+			case err = <-errCh:
+				if err != nil {
+					checkErr(err, stmt)
+				} else {
+					logStmt(stmt)
+				}
+			case <-time.After(time.Minute):
+				t.Log(successfulStmts.String())
+				t.Fatalf("stmt wasn't canceled by statement_timeout of 0.1s - ran at least for 1m: %s", stmt)
+			}
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		runner := sqlutils.MakeSQLRunner(sqlDB)
+		for _, gist := range gists {
+			runner.Exec(t, "SELECT crdb_internal.decode_plan_gist($1);", gist)
+		}
+	})
 }
