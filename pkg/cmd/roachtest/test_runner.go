@@ -580,6 +580,10 @@ func (r *testRunner) runWorker(
 		}
 	}()
 
+	work.mu.Lock()
+	totalTestCount := work.count * len(work.mu.tests)
+	work.mu.Unlock()
+	failedTestCount := 0
 	// Loop until there's no more work in the pool, we get interrupted, or an
 	// error occurs.
 	for {
@@ -857,6 +861,7 @@ func (r *testRunner) runWorker(
 		msg := "test passed: %s (run %d)"
 		if t.Failed() {
 			msg = "test failed: %s (run %d)"
+			failedTestCount++
 		}
 		msg = fmt.Sprintf(msg, t.Name(), testToRun.runNum)
 		l.PrintfCtx(ctx, msg)
@@ -891,6 +896,11 @@ func (r *testRunner) runWorker(
 				c.Save(ctx, "cluster saved since --debug-always set", l)
 				c = nil
 			}
+		}
+
+		failureRate := float64(failedTestCount) / float64(totalTestCount)
+		if failureRate > roachtestflags.AutokillThreshold {
+			return errors.Errorf("failure rate %.2f exceeds limit %.2f", failureRate, roachtestflags.AutokillThreshold)
 		}
 	}
 }

@@ -357,6 +357,12 @@ var (
 		Usage: `Use SpotVM to run tests, If the provider does not support spotVM, it will be ignored`,
 	})
 
+	AutokillThreshold float64 = 1.0
+	_                         = registerRunFlag(&AutokillThreshold, FlagInfo{
+		Name:  "autokillThreshold",
+		Usage: `The threshold of a failed tests after which the nightlies will be auto-killed.`,
+	})
+
 	GlobalSeed int64 = randutil.NewPseudoSeed()
 	_                = registerRunFlag(&GlobalSeed, FlagInfo{
 		Name:  "global-seed",
