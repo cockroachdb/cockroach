@@ -201,7 +201,7 @@ func (ri *Inserter) InsertRow(
 			for i := range entries {
 				e := &entries[i]
 
-				if ri.Helper.Indexes[idx].ForcePut() {
+				if ri.Helper.Indexes[idx].ForcePut() || true {
 					// See the comment on (catalog.Index).ForcePut() for more details.
 					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV)
 				} else {
