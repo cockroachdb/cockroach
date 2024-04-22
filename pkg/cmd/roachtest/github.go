@@ -82,6 +82,26 @@ func generateHelpCommand(
 	}
 }
 
+func failuresAsErrorWithOwnership(failures []failure) *registry.ErrorWithOwnership {
+	var transientError rperrors.TransientError
+	var err registry.ErrorWithOwnership
+	if failuresMatchingError(failures, &transientError) {
+		err = registry.ErrorWithOwner(
+			registry.OwnerTestEng, transientError,
+			registry.WithTitleOverride(transientError.Cause),
+			registry.InfraFlake,
+		)
+
+		return &err
+	}
+
+	if errWithOwner := failuresSpecifyOwner(failures); errWithOwner != nil {
+		return errWithOwner
+	}
+
+	return nil
+}
+
 // postIssueCondition encapsulates a condition that causes issue
 // posting to be skipped. The `reason` field contains a textual
 // description as to why issue posting was skipped.
@@ -167,19 +187,12 @@ func (g *githubIssues) createPostRequest(
 	}
 
 	issueClusterName := ""
-	errWithOwnership := failuresSpecifyOwner(failures)
-	var transientError rperrors.TransientError
 	// If we find a failure that was labeled as a roachprod transient
 	// error, redirect that to Test Eng with the corresponding label as
 	// title override.
-	if failuresMatchingError(failures, &transientError) {
-		handleErrorWithOwnership(registry.ErrorWithOwner(
-			registry.OwnerTestEng, transientError,
-			registry.WithTitleOverride(transientError.Cause),
-			registry.InfraFlake,
-		))
-	} else if errWithOwnership != nil {
-		handleErrorWithOwnership(*errWithOwnership)
+	errWithOwner := failuresAsErrorWithOwnership(failures)
+	if errWithOwner != nil {
+		handleErrorWithOwnership(*errWithOwner)
 	}
 
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers
