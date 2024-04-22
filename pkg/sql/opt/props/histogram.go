@@ -429,6 +429,7 @@ func makeSpanFromInvertedSpan(invSpan inverted.Span) *constraint.Span {
 	var span constraint.Span
 	// The statistics use the Bytes type for the encoded key, so we use DBytes
 	// here.
+	// TODO(mgartner): Use tree.DEncodedKey here instead of tree.DBytes.
 	span.Init(
 		constraint.MakeKey(tree.NewDBytes(tree.DBytes(invSpan.Start))),
 		constraint.IncludeBoundary,

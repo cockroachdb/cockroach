@@ -757,8 +757,8 @@ func (s *ScanPrivate) IsFullIndexScan(md *opt.Metadata) bool {
 
 // IsInvertedScan returns true if the index being scanned is an inverted
 // index.
-func (s *ScanPrivate) IsInvertedScan() bool {
-	return s.InvertedConstraint != nil
+func (s *ScanPrivate) IsInvertedScan(md *opt.Metadata) bool {
+	return md.Table(s.Table).Index(s.Index).IsInverted()
 }
 
 // IsVirtualTable returns true if the table being scanned is a virtual table.
