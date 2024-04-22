@@ -129,7 +129,8 @@ func registerOnlineRestorePerf(r registry.Registry) {
 						// Takes 10 minutes on OR tests for some reason.
 						SkipPostValidations: registry.PostValidationReplicaDivergence,
 						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-							restoreStats := runRestore(ctx, t, c, sp, runOnline, runWorkload, useWorkarounds)
+							rd := makeRestoreDriver(t, c, sp)
+							restoreStats := runRestore(ctx, t, c, sp, rd, runOnline, runWorkload, useWorkarounds)
 							if runOnline {
 								require.NoError(t, postRestoreValidation(
 									ctx,
@@ -142,6 +143,7 @@ func registerOnlineRestorePerf(r registry.Registry) {
 							if runWorkload {
 								require.NoError(t, exportStats(
 									ctx,
+									rd,
 									restoreStats,
 								))
 							}
@@ -185,7 +187,11 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 					t, sp, defaultSeed, defaultFakeTime, "-online.trace",
 				)
 
-				runRestore(ctx, t, c, regRestoreSpecs, false /* runOnline */, true /* runWorkload */, false /* useWorkarounds */)
+				rd := makeRestoreDriver(t, c, sp)
+				runRestore(
+					ctx, t, c, regRestoreSpecs, rd,
+					false /* runOnline */, true /* runWorkload */, false, /* useWorkarounds */
+				)
 				details, err := c.RunWithDetails(
 					ctx,
 					t.L(),
@@ -196,7 +202,10 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 				regQueryTrace := details[0].Stdout
 
 				c.Wipe(ctx)
-				runRestore(ctx, t, c, onlineRestoreSpecs, true /* runOnline */, true /* runWorkload */, false /* useWorkarounds */)
+				runRestore(
+					ctx, t, c, onlineRestoreSpecs, rd,
+					true /* runOnline */, true /* runWorkload */, false, /* useWorkarounds */
+				)
 				details, err = c.RunWithDetails(
 					ctx,
 					t.L(),
@@ -290,11 +299,10 @@ func createStatCollector(
 // execution time and the timestamp we reach and maintain an "acceptable" p99
 // latency. We define an acceptable latency as within 1.25x of the latency
 // observed 1 minute after the download job completed.
-func exportStats(ctx context.Context, restoreStats restoreStats) error {
+func exportStats(ctx context.Context, rd restoreDriver, restoreStats restoreStats) error {
 	endTime := timeutil.Now()
 	latencyQueryKey := sqlServiceLatency.Query
 	statsCollector := restoreStats.collector
-	rd := restoreStats.restoreDriver
 	exportingStats, err := statsCollector.Exporter().Export(ctx, rd.c, rd.t, true, /* dryRun */
 		restoreStats.workloadStartTime,
 		endTime,
@@ -420,7 +428,6 @@ func initCorrectnessRestoreSpecs(
 }
 
 type restoreStats struct {
-	restoreDriver             restoreDriver
 	collector                 clusterstats.StatCollector
 	restoreStartTime          time.Time
 	restoreEndTime            time.Time
@@ -434,11 +441,11 @@ func runRestore(
 	t test.Test,
 	c cluster.Cluster,
 	sp restoreSpecs,
+	rd restoreDriver,
 	runOnline, runWorkload, useWorkarounds bool,
 ) restoreStats {
 	testStartTime := timeutil.Now()
 
-	rd := makeRestoreDriver(t, c, sp)
 	rd.prepareCluster(ctx)
 
 	statsCollector, err := createStatCollector(ctx, rd)
@@ -541,7 +548,6 @@ func runRestore(
 		workloadEndTime = timeutil.Now()
 	}
 	return restoreStats{
-		restoreDriver:             rd,
 		collector:                 statsCollector,
 		restoreStartTime:          restoreStartTime,
 		restoreEndTime:            restoreEndTime,
