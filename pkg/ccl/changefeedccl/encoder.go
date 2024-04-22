@@ -42,6 +42,7 @@ type Encoder interface {
 }
 
 func getEncoder(
+	ctx context.Context,
 	opts changefeedbase.EncodingOptions,
 	targets changefeedbase.Targets,
 	encodeForQuery bool,
@@ -50,7 +51,7 @@ func getEncoder(
 ) (Encoder, error) {
 	switch opts.Format {
 	case changefeedbase.OptFormatJSON:
-		return makeJSONEncoder(jsonEncoderOptions{EncodingOptions: opts, encodeForQuery: encodeForQuery})
+		return makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts, encodeForQuery: encodeForQuery})
 	case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
 		return newConfluentAvroEncoder(opts, targets, p, sliMetrics)
 	case changefeedbase.OptFormatCSV:
