@@ -304,6 +304,12 @@ var (
 			run at least one test per prefix.`,
 	})
 
+	AutoKillThreshold float64 = 1.0
+	_                         = registerRunFlag(&AutoKillThreshold, FlagInfo{
+		Name:  "auto-kill-threshold",
+		Usage: `Percentage of failed tests before all remaining tests are automatically terminated.`,
+	})
+
 	GlobalSeed int64 = randutil.NewPseudoSeed()
 	_                = registerRunFlag(&GlobalSeed, FlagInfo{
 		Name:  "global-seed",
