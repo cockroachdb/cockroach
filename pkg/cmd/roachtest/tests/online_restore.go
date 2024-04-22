@@ -159,7 +159,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 		backup: makeRestoringBackupSpecs(backupSpecs{
 			nonRevisionHistory: true,
 			version:            fixtureFromMasterVersion,
-			workload:           tpccRestore{opts: tpccRestoreOptions{warehouses: 10, workers: 1, waitFraction: 0}}}),
+			workload:           tpccRestore{opts: tpccRestoreOptions{warehouses: 10, workers: 1, waitFraction: 0, maxOps: 1000}}}),
 		timeout:                15 * time.Minute,
 		suites:                 registry.Suites(registry.Nightly),
 		restoreUptoIncremental: 1,
@@ -177,7 +177,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 			SkipPostValidations: registry.PostValidationReplicaDivergence,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				defaultSeed := crdbworkload.NewUint64RandomSeed().Seed()
-				defaultFakeTime := uint32(timeutil.Now().Unix())
+				var defaultFakeTime uint32 = 1713818229 // Set to a fixed value for reproducibility
 				regRestoreSpecs, regWorkload := initCorrectnessRestoreSpecs(
 					t, sp, defaultSeed, defaultFakeTime, "-reg.trace",
 				)
@@ -185,7 +185,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 					t, sp, defaultSeed, defaultFakeTime, "-online.trace",
 				)
 
-				runRestore(ctx, t, c, regRestoreSpecs, false, true, false)
+				runRestore(ctx, t, c, regRestoreSpecs, false /* runOnline */, true /* runWorkload */, false /* useWorkarounds */)
 				details, err := c.RunWithDetails(
 					ctx,
 					t.L(),
@@ -196,7 +196,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 				regQueryTrace := details[0].Stdout
 
 				c.Wipe(ctx)
-				runRestore(ctx, t, c, onlineRestoreSpecs, true, true, false)
+				runRestore(ctx, t, c, onlineRestoreSpecs, true /* runOnline */, true /* runWorkload */, false /* useWorkarounds */)
 				details, err = c.RunWithDetails(
 					ctx,
 					t.L(),
