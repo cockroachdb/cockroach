@@ -30,6 +30,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -1188,6 +1190,7 @@ func (r *testRunner) runTest(
 			}
 		}()
 
+		grafanaAnnotateTestStart(runCtx, t, c)
 		// This is the call to actually run the test.
 		s.Run(runCtx, t, c)
 	}()
@@ -1210,6 +1213,11 @@ func (r *testRunner) runTest(
 			s = "with failure(s)"
 		}
 		t.L().Printf("test completed %s", s)
+		annotationText := fmt.Sprintf("%s completed %s", t.Name(), s)
+		// Attempt to annotate the test completion on Grafana.
+		if err := c.AddGrafanaAnnotation(ctx, t.L(), grafana.AddAnnotationRequest{Text: annotationText}); err != nil {
+			t.L().Printf(errors.Wrap(err, "error adding annotation for test end").Error())
+		}
 	case <-time.After(timeout):
 		// NB: We're adding the timeout failure intentionally without cancelling the context
 		// to capture as much state as possible during artifact collection.
@@ -1825,4 +1833,19 @@ func testTimeout(spec *registry.TestSpec) time.Duration {
 		timeout = d
 	}
 	return timeout
+}
+
+// Annotate the start of the test in Grafana and the branch if applicable.
+func grafanaAnnotateTestStart(ctx context.Context, t test.Test, c cluster.Cluster) {
+	const BuildBranch = "TC_BUILD_BRANCH"
+	text := fmt.Sprintf("Starting %s", t.Name())
+	var tags []string
+	branch := os.Getenv(BuildBranch)
+	if branch != "" {
+		tags = []string{branch}
+	}
+
+	if err := c.AddGrafanaAnnotation(ctx, t.L(), grafana.AddAnnotationRequest{Text: text, Tags: tags}); err != nil {
+		t.L().Printf(errors.Wrap(err, "error adding annotation for test start").Error())
+	}
 }
