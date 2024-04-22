@@ -184,7 +184,7 @@ VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SEL
 ON CONFLICT ("role", "member")`
 	if n.adminOption {
 		// admin option: true, set "isAdmin" even if the membership exists.
-		memberStmt += ` DO UPDATE SET "isAdmin" = true`
+		memberStmt += ` DO UPDATE SET "isAdmin" = true WHERE role_members."isAdmin" IS NOT true`
 	} else {
 		// admin option: false, do not clear it from existing memberships.
 		memberStmt += ` DO NOTHING`
