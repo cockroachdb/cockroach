@@ -860,7 +860,21 @@ func (tpcc tpccRestore) fixtureDir() string {
 }
 
 func (tpcc tpccRestore) String() string {
-	return fmt.Sprintf("tpc-c/%d", tpcc.opts.warehouses)
+	var builder strings.Builder
+	builder.WriteString("tpcc/")
+	switch tpcc.opts.warehouses {
+	case 10:
+		builder.WriteString("150MB")
+	case 500:
+		builder.WriteString("8GB")
+	case 7000:
+		builder.WriteString("115GB")
+	case 25000:
+		builder.WriteString("400GB")
+	default:
+		panic("tpcc warehouse count not recognized")
+	}
+	return builder.String()
 }
 
 func (tpcc tpccRestore) DatabaseName() string {
