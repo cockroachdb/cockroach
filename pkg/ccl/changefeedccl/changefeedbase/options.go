@@ -106,6 +106,7 @@ const (
 	OptLaggingRangesThreshold             = `lagging_ranges_threshold`
 	OptLaggingRangesPollingInterval       = `lagging_ranges_polling_interval`
 	OptIgnoreDisableChangefeedReplication = `ignore_disable_changefeed_replication`
+	OptStringifyJSONValues                = `stringify_json_values`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -368,6 +369,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptLaggingRangesThreshold:             durationOption,
 	OptLaggingRangesPollingInterval:       durationOption,
 	OptIgnoreDisableChangefeedReplication: flagOption,
+	OptStringifyJSONValues:                flagOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -766,18 +768,19 @@ func (s StatementOptions) GetCanHandle() CanHandle {
 // EncodingOptions describe how events are encoded when
 // sent to the sink.
 type EncodingOptions struct {
-	Format            FormatType
-	VirtualColumns    VirtualColumnVisibility
-	Envelope          EnvelopeType
-	KeyInValue        bool
-	TopicInValue      bool
-	UpdatedTimestamps bool
-	MVCCTimestamps    bool
-	Diff              bool
-	AvroSchemaPrefix  string
-	SchemaRegistryURI string
-	Compression       string
-	CustomKeyColumn   string
+	Format              FormatType
+	VirtualColumns      VirtualColumnVisibility
+	Envelope            EnvelopeType
+	KeyInValue          bool
+	TopicInValue        bool
+	UpdatedTimestamps   bool
+	MVCCTimestamps      bool
+	Diff                bool
+	StringifyJsonValues bool
+	AvroSchemaPrefix    string
+	SchemaRegistryURI   string
+	Compression         string
+	CustomKeyColumn     string
 }
 
 // GetEncodingOptions populates and validates an EncodingOptions.
@@ -819,6 +822,7 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	_, o.UpdatedTimestamps = s.m[OptUpdatedTimestamps]
 	_, o.MVCCTimestamps = s.m[OptMVCCTimestamps]
 	_, o.Diff = s.m[OptDiff]
+	_, o.StringifyJsonValues = s.m[OptStringifyJSONValues]
 
 	o.SchemaRegistryURI = s.m[OptConfluentSchemaRegistry]
 	o.AvroSchemaPrefix = s.m[OptAvroSchemaPrefix]

@@ -100,7 +100,7 @@ func makeJSONEncoder(opts jsonEncoderOptions) (*jsonEncoder, error) {
 				splitPrevRowVersion: isPrev && opts.encodeForQuery && opts.Envelope != changefeedbase.OptEnvelopeBare,
 			}
 			return getCachedOrCreate(key, versionCache, func() interface{} {
-				return &versionEncoder{}
+				return &versionEncoder{stringifyJSONValues: opts.StringifyJsonValues}
 			}).(*versionEncoder)
 		},
 	}
@@ -131,7 +131,8 @@ func makeJSONEncoder(opts jsonEncoderOptions) (*jsonEncoder, error) {
 
 // versionEncoder memoizes version specific encoding state.
 type versionEncoder struct {
-	valueBuilder *json.FixedKeysObjectBuilder
+	stringifyJSONValues bool
+	valueBuilder        *json.FixedKeysObjectBuilder
 }
 
 // EncodeKey implements the Encoder interface.
@@ -213,6 +214,20 @@ func (e *versionEncoder) rowAsGoNative(
 		if err != nil {
 			return err
 		}
+
+		if e.stringifyJSONValues {
+			// if a value is a JSON, stringify it. this should not introduce much additional cost as we'd have to do it
+			// anyway down the line.
+			d = tree.UnwrapDOidWrapper(d)
+			switch d.(type) {
+			case *tree.DJSON:
+				bs := bytes.NewBuffer(make([]byte, 0, d.Size()))
+				j.Format(bs)
+				j = json.FromString(bs.String())
+			}
+
+		}
+
 		return e.valueBuilder.Set(col.Name, j)
 	}); err != nil {
 		return nil, err
@@ -465,7 +480,7 @@ func init() {
 	}
 
 	utilccl.RegisterCCLBuiltin("crdb_internal.to_json_as_changefeed_with_flags",
-		`Encodes a tuple the way a changefeed would output it if it were inserted as a row or emitted by a changefeed expression, and returns the raw bytes. 
+		`Encodes a tuple the way a changefeed would output it if it were inserted as a row or emitted by a changefeed expression, and returns the raw bytes.
 		Flags such as 'diff' modify the encoding as though specified in the WITH portion of a changefeed.`,
 		overload)
 }
