@@ -408,13 +408,14 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	r := s.JobRegistry().(*Registry)
 
-	RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+	cleanup := TestingRegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				return nil
 			},
 		}
 	}, UsesTenantCostControl)
+	defer cleanup()
 
 	record := &Record{
 		Details:  jobspb.ImportDetails{},
@@ -585,13 +586,14 @@ func TestBatchJobsCreation(t *testing.T) {
 				defer s.Stopper().Stop(ctx)
 				r := s.JobRegistry().(*Registry)
 
-				RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+				cleanup := TestingRegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
 					return jobstest.FakeResumer{
 						OnResume: func(ctx context.Context) error {
 							return nil
 						},
 					}
 				}, UsesTenantCostControl)
+				defer cleanup()
 
 				// Create a batch of job specifications.
 				var records []*Record
@@ -769,12 +771,6 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		var sqlDB *gosql.DB
 		var srv serverutils.TestServerInterface
 		srv, sqlDB, bti.kvDB = serverutils.StartServer(t, args)
-		cleanup := func() {
-			close(bti.errCh)
-			close(bti.resumeCh)
-			close(bti.failOrCancelCh)
-			srv.Stopper().Stop(ctx)
-		}
 		bti.s = srv.ApplicationLayer()
 		bti.idb = bti.s.InternalDB().(isql.DB)
 		bti.tdb = sqlutils.MakeSQLRunner(sqlDB)
@@ -787,7 +783,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		bti.jobMetrics = bti.registry.metrics.JobMetrics[jobspb.TypeImport]
 		bti.adopted = bti.registry.metrics.AdoptIterations
 		bti.resumed = bti.registry.metrics.ResumedJobs
-		RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+		registryCleanup := TestingRegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
 			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
 					if bti.done.Load().(bool) {
@@ -815,6 +811,13 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 				},
 			}
 		}, UsesTenantCostControl)
+		cleanup := func() {
+			close(bti.errCh)
+			close(bti.resumeCh)
+			close(bti.failOrCancelCh)
+			srv.Stopper().Stop(ctx)
+			registryCleanup()
+		}
 		return cleanup
 	}
 
@@ -1114,7 +1117,7 @@ func TestExponentialBackoffSettings(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 			tdb = sqlutils.MakeSQLRunner(sdb)
 			// Create and run a dummy job.
-			RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
+			cleanup := TestingRegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
 				return jobstest.FakeResumer{}
 			}, UsesTenantCostControl)
 			registry := s.JobRegistry().(*Registry)
@@ -1130,6 +1133,7 @@ func TestExponentialBackoffSettings(t *testing.T) {
 				}, id, txn)
 				return err
 			}))
+			defer cleanup()
 
 			// Wait for the job to be succeed.
 			testutils.SucceedsSoon(t, func() error {
@@ -1241,7 +1245,7 @@ func BenchmarkRunEmptyJob(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 	defer ResetConstructors()
-	RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+	cleanup := TestingRegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				return nil
@@ -1251,6 +1255,7 @@ func BenchmarkRunEmptyJob(b *testing.B) {
 			},
 		}
 	}, UsesTenantCostControl)
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -1283,7 +1288,7 @@ func TestDeleteTerminalJobByID(t *testing.T) {
 	defer ResetConstructors()
 
 	errCh := make(chan error)
-	RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+	cleanup := TestingRegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				select {
@@ -1298,6 +1303,7 @@ func TestDeleteTerminalJobByID(t *testing.T) {
 			},
 		}
 	}, UsesTenantCostControl)
+	defer cleanup()
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -1394,7 +1400,7 @@ func TestRunWithoutLoop(t *testing.T) {
 	defer ResetConstructors()
 	var shouldFailCounter int64
 	var ran, failure int64
-	RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+	cleanup := TestingRegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
 		var successDone, failureDone int64
 		shouldFail := atomic.AddInt64(&shouldFailCounter, 1)%2 == 0
 		maybeIncrementCounter := func(check, counter *int64) {
@@ -1416,6 +1422,7 @@ func TestRunWithoutLoop(t *testing.T) {
 			},
 		}
 	}, UsesTenantCostControl)
+	defer cleanup()
 
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
@@ -1481,7 +1488,7 @@ func TestJobIdleness(t *testing.T) {
 	resumeStartChan := make(chan struct{})
 	resumeErrChan := make(chan error)
 	defer close(resumeErrChan)
-	RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
+	cleanup := TestingRegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				resumeStartChan <- struct{}{}
@@ -1489,6 +1496,7 @@ func TestJobIdleness(t *testing.T) {
 			},
 		}
 	}, UsesTenantCostControl)
+	defer cleanup()
 
 	currentlyIdle := r.MetricsStruct().JobMetrics[jobspb.TypeImport].CurrentlyIdle
 
@@ -1707,7 +1715,7 @@ func TestGetClaimedResumerFromRegistry(t *testing.T) {
 	resumeErrChan := make(chan error)
 	defer close(resumeErrChan)
 	var counter int
-	RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
+	cleanup := TestingRegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				resumeStartChan <- struct{}{}
@@ -1719,6 +1727,7 @@ func TestGetClaimedResumerFromRegistry(t *testing.T) {
 			},
 		}
 	}, UsesTenantCostControl)
+	defer cleanup()
 
 	createJob := func() *Job {
 		jobID := r.MakeJobID()

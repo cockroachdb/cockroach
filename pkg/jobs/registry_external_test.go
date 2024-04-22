@@ -372,9 +372,9 @@ func TestGCDurationControl(t *testing.T) {
 		},
 	}
 
-	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, cs *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, cs *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 	s, sqlDB, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
@@ -437,7 +437,7 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 		return event{id: j.ID(), resume: make(chan error)}
 	}
 	evChan := make(chan event)
-	jobs.RegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, cs *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, cs *cluster.Settings) jobs.Resumer {
 		execFn := func(ctx context.Context) error {
 			ev := mkEvent(j)
 			select {
@@ -456,7 +456,7 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 			OnResume:     execFn,
 			FailOrCancel: execFn,
 		}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -771,9 +771,9 @@ func TestWaitWithRetryableError(t *testing.T) {
 		},
 	}
 
-	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, cs *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, cs *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(ctx)
 	ts := s.ApplicationLayer()

@@ -5909,12 +5909,12 @@ func TestBatchedInsertStats(t *testing.T) {
 
 	unblockCh := make(chan struct{})
 	doneCh := make(chan struct{})
-	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return &fakeResumer{
 			unblockCh: unblockCh,
 			doneCh:    doneCh,
 		}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 	params := base.TestServerArgs{Knobs: base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}}

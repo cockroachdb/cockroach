@@ -1485,6 +1485,30 @@ func TestingClearConstructors() func() {
 
 }
 
+// TestingRegisterConstructor is like RegisterConstructor but returns a cleanup function
+// resets the registration for the given type.
+func TestingRegisterConstructor(typ jobspb.Type, fn Constructor, opts ...RegisterOption) func() {
+	var cleanupFn func()
+	if origConstructorFn, found := globalMu.constructors[typ]; found {
+		origOpts := globalMu.options[typ]
+		cleanupFn = func() {
+			globalMu.Lock()
+			defer globalMu.Unlock()
+			globalMu.constructors[typ] = origConstructorFn
+			globalMu.options[typ] = origOpts
+		}
+	} else {
+		cleanupFn = func() {
+			globalMu.Lock()
+			defer globalMu.Unlock()
+			delete(globalMu.constructors, typ)
+			delete(globalMu.options, typ)
+		}
+	}
+	registerConstructorLocked(typ, fn, opts...)
+	return cleanupFn
+}
+
 // RegisterConstructor registers a Resumer constructor for a certain job type.
 //
 // NOTE: You must pass either jobs.UsesTenantCostControl or
@@ -1495,7 +1519,10 @@ func TestingClearConstructors() func() {
 func RegisterConstructor(typ jobspb.Type, fn Constructor, opts ...RegisterOption) {
 	globalMu.Lock()
 	defer globalMu.Unlock()
+	registerConstructorLocked(typ, fn, opts...)
+}
 
+func registerConstructorLocked(typ jobspb.Type, fn Constructor, opts ...RegisterOption) {
 	globalMu.constructors[typ] = fn
 
 	// Apply all options to the struct.
