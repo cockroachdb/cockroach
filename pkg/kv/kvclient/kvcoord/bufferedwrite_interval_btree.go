@@ -2,13 +2,8 @@
 
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvcoord
 
@@ -29,7 +24,7 @@ const (
 	minItems = degree - 1
 )
 
-// cmp returns a value indicating the sort order relationship between
+// compare returns a value indicating the sort order relationship between
 // a and b. The comparison is performed lexicographically on
 //
 //	(a.Key(), a.EndKey(), a.ID())
@@ -40,12 +35,12 @@ const (
 //
 // tuples.
 //
-// Given c = cmp(a, b):
+// Given c = compare(a, b):
 //
 //	c == -1  if (a.Key(), a.EndKey(), a.ID()) <  (b.Key(), b.EndKey(), b.ID())
 //	c ==  0  if (a.Key(), a.EndKey(), a.ID()) == (b.Key(), b.EndKey(), b.ID())
 //	c ==  1  if (a.Key(), a.EndKey(), a.ID()) >  (b.Key(), b.EndKey(), b.ID())
-func cmp(a, b *bufferedWrite) int {
+func compare(a, b *bufferedWrite) int {
 	c := bytes.Compare(a.Key(), b.Key())
 	if c != 0 {
 		return c
@@ -331,7 +326,7 @@ func (n *node) find(item *bufferedWrite) (index int, found bool) {
 	for i < j {
 		h := int(uint(i+j) >> 1) // avoid overflow when computing h
 		// i ≤ h < j
-		v := cmp(item, n.items[h])
+		v := compare(item, n.items[h])
 		if v == 0 {
 			return h, true
 		} else if v > 0 {
@@ -415,10 +410,10 @@ func (n *node) insert(item *bufferedWrite) (replaced, newBound bool) {
 		splitLa, splitNode := mut(&n.children[i]).split(maxItems / 2)
 		n.insertAt(i, splitLa, splitNode)
 
-		switch cmp := cmp(item, n.items[i]); {
-		case cmp < 0:
+		switch v := compare(item, n.items[i]); {
+		case v < 0:
 			// no change, we want first split node
-		case cmp > 0:
+		case v > 0:
 			i++ // we want second split node
 		default:
 			n.items[i] = item
