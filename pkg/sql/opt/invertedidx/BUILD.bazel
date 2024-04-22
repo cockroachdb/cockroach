@@ -35,6 +35,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/encoding",
         "//pkg/util/json",
+        "//pkg/util/trigram",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_golang_geo//r1",
         "@com_github_golang_geo//s1",
@@ -47,12 +48,13 @@ go_test(
     size = "small",
     srcs = [
         "geo_test.go",
+        "inverted_index_expr_test.go",
         "json_array_test.go",
         "trigram_test.go",
         "tsearch_test.go",
     ],
+    embed = [":invertedidx"],
     deps = [
-        ":invertedidx",
         "//pkg/geo",
         "//pkg/geo/geoindex",
         "//pkg/geo/geopb",
