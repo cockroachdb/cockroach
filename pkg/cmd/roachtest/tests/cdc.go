@@ -712,8 +712,6 @@ func (ct *cdcTester) startGrafana() {
 		WithNodeExporter(ct.crdbNodes.InstallNodes()).
 		WithGrafanaDashboardJSON(grafana.ChangefeedRoachtestGrafanaDashboardJSON)
 
-	cfg.Grafana.Enabled = true
-
 	ct.promCfg = cfg
 
 	if !ct.t.SkipInit() {
