@@ -3940,8 +3940,9 @@ func (sm *StoreMetrics) getCounterForRangeLogEventType(
 }
 
 type pebbleCategoryIterMetrics struct {
-	IterBlockBytes        *metric.Gauge
-	IterBlockBytesInCache *metric.Gauge
+	IterBlockBytes          *metric.Gauge
+	IterBlockBytesInCache   *metric.Gauge
+	IterBlockReadLatencySum *metric.Gauge
 }
 
 func makePebbleCategorizedIterMetrics(category sstable.Category) *pebbleCategoryIterMetrics {
@@ -3957,9 +3958,16 @@ func makePebbleCategorizedIterMetrics(category sstable.Category) *pebbleCategory
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaBlockReadLatencySum := metric.Metadata{
+		Name:        fmt.Sprintf("storage.iterator.category-%s.block-load.latency-sum", category),
+		Help:        "Cumulative latency for loading bytes not in the block cache, by storage sstable iterators",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	return &pebbleCategoryIterMetrics{
-		IterBlockBytes:        metric.NewGauge(metaBlockBytes),
-		IterBlockBytesInCache: metric.NewGauge(metaBlockBytesInCache),
+		IterBlockBytes:          metric.NewGauge(metaBlockBytes),
+		IterBlockBytesInCache:   metric.NewGauge(metaBlockBytesInCache),
+		IterBlockReadLatencySum: metric.NewGauge(metaBlockReadLatencySum),
 	}
 }
 
@@ -3969,6 +3977,7 @@ func (m *pebbleCategoryIterMetrics) MetricStruct() {}
 func (m *pebbleCategoryIterMetrics) update(stats sstable.CategoryStats) {
 	m.IterBlockBytes.Update(int64(stats.BlockBytes))
 	m.IterBlockBytesInCache.Update(int64(stats.BlockBytesInCache))
+	m.IterBlockReadLatencySum.Update(int64(stats.BlockReadDuration))
 }
 
 type pebbleCategoryIterMetricsContainer struct {

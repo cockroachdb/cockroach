@@ -2883,7 +2883,7 @@ func (c *clusterImpl) AddGrafanaAnnotation(
 	// could add a lot of noise to the logs.
 	if len(c.grafanaTags) == 0 {
 		c.disableGrafanaAnnotations.Store(true)
-		return errors.New("grafana is not available for this cluster (disabled for the rest of the test)")
+		return errors.New("error adding grafana annotation: grafana is not available for this cluster (disabled for the rest of the test)")
 	}
 	// Add grafanaTags so we can filter annotations by test or by cluster.
 	req.Tags = append(req.Tags, c.grafanaTags...)
@@ -2893,7 +2893,7 @@ func (c *clusterImpl) AddGrafanaAnnotation(
 	const CentralizedGrafanaHost = "grafana.testeng.crdb.io"
 
 	// The centralized grafana instance requires auth through Google IDP.
-	return roachprod.AddGrafanaAnnotation(ctx, CentralizedGrafanaHost, true /* secure */, req)
+	return errors.Wrap(roachprod.AddGrafanaAnnotation(ctx, CentralizedGrafanaHost, true /* secure */, req), "error adding grafana annotation")
 }
 
 // AddInternalGrafanaAnnotation creates a grafana annotation for the internal grafana

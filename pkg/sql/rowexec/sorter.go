@@ -164,6 +164,9 @@ func newSorter(
 		// O(n*log(k)) and a worst-case space complexity of O(k).
 		return newSortTopKProcessor(ctx, flowCtx, processorID, spec, input, post, uint64(spec.Limit))
 	}
+	if spec.Limit != 0 && (post.Limit == 0 || post.Limit > uint64(spec.Limit)) {
+		post.Limit = uint64(spec.Limit)
+	}
 	// Ordering match length is specified. We will be able to use existing
 	// ordering in order to avoid loading all the rows into memory. If we're
 	// scanning an index with a prefix matching an ordering prefix, we can only
