@@ -42,7 +42,7 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 		pgURL, testuserCleanupFunc := sqlutils.PGUrlWithOptionalClientCerts(
 			t, s.ServingSQLAddr(), username,
 			url.UserPassword(username, username),
-			false, /* withClientCerts */
+			false /* withClientCerts */, "",
 		)
 		pgURL.Path = dbName
 		db, err := gosql.Open("postgres", pgURL.String())

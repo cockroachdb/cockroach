@@ -860,7 +860,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 			require.NoError(t, err)
 
 			userURL, cleanup2 := sqlutils.PGUrlWithOptionalClientCerts(t, c.ServingSQLAddr(), t.Name(),
-				url.UserPassword(tc.username, "a"), false)
+				url.UserPassword(tc.username, "a"), false, "")
 			defer cleanup2()
 
 			_, err := c.RunWithCapture(fmt.Sprintf("userfile upload %s %s --url=%s",

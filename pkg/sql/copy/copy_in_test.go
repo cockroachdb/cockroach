@@ -685,7 +685,7 @@ func TestCopyInReleasesLeases(t *testing.T) {
 
 	userURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
 		s.ServingSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"),
-		false /* withClientCerts */)
+		false /* withClientCerts */, "")
 	defer cleanupFn()
 	conn, err := sqltestutils.PGXConn(t, userURL)
 	require.NoError(t, err)

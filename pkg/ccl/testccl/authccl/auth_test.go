@@ -298,7 +298,7 @@ func jwtRunTest(t *testing.T, insecure bool) {
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
 						t, s.ServingSQLAddr(), t.Name(), url.User(user),
-						forceCerts || user == username.RootUser || user == username.TestUser /* withClientCerts */)
+						forceCerts || user == username.RootUser || user == username.TestUser /* withClientCerts */, "")
 					defer cleanupFn()
 
 					var host, port string
