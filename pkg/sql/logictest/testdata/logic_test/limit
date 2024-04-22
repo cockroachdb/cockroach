@@ -362,3 +362,22 @@ SELECT oid::INT, typname FROM pg_type ORDER BY oid LIMIT 3
 # Regression test for limit hint overflowing int64 range and becoming negative.
 statement ok
 SELECT * FROM t65171 WHERE x = 1 OFFSET 1 LIMIT 9223372036854775807
+
+# Regression test for #122748. Do not drop the limit in the row-based engine when
+# a partial sort is needed.
+statement ok
+CREATE TABLE t122748 (a int, b int, INDEX t_b_idx (b ASC) STORING (a));
+INSERT INTO t122748 VALUES
+  (1, 2),
+  (3, 4),
+  (5, 6)
+
+query I
+SELECT count(*) AS col1
+FROM t122748
+GROUP BY a, b
+ORDER BY b, a DESC
+LIMIT 2
+----
+1
+1
