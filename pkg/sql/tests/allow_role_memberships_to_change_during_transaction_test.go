@@ -43,6 +43,7 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 			t, s.ServingSQLAddr(), username,
 			url.UserPassword(username, username),
 			false, /* withClientCerts */
+			"",
 		)
 		pgURL.Path = dbName
 		db, err := gosql.Open("postgres", pgURL.String())
