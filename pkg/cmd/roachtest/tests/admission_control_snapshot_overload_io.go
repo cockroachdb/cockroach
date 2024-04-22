@@ -32,7 +32,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.ManualOnly,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(8), spec.VolumeSize(1024)),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(4), spec.VolumeSize(1000)),
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          12 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -40,12 +40,14 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)
 			}
 
+			compactionConcurrencyEnv := install.EnvOption{"COCKROACH_CONCURRENT_COMPACTIONS=1"}
+
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := crdbNodes + 1
 			for i := 1; i <= crdbNodes; i++ {
 				startOpts := option.NewStartOpts(option.NoBackupSchedule)
 				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--attrs=n%d", i))
-				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
+				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(compactionConcurrencyEnv), c.Node(i))
 			}
 
 			db := c.Conn(ctx, t.L(), crdbNodes)
@@ -59,16 +61,16 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 				// Ensure ingest splits and excises are enabled. (Enabled by default in v24.1+)
 				if _, err := db.ExecContext(
 					ctx, "SET CLUSTER SETTING kv.snapshot_receiver.excise.enabled = 'false'"); err != nil {
-					t.Fatalf("failed to set storage.ingest_split.enabled: %v", err)
+					t.Fatalf("failed to set kv.snapshot_receiver.excise.enabled: %v", err)
 				}
 				if _, err := db.ExecContext(
 					ctx, "SET CLUSTER SETTING storage.ingest_split.enabled = 'false'"); err != nil {
 					t.Fatalf("failed to set storage.ingest_split.enabled: %v", err)
 				}
 
-				// Set high snapshot rates.
+				// Ensure default snapshot rebalance rate.
 				if _, err := db.ExecContext(
-					ctx, "SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '256MiB'"); err != nil {
+					ctx, "SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '32MiB'"); err != nil {
 					t.Fatalf("failed to set kv.snapshot_rebalance.max_rate: %v", err)
 				}
 			}
@@ -92,7 +94,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", time.Hour))
 			c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
 				"./cockroach workload init kv --drop --insert-count=40000000 "+
-					"--max-block-bytes=12288 --min-block-bytes=12288 {pgurl:1}")
+					"--max-block-bytes=4096 --min-block-bytes=4096 {pgurl:1}")
 
 			// Kill node 3.
 			t.Status(fmt.Sprintf("killing node 3... (<%s)", time.Minute))
@@ -101,8 +103,8 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, option.WithNodes(c.Node(crdbNodes+1)),
-					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --splits=1000 --histograms=%s/stats.json --read-percent=50 --max-block-bytes=12288 --min-block-bytes=12288 --max-rate=400 --concurrency=512 {pgurl:1}",
+				c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
+					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --splits=1000 --histograms=%s/stats.json --read-percent=50 --max-block-bytes=4096 --min-block-bytes=4096 --max-rate=400 --concurrency=1024 {pgurl:1}",
 						t.PerfArtifactsDir()))
 				return nil
 			})
@@ -112,8 +114,8 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			time.Sleep(time.Hour * 2)
 
 			// Start node 3.
-			t.Status(fmt.Sprintf("start node 3... (<%s)", time.Minute))
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
+			t.Status(fmt.Sprintf("starting node 3... (<%s)", time.Minute))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(compactionConcurrencyEnv), c.Node(3))
 
 			// TODO(aaditya)
 			// 	1. We need to assert on sublevel count and sql latency while the ingest is taking place
