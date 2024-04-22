@@ -5224,7 +5224,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 	done := make(chan struct{})
 	defer close(done)
 
-	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return fakeResumer{
 			OnResume: func(ctx context.Context) error {
 				<-done
@@ -5235,7 +5235,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 				return nil
 			},
 		}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 
 	startLeasedJob := func(t *testing.T, record jobs.Record) *jobs.StartableJob {
 		job, err := jobs.TestingCreateAndStartJob(

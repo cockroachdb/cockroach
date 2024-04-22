@@ -188,7 +188,7 @@ type registryTestSuite struct {
 
 var _ jobs.TraceableJob = (*jobstest.FakeResumer)(nil)
 
-func (rts *registryTestSuite) setUp(t *testing.T) {
+func (rts *registryTestSuite) setUp(t *testing.T) func() {
 	rts.ctx = context.Background()
 
 	var args base.TestServerArgs
@@ -238,7 +238,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.failOrCancelCheckCh = make(chan struct{})
 	rts.sqlDB.Exec(t, "CREATE USER testuser")
 
-	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+	return jobs.TestingRegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
 			TraceRealSpan: rts.traceRealSpan,
 			OnResume: func(ctx context.Context) error {
@@ -365,7 +365,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("normal success", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
@@ -387,7 +387,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("create separately success", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
@@ -408,7 +408,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("pause running", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
@@ -442,7 +442,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("pause reverting", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
@@ -481,7 +481,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("cancel running", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
 		if err != nil {
@@ -508,7 +508,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("cancel reverting", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
 		if err != nil {
@@ -533,7 +533,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("cancel pause running", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
@@ -563,7 +563,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("cancel pause reverting", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
@@ -603,7 +603,7 @@ func TestRegistryLifecycle(t *testing.T) {
 	// Verify that pause and cancel in a rollback do nothing.
 	t.Run("rollback", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 		job, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
 		if err != nil {
@@ -700,7 +700,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("failed running", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
@@ -738,7 +738,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			}
 			return nil
 		}}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		injectFailures.Store(true)
@@ -798,7 +798,7 @@ func TestRegistryLifecycle(t *testing.T) {
 	// It would not make sense to revert a job in this scenario.
 	t.Run("fail marking success", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		// Inject an error in the update to move the job to "succeeded" one time.
@@ -853,7 +853,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			}
 			return nil
 		}}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		// Make marking success fail.
@@ -898,7 +898,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			}
 			completeCh <- struct{}{}
 		}}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 		pauseUnpauseJob := func(expectedNumFiles int) {
 			j, err := jobs.TestingCreateAndStartJob(ctx, rts.registry, rts.idb(), rts.mockJob)
@@ -943,7 +943,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			}
 			completeCh <- struct{}{}
 		}}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		runJobAndFail := func(expectedNumFiles int) {
@@ -982,7 +982,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			}
 			completeCh <- struct{}{}
 		}}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
@@ -1014,11 +1014,11 @@ func TestRegistryLifecycle(t *testing.T) {
 	t.Run("job with created by fields", func(t *testing.T) {
 		createdByType := "internal_test"
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 
 		resumerJob := make(chan *jobs.Job, 1)
-		jobs.RegisterConstructor(
+		cleanup := jobs.TestingRegisterConstructor(
 			jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 				return jobstest.FakeResumer{
 					OnResume: func(ctx context.Context) error {
@@ -1027,7 +1027,7 @@ func TestRegistryLifecycle(t *testing.T) {
 					},
 				}
 			}, jobs.UsesTenantCostControl)
-
+		defer cleanup()
 		jobID := rts.registry.MakeJobID()
 		record := jobs.Record{
 			Details:   jobspb.BackupDetails{},
@@ -2070,7 +2070,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 	require.NoError(t, err)
 	done := make(chan struct{})
 	defer close(done)
-	jobs.RegisterConstructor(
+	cleanup := jobs.TestingRegisterConstructor(
 		jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
@@ -2083,6 +2083,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 				},
 			}
 		}, jobs.UsesTenantCostControl)
+	defer cleanup()
 
 	type row struct {
 		id     jobspb.JobID
@@ -2235,7 +2236,7 @@ func TestJobInTxn(t *testing.T) {
 			return matched, nil, nil
 		},
 	)
-	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+	cleanup := jobs.TestingRegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				t.Logf("Resuming job: %+v", job.Payload())
@@ -2248,6 +2249,8 @@ func TestJobInTxn(t *testing.T) {
 			},
 		}
 	}, jobs.UsesTenantCostControl)
+	defer cleanup()
+
 	// Piggy back on RESTORE to be able to create a failing test job.
 	sql.AddPlanHook(
 		"test",
@@ -2275,13 +2278,13 @@ func TestJobInTxn(t *testing.T) {
 			return matched, nil, nil
 		},
 	)
-	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(_ context.Context) error {
 				return errors.New("RESTORE failed")
 			},
 		}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 
 	t.Run("rollback txn", func(t *testing.T) {
 		start := timeutil.Now()
@@ -2373,9 +2376,10 @@ func TestStartableJobMixedVersion(t *testing.T) {
 	_, err := sqlDB.Exec("SELECT now()")
 	require.NoError(t, err)
 
-	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+	cleanup := jobs.TestingRegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{}
 	}, jobs.UsesTenantCostControl)
+	defer cleanup()
 	var j *jobs.StartableJob
 	jobID := jr.MakeJobID()
 	insqlDB := s.InternalDB().(isql.DB)
@@ -2414,13 +2418,14 @@ func TestStartableJob(t *testing.T) {
 		resumeFunc.Store(f)
 		return func() { resumeFunc.Store(prev) }
 	}
-	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+	cleanup := jobs.TestingRegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				return resumeFunc.Load().(func(ctx context.Context) error)(ctx)
 			},
 		}
 	}, jobs.UsesTenantCostControl)
+	defer cleanup()
 	woodyP, _ := username.MakeSQLUsernameFromUserInput("Woody Pride", username.PurposeValidation)
 	rec := jobs.Record{
 		Description:   "There's a snake in my boot!",
@@ -2600,7 +2605,7 @@ func TestStartableJobTxnRetry(t *testing.T) {
 	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(ctx)
 	jr := s.JobRegistry().(*jobs.Registry)
-	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+	cleanup := jobs.TestingRegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{}
 	}, jobs.UsesTenantCostControl)
 	rec := jobs.Record{
@@ -2608,6 +2613,7 @@ func TestStartableJobTxnRetry(t *testing.T) {
 		Progress: jobspb.RestoreProgress{},
 		Username: username.TestUserName(),
 	}
+	cleanup()
 
 	db := s.InternalDB().(isql.DB)
 	jobID := jr.MakeJobID()
@@ -2642,7 +2648,7 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 
 	defer jobs.ResetConstructors()()
 	resuming := make(chan struct{})
-	jobs.RegisterConstructor(jobspb.TypeBackup, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+	cleanup := jobs.TestingRegisterConstructor(jobspb.TypeBackup, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				resuming <- struct{}{}
@@ -2650,6 +2656,8 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 			},
 		}
 	}, jobs.UsesTenantCostControl)
+	defer cleanup()
+
 	before := timeutil.Now()
 	jobID := registry.MakeJobID()
 	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */)
@@ -2727,7 +2735,7 @@ func TestMetrics(t *testing.T) {
 	}
 
 	fakeBackupMetrics := makeFakeMetrics()
-	jobs.RegisterConstructor(jobspb.TypeBackup,
+	defer jobs.TestingRegisterConstructor(jobspb.TypeBackup,
 		func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
@@ -2740,9 +2748,9 @@ func TestMetrics(t *testing.T) {
 			}
 		},
 		jobs.UsesTenantCostControl, jobs.WithJobMetrics(fakeBackupMetrics),
-	)
+	)()
 
-	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				return waitForErr(ctx)
@@ -2751,7 +2759,7 @@ func TestMetrics(t *testing.T) {
 				return waitForErr(ctx)
 			},
 		}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 
 	setup := func(t *testing.T) (
 		s serverutils.TestServerInterface, db *gosql.DB, r *jobs.Registry, cleanup func(),
@@ -2962,7 +2970,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 
 	defer jobs.ResetConstructors()()
 	resumed := make(chan error, 1)
-	jobs.RegisterConstructor(jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				defer close(resumed)
@@ -2978,7 +2986,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 				return err
 			},
 		}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 
 	_, err := registry.CreateJobWithTxn(ctx, rec, registry.MakeJobID(), nil)
 	require.NoError(t, err)
@@ -3032,7 +3040,7 @@ func TestPauseReason(t *testing.T) {
 	done := make(chan struct{})
 	defer close(done)
 	resumeSignaler := newResumeStartedSignaler()
-	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				resumeSignaler.SignalResumeStarted()
@@ -3044,7 +3052,7 @@ func TestPauseReason(t *testing.T) {
 				}
 			},
 		}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 
 	rec := jobs.Record{
 		DescriptorIDs: []descpb.ID{1},
@@ -3143,7 +3151,7 @@ func TestJobsRetry(t *testing.T) {
 
 	t.Run("retry non-cancelable running", func(t *testing.T) {
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 		// Make mockJob non-cancelable, ensuring that non-cancelable jobs are retried in running state.
 		rts.mockJob.SetNonCancelable(rts.ctx, func(ctx context.Context, nonCancelable bool) bool {
@@ -3188,7 +3196,7 @@ func TestJobsRetry(t *testing.T) {
 		// - Fail the job in revert state using a non-retryable error.
 		// - Make sure that the jobs is retried and is again in the revert state.
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
 		if err != nil {
@@ -3232,7 +3240,7 @@ func TestJobsRetry(t *testing.T) {
 		//   retries with a permanent error as well.
 		// - Make sure that the jobs is retried and is again in the revert state.
 		rts := registryTestSuite{}
-		rts.setUp(t)
+		defer rts.setUp(t)()
 		defer rts.tearDown()
 		// Make mockJob non-cancelable, ensuring that non-cancelable jobs are retried in reverting state.
 		rts.mockJob.SetNonCancelable(rts.ctx, func(ctx context.Context, nonCancelable bool) bool {
@@ -3287,7 +3295,7 @@ func TestPausepoints(t *testing.T) {
 	registry := s.JobRegistry().(*jobs.Registry)
 	defer s.Stopper().Stop(ctx)
 	idb := s.InternalDB().(isql.DB)
-	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				if err := registry.CheckPausepoint("test_pause_foo"); err != nil {
@@ -3296,7 +3304,7 @@ func TestPausepoints(t *testing.T) {
 				return nil
 			},
 		}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 
 	rec := jobs.Record{
 		DescriptorIDs: []descpb.ID{1},
@@ -3428,14 +3436,14 @@ func TestJobTypeMetrics(t *testing.T) {
 	}
 
 	for typ := range typeToRecord {
-		jobs.RegisterConstructor(typ, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		defer jobs.TestingRegisterConstructor(typ, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
 					<-ctx.Done()
 					return ctx.Err()
 				},
 			}
-		}, jobs.UsesTenantCostControl)
+		}, jobs.UsesTenantCostControl)()
 	}
 
 	makeJob := func(ctx context.Context,
