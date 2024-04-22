@@ -103,7 +103,7 @@ func newEventConsumer(
 
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		var err error
-		encoder, err := getEncoder(encodingOpts, feed.Targets, spec.Select.Expr != "",
+		encoder, err := getEncoder(ctx, encodingOpts, feed.Targets, spec.Select.Expr != "",
 			makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics)
 		if err != nil {
 			return nil, err
