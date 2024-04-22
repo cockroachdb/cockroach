@@ -1297,7 +1297,7 @@ func TestAvroWithRegionalTable(t *testing.T) {
 				sqlDB.Exec(t, `CREATE TABLE table1 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
 				schemaReg := cdctest.StartTestSchemaRegistry()
 				defer schemaReg.Close()
-				stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE table1 WITH format = avro, envelope = %s, 
+				stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE table1 WITH format = avro, envelope = %s,
 	confluent_schema_registry = "%s", schema_change_events = column_changes, schema_change_policy = nobackfill`,
 					test.envelope, schemaReg.URL())
 

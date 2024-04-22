@@ -13,6 +13,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -30,6 +31,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
+
+const (
+	// jsonNullAsObjectKey is the key used in null-as-object mode to represent a JSON null value.
+	jsonNullAsObjectKey = `__crdb_null_json__`
+)
+
+var jsonNullAsObjectJSONNullObj = sync.OnceValue(func() json.JSON {
+	j, _ := json.MakeJSON(map[string]any{
+		jsonNullAsObjectKey: json.FromBool(true),
+	})
+	return j
+})
 
 // jsonEncoder encodes changefeed entries as JSON. Keys are the primary key
 // columns in a JSON array. Values are a JSON object mapping every column name
@@ -100,7 +113,7 @@ func makeJSONEncoder(opts jsonEncoderOptions) (*jsonEncoder, error) {
 				splitPrevRowVersion: isPrev && opts.encodeForQuery && opts.Envelope != changefeedbase.OptEnvelopeBare,
 			}
 			return getCachedOrCreate(key, versionCache, func() interface{} {
-				return &versionEncoder{}
+				return &versionEncoder{jsonValueNullAsObject: opts.JSONValueNullAsObject}
 			}).(*versionEncoder)
 		},
 	}
@@ -131,7 +144,8 @@ func makeJSONEncoder(opts jsonEncoderOptions) (*jsonEncoder, error) {
 
 // versionEncoder memoizes version specific encoding state.
 type versionEncoder struct {
-	valueBuilder *json.FixedKeysObjectBuilder
+	jsonValueNullAsObject bool
+	valueBuilder          *json.FixedKeysObjectBuilder
 }
 
 // EncodeKey implements the Encoder interface.
@@ -157,7 +171,7 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) (enc []byte
 func (e *versionEncoder) encodeKeyRaw(it cdcevent.Iterator) (json.JSON, error) {
 	kb := json.NewArrayBuilder(1)
 	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+		j, err := e.datumToJSON(d)
 		if err != nil {
 			return err
 		}
@@ -209,7 +223,7 @@ func (e *versionEncoder) rowAsGoNative(
 	}
 
 	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+		j, err := e.datumToJSON(d)
 		if err != nil {
 			return err
 		}
@@ -225,6 +239,18 @@ func (e *versionEncoder) rowAsGoNative(
 	}
 
 	return e.valueBuilder.Build()
+}
+
+func (e *versionEncoder) datumToJSON(d tree.Datum) (json.JSON, error) {
+	j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+	if err != nil {
+		return nil, err
+	}
+
+	if e.jsonValueNullAsObject && j == json.NullJSONValue {
+		j = jsonNullAsObjectJSONNullObj()
+	}
+	return j, nil
 }
 
 func (e *jsonEncoder) initRawEnvelope() error {
@@ -465,7 +491,7 @@ func init() {
 	}
 
 	utilccl.RegisterCCLBuiltin("crdb_internal.to_json_as_changefeed_with_flags",
-		`Encodes a tuple the way a changefeed would output it if it were inserted as a row or emitted by a changefeed expression, and returns the raw bytes. 
+		`Encodes a tuple the way a changefeed would output it if it were inserted as a row or emitted by a changefeed expression, and returns the raw bytes.
 		Flags such as 'diff' modify the encoding as though specified in the WITH portion of a changefeed.`,
 		overload)
 }
