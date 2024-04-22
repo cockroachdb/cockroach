@@ -103,9 +103,9 @@ func hasManuallySplitRangesOnIndex(
 	return false
 }
 
-// splitLastRangeInSpan split the last range into two ranges,
+// splitFirstRangeInSpan split the first range into two ranges,
 // and check the new range has sticky bit set.
-func splitLastRangeInSpan(
+func splitFirstRangeInSpan(
 	ctx context.Context, t *testing.T, kvDB *kv.DB, tableSpan roachpb.Span,
 ) roachpb.Key {
 	metaStartKey := keys.RangeMetaKey(keys.MustAddr(tableSpan.Key))
@@ -114,12 +114,18 @@ func splitLastRangeInSpan(
 	if err != nil {
 		t.Fatal(err)
 	}
-	lastRange := ranges[len(ranges)-1]
-	var lastRangeDesc roachpb.RangeDescriptor
-	if err := lastRange.ValueProto(&lastRangeDesc); err != nil {
-		t.Fatal(err)
+	var firstRangeDesc roachpb.RangeDescriptor
+	for _, r := range ranges {
+		var rDesc roachpb.RangeDescriptor
+		if err := r.ValueProto(&rDesc); err != nil {
+			t.Fatal(err)
+		}
+		// Find the first range that's within the table span.
+		if bytes.Compare(rDesc.StartKey, tableSpan.Key) <= 0 {
+			firstRangeDesc = rDesc
+		}
 	}
-	splitKey := getMidKeyInSpan(t, kvDB, lastRangeDesc.StartKey, lastRangeDesc.EndKey)
+	splitKey := getMidKeyInSpan(t, kvDB, firstRangeDesc.StartKey, firstRangeDesc.EndKey)
 	splitKey, err = keys.EnsureSafeSplitKey(splitKey)
 	if err != nil {
 		t.Fatal(err)
@@ -299,8 +305,8 @@ func TestUnsplitRanges(t *testing.T) {
 		indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, idx.GetID())
 		tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 
-		// Split the last range.
-		splitKey := splitLastRangeInSpan(ctx, t, kvDB, tableSpan)
+		// Split the first range in the table.
+		splitKey := splitFirstRangeInSpan(ctx, t, kvDB, tableSpan)
 		// Verify there are manually split ranges.
 		require.True(t, rangeIsManuallySplit(ctx, t, kvDB, tableSpan, splitKey))
 		require.True(t, hasManuallySplitRangesInSpan(ctx, t, kvDB, tableSpan))
