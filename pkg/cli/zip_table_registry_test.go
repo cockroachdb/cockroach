@@ -111,34 +111,28 @@ func TestNoForbiddenSystemTablesInDebugZip(t *testing.T) {
 	}
 }
 
-func TestNoNonSensitiveColsAndCustomRedactedQueries(t *testing.T) {
+func TestTableRegistryConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	errFmtString := `FAILURE: The debug zip TableRegistryConfig for table %q
-contains both a custom redacted query (customQueryRedacted) AND a list of
-non sensitive columns (nonSensitiveCols). customQueryRedacted will ALWAYS
-be used in place of nonSensitiveCols if defined, so please remove the
-nonSensitiveCols. PLEASE be sure that NONE of the columns outside of those
-listed in nonSensitiveCols have leaked into your customQueryRedacted, as 
-this would be a PCI leak. If any columns in your customQueryRedacted were 
-NOT already listed in nonSensitiveCols, you MUST confirm with the compliance 
-team that these columns are acceptable to reveal in an unredacted manner, or
-you must redact them at the SQL level.`
+
+	validate := func(table string, regConfig TableRegistryConfig) {
+		if regConfig.customQueryRedacted == "" && len(regConfig.nonSensitiveCols) == 0 {
+			t.Fatalf("table %q contains no redacted query configuration", table)
+		}
+		if regConfig.customQueryRedacted != "" && len(regConfig.nonSensitiveCols) > 0 {
+			t.Fatalf(
+				"table %q has both customQueryRedacted and nonSensitiveCols. These fields are mutually exclusive.",
+				table)
+		}
+	}
+
 	for table, regConfig := range zipInternalTablesPerCluster {
-		if regConfig.customQueryRedacted != "" && len(regConfig.nonSensitiveCols) > 0 {
-			t.Fatalf(errFmtString, table)
-		}
+		validate(table, regConfig)
 	}
-
 	for table, regConfig := range zipInternalTablesPerNode {
-		if regConfig.customQueryRedacted != "" && len(regConfig.nonSensitiveCols) > 0 {
-			t.Fatalf(errFmtString, table)
-		}
+		validate(table, regConfig)
 	}
-
 	for table, regConfig := range zipSystemTables {
-		if regConfig.customQueryRedacted != "" && len(regConfig.nonSensitiveCols) > 0 {
-			t.Fatalf(errFmtString, table)
-		}
+		validate(table, regConfig)
 	}
 }
 
