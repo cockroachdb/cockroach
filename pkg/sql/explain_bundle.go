@@ -847,6 +847,18 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		return sessiondatapb.VectorizeExecMode(n).String()
 	}
 
+	timeoutConv := func(timeoutStr string) string {
+		// Currently, all supported timeouts have 0 default value, so we'll
+		// assert that in tests.
+		if timeoutStr != "0s" {
+			if buildutil.CrdbTestBuild {
+				panic(errors.AssertionFailedf("unexpected default value for a timeout setting %s", timeoutStr))
+			}
+			return timeoutStr
+		}
+		return "0"
+	}
+
 	// TODO(rytaft): Keeping this list up to date is a challenge. Consider just
 	// printing all session settings.
 	relevantSettings := []struct {
@@ -871,12 +883,12 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		{sessionSetting: "enable_multiple_modifications_of_table"},
 		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "expect_and_ignore_not_visible_columns_in_copy"},
-		{sessionSetting: "idle_in_transaction_session_timeout", clusterSetting: clusterIdleInTransactionSessionTimeout},
-		{sessionSetting: "idle_session_timeout", clusterSetting: clusterIdleInSessionTimeout},
+		{sessionSetting: "idle_in_transaction_session_timeout", clusterSetting: clusterIdleInTransactionSessionTimeout, convFunc: timeoutConv},
+		{sessionSetting: "idle_session_timeout", clusterSetting: clusterIdleInSessionTimeout, convFunc: timeoutConv},
 		{sessionSetting: "intervalstyle", clusterSetting: intervalStyle, convFunc: intervalstyleConv},
 		{sessionSetting: "large_full_scan_rows", clusterSetting: largeFullScanRows},
 		{sessionSetting: "locality_optimized_partitioned_index_scan", clusterSetting: localityOptimizedSearchMode, convFunc: boolToOnOff},
-		{sessionSetting: "lock_timeout", clusterSetting: clusterLockTimeout},
+		{sessionSetting: "lock_timeout", clusterSetting: clusterLockTimeout, convFunc: timeoutConv},
 		{sessionSetting: "null_ordered_last"},
 		{sessionSetting: "on_update_rehome_row_enabled", clusterSetting: onUpdateRehomeRowEnabledClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "opt_split_scan_limit"},
@@ -889,7 +901,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		{sessionSetting: "propagate_input_ordering", clusterSetting: propagateInputOrdering, convFunc: boolToOnOff},
 		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
 		{sessionSetting: "sql_safe_updates"},
-		{sessionSetting: "statement_timeout", clusterSetting: clusterStatementTimeout},
+		{sessionSetting: "statement_timeout", clusterSetting: clusterStatementTimeout, convFunc: timeoutConv},
 		{sessionSetting: "testing_optimizer_cost_perturbation"},
 		{sessionSetting: "testing_optimizer_disable_rule_probability"},
 		{sessionSetting: "testing_optimizer_random_seed"},
