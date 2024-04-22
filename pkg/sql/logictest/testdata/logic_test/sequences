@@ -2456,9 +2456,9 @@ statement ok
 CREATE SEQUENCE sq_119108;
 
 query T
-SELECT column_name from [SHOW COLUMNS FROM sq_119108]
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->'columns' FROM system.descriptor WHERE id = 'sq_119108'::REGCLASS::OID;
 ----
-value
+[{"id": 1, "name": "value", "type": {"family": "IntFamily", "oid": 20, "width": 64}}]
 
 subtest end
 
