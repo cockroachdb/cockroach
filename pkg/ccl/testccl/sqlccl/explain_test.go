@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -126,4 +127,125 @@ func TestExplainRedactDDL(t *testing.T) {
 	defer smith.Close()
 
 	tests.GenerateAndCheckRedactedExplainsForPII(t, smith, numStatements, query, containsPII)
+}
+
+// TestExplainGist is a randomized test for plan-gist logic.
+func TestExplainGist(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "the test is too slow")
+	skip.UnderRace(t, "the test is too slow")
+
+	ctx := context.Background()
+	rng, _ := randutil.NewTestRand()
+
+	const numStatements = 300
+	var gists []string
+
+	t.Run("main", func(t *testing.T) {
+		srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		runner := sqlutils.MakeSQLRunner(sqlDB)
+
+		// Set up some initial state.
+		setup := sqlsmith.Setups["seed"](rng)
+		setup = append(setup, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off;")
+		if rng.Float64() < 0.5 {
+			// In some cases have stats on the seed table.
+			setup = append(setup, "ANALYZE seed;")
+		}
+		runner.ExecMultiple(t, setup...)
+
+		// For some reason, failures don't reproduce based on the RNG seed, so
+		// we'll accumulate all successful stmts that will get logged if the
+		// test fails.
+		var successfulStmts strings.Builder
+		logStmt := func(stmt string) {
+			successfulStmts.WriteString(stmt)
+			successfulStmts.WriteString(";\n")
+		}
+		for _, stmt := range setup {
+			logStmt(stmt)
+		}
+
+		smither, err := sqlsmith.NewSmither(sqlDB, rng, sqlsmith.SimpleNames())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer smither.Close()
+
+		// Always set the statement timeout - we actually execute the stmts on
+		// the best effort basis to evolve the state of the DB. Note that we do
+		// this after having set up the smither since it itself can issue some
+		// statements.
+		timeoutStmt := "SET statement_timeout = '0.1s';"
+		runner.Exec(t, timeoutStmt)
+		logStmt(timeoutStmt)
+
+		checkErr := func(err error, stmt string) {
+			if err != nil && strings.Contains(err.Error(), "internal error") {
+				// Ignore all errors except the internal ones.
+				for _, knownErr := range []string{
+					"invalid datum type given: RECORD, expected RECORD", // #117101
+					"unable to encode table key: *tree.DTSQuery",        // #122871
+					"unable to encode table key: *tree.DTSVector",       // #122871
+				} {
+					if strings.Contains(err.Error(), knownErr) {
+						// Don't fail the test on a set of known errors.
+						return
+					}
+				}
+				t.Log(successfulStmts.String())
+				t.Fatalf("%v: %s", err, stmt)
+			}
+		}
+
+		for i := 0; i < numStatements; i++ {
+			stmt := func() string {
+				for {
+					stmt := smither.Generate()
+					switch stmt {
+					case "BEGIN TRANSACTION", "COMMIT TRANSACTION", "ROLLBACK TRANSACTION":
+						// Ignore frequently generated statements that result in
+						// a syntax error with EXPLAIN.
+					default:
+						return stmt
+					}
+				}
+			}()
+
+			row := sqlDB.QueryRow("EXPLAIN (GIST) " + stmt)
+			if err = row.Err(); err != nil {
+				checkErr(err, stmt)
+				continue
+			}
+			var gist string
+			err = row.Scan(&gist)
+			if err != nil {
+				t.Fatal(err)
+			}
+			runner.Exec(t, "SELECT crdb_internal.decode_plan_gist($1);", gist)
+			// Store the gist to be run against empty DB.
+			gists = append(gists, gist)
+
+			// Execute the stmt with short timeout so that the table schema is
+			// modified.
+			_, err = sqlDB.Exec(stmt)
+			if err != nil {
+				checkErr(err, stmt)
+			} else {
+				logStmt(stmt)
+			}
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		runner := sqlutils.MakeSQLRunner(sqlDB)
+		for _, gist := range gists {
+			runner.Exec(t, "SELECT crdb_internal.decode_plan_gist($1);", gist)
+		}
+	})
 }
