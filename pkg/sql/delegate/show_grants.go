@@ -37,6 +37,7 @@ func (d *delegator) delegateShowGrants(n *tree.ShowGrants) (tree.Statement, erro
 
 	const dbPrivQuery = `
 SELECT database_name,
+       'database' AS object_type,
        grantee,
        privilege_type,
 			 is_grantable::boolean
@@ -44,21 +45,32 @@ SELECT database_name,
 	const schemaPrivQuery = `
 SELECT table_catalog AS database_name,
        table_schema AS schema_name,
+       'schema' AS object_type,
        grantee,
        privilege_type,
        is_grantable::boolean
   FROM "".information_schema.schema_privileges`
 	const tablePrivQuery = `
-SELECT table_catalog AS database_name,
-       table_schema AS schema_name,
-       table_name,
-       grantee,
-       privilege_type,
-       is_grantable::boolean
-FROM "".information_schema.table_privileges`
+SELECT tp.table_catalog AS database_name,
+       tp.table_schema AS schema_name,
+       tp.table_name,
+       tp.grantee,
+       tp.privilege_type,
+       tp.is_grantable::boolean,
+       CASE
+           WHEN s.sequence_name IS NOT NULL THEN 'sequence'
+           ELSE 'table'
+       END AS object_type
+  FROM "".information_schema.table_privileges tp
+	LEFT JOIN "".information_schema.sequences s ON (
+  	tp.table_catalog = s.sequence_catalog AND
+  	tp.table_schema = s.sequence_schema AND
+  	tp.table_name = s.sequence_name
+	)`
 	const typePrivQuery = `
 SELECT type_catalog AS database_name,
        type_schema AS schema_name,
+       'type' AS object_type,
        type_name,
        grantee,
        privilege_type,
@@ -76,18 +88,18 @@ SELECT a.username AS grantee,
   FROM (
         SELECT username, unnest(privileges) AS privilege
           FROM crdb_internal.kv_system_privileges
-       ) AS a
-`
+       ) AS a`
 	const externalConnectionPrivilegeQuery = `
 SELECT *
   FROM (
         SELECT name AS connection_name,
+               'external_connection' AS object_type,
                a.username AS grantee,
                crdb_internal.privilege_name(privilege_key) AS privilege_type,
                a.privilege_key
                IN (
                   SELECT unnest(grant_options)
-                    FROM system.privileges
+                    FROM crdb_internal.kv_system_privileges
                    WHERE username = a.username
                 ) AS is_grantable
           FROM (
@@ -97,11 +109,11 @@ SELECT *
                        ) AS name,
                        username,
                        unnest(privileges) AS privilege_key
-                  FROM system.privileges
+                  FROM crdb_internal.kv_system_privileges
                  WHERE path ~* '^/externalconn/'
                ) AS a
-       )
-`
+       )`
+
 	// Query grants data for user-defined functions and procedures. Builtin
 	// functions are not included.
 	routineQuery := fmt.Sprintf(`
@@ -118,6 +130,7 @@ WITH fn_grants AS (
 )
 SELECT database_name,
        schema_name,
+       'routine' AS object_type,
        routine_id,
        concat(
 				 routine_name,
@@ -326,32 +339,36 @@ SELECT database_name,
 			fmt.Fprintf(&cond, `WHERE (database_name, schema_name, table_name) IN (%s)`, strings.Join(params, ","))
 		}
 	} else {
-		nameCols = "database_name, schema_name, relation_name,"
+		nameCols = "database_name, schema_name, object_name, object_type,"
 		// No target: only look at types, tables and schemas in the current database.
 		source.WriteString(
-			`SELECT database_name, schema_name, table_name AS relation_name, grantee, privilege_type, is_grantable FROM (`,
+			`SELECT database_name, schema_name, table_name AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`,
 		)
 		source.WriteString(tablePrivQuery)
 		source.WriteByte(')')
 		source.WriteString(` UNION ALL ` +
-			`SELECT database_name, schema_name, NULL::STRING AS relation_name, grantee, privilege_type, is_grantable FROM (`)
+			`SELECT database_name, schema_name, NULL::STRING AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`)
 		source.WriteString(schemaPrivQuery)
 		source.WriteByte(')')
 		source.WriteString(` UNION ALL ` +
-			`SELECT database_name, NULL::STRING AS schema_name, NULL::STRING AS relation_name, grantee, privilege_type, is_grantable FROM (`)
+			`SELECT database_name, NULL::STRING AS schema_name, NULL::STRING AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`)
 		source.WriteString(dbPrivQuery)
 		source.WriteByte(')')
 		source.WriteString(` UNION ALL ` +
-			`SELECT database_name, schema_name, type_name AS relation_name, grantee, privilege_type, is_grantable FROM (`)
+			`SELECT database_name, schema_name, type_name AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`)
 		source.WriteString(typePrivQuery)
 		source.WriteByte(')')
 		source.WriteString(` UNION ALL ` +
-			`SELECT database_name, schema_name, routine_signature AS relation_name, grantee, privilege_type, is_grantable FROM (`)
+			`SELECT database_name, schema_name, routine_signature AS object_name, object_type , grantee, privilege_type, is_grantable FROM (`)
 		source.WriteString(routineQuery)
+		source.WriteByte(')')
+		source.WriteString(` UNION ALL ` +
+			`SELECT NULL::STRING AS database_name, NULL::STRING AS schema_name, connection_name AS object_name, object_type , grantee, privilege_type, is_grantable FROM (`)
+		source.WriteString(externalConnectionPrivilegeQuery)
 		source.WriteByte(')')
 		// If the current database is set, restrict the command to it.
 		if currDB := d.evalCtx.SessionData().Database; currDB != "" {
-			fmt.Fprintf(&cond, ` WHERE database_name = %s`, lexbase.EscapeSQLString(currDB))
+			fmt.Fprintf(&cond, ` WHERE database_name = %s OR object_type = 'external_connection'`, lexbase.EscapeSQLString(currDB))
 		} else {
 			cond.WriteString(`WHERE true`)
 		}
@@ -412,6 +429,5 @@ ORDER BY
 			}
 		}
 	}
-
 	return d.parse(query)
 }
