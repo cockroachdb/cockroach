@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	rp_grafana "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
@@ -712,7 +713,14 @@ func (ct *cdcTester) startGrafana() {
 		WithNodeExporter(ct.crdbNodes.InstallNodes()).
 		WithGrafanaDashboardJSON(grafana.ChangefeedRoachtestGrafanaDashboardJSON)
 
-	cfg.Grafana.Enabled = true
+	// add in all the default dashboards
+	dashes, err := rp_grafana.GetDefaultDashboardJSONs()
+	if err != nil {
+		ct.t.Fatalf("failed to get default dashboards: %s", err)
+	}
+	for _, dash := range dashes {
+		cfg = cfg.WithGrafanaDashboardJSON(dash)
+	}
 
 	ct.promCfg = cfg
 
