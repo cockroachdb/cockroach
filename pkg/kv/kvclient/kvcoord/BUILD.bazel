@@ -1,6 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test", "gomock")
 load("//build:STRINGER.bzl", "stringer")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
 
 go_library(
     name = "kvcoord",
@@ -30,9 +31,11 @@ go_library(
         "txn_interceptor_pipeliner.go",
         "txn_interceptor_seq_num_allocator.go",
         "txn_interceptor_span_refresher.go",
+        "txn_interceptor_write_buffer.go",
         "txn_lock_gatekeeper.go",
         "txn_metrics.go",
         ":gen-txnstate-stringer",  # keep
+        ":bufferedwrite_interval_btree.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
     visibility = ["//visibility:public"],
@@ -152,6 +155,7 @@ go_test(
         "txn_interceptor_span_refresher_test.go",
         "txn_test.go",
         ":mock_kvcoord",  # keep
+        ":bufferedwrite_interval_btree.go",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":kvcoord"],
@@ -252,6 +256,12 @@ stringer(
     name = "gen-txnstate-stringer",
     src = "txn_coord_sender.go",
     typ = "txnState",
+)
+
+gen_interval_btree(
+    name = "buffered_write_interval_btree",
+    package = "kvcoord",
+    type = "*bufferedWrite",
 )
 
 disallowed_imports_test(
