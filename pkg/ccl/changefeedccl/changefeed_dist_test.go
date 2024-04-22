@@ -501,6 +501,7 @@ func TestChangefeedWithSimpleDistributionStrategy(t *testing.T) {
 	// The test is slow and will time out under deadlock/race/stress.
 	skip.UnderShort(t)
 	skip.UnderDuress(t)
+	skip.WithIssue(t, 121408)
 
 	noLocality := func(i int) []roachpb.Tier {
 		return make([]roachpb.Tier, 0)
