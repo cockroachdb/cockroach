@@ -244,6 +244,7 @@ func (ex *connExecutor) recordStatementSummary(
 
 		if queryLevelStats.ContentionTime > 0 {
 			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.ContendedQueriesCount.Inc(1)
+			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.CumulativeContentionNanos.Inc(queryLevelStats.ContentionTime.Nanoseconds())
 		}
 
 		err = ex.statsCollector.RecordStatementExecStats(recordedStmtStatsKey, *queryLevelStats)
