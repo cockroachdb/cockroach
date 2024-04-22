@@ -135,6 +135,9 @@ type testRunner struct {
 		skip    map[*testImpl]struct{}
 	}
 
+	// testCount is the total number of tests registered multiplied by the total number of times each test has to run.
+	testCount int
+
 	// cr keeps track of all live clusters.
 	cr *clusterRegistry
 
@@ -334,6 +337,8 @@ func (r *testRunner) Run(
 
 	r.work = newWorkPool(tests, count)
 	errs := &workerErrors{}
+
+	r.testCount = n * count
 
 	qp := quotapool.NewIntPool("cloud cpu", uint64(clustersOpt.cpuQuota))
 	l := lopt.l
@@ -891,6 +896,12 @@ func (r *testRunner) runWorker(
 				c.Save(ctx, "cluster saved since --debug-always set", l)
 				c = nil
 			}
+		}
+
+		// stop the tests if the failure rate has been exceeded
+		failureRate := float64(len(r.status.fail)) / float64(r.testCount)
+		if failureRate > roachtestflags.AutoKillThreshold {
+			return errors.Errorf("failure rate %.2f exceeds limit %.2f", failureRate, roachtestflags.AutoKillThreshold)
 		}
 	}
 }
