@@ -1,8 +1,173 @@
+diff --git a/src/crypto/md5/md5.go b/src/crypto/md5/md5.go
+index 0115784047..f55a921704 100644
+--- a/src/crypto/md5/md5.go
++++ b/src/crypto/md5/md5.go
+@@ -27,6 +27,10 @@ const Size = 16
+ // The blocksize of MD5 in bytes.
+ const BlockSize = 64
+ 
++// The maximum number of bytes that can be passed to block.
++const maxAsmIters = 1024
++const maxAsmSize = BlockSize * maxAsmIters // 64KiB
++
+ const (
+ 	init0 = 0x67452301
+ 	init1 = 0xEFCDAB89
+@@ -131,6 +135,11 @@ func (d *digest) Write(p []byte) (nn int, err error) {
+ 		d.nx += n
+ 		if d.nx == BlockSize {
+ 			if haveAsm {
++				for n > maxAsmSize {
++					block(d, p[:maxAsmSize])
++					p = p[maxAsmSize:]
++					n -= maxAsmSize
++				}
+ 				block(d, d.x[:])
+ 			} else {
+ 				blockGeneric(d, d.x[:])
+diff --git a/src/crypto/md5/md5_test.go b/src/crypto/md5/md5_test.go
+index 851e7fb10d..e120be3718 100644
+--- a/src/crypto/md5/md5_test.go
++++ b/src/crypto/md5/md5_test.go
+@@ -120,10 +120,11 @@ func TestGoldenMarshal(t *testing.T) {
+ 
+ func TestLarge(t *testing.T) {
+ 	const N = 10000
++	const offsets = 4
+ 	ok := "2bb571599a4180e1d542f76904adc3df" // md5sum of "0123456789" * 1000
+-	block := make([]byte, 10004)
++	block := make([]byte, N+offsets)
+ 	c := New()
+-	for offset := 0; offset < 4; offset++ {
++	for offset := 0; offset < offsets; offset++ {
+ 		for i := 0; i < N; i++ {
+ 			block[offset+i] = '0' + byte(i%10)
+ 		}
+@@ -142,6 +143,31 @@ func TestLarge(t *testing.T) {
+ 	}
+ }
+ 
++func TestExtraLarge(t *testing.T) {
++	const N = 100000
++	const offsets = 4
++	ok := "13572e9e296cff52b79c52148313c3a5" // md5sum of "0123456789" * 10000
++	block := make([]byte, N+offsets)
++	c := New()
++	for offset := 0; offset < offsets; offset++ {
++		for i := 0; i < N; i++ {
++			block[offset+i] = '0' + byte(i%10)
++		}
++		for blockSize := 10; blockSize <= N; blockSize *= 10 {
++			blocks := N / blockSize
++			b := block[offset : offset+blockSize]
++			c.Reset()
++			for i := 0; i < blocks; i++ {
++				c.Write(b)
++			}
++			s := fmt.Sprintf("%x", c.Sum(nil))
++			if s != ok {
++				t.Fatalf("md5 TestExtraLarge offset=%d, blockSize=%d = %s want %s", offset, blockSize, s, ok)
++			}
++		}
++	}
++}
++
+ // Tests that blockGeneric (pure Go) and block (in assembly for amd64, 386, arm) match.
+ func TestBlockGeneric(t *testing.T) {
+ 	gen, asm := New().(*digest), New().(*digest)
+diff --git a/src/crypto/sha256/sha256.go b/src/crypto/sha256/sha256.go
+index e3c15e66ca..dea5e68019 100644
+--- a/src/crypto/sha256/sha256.go
++++ b/src/crypto/sha256/sha256.go
+@@ -28,6 +28,10 @@ const Size224 = 28
+ // The blocksize of SHA256 and SHA224 in bytes.
+ const BlockSize = 64
+ 
++// The maximum number of bytes that can be passed to block.
++const maxAsmIters = 1024
++const maxAsmSize = BlockSize * maxAsmIters // 64KiB
++
+ const (
+ 	chunk     = 64
+ 	init0     = 0x6A09E667
+@@ -203,6 +207,11 @@ func (d *digest) Write(p []byte) (nn int, err error) {
+ 	}
+ 	if len(p) >= chunk {
+ 		n := len(p) &^ (chunk - 1)
++		for n > maxAsmSize {
++			block(d, p[:maxAsmSize])
++			p = p[maxAsmSize:]
++			n -= maxAsmSize
++		}
+ 		block(d, p[:n])
+ 		p = p[n:]
+ 	}
+diff --git a/src/crypto/sha256/sha256_test.go b/src/crypto/sha256/sha256_test.go
+index 7304678346..4d5e8bcd55 100644
+--- a/src/crypto/sha256/sha256_test.go
++++ b/src/crypto/sha256/sha256_test.go
+@@ -183,6 +183,56 @@ func TestGoldenMarshal(t *testing.T) {
+ 	}
+ }
+ 
++func TestLarge(t *testing.T) {
++	const N = 10000
++	const offsets = 4
++	ok := "4c207598af7a20db0e3334dd044399a40e467cb81b37f7ba05a4f76dcbd8fd59" // sha256sum of "0123456789" * 1000
++	block := make([]byte, N+offsets)
++	c := New()
++	for offset := 0; offset < offsets; offset++ {
++		for i := 0; i < N; i++ {
++			block[offset+i] = '0' + byte(i%10)
++		}
++		for blockSize := 10; blockSize <= N; blockSize *= 10 {
++			blocks := N / blockSize
++			b := block[offset : offset+blockSize]
++			c.Reset()
++			for i := 0; i < blocks; i++ {
++				c.Write(b)
++			}
++			s := fmt.Sprintf("%x", c.Sum(nil))
++			if s != ok {
++				t.Fatalf("sha256 TestLarge offset=%d, blockSize=%d = %s want %s", offset, blockSize, s, ok)
++			}
++		}
++	}
++}
++
++func TestExtraLarge(t *testing.T) {
++	const N = 100000
++	const offsets = 4
++	ok := "aca9e593cc629cbaa94cd5a07dc029424aad93e5129e5d11f8dcd2f139c16cc0" // sha256sum of "0123456789" * 10000
++	block := make([]byte, N+offsets)
++	c := New()
++	for offset := 0; offset < offsets; offset++ {
++		for i := 0; i < N; i++ {
++			block[offset+i] = '0' + byte(i%10)
++		}
++		for blockSize := 10; blockSize <= N; blockSize *= 10 {
++			blocks := N / blockSize
++			b := block[offset : offset+blockSize]
++			c.Reset()
++			for i := 0; i < blocks; i++ {
++				c.Write(b)
++			}
++			s := fmt.Sprintf("%x", c.Sum(nil))
++			if s != ok {
++				t.Fatalf("sha256 TestExtraLarge offset=%d, blockSize=%d = %s want %s", offset, blockSize, s, ok)
++			}
++		}
++	}
++}
++
+ func TestMarshalTypeMismatch(t *testing.T) {
+ 	h1 := New()
+ 	h2 := New224()
 diff --git a/src/runtime/proc.go b/src/runtime/proc.go
-index 3991a48b10..4a50ae650d 100644
+index 2b73b32c34..5c2a68421f 100644
 --- a/src/runtime/proc.go
 +++ b/src/runtime/proc.go
-@@ -994,8 +994,19 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -995,8 +995,19 @@ func casgstatus(gp *g, oldval, newval uint32) {
  		}
  	}
  
@@ -23,7 +188,7 @@ index 3991a48b10..4a50ae650d 100644
  		// Track every 8th time a goroutine transitions out of running.
  		if gp.trackingSeq%gTrackingPeriod == 0 {
  			gp.tracking = true
-@@ -1007,14 +1018,12 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -1008,14 +1019,12 @@ func casgstatus(gp *g, oldval, newval uint32) {
  			// We transitioned out of runnable, so measure how much
  			// time we spent in this state and add it to
  			// runnableTime.
@@ -38,7 +203,7 @@ index 3991a48b10..4a50ae650d 100644
  			gp.runnableStamp = now
  		} else if newval == _Grunning {
  			// We're transitioning into running, so turn off
-@@ -3258,6 +3267,14 @@ func dropg() {
+@@ -3267,6 +3276,14 @@ func dropg() {
  	setGNoWB(&_g_.m.curg, nil)
  }
  
@@ -53,7 +218,7 @@ index 3991a48b10..4a50ae650d 100644
  // checkTimers runs any timers for the P that are ready.
  // If now is not 0 it is the current time.
  // It returns the passed time or the current time if now was passed as 0.
-@@ -3491,6 +3508,8 @@ func goexit0(gp *g) {
+@@ -3500,6 +3517,8 @@ func goexit0(gp *g) {
  	gp.param = nil
  	gp.labels = nil
  	gp.timer = nil
@@ -63,7 +228,7 @@ index 3991a48b10..4a50ae650d 100644
  	if gcBlackenEnabled != 0 && gp.gcAssistBytes > 0 {
  		// Flush assist credit to the global pool. This gives
 diff --git a/src/runtime/runtime2.go b/src/runtime/runtime2.go
-index e1788223e7..5ed1fb40ba 100644
+index 2a42809f0d..29e054e67e 100644
 --- a/src/runtime/runtime2.go
 +++ b/src/runtime/runtime2.go
 @@ -474,7 +474,6 @@ type g struct {

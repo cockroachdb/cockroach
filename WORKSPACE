@@ -164,14 +164,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.19.13.darwin-amd64.tar.gz", "26b28dd32295bb44f8e963c94cf6135832d4c2acaa62b3c93de2c34eff4b020d"),
-        "darwin_arm64": ("go1.19.13.darwin-arm64.tar.gz", "6ab2eff10cb80e26f734726b9eef34f5943904e6855b1d22b8cccaa4697b6d6d"),
+        "darwin_amd64": ("go1.19.13.darwin-amd64.tar.gz", "f96090e16fbb9922b31cfd1f80f0f44154da704b60796987d8c2aa8ea006e62f"),
+        "darwin_arm64": ("go1.19.13.darwin-arm64.tar.gz", "aa72e9a4754e37d1a5e05243bcc2b78a2ac282b113241b83c9960bffd5473047"),
         "freebsd_amd64": ("go1.19.13.freebsd-amd64.tar.gz", "97fd4990c5349ab922b9bf3e4c655e899135559ea6ad666d4b3c7a27b1e147a2"),
-        "linux_amd64": ("go1.19.13.linux-amd64.tar.gz", "f5ac3d7014fdc429785f335d3b672d470a75e90e8f7d49a27c9b72be9c633909"),
-        "linux_arm64": ("go1.19.13.linux-arm64.tar.gz", "07b0c2e4d94cd81adfcbcbd39a7a6af638697e20f0c7c4760317512061c0ffb8"),
-        "windows_amd64": ("go1.19.13.windows-amd64.tar.gz", "5273166fb2baa784e26b2ffe19efba362c933e9dba05a953fec90b6117e09c8d"),
+        "linux_amd64": ("go1.19.13.linux-amd64.tar.gz", "b4d2f09a49509985e76a293d8f8435ab5013b66e9d7e4198fc70e8a9f2243da7"),
+        "linux_arm64": ("go1.19.13.linux-arm64.tar.gz", "fda319c9f14f5ab2c34a08f148cc432b09f824829f523e1551b4e4a24e31a6af"),
+        "windows_amd64": ("go1.19.13.windows-amd64.tar.gz", "55c229f99c4a5ed63d0bf206eb72f63717091b6bd1f9c42f5ac3c29a4d0eeb9d"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231207-165216/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240422-222025/{}"],
     version = "1.19.13",
 )
 
@@ -615,8 +615,8 @@ distdir_repositories()
 go_download_sdk(
     name = "go_sdk_fips",
     sdks = {
-        "linux_amd64": ("go1.19.13fips.linux-amd64.tar.gz", "48c3d498fd133c973b9d79d12a75f1627154f64edce2d07bc656eec7c2969369"),
+        "linux_amd64": ("go1.19.13fips.linux-amd64.tar.gz", "1256af160deeb1d47ee4d76ab6c0342f6e7b6d4541bf515c012c7c6357c8edee"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231207-165216/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240422-222025/{}"],
     version = "1.19.13fips",
 )
