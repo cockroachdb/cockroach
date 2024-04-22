@@ -3994,11 +3994,11 @@ FROM
 	}
 
 	// For each function generate a possible invocation passing in null arguments.
-	supportsUDFCallingUDF, err := isClusterVersionLessThan(ctx, tx, clusterversion.V24_1.Version())
+	disallowUDFCallingUDF, err := isClusterVersionLessThan(ctx, tx, clusterversion.V24_1.Version())
 	if err != nil {
 		return nil, err
 	}
-	if supportsUDFCallingUDF {
+	if !disallowUDFCallingUDF {
 		for _, function := range functions {
 			args := ""
 			if function["args"] != nil {
