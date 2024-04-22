@@ -240,7 +240,7 @@ func TestEncoders(t *testing.T) {
 				return
 			}
 			require.NoError(t, o.Validate())
-			e, err := getEncoder(o, targets, false, nil, nil)
+			e, err := getEncoder(context.Background(), o, targets, false, nil, nil)
 			require.NoError(t, err)
 
 			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
@@ -386,7 +386,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 			})
 
-			e, err := getEncoder(opts, targets, false, nil, nil)
+			e, err := getEncoder(context.Background(), opts, targets, false, nil, nil)
 			require.NoError(t, err)
 
 			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
@@ -418,7 +418,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			defer noCertReg.Close()
 			opts.SchemaRegistryURI = noCertReg.URL()
 
-			enc, err := getEncoder(opts, targets, false, nil, nil)
+			enc, err := getEncoder(context.Background(), opts, targets, false, nil, nil)
 			require.NoError(t, err)
 			_, err = enc.EncodeKey(context.Background(), rowInsert)
 			require.Regexp(t, "x509", err)
@@ -431,7 +431,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			defer wrongCertReg.Close()
 			opts.SchemaRegistryURI = wrongCertReg.URL()
 
-			enc, err = getEncoder(opts, targets, false, nil, nil)
+			enc, err = getEncoder(context.Background(), opts, targets, false, nil, nil)
 			require.NoError(t, err)
 			_, err = enc.EncodeKey(context.Background(), rowInsert)
 			require.Regexp(t, `contacting confluent schema registry.*: x509`, err)
@@ -937,7 +937,7 @@ func BenchmarkEncoders(b *testing.B) {
 		b.ReportAllocs()
 		b.StopTimer()
 
-		encoder, err := getEncoder(opts, targets, false, nil, nil)
+		encoder, err := getEncoder(context.Background(), opts, targets, false, nil, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1209,7 +1209,7 @@ func TestJsonRountrip(t *testing.T) {
 			dRow := rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(1)}, rowenc.EncDatum{Datum: test.datum}}
 			cdcRow := cdcevent.TestingMakeEventRow(tableDesc, 0, dRow, false)
 
-			encoder, err := makeJSONEncoder(jsonEncoderOptions{})
+			encoder, err := makeJSONEncoder(context.Background(), jsonEncoderOptions{})
 			require.NoError(t, err)
 
 			// Encode the value to a string and parse it. Assert that the parsed json matches the
@@ -1297,7 +1297,7 @@ func TestAvroWithRegionalTable(t *testing.T) {
 				sqlDB.Exec(t, `CREATE TABLE table1 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
 				schemaReg := cdctest.StartTestSchemaRegistry()
 				defer schemaReg.Close()
-				stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE table1 WITH format = avro, envelope = %s, 
+				stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE table1 WITH format = avro, envelope = %s,
 	confluent_schema_registry = "%s", schema_change_events = column_changes, schema_change_policy = nobackfill`,
 					test.envelope, schemaReg.URL())
 
