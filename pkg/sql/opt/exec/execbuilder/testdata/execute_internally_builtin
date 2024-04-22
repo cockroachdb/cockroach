@@ -48,6 +48,24 @@ vectorized: false
   table: t@t_pkey
   spans: FULL SCAN
 
+# Same query as above, but with overrides provided via the cluster setting.
+statement ok
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'Database=test,VectorizeMode=off';
+
+query T rowsort
+SELECT crdb_internal.execute_internally('EXPLAIN SELECT k FROM t;');
+----
+distribution: local
+vectorized: false
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: FULL SCAN
+
+statement ok
+RESET CLUSTER SETTING sql.internal_executor.session_overrides;
+
 # optimizer_use_histograms is the only variable that differs from the default
 # right now (except when the internal executor is session-bound, #102954).
 query T
@@ -70,6 +88,32 @@ query T
 SELECT crdb_internal.execute_internally('SHOW optimizer_use_histograms;', true, 'OptimizerUseHistograms=false');
 ----
 off
+
+# Also try override via the cluster setting.
+statement ok
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'OptimizerUseHistograms=true';
+
+query T
+SELECT crdb_internal.execute_internally('SHOW optimizer_use_histograms;', false);
+----
+on
+
+statement ok
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'OptimizerUseHistograms=false';
+
+query T
+SELECT crdb_internal.execute_internally('SHOW optimizer_use_histograms;', true);
+----
+off
+
+# Local override wins.
+query T
+SELECT crdb_internal.execute_internally('SHOW optimizer_use_histograms;', false, 'OptimizerUseHistograms=true');
+----
+on
+
+statement ok
+RESET CLUSTER SETTING sql.internal_executor.session_overrides;
 
 # Some sanity checks around error handling.
 statement error unknown signature
