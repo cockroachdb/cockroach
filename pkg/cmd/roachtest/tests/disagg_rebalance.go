@@ -120,8 +120,7 @@ func registerDisaggRebalance(r registry.Registry) {
 
 			var bytesInRanges int64
 			if err := db.QueryRow(
-				"SELECT sum(used) "+
-					"FROM crdb_internal.kv_store_status WHERE node_id = $1 GROUP BY node_id LIMIT 1",
+				"SELECT metrics['livebytes']::INT FROM crdb_internal.kv_store_status WHERE node_id = $1 LIMIT 1",
 				4,
 			).Scan(&bytesInRanges); err != nil {
 				t.Fatal(err)
