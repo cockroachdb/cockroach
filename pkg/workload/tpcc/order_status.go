@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgtype"
@@ -114,10 +113,10 @@ func createOrderStatus(
 	return o, nil
 }
 
-func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
+func (o *orderStatus) run(
+	ctx context.Context, wID int, tpccTime *tpccTime, rng *rand.Rand,
+) (interface{}, error) {
 	o.config.auditor.orderStatusTransactions.Add(1)
-
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	d := orderStatusData{
 		dID: rng.Intn(10) + 1,
