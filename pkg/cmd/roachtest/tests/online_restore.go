@@ -130,6 +130,8 @@ func registerOnlineRestorePerf(r registry.Registry) {
 						SkipPostValidations: registry.PostValidationReplicaDivergence,
 						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 							rd := makeRestoreDriver(t, c, sp)
+							rd.prepareCluster(ctx)
+
 							restoreStats := runRestore(ctx, t, c, sp, rd, runOnline, runWorkload, useWorkarounds)
 							if runOnline {
 								require.NoError(t, postRestoreValidation(
@@ -188,6 +190,8 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 				)
 
 				rd := makeRestoreDriver(t, c, sp)
+				rd.prepareCluster(ctx)
+
 				runRestore(
 					ctx, t, c, regRestoreSpecs, rd,
 					false /* runOnline */, true /* runWorkload */, false, /* useWorkarounds */
@@ -202,6 +206,8 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 				regQueryTrace := details[0].Stdout
 
 				c.Wipe(ctx)
+				rd.prepareCluster(ctx)
+
 				runRestore(
 					ctx, t, c, onlineRestoreSpecs, rd,
 					true /* runOnline */, true /* runWorkload */, false, /* useWorkarounds */
@@ -445,8 +451,6 @@ func runRestore(
 	runOnline, runWorkload, useWorkarounds bool,
 ) restoreStats {
 	testStartTime := timeutil.Now()
-
-	rd.prepareCluster(ctx)
 
 	statsCollector, err := createStatCollector(ctx, rd)
 	require.NoError(t, err)
