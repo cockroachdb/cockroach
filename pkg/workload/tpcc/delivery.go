@@ -97,9 +97,9 @@ func (del *delivery) run(
 				if err := del.selectNewOrder.QueryRowTx(ctx, tx, wID, dID).Scan(&oID); err != nil {
 					// If no matching order is found, the delivery of this order is skipped.
 					if !errors.Is(err, gosql.ErrNoRows) {
-						del.config.auditor.skippedDelivieries.Add(1)
 						return errors.Wrap(err, "select new_order failed")
 					}
+					del.config.auditor.skippedDelivieries.Add(1)
 					continue
 				}
 				dIDoIDPairs[dID] = oID
