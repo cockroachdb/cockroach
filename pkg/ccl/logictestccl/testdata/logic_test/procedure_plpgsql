@@ -631,3 +631,26 @@ SELECT * FROM temp;
 
 statement ok
 DROP PROCEDURE p(INOUT int);
+
+# Regression test for dropping the side effects from a variable assignment when
+# the variable is never used.
+subtest regression_122318
+
+statement ok
+DROP PROCEDURE IF EXISTS p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+DECLARE
+   x INT = 0;
+   b TEXT;
+BEGIN
+   LOOP
+       x = x + 1;
+       RAISE NOTICE '%: x=%', now(), x;
+       SELECT pg_sleep(0.5) INTO b;
+       EXIT WHEN x > 3;
+   END LOOP;
+END;
+$$;
+CALL p();
+
+subtest end
