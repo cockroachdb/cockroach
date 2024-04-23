@@ -11,11 +11,14 @@
 package status
 
 import (
+	"math"
 	"reflect"
+	"runtime/metrics"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/shirou/gopsutil/v3/net"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSumAndFilterDiskCounters(t *testing.T) {
@@ -167,5 +170,32 @@ func TestSubtractNetCounters(t *testing.T) {
 	subtractNetworkCounters(&from, sub)
 	if !reflect.DeepEqual(from, expected) {
 		t.Fatalf("expected %+v; got %+v", expected, from)
+	}
+}
+
+func TestFloat64HistogramSum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	type testCase struct {
+		h   metrics.Float64Histogram
+		sum int64
+	}
+	testCases := []testCase{
+		{
+			h: metrics.Float64Histogram{
+				Counts:  []uint64{9, 7, 6, 5, 4, 2, 0, 1, 2, 5},
+				Buckets: []float64{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100},
+			},
+			sum: 1485,
+		},
+		{
+			h: metrics.Float64Histogram{
+				Counts:  []uint64{9, 7, 6, 5, 4, 2, 0, 1, 2, 5},
+				Buckets: []float64{math.Inf(-1), 11.1, 22.2, 33.3, 44.4, 55.5, 66.6, 77.7, 88.8, 99.9, math.Inf(1)},
+			},
+			sum: 1670,
+		},
+	}
+	for _, tc := range testCases {
+		require.Equal(t, tc.sum, int64(float64HistogramSum(&tc.h)))
 	}
 }
