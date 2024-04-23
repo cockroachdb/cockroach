@@ -41,18 +41,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Register a fake job resumer for the test. We don't want the job to do
-// anything.
-func init() {
-	jobs.RegisterConstructor(
-		jobspb.TypeSchemaChangeGC,
-		func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-			return fakeResumer{}
-		},
-		jobs.UsesTenantCostControl,
-	)
-}
-
 type fakeResumer struct{}
 
 func (f fakeResumer) Resume(ctx context.Context, _ interface{}) error {
@@ -285,6 +273,13 @@ WHERE
 func TestSchedulesProtectedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	defer jobs.TestingRegisterConstructor(
+		jobspb.TypeSchemaChangeGC,
+		func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return fakeResumer{}
+		},
+		jobs.UsesTenantCostControl)()
 
 	ctx := context.Background()
 	s0, db, _ := serverutils.StartServer(t, base.TestServerArgs{

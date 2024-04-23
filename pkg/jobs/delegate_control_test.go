@@ -158,14 +158,14 @@ func TestJobsControlForSchedules(t *testing.T) {
 	// Our resume never completes any jobs, until this test completes.
 	// As such, the job does not undergo usual job state transitions
 	// (e.g. pause-request -> paused).
-	RegisterConstructor(jobspb.TypeImport, func(job *Job, _ *cluster.Settings) Resumer {
+	defer TestingRegisterConstructor(jobspb.TypeImport, func(job *Job, _ *cluster.Settings) Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(_ context.Context) error {
 				<-blockResume
 				return nil
 			},
 		}
-	}, UsesTenantCostControl)
+	}, UsesTenantCostControl)()
 
 	record := Record{
 		Description: "fake job",
@@ -272,14 +272,14 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 	defer close(blockResume)
 
 	// Our resume never completes any jobs, until this test completes.
-	RegisterConstructor(jobspb.TypeImport, func(job *Job, _ *cluster.Settings) Resumer {
+	defer TestingRegisterConstructor(jobspb.TypeImport, func(job *Job, _ *cluster.Settings) Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(_ context.Context) error {
 				<-blockResume
 				return nil
 			},
 		}
-	}, UsesTenantCostControl)
+	}, UsesTenantCostControl)()
 
 	record := Record{
 		Description: "fake job",
@@ -405,14 +405,14 @@ func TestJobControlByType(t *testing.T) {
 
 	// Make the jobs of each type controllable.
 	for _, jobType := range allJobTypes {
-		RegisterConstructor(jobType, func(job *Job, _ *cluster.Settings) Resumer {
+		defer TestingRegisterConstructor(jobType, func(job *Job, _ *cluster.Settings) Resumer {
 			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
 					<-ctx.Done()
 					return nil
 				},
 			}
-		}, UsesTenantCostControl)
+		}, UsesTenantCostControl)()
 	}
 
 	for _, jobType := range allJobTypes {
