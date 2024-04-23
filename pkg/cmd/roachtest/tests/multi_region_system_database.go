@@ -28,7 +28,7 @@ import (
 func registerMultiRegionSystemDatabase(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(3, spec.Geo(), spec.GatherCores(), spec.GCEZones("us-east1-b,us-west1-b,us-central1-b"))
 	r.Add(registry.TestSpec{
-		Name:             "multi-region-system-database",
+		Name:             "schemachange/multiregion/system-database",
 		Owner:            registry.OwnerSQLFoundations,
 		Timeout:          time.Hour * 1,
 		RequiresLicense:  true,
@@ -47,6 +47,8 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 
+			require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
+
 			_, err := conn.ExecContext(ctx, "SET CLUSTER SETTING sql.multiregion.preview_multiregion_system_database.enabled = true")
 			require.NoError(t, err)
 
@@ -62,7 +64,7 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 				fmt.Sprintf(`ALTER DATABASE system ADD REGION '%s'`, regionOnly(regions[2])))
 			require.NoError(t, err)
 
-			//Perform rolling restart to propagate region information to non-primary nodes
+			// Perform rolling restart to propagate region information to non-primary nodes
 			for i := 2; i <= nodes; i++ {
 				t.WorkerStatus("stop")
 				err := c.StopCockroachGracefullyOnNode(ctx, t.L(), i)
@@ -74,7 +76,7 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.Node(i))
 			}
 
-			//Check system.lease table to ensure that region information for each node is correct
+			// Check system.lease table to ensure that region information for each node is correct
 			rows, err := conn.Query("SELECT DISTINCT sql_instance_id, crdb_region FROM system.lease")
 			require.NoError(t, err)
 
@@ -90,9 +92,9 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 				require.Equal(t, regionOnly(regions[node-1]), regionName)
 			}
 
-			//Intentionally tear down nodes and ensure that everything is still working
+			// Intentionally tear down nodes and ensure that everything is still working
 			chaosTest := func() {
-				//Random operations on user-created table
+				// Random operations on user-created table
 				_, err := conn.Exec(`CREATE TABLE foo (key INT PRIMARY KEY)`)
 				if err != nil {
 					return
@@ -112,6 +114,8 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 			}
 
 			for i := 2; i <= nodes; i++ {
+				require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
+
 				t.WorkerStatus("stop")
 				c.Run(ctx, option.WithNodes(c.Node(i)), "killall -9 cockroach")
 

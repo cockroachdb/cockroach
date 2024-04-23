@@ -816,7 +816,9 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	require.Equal(t, repl.GetMVCCStats(), ms, "in-memory and on-disk stats diverge")
 
 	// Split the range at approximate halfway point.
-	_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKey))
+	// Call AdminSplit on the replica directly so that we can pass a
+	// reason. Splits with reason "manual" bypass estimated stats.
+	_, pErr = repl.AdminSplit(ctx, *adminSplitArgs(splitKey), "test")
 	require.NoError(t, pErr.GoError())
 
 	snap = store.TODOEngine().NewSnapshot()
@@ -978,7 +980,9 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 					// Split the range.
 					g := ctxgroup.WithContext(ctx)
 					g.GoCtx(func(ctx context.Context) error {
-						_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKey))
+						// Call AdminSplit on the replica directly so that we can pass a
+						// reason. Splits with reason "manual" bypass estimated stats.
+						_, pErr := lhsRepl.AdminSplit(ctx, *adminSplitArgs(splitKey), "test")
 						return pErr.GoError()
 					})
 
@@ -1025,12 +1029,12 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 					splitKeyLeft := roachpb.Key("aa")
 					splitKeyLeftAddr, err := keys.Addr(splitKeyLeft)
 					require.NoError(t, err)
-					_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKeyLeft))
+					_, pErr = lhsRepl.AdminSplit(ctx, *adminSplitArgs(splitKeyLeft), "test")
 					require.NoError(t, pErr.GoError())
 					splitKeyRight := roachpb.Key("bb")
 					splitKeyRightAddr, err := keys.Addr(splitKeyRight)
 					require.NoError(t, err)
-					_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKeyRight))
+					_, pErr = rhsRepl.AdminSplit(ctx, *adminSplitArgs(splitKeyRight), "test")
 					require.NoError(t, pErr.GoError())
 
 					snap = store.TODOEngine().NewSnapshot()
@@ -1188,9 +1192,10 @@ func TestStoreRangeSplitWithTracing(t *testing.T) {
 
 // TestStoreRangeSplitWithMismatchedDesc ensures that if a RecomputeRequest
 // during a split fails due to a range descriptor mismatch, the split doesn't
-// return an error to the client.
+// return a non-retryable error, which can be surfaced to the client.
 // The test works by splitting a range and concurrently subsuming that range via
-// a range merge. The split doesn't return an error to the client.
+// a range merge. The split returns a RangeNotFoundError, which will be retried
+// by the DistSender.
 func TestStoreRangeSplitWithMismatchedDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1244,17 +1249,20 @@ func TestStoreRangeSplitWithMismatchedDesc(t *testing.T) {
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("d"), []byte("bar")))
 	require.NoError(t, pErr.GoError())
 
+	lhsRepl := store.LookupReplica(roachpb.RKey("a"))
 	// Split the range at "b".
-	_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(roachpb.Key("b")))
+	_, pErr = lhsRepl.AdminSplit(ctx, *adminSplitArgs(roachpb.Key("b")), "test")
 	require.NoError(t, pErr.GoError())
 
+	rhsRepl := store.LookupReplica(roachpb.RKey("b"))
 	// Split the new RHS at "c". This split will be blocked by the above filter
 	// because the range we're splitting starts at key "b".
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
 		// Use AdminSplit with a non-test sender here to reproduce exactly what will
 		// be returned to the client.
-		return store.DB().AdminSplit(ctx, roachpb.Key("c"), hlc.MaxTimestamp)
+		_, pErr = rhsRepl.AdminSplit(ctx, *adminSplitArgs(roachpb.Key("c")), "test")
+		return pErr.GoError()
 	})
 
 	// Wait until split is underway.
@@ -1267,11 +1275,11 @@ func TestStoreRangeSplitWithMismatchedDesc(t *testing.T) {
 	// Unblock the split.
 	splitBlocked <- struct{}{}
 
-	// Wait for the split to complete and ensure no error is returned to the client.
-	// The split will hit a benign error because the range descriptor changed, and
-	// will be retried. The second time around, the split is a no-op because the
-	// range "b" - "d" was subsumed.
-	require.Nil(t, g.Wait())
+	// Wait for the split to complete and ensure a RangeNotFoundError is returned.
+	// The split will hit a benign error because the range descriptor changed.
+	// The DistSender will retry the RangeNotFoundError. The second time around,
+	// the split is a no-op because the range "b" - "d" was subsumed.
+	require.IsType(t, &kvpb.RangeNotFoundError{}, g.Wait())
 }
 
 // RaftMessageHandlerInterceptor wraps a storage.IncomingRaftMessageHandler. It
@@ -1408,10 +1416,9 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	midKey := writeRandomTimeSeriesDataToRange(t, store, repl.RangeID, keyPrefix)
 
 	// Split the range at approximate halfway point.
-	args = adminSplitArgs(midKey)
-	_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{
-		RangeID: repl.RangeID,
-	}, args)
+	// Call AdminSplit on the replica directly so that we can pass a
+	// reason. Splits with reason "manual" bypass estimated stats.
+	_, pErr = repl.AdminSplit(ctx, *adminSplitArgs(midKey), "test")
 	require.NoError(t, pErr.GoError())
 
 	snap := store.TODOEngine().NewSnapshot()

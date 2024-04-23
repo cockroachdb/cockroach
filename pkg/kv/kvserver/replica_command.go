@@ -506,6 +506,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	var totalStats enginepb.MVCCStats
 	if EnableEstimatedMVCCStatsInSplit.Get(&r.store.ClusterSettings().SV) &&
 		r.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1_EstimatedMVCCStatsInSplit) &&
+		reason != manualAdminReason &&
 		!useEstimatedStatsForExternalBytes {
 		// If the stats contain estimates, re-compute them to prevent estimates
 		// from compounding across splits. See makeEstimatedSplitStatsHelper for more
