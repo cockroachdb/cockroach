@@ -13,10 +13,10 @@ package status
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"regexp"
 	"runtime"
-	"runtime/debug"
 	"runtime/metrics"
 	"time"
 
@@ -381,6 +381,19 @@ const runtimeMetricMemStackOSBytes = "/memory/classes/os-stacks:bytes"
 // metrics in /memory/classes.
 const runtimeMetricGoTotal = "/memory/classes/total:bytes"
 
+// Count of all completed GC cycles.
+const runtimeMetricGCCount = "/gc/cycles/total:gc-cycles"
+
+// Distribution of individual GC-related stop-the-world pause
+// latencies. This is the time from deciding to stop the world
+// until the world is started again. Some of this time is spent
+// getting all threads to stop (this is measured directly in
+// /sched/pauses/stopping/gc:seconds), during which some threads
+// may still be running. Bucket counts increase monotonically.
+// TODO(lyang24): use "/sched/pauses/total/gc:seconds" once go 1.22
+// is fully adopted.
+const runtimeMetricGCPauseTotal = "/gc/pauses:seconds"
+
 var runtimeMetrics = []string{
 	runtimeMetricGCAssist,
 	runtimeMetricGoTotal,
@@ -391,6 +404,8 @@ var runtimeMetrics = []string{
 	runtimeMetricMemStackHeapBytes,
 	runtimeMetricMemStackOSBytes,
 	runtimeMetricCumulativeAlloc,
+	runtimeMetricGCCount,
+	runtimeMetricGCPauseTotal,
 }
 
 // GoRuntimeSampler are a collection of metrics to sample from golang's runtime environment and
@@ -424,6 +439,45 @@ func (grm *GoRuntimeSampler) uint64(name string) uint64 {
 func (grm *GoRuntimeSampler) float64(name string) float64 {
 	i := grm.getIndex(name)
 	return grm.metricSamples[i].Value.Float64()
+}
+
+// float64Histogram gets the sampled value by metrics name as *metrics.Float64Histogram.
+// N.B. This method will panic if the metrics value is not
+// metrics.KindFloat64Histogram.
+func (grm *GoRuntimeSampler) float64Histogram(name string) *metrics.Float64Histogram {
+	i := grm.getIndex(name)
+	return grm.metricSamples[i].Value.Float64Histogram()
+}
+
+// float64HistogramSum performs an estimated sum to the float64histogram.
+// The sum is estimated by taking the average of the bucket boundaries *
+// their count. Buckets with extreme boundary values such as -inf or inf
+// will be normalized to the other non infinity boundary value.
+func float64HistogramSum(h *metrics.Float64Histogram) float64 {
+	estSum := 0.0
+	if len(h.Buckets) == 2 && math.IsInf(h.Buckets[0], -1) && math.IsInf(h.Buckets[1], 1) {
+		panic("unable to estimate from histogram with boundary: [-inf, inf]")
+	}
+	var start, end float64 // start and end of current bucket
+	for i := 0; i <= len(h.Counts)-1; i++ {
+		start, end = h.Buckets[i], h.Buckets[i+1]
+		if math.IsInf(start, -1) { // -Inf
+			// Avoid interpolating with infinity by replacing it with
+			// the right boundary value.
+			start = end
+		}
+		if math.IsInf(end, 1) { // +Inf
+			// Avoid interpolating with infinity by replacing it with
+			// the left boundary value.
+			end = start
+		}
+		estBucketValue := start
+		if end != start {
+			estBucketValue += (end - start) / 2.0
+		}
+		estSum += estBucketValue * float64(h.Counts[i])
+	}
+	return estSum
 }
 
 // sampleRuntimeMetrics reads from metrics.Read api and fill in the value
@@ -690,12 +744,6 @@ func GetCGoMemStats(ctx context.Context) *CGoMemStats {
 // to keep runtime statistics current.
 // The CGoMemStats should be provided via GetCGoMemStats().
 func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMemStats) {
-	// Note that debug.ReadGCStats() does not suffer the same problem as
-	// runtime.ReadMemStats(). The only way you can know that is by reading the
-	// source.
-	gc := &debug.GCStats{}
-	debug.ReadGCStats(gc)
-
 	rsr.goRuntimeSampler.sampleRuntimeMetrics()
 
 	numCgoCall := runtime.NumCgoCall()
@@ -793,7 +841,11 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 
 	combinedNormalizedProcPerc := (procSrate + procUrate) / cpuCapacity
 	combinedNormalizedHostPerc := (hostSrate + hostUrate) / float64(numHostCPUs)
-	gcPauseRatio := float64(uint64(gc.PauseTotal)-rsr.last.gcPauseTime) / dur
+
+	gcPauseTotal := float64HistogramSum(rsr.goRuntimeSampler.float64Histogram(runtimeMetricGCPauseTotal))
+	gcPauseTotalNs := uint64(gcPauseTotal * 1.e9)
+	gcCount := rsr.goRuntimeSampler.uint64(runtimeMetricGCCount)
+	gcPauseRatio := float64(gcPauseTotalNs-rsr.last.gcPauseTime) / dur
 	runnableSum := goschedstats.CumulativeNormalizedRunnableGoroutines()
 	gcAssistSeconds := rsr.goRuntimeSampler.float64(runtimeMetricGCAssist)
 	gcAssistNS := int64(gcAssistSeconds * 1e9)
@@ -806,7 +858,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.last.procStime = procStime
 	rsr.last.hostUtime = hostUtime
 	rsr.last.hostStime = hostStime
-	rsr.last.gcPauseTime = uint64(gc.PauseTotal)
+	rsr.last.gcPauseTime = gcPauseTotalNs
 	rsr.last.runnableSum = runnableSum
 
 	// Log summary of statistics to console.
@@ -835,7 +887,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		CPUUserPercent:    float32(procUrate) * 100,
 		CPUSysPercent:     float32(procSrate) * 100,
 		GCPausePercent:    float32(gcPauseRatio) * 100,
-		GCRunCount:        uint64(gc.NumGC),
+		GCRunCount:        gcCount,
 		NetHostRecvBytes:  deltaNet.BytesRecv,
 		NetHostSendBytes:  deltaNet.BytesSent,
 	}
@@ -843,7 +895,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	logStats(ctx, stats)
 
 	rsr.last.cgoCall = numCgoCall
-	rsr.last.gcCount = gc.NumGC
+	rsr.last.gcCount = int64(gcCount)
 
 	rsr.GoAllocBytes.Update(int64(goAlloc))
 	rsr.GoTotalBytes.Update(int64(goTotal))
@@ -857,8 +909,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.RunnableGoroutinesPerCPU.Update(runnableAvg)
 	rsr.CgoAllocBytes.Update(int64(cs.CGoAllocatedBytes))
 	rsr.CgoTotalBytes.Update(int64(cs.CGoTotalBytes))
-	rsr.GcCount.Update(gc.NumGC)
-	rsr.GcPauseNS.Update(int64(gc.PauseTotal))
+	rsr.GcCount.Update(int64(gcCount))
+	rsr.GcPauseNS.Update(int64(gcPauseTotalNs))
 	rsr.GcPausePercent.Update(gcPauseRatio)
 	rsr.GcAssistNS.Update(gcAssistNS)
 
