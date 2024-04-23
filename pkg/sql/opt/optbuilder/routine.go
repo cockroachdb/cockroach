@@ -366,15 +366,17 @@ func (b *Builder) buildRoutine(
 	// for the schema changer we only need depth 1. Also keep track of when
 	// we have are executing inside a UDF, and whether the routine is used as a
 	// data source (this could be nested, so we need to track the previous state).
-	defer func(trackSchemaDeps, insideUDF, insideDataSource bool) {
+	defer func(trackSchemaDeps, insideUDF, insideDataSource, insideSQLRoutine bool) {
 		b.trackSchemaDeps = trackSchemaDeps
 		b.insideUDF = insideUDF
 		b.insideDataSource = insideDataSource
-	}(b.trackSchemaDeps, b.insideUDF, b.insideDataSource)
+		b.insideSQLRoutine = insideSQLRoutine
+	}(b.trackSchemaDeps, b.insideUDF, b.insideDataSource, b.insideSQLRoutine)
 	oldInsideDataSource := b.insideDataSource
 	b.insideDataSource = false
 	b.trackSchemaDeps = false
 	b.insideUDF = true
+	b.insideSQLRoutine = o.Language == tree.RoutineLangSQL
 	isSetReturning := o.Class == tree.GeneratorClass
 	isMultiColDataSource = false
 
@@ -407,21 +409,19 @@ func (b *Builder) buildRoutine(
 		body = make([]memo.RelExpr, len(stmts))
 		bodyProps = make([]*physical.Required, len(stmts))
 
-		b.withinSQLRoutine(func() {
-			for i := range stmts {
-				stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
-				expr, physProps := stmtScope.expr, stmtScope.makePhysicalProps()
+		for i := range stmts {
+			stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+			expr, physProps := stmtScope.expr, stmtScope.makePhysicalProps()
 
-				// The last statement produces the output of the UDF.
-				if i == len(stmts)-1 {
-					finishResolveType(stmtScope)
-					expr, physProps, isMultiColDataSource =
-						b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, oldInsideDataSource, f)
-				}
-				body[i] = expr
-				bodyProps[i] = physProps
+			// The last statement produces the output of the UDF.
+			if i == len(stmts)-1 {
+				finishResolveType(stmtScope)
+				expr, physProps, isMultiColDataSource =
+					b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, oldInsideDataSource, f)
 			}
-		})
+			body[i] = expr
+			bodyProps[i] = physProps
+		}
 
 		if b.verboseTracing {
 			bodyStmts = make([]string, len(stmts))
@@ -585,12 +585,4 @@ func (b *Builder) finishBuildLastStmt(
 		}
 	}
 	return expr, physProps, isMultiColDataSource
-}
-
-func (b *Builder) withinSQLRoutine(fn func()) {
-	defer func(origValue bool) {
-		b.insideSQLRoutine = origValue
-	}(b.insideSQLRoutine)
-	b.insideSQLRoutine = true
-	fn()
 }
