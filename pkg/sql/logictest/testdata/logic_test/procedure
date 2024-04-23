@@ -435,6 +435,48 @@ skipif config local-mixed-23.2
 statement error pgcode 0A000 calling procedures with output arguments is not supported in SQL functions
 CREATE PROCEDURE p_outer(OUT param INTEGER) AS $$ CALL p_inner(NULL); $$ LANGUAGE SQL;
 
+skipif config local-mixed-23.2
+statement ok
+CREATE PROCEDURE p_nested() AS $$
+  DECLARE
+    a INT;
+  BEGIN
+    CALL p_inner(a);
+    RAISE NOTICE 'a: %', a;
+  END
+$$ LANGUAGE PLpgSQL;
+
+skipif config local-mixed-23.2
+statement ok
+CREATE FUNCTION f() RETURNS VOID AS $$ CALL p_nested(); $$ LANGUAGE SQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: a: 1
+
+skipif config local-mixed-23.2
+statement ok
+DROP FUNCTION f;
+
+skipif config local-mixed-23.2
+statement ok
+CREATE PROCEDURE p() AS $$ CALL p_nested(); $$ LANGUAGE SQL;
+
+skipif config local-mixed-23.2
+query T noticetrace
+CALL p();
+----
+NOTICE: a: 1
+
+skipif config local-mixed-23.2
+statement ok
+DROP PROCEDURE p;
+
+skipif config local-mixed-23.2
+statement ok
+DROP PROCEDURE p_nested;
+
 statement ok
 DROP PROCEDURE p_inner;
 
