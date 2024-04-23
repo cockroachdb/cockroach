@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -260,8 +261,8 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	lastClientStart := make(map[string]hlc.Timestamp)
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
-			lastClientStart[token] = clientStartTime
+		BeforeClientSubscribe: func(addr string, token string, clientStartTimes span.Frontier) {
+			lastClientStart[token] = clientStartTimes.Frontier()
 		},
 	}
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
@@ -639,7 +640,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 		clientAddresses := make(map[string]struct{})
 		var addressesMu syncutil.Mutex
 		args.TestingKnobs = &sql.StreamingTestingKnobs{
-			BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
+			BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
 				addressesMu.Lock()
 				defer addressesMu.Unlock()
 				clientAddresses[addr] = struct{}{}
@@ -747,7 +748,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 	clientAddresses := make(map[string]struct{})
 	var addressesMu syncutil.Mutex
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
+		BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
 			addressesMu.Lock()
 			defer addressesMu.Unlock()
 			clientAddresses[addr] = struct{}{}
@@ -832,7 +833,7 @@ func TestStreamingReplanOnLag(t *testing.T) {
 	clientAddresses := make(map[string]struct{})
 	var addressesMu syncutil.Mutex
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
+		BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
 			addressesMu.Lock()
 			defer addressesMu.Unlock()
 			clientAddresses[addr] = struct{}{}

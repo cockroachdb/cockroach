@@ -49,6 +49,7 @@ type eventStream struct {
 	streamID streampb.StreamID
 	execCfg  *sql.ExecutorConfig
 	spec     streampb.StreamPartitionSpec
+	frontier span.Frontier
 
 	// streamCh and data are used to pass rows back to be emitted to the caller.
 	streamCh chan tree.Datums
@@ -137,6 +138,16 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	}
 
 	initialTimestamp := s.spec.InitialScanTimestamp
+	s.frontier, err = span.MakeFrontier(s.spec.Spans...)
+	if err != nil {
+		return err
+	}
+	for _, sp := range s.spec.Progress {
+		if _, err := s.frontier.Forward(sp.Span, sp.Timestamp); err != nil {
+			s.frontier.Release()
+			return err
+		}
+	}
 	if s.spec.PreviousReplicatedTimestamp.IsEmpty() {
 		s.addMu = &syncutil.Mutex{}
 		log.Infof(ctx, "starting event stream with initial scan at %s", initialTimestamp)
@@ -153,17 +164,20 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		log.Infof(ctx, "resuming event stream (no initial scan) from %s", initialTimestamp)
 	}
 
-	// Start rangefeed, which spins up a separate go routine to perform it's job.
-	s.rf = s.execCfg.RangeFeedFactory.New(
-		fmt.Sprintf("streamID=%d", s.streamID), initialTimestamp, s.onValue, opts...)
-	if err := s.rf.Start(ctx, s.spec.Spans); err != nil {
-		return err
-	}
-
 	// Reserve batch kvsSize bytes from monitor.  We might have to do something more fancy
 	// in the future, but for now, grabbing chunk of memory from the monitor would do the trick.
 	if err := s.acc.Grow(ctx, s.spec.Config.BatchByteSize); err != nil {
 		return errors.Wrapf(err, "failed to allocated %d bytes from monitor", s.spec.Config.BatchByteSize)
+	}
+
+	// Start rangefeed, which spins up a separate go routine to perform its job.
+	s.rf = s.execCfg.RangeFeedFactory.New(
+		fmt.Sprintf("streamID=%d", s.streamID), initialTimestamp, s.onValue, opts...,
+	)
+
+	if err := s.rf.StartFromFrontier(ctx, s.frontier); err != nil {
+		s.frontier.Release()
+		return err
 	}
 
 	activeStreams.Lock()
@@ -216,6 +230,9 @@ func (s *eventStream) Close(ctx context.Context) {
 
 	if s.rf != nil {
 		s.rf.Close()
+	}
+	if s.frontier != nil {
+		s.frontier.Release()
 	}
 	s.acc.Close(ctx)
 }

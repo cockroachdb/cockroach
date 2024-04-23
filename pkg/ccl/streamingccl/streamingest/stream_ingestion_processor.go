@@ -437,16 +437,14 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
 		}
 
-		previousReplicatedTimestamp := frontierForSpans(sip.frontier, partitionSpec.Spans...)
-
 		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-				streamingKnobs.BeforeClientSubscribe(addr, string(token), previousReplicatedTimestamp)
+				streamingKnobs.BeforeClientSubscribe(addr, string(token), sip.frontier)
 			}
 		}
 
 		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), int32(sip.flowCtx.NodeID.SQLInstanceID()), token,
-			sip.spec.InitialScanTimestamp, previousReplicatedTimestamp)
+			sip.spec.InitialScanTimestamp, sip.frontier)
 
 		if err != nil {
 			sip.MoveToDrainingAndLogError(errors.Wrapf(err, "consuming partition %v", redactedAddr))
@@ -897,7 +895,7 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 		// same resolved timestamp -- even if they were individually resolved to
 		// _slightly_ different/newer timestamps -- to allow them to merge into
 		// fewer and larger spans in the frontier.
-		if d > 0 {
+		if d > 0 && resolvedSpan.Timestamp.After(sip.spec.InitialScanTimestamp) {
 			resolvedSpan.Timestamp.Logical = 0
 			resolvedSpan.Timestamp.WallTime -= resolvedSpan.Timestamp.WallTime % int64(d)
 		}
@@ -1212,9 +1210,11 @@ func (sip *streamIngestionProcessor) flush() error {
 	bufferToFlush := sip.buffer
 	sip.buffer = getBuffer()
 
-	checkpoint := &jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
+	checkpoint := &jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0, sip.frontier.Len())}
 	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
-		checkpoint.ResolvedSpans = append(checkpoint.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		if !ts.IsEmpty() {
+			checkpoint.ResolvedSpans = append(checkpoint.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		}
 		return span.ContinueMatch
 	})
 
