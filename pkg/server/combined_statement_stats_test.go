@@ -77,7 +77,7 @@ func TestValidateSizeOfResult(t *testing.T) {
 				"",
 				"",
 				nil,
-				"",
+				"SELECT * FROM %s %s %s %s %s",
 			)
 			tc.evalErr(t, err)
 		})
@@ -117,7 +117,8 @@ func TestStatementStatsRunner(t *testing.T) {
 	}
 	where := fmt.Sprintf("WHERE app_name = '%s'", appName)
 	args := []interface{}{}
-	orderAndLimit := ""
+	order := ""
+	limit := ""
 
 	testCases := []struct {
 		name     string
@@ -126,7 +127,7 @@ func TestStatementStatsRunner(t *testing.T) {
 	}{
 		{
 			"less than max limit",
-			statsCount + 1,
+			statsCount * 10, // maxLimit
 			func(t *testing.T, resultsCount int, err error) {
 				require.NoError(t, err)
 				require.GreaterOrEqual(t, resultsCount, statsCount)
@@ -134,7 +135,7 @@ func TestStatementStatsRunner(t *testing.T) {
 		},
 		{
 			"exceeds max limit",
-			statsCount - 1,
+			1, // maxLimit
 			func(t *testing.T, resultsCount int, err error) {
 				require.ErrorIs(t, err, errMaxResultsSize)
 				require.Equal(t, 0, resultsCount)
@@ -147,12 +148,12 @@ func TestStatementStatsRunner(t *testing.T) {
 			_, _ = sqlDb.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.stats.response.max = %d", tc.maxLimit))
 
 			t.Run("collectCombinedStatements", func(t *testing.T) {
-				stats, err := runner.collectCombinedStatements(ctx, where, args, orderAndLimit, settings)
+				stats, err := runner.collectCombinedStatements(ctx, where, args, order, limit, settings)
 				tc.assertFn(t, len(stats), err)
 			})
 
 			t.Run("collectCombinedTransactions", func(t *testing.T) {
-				stats, err := runner.collectCombinedTransactions(ctx, where, args, orderAndLimit)
+				stats, err := runner.collectCombinedTransactions(ctx, where, args, order, limit)
 				tc.assertFn(t, len(stats), err)
 			})
 
@@ -160,7 +161,7 @@ func TestStatementStatsRunner(t *testing.T) {
 				// Set max response size to some large number to ensure we get transactions stats as a prerequisite
 				// without any restrictions.
 				_, _ = sqlDb.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.stats.response.max = %d", statsCount*10))
-				transactions, err := runner.collectCombinedTransactions(ctx, where, args, orderAndLimit)
+				transactions, err := runner.collectCombinedTransactions(ctx, where, args, order, limit)
 				require.NoError(t, err)
 				require.GreaterOrEqual(t, len(transactions), statsCount)
 
