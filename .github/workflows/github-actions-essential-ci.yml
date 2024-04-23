@@ -1,44 +1,52 @@
 name: GitHub Actions Essential CI
 on:
   pull_request:
-    types: [ opened, reopened, synchronize ]
+    types: [opened, reopened, synchronize]
     branches:
-      - 'master'
-      - 'release-*'
-      - '!release-1.0*'
-      - '!release-1.1*'
-      - '!release-2.0*'
-      - '!release-2.1*'
-      - '!release-19.1*'
-      - '!release-19.2*'
-      - '!release-20.1*'
-      - '!release-20.2*'
-      - '!release-21.1*'
-      - '!release-21.2*'
-      - '!release-22.1*'
-      - '!release-22.2*'
-      - '!release-23.1*'
-      - '!release-23.2*'
+      - "master"
+      - "release-*"
+      - "staging-*"
+      - "!release-1.0*"
+      - "!release-1.1*"
+      - "!release-2.0*"
+      - "!release-2.1*"
+      - "!release-19.1*"
+      - "!release-19.2*"
+      - "!release-20.1*"
+      - "!release-20.2*"
+      - "!release-21.1*"
+      - "!release-21.2*"
+      - "!release-22.1*"
+      - "!release-22.2*"
+      - "!release-23.1*"
+      - "!release-23.2*"
+      - "!staging-v22.2*"
+      - "!staging-v23.1*"
+      - "!staging-v23.2*"
   push:
     branches:
-      - 'master'
-      - 'release-*'
-      - 'staging'
-      - 'trying'
-      - '!release-1.0*'
-      - '!release-1.1*'
-      - '!release-2.0*'
-      - '!release-2.1*'
-      - '!release-19.1*'
-      - '!release-19.2*'
-      - '!release-20.1*'
-      - '!release-20.2*'
-      - '!release-21.1*'
-      - '!release-21.2*'
-      - '!release-22.1*'
-      - '!release-22.2*'
-      - '!release-23.1*'
-      - '!release-23.2*'
+      - "master"
+      - "release-*"
+      - "staging-*"
+      - "staging"
+      - "trying"
+      - "!release-1.0*"
+      - "!release-1.1*"
+      - "!release-2.0*"
+      - "!release-2.1*"
+      - "!release-19.1*"
+      - "!release-19.2*"
+      - "!release-20.1*"
+      - "!release-20.2*"
+      - "!release-21.1*"
+      - "!release-21.2*"
+      - "!release-22.1*"
+      - "!release-22.2*"
+      - "!release-23.1*"
+      - "!release-23.2*"
+      - "!staging-v22.2*"
+      - "!staging-v23.1*"
+      - "!staging-v23.2*"
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
@@ -269,7 +277,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_unit_tests:
+  unit_tests:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -282,7 +290,7 @@ jobs:
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run tests
-        run: bazel test //pkg:all_tests //pkg/ui:lint //pkg/ui:test --config crosslinux --jobs 300 --remote_download_minimal --bes_keywords ci-unit-test --config=use_ci_timeouts --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
+        run: ./build/github/unit-tests.sh
       - name: upload test results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()

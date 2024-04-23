@@ -16,5 +16,5 @@ if tc_bors_branch; then
 fi
 
 $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- test --config=ci --config=use_ci_timeouts -c fastbuild \
-                                  //pkg:small_non_ccl_tests //pkg:medium_non_ccl_tests //pkg:large_non_ccl_tests //pkg:enormous_non_ccl_tests \
-                                   --profile=/artifacts/profile.gz $EXTRA_PARAMS
+    //pkg:all_tests \
+    --profile=/artifacts/profile.gz $EXTRA_PARAMS
