@@ -317,6 +317,8 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = true
 	ot.evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity = true
 	ot.evalCtx.SessionData().TrigramSimilarityThreshold = 0.3
+	ot.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
+	ot.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
 
 	return ot
 }

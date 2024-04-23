@@ -32,6 +32,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/build",
         "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprofiler/profilerconstants",
@@ -102,6 +103,7 @@ go_test(
         "jobs_test.go",
         "lease_test.go",
         "main_test.go",
+        "progress_test.go",
         "registry_external_test.go",
         "registry_test.go",
         "scheduled_job_executor_test.go",
