@@ -313,7 +313,6 @@ SELECT '%[1]s';
 			cmd = exec.CommandContext(ctx, binary,
 				"demo",
 				"--empty",
-				"--disable-demo-license",
 				"--set=errexit=false",
 				"--format=tsv",
 			)
