@@ -143,6 +143,19 @@ func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
 	panic("unimplemented")
 }
 
+func (p *Provider) CreateLoadBalancer(*logger.Logger, vm.List, int) error {
+	panic("unimplemented")
+}
+
+func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
+	panic("unimplemented")
+}
+
+func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {
+	// This Provider has no concept of load balancers yet, return an empty list.
+	return nil, nil
+}
+
 // New constructs a new Provider instance.
 func New() *Provider {
 	p := &Provider{}
