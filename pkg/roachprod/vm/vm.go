@@ -40,6 +40,8 @@ const (
 	// TagUsage indicates where a certain resource is used. "roachtest" is used
 	// as the key for roachtest created resources.
 	TagUsage = "usage"
+	// TagService indicates service is either "static" or "srv".
+	TagService = "svc"
 	// TagArch is the CPU architecture tag const.
 	TagArch = "arch"
 
@@ -88,6 +90,11 @@ func ParseArch(s string) CPUArch {
 
 // GetDefaultLabelMap returns a label map for a common set of labels.
 func GetDefaultLabelMap(opts CreateOpts) map[string]string {
+	svc := "static"
+	if opts.DynamicService {
+		svc = "srv"
+	}
+
 	// Add architecture override tag, only if it was specified.
 	if opts.Arch != "" {
 		return map[string]string{
@@ -95,12 +102,14 @@ func GetDefaultLabelMap(opts CreateOpts) map[string]string {
 			TagLifetime:  opts.Lifetime.String(),
 			TagRoachprod: "true",
 			TagArch:      opts.Arch,
+			TagService:   svc,
 		}
 	}
 	return map[string]string{
 		TagCluster:   opts.ClusterName,
 		TagLifetime:  opts.Lifetime.String(),
 		TagRoachprod: "true",
+		TagService:   svc,
 	}
 }
 
@@ -306,6 +315,8 @@ type CreateOpts struct {
 		FileSystem string
 	}
 	OsVolumeSize int
+
+	DynamicService bool
 }
 
 // DefaultCreateOpts returns a new vm.CreateOpts with default values set.
@@ -316,6 +327,7 @@ func DefaultCreateOpts() CreateOpts {
 		GeoDistributed: false,
 		VMProviders:    []string{},
 		OsVolumeSize:   10,
+		DynamicService: true,
 		// N.B. When roachprod is used via CLI, this will be overridden by {"roachprod":"true"}.
 		CustomLabels: map[string]string{"roachtest": "true"},
 	}

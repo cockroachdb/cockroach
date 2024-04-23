@@ -150,6 +150,9 @@ func initFlags() {
 			vm.AllProviderNames()))
 	createCmd.Flags().BoolVar(&createVMOpts.GeoDistributed,
 		"geo", false, "Create geo-distributed cluster")
+	createCmd.Flags().BoolVar(&createVMOpts.DynamicService,
+		"dynamic", false, "Enable use of SRV records to dynamically discover and allocate ports to services "+
+			"for running multiple listening processes per node (e.g. for serverless-style deployments)")
 	createCmd.Flags().StringVar(&createVMOpts.Arch, "arch", "",
 		"architecture override for VM [amd64, arm64, fips]; N.B. fips implies amd64 with openssl")
 

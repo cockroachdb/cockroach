@@ -318,6 +318,12 @@ func (s *ClusterSpec) RoachprodOpts(
 	}
 
 	createVMOpts := vm.DefaultCreateOpts()
+	// We just always use dynamic port allocations and discovery in tests since:
+	// a) some tests start multiple processes per node and would need to do this
+	// on a test by test basis if we didn't and
+	// b) these are *automated* tests, so the benefit of predictable ports to a
+	// human interacting with the cluster is less significant.
+	createVMOpts.DynamicService = true
 	// N.B. We set "usage=roachtest" as the default, custom label for billing tracking.
 	createVMOpts.CustomLabels = map[string]string{"usage": "roachtest"}
 	createVMOpts.ClusterName = "" // Will be set later.

@@ -246,6 +246,10 @@ func (c *SyncedCluster) allowServiceRegistration() bool {
 func (c *SyncedCluster) maybeRegisterServices(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts, portFunc FindOpenPortsFunc,
 ) error {
+	if !c.supportsDiscovery() {
+		return nil
+	}
+
 	serviceMap, err := c.MapServices(ctx, startOpts.VirtualClusterName, startOpts.SQLInstance)
 	if err != nil {
 		return err

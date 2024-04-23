@@ -143,6 +143,9 @@ func (c *SyncedCluster) DiscoverServices(
 	serviceType ServiceType,
 	predicates ...ServicePredicate,
 ) (ServiceDescriptors, error) {
+	if !c.supportsDiscovery() {
+		return nil, nil
+	}
 	// If no VC name is specified, use the system interface.
 	if virtualClusterName == "" {
 		virtualClusterName = SystemInterfaceName
@@ -292,10 +295,18 @@ func (c *SyncedCluster) MapServices(
 	return serviceMap, nil
 }
 
+func (c *SyncedCluster) supportsDiscovery() bool {
+	v, ok := c.VMs[0].Labels[vm.TagService]
+	return v == "srv" || !ok
+}
+
 // RegisterServices registers services with the DNS provider. This function is
 // lenient and will not return an error if no DNS provider is available to
 // register the service.
 func (c *SyncedCluster) RegisterServices(ctx context.Context, services ServiceDescriptors) error {
+	if !c.supportsDiscovery() {
+		return nil
+	}
 	servicesByDNSProvider := make(map[string]ServiceDescriptors)
 	for _, desc := range services {
 		dnsProvider := c.VMs[desc.Node-1].DNSProvider
