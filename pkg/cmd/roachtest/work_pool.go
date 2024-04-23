@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -49,8 +48,7 @@ func newWorkPool(
 		//  nightly runs. This is a temp logic to test spot VMs.
 		if roachtestflags.Cloud == spec.GCE &&
 			testSpec.Benchmark &&
-			!testSpec.Suites.Contains(registry.Weekly) &&
-			rand.Float64() <= 0.5 {
+			!testSpec.Suites.Contains(registry.Weekly) {
 			l.PrintfCtx(ctx, "using spot VMs to run test %s", testSpec.Name)
 			testSpec.Cluster.UseSpotVMs = true
 		}
