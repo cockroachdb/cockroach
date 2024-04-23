@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
@@ -34,7 +34,7 @@ import (
 func runSchemaChangeMultiRegionBenchmarkLeasing(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
-	var durations [2]int64
+	var durations [2]time.Duration
 	defaultOpts := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), defaultOpts)
 	// Create 600 tables inside the database, which is above our default lease
@@ -141,7 +141,7 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), defaultOpts)
 
 			grp := ctxgroup.WithContext(ctx)
-			totalTime := atomic.Int64{}
+			totalTimeSeconds := syncutil.AtomicFloat64(0.0)
 			// Start one thread per-node that will execute the cockroach sql command
 			// with a script that selects from each table. The number of tables that
 			// we have is high so the lease manager can't keep everything refreshed
@@ -170,14 +170,14 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 						// We are going to intentionally extract the first line to get the
 						// elapsed time for the set of queries.
 						outputSlice := strings.Split(output.Output(false), "\n")
-						realExecTime := 0.0
+						realExecTimeSeconds := 0.0
 						realPrefix := ""
-						_, err = fmt.Sscanf(outputSlice[len(outputSlice)-4], "%s%f", &realPrefix, &realExecTime)
+						_, err = fmt.Sscanf(outputSlice[len(outputSlice)-4], "%s%f", &realPrefix, &realExecTimeSeconds)
 						if err != nil {
 							return err
 						}
 						// Update our tally of execution time for this set of queries.
-						totalTime.Add(int64(realExecTime))
+						syncutil.AddFloat64(&totalTimeSeconds, realExecTimeSeconds)
 					}
 					return nil
 				})
@@ -186,7 +186,7 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 			if err := grp.Wait(); err != nil {
 				t.Fatal(err)
 			}
-			durations[modeIdx] = int64(time.Duration(totalTime.Load()) * time.Millisecond)
+			durations[modeIdx] = time.Duration(syncutil.LoadFloat64(&totalTimeSeconds) * float64(time.Second))
 			t.Status(fmt.Sprintf("benchmark completed for session_based_leasing=%t in %d", sessionBasedLeasingEnabled, durations[modeIdx]))
 		}()
 	}
