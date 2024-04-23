@@ -420,6 +420,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			b.appendPlpgSQLStmts(&blockCon, stmts[i+1:])
 			b.pushContinuation(blockCon)
+			defer b.popContinuation()
 			return b.buildBlock(t, s)
 
 		case *ast.Return:
