@@ -870,4 +870,27 @@ DROP PROCEDURE p;
 statement ok
 DROP SEQUENCE seq;
 
+# Regression test for invalid assertion when using the default argument for
+# INOUT parameter when invoking the procedure (#122263).
+statement ok
+CREATE PROCEDURE p(INOUT a int DEFAULT 11) AS $$
+BEGIN
+  RAISE NOTICE 'a: %', a;
+  a := a * 10;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 procedure parameter "a" is an output parameter but corresponding argument is not writable
+CREATE PROCEDURE foo() AS $$
+DECLARE _a int;
+BEGIN
+  _a := 10;
+  CALL p();  -- fail, no output argument for a
+  RAISE NOTICE '_a: %', _a;
+END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP PROCEDURE p;
+
 subtest end
