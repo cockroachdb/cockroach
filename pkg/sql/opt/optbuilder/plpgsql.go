@@ -935,8 +935,22 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			callScope := callCon.s.push()
 			proc, def := b.ob.resolveProcedureDefinition(callScope, t.Proc)
 			overload := proc.ResolvedOverload()
-			if len(proc.Exprs) != len(overload.RoutineParams) {
-				panic(errors.AssertionFailedf("expected arguments and parameters to be the same length"))
+			var numDefaultParams int
+			for _, p := range overload.RoutineParams {
+				if p.DefaultVal != nil {
+					numDefaultParams++
+				}
+			}
+			if len(proc.Exprs)+numDefaultParams < len(overload.RoutineParams) {
+				panic(errors.AssertionFailedf(
+					"too few arguments are provided: got %d, want %d (%d have defaults)",
+					len(proc.Exprs), len(overload.RoutineParams), numDefaultParams,
+				))
+			} else if len(proc.Exprs) > len(overload.RoutineParams) {
+				panic(errors.AssertionFailedf(
+					"too many arguments are provided: got %d, want %d",
+					len(proc.Exprs), len(overload.RoutineParams),
+				))
 			}
 			procTyp := proc.ResolvedType()
 			colName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_call"))
@@ -950,6 +964,15 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			var target []ast.Variable
 			for j := range overload.RoutineParams {
 				if overload.RoutineParams[j].IsOutParam() {
+					if j >= len(proc.Exprs) {
+						// We must have used the DEFAULT argument for this
+						// parameter which is not writable.
+						panic(pgerror.Newf(pgcode.Syntax,
+							"procedure parameter \"%s\" is an output parameter "+
+								"but corresponding argument is not writable",
+							string(overload.RoutineParams[j].Name),
+						))
+					}
 					if arg, ok := proc.Exprs[j].(*scopeColumn); ok {
 						target = append(target, arg.name.refName)
 						continue
