@@ -198,4 +198,88 @@ CALL p(1);
 ----
 NOTICE: foo 1
 
+# Regression test for dropping the side effects from a variable assignment when
+# the variable is never used.
+subtest regression_122318
+
+statement ok
+CREATE SEQUENCE s1;
+
+statement ok
+DROP PROCEDURE IF EXISTS p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT = 1;
+  y INT = x + 1;
+  b INT;
+BEGIN
+  RAISE NOTICE 'x=% y=%', x, y;
+  b := nextval('s1');
+END;
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: x=1 y=2
+
+query I
+SELECT nextval('s1');
+----
+2
+
+statement ok
+DROP PROCEDURE IF EXISTS p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT = 1;
+  y INT = x + 1;
+  b INT;
+BEGIN
+  RAISE NOTICE 'x=% y=%', x, y;
+  SELECT nextval('s1') INTO b;
+END;
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: x=1 y=2
+
+query I
+SELECT nextval('s1');
+----
+4
+
+statement ok
+DROP PROCEDURE IF EXISTS p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT = 1;
+  y INT = x + 1;
+  b INT;
+  curs REFCURSOR := 'foo';
+BEGIN
+  OPEN curs FOR SELECT 1;
+  RAISE NOTICE 'x=% y=%', x, y;
+  FETCH curs INTO b;
+END;
+$$;
+
+statement ok
+BEGIN;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: x=1 y=2
+
+# The cursor should already be exhausted.
+query I
+FETCH foo;
+----
+
+statement ok
+ROLLBACK;
+
 subtest end
