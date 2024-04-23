@@ -141,12 +141,12 @@ func defaultExecutorConfig() executorConfig {
 		outputDir:    "artifacts/roachprod-microbench",
 		libDir:       "bin/lib",
 		remoteDir:    "/mnt/data1/microbench",
-		timeout:      "20m",
+		timeout:      "10m",
 		shellCommand: "COCKROACH_RANDOM_SEED=1",
 		iterations:   1,
 		copyBinaries: true,
 		lenient:      true,
-		affinity:     true,
+		affinity:     false,
 		quiet:        false,
 	}
 }
@@ -228,11 +228,10 @@ func (e *executor) listBenchmarks(
 	}
 
 	// Execute commands for listing benchmarks.
-	e.log.Printf("Distributing and running benchmark listings across cluster %s", e.cluster)
 	isValidBenchmarkName := regexp.MustCompile(`^Benchmark[a-zA-Z0-9_]+$`).MatchString
 	errorCount := 0
 	benchmarkCounts := make(map[benchmark]int)
-	cluster.ExecuteRemoteCommands(roachprodLog, e.cluster, commands, numNodes, true, func(response cluster.RemoteResponse) {
+	callback := func(response cluster.RemoteResponse) {
 		if !e.quiet {
 			fmt.Print(".")
 		}
@@ -268,7 +267,11 @@ func (e *executor) listBenchmarks(
 				strings.Join(response.Args, " "), response.Err, response.Stderr)
 			errorCount++
 		}
-	})
+	}
+	e.log.Printf("Distributing and running benchmark listings across cluster %s", e.cluster)
+	_ = cluster.ExecuteRemoteCommands(
+		roachprodLog, roachprod.RunWithDetails, e.cluster, commands, numNodes, true, callback,
+	)
 	if !e.quiet {
 		fmt.Println()
 	}
@@ -390,9 +393,7 @@ func (e *executor) executeBenchmarks() error {
 	missingBenchmarks := make(map[benchmark]int, 0)
 	failedBenchmarks := make(map[benchmark]int, 0)
 	skippedBenchmarks := make(map[benchmark]int, 0)
-	e.log.Printf("Found %d benchmarks, distributing and running benchmarks for %d iteration(s) across cluster %s",
-		len(benchmarks), e.iterations, e.cluster)
-	cluster.ExecuteRemoteCommands(muteLogger, e.cluster, commands, numNodes, !e.lenient, func(response cluster.RemoteResponse) {
+	callback := func(response cluster.RemoteResponse) {
 		if !e.quiet {
 			fmt.Print(".")
 		}
@@ -437,7 +438,12 @@ func (e *executor) executeBenchmarks() error {
 				missingBenchmarks[benchmarkResponse.benchmark]++
 			}
 		}
-	})
+	}
+	e.log.Printf("Found %d benchmarks, distributing and running benchmarks for %d iteration(s) across cluster %s",
+		len(benchmarks), e.iterations, e.cluster)
+	_ = cluster.ExecuteRemoteCommands(
+		muteLogger, roachprod.RunWithDetails, e.cluster, commands, numNodes, !e.lenient, callback,
+	)
 
 	if !e.quiet {
 		fmt.Println()
