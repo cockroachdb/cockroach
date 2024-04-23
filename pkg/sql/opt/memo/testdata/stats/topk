@@ -351,7 +351,7 @@ distinct-on
  ├── columns: a:1(int!null) b:2(int)
  ├── grouping columns: a:1(int!null) b:2(int)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=4, distinct(1,2)=4, null(1,2)=0]
+ ├── stats: [rows=4, distinct(1)=4, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── top-k
@@ -359,12 +359,14 @@ distinct-on
       ├── internal-ordering: +3,+1
       ├── k: 4
       ├── cardinality: [0 - 4]
-      ├── stats: [rows=4, distinct(1,2)=4, null(1,2)=0]
+      ├── stats: [rows=4, distinct(1)=4, null(1)=0]
       ├── key: (1)
       ├── fd: (1)-->(2,3)
       └── scan abc
            ├── columns: a:1(int!null) b:2(int) c:3(int)
-           ├── stats: [rows=20, distinct(1,2)=20, null(1,2)=0]
+           ├── stats: [rows=20, distinct(1)=20, null(1)=0]
+           │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+           │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
            ├── key: (1)
            └── fd: (1)-->(2,3)
 
@@ -466,7 +468,7 @@ distinct-on
  ├── columns: a:1(int!null) b:2(int!null)
  ├── grouping columns: a:1(int!null) b:2(int!null)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=4, distinct(1,2)=4, null(1,2)=0]
+ ├── stats: [rows=4, distinct(1)=4, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── top-k
@@ -474,19 +476,19 @@ distinct-on
       ├── internal-ordering: +3,+1
       ├── k: 4
       ├── cardinality: [0 - 4]
-      ├── stats: [rows=4, distinct(1,2)=4, null(1,2)=0]
+      ├── stats: [rows=4, distinct(1)=4, null(1)=0]
       ├── key: (1)
       ├── fd: (1)-->(2,3)
       └── select
            ├── columns: a:1(int!null) b:2(int!null) c:3(int)
-           ├── stats: [rows=8, distinct(2)=4, null(2)=0, distinct(1,2)=8, null(1,2)=0]
+           ├── stats: [rows=8, distinct(1)=8, null(1)=0, distinct(2)=4, null(2)=0]
            │   histogram(2)=  0  2  0  2  0  2  0  2
            │                <--- 6 --- 7 --- 8 --- 9
            ├── key: (1)
            ├── fd: (1)-->(2,3)
            ├── scan abc
            │    ├── columns: a:1(int!null) b:2(int) c:3(int)
-           │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0, distinct(1,2)=20, null(1,2)=0]
+           │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
            │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
            │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
            │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2

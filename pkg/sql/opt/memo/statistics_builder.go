@@ -2000,7 +2000,7 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 	s.Available = sb.availabilityFromInput(groupNode)
 
 	groupingPrivate := groupNode.Private().(*GroupingPrivate)
-	groupingColSet := groupingPrivate.GroupingCols
+	groupingColSet := relProps.FuncDeps.ReduceCols(groupingPrivate.GroupingCols)
 
 	inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
 	s.VirtualCols.UnionWith(inputStats.VirtualCols)

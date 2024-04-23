@@ -46,17 +46,17 @@ project
  └── group-by (hash)
       ├── columns: x:1(int!null) y:2(int)
       ├── grouping columns: x:1(int!null) y:2(int)
-      ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+      ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
       ├── key: (1)
       ├── fd: (1)-->(2)
       └── project
            ├── columns: x:1(int!null) y:2(int)
-           ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+           ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
            ├── key: (1)
            ├── fd: (1)-->(2)
            └── scan a
                 ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-                ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+                ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
                 ├── key: (1)
                 └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
 
@@ -305,17 +305,17 @@ project
  └── group-by (hash)
       ├── columns: x:1(int!null) y:2(int)
       ├── grouping columns: x:1(int!null) y:2(int)
-      ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+      ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
       ├── key: (1)
       ├── fd: (1)-->(2)
       └── project
            ├── columns: x:1(int!null) y:2(int)
-           ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+           ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
            ├── key: (1)
            ├── fd: (1)-->(2)
            └── scan a
                 ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-                ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+                ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
                 ├── key: (1)
                 └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
 
