@@ -24,14 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
-	dnsManagedZone           = "roachprod-managed"
-	dnsDomain                = "roachprod-managed.crdb.io"
-	dnsMaxResults            = 10000
-	dnsMaxConcurrentRequests = 4
+	dnsManagedZone = "roachprod-managed"
+	dnsDomain      = "roachprod-managed.crdb.io"
+	dnsMaxResults  = 10000
 
 	// dnsProblemLabel is the label used when we see transient DNS
 	// errors while making API calls to Cloud DNS.
@@ -40,20 +38,37 @@ const (
 
 var _ vm.DNSProvider = &dnsProvider{}
 
+type ExecFn func(cmd *exec.Cmd) ([]byte, error)
+
 // dnsProvider implements the vm.DNSProvider interface.
 type dnsProvider struct {
 	recordsCache struct {
 		mu      syncutil.Mutex
 		records map[string][]vm.DNSRecord
 	}
+	execFn ExecFn
 }
 
 func NewDNSProvider() vm.DNSProvider {
+	var gcloudMu syncutil.Mutex
+	return NewDNSProviderWithExec(func(cmd *exec.Cmd) ([]byte, error) {
+		// Limit to one gcloud command at a time. At this time we are unsure if it's
+		// safe to make concurrent calls to the `gcloud` CLI to mutate DNS records
+		// in the same zone. We don't mutate the same record in parallel, but we do
+		// mutate different records in the same zone. See: #122180 for more details.
+		gcloudMu.Lock()
+		defer gcloudMu.Unlock()
+		return cmd.CombinedOutput()
+	})
+}
+
+func NewDNSProviderWithExec(execFn ExecFn) vm.DNSProvider {
 	return &dnsProvider{
 		recordsCache: struct {
 			mu      syncutil.Mutex
 			records map[string][]vm.DNSRecord
 		}{records: make(map[string][]vm.DNSRecord)},
+		execFn: execFn,
 	}
 }
 
@@ -98,8 +113,11 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 			"--rrdatas", strings.Join(data, ","),
 		}
 		cmd := exec.CommandContext(ctx, "gcloud", args...)
-		out, err := cmd.CombinedOutput()
+		out, err := n.execFn(cmd)
 		if err != nil {
+			// Clear the cache entry if the operation failed, as the records may
+			// have been partially updated.
+			n.clearCacheEntry(name)
 			return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", out), dnsProblemLabel)
 		}
 		n.updateCache(name, maps.Values(combinedRecords))
@@ -119,26 +137,21 @@ func (n *dnsProvider) ListRecords(ctx context.Context) ([]vm.DNSRecord, error) {
 
 // DeleteRecordsByName implements the vm.DNSProvider interface.
 func (n *dnsProvider) DeleteRecordsByName(ctx context.Context, names ...string) error {
-	var g errgroup.Group
-	g.SetLimit(dnsMaxConcurrentRequests)
 	for _, name := range names {
-		// capture loop variable
-		name := name
-		g.Go(func() error {
-			args := []string{"--project", dnsProject, "dns", "record-sets", "delete", name,
-				"--type", string(vm.SRV),
-				"--zone", dnsManagedZone,
-			}
-			cmd := exec.CommandContext(ctx, "gcloud", args...)
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", out), dnsProblemLabel)
-			}
-			n.clearCacheEntry(name)
-			return nil
-		})
+		args := []string{"--project", dnsProject, "dns", "record-sets", "delete", name,
+			"--type", string(vm.SRV),
+			"--zone", dnsManagedZone,
+		}
+		cmd := exec.CommandContext(ctx, "gcloud", args...)
+		out, err := n.execFn(cmd)
+		// Clear the cache entry regardless of the outcome. As the records may
+		// have been partially deleted.
+		n.clearCacheEntry(name)
+		if err != nil {
+			return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", out), dnsProblemLabel)
+		}
 	}
-	return g.Wait()
+	return nil
 }
 
 // DeleteRecordsBySubdomain implements the vm.DNSProvider interface.
@@ -182,10 +195,10 @@ func (n *dnsProvider) lookupSRVRecords(ctx context.Context, name string) ([]vm.D
 	}
 	// Lookup the records, if no records are found in the cache.
 	records, err := n.listSRVRecords(ctx, name, dnsMaxResults)
-	filteredRecords := make([]vm.DNSRecord, 0, len(records))
 	if err != nil {
 		return nil, err
 	}
+	filteredRecords := make([]vm.DNSRecord, 0, len(records))
 	for _, record := range records {
 		// Filter out records that do not match the full normalised target name.
 		// This is necessary because the gcloud command does partial matching.
@@ -214,7 +227,7 @@ func (n *dnsProvider) listSRVRecords(
 		args = append(args, "--filter", filter)
 	}
 	cmd := exec.CommandContext(ctx, "gcloud", args...)
-	res, err := cmd.CombinedOutput()
+	res, err := n.execFn(cmd)
 	if err != nil {
 		return nil, rperrors.TransientFailure(errors.Wrapf(err, "output: %s", res), dnsProblemLabel)
 	}

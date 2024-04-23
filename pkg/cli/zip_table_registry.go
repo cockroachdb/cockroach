@@ -25,24 +25,38 @@ type NonSensitiveColumns []string
 // TableRegistryConfig is the unit of configuration used
 // in the DebugZipTableRegistry, providing the option to
 // define custom redacted/unredacted queries if necessary.
-// If nonSensitiveCols is provided, you don't need to define
-// customQueryRedacted in the presence of customQueryRedacted.
-// In the absence of customQueryRedacted, nonSensitiveCols will
-// be used.
+//
+// It allows us to define how a table should be queried when the `--redact`
+// flag is passed to `debug zip`, as well as how it should be queried when
+// an unredacted debug zip is requested. The goal is to be selective in how
+// we query tables in the `--redact` case, so that newly added columns containing
+// sensitive information don't accidentally leak into debug zip outputs.
+//
+// We enforce that *some* explicit config is present for the redacted case.
+// In the absence of an explicit configuration for the unredacted case, a
+// `SELECT *` query is used.
+//
+// The following config combinations are acceptable:
+// - nonSensitiveCols defined, nothing else.
+// - customQueryRedacted defined, nothing else
+// - customQueryUnredacted defined AND customQueryRedacted defined
+// - customQueryUnredacted defined AND nonSensitiveCols defined
 type TableRegistryConfig struct {
 	// nonSensitiveCols are all the columns associated with the table that do
-	// not contain sensitive data.
-	// NB: these are required in the absence of customQueryRedacted.
-	// NB: the ordering of the columns should match the unredacted column
-	// ordering as much as possible, to provide a consistent experience across
-	// redacted/unredacted table dumps.
+	// not contain sensitive data. This is required in the absence of
+	// customQueryRedacted.
 	nonSensitiveCols NonSensitiveColumns
 	// customQueryUnredacted is the custom SQL query used to query the
-	// table when redaction is not necessary. NB: optional.
+	// table when redaction is not necessary.
+	// If omitted, unredacted debug zips will run a simple `SELECT *` against
+	// the table.
 	customQueryUnredacted string
 	// customQueryUnredacted is the custom SQL query used to query the
-	// table when redaction is required.
-	// NB: this field is optional, and takes precedence over nonSensitiveCols.
+	// table when redaction is required. This is required in the absence of
+	// nonSensitiveCols.
+	//
+	// customQueryRedacted should NOT be a `SELECT * FROM table` type query, as
+	// this could leak newly added sensitive columns into the output.
 	customQueryRedacted string
 }
 
@@ -1140,9 +1154,13 @@ var zipSystemTables = DebugZipTableRegistry{
 			FROM system.job_info`,
 	},
 	"system.lease": {
-		customQueryUnredacted: `
-			SELECT * FROM system.lease;
-		`,
+		nonSensitiveCols: NonSensitiveColumns{
+			"desc_id",
+			"version",
+			"sql_instance_id",
+			"session_id",
+			"crdb_region",
+		},
 	},
 	"system.locations": {
 		nonSensitiveCols: NonSensitiveColumns{
