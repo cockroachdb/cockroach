@@ -1330,6 +1330,19 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	// the zigzag join. See issue #68556.
 	cost += c.largeCardinalityCostPenalty(join.Relational().Cardinality, rowCount)
 
+	if c.evalCtx != nil && c.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting {
+		// Add one randIOCostFactor of additional seek cost so the cost is at least as
+		// much as a scan if rowCount is less than one.
+		cost += randIOCostFactor
+
+		// TODO(rytaft): We don't capture distribution info in zigzag joins, so pass
+		// an empty distribution. We need to add some distribution cost to prevent the
+		// coster from always preferring zigzag joins over scans. If we ever want to
+		// make zigzag joins a priority again, we should store a real distribution
+		// value on the zigzag join, similar to scans.
+		cost += c.distributionCost(physical.Distribution{})
+	}
+
 	return cost
 }
 

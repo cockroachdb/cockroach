@@ -1973,7 +1973,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 		corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, zigzag, s)
 		s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, zigzag, s, corr))
 	} else {
-		multiColSelectivity, _ := sb.selectivityFromMultiColDistinctCounts(constrainedCols, zigzag, s)
+		multiColSelectivity, _, _ := sb.selectivityFromMultiColDistinctCounts(constrainedCols, zigzag, s)
 		s.ApplySelectivity(multiColSelectivity)
 	}
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, zigzag, s))
@@ -3999,13 +3999,13 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 //	3 or 4. We estimate the new distinct count as follows, using the concept
 //	of "soft functional dependency (FD) strength" as defined in [1]:
 //
-//	  new_distinct({x,y}) = min_value + range * (1 - FD_strength_scaled)
+//	  new_distinct({x,y}) = min_distinct + distinct_range * (1 - FD_strength_scaled)
 //
 //	where
 //
-//	  min_value = max(new_distinct(x), new_distinct(y))
-//	  max_value = new_distinct(x) * new_distinct(y)
-//	  range     = max_value - min_value
+//	  min_distinct   = max(new_distinct(x), new_distinct(y))
+//	  max_distinct   = new_distinct(x) * new_distinct(y)
+//	  distinct_range = max_distinct - min_distinct
 //
 //	                ⎛ max(old_distinct(x),old_distinct(y)) ⎞
 //	  FD_strength = ⎜ ------------------------------------ ⎟
@@ -4048,20 +4048,25 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 // This selectivity will be used later to update the row count and the
 // distinct count for the unconstrained columns.
 //
-// We also return selectivityUpperBound, which is the minimum selectivity of any
-// single column. This would be the value of equation (2) if the columns were
-// completely correlated. It will be used later to measure the level of
-// correlation.
+// We also return selectivityUpperBound and selectivityLowerBound.
+// selectivityUpperBound would be the value of equation (2) if the columns were
+// completely correlated. It is equal to the minimum selectivity of any single
+// column. selectivityLowerBound would be the value of equation (2) if the
+// columns were completely independent. It is the minimum new distinct count
+// (min_distinct) divided by the product of the old single column distinct counts
+// (or the old row count, whichever is smaller). These values will be used later
+// to measure the level of correlation.
 //
 // [1] Ilyas, Ihab F., et al. "CORDS: automatic discovery of correlations and
 //
 //	soft functional dependencies." SIGMOD 2004.
 func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	cols opt.ColSet, e RelExpr, s *props.Statistics,
-) (selectivity, selectivityUpperBound props.Selectivity) {
+) (selectivity, selectivityUpperBound, selectivityLowerBound props.Selectivity) {
 	// Respect the session setting OptimizerUseMultiColStats.
 	if !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
-		return sb.selectivityFromSingleColDistinctCounts(cols, e, s)
+		selectivity, selectivityUpperBound = sb.selectivityFromSingleColDistinctCounts(cols, e, s)
+		return selectivity, selectivityUpperBound, selectivity
 	}
 
 	// Make a copy of cols so we can remove columns that are not constrained.
@@ -4069,72 +4074,78 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 
 	// First calculate the selectivity from equation (1) (see function comment),
 	// and collect the inputs to equation (2).
-	singleColSelectivity := props.OneSelectivity
-	newDistinctProduct, oldDistinctProduct := 1.0, 1.0
-	maxNewDistinct, maxOldDistinct := float64(0), float64(0)
+	multiColSelWithIndepAssumption := props.OneSelectivity
+	newSingleColDistinctProduct, oldSingleColDistinctProduct := 1.0, 1.0
+	maxNewSingleColDistinct, maxOldSingleColDistinct := float64(0), float64(0)
 	multiColNullCount := -1.0
-	minLocalSel := props.OneSelectivity
+	minSingleColSel := props.OneSelectivity
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
-		colStat, ok := s.ColStats.LookupSingleton(col)
+		singleColStat, ok := s.ColStats.LookupSingleton(col)
 		if !ok {
 			multiColSet.Remove(col)
 			continue
 		}
 
-		inputColStat, inputStats := sb.colStatFromInput(colStat.Cols, e)
-		localSel := sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
-		singleColSelectivity.Multiply(localSel)
+		inputSingleColStat, inputStats := sb.colStatFromInput(singleColStat.Cols, e)
+		singleColSel := sb.selectivityFromDistinctCount(singleColStat, inputSingleColStat, inputStats.RowCount)
+		multiColSelWithIndepAssumption.Multiply(singleColSel)
 
 		// Don't bother including columns in the multi-column calculation that
 		// don't contribute to the selectivity.
-		if localSel == props.OneSelectivity {
+		if singleColSel == props.OneSelectivity {
 			multiColSet.Remove(col)
 			continue
 		}
 
 		// Calculate values needed for the multi-column stats calculation below.
-		newDistinctProduct *= colStat.DistinctCount
-		oldDistinctProduct *= inputColStat.DistinctCount
-		if colStat.DistinctCount > maxNewDistinct {
-			maxNewDistinct = colStat.DistinctCount
+		newSingleColDistinctProduct *= singleColStat.DistinctCount
+		oldSingleColDistinctProduct *= inputSingleColStat.DistinctCount
+		if singleColStat.DistinctCount > maxNewSingleColDistinct {
+			maxNewSingleColDistinct = singleColStat.DistinctCount
 		}
-		if inputColStat.DistinctCount > maxOldDistinct {
-			maxOldDistinct = inputColStat.DistinctCount
+		if inputSingleColStat.DistinctCount > maxOldSingleColDistinct {
+			maxOldSingleColDistinct = inputSingleColStat.DistinctCount
 		}
-		minLocalSel = props.MinSelectivity(localSel, minLocalSel)
+		minSingleColSel = props.MinSelectivity(singleColSel, minSingleColSel)
 		if multiColNullCount < 0 {
 			multiColNullCount = inputStats.RowCount
 		}
 		// Multiply by the expected chance of collisions with nulls already
 		// collected.
-		multiColNullCount *= colStat.NullCount / inputStats.RowCount
+		multiColNullCount *= singleColStat.NullCount / inputStats.RowCount
 	}
 
 	// If we don't need to use a multi-column statistic, we're done.
 	if multiColSet.Len() <= 1 {
-		return singleColSelectivity, minLocalSel
+		return multiColSelWithIndepAssumption, minSingleColSel, multiColSelWithIndepAssumption
 	}
 
 	// Otherwise, calculate the selectivity using multi-column stats from
 	// equation (2). See the comment above the function definition for details
 	// about the formula.
-	inputColStat, inputStats := sb.colStatFromInput(multiColSet, e)
-	fdStrength := min(maxOldDistinct/inputColStat.DistinctCount, 1.0)
-	minFdStrength := min(maxOldDistinct/oldDistinctProduct, fdStrength)
+	inputMultiColStat, inputStats := sb.colStatFromInput(multiColSet, e)
+	fdStrength := min(maxOldSingleColDistinct/inputMultiColStat.DistinctCount, 1.0)
+	minFdStrength := min(maxOldSingleColDistinct/oldSingleColDistinctProduct, fdStrength)
 	if minFdStrength < 1 {
 		// Scale the fdStrength so it ranges between 0 and 1.
 		fdStrength = (fdStrength - minFdStrength) / (1 - minFdStrength)
 	}
-	distinctCountRange := max(newDistinctProduct-maxNewDistinct, 0)
 
-	colStat, _ := s.ColStats.Add(multiColSet)
-	colStat.DistinctCount = maxNewDistinct + distinctCountRange*(1-fdStrength)
-	colStat.NullCount = multiColNullCount
-	multiColSelectivity := sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
+	// These variables correspond to min_distinct, max_distinct, and distinct_range
+	// in the comment above the function definition.
+	minNewMultiColDistinct := maxNewSingleColDistinct
+	maxNewMultiColDistinct := newSingleColDistinctProduct
+	multiColDistinctRange := max(maxNewMultiColDistinct-minNewMultiColDistinct, 0)
 
-	// multiColSelectivity must be at least as large as singleColSelectivity,
-	// since singleColSelectivity corresponds to equation (1).
-	multiColSelectivity = props.MaxSelectivity(multiColSelectivity, singleColSelectivity)
+	multiColStat, _ := s.ColStats.Add(multiColSet)
+	multiColStat.DistinctCount = minNewMultiColDistinct + multiColDistinctRange*(1-fdStrength)
+	multiColStat.NullCount = multiColNullCount
+	multiColSelectivity := sb.selectivityFromDistinctCount(multiColStat, inputMultiColStat, inputStats.RowCount)
+
+	// multiColSelectivity must be at least as large as
+	// multiColSelWithIndepAssumption, since multiColSelWithIndepAssumption
+	// corresponds to equation (1).
+	multiColSelectivity = props.MaxSelectivity(multiColSelectivity, multiColSelWithIndepAssumption)
 
 	// Now, we must adjust multiColSelectivity so that it is not greater than
 	// the selectivity of any subset of the columns in multiColSet. This would
@@ -4142,8 +4153,8 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	// x=1 AND y=1 should always be considered more selective (i.e., with lower
 	// selectivity) than x=1 alone.
 	//
-	// We have already found the minimum selectivity of all the individual
-	// columns (subsets of size 1) above and stored it in minLocalSel. It's not
+	// We have already found the minimum selectivity of all the individual columns
+	// (subsets of size 1) above and stored it in minSingleColSel. It's not
 	// practical, however, to calculate the minimum selectivity for all subsets
 	// larger than size 1.
 	//
@@ -4155,7 +4166,7 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	//
 	// In this case, adjust multiColSelectivity as needed.
 	//
-	if maxNewDistinct > 1 && multiColSet.Len() > 2 {
+	if maxNewSingleColDistinct > 1 && multiColSet.Len() > 2 {
 		var lowDistinctCountCols opt.ColSet
 		multiColSet.ForEach(func(col opt.ColumnID) {
 			// We already know the column stat exists if it's in multiColSet.
@@ -4171,27 +4182,46 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 			// multiply by the selectivity of the other columns to differentiate
 			// between different plans that constrain different subsets of these
 			// columns.
-			selLowDistinctCountCols, _ := sb.selectivityFromMultiColDistinctCounts(
+			selLowDistinctCountCols, _, _ := sb.selectivityFromMultiColDistinctCounts(
 				lowDistinctCountCols, e, s,
 			)
-			selOtherCols, _ := sb.selectivityFromMultiColDistinctCounts(
+			selOtherCols, _, _ := sb.selectivityFromMultiColDistinctCounts(
 				multiColSet.Difference(lowDistinctCountCols), e, s,
 			)
 			selLowDistinctCountCols.Multiply(selOtherCols)
 			multiColSelectivity = props.MinSelectivity(multiColSelectivity, selLowDistinctCountCols)
 		}
 	}
-	multiColSelectivity = props.MinSelectivity(multiColSelectivity, minLocalSel)
+	multiColSelectivity = props.MinSelectivity(multiColSelectivity, minSingleColSel)
 
-	// As described in the function comment, we actually return a weighted sum
-	// of multi-column and single-column selectivity estimates.
+	// multiColSelectivityLowerBound is the minimum multi-column selectivity, which
+	// is the minimum possible new multi-col distinct count divided by the maximum
+	// old multi-column distinct count (either the product of the old single column
+	// distinct counts or the old row count, whichever is smaller).
+	maxOldMultiColDistinct := min(inputStats.RowCount, oldSingleColDistinctProduct)
+	multiColSelectivityLowerBound := props.MakeSelectivityFromFraction(
+		minNewMultiColDistinct, maxOldMultiColDistinct,
+	)
+	// Ensure that multiColSelectivityLowerBound is not larger than
+	// multiColSelectivity.
+	multiColSelectivityLowerBound = props.MinSelectivity(
+		multiColSelectivityLowerBound, multiColSelectivity,
+	)
+
+	// As described in the function comment, we actually return a weighted sum of
+	// multi-column selectivity estimates with and without an independence
+	// assumption. To ensure selectivityLowerBound is not larger than this
+	// selectivity, use the same weighting scheme.
 	//
 	// Use MaxSelectivity to handle floating point rounding errors.
 	w := multiColWeight
-	return props.MaxSelectivity(singleColSelectivity, props.MakeSelectivity(
-			(1-w)*singleColSelectivity.AsFloat()+w*multiColSelectivity.AsFloat(),
+	return props.MaxSelectivity(multiColSelWithIndepAssumption, props.MakeSelectivity(
+			(1-w)*multiColSelWithIndepAssumption.AsFloat()+w*multiColSelectivity.AsFloat(),
 		)),
-		minLocalSel
+		minSingleColSel,
+		props.MaxSelectivity(multiColSelWithIndepAssumption, props.MakeSelectivity(
+			(1-w)*multiColSelWithIndepAssumption.AsFloat()+w*multiColSelectivityLowerBound.AsFloat(),
+		))
 }
 
 // correlationFromMultiColDistinctCounts returns the correlation between the
@@ -4203,10 +4233,14 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 // correlation coefficient between pairs of columns during table stats
 // collection. Instead, this is just a proxy obtained by estimating three values
 // for the selectivity of the filter constraining the given columns:
-//  1. lb (lower bound): the value returned by multiplying the individual
-//     conjunct selectivities together, estimated from single-column distinct
-//     counts. This would be the selectivity of the entire predicate if the
-//     columns were completely independent.
+//  1. lb (lower bound): if optimizer_use_improved_multi_column_selectivity_estimate
+//     is true, this is the minimum possible multi-column selectivity, calculated
+//     based on the minimum new multi-column distinct count and the maximum old
+//     multi-column distinct count.
+//     Else, it is the value returned by multiplying the individual conjunct
+//     selectivities together, estimated from single-column distinct counts. This
+//     would be the selectivity of the entire predicate if the columns were
+//     completely independent.
 //  2. ub (upper bound): the lowest single-conjunct selectivity estimated from
 //     single-column distinct counts. This would be the selectivity of the entire
 //     predicate if the columns were completely correlated. In other words, this
@@ -4240,8 +4274,13 @@ func (sb *statisticsBuilder) correlationFromMultiColDistinctCounts(
 		return 0
 	}
 
-	lowerBound, _ := sb.selectivityFromSingleColDistinctCounts(cols, e, s)
-	selectivity, upperBound := sb.selectivityFromMultiColDistinctCounts(cols, e, s)
+	selectivity, upperBound, lowerBound := sb.selectivityFromMultiColDistinctCounts(cols, e, s)
+	// Check s.Available since OptimizerUseImprovedMultiColumnSelectivityEstimate
+	// tends to cause some hash join plans to turn into lookup join plans, and
+	// when we're operating without stats, that bias is more risky.
+	if !sb.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate || !s.Available {
+		lowerBound, _ = sb.selectivityFromSingleColDistinctCounts(cols, e, s)
+	}
 	if upperBound == lowerBound {
 		return 0
 	}
@@ -4258,17 +4297,25 @@ func (sb *statisticsBuilder) correlationFromMultiColDistinctCountsForJoin(
 		return 0
 	}
 
-	lowerBound, _ := sb.selectivityFromSingleColDistinctCounts(cols, e, s)
-	selectivityLeft, upperBoundLeft := sb.selectivityFromMultiColDistinctCounts(
+	selectivityLeft, upperBoundLeft, lowerBoundLeft := sb.selectivityFromMultiColDistinctCounts(
 		cols.Intersection(leftCols), e, s,
 	)
-	selectivityRight, upperBoundRight := sb.selectivityFromMultiColDistinctCounts(
+	selectivityRight, upperBoundRight, lowerBoundRight := sb.selectivityFromMultiColDistinctCounts(
 		cols.Intersection(rightCols), e, s,
 	)
 	selectivity := selectivityLeft
 	selectivity.Multiply(selectivityRight)
 	upperBound := upperBoundLeft
 	upperBound.Multiply(upperBoundRight)
+	lowerBound := lowerBoundLeft
+	// Check s.Available since OptimizerUseImprovedMultiColumnSelectivityEstimate
+	// tends to cause some hash join plans to turn into lookup join plans, and
+	// when we're operating without stats, that bias is more risky.
+	if sb.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate && s.Available {
+		lowerBound.Multiply(lowerBoundRight)
+	} else {
+		lowerBound, _ = sb.selectivityFromSingleColDistinctCounts(cols, e, s)
+	}
 	if upperBound == lowerBound {
 		return 0
 	}
@@ -4395,7 +4442,7 @@ func (sb *statisticsBuilder) selectivityFromConstrainedCols(
 	constrainedCols, histCols opt.ColSet, e RelExpr, s *props.Statistics, correlation float64,
 ) (selectivity props.Selectivity) {
 	if buildutil.CrdbTestBuild && (correlation < 0 || correlation > 1) {
-		panic(errors.AssertionFailedf("correlation must be betwen 0 and 1. Found %f", correlation))
+		panic(errors.AssertionFailedf("correlation must be between 0 and 1. Found %f", correlation))
 	}
 	selectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, e, s)
 	selectivity2, selectivityUpperBound2 := sb.selectivityFromSingleColDistinctCounts(
