@@ -1861,6 +1861,9 @@ func startServeSQL(
 	// objects when the stopper tells us to shut down.
 	connManager := netutil.MakeTCPServer(ctx, stopper)
 
+	// Logger frequency to limit bad certificate error logs
+	logEvery := log.Every(10 * time.Second)
+
 	_ = stopper.RunAsyncTaskEx(ctx,
 		stop.TaskOpts{TaskName: "pgwire-listener", SpanOpt: stop.SterileRootSpan},
 		func(ctx context.Context) {
@@ -1870,13 +1873,17 @@ func startServeSQL(
 
 				conn, status, err := pgPreServer.PreServe(connCtx, conn, pgwire.SocketTCP)
 				if err != nil {
-					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
-					return
-				}
+                    if logEvery.ShouldLog() {
+                        log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+                    }
+                    return
+                }
 
-				if err := serveConn(connCtx, conn, status); err != nil {
-					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
-				}
+                if err := serveConn(connCtx, conn, status); err != nil {
+                    if logEvery.ShouldLog() {
+                        log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+                    }
+                }
 			})
 			netutil.FatalIfUnexpected(err)
 		})
