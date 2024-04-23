@@ -359,7 +359,6 @@ func (p *Provider) GetPreemptedSpotVMs(
 		l.Printf("Error building gcloud cli command: %v\n", err)
 		return nil, err
 	}
-	l.Printf("gcloud cli for preemption : " + strings.Join(append([]string{"gcloud"}, args...), " "))
 	var logEntries []LogEntry
 	if err := runJSONCommand(args, &logEntries); err != nil {
 		l.Printf("Error running gcloud cli command: %v\n", err)
@@ -388,7 +387,6 @@ func (p *Provider) GetHostErrorVMs(
 		l.Printf("Error building gcloud cli command: %v\n", err)
 		return nil, err
 	}
-	l.Printf("gcloud cli for host error : " + strings.Join(append([]string{"gcloud"}, args...), " "))
 	var logEntries []LogEntry
 	if err := runJSONCommand(args, &logEntries); err != nil {
 		l.Printf("Error running gcloud cli command: %v\n", err)
