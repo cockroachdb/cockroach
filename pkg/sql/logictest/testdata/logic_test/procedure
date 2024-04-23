@@ -435,3 +435,28 @@ CREATE PROCEDURE p_outer(OUT param INTEGER) AS $$ CALL p_inner(NULL); $$ LANGUAG
 
 statement ok
 DROP PROCEDURE p_inner;
+
+# Regression test for printing the stack trace for an internal error (#122911).
+statement ok
+CREATE TABLE bank (accountno INT PRIMARY KEY, balance NUMERIC);
+CREATE PROCEDURE withdraw(accountno INT, debit NUMERIC, OUT new_balance NUMERIC) AS $$
+    UPDATE bank
+        SET balance = balance - debit
+        WHERE bank.accountno = accountno
+    RETURNING balance;
+$$ LANGUAGE SQL;
+
+statement error pgcode XX000 internal error: procedure returned null record
+CALL withdraw(17, 100.0, NULL);
+
+statement ok
+INSERT INTO bank VALUES (17, 1000.0);
+
+query R
+CALL withdraw(17, 100.0, NULL);
+----
+900.0
+
+statement ok
+DROP PROCEDURE withdraw;
+DROP TABLE bank;
