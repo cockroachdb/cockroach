@@ -56,6 +56,12 @@ func (d *callNode) startExec(params runParams) error {
 		}
 		return nil
 	}
+	if d.proc.Typ.Family() != types.TupleFamily {
+		return errors.AssertionFailedf("expected VOID or RECORD type for procedures, got %s", d.proc.Typ.SQLStringForError())
+	}
+	if res == tree.DNull {
+		return pgerror.New(pgcode.Internal, "procedure returned null record")
+	}
 	tuple, ok := tree.AsDTuple(res)
 	if !ok {
 		return errors.AssertionFailedf("expected a tuple, got %T", res)
