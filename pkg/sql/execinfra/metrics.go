@@ -22,6 +22,7 @@ type DistSQLMetrics struct {
 	QueriesActive               *metric.Gauge
 	QueriesTotal                *metric.Counter
 	ContendedQueriesCount       *metric.Counter
+	CumulativeContentionNanos   *metric.Counter
 	FlowsActive                 *metric.Gauge
 	FlowsTotal                  *metric.Counter
 	MaxBytesHist                metric.IHistogram
@@ -59,6 +60,12 @@ var (
 		Help:        "Number of SQL queries that experienced contention",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaCumulativeContentionNanos = metric.Metadata{
+		Name:        "sql.distsql.cumulative_contention_nanos",
+		Help:        "Cumulative contention across all queries (in nanoseconds)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaFlowsActive = metric.Metadata{
 		Name:        "sql.distsql.flows.active",
@@ -141,11 +148,12 @@ const log10int64times1000 = 19 * 1000
 // MakeDistSQLMetrics instantiates the metrics holder for DistSQL monitoring.
 func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 	return DistSQLMetrics{
-		QueriesActive:         metric.NewGauge(metaQueriesActive),
-		QueriesTotal:          metric.NewCounter(metaQueriesTotal),
-		ContendedQueriesCount: metric.NewCounter(metaContendedQueriesCount),
-		FlowsActive:           metric.NewGauge(metaFlowsActive),
-		FlowsTotal:            metric.NewCounter(metaFlowsTotal),
+		QueriesActive:             metric.NewGauge(metaQueriesActive),
+		QueriesTotal:              metric.NewCounter(metaQueriesTotal),
+		ContendedQueriesCount:     metric.NewCounter(metaContendedQueriesCount),
+		CumulativeContentionNanos: metric.NewCounter(metaCumulativeContentionNanos),
+		FlowsActive:               metric.NewGauge(metaFlowsActive),
+		FlowsTotal:                metric.NewCounter(metaFlowsTotal),
 		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaMemMaxBytes,
 			Duration:     histogramWindow,
