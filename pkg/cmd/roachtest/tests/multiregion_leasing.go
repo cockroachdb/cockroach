@@ -34,7 +34,7 @@ import (
 func runSchemaChangeMultiRegionBenchmarkLeasing(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
-	var durations [2]int64
+	var durations [2]time.Duration
 	defaultOpts := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), defaultOpts)
 	// Create 600 tables inside the database, which is above our default lease
