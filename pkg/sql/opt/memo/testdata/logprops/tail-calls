@@ -389,14 +389,17 @@ values
                                     │              ├── const: ''
                                     │              ├── const: ''
                                     │              └── const: '00000'
-                                    └── values
-                                         └── tuple
-                                              └── udf: nested
-                                                   ├── tail-call
-                                                   └── body
-                                                        └── values
-                                                             └── tuple
-                                                                  └── const: 1
+                                    └── project
+                                         ├── barrier
+                                         │    └── values
+                                         │         └── tuple
+                                         │              └── udf: nested
+                                         │                   └── body
+                                         │                        └── values
+                                         │                             └── tuple
+                                         │                                  └── const: 1
+                                         └── projections
+                                              └── variable: x
 
 # Not a tail-call because of the second RAISE statement.
 exec-ddl
@@ -441,13 +444,14 @@ values
                                     │              └── const: '00000'
                                     └── project
                                          ├── barrier
-                                         │    └── values
-                                         │         └── tuple
-                                         │              └── udf: nested
-                                         │                   └── body
-                                         │                        └── values
-                                         │                             └── tuple
-                                         │                                  └── const: 1
+                                         │    └── barrier
+                                         │         └── values
+                                         │              └── tuple
+                                         │                   └── udf: nested
+                                         │                        └── body
+                                         │                             └── values
+                                         │                                  └── tuple
+                                         │                                       └── const: 1
                                          └── projections
                                               └── udf: _stmt_raise_3
                                                    ├── tail-call
@@ -974,17 +978,18 @@ values
                                          ├── left-join (cross)
                                          │    ├── values
                                          │    │    └── tuple
-                                         │    ├── limit
-                                         │    │    ├── project-set
-                                         │    │    │    ├── values
-                                         │    │    │    │    └── tuple
-                                         │    │    │    └── zip
-                                         │    │    │         └── udf: nested
-                                         │    │    │              └── body
-                                         │    │    │                   └── values
-                                         │    │    │                        └── tuple
-                                         │    │    │                             └── const: 1
-                                         │    │    └── const: 1
+                                         │    ├── barrier
+                                         │    │    └── limit
+                                         │    │         ├── project-set
+                                         │    │         │    ├── values
+                                         │    │         │    │    └── tuple
+                                         │    │         │    └── zip
+                                         │    │         │         └── udf: nested
+                                         │    │         │              └── body
+                                         │    │         │                   └── values
+                                         │    │         │                        └── tuple
+                                         │    │         │                             └── const: 1
+                                         │    │         └── const: 1
                                          │    └── filters (true)
                                          └── projections
                                               └── variable: nested
