@@ -40,6 +40,7 @@ import { History } from "history";
 import { TimeWindow } from "src/redux/timeScale";
 import { PayloadAction } from "src/interfaces/action";
 import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client-ccl";
 
 /**
  * AxisProps represents the properties of an Axis being specified as part of a
@@ -96,6 +97,12 @@ export interface MetricProps {
   // metric was a duration stored in seconds you'd need a scale of 1_000_000_000
   // to convert it to our Duration format which assumes Nanoseconds.
   scale?: number;
+
+  // Transform is a function that can be applied to the datapoints of the metric
+  // and applies BEFORE scaling
+  transform?: (
+    d: cockroach.ts.tspb.TimeSeriesQueryResponse.IResult["datapoints"],
+  ) => cockroach.ts.tspb.TimeSeriesQueryResponse.IResult["datapoints"];
 
   nonNegativeRate?: boolean;
   aggregateMax?: boolean;

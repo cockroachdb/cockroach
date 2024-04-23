@@ -12,9 +12,10 @@ import React from "react";
 
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
-import { AxisUnits } from "@cockroachlabs/cluster-ui";
-
+import { AxisUnits, util } from "@cockroachlabs/cluster-ui";
 import { GraphDashboardProps } from "./dashboardUtils";
+import { cockroach } from "src/js/protos";
+import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function (props: GraphDashboardProps) {
   const { storeSources, tenantSource } = props;
@@ -45,6 +46,35 @@ export default function (props: GraphDashboardProps) {
           name="cr.node.physical_replication.sst_bytes"
           title="SST Bytes"
           nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+    <LineGraph
+      title="Replication Lag"
+      sources={storeSources}
+      tenantSource={tenantSource}
+      tooltip={`Replication lag between primary and standby cluster`}
+    >
+      <Axis units={AxisUnits.Duration} label="duration">
+        <Metric
+          downsampler={TimeSeriesQueryAggregator.MIN}
+          aggregator={TimeSeriesQueryAggregator.AVG}
+          name="cr.node.physical_replication.replicated_time_seconds"
+          title="Replication Lag"
+          transform={datapoints =>
+            datapoints
+              .filter(d => d.value !== 0)
+              .map(d =>
+                d.value
+                  ? {
+                      ...d,
+                      value:
+                        d.timestamp_nanos.toNumber() -
+                        util.SecondsToNano(d.value),
+                    }
+                  : d,
+              )
+          }
         />
       </Axis>
     </LineGraph>,
