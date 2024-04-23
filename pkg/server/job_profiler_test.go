@@ -74,7 +74,7 @@ func TestJobExecutionDetailsRouting(t *testing.T) {
 	hasStartedCh := make(chan struct{})
 	defer close(hasStartedCh)
 	canContinueCh := make(chan struct{})
-	jobs.RegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return fakeExecResumer{
 			OnResume: func(ctx context.Context) error {
 				hasStartedCh <- struct{}{}
@@ -82,7 +82,7 @@ func TestJobExecutionDetailsRouting(t *testing.T) {
 				return nil
 			},
 		}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 	defer jobs.ResetConstructors()()
 
 	dialedNodeID := roachpb.NodeID(-1)

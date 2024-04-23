@@ -97,7 +97,7 @@ func TestDebugJobTrace(t *testing.T) {
 	defer close(completeResumerCh)
 	defer close(recordedSpanCh)
 
-	jobs.RegisterConstructor(
+	defer jobs.TestingRegisterConstructor(
 		jobspb.TypeBackup,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return &traceSpanResumer{
@@ -107,7 +107,7 @@ func TestDebugJobTrace(t *testing.T) {
 			}
 		},
 		jobs.UsesTenantCostControl,
-	)
+	)()
 
 	// Create a "backup job" but we have overridden the resumer constructor above
 	// to inject our traceSpanResumer.

@@ -929,7 +929,7 @@ func TestZipJobTrace(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 	blockCh := make(chan struct{})
-	jobs.RegisterConstructor(jobspb.TypeImport,
+	defer jobs.TestingRegisterConstructor(jobspb.TypeImport,
 		func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
@@ -937,7 +937,7 @@ func TestZipJobTrace(t *testing.T) {
 					return nil
 				},
 			}
-		}, jobs.UsesTenantCostControl)
+		}, jobs.UsesTenantCostControl)()
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
