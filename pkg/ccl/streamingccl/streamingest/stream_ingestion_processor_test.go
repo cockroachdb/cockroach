@@ -123,7 +123,7 @@ func (m *mockStreamClient) Subscribe(
 	_ int32,
 	token streamclient.SubscriptionToken,
 	initialScanTime hlc.Timestamp,
-	_ hlc.Timestamp,
+	_ span.Frontier,
 ) (streamclient.Subscription, error) {
 	var events []streamingccl.Event
 	var ok bool
@@ -179,7 +179,7 @@ func (m *errorStreamClient) Subscribe(
 	_ int32,
 	_ streamclient.SubscriptionToken,
 	_ hlc.Timestamp,
-	_ hlc.Timestamp,
+	_ span.Frontier,
 ) (streamclient.Subscription, error) {
 	return nil, errors.New("this client always returns an error")
 }
@@ -476,8 +476,15 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 
 		lastClientStart := make(map[string]hlc.Timestamp)
-		streamingTestingKnobs := &sql.StreamingTestingKnobs{BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
-			lastClientStart[token] = clientStartTime
+		streamingTestingKnobs := &sql.StreamingTestingKnobs{BeforeClientSubscribe: func(addr string, token string, clientStartTimes span.Frontier) {
+			sp := p1Span
+			if token == string(p2) {
+				sp = p2Span
+			}
+			clientStartTimes.SpanEntries(sp, func(s roachpb.Span, t hlc.Timestamp) (done span.OpResult) {
+				lastClientStart[token] = t
+				return span.StopMatch
+			})
 		}}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, checkpoint, tenantRekey, mockClient,
@@ -493,8 +500,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			"partition 1 should advance to timestamp 6")
 		require.Contains(t, emittedRows, "key_2{-\\x00} 0.000000005,0",
 			"partition 2 should advance to timestamp 5")
-		require.Equal(t, lastClientStart[string(p1)], hlc.Timestamp{WallTime: 4})
-		require.Equal(t, lastClientStart[string(p2)], hlc.Timestamp{WallTime: 5})
+		require.Equal(t, hlc.Timestamp{WallTime: 4}, lastClientStart[string(p1)])
+		require.Equal(t, hlc.Timestamp{WallTime: 5}, lastClientStart[string(p2)])
 	})
 
 	t.Run("error stream client", func(t *testing.T) {

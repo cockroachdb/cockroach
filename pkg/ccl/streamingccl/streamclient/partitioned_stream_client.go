@@ -16,11 +16,13 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -210,7 +212,7 @@ func (p *partitionedStreamClient) Subscribe(
 	consumerID int32,
 	spec SubscriptionToken,
 	initialScanTime hlc.Timestamp,
-	previousReplicatedTime hlc.Timestamp,
+	previousReplicatedTimes span.Frontier,
 ) (Subscription, error) {
 	_, sp := tracing.ChildSpan(ctx, "streamclient.Client.Subscribe")
 	defer sp.Finish()
@@ -220,7 +222,13 @@ func (p *partitionedStreamClient) Subscribe(
 		return nil, err
 	}
 	sps.InitialScanTimestamp = initialScanTime
-	sps.PreviousReplicatedTimestamp = previousReplicatedTime
+	if previousReplicatedTimes != nil {
+		sps.PreviousReplicatedTimestamp = previousReplicatedTimes.Frontier()
+		previousReplicatedTimes.Entries(func(s roachpb.Span, t hlc.Timestamp) (done span.OpResult) {
+			sps.Progress = append(sps.Progress, jobspb.ResolvedSpan{Span: s, Timestamp: t})
+			return span.ContinueMatch
+		})
+	}
 	sps.ConsumerID = consumerID
 
 	specBytes, err := protoutil.Marshal(&sps)

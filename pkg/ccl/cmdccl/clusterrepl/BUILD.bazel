@@ -13,7 +13,6 @@ go_library(
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/util/ctxgroup",
-        "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/protoutil",
         "//pkg/util/span",
