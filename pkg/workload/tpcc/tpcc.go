@@ -230,6 +230,7 @@ var tpccMeta = workload.Meta{
 			`replicate-static-columns`: {RuntimeOnly: true},
 			`deprecated-fk-indexes`:    {RuntimeOnly: true},
 			`query-trace-file`:         {RuntimeOnly: true},
+			`fake-time`:                {RuntimeOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
