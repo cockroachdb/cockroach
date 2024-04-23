@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1644,4 +1645,91 @@ func (c *channelSink) Send(e *kvpb.RangeFeedEvent) error {
 	case <-c.ctx.Done():
 		return c.ctx.Err()
 	}
+}
+
+
+// TestRangeFeedMetadata
+//
+// 2. Spin up a rangefeed over the whole tenant key space
+// 3. Observe the initial scan
+// 4. Create a table
+// 5. Observe the metadata event, but no split point
+// 6. Manually split, observe the metadata event with a split point
+func TestRangeFeedMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+		ctx := context.Background()
+		settings := cluster.MakeTestingClusterSettings()
+		// We must enable desired scheduler settings before we start cluster,
+		// otherwise we will trigger processor restarts later and this test can't
+		// handle duplicated events.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
+		srv, conn, db := serverutils.StartServer(t, base.TestServerArgs{
+			Settings: settings,
+		})
+		sql := sqlutils.MakeSQLRunner(conn)
+
+
+		defer srv.Stopper().Stop(ctx)
+		ts := srv.ApplicationLayer()
+    
+		tenantPrefix := ts.Codec().TenantPrefix()
+
+		// consider making th
+
+		sp := roachpb.Span{
+			Key:    tenantPrefix,
+			EndKey: tenantPrefix.PrefixEnd(),
+		}
+
+
+		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+		for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
+			// Whether rangefeeds are enabled is a property of both the
+			// storage layer and the application layer.
+			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+		// Lower the closed timestamp target duration to speed up the test.
+			closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
+		}
+
+		f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
+		require.NoError(t, err)
+		metadata := make(chan *kvpb.RangeFeedMetadata)
+		initialScanDone := make(chan struct{})
+		r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, db.Clock().Now(),
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {
+		},
+			rangefeed.WithInitialScan(func(ctx context.Context) {
+				close(initialScanDone)
+			}),
+			rangefeed.WithOnMetadata(func(ctx context.Context, value *kvpb.RangeFeedMetadata){
+				select {
+				case metadata <- value:
+				case <-ctx.Done():
+					return
+				}
+			}),
+		)
+		require.NoError(t, err)
+		defer r.Close()
+		<-initialScanDone
+    sql.Exec(t,"CREATE TABLE foo (key INT PRIMARY KEY)")
+		sql.Exec(t,`INSERT INTO foo (key) SELECT * FROM generate_series(1, 100)`)
+		{
+			// Expect a metadata event induced by a split queue split from the new table.
+			meta := <-metadata
+			require.Equal(t, false, meta.FromManualSplit)
+		  fmt.Printf("\t new range key span %s-%s\n",meta.Span.Key,meta.Span.EndKey)
+		}		
+		sql.Exec(t,`ALTER TABLE foo SPLIT AT (SELECT * FROM foo ORDER BY key OFFSET 50 ROWS LIMIT 1)`)
+		{
+			
+			// Expect a metadata event from the manual split.
+			meta := <-metadata
+			fmt.Printf("\t expected manual split new range key span %s-%s\n",meta.Span.Key,meta.Span.EndKey)
+			require.Equal(t, true, meta.FromManualSplit)
+		}		
+	})
 }

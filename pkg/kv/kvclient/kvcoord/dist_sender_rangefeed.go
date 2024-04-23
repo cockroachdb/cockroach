@@ -91,7 +91,7 @@ type rangeFeedConfig struct {
 	overSystemTable     bool
 	withDiff            bool
 	withFiltering       bool
-	emitMetadata        bool
+	withMetadata        bool
 	rangeObserver       func(ForEachRangeFn)
 
 	knobs struct {
@@ -158,6 +158,12 @@ func WithFiltering() RangeFeedOption {
 func WithRangeObserver(observer func(ForEachRangeFn)) RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.rangeObserver = observer
+	})
+}
+
+func WithMetadata() RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.withMetadata = true
 	})
 }
 
@@ -278,9 +284,11 @@ func (ds *DistSender) RangeFeedSpans(
 						sri.token, rangeCh, eventCh, cfg, metrics)
 				})
 
-				if cfg.emitMetadata {
+				if cfg.withMetadata {
 					sendMetadata(eventCh, span, sri.fromManualSplit)
 				}
+
+				
 			case <-ctx.Done():
 				return ctx.Err()
 			}

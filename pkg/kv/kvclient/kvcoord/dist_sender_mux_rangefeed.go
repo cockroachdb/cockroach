@@ -230,7 +230,7 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 		return err
 	}
 
-	if m.cfg.emitMetadata {
+	if m.cfg.withMetadata {
 		sendMetadata(m.eventCh, span, fromManualSplit)
 	}
 

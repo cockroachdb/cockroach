@@ -48,6 +48,7 @@ type config struct {
 	onSSTable            OnSSTable
 	onValues             OnValues
 	onDeleteRange        OnDeleteRange
+	onMetadata OnMetadata
 	extraPProfLabels     []string
 }
 
@@ -152,6 +153,12 @@ func WithRetry(options retry.Options) Option {
 	})
 }
 
+func WithOnMetadata(fn OnMetadata) Option {
+	return optionFunc(func(c *config){
+		c.onMetadata = fn
+	})
+}
+
 // WithOnValues sets up a callback that's invoked whenever a batch of values is
 // passed such as during initial scans, allowing passing it as a batch to the
 // client rather than key-by-key to reduce overhead. This however comes with
@@ -206,6 +213,8 @@ func WithOnSSTable(f OnSSTable) Option {
 		c.onSSTable = f
 	})
 }
+
+type OnMetadata func(ctx context.Context, value *kvpb.RangeFeedMetadata)
 
 // OnDeleteRange is called when an MVCC range tombstone is written (e.g. when
 // DeleteRange is called with UseRangeTombstone, but not when the range is
