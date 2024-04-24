@@ -13,9 +13,9 @@ package tpcc
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
@@ -77,13 +77,13 @@ func createDelivery(
 	return del, nil
 }
 
-func (del *delivery) run(
-	ctx context.Context, wID int, tpccTime *tpccTime, rng *rand.Rand,
-) (interface{}, error) {
+func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 	del.config.auditor.deliveryTransactions.Add(1)
 
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
+
 	oCarrierID := rng.Intn(10) + 1
-	olDeliveryD := tpccTime.Now()
+	olDeliveryD := timeutil.Now()
 
 	err := del.config.executeTx(
 		ctx, del.mcp.Get(),
@@ -192,28 +192,16 @@ func (del *delivery) run(
 
 func makeInTuples(pairs map[int]int) string {
 	tupleStrs := make([]string, 0, len(pairs))
-	keys := make([]int, 0, len(pairs))
-	for k := range pairs {
-		keys = append(keys, k)
-	}
-	// Sorted to make the output deterministic.
-	sort.Ints(keys)
-	for _, k := range keys {
-		tupleStrs = append(tupleStrs, fmt.Sprintf("(%d, %d)", k, pairs[k]))
+	for k, v := range pairs {
+		tupleStrs = append(tupleStrs, fmt.Sprintf("(%d, %d)", k, v))
 	}
 	return strings.Join(tupleStrs, ", ")
 }
 
 func makeWhereCases(cases map[int]float64) string {
 	casesStrs := make([]string, 0, len(cases))
-	keys := make([]int, 0, len(cases))
-	for k := range cases {
-		keys = append(keys, k)
-	}
-	// Sorted to make the output deterministic.
-	sort.Ints(keys)
-	for _, k := range keys {
-		casesStrs = append(casesStrs, fmt.Sprintf("WHEN %d THEN %f", k, cases[k]))
+	for k, v := range cases {
+		casesStrs = append(casesStrs, fmt.Sprintf("WHEN %d THEN %f", k, v))
 	}
 	return strings.Join(casesStrs, " ")
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
@@ -146,16 +147,16 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 	return p, nil
 }
 
-func (p *payment) run(
-	ctx context.Context, wID int, tpccTime *tpccTime, rng *rand.Rand,
-) (interface{}, error) {
+func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 	p.config.auditor.paymentTransactions.Add(1)
+
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	d := paymentData{
 		dID: rng.Intn(10) + 1,
 		// hAmount is randomly selected within [1.00..5000.00]
 		hAmount: float64(randInt(rng, 100, 500000)) / float64(100.0),
-		hDate:   tpccTime.Now(),
+		hDate:   timeutil.Now(),
 	}
 
 	// 2.5.1.2: 85% chance of paying through home warehouse, otherwise
