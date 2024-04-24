@@ -59,7 +59,7 @@ func alterTableAddColumn(
 			IsExistenceOptional: true,
 			RequiredPrivilege:   privilege.CREATE,
 		})
-		_, _, col := scpb.FindColumn(elts)
+		_, colTargetStatus, col := scpb.FindColumn(elts)
 		if col != nil {
 			if t.IfNotExists {
 				return
@@ -69,7 +69,9 @@ func alterTableAddColumn(
 					"column name %q conflicts with a system column name",
 					d.Name))
 			}
-			panic(sqlerrors.NewColumnAlreadyExistsInRelationError(string(d.Name), tn.Object()))
+			if colTargetStatus != scpb.ToAbsent {
+				panic(sqlerrors.NewColumnAlreadyExistsInRelationError(string(d.Name), tn.Object()))
+			}
 		}
 	}
 	if d.IsSerial {
