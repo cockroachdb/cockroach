@@ -1642,6 +1642,7 @@
 <tr><td>SERVER</td><td>sys.gc.count</td><td>Total number of GC runs</td><td>GC Runs</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.gc.pause.ns</td><td>Total GC pause</td><td>GC Pause</td><td>GAUGE</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.gc.pause.percent</td><td>Current GC pause percentage</td><td>GC Pause</td><td>GAUGE</td><td>PERCENT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.gc.stop.ns</td><td>Estimated GC related stop the world stop stopping latencies</td><td>GC stw latencies</td><td>GAUGE</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.go.allocbytes</td><td>Current bytes of memory allocated by go</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.go.heap.allocbytes</td><td>Cumulative bytes allocated for heap objects.</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.go.heap.heapfragmentbytes</td><td>Total heap fragmentation bytes, derived from bytes in in-use spans minus bytes allocated</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
@@ -1667,6 +1668,8 @@
 <tr><td>SERVER</td><td>sys.host.net.send.drop</td><td>Sending packets that got dropped on all network interfaces since this process started (as reported by the OS)</td><td>Packets</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.host.net.send.err</td><td>Error on sending packets on all network interfaces since this process started (as reported by the OS)</td><td>Packets</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.host.net.send.packets</td><td>Packets sent on all network interfaces since this process started (as reported by the OS)</td><td>Packets</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.other.pause.ns</td><td>Estimated non gc related total pause time</td><td>Non GC related Pause</td><td>GAUGE</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.other.stop.ns</td><td>Estimated non GC related stop the world stop stopping latencies</td><td>Non GC stw latencies</td><td>GAUGE</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.rss</td><td>Current process RSS</td><td>RSS</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.runnable.goroutines.per.cpu</td><td>Average number of goroutines that are waiting to run, normalized by number of cores</td><td>goroutines</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.totalmem</td><td>Total memory (both free and used)</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
