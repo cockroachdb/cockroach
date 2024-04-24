@@ -35,10 +35,21 @@ type CollectionStats struct {
 	Descriptors int
 }
 
+// CollectRemoteReplicaInfo retrieves information about:
+//  1. range descriptors contained in cluster meta ranges if meta ranges
+//     are readable;
+//  2. replica information from all live nodes that have connection to
+//     the target node.
+//
+// maxConcurrency is the maximum parallelism that will be used when fanning out
+// RPCs to nodes in the cluster. A value of 0 disables concurrency. A negative
+// value configures no limit for concurrency.
 func CollectRemoteReplicaInfo(
-	ctx context.Context, c serverpb.AdminClient,
+	ctx context.Context, c serverpb.AdminClient, maxConcurrency int,
 ) (loqrecoverypb.ClusterReplicaInfo, CollectionStats, error) {
-	cc, err := c.RecoveryCollectReplicaInfo(ctx, &serverpb.RecoveryCollectReplicaInfoRequest{})
+	cc, err := c.RecoveryCollectReplicaInfo(ctx, &serverpb.RecoveryCollectReplicaInfoRequest{
+		MaxConcurrency: int32(maxConcurrency),
+	})
 	if err != nil {
 		return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, err
 	}

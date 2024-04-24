@@ -888,7 +888,12 @@ message ChartCatalogResponse {
   repeated cockroach.ts.catalog.ChartSection catalog = 1 [(gogoproto.nullable) = false];
 }
 
-message RecoveryCollectReplicaInfoRequest {}
+message RecoveryCollectReplicaInfoRequest {
+  // MaxConcurrency is the maximum parallelism that will be used when fanning
+  // out RPCs to nodes in the cluster while servicing this request. A value of 0
+  // disables concurrency. A negative value configures no limit for concurrency.
+  int32 max_concurrency = 1;
+}
 
 // RecoveryCollectReplicaRestartNodeStream is sent by collector node to client
 // if it experiences a transient failure collecting data from one of the nodes.
@@ -933,6 +938,10 @@ message RecoveryStagePlanRequest {
   // if target cluster is stuck in recovery where only part of nodes were
   // successfully migrated.
   bool force_local_internal_version = 4;
+  // MaxConcurrency is the maximum parallelism that will be used when fanning
+  // out RPCs to nodes in the cluster while servicing this request. A value of 0
+  // disables concurrency. A negative value configures no limit for concurrency.
+  int32 max_concurrency = 5;
 }
 
 message RecoveryStagePlanResponse {
@@ -961,6 +970,10 @@ message RecoveryVerifyRequest {
   // If more unhealthy ranges are found, error will be returned alongside range
   // to indicate that ranges were cut short.
   int32 max_reported_ranges = 3;
+  // MaxConcurrency is the maximum parallelism that will be used when fanning
+  // out RPCs to nodes in the cluster while servicing this request. A value of 0
+  // disables concurrency. A negative value configures no limit for concurrency.
+  int32 max_concurrency = 4;
 }
 
 message RecoveryVerifyResponse {
