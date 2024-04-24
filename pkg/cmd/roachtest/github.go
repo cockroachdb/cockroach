@@ -213,8 +213,11 @@ func (g *githubIssues) createPostRequest(
 	}
 
 	if sl, ok := teams.GetAliasesForPurpose(issueOwner.ToTeamAlias(), team.PurposeRoachtest); ok {
+		mentionTeam := !teams[sl[0]].SilenceMentions
 		for _, alias := range sl {
-			mention = append(mention, "@"+string(alias))
+			if mentionTeam {
+				mention = append(mention, "@"+string(alias))
+			}
 			if label := teams[alias].Label; label != "" {
 				labels = append(labels, label)
 			}
