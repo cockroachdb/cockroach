@@ -2462,6 +2462,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"sql.distsql.contended_queries.count"},
 			},
 			{
+				Title:   "Cumulative Contention (nanos)",
+				Metrics: []string{"sql.distsql.cumulative_contention_nanos"},
+			},
+			{
 				Title:   "Vectorized Temporary Storage Open File Descriptors",
 				Metrics: []string{"sql.distsql.vec.openfds"},
 			},
