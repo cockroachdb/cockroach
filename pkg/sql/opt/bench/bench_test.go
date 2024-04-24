@@ -734,6 +734,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 	h.evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization = true
 	h.evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = true
 	h.evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity = true
+	h.evalCtx.SessionData().TrigramSimilarityThreshold = 0.3
 	h.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
 	h.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
 
