@@ -1778,7 +1778,7 @@ EXPLAIN (OPT, REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
 ----
 select
  ├── index-join g
- │    └── scan g@g_expr_idx
+ │    └── scan g@g_expr_idx,inverted
  │         └── inverted constraint: /6/3
  │              └── spans: ‹×›
  └── filters
@@ -1798,7 +1798,7 @@ select
  │    ├── stats: [rows=111.1111]
  │    ├── cost: 810.262222
  │    ├── distribution: test
- │    └── scan g@g_expr_idx
+ │    └── scan g@g_expr_idx,inverted
  │         ├── columns: rowid:3
  │         ├── inverted constraint: /6/3
  │         │    └── spans: ‹×›
@@ -1823,7 +1823,7 @@ select
  │    ├── stats: [rows=111.1111]
  │    ├── cost: 810.262222
  │    ├── distribution: test
- │    └── scan g@g_expr_idx
+ │    └── scan g@g_expr_idx,inverted
  │         ├── columns: rowid:3(int!null)
  │         ├── inverted constraint: /6/3
  │         │    └── spans: ‹×›
@@ -1869,12 +1869,12 @@ memo (optimized, ~13KB, required=[presentation: info:7] [distribution: test])
  │         ├── best: (index-join G7 g,cols=(1))
  │         └── cost: 810.26
  ├── G6: (like G8 G9)
- ├── G7: (scan g@g_expr_idx,cols=(3),constrained inverted)
+ ├── G7: (scan g@g_expr_idx,inverted,cols=(3),constrained inverted)
  │    ├── [distribution: test]
- │    │    ├── best: (scan g@g_expr_idx,cols=(3),constrained inverted)
+ │    │    ├── best: (scan g@g_expr_idx,inverted,cols=(3),constrained inverted)
  │    │    └── cost: 135.80
  │    └── []
- │         ├── best: (scan g@g_expr_idx,cols=(3),constrained inverted)
+ │         ├── best: (scan g@g_expr_idx,inverted,cols=(3),constrained inverted)
  │         └── cost: 135.80
  ├── G8: (concat G10 G11)
  ├── G9: (const ‹×›)
@@ -1882,7 +1882,7 @@ memo (optimized, ~13KB, required=[presentation: info:7] [distribution: test])
  └── G11: (const ‹×›)
 select
  ├── index-join g
- │    └── scan g@g_expr_idx
+ │    └── scan g@g_expr_idx,inverted
  │         └── inverted constraint: /6/3
  │              └── spans: ‹×›
  └── filters

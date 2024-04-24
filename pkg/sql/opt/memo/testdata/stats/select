@@ -858,7 +858,7 @@ index-join t_json_arr
  ├── stats: [rows=555.5556]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── scan t_json_arr@b_idx
+ └── scan t_json_arr@b_idx,inverted
       ├── columns: a:1(int!null)
       ├── inverted constraint: /7/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -878,7 +878,7 @@ inner-join (lookup t_json_arr)
  ├── stats: [rows=61.7284]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- ├── inner-join (zigzag t_json_arr@b_idx t_json_arr@b_idx)
+ ├── inner-join (zigzag t_json_arr@b_idx,inverted t_json_arr@b_idx,inverted)
  │    ├── columns: a:1(int!null)
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [7] = ['\x3761000112620001']
