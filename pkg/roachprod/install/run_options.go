@@ -10,7 +10,9 @@
 
 package install
 
-import "github.com/cockroachdb/cockroach/pkg/util/retry"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+)
 
 type RunOptions struct {
 	// RetryOptions are the retry options

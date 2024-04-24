@@ -99,6 +99,8 @@ func registerRebalanceLoad(r registry.Registry) {
 				mixedversion.ClusterSettingOption(
 					install.ClusterSettingsOption(settings.ClusterSettings),
 				),
+				// Multi-tenant deployments are currently unsupported. See #127378.
+				mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 			)
 			mvt.InMixedVersion("rebalance load run",
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {

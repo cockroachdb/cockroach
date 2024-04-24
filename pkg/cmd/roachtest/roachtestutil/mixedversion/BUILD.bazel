@@ -49,6 +49,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":mixedversion"],
+    embedsrcs = ["testdata/test_releases.yaml"],
     deps = [
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
@@ -66,5 +67,6 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+        "@io_k8s_sigs_yaml//:yaml",
     ],
 )

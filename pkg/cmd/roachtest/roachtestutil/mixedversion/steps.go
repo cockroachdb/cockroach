@@ -39,7 +39,9 @@ func (s installFixturesStep) Description() string {
 func (s installFixturesStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	return clusterupgrade.InstallFixtures(ctx, l, h.runner.cluster, h.runner.crdbNodes, s.version)
+	return clusterupgrade.InstallFixtures(
+		ctx, l, h.runner.cluster, h.System.Descriptor.Nodes, s.version,
+	)
 }
 
 // startStep is the step that starts the cluster from a specific
@@ -59,8 +61,9 @@ func (s startStep) Description() string {
 // Run uploads the binary associated with the given version and starts
 // the cockroach binary on the nodes.
 func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper) error {
+	systemNodes := h.System.Descriptor.Nodes
 	binaryPath, err := clusterupgrade.UploadCockroach(
-		ctx, s.rt, l, h.runner.cluster, h.runner.crdbNodes, s.version,
+		ctx, s.rt, l, h.runner.cluster, systemNodes, s.version,
 	)
 	if err != nil {
 		return err
@@ -71,7 +74,32 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *H
 		install.BinaryOption(binaryPath),
 	)
 	return clusterupgrade.StartWithSettings(
-		ctx, l, h.runner.cluster, h.runner.crdbNodes, startOpts(), clusterSettings...,
+		ctx, l, h.runner.cluster, systemNodes, startOpts(), clusterSettings...,
+	)
+}
+
+// startSharedProcessVirtualCluster step creates a new shared-process
+// virtual cluster with the given name, and starts it. At the end of
+// this step, the virtual cluster should be ready to receive requests.
+type startSharedProcessVirtualClusterStep struct {
+	name     string
+	settings []install.ClusterSettingOption
+}
+
+func (s startSharedProcessVirtualClusterStep) Background() shouldStop { return nil }
+
+func (s startSharedProcessVirtualClusterStep) Description() string {
+	return fmt.Sprintf("start shared-process tenant %q", s.name)
+}
+
+func (s startSharedProcessVirtualClusterStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+	l.Printf("starting shared process virtual cluster %s", s.name)
+	startOpts := option.StartSharedVirtualClusterOpts(s.name)
+
+	return h.runner.cluster.StartServiceForVirtualClusterE(
+		ctx, l, startOpts, install.MakeClusterSettings(s.settings...),
 	)
 }
 
@@ -91,7 +119,7 @@ func (s waitForStableClusterVersionStep) Background() shouldStop { return nil }
 func (s waitForStableClusterVersionStep) Description() string {
 	return fmt.Sprintf(
 		"wait for %s tenant on nodes %v to reach cluster version %s",
-		s.virtualClusterName, s.nodes, s.desiredVersion,
+		s.virtualClusterName, s.nodes, quoteVersionForPresentation(s.desiredVersion),
 	)
 }
 
@@ -122,14 +150,15 @@ func (s preserveDowngradeOptionStep) Description() string {
 func (s preserveDowngradeOptionStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	node, db := serviceByName(h, s.virtualClusterName).RandomDB(rng)
+	service := serviceByName(h, s.virtualClusterName)
+	node, db := service.RandomDB(rng)
 	l.Printf("checking binary version (via node %d)", node)
 	bv, err := clusterupgrade.BinaryVersion(db)
 	if err != nil {
 		return err
 	}
 
-	return h.Exec(rng, "SET CLUSTER SETTING cluster.preserve_downgrade_option = $1", bv.String())
+	return service.Exec(rng, "SET CLUSTER SETTING cluster.preserve_downgrade_option = $1", bv.String())
 }
 
 // restartWithNewBinaryStep restarts a certain `node` with a new
@@ -168,18 +197,74 @@ func (s restartWithNewBinaryStep) Run(
 // allowUpgradeStep resets the `preserve_downgrade_option` cluster
 // setting, allowing the upgrade migrations to run and the cluster
 // version to eventually reach the binary version on the nodes.
-type allowUpgradeStep struct{}
+type allowUpgradeStep struct {
+	virtualClusterName string
+}
 
 func (s allowUpgradeStep) Background() shouldStop { return nil }
 
 func (s allowUpgradeStep) Description() string {
-	return "allow upgrade to happen by resetting `preserve_downgrade_option`"
+	return fmt.Sprintf(
+		"allow upgrade to happen on %s tenant by resetting `preserve_downgrade_option`",
+		s.virtualClusterName,
+	)
 }
 
 func (s allowUpgradeStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	return h.Exec(rng, "RESET CLUSTER SETTING cluster.preserve_downgrade_option")
+	return serviceByName(h, s.virtualClusterName).Exec(
+		rng, "RESET CLUSTER SETTING cluster.preserve_downgrade_option",
+	)
+}
+
+// setTenantClusterVersionStep will `set` the `version` setting on the
+// tenant with the associated name. Used in older versions where
+// auto-upgrading does not work reliably; in those cases, we block
+// and wait for the migrations to run before proceeding.
+type setTenantClusterVersionStep struct {
+	nodes              option.NodeListOption
+	targetVersion      string
+	virtualClusterName string
+}
+
+func (s setTenantClusterVersionStep) Background() shouldStop { return nil }
+
+func (s setTenantClusterVersionStep) Description() string {
+	return fmt.Sprintf(
+		"run upgrades on tenant %s by explicitly setting cluster version to %s",
+		s.virtualClusterName, quoteVersionForPresentation(s.targetVersion),
+	)
+}
+
+func (s setTenantClusterVersionStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	node, db := h.RandomDB(rng)
+
+	targetVersion := s.targetVersion
+	if s.targetVersion == clusterupgrade.CurrentVersionString {
+		l.Printf("querying binary version on node %d", node)
+		bv, err := clusterupgrade.BinaryVersion(db)
+		if err != nil {
+			return err
+		}
+
+		targetVersion = fmt.Sprintf("%d.%d", bv.Major, bv.Minor)
+		if !bv.IsFinal() {
+			targetVersion += fmt.Sprintf("-%d", bv.Internal)
+		}
+	}
+
+	l.Printf(
+		"setting version on tenant %s to %s via node %d",
+		s.virtualClusterName, targetVersion, node,
+	)
+
+	stmt := fmt.Sprintf("SET CLUSTER SETTING version = '%s'", targetVersion)
+	return serviceByName(h, s.virtualClusterName).ExecWithGateway(
+		rng, h.runner.cluster.Node(node), stmt,
+	)
 }
 
 // waitStep does nothing but sleep for the provided duration. Most
@@ -234,7 +319,7 @@ func (s setClusterSettingStep) Background() shouldStop { return nil }
 
 func (s setClusterSettingStep) Description() string {
 	return fmt.Sprintf(
-		"set cluster setting %q to %v on %s tenant",
+		"set cluster setting %q to '%v' on %s tenant",
 		s.name, s.value, s.virtualClusterName,
 	)
 }
@@ -283,7 +368,31 @@ func (s resetClusterSettingStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
 	stmt := fmt.Sprintf("RESET CLUSTER SETTING %s", s.name)
-	return h.ExecWithGateway(rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt)
+	return serviceByName(h, s.virtualClusterName).ExecWithGateway(
+		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt,
+	)
+}
+
+// deleteAllTenantsVersionOverrideStep is a hack that deletes bad data
+// from the `system.tenant_settings` table; specifically an
+// all-tenants (tenant_id = 0) override for the 'version' key. See
+// #125702 for more details.
+//
+// This allows us to continue testing virtual cluster upgrades to
+// versions older than 24.2 without hitting this (already fixed) bug.
+type deleteAllTenantsVersionOverrideStep struct{}
+
+func (s deleteAllTenantsVersionOverrideStep) Background() shouldStop { return nil }
+
+func (s deleteAllTenantsVersionOverrideStep) Description() string {
+	return "delete all-tenants override for the `version` key"
+}
+
+func (s deleteAllTenantsVersionOverrideStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	const stmt = "DELETE FROM system.tenant_settings WHERE tenant_id = $1 and name = $2"
+	return h.System.Exec(rng, stmt, 0, "version")
 }
 
 // nodesRunningAtLeast returns a list of nodes running a system or
@@ -314,6 +423,15 @@ func serviceByName(h *Helper, virtualClusterName string) *Service {
 	}
 
 	return h.Tenant
+}
+
+func quoteVersionForPresentation(v string) string {
+	quotedV := v
+	if v != clusterupgrade.CurrentVersionString {
+		quotedV = fmt.Sprintf("'%s'", v)
+	}
+
+	return quotedV
 }
 
 // startOpts returns the start options used when starting (or
