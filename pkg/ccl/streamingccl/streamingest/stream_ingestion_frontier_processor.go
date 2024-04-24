@@ -413,7 +413,9 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 
 	frontierResolvedSpans := make([]jobspb.ResolvedSpan, 0)
 	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
-		frontierResolvedSpans = append(frontierResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		if ts.IsSet() {
+			frontierResolvedSpans = append(frontierResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		}
 		return span.ContinueMatch
 	})
 
@@ -505,7 +507,9 @@ func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 
 	frontierEntries := &execinfrapb.FrontierEntries{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
 	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
-		frontierEntries.ResolvedSpans = append(frontierEntries.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		if ts.IsSet() {
+			frontierEntries.ResolvedSpans = append(frontierEntries.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		}
 		return span.ContinueMatch
 	})
 

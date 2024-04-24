@@ -225,7 +225,9 @@ func (p *partitionedStreamClient) Subscribe(
 	if previousReplicatedTimes != nil {
 		sps.PreviousReplicatedTimestamp = previousReplicatedTimes.Frontier()
 		previousReplicatedTimes.Entries(func(s roachpb.Span, t hlc.Timestamp) (done span.OpResult) {
-			sps.Progress = append(sps.Progress, jobspb.ResolvedSpan{Span: s, Timestamp: t})
+			if t.IsSet() {
+				sps.Progress = append(sps.Progress, jobspb.ResolvedSpan{Span: s, Timestamp: t})
+			}
 			return span.ContinueMatch
 		})
 	}
