@@ -2621,3 +2621,39 @@ statement error pgcode 42804 pq: RETURN cannot have a parameter in function retu
 CREATE FUNCTION void_return_expr() RETURNS VOID AS $$ BEGIN RETURN 5; END; $$ LANGUAGE PLpgSQL;
 
 subtest end
+
+# Regression test for using Unknown type in place of a wildcard for a nested block
+# with no RETURN statement (#122945).
+skipif config local-mixed-23.2
+statement ok
+CREATE FUNCTION f1() RETURNS RECORD AS $$
+BEGIN
+  RETURN (1, 2);
+END;
+$$ LANGUAGE PLpgSQL;
+CREATE FUNCTION f2(b BOOL) RETURNS RECORD AS $$
+BEGIN
+  IF b THEN
+    RETURN f1();
+  ELSE
+    DECLARE
+    BEGIN
+    END;
+  END IF;
+END;
+$$ LANGUAGE PLpgSQL;
+
+skipif config local-mixed-23.2
+query T
+SELECT f2(true);
+----
+(1,2)
+
+skipif config local-mixed-23.2
+statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f2(false);
+
+skipif config local-mixed-23.2
+statement ok
+DROP FUNCTION f2;
+DROP FUNCTION f1;

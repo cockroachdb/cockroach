@@ -377,7 +377,12 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		// will have already determined the return type.
 		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s, astBlock)
 		ast.Walk(recordVisitor, astBlock)
-		b.returnType = recordVisitor.typ
+		if recordVisitor.typ.Family() != types.UnknownFamily {
+			// It is possible that we didn't infer the concrete type (e.g.
+			// because there is no RETURN statement in this block). In this
+			// case, we'll keep the original wildcard type.
+			b.returnType = recordVisitor.typ
+		}
 	}
 	// Build the exception handler. This has to happen after building the variable
 	// declarations, since the exception handler can reference the block's vars.
