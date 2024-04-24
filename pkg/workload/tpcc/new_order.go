@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
@@ -127,10 +128,10 @@ func createNewOrder(
 	return n, nil
 }
 
-func (n *newOrder) run(
-	ctx context.Context, wID int, tpccTime *tpccTime, rng *rand.Rand,
-) (interface{}, error) {
+func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 	n.config.auditor.newOrderTransactions.Add(1)
+
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	d := newOrderData{
 		wID:    wID,
@@ -207,7 +208,7 @@ func (n *newOrder) run(
 		return d.items[i].olIID < d.items[j].olIID
 	})
 
-	d.oEntryD = tpccTime.Now()
+	d.oEntryD = timeutil.Now()
 
 	err := n.config.executeTx(
 		ctx, n.mcp.Get(),

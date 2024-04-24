@@ -13,6 +13,7 @@ package tpcc
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
@@ -85,9 +86,9 @@ func createStockLevel(
 	return s, nil
 }
 
-func (s *stockLevel) run(
-	ctx context.Context, wID int, tpccTime *tpccTime, rng *rand.Rand,
-) (interface{}, error) {
+func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
+
 	// 2.8.1.2: The threshold of minimum quantity in stock is selected at random
 	// within [10..20].
 	d := stockLevelData{
