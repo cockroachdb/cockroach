@@ -1827,6 +1827,12 @@ func (s *randomTest) step(t *testing.T) {
 			// everything.
 			s.TS.WallTime = 0
 		}
+		// If this is a transactional request, ensure the request timestamp is the
+		// same as the transaction's read timestamp. Otherwise, writes will return
+		// an error from mvccPutInternal.
+		if s.Txn != nil {
+			s.TS = s.Txn.ReadTimestamp
+		}
 	} else {
 		s.TS = hlc.Timestamp{}
 		s.inline = true
@@ -1924,54 +1930,38 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	}
 
 	actions["Put"] = func(s *state) (bool, string) {
-		ts := s.TS
-		if s.Txn != nil {
-			ts = s.Txn.ReadTimestamp
-		}
 		opts := MVCCWriteOptions{
 			Txn:   s.Txn,
 			Stats: s.MSDelta,
 		}
-		if _, err := MVCCPut(ctx, s.batch, s.key, ts, s.rngVal(), opts); err != nil {
+		if _, err := MVCCPut(ctx, s.batch, s.key, s.TS, s.rngVal(), opts); err != nil {
 			return false, err.Error()
 		}
 		return true, ""
 	}
 	actions["InitPut"] = func(s *state) (bool, string) {
-		ts := s.TS
-		if s.Txn != nil {
-			ts = s.Txn.ReadTimestamp
-		}
 		opts := MVCCWriteOptions{
 			Txn:   s.Txn,
 			Stats: s.MSDelta,
 		}
 		failOnTombstones := s.rng.Intn(2) == 0
 		desc := fmt.Sprintf("failOnTombstones=%t", failOnTombstones)
-		if _, err := MVCCInitPut(ctx, s.batch, s.key, ts, s.rngVal(), failOnTombstones, opts); err != nil {
+		if _, err := MVCCInitPut(ctx, s.batch, s.key, s.TS, s.rngVal(), failOnTombstones, opts); err != nil {
 			return false, desc + ": " + err.Error()
 		}
 		return true, desc
 	}
 	actions["Del"] = func(s *state) (bool, string) {
-		ts := s.TS
-		if s.Txn != nil {
-			ts = s.Txn.ReadTimestamp
-		}
 		opts := MVCCWriteOptions{
 			Txn:   s.Txn,
 			Stats: s.MSDelta,
 		}
-		if _, _, err := MVCCDelete(ctx, s.batch, s.key, ts, opts); err != nil {
+		if _, _, err := MVCCDelete(ctx, s.batch, s.key, s.TS, opts); err != nil {
 			return false, err.Error()
 		}
 		return true, ""
 	}
 	actions["DelRange"] = func(s *state) (bool, string) {
-		ts := s.TS
-		if s.Txn != nil {
-			ts = s.Txn.ReadTimestamp
-		}
 		opts := MVCCWriteOptions{
 			Txn:   s.Txn,
 			Stats: s.MSDelta,
@@ -1998,7 +1988,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			}
 
 			if !s.inline && s.rng.Intn(2) == 0 {
-				predicates.StartTime.WallTime = s.rng.Int63n(ts.WallTime + 1)
+				predicates.StartTime.WallTime = s.rng.Int63n(s.TS.WallTime + 1)
 			}
 		}
 
@@ -2013,7 +2003,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		if !mvccRangeDel {
 			desc = fmt.Sprintf("mvccDeleteRange=%s, returnKeys=%t, max=%d", keySpan, returnKeys, max)
 			_, _, _, _, err = MVCCDeleteRange(
-				ctx, s.batch, keySpan.Key, keySpan.EndKey, max, ts, opts, returnKeys,
+				ctx, s.batch, keySpan.Key, keySpan.EndKey, max, s.TS, opts, returnKeys,
 			)
 		} else if predicates == (kvpb.DeleteRangePredicates{}) {
 			desc = fmt.Sprintf("mvccDeleteRangeUsingTombstone=%s",
@@ -2023,7 +2013,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			const targetLockConflictBytes = 0 // unlimited
 			msCovered := (*enginepb.MVCCStats)(nil)
 			err = MVCCDeleteRangeUsingTombstone(
-				ctx, s.batch, s.MSDelta, mvccRangeDelKey, mvccRangeDelEndKey, ts, hlc.ClockTimestamp{}, nil, /* leftPeekBound */
+				ctx, s.batch, s.MSDelta, mvccRangeDelKey, mvccRangeDelEndKey, s.TS, hlc.ClockTimestamp{}, nil, /* leftPeekBound */
 				nil /* rightPeekBound */, idempotent, maxLockConflicts, targetLockConflictBytes, msCovered,
 			)
 		} else {
@@ -2033,7 +2023,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			const maxLockConflicts = 0        // unlimited
 			const targetLockConflictBytes = 0 // unlimited
 			_, err = MVCCPredicateDeleteRange(ctx, s.batch, s.MSDelta, mvccRangeDelKey, mvccRangeDelEndKey,
-				ts, hlc.ClockTimestamp{}, nil /* leftPeekBound */, nil, /* rightPeekBound */
+				s.TS, hlc.ClockTimestamp{}, nil /* leftPeekBound */, nil, /* rightPeekBound */
 				predicates, 0, 0, rangeTombstoneThreshold, maxLockConflicts, targetLockConflictBytes)
 		}
 		if err != nil {
