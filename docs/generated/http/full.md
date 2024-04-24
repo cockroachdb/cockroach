@@ -7689,6 +7689,10 @@ Support status: [reserved](#support-status)
 
 
 
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| max_concurrency | [int32](#cockroach.server.serverpb.RecoveryCollectReplicaInfoRequest-int32) |  | MaxConcurrency is the maximum parallelism that will be used when fanning out RPCs to nodes in the cluster while servicing this request. A value of 0 disables concurrency. A negative value configures no limit for concurrency. | [reserved](#support-status) |
+
 
 
 
@@ -7799,6 +7803,7 @@ Support status: [reserved](#support-status)
 | all_nodes | [bool](#cockroach.server.serverpb.RecoveryStagePlanRequest-bool) |  | If all nodes is true, then receiver should act as a coordinator and perform a fan-out to stage plan on all nodes of the cluster. | [reserved](#support-status) |
 | force_plan | [bool](#cockroach.server.serverpb.RecoveryStagePlanRequest-bool) |  | ForcePlan tells receiver to ignore any plan already staged on the node if it is present and replace it with new plan (including empty one). | [reserved](#support-status) |
 | force_local_internal_version | [bool](#cockroach.server.serverpb.RecoveryStagePlanRequest-bool) |  | ForceLocalInternalVersion tells server to update internal component of plan version to the one of active cluster version. This option needs to be set if target cluster is stuck in recovery where only part of nodes were successfully migrated. | [reserved](#support-status) |
+| max_concurrency | [int32](#cockroach.server.serverpb.RecoveryStagePlanRequest-int32) |  | MaxConcurrency is the maximum parallelism that will be used when fanning out RPCs to nodes in the cluster while servicing this request. A value of 0 disables concurrency. A negative value configures no limit for concurrency. | [reserved](#support-status) |
 
 
 
@@ -7888,6 +7893,7 @@ Support status: [reserved](#support-status)
 | plan_id | [bytes](#cockroach.server.serverpb.RecoveryVerifyRequest-bytes) |  | PlanID is ID of the plan to verify. | [reserved](#support-status) |
 | decommissioned_node_ids | [int32](#cockroach.server.serverpb.RecoveryVerifyRequest-int32) | repeated | DecommissionedNodeIDs is a set of nodes that should be marked as decommissioned in the cluster when loss of quorum recovery successfully applies. | [reserved](#support-status) |
 | max_reported_ranges | [int32](#cockroach.server.serverpb.RecoveryVerifyRequest-int32) |  | MaxReportedRanges is the maximum number of failed ranges to report. If more unhealthy ranges are found, error will be returned alongside range to indicate that ranges were cut short. | [reserved](#support-status) |
+| max_concurrency | [int32](#cockroach.server.serverpb.RecoveryVerifyRequest-int32) |  | MaxConcurrency is the maximum parallelism that will be used when fanning out RPCs to nodes in the cluster while servicing this request. A value of 0 disables concurrency. A negative value configures no limit for concurrency. | [reserved](#support-status) |
 
 
 
