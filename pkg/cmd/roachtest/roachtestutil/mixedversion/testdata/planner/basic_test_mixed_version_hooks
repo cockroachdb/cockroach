@@ -62,5 +62,5 @@ Plan:
    │   ├── run "mixed-version 2" (25)
    │   ├── restart node 3 with binary version <current> (26)
    │   └── run "mixed-version 1" (27)
-   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (28)
+   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (28)
    └── wait for system tenant on nodes :1-4 to reach cluster version <current> (29)

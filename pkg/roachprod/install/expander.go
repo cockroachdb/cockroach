@@ -156,7 +156,7 @@ func extractVirtualClusterInfo(matches []string) (string, int, error) {
 	return virtualClusterName, sqlInstance, nil
 }
 
-// maybeExpandPgURL is an expanderFunc for {pgurl:<nodeSpec>}
+// maybeExpandPgURL is an expanderFunc for {pgurl:<nodeSpec>[:virtualCluster[:sqlInstance]]}
 func (e *expander) maybeExpandPgURL(
 	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {

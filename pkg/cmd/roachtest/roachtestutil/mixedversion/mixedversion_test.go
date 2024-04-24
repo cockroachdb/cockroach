@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
@@ -111,6 +110,15 @@ func Test_assertValidTest(t *testing.T) {
 		fatalErr.Error(),
 	)
 
+	// an invalid deployment mode is chosen
+	mvt = newTest(EnabledDeploymentModes(SystemOnlyDeployment, "my-deployment"))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		`mixedversion.NewTest: invalid test options: unknown deployment mode "my-deployment"`,
+		fatalErr.Error(),
+	)
+
 	mvt = newTest(MinimumSupportedVersion("v22.2.0"))
 	assertValidTest(mvt, fatalFunc())
 	require.NoError(t, fatalErr)
@@ -172,7 +180,7 @@ func Test_choosePreviousReleases(t *testing.T) {
 
 			mvt := newTest(opts...)
 			mvt.predecessorFunc = func(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
-				return testPredecessorMapping[release.VersionSeries(&v.Version)], tc.predecessorErr
+				return testPredecessorMapping[v.Series()], tc.predecessorErr
 			}
 			mvt._arch = &tc.arch
 
