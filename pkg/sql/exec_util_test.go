@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -97,4 +98,17 @@ func TestMaybeHashAppName(t *testing.T) {
 			require.Equal(t, tc.expected, out)
 		})
 	}
+}
+
+// TestSessionDefaultsSafeFormat tests the redacted output of SessionDefaults.
+func TestSessionDefaultsSafeFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	session := SessionDefaults(make(map[string]string))
+	session["database"] = "test"
+	session["statement_timeout"] = "250ms"
+	session["disallow_full_table_scans"] = "true"
+	require.Contains(t, redact.Sprint(session), "database=‹test›")
+	require.Contains(t, redact.Sprint(session).Redact(), "statement_timeout=‹×›")
 }

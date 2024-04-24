@@ -70,16 +70,17 @@ connect user=carl database=mydb password=doggo
 ----
 ok mydb
 
-authlog 7
+authlog 8
 .*client_connection_end
 ----
-5 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-6 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
-7 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
-9 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
-10 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
-11 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-12 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+6 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+7 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+8 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+10 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+11 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+12 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=mydb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+13 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+14 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -98,12 +99,12 @@ ERROR: password authentication failed for user carl@cockroachlabs.com (SQLSTATE 
 authlog 6
 .*client_connection_end
 ----
-13 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-14 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl"}
-15 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl"}
-16 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"USER_NOT_FOUND","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl","User":"carl@cockroachlabs.com"}
-17 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-18 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+15 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+16 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl"}
+17 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl"}
+18 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"USER_NOT_FOUND","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl","User":"carl@cockroachlabs.com"}
+19 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+20 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -115,16 +116,17 @@ connect user=will_be_carl database=mydb password=oggod show_system_identity
 ----
 ok mydb will_be_carl
 
-authlog 7
+authlog 8
 .*client_connection_end
 ----
-19 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-20 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl"}
-21 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl"}
-23 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl","User":"will_be_carl"}
-24 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl","User":"will_be_carl"}
-25 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-26 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+21 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+22 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl"}
+23 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl"}
+25 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl","User":"will_be_carl"}
+26 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl","User":"will_be_carl"}
+27 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=mydb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"will_be_carl","Timestamp":"XXX","Transport":"hostssl","User":"will_be_carl"}
+28 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+29 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -135,15 +137,16 @@ connect user=carl database=mydb system_identity=testuser force_certs show_system
 ----
 ok mydb testuser
 
-authlog 6
+authlog 7
 .*client_connection_end
 ----
-27 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-28 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
-29 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
-31 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
-32 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-33 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+30 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+31 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
+32 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
+34 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+35 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=mydb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+36 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+37 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -157,15 +160,16 @@ connect system_identity=testuser2 user=carl database=mydb force_certs show_syste
 ----
 ok mydb testuser2
 
-authlog 6
+authlog 7
 .*client_connection_end
 ----
-34 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-35 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser2","Timestamp":"XXX","Transport":"hostssl"}
-36 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser2","Timestamp":"XXX","Transport":"hostssl"}
-38 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser2","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
-39 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-40 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+38 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+39 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser2","Timestamp":"XXX","Transport":"hostssl"}
+40 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser2","Timestamp":"XXX","Transport":"hostssl"}
+42 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser2","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+43 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=mydb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser2","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+44 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+45 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -177,15 +181,16 @@ connect user=carl database=mydb cert_name=testuser_cn_only force_certs show_syst
 ----
 ok mydb testuser
 
-authlog 6
+authlog 7
 .*client_connection_end
 ----
-41 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-42 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
-43 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
-45 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
-46 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-47 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+46 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+47 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+48 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+50 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+51 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=mydb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+52 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+53 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -197,15 +202,16 @@ connect user=carl database=mydb cert_name=testuser_cn_and_san force_certs show_s
 ----
 ok mydb testuser
 
-authlog 6
+authlog 7
 .*client_connection_end
 ----
-48 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-49 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
-50 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
-52 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
-53 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-54 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+54 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+55 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+56 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+58 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+59 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=mydb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+60 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+61 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -220,12 +226,12 @@ ERROR: system identity "" did not map to a database role (SQLSTATE 28000)
 authlog 6
 .*client_connection_end
 ----
-55 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-56 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
-57 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
-58 {"Detail":"system identity \"\" did not map to a database role","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"USER_NOT_FOUND","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX","Transport":"hostssl"}
-59 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-60 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+62 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+63 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+64 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+65 {"Detail":"system identity \"\" did not map to a database role","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"USER_NOT_FOUND","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX","Transport":"hostssl"}
+66 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+67 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 

@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -230,6 +231,11 @@ func (c *conn) processCommands(
 	// Signal the connection was established to the authenticator.
 	ac.AuthOK(ctx)
 	ac.LogAuthOK(ctx)
+	ac.LogAuthInfof(ctx, redact.Sprintf(
+		"session created with SessionDefaults=%s and CustomOptions=%s",
+		c.sessionArgs.SessionDefaults,
+		c.sessionArgs.CustomOptionSessionDefaults,
+	))
 
 	// We count the connection establish latency until we are ready to
 	// serve a SQL query. It includes the time it takes to authenticate and
