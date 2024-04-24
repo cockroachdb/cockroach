@@ -2658,7 +2658,11 @@ func (c *SyncedCluster) pghosts(
 // virtual cluster and SQL instance. Returns an empty string if a load balancer
 // is not found.
 func (c *SyncedCluster) loadBalancerURL(
-	ctx context.Context, l *logger.Logger, virtualClusterName string, sqlInstance int,
+	ctx context.Context,
+	l *logger.Logger,
+	virtualClusterName string,
+	sqlInstance int,
+	auth PGAuthMode,
 ) (string, error) {
 	services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL)
 	if err != nil {
@@ -2677,7 +2681,7 @@ func (c *SyncedCluster) loadBalancerURL(
 	if err != nil {
 		return "", err
 	}
-	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, serviceMode, AuthRootCert)
+	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, serviceMode, auth)
 	return loadBalancerURL, nil
 }
 
