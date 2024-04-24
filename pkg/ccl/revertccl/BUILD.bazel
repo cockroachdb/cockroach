@@ -17,6 +17,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
+        "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/sql",
         "//pkg/sql/catalog/colinfo",

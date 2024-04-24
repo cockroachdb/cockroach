@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -55,6 +56,7 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srv.SystemLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
+	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 	t.Run("destination cannot be system tenant", func(t *testing.T) {
 		sysSQL.ExpectErr(t, `pq: the destination tenant "system" \(0\) cannot be the system tenant`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1", srcPgURL.String())
@@ -75,6 +77,9 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 			fmt.Sprintf(`CREATE EXTERNAL CONNECTION "replication-source-addr" AS "%s"`,
 				badPgURL.String()))
 	})
+	counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+	require.Equal(t, int32(0), counts["physical_replication.started"])
+
 }
 
 func TestTenantStreamingFailback(t *testing.T) {
@@ -549,6 +554,7 @@ func TestCutoverCheckpointing(t *testing.T) {
 		},
 	}
 
+	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 	ctx := context.Background()
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
@@ -558,6 +564,11 @@ func TestCutoverCheckpointing(t *testing.T) {
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobIDInt))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, replicationJobID)
+
+	// Assert that our counters have been incremented.
+	counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+	require.GreaterOrEqual(t, counts["physical_replication.started"], int32(1))
+
 	c.WaitUntilStartTimeReached(replicationJobID)
 
 	c.SrcTenantSQL.Exec(t, `CREATE TABLE foo(id) AS SELECT generate_series(1, 10)`)
