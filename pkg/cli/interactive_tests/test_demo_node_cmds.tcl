@@ -59,10 +59,26 @@ send "SELECT count(*) FROM system.users;\r"
 eexpect "1"
 eexpect "defaultdb>"
 
-# Now restart the node.
+# Now restart the node, and wait for liveness to update.
+# See: https://github.com/cockroachdb/cockroach/issues/122134#issuecomment-2050667479.
 send "\\demo restart 3\r"
 eexpect "node 3 has been restarted"
 eexpect "defaultdb>"
+
+set timeout 1
+set stmt "select node_id, draining, membership from crdb_internal.kv_node_liveness ORDER BY node_id;\r"
+send $stmt
+expect {
+    "3 |    f     | active" {
+        puts "\rfound n3 active and no longer draining"
+    }
+    timeout {
+        puts "\rdid not see n3 active and no longer draining - retrying"
+        sleep 2
+        send $stmt
+        exp_continue
+    }
+}
 
 send "select node_id, draining, membership from crdb_internal.kv_node_liveness ORDER BY node_id;\r"
 eexpect "1 |    f     | active"
