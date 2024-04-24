@@ -289,3 +289,29 @@ BEGIN
   END
   RAISE NOTICE '%', x;
   ^
+
+error
+<<foo>>
+BEGIN
+  SELECT 1;
+END bar
+----
+at or near "bar": syntax error: end label "bar" differs from block's label "foo"
+DETAIL: source SQL:
+<<foo>>
+BEGIN
+  SELECT 1;
+END bar
+    ^
+
+error
+BEGIN
+  SELECT 1;
+END foo
+----
+at or near "foo": syntax error: end label "foo" specified for unlabeled block
+DETAIL: source SQL:
+BEGIN
+  SELECT 1;
+END foo
+    ^

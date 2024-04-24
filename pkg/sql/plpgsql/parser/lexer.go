@@ -489,10 +489,6 @@ func (l *lexer) Unimplemented(feature string) {
 	}
 }
 
-func (l *lexer) GetTypeFromValidSQLSyntax(sqlStr string) (tree.ResolvableTypeReference, error) {
-	return parser.GetTypeFromValidSQLSyntax(sqlStr)
-}
-
 func (l *lexer) ParseExpr(sqlStr string) (plpgsqltree.Expr, error) {
 	// Use ParseExprs instead of ParseExpr in order to correctly handle the case
 	// when multiple expressions are incorrectly passed.

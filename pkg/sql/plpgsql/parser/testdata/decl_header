@@ -202,16 +202,11 @@ DECLARE
 BEGIN
 END
 ----
-at or near "four": at or near ".": syntax error
+at or near "four": syntax error: unable to parse type of variable declaration
 DETAIL: source SQL:
-SET ROW (1::one.two.three.four)
-                         ^
---
-source SQL:
 DECLARE
   var1 one.two.three.four;
                      ^
-HINT: try \h SET SESSION
 
 error
 DECLARE
@@ -219,39 +214,58 @@ DECLARE
 BEGIN
 END
 ----
-at or near "four": at or near ".": syntax error
+at or near "four": syntax error: unable to parse type of variable declaration
 DETAIL: source SQL:
-SET ROW (1::one.two.three.four )
-                         ^
---
-source SQL:
 DECLARE
   var1 one.two.three.four := 0;
                      ^
-HINT: try \h SET SESSION
 
 error
-<<foo>>
+DECLARE
+  var1 1;
 BEGIN
-  SELECT 1;
-END bar
+END
 ----
-at or near "bar": syntax error: end label "bar" differs from block's label "foo"
+at or near "1": syntax error: unable to parse type of variable declaration
 DETAIL: source SQL:
-<<foo>>
-BEGIN
-  SELECT 1;
-END bar
-    ^
+DECLARE
+  var1 1;
+       ^
 
 error
+DECLARE
+  var1 'foo';
 BEGIN
-  SELECT 1;
-END foo
+END
 ----
-at or near "foo": syntax error: end label "foo" specified for unlabeled block
+at or near "foo": syntax error: unable to parse type of variable declaration
 DETAIL: source SQL:
+DECLARE
+  var1 'foo';
+       ^
+
+error
+DECLARE
+  var1 xy%ROWTYPE;
 BEGIN
-  SELECT 1;
-END foo
-    ^
+END
+----
+at or near "rowtype": syntax error: unable to parse type of variable declaration
+DETAIL: source SQL:
+DECLARE
+  var1 xy%ROWTYPE;
+          ^
+
+error
+DECLARE
+  var1 INT;
+  var2 var1%TYPE;
+BEGIN
+END
+----
+at or near "type": syntax error: unable to parse type of variable declaration
+DETAIL: source SQL:
+DECLARE
+  var1 INT;
+  var2 var1%TYPE;
+            ^
