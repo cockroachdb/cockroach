@@ -194,6 +194,9 @@ func sendAddRemoteSSTWorker(
 						entry.Span,
 					)
 				}
+				if !entry.Span.Contains(file.BackupFileEntrySpan) {
+					return errors.AssertionFailedf("file span %s is not contained in restore span %s", file.BackupFileEntrySpan, entry.Span)
+				}
 				// Clone the key because rewriteSpan could modify the keys in place, but
 				// we reuse backup files across restore span entries.
 				restoringSubspan, err = rewriteSpan(&kr, restoringSubspan.Clone(), entry.ElidedPrefix)
