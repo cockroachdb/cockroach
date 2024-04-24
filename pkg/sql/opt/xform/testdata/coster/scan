@@ -705,7 +705,7 @@ index-join inv
  ├── cost: 803.595556
  ├── key: (1)
  ├── fd: (1)-->(2)
- └── scan inv@inv_j_idx
+ └── scan inv@inv_j_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /5/1
       │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]

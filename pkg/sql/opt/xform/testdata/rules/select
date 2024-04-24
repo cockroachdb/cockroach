@@ -2695,7 +2695,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan b@j_inv_idx
+ └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -2714,9 +2714,9 @@ memo (optimized, ~9KB, required=[presentation: k:1])
  │         ├── best: (index-join G4 b,cols=(1,4))
  │         └── cost: 803.53
  ├── G3: (projections)
- ├── G4: (scan b@j_inv_idx,cols=(1),constrained inverted)
+ ├── G4: (scan b@j_inv_idx,inverted,cols=(1),constrained inverted)
  │    └── []
- │         ├── best: (scan b@j_inv_idx,cols=(1),constrained inverted)
+ │         ├── best: (scan b@j_inv_idx,inverted,cols=(1),constrained inverted)
  │         └── cost: 132.46
  ├── G5: (scan b,cols=(1,4))
  │    └── []
@@ -2765,7 +2765,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2,4)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null
            ├── inverted constraint: /7/1
            │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -2779,7 +2779,7 @@ index-join b
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(4)
- └── scan b@j_inv_idx
+ └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -2793,7 +2793,7 @@ index-join b
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── scan b@j_inv_idx
+ └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -2807,7 +2807,7 @@ index-join b
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── scan b@j_inv_idx
+ └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
       │    └── spans
@@ -2833,7 +2833,7 @@ project
       │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
       │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -2884,7 +2884,7 @@ select
  │         │                        ├── tight: true, unique: true
  │         │                        └── union spans: ["7\x00\x03\x00\x03\x00\x01*\b\x00", "7\x00\x03\x00\x03\x00\x01*\b\x00"]
  │         ├── key: (1)
- │         └── scan b@j_inv_idx
+ │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
  │              ├── inverted constraint: /7/1
  │              │    └── spans
@@ -2913,7 +2913,7 @@ index-join b
       │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
       │         └── ["7\x00\x03\x00\xff", "7\x00\x04")
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -2938,7 +2938,7 @@ index-join b
       │         ├── ["7a\x00\x019", "7a\x00\x019"]
       │         └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -2963,7 +2963,7 @@ index-join b
       │         ├── ["7a\x00\x018", "7a\x00\x018"]
       │         └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -2980,7 +2980,7 @@ index-join b
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── scan b@j_inv_idx
+ └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
       │    └── spans: ["7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01", "7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01"]
@@ -2999,7 +2999,7 @@ select
  │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- │    └── scan b@j_inv_idx
+ │    └── scan b@j_inv_idx,inverted
  │         ├── columns: k:1!null
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
@@ -3019,7 +3019,7 @@ select
  │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- │    └── scan b@j_inv_idx
+ │    └── scan b@j_inv_idx,inverted
  │         ├── columns: k:1!null
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7\x00\x019", "7\x00\x019"]
@@ -3039,7 +3039,7 @@ select
  │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- │    └── scan b@j_inv_idx
+ │    └── scan b@j_inv_idx,inverted
  │         ├── columns: k:1!null
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7\x00\x018", "7\x00\x018"]
@@ -3067,7 +3067,7 @@ select
  │         │         ├── ["7\x00\x019", "7\x00\x019"]
  │         │         └── ["7a\x00\x018", "7a\x00\x018"]
  │         ├── key: (1)
- │         └── scan b@j_inv_idx
+ │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
  │              ├── inverted constraint: /7/1
  │              │    └── spans
@@ -3104,7 +3104,7 @@ select
  │         │         ├── ["7\x00\x03a\x00\x019", "7\x00\x03a\x00\x019"]
  │         │         └── ["7\x00\x03a\x00\x02d\x00\x01\n", "7\x00\x03a\x00\x02d\x00\x01\n"]
  │         ├── key: (1)
- │         └── scan b@j_inv_idx
+ │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
  │              ├── inverted constraint: /7/1
  │              │    └── spans
@@ -3149,7 +3149,7 @@ select
  │         │         ├── ["7a\x00\x018", "7a\x00\x018"]
  │         │         └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
  │         ├── key: (1)
- │         └── scan b@j_inv_idx
+ │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
  │              ├── inverted constraint: /7/1
  │              │    └── spans
@@ -3203,7 +3203,7 @@ select
  │         │                   ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
  │         │                   └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
  │         ├── key: (1)
- │         └── scan b@j_inv_idx
+ │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
  │              ├── inverted constraint: /7/1
  │              │    └── spans
@@ -3244,7 +3244,7 @@ project
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
+      │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
       │         │    └── spans
@@ -3271,7 +3271,7 @@ project
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
+      │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
       │         │    └── spans
@@ -3298,7 +3298,7 @@ project
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
+      │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
       │         │    └── spans
@@ -3325,7 +3325,7 @@ project
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
+      │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
       │         │    └── spans
@@ -3350,7 +3350,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(4)
-      ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+      ├── inner-join (zigzag b@j_inv_idx,inverted b@j_inv_idx,inverted)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [7] = ['\x37000300012a0200']
@@ -3385,7 +3385,7 @@ project
       │         │         ├── ["7\x00\x018", "7\x00\x018"]
       │         │         └── ["7\x00\x03", "7\x00\x03"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -3421,7 +3421,7 @@ project
       │         │         ├── ["7\x00\x019", "7\x00\x019"]
       │         │         └── ["7\x00\xff", "8")
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -3447,7 +3447,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(4)
-      ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+      ├── inner-join (zigzag b@j_inv_idx,inverted b@j_inv_idx,inverted)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [7] = ['\x3761000112620001']
@@ -3464,7 +3464,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan b@j_inv_idx
+ └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -3477,7 +3477,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan b@j_inv_idx
+ └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -3491,7 +3491,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan b@j_inv_idx
+ └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
       │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
@@ -3541,7 +3541,7 @@ project
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
+      │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
       │         │    └── spans: ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
@@ -3568,7 +3568,7 @@ project
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
+      │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
       │         │    └── spans: ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
@@ -3593,7 +3593,7 @@ project
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
+      │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
       │         │    └── spans: ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
@@ -3618,7 +3618,7 @@ project
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
+      │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
       │         │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
@@ -3645,7 +3645,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+      ├── inner-join (zigzag b@j_inv_idx,inverted b@j_inv_idx,inverted)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [7] = ['\x370003000300012a0200']
@@ -3672,7 +3672,7 @@ project
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
+      │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
       │         │    └── spans: ["7\x00\x03b\x00\x01\x12c\x00\x01", "7\x00\x03b\x00\x01\x12c\x00\x01"]
@@ -3707,7 +3707,7 @@ project
       │         │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
       │         │         └── ["7\x00\x03b\x00\x01\x12c\x00\x01", "7\x00\x03b\x00\x01\x12c\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -3751,7 +3751,7 @@ project
       │         │         ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
       │         │         └── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -3784,7 +3784,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+      ├── inner-join (zigzag b@j_inv_idx,inverted b@j_inv_idx,inverted)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [7] = ['\x370003000300012a0200']
@@ -3820,7 +3820,7 @@ project
       │         │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
       │         │         └── ["7\x00\x03\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x03\x00\x01\x12a\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -3858,7 +3858,7 @@ project
       │         │         ├── ["7\x00\x018", "7\x00\x018"]
       │         │         └── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -3896,7 +3896,7 @@ project
       │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
       │         │         └── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -3934,7 +3934,7 @@ project
       │         │         ├── ["7\x00\x018", "7\x00\x018"]
       │         │         └── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -3967,7 +3967,7 @@ project
       │              ├── tight: true, unique: true
       │              └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -3992,7 +3992,7 @@ project
       │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -4021,7 +4021,7 @@ project
       │         ├── ["7a\x00\x01*\x04\x00", "7a\x00\x01*\x04\x00"]
       │         └── ["7a\x00\x01*\x06\x00", "7a\x00\x01*\x06\x00"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -4062,7 +4062,7 @@ project
       │         │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
       │         │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4105,7 +4105,7 @@ project
       │         │         ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
       │         │         └── ["7\x00\x03\x00\x01\x12c\x00\x01", "7\x00\x03\x00\x01\x12c\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4172,7 +4172,7 @@ project
       │         │                        ├── tight: true, unique: true
       │         │                        └── union spans: ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4234,7 +4234,7 @@ project
       │         │                        ├── tight: true, unique: true
       │         │                        └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4281,7 +4281,7 @@ project
       │         │              ├── tight: true, unique: true
       │         │              └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4317,7 +4317,7 @@ project
       │         ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
       │         └── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -4355,7 +4355,7 @@ project
       │         │         ├── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
       │         │         └── ["7a\x00\x02c\x00\x01\x12d\x00\x01", "7a\x00\x02c\x00\x01\x12d\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4396,7 +4396,7 @@ project
       │         │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
       │         │         └── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4453,7 +4453,7 @@ project
       │         │              ├── tight: true, unique: true
       │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4524,7 +4524,7 @@ project
       │         │                        ├── tight: true, unique: true
       │         │                        └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4565,7 +4565,7 @@ project
       │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
       │         │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4604,7 +4604,7 @@ project
       │         │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
       │         │         └── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4643,7 +4643,7 @@ project
       │         │         ├── ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
       │         │         └── ["7\x00\x03c\x00\x01\x12d\x00\x01", "7\x00\x03c\x00\x01\x12d\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4851,7 +4851,7 @@ project
       │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
       │         │         └── ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4919,7 +4919,7 @@ project
       │         │                        ├── tight: true, unique: true
       │         │                        └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4962,7 +4962,7 @@ project
       │         │         ├── ["7\x00\x03a\x00\x01*\x02\x00", "7\x00\x03a\x00\x01*\x02\x00"]
       │         │         └── ["7\x00\x03a\x00\x02a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x02a\x00\x01\x12b\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -4993,7 +4993,7 @@ project
       │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -5018,7 +5018,7 @@ project
       │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       │         └── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -5051,7 +5051,7 @@ project
       │         │         ├── ["7\x00\x019", "7\x00\x019"]
       │         │         └── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -5078,7 +5078,7 @@ project
       │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
       │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -5102,7 +5102,7 @@ project
       │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
       │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -5136,7 +5136,7 @@ project
       │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
       │         │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -5166,7 +5166,7 @@ project
       │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       │         └── ["7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -5204,7 +5204,7 @@ project
       │         │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
       │         │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -5241,7 +5241,7 @@ project
       │                   ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       │                   └── ["7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -5285,7 +5285,7 @@ project
       │         │                   ├── ["7\x00\x019", "7\x00\x019"]
       │         │                   └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       │         ├── key: (1)
-      │         └── scan b@j_inv_idx
+      │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -5305,7 +5305,7 @@ project
  ├── columns: k:1!null
  ├── volatile
  ├── key: (1)
- └── scan b@j_inv_idx
+ └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -5321,7 +5321,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan c@a_inv_idx
+ └── scan c@a_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /6/1
       │    └── spans: ["\x89", "\x89"]
@@ -5341,7 +5341,7 @@ project
       │    ├── tight: true, unique: false
       │    └── union spans: ["\x89", "\x8b")
       ├── key: (1)
-      └── scan c@a_inv_idx
+      └── scan c@a_inv_idx,inverted
            ├── columns: k:1!null a_inverted_key:6!null
            ├── inverted constraint: /6/1
            │    └── spans: ["\x89", "\x8b")
@@ -5361,7 +5361,7 @@ project
       │    ├── tight: true, unique: false
       │    └── union spans: ["", ""]
       ├── key: (1)
-      └── scan c@a_inv_idx
+      └── scan c@a_inv_idx,inverted
            ├── columns: k:1!null a_inverted_key:6!null
            ├── inverted constraint: /6/1
            │    └── spans: ["", ""]
@@ -5405,7 +5405,7 @@ select
  │         │         ├── ["C", "C"]
  │         │         └── ["\x89", "\x89"]
  │         ├── key: (1)
- │         └── scan c@a_inv_idx
+ │         └── scan c@a_inv_idx,inverted
  │              ├── columns: k:1!null a_inverted_key:6!null
  │              ├── inverted constraint: /6/1
  │              │    └── spans
@@ -5428,7 +5428,7 @@ select
  │    ├── columns: k:1!null a:2 u:3
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
- │    └── scan c@a_inv_idx
+ │    └── scan c@a_inv_idx,inverted
  │         ├── columns: k:1!null
  │         ├── inverted constraint: /6/1
  │         │    └── spans: ["C", "C"]
@@ -5448,7 +5448,7 @@ select
  │    ├── columns: k:1!null a:2 u:3
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
- │    └── scan c@a_inv_idx
+ │    └── scan c@a_inv_idx,inverted
  │         ├── columns: k:1!null
  │         ├── inverted constraint: /6/1
  │         │    └── spans: ["C", "C"]
@@ -5476,7 +5476,7 @@ select
  │         │         ├── ["C", "C"]
  │         │         └── ["\x89", "\x8b")
  │         ├── key: (1)
- │         └── scan c@a_inv_idx
+ │         └── scan c@a_inv_idx,inverted
  │              ├── columns: k:1!null a_inverted_key:6!null
  │              ├── inverted constraint: /6/1
  │              │    └── spans
@@ -5512,7 +5512,7 @@ select
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["\x8a", "\x8a"]
  │         ├── key: (1)
- │         └── scan c@a_inv_idx
+ │         └── scan c@a_inv_idx,inverted
  │              ├── columns: k:1!null a_inverted_key:6!null
  │              ├── inverted constraint: /6/1
  │              │    └── spans
@@ -5532,7 +5532,7 @@ index-join c
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- └── scan c@a_inv_idx
+ └── scan c@a_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /6/1
       │    └── spans: ["\x89", "\x89"]
@@ -5553,7 +5553,7 @@ index-join c
       │    ├── tight: true, unique: false
       │    └── union spans: ["\x89", "\x8b")
       ├── key: (1)
-      └── scan c@a_inv_idx
+      └── scan c@a_inv_idx,inverted
            ├── columns: k:1!null a_inverted_key:6!null
            ├── inverted constraint: /6/1
            │    └── spans: ["\x89", "\x8b")
@@ -5571,7 +5571,7 @@ inner-join (lookup c)
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- ├── inner-join (zigzag c@a_inv_idx c@a_inv_idx)
+ ├── inner-join (zigzag c@a_inv_idx,inverted c@a_inv_idx,inverted)
  │    ├── columns: k:1!null
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [6] = ['\x89']
@@ -5659,7 +5659,7 @@ index-join c
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- └── scan c@a_inv_idx
+ └── scan c@a_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
       │    └── spans: ["\x89", "\x89"]
@@ -5683,7 +5683,7 @@ index-join b
       │         ├── ["7\x00\x018", "7\x00\x018"]
       │         └── ["7\x00\x03", "7\x00\x03"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:8!null
            ├── inverted constraint: /8/1
            │    └── spans
@@ -5753,7 +5753,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_intersects('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4)
       │         ├── key: (1)
-      │         └── scan g@geog_idx
+      │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
       │              ├── inverted constraint: /8/1
       │              │    └── spans
@@ -5793,7 +5793,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_intersects('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4)
       │         ├── key: (1)
-      │         └── scan g@geog_idx
+      │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
       │              ├── inverted constraint: /8/1
       │              │    └── spans
@@ -5832,7 +5832,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3)
       │         ├── key: (1)
-      │         └── scan g@geom_idx
+      │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -5869,7 +5869,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_covers('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3)
       │         ├── key: (1)
-      │         └── scan g@geom_idx
+      │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
@@ -5902,7 +5902,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
-      │         └── scan g@geom_idx
+      │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
@@ -5935,7 +5935,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_dfullywithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
-      │         └── scan g@geom_idx
+      │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
@@ -5978,7 +5978,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0)
       │         ├── key: (1)
-      │         └── scan g@geog_idx
+      │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
       │              ├── inverted constraint: /8/1
       │              │    └── spans
@@ -6031,7 +6031,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0, false)
       │         ├── key: (1)
-      │         └── scan g@geog_idx
+      │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
       │              ├── inverted constraint: /8/1
       │              │    └── spans
@@ -6075,7 +6075,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_dwithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
-      │         └── scan g@geom_idx
+      │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
@@ -6109,7 +6109,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
-      │         └── scan g@geom_idx
+      │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
@@ -6142,7 +6142,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_dfullywithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
-      │         └── scan g@geom_idx
+      │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
@@ -6183,7 +6183,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4)
       │         ├── key: (1)
-      │         └── scan g@geog_idx
+      │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
       │              ├── inverted constraint: /8/1
       │              │    └── spans
@@ -6222,7 +6222,7 @@ project
       │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │         │         └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
       │         ├── key: (1)
-      │         └── scan g@geog_idx
+      │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
       │              ├── inverted constraint: /8/1
       │              │    └── spans
@@ -6284,7 +6284,7 @@ project
       │         │                   ├── ["B\xfdO\x00\x00\x00\x00\x00\x00\x00", "B\xfdO\x00\x00\x00\x00\x00\x00\x00"]
       │         │                   └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
-      │         └── scan g@geog_idx
+      │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
       │              ├── inverted constraint: /8/1
       │              │    └── spans
@@ -6327,7 +6327,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_overlaps('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3)
       │         ├── key: (1)
-      │         └── scan g@geom_idx
+      │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
@@ -6378,7 +6378,7 @@ project
       │    │    │         ├── pre-filterer expression
       │    │    │         │    └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:12)
       │    │    │         ├── key: (9)
-      │    │    │         └── scan g@geog_idx
+      │    │    │         └── scan g@geog_idx,inverted
       │    │    │              ├── columns: k:9!null geog_inverted_key:16!null
       │    │    │              ├── inverted constraint: /16/9
       │    │    │              │    └── spans
@@ -6406,7 +6406,7 @@ project
       │         │         ├── pre-filterer expression
       │         │         │    └── st_touches('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:19)
       │         │         ├── key: (17)
-      │         │         └── scan g@geom_idx
+      │         │         └── scan g@geom_idx,inverted
       │         │              ├── columns: k:17!null geom_inverted_key:23!null
       │         │              ├── inverted constraint: /23/17
       │         │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
@@ -6447,7 +6447,7 @@ project
       │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │         │         └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
       │         ├── key: (1)
-      │         └── scan g@geog_idx
+      │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
       │              ├── inverted constraint: /8/1
       │              │    └── spans
@@ -6492,7 +6492,7 @@ project
       │              ├── columns: k:1!null geog_inverted_key:8!null
       │              ├── key: (1)
       │              ├── fd: (1)-->(8)
-      │              ├── scan g@geog_idx
+      │              ├── scan g@geog_idx,inverted
       │              │    ├── columns: k:1!null geog_inverted_key:8!null
       │              │    ├── inverted constraint: /8/1
       │              │    │    └── spans
@@ -6534,7 +6534,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_covers('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom:3)
       │         ├── key: (1)
-      │         └── scan g@geom_idx
+      │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -6571,7 +6571,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_coveredby('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom:3)
       │         ├── key: (1)
-      │         └── scan g@geom_idx
+      │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -6615,7 +6615,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_coveredby('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom:3)
       │         ├── key: (1)
-      │         └── scan g@geom_idx
+      │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -6651,7 +6651,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan pi@idx,partial
+ └── scan pi@idx,inverted,partial
       ├── columns: k:1!null
       ├── inverted constraint: /6/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -6674,7 +6674,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan pi@idx,partial
+ └── scan pi@idx,inverted,partial
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -6698,7 +6698,7 @@ index-join pi
  ├── immutable
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
- └── scan pi@idx,partial
+ └── scan pi@idx,inverted,partial
       ├── columns: k:1!null
       ├── inverted constraint: /8/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -6739,7 +6739,7 @@ select
  │         │              ├── tight: true, unique: true
  │         │              └── union spans: ["7group\x00\x01*\x02\x00", "7group\x00\x01*\x02\x00"]
  │         ├── key: (1)
- │         └── scan pi@idx,partial
+ │         └── scan pi@idx,inverted,partial
  │              ├── columns: k:1!null j_inverted_key:9!null
  │              ├── inverted constraint: /9/1
  │              │    └── spans
@@ -6783,15 +6783,15 @@ memo (optimized, ~14KB, required=[presentation: k:1,s:2,j:3])
  │         ├── best: (index-join G9 pi,cols=(1-3))
  │         └── cost: 33.80
  ├── G5: (filters G8)
- ├── G6: (scan pi@idx2,partial,cols=(1),constrained inverted)
+ ├── G6: (scan pi@idx2,inverted,partial,cols=(1),constrained inverted)
  │    └── []
- │         ├── best: (scan pi@idx2,partial,cols=(1),constrained inverted)
+ │         ├── best: (scan pi@idx2,inverted,partial,cols=(1),constrained inverted)
  │         └── cost: 19.16
  ├── G7: (contains G10 G11)
  ├── G8: (eq G12 G13)
- ├── G9: (scan pi@idx,partial,cols=(1),constrained inverted)
+ ├── G9: (scan pi@idx,inverted,partial,cols=(1),constrained inverted)
  │    └── []
- │         ├── best: (scan pi@idx,partial,cols=(1),constrained inverted)
+ │         ├── best: (scan pi@idx,inverted,partial,cols=(1),constrained inverted)
  │         └── cost: 20.31
  ├── G10: (variable j)
  ├── G11: (const '{"a": "b"}')
@@ -6846,7 +6846,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan computed@field_inv_idx
+ └── scan computed@field_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /9/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -6859,7 +6859,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan computed@field_inv_idx
+ └── scan computed@field_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /9/1
       │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
@@ -6902,7 +6902,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5)
  │         ├── key: (1)
- │         └── scan m@multicol
+ │         └── scan m@multicol,inverted
  │              ├── columns: k:1!null geom_inverted_key:8!null
  │              ├── constraint: /2: [/'foo' - /'foo']
  │              ├── inverted constraint: /8/1
@@ -6939,7 +6939,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5)
  │         ├── key: (1)
- │         └── scan m@multicol
+ │         └── scan m@multicol,inverted
  │              ├── columns: k:1!null geom_inverted_key:8!null
  │              ├── constraint: /2
  │              │    ├── [/'bar' - /'bar']
@@ -7021,7 +7021,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5)
  │         ├── key: (1)
- │         └── scan m@multicol
+ │         └── scan m@multicol,inverted
  │              ├── columns: k:1!null geom_inverted_key:9!null
  │              ├── constraint: /2/3: [/'foo'/'bar' - /'foo'/'bar']
  │              ├── inverted constraint: /9/1
@@ -7058,7 +7058,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5)
  │         ├── key: (1)
- │         └── scan m@multicol
+ │         └── scan m@multicol,inverted
  │              ├── columns: k:1!null geom_inverted_key:9!null
  │              ├── constraint: /2/3
  │              │    ├── [/'bar'/'baz' - /'bar'/'baz']
@@ -7202,7 +7202,7 @@ project
       │         ├── pre-filterer expression
       │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5)
       │         ├── key: (1)
-      │         └── scan m@multicol
+      │         └── scan m@multicol,inverted
       │              ├── columns: k:1!null geom_inverted_key:10!null
       │              ├── constraint: /4
       │              │    ├── [/1 - /1]
@@ -7257,7 +7257,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5)
  │         ├── key: (1)
- │         └── scan mc@mc_idx
+ │         └── scan mc@mc_idx,inverted
  │              ├── columns: k:1!null geom_inverted_key:8!null
  │              ├── constraint: /3
  │              │    ├── [/'bar' - /'bar']
@@ -7305,7 +7305,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5)
  │         ├── key: (1)
- │         └── scan mc@mc_idx
+ │         └── scan mc@mc_idx,inverted
  │              ├── columns: k:1!null geom_inverted_key:9!null
  │              ├── constraint: /2/3
  │              │    ├── [/'x'/'bar' - /'x'/'bar']
@@ -7354,7 +7354,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5)
  │         ├── key: (1)
- │         └── scan mc@mc_idx
+ │         └── scan mc@mc_idx,inverted
  │              ├── columns: k:1!null geom_inverted_key:10!null
  │              ├── constraint: /4: [/'FOO' - /'FOO']
  │              ├── inverted constraint: /10/1
@@ -7393,7 +7393,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5)
  │         ├── key: (1)
- │         └── scan mc@mc_idx
+ │         └── scan mc@mc_idx,inverted
  │              ├── columns: k:1!null geom_inverted_key:10!null
  │              ├── constraint: /4: [/'FOO' - /'FOO']
  │              ├── inverted constraint: /10/1
@@ -7503,7 +7503,7 @@ index-join t63180
       │    ├── tight: true, unique: false
       │    └── union spans: ["7a\x00\x01\x12c\x00\x01", "7a\x00\x01\x12c\x00\x01"]
       ├── key: (2)
-      └── scan t63180@j_idx
+      └── scan t63180@j_idx,inverted
            ├── columns: rowid:2!null j_inverted_key:5!null
            ├── inverted constraint: /5/2
            │    └── spans: ["7a\x00\x01\x12c\x00\x01", "7a\x00\x01\x12c\x00\x01"]
@@ -7548,7 +7548,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_intersects('010100000000000000000000000000000000000000', geom:1)
  │         ├── key: (4)
- │         └── scan geom_geog@geom_geog_geom_idx
+ │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │              ├── columns: rowid:4!null geom_inverted_key:7!null
  │              ├── inverted constraint: /7/4
  │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
@@ -7574,7 +7574,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_intersects('0101000020E610000000000000000000000000000000000000', geog:2)
  │         ├── key: (4)
- │         └── scan geom_geog@geom_geog_geog_idx
+ │         └── scan geom_geog@geom_geog_geog_idx,inverted
  │              ├── columns: rowid:4!null geog_inverted_key:8!null
  │              ├── inverted constraint: /8/4
  │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
@@ -7640,7 +7640,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_dwithin('010100000000000000000000000000000000000000', geom:1, 5.0)
  │         ├── key: (4)
- │         └── scan geom_geog@geom_geog_geom_idx
+ │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │              ├── columns: rowid:4!null geom_inverted_key:7!null
  │              ├── inverted constraint: /7/4
  │              │    └── spans
@@ -7670,7 +7670,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_dwithinexclusive('010100000000000000000000000000000000000000', geom:1, 5.0)
  │         ├── key: (4)
- │         └── scan geom_geog@geom_geog_geom_idx
+ │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │              ├── columns: rowid:4!null geom_inverted_key:7!null
  │              ├── inverted constraint: /7/4
  │              │    └── spans
@@ -7754,7 +7754,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_dwithin('0101000020E610000000000000000000000000000000000000', geog:2, 5.0)
  │         ├── key: (4)
- │         └── scan geom_geog@geom_geog_geog_idx
+ │         └── scan geom_geog@geom_geog_geog_idx,inverted
  │              ├── columns: rowid:4!null geog_inverted_key:8!null
  │              ├── inverted constraint: /8/4
  │              │    └── spans
@@ -7838,7 +7838,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_dwithin('0101000020E610000000000000000000000000000000000000', geog:2, 5.0)
  │         ├── key: (4)
- │         └── scan geom_geog@geom_geog_geog_idx
+ │         └── scan geom_geog@geom_geog_geog_idx,inverted
  │              ├── columns: rowid:4!null geog_inverted_key:8!null
  │              ├── inverted constraint: /8/4
  │              │    └── spans
@@ -7925,7 +7925,7 @@ select
  │         │         ├── variable: geog:2 [type=geography]
  │         │         └── const: 5.0 [type=float]
  │         ├── key: (4)
- │         └── scan geom_geog@geom_geog_geog_idx
+ │         └── scan geom_geog@geom_geog_geog_idx,inverted
  │              ├── columns: rowid:4(int!null) geog_inverted_key:8(encodedkey!null)
  │              ├── inverted constraint: /8/4
  │              │    └── spans
@@ -8031,7 +8031,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_dwithin('0101000020E610000000000000000000000000000000000000', geog:2, 5.0, true)
  │         ├── key: (4)
- │         └── scan geom_geog@geom_geog_geog_idx
+ │         └── scan geom_geog@geom_geog_geog_idx,inverted
  │              ├── columns: rowid:4!null geog_inverted_key:8!null
  │              ├── inverted constraint: /8/4
  │              │    └── spans
@@ -8162,7 +8162,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_dfullywithin('010100000000000000000000000000000000000000', geom:1, 5.0)
  │         ├── key: (4)
- │         └── scan geom_geog@geom_geog_geom_idx
+ │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │              ├── columns: rowid:4!null geom_inverted_key:7!null
  │              ├── inverted constraint: /7/4
  │              │    └── spans
@@ -8192,7 +8192,7 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_dfullywithinexclusive('010100000000000000000000000000000000000000', geom:1, 5.0)
  │         ├── key: (4)
- │         └── scan geom_geog@geom_geog_geom_idx
+ │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │              ├── columns: rowid:4!null geom_inverted_key:7!null
  │              ├── inverted constraint: /7/4
  │              │    └── spans
@@ -8310,7 +8310,7 @@ select
  │         │         ├── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
  │         │         └── ["\x12oo \x00\x01", "\x12oo \x00\x01"]
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null s_inverted_key:5!null
  │              ├── inverted constraint: /5/1
  │              │    └── spans
@@ -8329,7 +8329,7 @@ SELECT * FROM trgm WHERE s % 'foo'
 select
  ├── index-join trgm
  │    └── distinct-on
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              └── constraint: /5
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
  │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
@@ -9579,7 +9579,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+      ├── inner-join (zigzag b@j_inv_idx,inverted b@j_inv_idx,inverted)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [9] = ['\x3761000112620001']
@@ -9598,7 +9598,7 @@ inner-join (lookup b)
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(4)
- ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+ ├── inner-join (zigzag b@j_inv_idx,inverted b@j_inv_idx,inverted)
  │    ├── columns: k:1!null
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [9] = ['\x3761000112620001']
@@ -9616,7 +9616,7 @@ inner-join (lookup b)
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+ ├── inner-join (zigzag b@j_inv_idx,inverted b@j_inv_idx,inverted)
  │    ├── columns: k:1!null
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [9] = ['\x3761000262000112630001']
@@ -9636,7 +9636,7 @@ inner-join (lookup b)
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+ ├── inner-join (zigzag b@j_inv_idx,inverted b@j_inv_idx,inverted)
  │    ├── columns: k:1!null
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [9] = ['\x37610002000362000112630001']
@@ -9717,7 +9717,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2)
-      ├── inner-join (zigzag c@a_inv_idx c@a_inv_idx)
+      ├── inner-join (zigzag c@a_inv_idx,inverted c@a_inv_idx,inverted)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [8] = ['\x89']
@@ -9741,7 +9741,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2)
-      ├── inner-join (zigzag c@a_inv_idx c@a_inv_idx)
+      ├── inner-join (zigzag c@a_inv_idx,inverted c@a_inv_idx,inverted)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [8] = ['\x89']
@@ -9760,7 +9760,7 @@ inner-join (lookup b)
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+ ├── inner-join (zigzag b@j_inv_idx,inverted b@j_inv_idx,inverted)
  │    ├── columns: k:1!null
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [9] = ['\x376200012a0400']
@@ -9795,7 +9795,7 @@ select
  │         │              ├── tight: true, unique: true
  │         │              └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
  │         ├── key: (1)
- │         └── scan b@j_inv_idx
+ │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:9!null
  │              ├── inverted constraint: /9/1
  │              │    └── spans
@@ -9819,7 +9819,7 @@ inner-join (lookup b)
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+ ├── inner-join (zigzag b@j_inv_idx,inverted b@j_inv_idx,inverted)
  │    ├── columns: k:1!null
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [9] = ['\x376100012a0200']
@@ -9850,7 +9850,7 @@ project
       │              ├── tight: true, unique: true
       │              └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       ├── key: (1)
-      └── scan b@j_inv_idx
+      └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
            ├── inverted constraint: /9/1
            │    └── spans
@@ -9894,7 +9894,7 @@ project
       │              ├── tight: true, unique: true
       │              └── union spans: ["7b\x00\x01*\x04\x00", "7b\x00\x01*\x04\x00"]
       ├── key: (1)
-      └── scan inv_zz_partial@zz_idx,partial
+      └── scan inv_zz_partial@zz_idx,inverted,partial
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
@@ -9918,7 +9918,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(3,4), (1)-->(2)
-      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
+      ├── inner-join (zigzag inv_zz_partial@zz_idx,inverted,partial inv_zz_partial@zz_idx,inverted,partial)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [7] = ['\x376100012a0200']
@@ -9955,7 +9955,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(3,4), (1)-->(2)
-      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
+      ├── inner-join (zigzag inv_zz_partial@zz_idx,inverted,partial inv_zz_partial@zz_idx,inverted,partial)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [7] = ['\x376100012a0200']
@@ -9979,7 +9979,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(3,4), (1)-->(2)
-      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
+      ├── inner-join (zigzag inv_zz_partial@zz_idx,inverted,partial inv_zz_partial@zz_idx,inverted,partial)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [7] = ['\x376100012a0200']
@@ -10002,7 +10002,7 @@ opt expect-not=GenerateInvertedIndexZigzagJoins format=hide-all
 SELECT k FROM inv_zz_partial WHERE j->'a' = '1' AND j->'b' = '2'
 ----
 project
- └── scan inv_zz_partial@zz_idx,partial
+ └── scan inv_zz_partial@zz_idx,inverted,partial
       └── inverted constraint: /8/1
            └── spans: ["7b\x00\x01*\x04\x00", "7b\x00\x01*\x04\x00"]
 
@@ -10331,7 +10331,7 @@ project
       │              ├── columns: k:19!null
       │              ├── key: (19)
       │              ├── ordering: +19
-      │              └── scan b@j_inv_idx
+      │              └── scan b@j_inv_idx,inverted
       │                   ├── columns: k:19!null
       │                   ├── inverted constraint: /27/19
       │                   │    └── spans: ["7foo\x00\x01\x12bar\x00\x01", "7foo\x00\x01\x12bar\x00\x01"]
@@ -10377,7 +10377,7 @@ project
       │              ├── columns: k:17!null
       │              ├── key: (17)
       │              ├── ordering: +17
-      │              └── scan c@a_inv_idx
+      │              └── scan c@a_inv_idx,inverted
       │                   ├── columns: k:17!null
       │                   ├── inverted constraint: /24/17
       │                   │    └── spans: ["\x8a", "\x8a"]
@@ -11855,7 +11855,7 @@ project
       │              ├── columns: k:19!null
       │              ├── key: (19)
       │              ├── ordering: +19
-      │              └── scan b@j_inv_idx
+      │              └── scan b@j_inv_idx,inverted
       │                   ├── columns: k:19!null
       │                   ├── inverted constraint: /27/19
       │                   │    └── spans: ["7foo\x00\x01\x12bar\x00\x01", "7foo\x00\x01\x12bar\x00\x01"]
@@ -11907,7 +11907,7 @@ project
       │              ├── columns: k:17!null
       │              ├── key: (17)
       │              ├── ordering: +17
-      │              └── scan c@a_inv_idx
+      │              └── scan c@a_inv_idx,inverted
       │                   ├── columns: k:17!null
       │                   ├── inverted constraint: /24/17
       │                   │    └── spans: ["\x8a", "\x8a"]
