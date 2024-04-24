@@ -45,11 +45,13 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/retry",
         "//pkg/util/strutil",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//vfs",
         "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
