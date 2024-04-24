@@ -74,7 +74,9 @@ func DefaultFormatter(ctx context.Context, f Failure) (issues.IssueFormatter, is
 	if len(teams) > 0 {
 		projColID = teams[0].TriageColumnID
 		for _, team := range teams {
-			mentions = append(mentions, "@"+string(team.Name()))
+			if !team.SilenceMentions {
+				mentions = append(mentions, "@"+string(team.Name()))
+			}
 			if team.Label != "" {
 				labels = append(labels, team.Label)
 			}

@@ -39,6 +39,8 @@ type Team struct {
 	Label string `yaml:"label"`
 	// TriageColumnID is the GitHub Column ID to assign issues to.
 	TriageColumnID int `yaml:"triage_column_id"`
+	// SilenceMentions is true if @-mentions should be supressed for this team.
+	SilenceMentions bool `yaml:"silence_mentions"`
 	// Email is the email address for this team.
 	//
 	// Currently unused.
