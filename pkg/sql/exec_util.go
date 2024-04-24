@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -2199,6 +2200,33 @@ type queryMeta struct {
 // SessionDefaults mirrors fields in Session, for restoring default
 // configuration values in SET ... TO DEFAULT (or RESET ...) statements.
 type SessionDefaults map[string]string
+
+// SafeFormat implements the redact.SafeFormatter interface.
+// An example output for SessionDefaults SafeFormat:
+// [disallow_full_table_scans=‹true›; database=‹test›; statement_timeout=‹250ms›]
+func (sd SessionDefaults) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("[")
+	addSemiColon := false
+	// Iterate through map in alphabetical order.
+	sortedKeys := make([]string, 0, len(sd))
+	for k := range sd {
+		sortedKeys = append(sortedKeys, k)
+	}
+	sort.Strings(sortedKeys)
+	for _, k := range sortedKeys {
+		if addSemiColon {
+			s.Print(redact.SafeString("; "))
+		}
+		s.Printf("%s=%s", redact.SafeString(k), sd[k])
+		addSemiColon = true
+	}
+	s.Printf("]")
+}
+
+// String implements the fmt.Stringer interface.
+func (sd SessionDefaults) String() string {
+	return redact.StringWithoutMarkers(sd)
+}
 
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
