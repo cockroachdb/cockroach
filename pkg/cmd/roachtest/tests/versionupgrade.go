@@ -142,7 +142,9 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 			for _, featureTest := range versionUpgradeTestFeatures {
 				l.Printf("running feature test %q", featureTest.name)
-				if err := h.Exec(rng, featureTest.statement); err != nil {
+				// These features rely on the fixtures used in this test,
+				// which write data on the system interface.
+				if err := h.System.Exec(rng, featureTest.statement); err != nil {
 					l.Printf("%q: ERROR (%s)", featureTest.name, err)
 					return err
 				}
