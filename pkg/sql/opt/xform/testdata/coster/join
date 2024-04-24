@@ -203,7 +203,7 @@ inner-join (lookup g [as=g2])
  ├── cost: 1101976.47
  ├── key: (1,6)
  ├── fd: (1)-->(2), (6)-->(7)
- ├── inner-join (inverted g@g_geom_idx [as=g2])
+ ├── inner-join (inverted g@g_geom_idx,inverted [as=g2])
  │    ├── columns: g1.k:1!null g1.geom:2 g2.k:11!null
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr

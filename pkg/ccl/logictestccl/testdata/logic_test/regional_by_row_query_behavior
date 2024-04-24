@@ -3213,12 +3213,12 @@ WHERE json_col->'loc' @> '{"state":"NY"}'
 ----
 index-join t88047
  └── locality-optimized-search
-      ├── scan t88047@t88047_inv_idx
+      ├── scan t88047@t88047_inv_idx,inverted
       │    ├── constraint: /11: [/'ap-southeast-2' - /'ap-southeast-2']
       │    ├── inverted constraint: /15/12
       │    │    └── spans: ["7loc\x00\x02state\x00\x01\x12NY\x00\x01", "7loc\x00\x02state\x00\x01\x12NY\x00\x01"]
       │    └── limit: 2
-      └── scan t88047@t88047_inv_idx
+      └── scan t88047@t88047_inv_idx,inverted
            ├── constraint: /18
            │    ├── [/'ca-central-1' - /'ca-central-1']
            │    └── [/'us-east-1' - /'us-east-1']
