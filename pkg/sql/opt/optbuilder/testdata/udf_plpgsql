@@ -6751,45 +6751,37 @@ project
                      │              │                                  └── null [type=unknown]
                      │              └── subquery [type=tuple{int, unknown, decimal}]
                      │                   └── project
-                     │                        ├── columns: post_nested_block_6:7(tuple{int, unknown, decimal})
+                     │                        ├── columns: stmt_if_1:7(tuple{int, unknown, decimal})
                      │                        ├── values
                      │                        │    └── tuple [type=tuple]
                      │                        └── projections
-                     │                             └── udf: post_nested_block_6 [as=post_nested_block_6:7, type=tuple{int, unknown, decimal}]
+                     │                             └── udf: stmt_if_1 [as=stmt_if_1:7, type=tuple{int, unknown, decimal}]
                      │                                  └── body
                      │                                       └── project
-                     │                                            ├── columns: stmt_if_1:5(tuple{int, unknown, decimal})
+                     │                                            ├── columns: "_end_of_function_2":3(tuple{int, unknown, decimal})
                      │                                            ├── values
                      │                                            │    └── tuple [type=tuple]
                      │                                            └── projections
-                     │                                                 └── udf: stmt_if_1 [as=stmt_if_1:5, type=tuple{int, unknown, decimal}]
+                     │                                                 └── udf: _end_of_function_2 [as="_end_of_function_2":3, type=tuple{int, unknown, decimal}]
                      │                                                      ├── tail-call
                      │                                                      └── body
+                     │                                                           ├── project
+                     │                                                           │    ├── columns: stmt_raise_3:1(int)
+                     │                                                           │    ├── values
+                     │                                                           │    │    └── tuple [type=tuple]
+                     │                                                           │    └── projections
+                     │                                                           │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_3:1, type=int]
+                     │                                                           │              ├── const: 'ERROR' [type=string]
+                     │                                                           │              ├── const: 'control reached end of function without RETURN' [type=string]
+                     │                                                           │              ├── const: '' [type=string]
+                     │                                                           │              ├── const: '' [type=string]
+                     │                                                           │              └── const: '2F005' [type=string]
                      │                                                           └── project
-                     │                                                                ├── columns: "_end_of_function_2":3(tuple{int, unknown, decimal})
+                     │                                                                ├── columns: end_of_function_4:2(tuple{int, unknown, decimal})
                      │                                                                ├── values
                      │                                                                │    └── tuple [type=tuple]
                      │                                                                └── projections
-                     │                                                                     └── udf: _end_of_function_2 [as="_end_of_function_2":3, type=tuple{int, unknown, decimal}]
-                     │                                                                          ├── tail-call
-                     │                                                                          └── body
-                     │                                                                               ├── project
-                     │                                                                               │    ├── columns: stmt_raise_3:1(int)
-                     │                                                                               │    ├── values
-                     │                                                                               │    │    └── tuple [type=tuple]
-                     │                                                                               │    └── projections
-                     │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_3:1, type=int]
-                     │                                                                               │              ├── const: 'ERROR' [type=string]
-                     │                                                                               │              ├── const: 'control reached end of function without RETURN' [type=string]
-                     │                                                                               │              ├── const: '' [type=string]
-                     │                                                                               │              ├── const: '' [type=string]
-                     │                                                                               │              └── const: '2F005' [type=string]
-                     │                                                                               └── project
-                     │                                                                                    ├── columns: end_of_function_4:2(tuple{int, unknown, decimal})
-                     │                                                                                    ├── values
-                     │                                                                                    │    └── tuple [type=tuple]
-                     │                                                                                    └── projections
-                     │                                                                                         └── null [as=end_of_function_4:2, type=tuple{int, unknown, decimal}]
+                     │                                                                     └── null [as=end_of_function_4:2, type=tuple{int, unknown, decimal}]
                      └── const: 1 [type=int]
 
 # Regression test for #120916 - the nested call should not have the "tail-call"
