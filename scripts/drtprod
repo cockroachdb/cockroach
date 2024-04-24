@@ -104,13 +104,14 @@ case $1 in
           --clouds="gce" \
           --gce-zones="us-east1-c" \
           --nodes="7" \
-          --gce-machine-type="n2-standard-8" \
+          --gce-machine-type="n2-standard-24" \
           --local-ssd="true"  \
           --gce-local-ssd-count="16" \
           --username="drt" \
-          --lifetime="8760h"
+          --lifetime="8760h" \
+          --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
-        $0 dns drt-ua1 create
+        $0 dns drt-ua1 create || $0 dns drt-ua1
         ;;
       "drt-ua2")
       set -x
@@ -118,13 +119,30 @@ case $1 in
           --clouds="gce" \
           --gce-zones="us-east1-c" \
           --nodes="7" \
-          --gce-machine-type="n2d-standard-8" \
+          --gce-machine-type="n2d-standard-24" \
           --local-ssd="true"  \
           --gce-local-ssd-count="16" \
           --username="drt" \
-          --lifetime="8760h"
+          --lifetime="8760h" \
+          --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
-        $0 dns drt-ua2 create
+        $0 dns drt-ua2 create || $0 dns drt-ua2
+        ;;
+      "workload-ua")
+        set -x
+        roachprod create workload-ua \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="1" \
+          --gce-machine-type="n2-standard-8" \
+          --os-volume-size 100 \
+          --username workload \
+          --lifetime 8760h \
+          --gce-image "ubuntu-2204-jammy-v20240319"
+        # setup dns
+        $0 dns workload-ua create || $0 dns workload-ua
+        # TODO(dt): push the pg-urls for ua2 and ua2 to it.
+        # TODO(dt): push a systemd unit file to it to run tpcc workload.
         ;;
       *)
         echo
