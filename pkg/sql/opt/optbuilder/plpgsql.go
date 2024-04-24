@@ -302,6 +302,11 @@ func (b *plpgsqlBuilder) buildRootBlock(
 			return s
 		}
 	}
+	defer func() {
+		if b.returnType.Identical(types.AnyTuple) {
+			panic(wildcardReturnTypeErr)
+		}
+	}()
 	return b.buildBlock(astBlock, s)
 }
 
@@ -377,7 +382,12 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		// will have already determined the return type.
 		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s, astBlock)
 		ast.Walk(recordVisitor, astBlock)
-		b.returnType = recordVisitor.typ
+		if recordVisitor.typ.Family() != types.UnknownFamily {
+			// It is possible that we didn't infer the concrete type (e.g.
+			// because there is no RETURN statement in this block). In this
+			// case, we'll keep the original wildcard type.
+			b.returnType = recordVisitor.typ
+		}
 	}
 	// Build the exception handler. This has to happen after building the variable
 	// declarations, since the exception handler can reference the block's vars.
@@ -2238,7 +2248,8 @@ var (
 		),
 		"try casting all RETURN statements to the same type",
 	)
-	exitOutsideLoopErr = pgerror.New(pgcode.Syntax,
+	wildcardReturnTypeErr = unimplemented.NewWithIssue(122945, "wildcard return type is not yet supported")
+	exitOutsideLoopErr    = pgerror.New(pgcode.Syntax,
 		"EXIT cannot be used outside a loop, unless it has a label",
 	)
 	continueOutsideLoopErr = pgerror.New(pgcode.Syntax,
