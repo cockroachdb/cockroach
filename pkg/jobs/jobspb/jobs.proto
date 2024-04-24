@@ -140,19 +140,6 @@ message StreamIngestionCheckpoint {
 }
 
 message StreamIngestionProgress {
-  // PartitionProgress stores fields that are related to the status of a
-  // source cluster partition.
-  message PartitionProgress {
-    reserved 1;
-    // TODO(pbardea): Add an error message so that per-partition errors can be
-    // surfaced to the user.
-
-    // Destination SQL instance that subscribes to this partition.
-    int32 dest_sql_instance_id = 2 [(gogoproto.customname) = "DestSQLInstanceID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID",
-      (gogoproto.nullable) = false];
-  }
-
   // CutoverTime is set to signal to the stream ingestion job to complete its
   // ingestion. This involves stopping any subsequent ingestion, and rolling
   // back any additional ingested data, to bring the ingested cluster to a
@@ -170,10 +157,8 @@ message StreamIngestionProgress {
     (gogoproto.customtype) = "ReplicationStatus",
     (gogoproto.nullable) = false];
 
-  // PartitionProgress maps partition addresses to their progress.
-  // TODO(pbardea): This could scale O(partitions) = O(nodes).
-  map<string, PartitionProgress> partition_progress = 2 [(gogoproto.nullable) = false];
-
+  reserved 2;
+  
   // Checkpoint stores a set of resolved spans denoting completed ingestion progress
   StreamIngestionCheckpoint checkpoint = 4 [(gogoproto.nullable) = false];
 

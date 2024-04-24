@@ -267,6 +267,8 @@ message StreamIngestionFrontierSpec {
   // timestamp.
   repeated roachpb.Span tracked_spans = 2 [(gogoproto.nullable) = false];
 
+  reserved 6;
+
   // JobID is the job ID of the stream ingestion job.
   optional int64 job_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
 
