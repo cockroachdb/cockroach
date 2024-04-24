@@ -23,6 +23,7 @@ type TestingKnobs struct {
 	MetadataScanTimeout time.Duration
 
 	// Replica filter for forwarded replica info when collecting fan-out data.
+	// It can be called concurrently, so must be safe for concurrent use.
 	ForwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
 }
 
