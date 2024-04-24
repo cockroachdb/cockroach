@@ -66,6 +66,8 @@ jobs:
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
         if: ${{ failure() }}
         with:
@@ -103,6 +105,8 @@ jobs:
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
@@ -144,6 +148,8 @@ jobs:
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
@@ -202,6 +208,8 @@ jobs:
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
@@ -220,6 +228,8 @@ jobs:
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
@@ -238,6 +248,8 @@ jobs:
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
@@ -256,6 +268,8 @@ jobs:
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
@@ -274,6 +288,8 @@ jobs:
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
@@ -294,6 +310,8 @@ jobs:
       - name: upload test results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
@@ -312,6 +330,8 @@ jobs:
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
