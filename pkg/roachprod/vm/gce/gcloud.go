@@ -1244,8 +1244,9 @@ func (p *Provider) computeInstanceArgs(
 		for i := 0; i < providerOpts.SSDCount; i++ {
 			args = append(args, "--local-ssd", "interface=NVME")
 		}
+		extraMountOpts = "discard"
 		if opts.SSDOpts.NoExt4Barrier {
-			extraMountOpts = "nobarrier"
+			extraMountOpts = fmt.Sprintf("%s,%s", extraMountOpts, "nobarrier")
 		}
 	} else {
 		pdProps := []string{
