@@ -253,7 +253,11 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 
 	// Set up and run test.
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), mixedversion.ClusterSettingOption(
-		install.EnvOption{"COCKROACH_SCAN_MAX_IDLE_TIME=10ms"})) // speed up queues
+		// Speed up the queues.
+		install.EnvOption{"COCKROACH_SCAN_MAX_IDLE_TIME=10ms"}),
+		// Multi-tenant deployments are currently unsupported. See #127378.
+		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
+	)
 
 	mvt.OnStartup("create test table", createTable)
 	mvt.InMixedVersion("move replicas", moveReplicas)
