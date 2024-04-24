@@ -36,9 +36,11 @@ type CollectionStats struct {
 }
 
 func CollectRemoteReplicaInfo(
-	ctx context.Context, c serverpb.AdminClient,
+	ctx context.Context, c serverpb.AdminClient, maxConcurrency int,
 ) (loqrecoverypb.ClusterReplicaInfo, CollectionStats, error) {
-	cc, err := c.RecoveryCollectReplicaInfo(ctx, &serverpb.RecoveryCollectReplicaInfoRequest{})
+	cc, err := c.RecoveryCollectReplicaInfo(ctx, &serverpb.RecoveryCollectReplicaInfoRequest{
+		MaxConcurrency: int32(maxConcurrency),
+	})
 	if err != nil {
 		return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, err
 	}
