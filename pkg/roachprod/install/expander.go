@@ -22,8 +22,8 @@ import (
 )
 
 var parameterRe = regexp.MustCompile(`{[^{}]*}`)
-var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
-var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+)?}`)
+var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+|:L)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
+var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+|:L)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)}`)
 var storeDirRe = regexp.MustCompile(`{store-dir(:[0-9]+)?}`)
@@ -157,14 +157,20 @@ func (e *expander) maybeExpandPgURL(
 	if err != nil {
 		return "", false, err
 	}
-	if e.pgURLs[virtualClusterName] == nil {
-		e.pgURLs[virtualClusterName], err = c.pgurls(ctx, l, allNodes(len(c.VMs)), virtualClusterName, sqlInstance)
-		if err != nil {
-			return "", false, err
+	switch m[1] {
+	case ":L":
+		url, err := c.loadBalancerURL(ctx, l, virtualClusterName, sqlInstance, AuthUserCert)
+		return url, url != "", err
+	default:
+		if e.pgURLs[virtualClusterName] == nil {
+			e.pgURLs[virtualClusterName], err = c.pgurls(ctx, l, allNodes(len(c.VMs)), virtualClusterName, sqlInstance)
+			if err != nil {
+				return "", false, err
+			}
 		}
+		s, err = e.maybeExpandMap(c, e.pgURLs[virtualClusterName], m[1])
+		return s, err == nil, err
 	}
-	s, err = e.maybeExpandMap(c, e.pgURLs[virtualClusterName], m[1])
-	return s, err == nil, err
 }
 
 // maybeExpandPgHost is an expanderFunc for {pghost:<nodeSpec>}
@@ -175,17 +181,38 @@ func (e *expander) maybeExpandPgHost(
 	if m == nil {
 		return s, false, nil
 	}
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:])
+	if err != nil {
+		return "", false, err
+	}
 
-	if e.pgHosts == nil {
-		var err error
-		e.pgHosts, err = c.pghosts(ctx, l, allNodes(len(c.VMs)))
+	switch m[1] {
+	case ":L":
+		services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL, ServiceInstancePredicate(sqlInstance))
 		if err != nil {
 			return "", false, err
 		}
+		for _, svc := range services {
+			if svc.VirtualClusterName == virtualClusterName && svc.Instance == sqlInstance {
+				addr, err := c.FindLoadBalancer(l, svc.Port)
+				if err != nil {
+					return "", false, err
+				}
+				return addr.IP, true, nil
+			}
+		}
+		return "", false, err
+	default:
+		if e.pgHosts == nil {
+			var err error
+			e.pgHosts, err = c.pghosts(ctx, l, allNodes(len(c.VMs)))
+			if err != nil {
+				return "", false, err
+			}
+		}
+		s, err := e.maybeExpandMap(c, e.pgHosts, m[1])
+		return s, err == nil, err
 	}
-
-	s, err := e.maybeExpandMap(c, e.pgHosts, m[1])
-	return s, err == nil, err
 }
 
 // maybeExpandPgURL is an expanderFunc for {pgport:<nodeSpec>}
