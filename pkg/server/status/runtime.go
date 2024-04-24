@@ -118,6 +118,24 @@ var (
 		Measurement: "GC Pause",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaNonGCPauseNS = metric.Metadata{
+		Name:        "sys.go.pause.other.ns",
+		Help:        "Estimated non gc related total pause time",
+		Measurement: "Non GC related Pause",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaGCStopNS = metric.Metadata{
+		Name:        "sys.gc.stop.ns",
+		Help:        "Estimated GC related stop the world stop stopping latencies",
+		Measurement: "GC stw latencies",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaNonGCStopNS = metric.Metadata{
+		Name:        "sys.go.stop.other.ns",
+		Help:        "Estimated non GC related stop the world stop stopping latencies",
+		Measurement: "Non GC stw latencies",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaGCPausePercent = metric.Metadata{
 		Name:        "sys.gc.pause.percent",
 		Help:        "Current GC pause percentage",
@@ -394,6 +412,30 @@ const runtimeMetricGCCount = "/gc/cycles/total:gc-cycles"
 // is fully adopted.
 const runtimeMetricGCPauseTotal = "/gc/pauses:seconds"
 
+// Distribution of individual non-GC-related stop-the-world
+// pause latencies. This is the time from deciding to stop the
+// world until the world is started again. Some of this time
+// is spent getting all threads to stop (measured directly in
+// /sched/pauses/stopping/other:seconds). Bucket counts increase
+// monotonically.
+const runtimeMetricNonGCPauseTotal = "/sched/pauses/total/other:seconds"
+
+// Distribution of individual GC-related stop-the-world stopping
+// latencies. This is the time it takes from deciding to stop the
+// world until all Ps are stopped. This is a subset of the total
+// GC-related stop-the-world time (/sched/pauses/total/gc:seconds).
+// During this time, some threads may be executing. Bucket counts
+// increase monotonically.
+const runtimeMetricGCStopTotal = "/sched/pauses/stopping/gc:seconds"
+
+// Distribution of individual non-GC-related stop-the-world
+// stopping latencies. This is the time it takes from deciding
+// to stop the world until all Ps are stopped. This is a
+// subset of the total non-GC-related stop-the-world time
+// (/sched/pauses/total/other:seconds). During this time, some
+// threads may be executing. Bucket counts increase monotonically.
+const runtimeMetricNonGCStopTotal = "/sched/pauses/stopping/other:seconds"
+
 var runtimeMetrics = []string{
 	runtimeMetricGCAssist,
 	runtimeMetricGoTotal,
@@ -406,6 +448,9 @@ var runtimeMetrics = []string{
 	runtimeMetricCumulativeAlloc,
 	runtimeMetricGCCount,
 	runtimeMetricGCPauseTotal,
+	runtimeMetricNonGCPauseTotal,
+	runtimeMetricGCStopTotal,
+	runtimeMetricNonGCStopTotal,
 }
 
 // GoRuntimeSampler are a collection of metrics to sample from golang's runtime environment and
@@ -577,6 +622,9 @@ type RuntimeStatSampler struct {
 	CgoTotalBytes            *metric.Gauge
 	GcCount                  *metric.Gauge
 	GcPauseNS                *metric.Gauge
+	NonGcPauseNS             *metric.Gauge
+	GcStopNS                 *metric.Gauge
+	NonGcStopNS              *metric.Gauge
 	GcPausePercent           *metric.GaugeFloat64
 	GcAssistNS               *metric.Gauge
 	// CPU stats for the CRDB process usage.
@@ -670,6 +718,9 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		CgoTotalBytes:            metric.NewGauge(metaCgoTotalBytes),
 		GcCount:                  metric.NewGauge(metaGCCount),
 		GcPauseNS:                metric.NewGauge(metaGCPauseNS),
+		NonGcPauseNS:             metric.NewGauge(metaNonGCPauseNS),
+		GcStopNS:                 metric.NewGauge(metaGCStopNS),
+		NonGcStopNS:              metric.NewGauge(metaNonGCStopNS),
 		GcPausePercent:           metric.NewGaugeFloat64(metaGCPausePercent),
 		GcAssistNS:               metric.NewGauge(metaGCAssistNS),
 
@@ -843,7 +894,13 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	combinedNormalizedHostPerc := (hostSrate + hostUrate) / float64(numHostCPUs)
 
 	gcPauseTotal := float64HistogramSum(rsr.goRuntimeSampler.float64Histogram(runtimeMetricGCPauseTotal))
+	nonGcPauseTotal := float64HistogramSum(rsr.goRuntimeSampler.float64Histogram(runtimeMetricNonGCPauseTotal))
+	gcStopTotal := float64HistogramSum(rsr.goRuntimeSampler.float64Histogram(runtimeMetricGCStopTotal))
+	nonGcStopTotal := float64HistogramSum(rsr.goRuntimeSampler.float64Histogram(runtimeMetricNonGCStopTotal))
 	gcPauseTotalNs := uint64(gcPauseTotal * 1.e9)
+	nonGcPauseTotalNs := int64(nonGcPauseTotal * 1.e9)
+	gcStopTotalNs := int64(gcStopTotal * 1.e9)
+	nonGcStopTotalNs := int64(nonGcStopTotal * 1.e9)
 	gcCount := rsr.goRuntimeSampler.uint64(runtimeMetricGCCount)
 	gcPauseRatio := float64(gcPauseTotalNs-rsr.last.gcPauseTime) / dur
 	runnableSum := goschedstats.CumulativeNormalizedRunnableGoroutines()
@@ -911,6 +968,9 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.CgoTotalBytes.Update(int64(cs.CGoTotalBytes))
 	rsr.GcCount.Update(int64(gcCount))
 	rsr.GcPauseNS.Update(int64(gcPauseTotalNs))
+	rsr.NonGcPauseNS.Update(nonGcPauseTotalNs)
+	rsr.GcStopNS.Update(gcStopTotalNs)
+	rsr.NonGcStopNS.Update(nonGcStopTotalNs)
 	rsr.GcPausePercent.Update(gcPauseRatio)
 	rsr.GcAssistNS.Update(gcAssistNS)
 
