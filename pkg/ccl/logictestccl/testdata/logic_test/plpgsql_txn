@@ -983,4 +983,30 @@ CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
   END
 $$;
 
+# Regression test for #122266 - functions should not be allowed to use
+# COMMIT/ROLLBACK, and COMMIT/ROLLBACK is currently unsupported in a nested
+# CALL statement.
+subtest commit_rollback
+
+statement error pgcode 2D000 pq: invalid transaction termination
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN COMMIT; END $$;
+
+statement error pgcode 2D000 pq: invalid transaction termination
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN ROLLBACK; END $$;
+
+statement error pgcode 2D000 pq: invalid transaction termination
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE i INT := 0; BEGIN WHILE i < 10 LOOP COMMIT; i := i + 1; END LOOP; END
+$$;
+
+statement ok
+CREATE PROCEDURE p_nested_commit() LANGUAGE PLpgSQL AS $$ BEGIN COMMIT; END $$;
+CREATE PROCEDURE p_nested_rollback() LANGUAGE PLpgSQL AS $$ BEGIN ROLLBACK; END $$;
+
+statement error pgcode 0A000 pq: unimplemented: transaction control statements in nested routines
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$ BEGIN CALL p_nested_commit(); END $$;
+
+statement error pgcode 0A000 pq: unimplemented: transaction control statements in nested routines
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$ BEGIN CALL p_nested_rollback(); END $$;
+
 subtest end

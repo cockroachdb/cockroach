@@ -153,6 +153,10 @@ type Builder struct {
 	// insideDataSource is true when we are processing a data source.
 	insideDataSource bool
 
+	// insideNestedPLpgSQLCall is true when we are processing a nested PLpgSQL
+	// CALL statement.
+	insideNestedPLpgSQLCall bool
+
 	// If set, we are collecting view dependencies in schemaDeps. This can only
 	// happen inside view/function definitions.
 	//
