@@ -37,6 +37,7 @@ cockroachdb/sql-queries:
   # there is no triage column ID.
   # See .github/workflows/add-issues-to-project.yml.
   label: T-sql-queries
+  silence_mentions: true
 cockroachdb/kv:
   aliases:
     cockroachdb/kv-triage: roachtest
