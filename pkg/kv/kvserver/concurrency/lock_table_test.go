@@ -1114,6 +1114,8 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 				g = nil
 			}
 		}()
+		var timer timeutil.Timer
+		defer timer.Stop()
 		var err error
 		for {
 			// Since we can't do a select involving latch acquisition and context
@@ -1137,10 +1139,18 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			var lastID uuid.UUID
 		L:
 			for {
+				timer.Reset(time.Minute * 5)
 				select {
 				case <-g.NewStateChan():
 				case <-ctx.Done():
 					return ctx.Err()
+				case <-timer.C:
+					timer.Read = true
+					return errors.AssertionFailedf(
+						"request %d has been waiting for more than 5 minutes; lock table state:\n%s\n",
+						g.(*lockTableGuardImpl).seqNum,
+						e.lt.String(),
+					)
 				}
 				state, err := g.CurState()
 				if err != nil {
@@ -1582,6 +1592,13 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	probCreateNewTxn := possibleProbCreateNewTxn[rng.Intn(len(possibleProbTxnalReq))]
 	probDupAccessWithWeakerStr := 0.5
 	probOnlyRead := possibleProbOnlyRead[rng.Intn(len(possibleProbOnlyRead))]
+
+	if syncutil.DeadlockEnabled {
+		// We've seen 10,000 requests to be too much when running a deadlock build.
+		// Override numRequests to the lowest option (1,000) for deadlock builds.
+		numRequests = 1000
+	}
+
 	testLockTableConcurrentRequests(
 		t, numActiveTxns, numRequests, probTxnalReq, probCreateNewTxn,
 		probDupAccessWithWeakerStr, probOnlyRead,
