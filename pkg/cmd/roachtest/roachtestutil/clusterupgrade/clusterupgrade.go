@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -85,6 +86,11 @@ func (v *Version) Equal(other *Version) bool {
 // allowing two `Version` objects to be compared directly.
 func (v *Version) AtLeast(other *Version) bool {
 	return v.Version.AtLeast(&other.Version)
+}
+
+// Series returns the release series this version is a part of.
+func (v *Version) Series() string {
+	return release.VersionSeries(&v.Version)
 }
 
 // CurrentVersion returns the version associated with the current
