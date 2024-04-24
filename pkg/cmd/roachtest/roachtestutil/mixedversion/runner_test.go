@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -113,10 +114,14 @@ func Test_run(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			runner := testTestRunner()
-			// Set an artificially large `startClusterID` to stop the test
-			// runner from attempting to perform post-initialization tasks
-			// that wouldn't work in this limited test environment.
-			runner.plan = &TestPlan{initSteps: tc.steps, startClusterID: 9999}
+			runner.plan = &TestPlan{
+				setup:     testSetup{systemSetup: &serviceSetup{}},
+				initSteps: tc.steps,
+				// Set an artificially large `startSystemID` to stop the test
+				// runner from attempting to perform post-initialization tasks
+				// that wouldn't work in this limited test environment.
+				startSystemID: 9999,
+			}
 
 			runnerCh := make(chan error)
 			defer close(runnerCh)
@@ -151,11 +156,15 @@ func testAddAnnotation() error {
 func testTestRunner() *testRunner {
 	runnerCtx, cancel := context.WithCancel(ctx)
 	var ranUserHooks atomic.Bool
+	systemDescriptor := &ServiceDescriptor{
+		Name:  install.SystemInterfaceName,
+		Nodes: nodes,
+	}
 	return &testRunner{
 		ctx:            runnerCtx,
 		cancel:         cancel,
 		logger:         nilLogger,
-		crdbNodes:      nodes,
+		systemService:  newServiceRuntime(systemDescriptor),
 		background:     newBackgroundRunner(runnerCtx, nilLogger),
 		ranUserHooks:   &ranUserHooks,
 		plan:           &TestPlan{seed: seed},

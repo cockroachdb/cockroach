@@ -32,11 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/maps"
 )
 
 type (
@@ -56,9 +58,8 @@ type (
 		stopFuncs []StopFunc
 	}
 
-	testFailureDetails struct {
-		seed           int64
-		testContext    *Context
+	serviceFailureDetails struct {
+		descriptor     *ServiceDescriptor
 		binaryVersions []roachpb.Version
 		// Cluster versions before and after the failure occurred. Before
 		// each step is executed, the test runner will cache each node's
@@ -70,6 +71,13 @@ type (
 		// happen while the upgrade is finalizing.
 		clusterVersionsBefore []roachpb.Version
 		clusterVersionsAfter  []roachpb.Version
+	}
+
+	testFailureDetails struct {
+		seed          int64
+		testContext   *Context
+		systemService *serviceFailureDetails
+		tenantService *serviceFailureDetails
 	}
 
 	// crdbMonitor is a thin wrapper around the roachtest monitor API
@@ -85,16 +93,25 @@ type (
 		errCh     chan error
 	}
 
-	testRunner struct {
-		ctx       context.Context
-		cancel    context.CancelFunc
-		plan      *TestPlan
-		cluster   cluster.Cluster
-		crdbNodes option.NodeListOption
-		logger    *logger.Logger
-
+	serviceRuntime struct {
+		descriptor      *ServiceDescriptor
 		binaryVersions  *atomic.Value
 		clusterVersions *atomic.Value
+
+		connCache struct {
+			mu    syncutil.Mutex
+			cache []*gosql.DB
+		}
+	}
+
+	testRunner struct {
+		ctx           context.Context
+		cancel        context.CancelFunc
+		plan          *TestPlan
+		cluster       cluster.Cluster
+		systemService *serviceRuntime
+		tenantService *serviceRuntime
+		logger        *logger.Logger
 
 		background *backgroundRunner
 		monitor    *crdbMonitor
@@ -102,11 +119,6 @@ type (
 		// ranUserHooks keeps track of whether the runner has run any
 		// user-provided hooks so far.
 		ranUserHooks *atomic.Bool
-
-		connCache struct {
-			mu    syncutil.Mutex
-			cache []*gosql.DB
-		}
 
 		// the following are test-only fields, allowing tests to simulate
 		// cluster properties without passing a cluster.Cluster
@@ -120,30 +132,52 @@ var (
 	invalidChars = regexp.MustCompile(`[^a-zA-Z0-9 \-_\.]`)
 )
 
+func newServiceRuntime(desc *ServiceDescriptor) *serviceRuntime {
+	var binaryVersions atomic.Value
+	var clusterVersions atomic.Value
+
+	return &serviceRuntime{
+		descriptor:      desc,
+		binaryVersions:  &binaryVersions,
+		clusterVersions: &clusterVersions,
+	}
+}
+
 func newTestRunner(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	plan *TestPlan,
 	l *logger.Logger,
 	c cluster.Cluster,
-	crdbNodes option.NodeListOption,
 ) *testRunner {
-	var ranUserHooks atomic.Bool
-	var binaryVersions atomic.Value
-	var clusterVersions atomic.Value
+	allCRDBNodes := make(map[int]struct{})
+	var systemService *serviceRuntime
+	var tenantService *serviceRuntime
 
+	for _, s := range plan.services {
+		for _, n := range s.Nodes {
+			allCRDBNodes[n] = struct{}{}
+		}
+
+		if s.Name == install.SystemInterfaceName {
+			systemService = newServiceRuntime(s)
+		} else {
+			tenantService = newServiceRuntime(s)
+		}
+	}
+
+	var ranUserHooks atomic.Bool
 	return &testRunner{
-		ctx:             ctx,
-		cancel:          cancel,
-		plan:            plan,
-		logger:          l,
-		binaryVersions:  &binaryVersions,
-		clusterVersions: &clusterVersions,
-		cluster:         c,
-		crdbNodes:       crdbNodes,
-		background:      newBackgroundRunner(ctx, l),
-		monitor:         newCRDBMonitor(ctx, c, crdbNodes),
-		ranUserHooks:    &ranUserHooks,
+		ctx:           ctx,
+		cancel:        cancel,
+		plan:          plan,
+		logger:        l,
+		systemService: systemService,
+		tenantService: tenantService,
+		cluster:       c,
+		background:    newBackgroundRunner(ctx, l),
+		monitor:       newCRDBMonitor(ctx, c, maps.Keys(allCRDBNodes)),
+		ranUserHooks:  &ranUserHooks,
 	}
 }
 
@@ -196,20 +230,16 @@ func (tr *testRunner) run() (retErr error) {
 // recursively in the case of sequentialRunStep and concurrentRunStep.
 func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 	if ss, ok := step.(*singleStep); ok {
-		if ss.ID > tr.plan.startClusterID {
-			// update the runner's view of the cluster's binary and cluster
-			// versions before every non-initialization `singleStep` is
-			// executed
-			if err := tr.maybeInitConnections(); err != nil {
+		if ss.ID > tr.plan.startSystemID {
+			if err := tr.refreshServiceData(tr.systemService); err != nil {
 				return err
 			}
-			if err := tr.refreshBinaryVersions(); err != nil {
+		}
+
+		if ss.ID > tr.plan.startTenantID && tr.tenantService != nil {
+			if err := tr.refreshServiceData(tr.tenantService); err != nil {
 				return err
 			}
-			if err := tr.refreshClusterVersions(); err != nil {
-				return err
-			}
-			tr.monitor.Init()
 		}
 	}
 
@@ -337,22 +367,50 @@ func (tr *testRunner) stepError(err error, step *singleStep, l *logger.Logger) e
 // and renames the underlying file to include the "FAILED" prefix to
 // help in debugging.
 func (tr *testRunner) testFailure(err error, l *logger.Logger, testContext *Context) error {
-	clusterVersionsBefore := tr.clusterVersions
-	var clusterVersionsAfter atomic.Value
-	if tr.connCacheInitialized() {
-		if err := tr.refreshClusterVersions(); err != nil {
-			tr.logger.Printf("failed to fetch cluster versions after failure: %s", err)
-		} else {
-			clusterVersionsAfter.Store(tr.clusterVersions.Load())
+	detailsForService := func(service *serviceRuntime) *serviceFailureDetails {
+		return &serviceFailureDetails{
+			descriptor:            service.descriptor,
+			binaryVersions:        loadAtomicVersions(service.binaryVersions),
+			clusterVersionsBefore: loadAtomicVersions(service.clusterVersions),
+			clusterVersionsAfter:  loadAtomicVersions(service.clusterVersions),
 		}
 	}
 
+	var systemDetails *serviceFailureDetails
+	var tenantDetails *serviceFailureDetails
+	for _, service := range tr.allServices() {
+		if service.descriptor.Name == install.SystemInterfaceName {
+			systemDetails = detailsForService(service)
+		} else {
+			tenantDetails = detailsForService(service)
+		}
+	}
+
+	currentClusterVersions := func(service *serviceRuntime) []roachpb.Version {
+		if tr.connCacheInitialized(service) {
+			if err := tr.refreshClusterVersions(service); err == nil {
+				return loadAtomicVersions(service.clusterVersions)
+			} else {
+				tr.logger.Printf(
+					"failed to fetch cluster versions for service %s after failure: %s",
+					service.descriptor.Name, err,
+				)
+			}
+		}
+
+		return loadAtomicVersions(service.clusterVersions)
+	}
+
+	systemDetails.clusterVersionsAfter = currentClusterVersions(tr.systemService)
+	if tenantDetails != nil {
+		tenantDetails.clusterVersionsAfter = currentClusterVersions(tr.tenantService)
+	}
+
 	tf := &testFailureDetails{
-		seed:                  tr.plan.seed,
-		testContext:           testContext,
-		binaryVersions:        loadAtomicVersions(tr.binaryVersions),
-		clusterVersionsBefore: loadAtomicVersions(clusterVersionsBefore),
-		clusterVersionsAfter:  loadAtomicVersions(&clusterVersionsAfter),
+		seed:          tr.plan.seed,
+		testContext:   testContext,
+		systemService: systemDetails,
+		tenantService: tenantDetails,
 	}
 
 	// failureErr wraps the original error, adding mixed-version state
@@ -414,8 +472,13 @@ func (tr *testRunner) logStep(prefix string, step *singleStep, l *logger.Logger)
 // cluster versions on each node. The cached versions should exist for
 // all steps but the first one (when we start the cluster itself).
 func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
-	binaryVersions := loadAtomicVersions(tr.binaryVersions)
-	clusterVersions := loadAtomicVersions(tr.clusterVersions)
+	binaryVersions := loadAtomicVersions(tr.systemService.binaryVersions)
+	systemClusterVersions := loadAtomicVersions(tr.systemService.clusterVersions)
+	var tenantClusterVersions []roachpb.Version
+	if tr.tenantService != nil {
+		tenantClusterVersions = loadAtomicVersions(tr.tenantService.clusterVersions)
+	}
+
 	releasedVersions := make([]*clusterupgrade.Version, 0, len(testContext.System.Descriptor.Nodes))
 	for _, node := range testContext.System.Descriptor.Nodes {
 		nv, err := testContext.NodeVersion(node)
@@ -423,14 +486,21 @@ func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
 		releasedVersions = append(releasedVersions, nv)
 	}
 
-	if binaryVersions == nil || clusterVersions == nil {
+	if binaryVersions == nil || systemClusterVersions == nil {
 		return
 	}
 
 	tw := newTableWriter(len(releasedVersions))
 	tw.AddRow("released versions", toString(releasedVersions)...)
 	tw.AddRow("logical binary versions", toString(binaryVersions)...)
-	tw.AddRow("cluster versions", toString(clusterVersions)...)
+
+	tw.AddRow("cluster versions (system)", toString(systemClusterVersions)...)
+	if len(tenantClusterVersions) > 0 {
+		tw.AddRow(
+			fmt.Sprintf("cluster versions (%s)", tr.tenantService.descriptor.Name),
+			toString(tenantClusterVersions)...,
+		)
+	}
 
 	l.Printf("current cluster configuration:\n%s", tw.String())
 }
@@ -447,56 +517,81 @@ func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
 	return prefixedLogger(tr.logger, prefix)
 }
 
-// refreshBinaryVersions updates the internal `binaryVersions` field
-// with the binary version running on each node of the cluster. We use
-// the `atomic` package here as this function may be called by two
-// steps that are running concurrently.
-func (tr *testRunner) refreshBinaryVersions() error {
-	newBinaryVersions := make([]roachpb.Version, 0, len(tr.crdbNodes))
-	for _, node := range tr.crdbNodes {
-		bv, err := clusterupgrade.BinaryVersion(tr.conn(node))
+// refreshBinaryVersions updates the `binaryVersions` field for every
+// service with the binary version running on each node of the
+// cluster. We use the `atomic` package here as this function may be
+// called by two steps that are running concurrently.
+func (tr *testRunner) refreshBinaryVersions(service *serviceRuntime) error {
+	newBinaryVersions := make([]roachpb.Version, 0, len(tr.systemService.descriptor.Nodes))
+	for _, node := range service.descriptor.Nodes {
+		bv, err := clusterupgrade.BinaryVersion(tr.conn(node, service.descriptor.Name))
 		if err != nil {
 			return fmt.Errorf("failed to get binary version for node %d: %w", node, err)
 		}
 		newBinaryVersions = append(newBinaryVersions, bv)
 	}
 
-	tr.binaryVersions.Store(newBinaryVersions)
+	service.binaryVersions.Store(newBinaryVersions)
 	return nil
 }
 
 // refreshClusterVersions updates the internal `clusterVersions` field
 // with the current view of the cluster version in each of the nodes
 // of the cluster.
-func (tr *testRunner) refreshClusterVersions() error {
-	newClusterVersions := make([]roachpb.Version, 0, len(tr.crdbNodes))
-	for _, node := range tr.crdbNodes {
-		cv, err := clusterupgrade.ClusterVersion(tr.ctx, tr.conn(node))
+func (tr *testRunner) refreshClusterVersions(service *serviceRuntime) error {
+	newClusterVersions := make([]roachpb.Version, 0, len(service.descriptor.Nodes))
+	for _, node := range service.descriptor.Nodes {
+		cv, err := clusterupgrade.ClusterVersion(tr.ctx, tr.conn(node, service.descriptor.Name))
 		if err != nil {
-			return fmt.Errorf("failed to get cluster version for node %d: %w", node, err)
+			return err
 		}
+
 		newClusterVersions = append(newClusterVersions, cv)
 	}
 
-	tr.clusterVersions.Store(newClusterVersions)
+	service.clusterVersions.Store(newClusterVersions)
 	return nil
 }
 
-// maybeInitConnections initialize connections if the connection cache
-// is empty. When the function returns, either the `connCache` field
-// is populated with a connection for every crdb node, or the field is
-// left untouched, and an error is returned.
-func (tr *testRunner) maybeInitConnections() error {
-	tr.connCache.mu.Lock()
-	defer tr.connCache.mu.Unlock()
+func (tr *testRunner) refreshServiceData(service *serviceRuntime) error {
+	// Update the runner's view of the cluster's binary and cluster
+	// versions for given service before every non-initialization
+	// `singleStep` is executed.
+	if err := tr.maybeInitConnections(service); err != nil {
+		return err
+	}
 
-	if tr.connCache.cache != nil {
+	if service == tr.systemService {
+		if err := tr.refreshBinaryVersions(service); err != nil {
+			return err
+		}
+	}
+
+	if err := tr.refreshClusterVersions(service); err != nil {
+		return err
+	}
+
+	tr.monitor.Init()
+	return nil
+}
+
+// maybeInitConnections initializes connections if the connection
+// cache is empty. When the function returns, either the `connCache`
+// field is populated with a connection for every crdb node, or the
+// field is left untouched, and an error is returned.
+func (tr *testRunner) maybeInitConnections(service *serviceRuntime) error {
+	service.connCache.mu.Lock()
+	defer service.connCache.mu.Unlock()
+
+	if service.connCache.cache != nil {
 		return nil
 	}
 
-	cc := make([]*gosql.DB, len(tr.crdbNodes))
-	for _, node := range tr.crdbNodes {
-		conn, err := tr.cluster.ConnE(tr.ctx, tr.logger, node)
+	cc := make([]*gosql.DB, len(service.descriptor.Nodes))
+	for _, node := range service.descriptor.Nodes {
+		conn, err := tr.cluster.ConnE(
+			tr.ctx, tr.logger, node, option.VirtualClusterName(service.descriptor.Name),
+		)
 		if err != nil {
 			return fmt.Errorf("failed to connect to node %d: %w", node, err)
 		}
@@ -504,38 +599,47 @@ func (tr *testRunner) maybeInitConnections() error {
 		cc[node-1] = conn
 	}
 
-	tr.connCache.cache = cc
+	service.connCache.cache = cc
 	return nil
 }
 
-func (tr *testRunner) connCacheInitialized() bool {
-	tr.connCache.mu.Lock()
-	defer tr.connCache.mu.Unlock()
+func (tr *testRunner) connCacheInitialized(service *serviceRuntime) bool {
+	service.connCache.mu.Lock()
+	defer service.connCache.mu.Unlock()
 
-	return tr.connCache.cache != nil
+	return service.connCache.cache != nil
 }
 
 func (tr *testRunner) newHelper(
 	ctx context.Context, l *logger.Logger, testContext Context,
 ) *Helper {
-	newService := func(sc *ServiceContext) *Service {
+	newService := func(sc *ServiceContext, cv *atomic.Value) *Service {
 		if sc == nil {
 			return nil
+		}
+
+		connFunc := func(node int) *gosql.DB {
+			return tr.conn(node, sc.Descriptor.Name)
 		}
 
 		return &Service{
 			ServiceContext: sc,
 
 			ctx:             ctx,
-			connFunc:        tr.conn,
+			connFunc:        connFunc,
 			stepLogger:      l,
-			clusterVersions: tr.clusterVersions,
+			clusterVersions: cv,
 		}
 	}
 
+	var tenantCV *atomic.Value
+	if tr.tenantService != nil {
+		tenantCV = tr.tenantService.clusterVersions
+	}
+
 	return &Helper{
-		System: newService(testContext.System),
-		Tenant: newService(testContext.Tenant),
+		System: newService(testContext.System, tr.systemService.clusterVersions),
+		Tenant: newService(testContext.Tenant, tenantCV),
 
 		testContext: testContext,
 		ctx:         ctx,
@@ -546,21 +650,41 @@ func (tr *testRunner) newHelper(
 
 // conn returns a database connection to the given node. Assumes the
 // connection cache has been previously initialized.
-func (tr *testRunner) conn(node int) *gosql.DB {
-	tr.connCache.mu.Lock()
-	defer tr.connCache.mu.Unlock()
-	return tr.connCache.cache[node-1]
+func (tr *testRunner) conn(node int, virtualClusterName string) *gosql.DB {
+	var service *serviceRuntime
+	if virtualClusterName == install.SystemInterfaceName {
+		service = tr.systemService
+	} else if tr.tenantService != nil && virtualClusterName == tr.tenantService.descriptor.Name {
+		service = tr.tenantService
+	} else {
+		panic(fmt.Errorf("internal error: unknown virtual cluster %q", virtualClusterName))
+	}
+
+	service.connCache.mu.Lock()
+	defer service.connCache.mu.Unlock()
+	return service.connCache.cache[node-1]
 }
 
 func (tr *testRunner) closeConnections() {
-	tr.connCache.mu.Lock()
-	defer tr.connCache.mu.Unlock()
+	for _, service := range tr.allServices() {
+		service.connCache.mu.Lock()
+		defer service.connCache.mu.Unlock()
 
-	for _, db := range tr.connCache.cache {
-		if db != nil {
-			_ = db.Close()
+		for _, db := range service.connCache.cache {
+			if db != nil {
+				_ = db.Close()
+			}
 		}
 	}
+}
+
+func (tr *testRunner) allServices() []*serviceRuntime {
+	services := []*serviceRuntime{tr.systemService}
+	if tr.tenantService != nil {
+		services = append(services, tr.tenantService)
+	}
+
+	return services
 }
 
 func (tr *testRunner) addGrafanaAnnotation(
@@ -690,7 +814,8 @@ func (tfd *testFailureDetails) Format() string {
 		fmt.Sprintf("test random seed: %d\n", tfd.seed),
 	}
 
-	tw := newTableWriter(len(tfd.binaryVersions))
+	numNodes := len(tfd.systemService.descriptor.Nodes)
+	tw := newTableWriter(numNodes)
 	if tfd.testContext != nil {
 		releasedVersions := make([]*clusterupgrade.Version, 0, len(tfd.testContext.System.Descriptor.Nodes))
 		for _, node := range tfd.testContext.System.Descriptor.Nodes {
@@ -701,11 +826,23 @@ func (tfd *testFailureDetails) Format() string {
 		tw.AddRow("released versions", toString(releasedVersions)...)
 	}
 
-	tw.AddRow("logical binary versions", toString(tfd.binaryVersions)...)
-	tw.AddRow("cluster versions before failure", toString(tfd.clusterVersionsBefore)...)
+	tw.AddRow("logical binary versions", toString(tfd.systemService.binaryVersions)...)
+	for _, service := range []*serviceFailureDetails{tfd.systemService, tfd.tenantService} {
+		if service == nil {
+			continue
+		}
 
-	if cv := tfd.clusterVersionsAfter; cv != nil {
-		tw.AddRow("cluster versions after failure", toString(cv)...)
+		tw.AddRow(
+			fmt.Sprintf("cluster versions before failure (%s)", service.descriptor.Name),
+			toString(service.clusterVersionsBefore)...,
+		)
+
+		if cv := service.clusterVersionsAfter; cv != nil {
+			tw.AddRow(
+				fmt.Sprintf("cluster versions after failure (%s)", service.descriptor.Name),
+				toString(cv)...,
+			)
+		}
 	}
 
 	lines = append(lines, tw.String())

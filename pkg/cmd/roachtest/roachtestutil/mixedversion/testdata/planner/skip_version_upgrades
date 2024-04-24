@@ -48,7 +48,7 @@ Plan:
 │   │   │   └── run "mixed-version 2", after 5s delay (11)
 │   │   ├── restart node 2 with binary version v23.2.0 (12)
 │   │   └── restart node 3 with binary version v23.2.0 (13)
-│   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (14)
+│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (14)
 │   ├── run mixed-version hooks concurrently
 │   │   ├── run "mixed-version 1", after 100ms delay (15)
 │   │   └── run "mixed-version 2", after 500ms delay (16)
@@ -75,7 +75,7 @@ Plan:
 │   │   ├── restart node 1 with binary version v24.1.1 (33)
 │   │   ├── run "mixed-version 2" (34)
 │   │   └── restart node 4 with binary version v24.1.1 (35)
-│   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (36)
+│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (36)
 │   ├── wait for system tenant on nodes :1-4 to reach cluster version '24.1' (37)
 │   └── run "validate upgrade" (38)
 └── upgrade cluster from "v24.1.1" to "<current>"
@@ -100,7 +100,7 @@ Plan:
    │   ├── restart node 2 with binary version <current> (54)
    │   ├── run "mixed-version 1" (55)
    │   └── restart node 4 with binary version <current> (56)
-   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (57)
+   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (57)
    ├── run "mixed-version 1" (58)
    ├── wait for system tenant on nodes :1-4 to reach cluster version <current> (59)
    └── run "validate upgrade" (60)

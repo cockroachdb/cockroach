@@ -158,6 +158,10 @@ func (s *Service) ClusterVersionAtLeast(rng *rand.Rand, v string) (bool, error) 
 	return currentVersion.AtLeast(minVersion), nil
 }
 
+func (h *Helper) IsMultitenant() bool {
+	return h.Tenant != nil
+}
+
 func (h *Helper) DefaultService() *Service {
 	if h.Tenant != nil {
 		return h.Tenant
