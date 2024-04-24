@@ -2194,6 +2194,20 @@ type queryMeta struct {
 // configuration values in SET ... TO DEFAULT (or RESET ...) statements.
 type SessionDefaults map[string]string
 
+// SafeFormat implements the redact.SafeFormatter interface.
+func (sd SessionDefaults) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("[")
+	for k, v := range sd {
+		s.Printf("%s:%s;", k, v)
+	}
+	s.Printf("]")
+}
+
+// String implements the fmt.Stringer interface.
+func (sd SessionDefaults) String() string {
+	return redact.StringWithoutMarkers(sd)
+}
+
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
 	User                        username.SQLUsername

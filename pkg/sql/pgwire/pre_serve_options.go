@@ -241,7 +241,8 @@ func parseClientProvidedSessionParameters(
 			telemetry.Inc(sqltelemetry.CockroachShellCounter)
 		}
 	}
-
+	log.Infof(ctx, "connection was made with session defaults: %s and custom session defaults: %s",
+		args.SessionDefaults, args.CustomOptionSessionDefaults)
 	return args, nil
 }
 
