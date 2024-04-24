@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -297,7 +298,8 @@ See debug recover command help for more details on how to use this command.
 }
 
 var debugRecoverCollectInfoOpts struct {
-	Stores base.StoreSpecList
+	Stores         base.StoreSpecList
+	maxConcurrency int
 }
 
 func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
@@ -316,7 +318,7 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 			return errors.Wrapf(err, "failed to get admin connection to cluster")
 		}
 		defer finish()
-		replicaInfo, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c)
+		replicaInfo, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c, debugRecoverCollectInfoOpts.maxConcurrency)
 		if err != nil {
 			return errors.WithHint(errors.Wrap(err,
 				"failed to retrieve replica info from cluster"),
@@ -402,6 +404,7 @@ var debugRecoverPlanOpts struct {
 	deadNodeIDs    []int
 	confirmAction  confirmActionFlag
 	force          bool
+	maxConcurrency int
 }
 
 var planSpecificFlags = map[string]struct{}{
@@ -432,7 +435,7 @@ func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
 			return errors.Wrapf(err, "failed to get admin connection to cluster")
 		}
 		defer finish()
-		replicas, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c)
+		replicas, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c, debugRecoverPlanOpts.maxConcurrency)
 		if err != nil {
 			return errors.Wrapf(err, "failed to retrieve replica info from cluster")
 		}
@@ -643,6 +646,7 @@ var debugRecoverExecuteOpts struct {
 	Stores                base.StoreSpecList
 	confirmAction         confirmActionFlag
 	ignoreInternalVersion bool
+	maxConcurrency        int
 }
 
 // runDebugExecuteRecoverPlan is using the following pattern when performing command
@@ -670,7 +674,7 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 
 	if len(debugRecoverExecuteOpts.Stores.Specs) == 0 {
 		return stageRecoveryOntoCluster(ctx, cmd, planFile, nodeUpdates,
-			debugRecoverExecuteOpts.ignoreInternalVersion)
+			debugRecoverExecuteOpts.ignoreInternalVersion, debugRecoverExecuteOpts.maxConcurrency)
 	}
 	return applyRecoveryToLocalStore(ctx, nodeUpdates, debugRecoverExecuteOpts.ignoreInternalVersion)
 }
@@ -681,6 +685,7 @@ func stageRecoveryOntoCluster(
 	planFile string,
 	plan loqrecoverypb.ReplicaUpdatePlan,
 	ignoreInternalVersion bool,
+	maxConcurrency int,
 ) error {
 	c, finish, err := getAdminClient(ctx, serverCfg)
 	if err != nil {
@@ -693,7 +698,9 @@ func stageRecoveryOntoCluster(
 		nodeID roachpb.NodeID
 		planID string
 	}
-	vr, err := c.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	vr, err := c.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
+		MaxConcurrency: int32(maxConcurrency),
+	})
 	if err != nil {
 		return errors.Wrap(err, "failed to retrieve loss of quorum recovery status from cluster")
 	}
@@ -754,7 +761,11 @@ func stageRecoveryOntoCluster(
 		// We don't want to combine removing old plan and adding new one since it
 		// could produce cluster with multiple plans at the same time which could
 		// make situation worse.
-		res, err := c.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{AllNodes: true, ForcePlan: true})
+		res, err := c.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+			AllNodes:       true,
+			ForcePlan:      true,
+			MaxConcurrency: int32(maxConcurrency),
+		})
 		if err := maybeWrapStagingError("failed removing existing loss of quorum replica recovery plan from cluster", res, err); err != nil {
 			return err
 		}
@@ -763,6 +774,7 @@ func stageRecoveryOntoCluster(
 		Plan:                      &plan,
 		AllNodes:                  true,
 		ForceLocalInternalVersion: ignoreInternalVersion,
+		MaxConcurrency:            int32(maxConcurrency),
 	})
 	if err := maybeWrapStagingError("failed to stage loss of quorum recovery plan on cluster",
 		sr, err); err != nil {
@@ -919,6 +931,10 @@ See debug recover command help for more details on how to use this command.
 	RunE: runDebugVerify,
 }
 
+var debugRecoverVerifyOpts struct {
+	maxConcurrency int
+}
+
 func runDebugVerify(cmd *cobra.Command, args []string) error {
 	// We must have cancellable context here to obtain grpc client connection.
 	ctx, cancel := context.WithCancel(cmd.Context())
@@ -952,6 +968,7 @@ func runDebugVerify(cmd *cobra.Command, args []string) error {
 	req := serverpb.RecoveryVerifyRequest{
 		DecommissionedNodeIDs: updatePlan.DecommissionedNodeIDs,
 		MaxReportedRanges:     20,
+		MaxConcurrency:        int32(debugRecoverVerifyOpts.maxConcurrency),
 	}
 	// Maybe switch to non-nullable?
 	if !updatePlan.PlanID.Equal(uuid.UUID{}) {
@@ -1155,14 +1172,23 @@ func getCLIClusterFlags(fromCfg bool, cmd *cobra.Command, filter func(flag strin
 	return buf.String()
 }
 
+// debugRecoverDefaultMaxConcurrency is the default concurrency that will be
+// used when fanning out RPCs to nodes in the cluster while servicing a debug
+// recover command.
+var debugRecoverDefaultMaxConcurrency = 2 * runtime.GOMAXPROCS(0)
+
 // setDebugRecoverContextDefaults resets values of command line flags to
 // their default values to ensure tests don't interfere with each other.
 func setDebugRecoverContextDefaults() {
 	debugRecoverCollectInfoOpts.Stores.Specs = nil
+	debugRecoverCollectInfoOpts.maxConcurrency = debugRecoverDefaultMaxConcurrency
 	debugRecoverPlanOpts.outputFileName = ""
 	debugRecoverPlanOpts.confirmAction = prompt
 	debugRecoverPlanOpts.deadStoreIDs = nil
-	debugRecoverPlanOpts.deadStoreIDs = nil
+	debugRecoverPlanOpts.deadNodeIDs = nil
+	debugRecoverPlanOpts.maxConcurrency = debugRecoverDefaultMaxConcurrency
 	debugRecoverExecuteOpts.Stores.Specs = nil
 	debugRecoverExecuteOpts.confirmAction = prompt
+	debugRecoverExecuteOpts.maxConcurrency = debugRecoverDefaultMaxConcurrency
+	debugRecoverVerifyOpts.maxConcurrency = debugRecoverDefaultMaxConcurrency
 }
