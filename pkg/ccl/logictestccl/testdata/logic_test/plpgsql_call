@@ -427,7 +427,7 @@ CREATE PROCEDURE p() AS $$
 $$ LANGUAGE PLpgSQL;
 
 # CALL with non-variable argument in OUT parameter position.
-statement error pgcode 42601 pq: procedure parameter \"b - 1\" is an output parameter but corresponding argument is not writable
+statement error pgcode 42601 pq: procedure parameter "y" is an output parameter but corresponding argument is not writable
 CREATE PROCEDURE p() AS $$
   DECLARE
     a INT;
@@ -437,7 +437,7 @@ CREATE PROCEDURE p() AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error pgcode 42601 pq: procedure parameter \"b::INT8\" is an output parameter but corresponding argument is not writable
+statement error pgcode 42601 pq: procedure parameter "y" is an output parameter but corresponding argument is not writable
 CREATE PROCEDURE p() AS $$
   DECLARE
     a INT;
