@@ -247,6 +247,7 @@ func makeBackupLocalityMap(
 					return nil, errors.Wrap(err,
 						"creating locality external storage configuration")
 				}
+				conf.URI = uri
 				storesByLocalityKV[kv] = conf
 			}
 		}
