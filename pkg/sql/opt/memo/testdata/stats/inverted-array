@@ -71,7 +71,7 @@ index-join t
       │    └── union spans: ["", ""]
       ├── stats: [rows=1020]
       ├── key: (1)
-      └── scan t@a_idx
+      └── scan t@a_idx,inverted
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans: ["", ""]
@@ -92,7 +92,7 @@ index-join t
  ├── stats: [rows=111.1111]
  ├── key: (1)
  ├── fd: (1)-->(2)
- └── scan t@a_idx
+ └── scan t@a_idx,inverted
       ├── columns: k:1(int!null)
       ├── inverted constraint: /5/1
       │    └── spans: ["\x8a", "\x8a"]
@@ -119,7 +119,7 @@ index-join t
       │    └── union spans: ["\x8a", "\x8c")
       ├── stats: [rows=20]
       ├── key: (1)
-      └── scan t@a_idx
+      └── scan t@a_idx,inverted
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans: ["\x8a", "\x8c")
@@ -145,7 +145,7 @@ select
  │    ├── stats: [rows=10]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
- │    └── scan t@a_idx
+ │    └── scan t@a_idx,inverted
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /5/1
  │         │    └── spans: ["C", "C"]
@@ -182,7 +182,7 @@ select
  │         │         └── ["\x8a", "\x8a"]
  │         ├── stats: [rows=20]
  │         ├── key: (1)
- │         └── scan t@a_idx
+ │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
@@ -221,7 +221,7 @@ select
  │         │         └── ["\x8a", "\x8c")
  │         ├── stats: [rows=30]
  │         ├── key: (1)
- │         └── scan t@a_idx
+ │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
@@ -266,7 +266,7 @@ select
  │         │              └── union spans: ["\x8b", "\x8b"]
  │         ├── stats: [rows=30]
  │         ├── key: (1)
- │         └── scan t@a_idx
+ │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans

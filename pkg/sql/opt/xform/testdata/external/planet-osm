@@ -1757,7 +1757,7 @@ sort
       │         │    ├── immutable
       │         │    ├── stats: [rows=3926737, distinct(69)=2632.06, null(69)=0, distinct(100)=31, null(100)=1.52957e+06]
       │         │    ├── fd: ()-->(29)
-      │         │    ├── inner-join (inverted planet_osm_line@planet_osm_line_way_idx [as=l])
+      │         │    ├── inner-join (inverted planet_osm_line@planet_osm_line_way_idx,inverted [as=l])
       │         │    │    ├── columns: p.highway:29!null p.way:69 l.rowid:218!null
       │         │    │    ├── inverted-expr
       │         │    │    │    └── st_dwithin(p.way:69, l.way:217, 100.0)

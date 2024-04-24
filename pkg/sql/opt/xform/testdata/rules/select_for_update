@@ -164,7 +164,7 @@ inner-join (lookup inverted)
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- ├── inner-join (zigzag inverted@b_inv inverted@b_inv)
+ ├── inner-join (zigzag inverted@b_inv,inverted inverted@b_inv,inverted)
  │    ├── columns: a:1!null
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [6] = ['\x89']
@@ -197,7 +197,7 @@ select
  │         │         └── ["\x89", "\x8b")
  │         ├── volatile
  │         ├── key: (1)
- │         └── scan inverted@b_inv
+ │         └── scan inverted@b_inv,inverted
  │              ├── columns: a:1!null b_inverted_key:6!null
  │              ├── inverted constraint: /6/1
  │              │    └── spans
@@ -221,7 +221,7 @@ inner-join (lookup inverted [as=i1])
  ├── volatile
  ├── key: (1,7)
  ├── fd: (1)-->(2,3), (7)-->(8,9)
- ├── inner-join (inverted inverted@b_inv [as=i1])
+ ├── inner-join (inverted inverted@b_inv,inverted [as=i1])
  │    ├── columns: i2.a:7!null i2.b:8 i2.c:9 i1.a:19!null
  │    ├── inverted-expr
  │    │    └── i1.b:20 @> i2.b:8
@@ -283,7 +283,7 @@ inner-join (lookup zigzag)
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- ├── inner-join (zigzag zigzag@d_idx zigzag@d_idx)
+ ├── inner-join (zigzag zigzag@d_idx,inverted zigzag@d_idx,inverted)
  │    ├── columns: a:1!null
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [7] = ['\x3761000262000112630001']

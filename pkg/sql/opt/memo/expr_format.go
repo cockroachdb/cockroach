@@ -1382,6 +1382,9 @@ func (f *ExprFmtCtx) formatIndex(tabID opt.TableID, idxOrd cat.IndexOrdinal, rev
 	if reverse {
 		f.Buffer.WriteString(",rev")
 	}
+	if index.IsInverted() {
+		f.Buffer.WriteString(",inverted")
+	}
 	if _, isPartial := index.Predicate(); isPartial {
 		f.Buffer.WriteString(",partial")
 	}

@@ -98,7 +98,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=59.37842]
       │         ├── key: (1)
-      │         └── scan t@m
+      │         └── scan t@m,inverted
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── constraint: /3: [/'banana' - /'banana']
       │              ├── inverted constraint: /7/1
@@ -150,7 +150,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=59.37842]
       │         ├── key: (1)
-      │         └── scan t@p,partial
+      │         └── scan t@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:8(encodedkey!null)
       │              ├── inverted constraint: /8/1
       │              │    └── spans
@@ -213,7 +213,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=118.7568]
       │         ├── key: (1)
-      │         └── scan t@m
+      │         └── scan t@m,inverted
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── constraint: /3
       │              │    ├── [/'apple' - /'apple']
@@ -268,7 +268,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=121.5695]
       │         ├── key: (1)
-      │         └── scan t@p,partial
+      │         └── scan t@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:9(encodedkey!null)
       │              ├── inverted constraint: /9/1
       │              │    └── spans
@@ -331,7 +331,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=2.503931]
       │         ├── key: (1)
-      │         └── scan t@mp,partial
+      │         └── scan t@mp,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:10(encodedkey!null)
       │              ├── constraint: /4: [/400 - /400]
       │              ├── inverted constraint: /10/1
@@ -387,7 +387,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=10.11106]
       │         ├── key: (1)
-      │         └── scan t@mp,partial
+      │         └── scan t@mp,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:10(encodedkey!null)
       │              ├── constraint: /4
       │              │    ├── [/200 - /200]

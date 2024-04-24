@@ -867,7 +867,7 @@ project
  ├── immutable
  ├── stats: [rows=2.204409]
  ├── key: (1)
- └── scan inv@partial,partial
+ └── scan inv@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
       │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
@@ -884,7 +884,7 @@ index-join inv
  ├── stats: [rows=2.204409, distinct(4)=2, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── scan inv@partial,partial
+ └── scan inv@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
       │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
@@ -911,7 +911,7 @@ project
       │    ├── stats: [rows=2.204409]
       │    ├── key: (1)
       │    ├── fd: (1)-->(3,4)
-      │    └── scan inv@partial,partial
+      │    └── scan inv@partial,inverted,partial
       │         ├── columns: k:1(int!null)
       │         ├── inverted constraint: /7/1
       │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
@@ -935,7 +935,7 @@ select
  │    ├── stats: [rows=2.204409]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
- │    └── scan inv@partial,partial
+ │    └── scan inv@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
@@ -959,7 +959,7 @@ select
  │    ├── stats: [rows=2.204409]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
- │    └── scan inv@partial,partial
+ │    └── scan inv@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
@@ -1044,7 +1044,7 @@ project
  ├── immutable
  ├── stats: [rows=17.77778]
  ├── key: (1)
- └── scan inv_hist@partial,partial
+ └── scan inv_hist@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
       │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
@@ -1067,7 +1067,7 @@ index-join inv_hist
  │                <--- 'banana' --- 'cherry'
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── scan inv_hist@partial,partial
+ └── scan inv_hist@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
       │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
@@ -1100,7 +1100,7 @@ project
       │    ├── stats: [rows=20]
       │    ├── key: (1)
       │    ├── fd: (1)-->(3,4)
-      │    └── scan inv_hist@partial,partial
+      │    └── scan inv_hist@partial,inverted,partial
       │         ├── columns: k:1(int!null)
       │         ├── inverted constraint: /7/1
       │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
@@ -1130,7 +1130,7 @@ select
  │    ├── stats: [rows=20]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
- │    └── scan inv_hist@partial,partial
+ │    └── scan inv_hist@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
@@ -1162,7 +1162,7 @@ select
  │    ├── stats: [rows=20]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
- │    └── scan inv_hist@partial,partial
+ │    └── scan inv_hist@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
@@ -1244,7 +1244,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=16.66667]
       │         ├── key: (1)
-      │         └── scan spatial@p,partial
+      │         └── scan spatial@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -1290,7 +1290,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=16.66667]
       │         ├── key: (1)
-      │         └── scan spatial@p,partial
+      │         └── scan spatial@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -1357,7 +1357,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=8.547009]
       │         ├── key: (1)
-      │         └── scan spatial@p,partial
+      │         └── scan spatial@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -1401,7 +1401,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=8.547009]
       │         ├── key: (1)
-      │         └── scan spatial@p,partial
+      │         └── scan spatial@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -1491,7 +1491,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=118.7568]
       │         ├── key: (1)
-      │         └── scan spatial@p,partial
+      │         └── scan spatial@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -1543,7 +1543,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=118.7568]
       │         ├── key: (1)
-      │         └── scan spatial@p,partial
+      │         └── scan spatial@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -1631,7 +1631,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=121.5695]
       │         ├── key: (1)
-      │         └── scan spatial@p,partial
+      │         └── scan spatial@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -1681,7 +1681,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=121.5695]
       │         ├── key: (1)
-      │         └── scan spatial@p,partial
+      │         └── scan spatial@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans

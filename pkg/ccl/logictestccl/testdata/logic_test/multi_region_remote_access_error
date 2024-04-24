@@ -1027,7 +1027,7 @@ EXPLAIN (OPT) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1
 project
  └── inner-join (lookup json_arr1_rbt [as=t1])
       ├── lookup columns are key
-      ├── inner-join (inverted json_arr1_rbt@j_idx [as=t1])
+      ├── inner-join (inverted json_arr1_rbt@j_idx,inverted [as=t1])
       │    ├── flags: force inverted join (into right side)
       │    ├── inverted-expr
       │    │    └── t1.j @> t2.j
@@ -1084,7 +1084,7 @@ project
       │    ├── distribution: ap-southeast-2
       │    ├── lookup table distribution: ap-southeast-2
       │    ├── prune: (7)
-      │    ├── inner-join (inverted json_arr1_rbr@j_idx [as=t1])
+      │    ├── inner-join (inverted json_arr1_rbr@j_idx,inverted [as=t1])
       │    │    ├── columns: t2.j:3 t1.k:18 crdb_region:22
       │    │    ├── flags: force inverted join (into right side)
       │    │    ├── prefix key columns: [17] = [22]
