@@ -95,9 +95,6 @@ type tpcc struct {
 
 	queryTraceFile string
 
-	// If set, the generator will use randomly generated times instead of actual current time
-	fakeTime uint32
-
 	randomCIDsCache struct {
 		syncutil.Mutex
 		values [][]int
@@ -268,7 +265,6 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.replicateStaticColumns, `replicate-static-columns`, false, "Create duplicate indexes for all static columns in district, items and warehouse tables, such that each zone or rack has them locally.")
 		g.flags.BoolVar(&g.localWarehouses, `local-warehouses`, false, `Force transactions to use a local warehouse in all cases (in violation of the TPC-C specification)`)
 		g.flags.StringVar(&g.queryTraceFile, `query-trace-file`, ``, `File to write the query traces to. Defaults to no output`)
-		g.flags.Uint32Var(&g.fakeTime, `fake-time`, 0, `If set, randomly generate times starting from this unix epoch for queries instead of using the current time`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
@@ -423,7 +419,6 @@ func (w *tpcc) Hooks() workload.Hooks {
 					return errors.Wrap(err, "error creating multi-region partitioner")
 				}
 			}
-
 			return initializeMix(w)
 		},
 		PreCreate: func(db *gosql.DB) error {
@@ -592,7 +587,7 @@ func (w *tpcc) Tables() []workload.Table {
 			New: func() interface{} {
 				return &generateLocals{
 					rng: tpccRand{
-						Rand: rand.New(rand.NewSource(seed)),
+						Rand: rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
 						// Intentionally wait until here to initialize the precomputed rands
 						// so a caller of Tables that only wants schema doesn't compute
 						// them.
