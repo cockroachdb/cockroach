@@ -1792,7 +1792,7 @@ select
  │         ├── cost: 142.706667
  │         ├── key: (3)
  │         └── scan t2@inverted_idx,inverted
- │              ├── columns: rowid:3!null t2.geom1_inverted_key:6!null
+ │              ├── columns: rowid:3!null geom1_inverted_key:6!null
  │              ├── inverted constraint: /6/3
  │              │    └── spans
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -1935,7 +1935,7 @@ select
  │         ├── cost: 142.706667
  │         ├── key: (3)
  │         └── scan t2@inverted_idx_visible,inverted
- │              ├── columns: rowid:3!null t2.geom1_inverted_key:8!null
+ │              ├── columns: rowid:3!null geom1_inverted_key:8!null
  │              ├── inverted constraint: /8/3
  │              │    └── spans
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]

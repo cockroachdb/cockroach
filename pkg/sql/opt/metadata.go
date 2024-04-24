@@ -1015,7 +1015,8 @@ func (md *Metadata) UpdateTableMeta(
 			// will have extra inverted columns added. Add any new inverted columns to
 			// the metadata.
 			for j, n := oldTable.ColumnCount(), newTable.ColumnCount(); j < n; j++ {
-				md.AddColumn(string(newTable.Column(j).ColName()), types.Bytes)
+				colID := md.AddColumn(string(newTable.Column(j).ColName()), types.Bytes)
+				md.ColumnMeta(colID).Table = md.tables[i].MetaID
 			}
 			if newTable.ColumnCount() > oldTable.ColumnCount() {
 				// If we added any new columns, we need to recalculate the not null
