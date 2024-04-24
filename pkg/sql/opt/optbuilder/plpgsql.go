@@ -372,12 +372,19 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 	if b.returnType.Identical(types.AnyTuple) {
 		// For a RECORD-returning routine, infer the concrete type by examining the
 		// RETURN statements. This has to happen after building the declaration
-		// block because RETURN statements can reference declared variables. Only
-		// perform this step if there are no OUT parameters, since OUT parameters
-		// will have already determined the return type.
+		// block because RETURN statements can reference declared variables.
 		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s, astBlock)
 		ast.Walk(recordVisitor, astBlock)
-		b.returnType = recordVisitor.typ
+		if rtyp := recordVisitor.typ; rtyp == nil || rtyp.Identical(types.AnyTuple) {
+			// rtyp is nil when there is no RETURN statement in this block. rtyp
+			// can be AnyTuple when RETURN statement invokes a RECORD-returning
+			// UDF. We currently don't support such cases.
+			panic(wildcardReturnTypeErr)
+		} else if rtyp.Family() != types.UnknownFamily {
+			// Don't overwrite the wildcard type with Unknown one in case we
+			// have other blocks that have concrete type.
+			b.returnType = rtyp
+		}
 	}
 	// Build the exception handler. This has to happen after building the variable
 	// declarations, since the exception handler can reference the block's vars.
@@ -2153,7 +2160,7 @@ type recordTypeVisitor struct {
 func newRecordTypeVisitor(
 	ctx context.Context, semaCtx *tree.SemaContext, s *scope, block *ast.Block,
 ) *recordTypeVisitor {
-	return &recordTypeVisitor{ctx: ctx, semaCtx: semaCtx, s: s, typ: types.Unknown, block: block}
+	return &recordTypeVisitor{ctx: ctx, semaCtx: semaCtx, s: s, block: block}
 }
 
 var _ ast.StatementVisitor = &recordTypeVisitor{}
@@ -2169,7 +2176,7 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, re
 		}
 	case *ast.Return:
 		desired := types.Any
-		if r.typ.Family() != types.UnknownFamily {
+		if r.typ != nil && r.typ.Family() != types.UnknownFamily {
 			desired = r.typ
 		}
 		expr, _ := tree.WalkExpr(r.s, t.Expr)
@@ -2178,14 +2185,16 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, re
 			panic(err)
 		}
 		typ := typedExpr.ResolvedType()
-		if typ.Family() == types.UnknownFamily {
-			return stmt, false
-		}
-		if typ.Family() != types.TupleFamily {
+		switch typ.Family() {
+		case types.UnknownFamily, types.TupleFamily:
+		default:
 			panic(nonCompositeErr)
 		}
-		if r.typ.Family() == types.UnknownFamily {
+		if r.typ == nil || r.typ.Family() == types.UnknownFamily {
 			r.typ = typ
+			return stmt, false
+		}
+		if typ.Family() == types.UnknownFamily {
 			return stmt, false
 		}
 		if !typ.Identical(r.typ) {
@@ -2238,6 +2247,8 @@ var (
 		),
 		"try casting all RETURN statements to the same type",
 	)
+	wildcardReturnTypeErr = unimplemented.NewWithIssue(122945,
+		"wildcard return type is not yet supported in this context")
 	exitOutsideLoopErr = pgerror.New(pgcode.Syntax,
 		"EXIT cannot be used outside a loop, unless it has a label",
 	)
