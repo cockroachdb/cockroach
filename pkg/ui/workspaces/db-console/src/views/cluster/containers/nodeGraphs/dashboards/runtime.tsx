@@ -161,6 +161,24 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="GC Stopping Time"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`The time it takes from deciding to
+      stop-the-world (gc related) until all Ps are stopped
+        ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Duration} label="pause time">
+        <Metric
+          name="cr.node.sys.gc.stop.ns"
+          title="GC Stopping Time"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="GC Assist Time"
       sources={nodeSources}
       tenantSource={tenantSource}
@@ -172,6 +190,41 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.node.sys.gc.assist.ns"
           title="GC Assist Time"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Non-GC Pause Time"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`The stop-the-world pause time during
+      non-gc process ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Duration} label="pause time">
+        <Metric
+          name="cr.node.sys.go.pause.other.ns"
+          title="Non-GC Pause Time"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Non-GC Stopping Time"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`The time it takes from deciding to stop-the-world 
+      (non-gc-related) until all Ps are stopped
+      ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Duration} label="pause time">
+        <Metric
+          name="cr.node.sys.go.stop.other.ns"
+          title="Non-GC Stopping Time"
           nonNegativeRate
         />
       </Axis>
