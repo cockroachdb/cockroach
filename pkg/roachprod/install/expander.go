@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 )
@@ -192,16 +193,18 @@ func (e *expander) maybeExpandPgHost(
 		if err != nil {
 			return "", false, err
 		}
+		port := config.DefaultSQLPort
 		for _, svc := range services {
 			if svc.VirtualClusterName == virtualClusterName && svc.Instance == sqlInstance {
-				addr, err := c.FindLoadBalancer(l, svc.Port)
-				if err != nil {
-					return "", false, err
-				}
-				return addr.IP, true, nil
+				port = svc.Port
+				break
 			}
 		}
-		return "", false, err
+		addr, err := c.FindLoadBalancer(l, port)
+		if err != nil {
+			return "", false, err
+		}
+		return addr.IP, true, nil
 	default:
 		if e.pgHosts == nil {
 			var err error
