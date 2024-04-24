@@ -55,7 +55,12 @@ func runSQLStatsMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster
 	roachNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c,
-		roachNodes, mixedversion.MinimumSupportedVersion("v23.1.8"))
+		roachNodes,
+		// We test only upgrades from 23.2 in this test because it uses
+		// the `workload fixtures import` command, which is only supported
+		// reliably multi-tenant mode starting from that version.
+		mixedversion.MinimumSupportedVersion("v23.2.0"),
+	)
 	flushInterval := 2 * time.Minute
 
 	initWorkload := roachtestutil.NewCommand("./cockroach workload init tpcc").

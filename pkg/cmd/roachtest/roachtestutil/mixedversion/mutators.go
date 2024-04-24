@@ -64,8 +64,8 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 	for _, upgradeSelector := range randomUpgrades(rng, plan) {
 		removeExistingStep := upgradeSelector.
 			Filter(func(s *singleStep) bool {
-				_, ok := s.impl.(allowUpgradeStep)
-				return ok
+				step, ok := s.impl.(allowUpgradeStep)
+				return ok && step.virtualClusterName == install.SystemInterfaceName
 			}).
 			Remove()
 
@@ -84,10 +84,10 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 			// Note that we don't attempt a concurrent insert because the
 			// selected step could be one that restarts a cockroach node,
 			// and `allowUpgradeStep` could fail in that situation.
-			InsertBefore(allowUpgradeStep{})
+			InsertBefore(allowUpgradeStep{virtualClusterName: install.SystemInterfaceName})
 
 		// Finally, we update the context associated with every step where
-		// all nodes are running the next verison to indicate they are in
+		// all nodes are running the next version to indicate they are in
 		// fact in `Finalizing` state. Previously, this would only be set
 		// after `allowUpgradeStep` but, when this mutator is enabled,
 		// `Finalizing` should be `true` as soon as all nodes are on the

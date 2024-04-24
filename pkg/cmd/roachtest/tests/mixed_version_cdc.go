@@ -502,9 +502,11 @@ func canMixedVersionUseDeletedClusterSetting(
 func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	tester := newCDCMixedVersionTester(ctx, t, c)
 
-	// NB: We rely on the testing framework to choose a random predecessor
-	// to upgrade from.
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, tester.crdbNodes)
+	mvt := mixedversion.NewTest(
+		ctx, t, t.L(), c, tester.crdbNodes,
+		// Multi-tenant deployments are currently unsupported. See #127378.
+		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
+	)
 
 	cleanupKafka := tester.StartKafka(t, c)
 	defer cleanupKafka()

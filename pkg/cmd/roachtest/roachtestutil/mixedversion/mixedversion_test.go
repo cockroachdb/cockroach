@@ -111,6 +111,15 @@ func Test_assertValidTest(t *testing.T) {
 		fatalErr.Error(),
 	)
 
+	// an invalid deployment mode is chosen
+	mvt = newTest(EnabledDeploymentModes(SystemOnlyDeployment, "my-deployment"))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		`mixedversion.NewTest: invalid test options: unknown deployment mode "my-deployment"`,
+		fatalErr.Error(),
+	)
+
 	mvt = newTest(MinimumSupportedVersion("v22.2.0"))
 	assertValidTest(mvt, fatalFunc())
 	require.NoError(t, fatalErr)

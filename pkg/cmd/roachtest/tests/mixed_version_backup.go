@@ -2607,6 +2607,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 					mixedversion.ClusterSettingMutator("storage.ingest_split.enabled"),
 					mixedversion.ClusterSettingMutator("storage.sstable.compression_algorithm"),
 				),
+				// Multi-tenant deployments are currently unsupported. See #127378.
+				mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 			)
 			testRNG := mvt.RNG()
 

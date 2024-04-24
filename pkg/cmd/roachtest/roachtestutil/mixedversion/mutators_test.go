@@ -11,6 +11,7 @@
 package mixedversion
 
 import (
+	"fmt"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -69,7 +70,7 @@ func TestClusterSettingMutator(t *testing.T) {
 	// words, there should be at least one node running at least
 	// `minVersion`, so that we are able to service the cluster setting
 	// change request.
-	verifyVersionRequirement := func(minVersion *clusterupgrade.Version, m mutation) {
+	verifyVersionRequirement := func(minVersion *clusterupgrade.Version, m mutation, plan *TestPlan) {
 		if minVersion == nil {
 			return
 		}
@@ -86,7 +87,8 @@ func TestClusterSettingMutator(t *testing.T) {
 
 		require.NotEmpty(
 			t, nodesInValidVersion,
-			"attempting to change setting but no node can service request",
+			"attempting to change setting but no node can service request (minVersion: %s). Mutation:\n%s\nPlan:\n%s",
+			minVersion, fmt.Sprintf("op: %d | ref: %d", m.op, m.reference.ID), plan.PrettyPrint(),
 		)
 	}
 
@@ -109,7 +111,7 @@ func TestClusterSettingMutator(t *testing.T) {
 		// For every mutation:
 		var prevImpl singleStepProtocol
 		for j, m := range mutations {
-			verifyVersionRequirement(mut.minVersion, m)
+			verifyVersionRequirement(mut.minVersion, m, plan)
 
 			switch step := m.impl.(type) {
 			case setClusterSettingStep:
