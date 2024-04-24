@@ -15,7 +15,6 @@ go_library(
         "random.go",
         "result.go",
         "stock_level.go",
-        "timeutil.go",
         "tpcc.go",
         "worker.go",
     ],
