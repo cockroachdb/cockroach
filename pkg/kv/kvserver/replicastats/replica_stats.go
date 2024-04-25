@@ -11,7 +11,6 @@
 package replicastats
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -78,11 +77,10 @@ type ReplicaStats struct {
 	// require more memory than this slightly less precise windowing method:
 	//   http://dimacs.rutgers.edu/~graham/pubs/papers/fwddecay.pdf
 	idx int
-	// the window records are initialized once, then each window is reused
-	// internally by flipping an active field and clearing the fields.
-	records    [6]*replicaStatsRecord
+	// Each window record is reused internally by flipping an active field and
+	// clearing the fields.
+	records    [6]replicaStatsRecord
 	lastRotate time.Time
-	lastReset  time.Time
 
 	// Testing only.
 	avgRateForTesting float64
@@ -138,7 +136,7 @@ func (rsr *replicaStatsRecord) deactivate() {
 }
 
 // mergeReplicaStatsRecords combines the record passed in with the receiver.
-func (rsr *replicaStatsRecord) mergeReplicaStatsRecords(other *replicaStatsRecord) {
+func (rsr *replicaStatsRecord) mergeReplicaStatsRecords(other replicaStatsRecord) {
 	// If the other record is inactive, then there is nothing to merge into the
 	// resulting record. Otherwise, regardless of whether the resulting record
 	// was originally active or inactive, we should merge the stats in and
@@ -193,33 +191,23 @@ func NewReplicaStats(now time.Time, getNodeLocality LocalityOracle) *ReplicaStat
 	rs := &ReplicaStats{
 		getNodeLocality: getNodeLocality,
 	}
-
-	rs.lastRotate = now
-	for i := range rs.records {
-		rs.records[i] = &replicaStatsRecord{}
-		// Only create the locality counts when a locality oracle is given.
-		if getNodeLocality != nil {
+	// Only create the locality counts when a locality oracle is given.
+	if getNodeLocality != nil {
+		for i := range rs.records {
 			rs.records[i].localityCounts = &PerLocalityCounts{}
 		}
 	}
 	// Set the first record to active. All other records will be initially
 	// inactive and empty.
 	rs.records[rs.idx].activate()
-	rs.lastReset = rs.lastRotate
+	rs.lastRotate = now
 	return rs
 }
 
 // MergeRequestCounts joins the current ReplicaStats object with other, for the
 // purposes of merging a range.
 func (rs *ReplicaStats) MergeRequestCounts(other *ReplicaStats) {
-	// Sanity check that the request lengths are correct, if not we cannot
-	// merge them.
 	n := len(rs.records)
-	m := len(other.records)
-	if n != m {
-		panic(fmt.Sprintf("mismatching replicastats lengths %d!=%d impossible merge", n, m))
-	}
-
 	for i := range other.records {
 		rsIdx := (rs.idx + n - i) % n
 		otherIdx := (other.idx + n - i) % n
@@ -247,7 +235,6 @@ func (rs *ReplicaStats) MergeRequestCounts(other *ReplicaStats) {
 func (rs *ReplicaStats) SplitRequestCounts(other *ReplicaStats) {
 	other.idx = rs.idx
 	other.lastRotate = rs.lastRotate
-	other.lastReset = rs.lastReset
 
 	for i := range rs.records {
 		// When the lhs isn't active, set the rhs to inactive as well.
@@ -258,7 +245,7 @@ func (rs *ReplicaStats) SplitRequestCounts(other *ReplicaStats) {
 		// Otherwise, activate the rhs record and split the request count
 		// between the two.
 		other.records[i].activate()
-		rs.records[i].split(other.records[i])
+		rs.records[i].split(&other.records[i])
 	}
 }
 
@@ -266,7 +253,7 @@ func (rs *ReplicaStats) SplitRequestCounts(other *ReplicaStats) {
 func (rs *ReplicaStats) RecordCount(now time.Time, count float64, nodeID roachpb.NodeID) {
 	rs.maybeRotate(now)
 
-	record := rs.records[rs.idx]
+	record := &rs.records[rs.idx]
 	record.sum += count
 
 	if rs.getNodeLocality != nil {
@@ -383,7 +370,6 @@ func (rs *ReplicaStats) ResetRequestCounts(now time.Time) {
 	// Update the current idx record to be active.
 	rs.records[rs.idx].activate()
 	rs.lastRotate = now
-	rs.lastReset = rs.lastRotate
 }
 
 // SnapshotRatedSummary returns a RatedSummary representing a snapshot of the
