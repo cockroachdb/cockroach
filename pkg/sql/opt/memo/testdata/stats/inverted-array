@@ -69,7 +69,7 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans: ["", ""]
-      ├── stats: [rows=1020]
+      ├── stats: [rows=1000]
       ├── key: (1)
       └── scan t@a_idx
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -117,7 +117,7 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans: ["\x8a", "\x8c")
-      ├── stats: [rows=20]
+      ├── stats: [rows=19.60784]
       ├── key: (1)
       └── scan t@a_idx
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -170,7 +170,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) a:2(int[])
- │    ├── stats: [rows=20]
+ │    ├── stats: [rows=19.60784]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -180,7 +180,7 @@ select
  │         │    └── union spans
  │         │         ├── ["C", "C"]
  │         │         └── ["\x8a", "\x8a"]
- │         ├── stats: [rows=20]
+ │         ├── stats: [rows=19.60784]
  │         ├── key: (1)
  │         └── scan t@a_idx
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -209,7 +209,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) a:2(int[])
- │    ├── stats: [rows=30]
+ │    ├── stats: [rows=29.41176]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -219,7 +219,7 @@ select
  │         │    └── union spans
  │         │         ├── ["C", "C"]
  │         │         └── ["\x8a", "\x8c")
- │         ├── stats: [rows=30]
+ │         ├── stats: [rows=29.41176]
  │         ├── key: (1)
  │         └── scan t@a_idx
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -249,7 +249,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) a:2(int[])
- │    ├── stats: [rows=30]
+ │    ├── stats: [rows=29.41176]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -264,7 +264,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["\x8b", "\x8b"]
- │         ├── stats: [rows=30]
+ │         ├── stats: [rows=29.41176]
  │         ├── key: (1)
  │         └── scan t@a_idx
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
