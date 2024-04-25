@@ -650,7 +650,7 @@ func TestReplicaStatsRecordAggregate(t *testing.T) {
 		awsLocalities[2]: 2 * expectedSum,
 		awsLocalities[3]: 3 * expectedSum,
 	}
-	expectedStatsRecord := &replicaStatsRecord{
+	expectedStatsRecord := replicaStatsRecord{
 		localityCounts: &expectedLocalityCounts,
 		sum:            expectedSum * 6,
 		active:         true,
