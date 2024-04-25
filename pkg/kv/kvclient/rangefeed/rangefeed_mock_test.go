@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -44,6 +46,7 @@ type mockClient struct {
 		spans []roachpb.Span,
 		asOf hlc.Timestamp,
 		rowFn func(value roachpb.KeyValue),
+		rowsFn func(values []kv.KeyValue),
 		cfg rangefeed.ScanConfig,
 	) error
 }
@@ -63,9 +66,10 @@ func (m *mockClient) Scan(
 	spans []roachpb.Span,
 	asOf hlc.Timestamp,
 	rowFn func(value roachpb.KeyValue),
+	rowsFn func(values []kv.KeyValue),
 	cfg rangefeed.ScanConfig,
 ) error {
-	return m.scan(ctx, spans, asOf, rowFn, cfg)
+	return m.scan(ctx, spans, asOf, rowFn, rowsFn, cfg)
 }
 
 var _ rangefeed.KVDB = (*mockClient)(nil)
@@ -96,7 +100,7 @@ func TestRangeFeedMock(t *testing.T) {
 		const numFailures = 2
 		mc := mockClient{
 			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
-				rowFn func(value roachpb.KeyValue), cfg rangefeed.ScanConfig) error {
+				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), cfg rangefeed.ScanConfig) error {
 				assert.Equal(t, ts, asOf)
 				assert.Equal(t, []roachpb.Span{sp}, spans)
 				rowFn(row)
@@ -157,7 +161,7 @@ func TestRangeFeedMock(t *testing.T) {
 		mc := mockClient{
 			scan: func(
 				ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
-				rowFn func(value roachpb.KeyValue), config rangefeed.ScanConfig,
+				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), config rangefeed.ScanConfig,
 			) error {
 				t.Error("this should not be called")
 				return nil
@@ -260,7 +264,7 @@ func TestRangeFeedMock(t *testing.T) {
 		}
 		mc := mockClient{
 			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
-				rowFn func(value roachpb.KeyValue), config rangefeed.ScanConfig,
+				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), config rangefeed.ScanConfig,
 			) error {
 				t.Error("this should not be called")
 				return nil
@@ -316,7 +320,7 @@ func TestRangeFeedMock(t *testing.T) {
 		var called int
 		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{
 			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
-				rowFn func(value roachpb.KeyValue), config rangefeed.ScanConfig) error {
+				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), config rangefeed.ScanConfig) error {
 				return errors.New("boom")
 			},
 		}, nil /* knobs */)
@@ -338,6 +342,79 @@ func TestRangeFeedMock(t *testing.T) {
 		<-done
 		r.Close()
 	})
+
+	// Test that the initial scan of [a, z) makes progress and completes even when
+	// the rangefeed is being fully restarted after errors during its initial scan
+	// such as might happen if a job running a rangefeed is replans or restarts,
+	// so long as that job passes progress previously made and persisted to the
+	// restarted rangefeed via a frontier. In this test the persistance of the
+	// frontier is simply that it is outside the loop used to run each rangefeed
+	// but in a job a frontier visitor would likely be copying state out of tthe
+	// rangefeed's frontier while it is running and persisting it somewhere to be
+	// used to construct a new but non-empty frontier to pass to resumptions.
+	t.Run("initial scan resumed from frontier makes progress", func(t *testing.T) {
+		stopper := stop.NewStopper()
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
+
+		s := func(s, e string) roachpb.Span {
+			return roachpb.Span{Key: roachpb.Key(s), EndKey: roachpb.Key(e)}
+		}
+
+		// Valid result spans represent partial successes while invalid spans here
+		// result in synthetic scan errors.
+		scanResults := []roachpb.Span{
+			s("a", "c"), s("c", "f"), s("f", "g"), s("g", "z"),
+		}
+		resultCh := make(chan roachpb.Span, len(scanResults))
+		for _, sp := range scanResults {
+			resultCh <- sp
+		}
+
+		// Mock a rangefeed whose scan results will be partial successes or errors
+		// from the above channel, and for which successfully "scanned" spans will
+		// call the usual rangefeed initial scan span complete callback.
+		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{
+			scan: func(ctx context.Context, requested []roachpb.Span, _ hlc.Timestamp,
+				rowFn func(_ roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), cfg rangefeed.ScanConfig) error {
+				res := <-resultCh
+				if err := cfg.OnSpanDone(ctx, res); err != nil {
+					return err
+				}
+				require.Equal(t, res.Key, requested[0].Key, "rangefeed should have tried to scan remaining span")
+				return errors.New("err")
+			},
+		}, nil)
+
+		frontier, err := span.MakeFrontier(s("a", "z"))
+		require.NoError(t, err)
+		defer frontier.Release()
+
+		var runs int
+		done := false
+		// Run our rangefeed up to 5 times, or until it reports completing its
+		// initial scan, simulating a job performing an initial scan restarting.
+		for ; !done && runs < 5; runs++ {
+			// Sanity check that our frontier isn't empty (i.e. wasn't Released).
+			require.Greater(t, frontier.Len(), 0, frontier.String())
+			// Create a rangefeed that will abort on scan error, to give our test a
+			// chance to stop it and create a new one, similar to how a real one might
+			// get recreated if a job is resumed or replanned after something like a
+			// node restart or liveness failure.
+			r := f.New("test", hlc.Timestamp{WallTime: 1},
+				func(_ context.Context, _ *kvpb.RangeFeedValue) {},
+				rangefeed.WithInitialScan(func(_ context.Context) { done = true }),
+				rangefeed.WithOnInitialScanError(func(_ context.Context, _ error) (shouldFail bool) {
+					return true
+				}),
+			)
+			err := r.StartFromFrontier(ctx, frontier)
+			require.NoError(t, err)
+			r.Close()
+		}
+		require.True(t, done)
+		require.Equal(t, 5, runs)
+	})
 }
 
 // TestBackoffOnRangefeedFailure ensures that the rangefeed is retried on
@@ -353,8 +430,8 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 	db := rangefeed.NewMockDB(ctrl)
 
 	// Make sure scan failure gets retried.
-	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("scan failed"))
-	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("scan failed"))
+	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
 	// Make sure rangefeed is retried even after 3 failures, then succeed and cancel context
 	// (which signals the rangefeed to shut down gracefully).
@@ -369,7 +446,7 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 
 	f := rangefeed.NewFactoryWithDB(stopper, db, nil /* knobs */)
 	r, err := f.RangeFeed(ctx, "foo",
-		[]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}},
+		[]roachpb.Span{{Key: keys.TableDataMin, EndKey: keys.TableDataMax}},
 		hlc.Timestamp{},
 		func(ctx context.Context, value *kvpb.RangeFeedValue) {},
 		rangefeed.WithInitialScan(func(ctx context.Context) {}),

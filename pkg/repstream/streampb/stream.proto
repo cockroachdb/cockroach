@@ -113,6 +113,9 @@ message StreamPartitionSpec {
   ExecutionConfig config = 3 [(gogoproto.nullable) = false];
 
   int32 consumer_id = 5 [(gogoproto.customname) = "ConsumerID"];
+
+  // Progress describes previous progress made towards replicating these spans.
+  repeated cockroach.sql.jobs.jobspb.ResolvedSpan progress = 6  [(gogoproto.nullable) = false];
 }
 
 // SpanConfigEventStreamSpec is the span config event stream specification.

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
@@ -144,7 +143,7 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 	sub, err := client.Subscribe(ctx, replicationProducerSpec.StreamID, 1,
 		spsBytes,
 		sps.InitialScanTimestamp,
-		hlc.Timestamp{})
+		nil)
 	if err != nil {
 		return err
 	}
