@@ -410,9 +410,15 @@ func (c *serverController) newServerForOrchestrator(
 // Close implements the stop.Closer interface.
 func (c *serverController) Close() {
 	ctx := c.AnnotateCtx(context.Background())
-	log.Infof(ctx, "server controller shutting down ungracefully")
-	// Note Close() is only called in the case of expedited shutdown.
-	// It should not invoke the graceful drain process.
+	if c.draining.Get() {
+		// If the drain was requested, then we assume that Close is called on
+		// the graceful path (it's called by the parent stopper).
+		log.Infof(ctx, "server controller shutting down after drain request")
+	} else {
+		// Close is invoked via the parent stopper without a prior drain -
+		// consider this ungraceful shutdown.
+		log.Infof(ctx, "server controller shutting down ungracefully")
+	}
 	entries := c.getAllEntries()
 	// Request immediate shutdown. This is probably not needed; the
 	// server should already be sensitive to the parent stopper
