@@ -165,6 +165,7 @@ func (s *Receiver) onRecvErr(ctx context.Context, nodeID roachpb.NodeID, err err
 // timestamp information. It maintains the latest closed timestamps communicated
 // by the sender node.
 type incomingStream struct {
+	log.AmbientContext
 	// The server that created this stream.
 	server       *Receiver
 	stores       Stores
@@ -324,6 +325,8 @@ func (r *incomingStream) Run(
 				if !msg.Snapshot {
 					log.Fatal(ctx, "expected the first message to be a snapshot")
 				}
+				r.AddLogTag("remote", r.nodeID)
+				ctx = r.AnnotateCtx(ctx)
 			}
 
 			r.processUpdate(ctx, msg)
