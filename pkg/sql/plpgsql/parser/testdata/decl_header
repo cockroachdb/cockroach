@@ -255,6 +255,9 @@ DETAIL: source SQL:
 DECLARE
   var1 xy%ROWTYPE;
           ^
+HINT: you may have attempted to use %TYPE or %ROWTYPE syntax, which is unsupported.
+--
+See: https://go.crdb.dev/issue-v/114676/
 
 error
 DECLARE
@@ -269,3 +272,6 @@ DECLARE
   var1 INT;
   var2 var1%TYPE;
             ^
+HINT: you may have attempted to use %TYPE or %ROWTYPE syntax, which is unsupported.
+--
+See: https://go.crdb.dev/issue-v/114676/
