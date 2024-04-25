@@ -7821,3 +7821,64 @@ func TestMemoryMonitorErrorsDuringBackfillAreRetried(t *testing.T) {
 		require.Equalf(t, shouldFail.Load(), int64(2), "not all failure conditions were hit %d", shouldFail.Load())
 	})
 }
+
+// TestGrantAndSelectsWithinTransaction tests two concurrent
+// transactions on tables, where one transaction is a grant.
+// We verify that grants on tables no longer creates a job(s).
+// We also verify that the second transaction does wait for
+// the first transaction to commit.
+func TestGrantAndSelectsWithinTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	connection1 := sqlutils.MakeSQLRunner(sqlDB)
+	connection2 := sqlutils.MakeSQLRunner(sqlDB)
+
+	connection1.Exec(t, `CREATE USER ROACHMIN;`)
+	connection1.Exec(t, `GRANT ADMIN TO ROACHMIN;`)
+	connection1.Exec(t, `CREATE TABLE PROMO_CODES (my_int INT);`)
+	connection1.Exec(t, `CREATE TABLE RIDES (my_int INT);`)
+
+	transaction1 := connection1.Begin(t)
+	transaction1.Exec(`SELECT * FROM PROMO_CODES;`)
+
+	messages := make(chan struct{})
+
+	group := ctxgroup.WithContext(ctx)
+	group.Go(func() error {
+		// wait for channel before starting the sleep
+		<-messages
+		// we sleep on transaction1 which should hold transaction2
+		time.Sleep(2 * time.Second)
+		err := transaction1.Commit()
+		return err
+	})
+
+	resBefore := connection2.QueryStr(t, `select count(*) from [show jobs];`)
+
+	transaction2 := connection2.Begin(t)
+	transaction2.Exec(`GRANT ALL ON TABLE PROMO_CODES TO ROACHMIN;`)
+	transaction2.Exec(`GRANT ALL ON TABLE RIDES TO ROACHMIN;`)
+
+	// close channel to start sleep timer in go routine
+	close(messages)
+	startTime := timeutil.Now()
+
+	err := transaction2.Commit()
+	duration := timeutil.Since(startTime)
+
+	err = group.Wait()
+	// we verify that transaction2 did hold, it should hold for up to
+	// 2 seconds, so we check that the duration is at least 1.5 seconds
+	require.True(t, duration > 1500*time.Millisecond)
+	require.NoError(t, err)
+
+	resAfter := connection2.QueryStr(t, `select count(*) from [show jobs];`)
+	// no new jobs should have been created between resBefore to resAfter
+	require.True(t, resBefore[0][0] == resAfter[0][0])
+
+}
