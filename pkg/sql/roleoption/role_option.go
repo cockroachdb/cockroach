@@ -222,9 +222,11 @@ func MakeListFromKVOptions(
 					return err
 				}
 				if u.IsRootUser() {
-					return pgerror.Newf(pgcode.InvalidParameterValue, "role %q cannot have a SUBJECT", u,
+					return errors.WithDetailf(
+						pgerror.Newf(pgcode.InvalidParameterValue, "role %q cannot have a SUBJECT", u),
 						"use the --%s CLI flag to configure root",
-						cliflags.RootCertDistinguishedName.Name)
+						cliflags.RootCertDistinguishedName.Name,
+					)
 				}
 				if err := distinguishedname.ValidateDN(s); err != nil {
 					return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
