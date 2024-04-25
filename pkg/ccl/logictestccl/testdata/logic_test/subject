@@ -1,7 +1,7 @@
 # LogicTest: !local-mixed-23.2
 # Tests for parsing/validation of the SUBJECT role option.
 
-statement error role "root" cannot have a SUBJECT
+statement error role "root" cannot have a SUBJECT\n.*use the --root-cert-distinguished-name CLI flag
 ALTER ROLE root SUBJECT 'O=US, CN=John Doe'
 
 statement error failed to parse distinguished name foo: DN ended with incomplete type, value pair
