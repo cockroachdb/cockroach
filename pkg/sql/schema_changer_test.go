@@ -7821,3 +7821,58 @@ func TestMemoryMonitorErrorsDuringBackfillAreRetried(t *testing.T) {
 		require.Equalf(t, shouldFail.Load(), int64(2), "not all failure conditions were hit %d", shouldFail.Load())
 	})
 }
+
+// TestLeaseTimeoutWithConcurrentTransactions tests two concurrent transactions
+// on tables, we verify that the second transaction waits for the first
+// transaction to commit or for the lease to expire.
+func TestLeaseTimeoutWithConcurrentTransactions(t *testing.T) {
+	skip.UnderDuress(t, "slow test")
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	settings := cluster.MakeTestingClusterSettings()
+	lease.LeaseDuration.Override(ctx, &settings.SV, 15*time.Second)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: settings})
+	defer s.Stopper().Stop(ctx)
+
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+
+	sqlRunner.Exec(t, `CREATE USER ROACHMIN;`)
+	sqlRunner.Exec(t, `GRANT ADMIN TO ROACHMIN;`)
+	sqlRunner.Exec(t, `CREATE TABLE PROMO_CODES (my_int INT);`)
+	sqlRunner.Exec(t, `CREATE TABLE RIDES (my_int INT);`)
+
+	txn1 := sqlRunner.Begin(t)
+	txn1.Exec(`SELECT * FROM PROMO_CODES;`)
+
+	txn2 := sqlRunner.Begin(t)
+	txn2.Exec(`GRANT ALL ON TABLE PROMO_CODES TO ROACHMIN;`)
+	txn2.Exec(`GRANT ALL ON TABLE RIDES TO ROACHMIN;`)
+
+	var duration time.Duration
+	blocker := make(chan struct{})
+	group := ctxgroup.WithContext(ctx)
+
+	group.GoCtx(func(ctx context.Context) error {
+		startTime := timeutil.Now()
+		err := txn2.Commit()
+		duration = timeutil.Since(startTime)
+		close(blocker)
+		return err
+	})
+
+	<-blocker
+	_, err := txn1.Exec("INSERT INTO promo_codes values (1)")
+	require.NoError(t, err)
+
+	// txn1.commit() completes with an error due to lease timeout on txn2.commit().
+	err = txn1.Commit()
+	require.ErrorContains(t, err, "RETRY_COMMIT_DEADLINE_EXCEEDED")
+
+	err = group.Wait()
+	require.NoError(t, err)
+
+	require.Greaterf(t, duration, 15*time.Second, "transaction2 did not hold for at least 15 seconds")
+}
