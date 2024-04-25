@@ -672,8 +672,6 @@ func TestPartitionSpans(t *testing.T) {
 
 		locFilter string
 
-		withoutMerging bool
-
 		// expected result: a map of node to list of spans.
 		partitions      map[int][][2]string
 		partitionStates []string
@@ -966,34 +964,6 @@ func TestPartitionSpans(t *testing.T) {
 				totalPartitionSpans: 2,
 			},
 		},
-		// A single span touching multiple ranges but on the same node results
-		// in a multiple partitioned span iff ParitionSpansWithoutMerging is used.
-		{
-			withoutMerging: true,
-			ranges:         []testSpanResolverRange{{"A", 1}, {"A1", 1}, {"B", 2}},
-			gatewayNode:    1,
-
-			spans: [][2]string{{"A", "B"}},
-
-			partitions: map[int][][2]string{
-				1: {{"A", "A1"}, {"A1", "B"}},
-			},
-
-			partitionStates: []string{
-				"partition span: A{-1}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
-			},
-
-			partitionState: spanPartitionState{
-				partitionSpans: map[base.SQLInstanceID]int{
-					1: 2,
-				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 2,
-				},
-				totalPartitionSpans: 2,
-			},
-		},
 		// Test some locality-filtered planning too.
 		//
 		// Since this test is run on a system tenant but there is a locality filter,
@@ -1235,17 +1205,11 @@ func TestPartitionSpans(t *testing.T) {
 			for _, s := range tc.spans {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
 			}
-			var partitions []SpanPartition
-			var err error
-			if tc.withoutMerging {
-				partitions, err = dsp.PartitionSpansWithoutMerging(ctx, planCtx, spans)
-			} else {
-				partitions, err = dsp.PartitionSpans(ctx, planCtx, spans)
-			}
+
+			partitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
 			if err != nil {
 				t.Fatal(err)
 			}
-
 			countRanges := func(parts []SpanPartition) (count int) {
 				for _, sp := range parts {
 					ri := tsp.NewSpanResolverIterator(nil, nil)

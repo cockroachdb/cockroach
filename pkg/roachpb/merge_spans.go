@@ -101,16 +101,6 @@ func MergeSpans(spans *[]Span) ([]Span, bool) {
 	return r, distinct
 }
 
-// SubtractSpansWithCopy is the same thing as Subtract spans, but copies the
-// todo span first so it can be used after this function call.
-func SubtractSpansWithCopy(todo, done Spans) Spans {
-	newTodo := make(Spans, 0, len(todo))
-	for i := range todo {
-		newTodo = append(newTodo, todo[i].Clone())
-	}
-	return SubtractSpans(newTodo, done)
-}
-
 // SubtractSpans subtracts the subspans covered by a set of non-overlapping
 // spans from another set of non-overlapping spans.
 //

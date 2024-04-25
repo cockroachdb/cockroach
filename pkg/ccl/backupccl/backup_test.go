@@ -539,7 +539,7 @@ func TestBackupManifestFileCount(t *testing.T) {
 	const numAccounts = 1000
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	sqlDB.Exec(t, "BACKUP DATABASE data INTO 'userfile:///backup'")
+	sqlDB.Exec(t, "BACKUP INTO 'userfile:///backup'")
 	rows := sqlDB.QueryRow(t, "SELECT count(distinct(path)) FROM [SHOW BACKUP FILES FROM LATEST IN 'userfile:///backup']")
 	var count int
 	rows.Scan(&count)
@@ -6290,7 +6290,7 @@ func TestPublicIndexTableSpans(t *testing.T) {
 			pkIndex:             getMockIndexDesc(1),
 			indexes:             []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
 			expectedSpans:       []string{"/Table/55/{1-2}", "/Table/55/{2-3}"},
-			expectedMergedSpans: []string{"/Table/55/{1-2}", "/Table/55/{2-3}"},
+			expectedMergedSpans: []string{"/Table/55/{1-3}"},
 		},
 		{
 			name:                "dropped-span-between-two-spans",
@@ -6356,7 +6356,7 @@ func TestPublicIndexTableSpans(t *testing.T) {
 			},
 			addingIndexes:       []descpb.IndexDescriptor{getMockIndexDesc(2)},
 			expectedSpans:       []string{"/Table/61/{1-2}", "/Table/61/{3-4}", "/Table/61/{4-5}"},
-			expectedMergedSpans: []string{"/Table/61/{1-2}", "/Table/61/{3-4}", "/Table/61/{4-5}"},
+			expectedMergedSpans: []string{"/Table/61/{1-2}", "/Table/61/{3-5}"},
 		},
 	}
 
