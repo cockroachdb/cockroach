@@ -17,9 +17,6 @@ import { Col, Row, Tabs } from "antd";
 
 import { commonStyles } from "src/common";
 import { Button } from "src/button";
-import "antd/lib/tabs/style";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import { SqlBox, SqlBoxSize } from "src/sql/box";
 import { getMatchParamByName } from "src/util/query";
 import {

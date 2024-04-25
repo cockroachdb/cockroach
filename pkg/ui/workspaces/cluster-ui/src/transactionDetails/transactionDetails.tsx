@@ -20,8 +20,6 @@ import {
   Heading,
 } from "@cockroachlabs/ui-components";
 import { Col, Row } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import Long from "long";
 import get from "lodash/get";

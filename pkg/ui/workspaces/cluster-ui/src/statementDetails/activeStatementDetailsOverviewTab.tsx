@@ -46,7 +46,7 @@ export const ActiveStatementDetailsOverviewTab = ({
   return (
     <>
       <section className={cx("section", "section--container")}>
-        <Row gutter={24} type="flex">
+        <Row gutter={24}>
           <Col className="gutter-row" span={12}>
             <SummaryCard className={cx("summary-card")}>
               <SummaryCardItem
