@@ -33,7 +33,7 @@ select
  ├── index-join a
  │    ├── columns: a:1(string)
  │    ├── stats: [rows=111.1111]
- │    └── scan a@inv
+ │    └── scan a@inv,inverted
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted constraint: /5/2
  │         │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
@@ -108,7 +108,7 @@ select
  │         │              └── union spans: ["\x12lah\x00\x01", "\x12lah\x00\x01"]
  │         ├── stats: [rows=111.1111]
  │         ├── key: (2)
- │         └── scan a@inv
+ │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans
@@ -242,7 +242,7 @@ select
  │         │              └── union spans: ["\x12lah\x00\x01", "\x12lah\x00\x01"]
  │         ├── stats: [rows=20]
  │         ├── key: (2)
- │         └── scan a@inv
+ │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans
@@ -280,7 +280,7 @@ select
  │         │              └── union spans: ["\x12zoo\x00\x01", "\x12zoo\x00\x01"]
  │         ├── stats: [rows=1980]
  │         ├── key: (2)
- │         └── scan a@inv
+ │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans
@@ -311,7 +311,7 @@ select
  │         ├── grouping columns: rowid:2(int!null)
  │         ├── stats: [rows=8, distinct(2)=8, null(2)=0]
  │         ├── key: (2)
- │         └── scan a@inv
+ │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null)
  │              ├── constraint: /5
  │              │    ├── [/'\x1220626c0001' - /'\x1220626c0001']
@@ -339,7 +339,7 @@ select
  │         ├── grouping columns: rowid:2(int!null)
  │         ├── stats: [rows=8, distinct(2)=8, null(2)=0]
  │         ├── key: (2)
- │         └── scan a@inv
+ │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null)
  │              ├── constraint: /5
  │              │    ├── [/'\x1220626c0001' - /'\x1220626c0001']
@@ -368,7 +368,7 @@ select
  │         ├── grouping columns: rowid:2(int!null)
  │         ├── stats: [rows=2, distinct(2)=2, null(2)=0]
  │         ├── key: (2)
- │         └── scan a@inv
+ │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null)
  │              ├── constraint: /5: [/'\x126c61680001' - /'\x126c61680001']
  │              └── stats: [rows=10, distinct(2)=2, null(2)=0, distinct(5)=1, null(5)=0]
@@ -488,7 +488,7 @@ select
  │         │              └── union spans: ["\x12lah\x00\x01", "\x12lah\x00\x01"]
  │         ├── stats: [rows=20]
  │         ├── key: (2)
- │         └── scan a@inv
+ │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans
@@ -526,7 +526,7 @@ select
  │         │              └── union spans: ["\x12zoo\x00\x01", "\x12zoo\x00\x01"]
  │         ├── stats: [rows=1980]
  │         ├── key: (2)
- │         └── scan a@inv
+ │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans

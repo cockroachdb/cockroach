@@ -1023,7 +1023,7 @@ scalar-group-by
  │    │         ├── pre-filterer expression
  │    │         │    └── st_intersects('0103000020E610000001000000050000000000000000000000000000000000000000000000000000000000000000005940000000000000594000000000000059400000000000005940000000000000000000000000000000000000000000000000', geom:1)
  │    │         ├── key: (4)
- │    │         └── scan geom_geog@geom_geog_geom_idx
+ │    │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │    │              ├── columns: rowid:4!null geom_inverted_key:7!null
  │    │              ├── inverted constraint: /7/4
  │    │              │    └── spans

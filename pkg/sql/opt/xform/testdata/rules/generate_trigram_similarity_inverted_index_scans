@@ -32,7 +32,7 @@ project
       │         ├── columns: k:1!null
       │         ├── grouping columns: k:1!null
       │         ├── key: (1)
-      │         └── scan trgm@s_idx
+      │         └── scan trgm@s_idx,inverted
       │              ├── columns: k:1!null
       │              └── constraint: /7
       │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
@@ -59,7 +59,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
@@ -87,7 +87,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7: [/'\x12666f6f0001' - /'\x12666f6f0001']
  └── filters
@@ -110,7 +110,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
@@ -136,7 +136,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
@@ -163,7 +163,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
@@ -191,7 +191,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7
  │                   ├── [/'\x126172200001' - /'\x126172200001']
@@ -220,7 +220,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@i_j_s_idx
+ │         └── scan trgm@i_j_s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /2/3/8
  │                   ├── [/1/10/'\x1220666f0001' - /1/10/'\x1220666f0001']
@@ -253,7 +253,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@i_j_s_idx
+ │         └── scan trgm@i_j_s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /2/3/8
  │                   ├── [/1/10/'\x1220666f0001' - /1/10/'\x1220666f0001']
@@ -353,7 +353,7 @@ project
       │         │         ├── ["\x12 fo\x00\x01", "\x12 fo\x00\x01"]
       │         │         ├── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
       │         │         └── ["\x12oo \x00\x01", "\x12oo \x00\x01"]
-      │         └── scan trgm@s_idx
+      │         └── scan trgm@s_idx,inverted
       │              └── inverted constraint: /7/1
       │                   └── spans
       │                        ├── ["\x12  f\x00\x01", "\x12  f\x00\x01"]

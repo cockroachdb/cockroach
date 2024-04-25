@@ -130,9 +130,9 @@ memo (optimized, ~14KB, required=[presentation: i:1])
  │         ├── best: (inverted-filter G12 g_inverted_key)
  │         └── cost: 1272.99
  ├── G11: (scalar-list G13 G14)
- ├── G12: (scan t@t_g_idx,cols=(3,6),constrained inverted)
+ ├── G12: (scan t@t_g_idx,inverted,cols=(3,6),constrained inverted)
  │    └── []
- │         ├── best: (scan t@t_g_idx,cols=(3,6),constrained inverted)
+ │         ├── best: (scan t@t_g_idx,inverted,cols=(3,6),constrained inverted)
  │         └── cost: 1261.09
  ├── G13: (const '010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F')
  └── G14: (variable g)
@@ -180,7 +180,7 @@ project
       │    │              │    └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool]
       │    │              ├── stats: [rows=1.4e-06]
       │    │              ├── key: (3)
-      │    │              └── scan t@t_g_idx
+      │    │              └── scan t@t_g_idx,inverted
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
       │    │                   ├── inverted constraint: /6/3
       │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
@@ -234,9 +234,9 @@ memo (optimized, ~14KB, required=[presentation: i:1])
  │         ├── best: (inverted-filter G12 g_inverted_key)
  │         └── cost: 18.04
  ├── G11: (scalar-list G13 G14)
- ├── G12: (scan t@t_g_idx,cols=(3,6),constrained inverted)
+ ├── G12: (scan t@t_g_idx,inverted,cols=(3,6),constrained inverted)
  │    └── []
- │         ├── best: (scan t@t_g_idx,cols=(3,6),constrained inverted)
+ │         ├── best: (scan t@t_g_idx,inverted,cols=(3,6),constrained inverted)
  │         └── cost: 18.02
  ├── G13: (const '010200000002000000000000000000594000000000000059400000000000C062400000000000C06240')
  └── G14: (variable g)
@@ -400,7 +400,7 @@ project
       │    │              │    └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool]
       │    │              ├── stats: [rows=1.42e-06]
       │    │              ├── key: (3)
-      │    │              └── scan t@t_g_idx
+      │    │              └── scan t@t_g_idx,inverted
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
       │    │                   ├── inverted constraint: /6/3
       │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
@@ -479,7 +479,7 @@ select
  │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
  │         ├── stats: [rows=100]
  │         ├── key: (3)
- │         └── scan t@t_g_idx
+ │         └── scan t@t_g_idx,inverted
  │              ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
  │              ├── inverted constraint: /6/3
  │              │    └── spans
@@ -521,7 +521,7 @@ project
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=100]
       │         ├── key: (3)
-      │         └── scan t@t_g_idx
+      │         └── scan t@t_g_idx,inverted
       │              ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
       │              ├── inverted constraint: /6/3
       │              │    └── spans

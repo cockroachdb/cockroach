@@ -89,7 +89,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan a@j
+ └── scan a@j,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /8/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -103,7 +103,7 @@ SELECT k + 1 FROM a WHERE j @> '{"a": "b"}'
 project
  ├── columns: "?column?":9!null
  ├── immutable
- ├── scan a@j
+ ├── scan a@j,inverted
  │    ├── columns: k:1!null
  │    ├── inverted constraint: /8/1
  │    │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
@@ -120,7 +120,7 @@ SELECT j FROM a WHERE j @> '{"a": "b"}'
 index-join a
  ├── columns: j:5!null
  ├── immutable
- └── scan a@j
+ └── scan a@j,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /8/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
