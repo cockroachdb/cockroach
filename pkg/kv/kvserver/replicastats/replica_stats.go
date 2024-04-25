@@ -11,7 +11,6 @@
 package replicastats
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -212,14 +211,7 @@ func NewReplicaStats(now time.Time, getNodeLocality LocalityOracle) *ReplicaStat
 // MergeRequestCounts joins the current ReplicaStats object with other, for the
 // purposes of merging a range.
 func (rs *ReplicaStats) MergeRequestCounts(other *ReplicaStats) {
-	// Sanity check that the request lengths are correct, if not we cannot
-	// merge them.
 	n := len(rs.records)
-	m := len(other.records)
-	if n != m {
-		panic(fmt.Sprintf("mismatching replicastats lengths %d!=%d impossible merge", n, m))
-	}
-
 	for i := range other.records {
 		rsIdx := (rs.idx + n - i) % n
 		otherIdx := (other.idx + n - i) % n
