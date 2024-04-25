@@ -7821,3 +7821,58 @@ func TestMemoryMonitorErrorsDuringBackfillAreRetried(t *testing.T) {
 		require.Equalf(t, shouldFail.Load(), int64(2), "not all failure conditions were hit %d", shouldFail.Load())
 	})
 }
+
+// TestGrantAndSelectsWithinTransaction tests two concurrent
+// transactions on tables, where one transaction is a grant.
+// We verify that grants on tables no longer creates a job(s).
+// We also verify that the second transaction does wait for
+// the first transaction to commit.
+func TestGrantAndSelectsWithinTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+
+	sqlRunner.Exec(t, `CREATE USER ROACHMIN;`)
+	sqlRunner.Exec(t, `GRANT ADMIN TO ROACHMIN;`)
+	sqlRunner.Exec(t, `CREATE TABLE PROMO_CODES (my_int INT);`)
+	sqlRunner.Exec(t, `CREATE TABLE RIDES (my_int INT);`)
+
+	txn1 := sqlRunner.Begin(t)
+	txn1.Exec(`SELECT * FROM PROMO_CODES;`)
+
+	resBefore := sqlRunner.QueryStr(t, `select count(*) from [show jobs];`)
+
+	txn2 := sqlRunner.Begin(t)
+	txn2.Exec(`GRANT ALL ON TABLE PROMO_CODES TO ROACHMIN;`)
+	txn2.Exec(`GRANT ALL ON TABLE RIDES TO ROACHMIN;`)
+
+	var txn2Committed syncutil.AtomicBool
+	group := ctxgroup.WithContext(ctx)
+
+	group.GoCtx(func(ctx context.Context) error {
+		err := txn2.Commit()
+		txn2Committed.Set(true)
+		return err
+	})
+
+	group.GoCtx(func(ctx context.Context) error {
+		if txn2Committed.Get() {
+			return errors.New("transaction 2 committed before transaction 1")
+		}
+		err := txn1.Commit()
+		return err
+	})
+
+	err := group.Wait()
+	require.NoError(t, err)
+
+	resAfter := sqlRunner.QueryStr(t, `select count(*) from [show jobs];`)
+	// No new jobs should have been created between resBefore to resAfter.
+	require.True(t, resBefore[0][0] == resAfter[0][0])
+
+}
