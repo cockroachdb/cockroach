@@ -393,15 +393,6 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 			}
 
 		case *tabledesc.Mutable:
-			// TODO (lucy): This should probably have a single consolidated job like
-			// DROP DATABASE.
-			if err := p.createOrUpdateSchemaChangeJob(
-				ctx, d,
-				fmt.Sprintf("updating privileges for table %d", d.ID),
-				descpb.InvalidMutationID,
-			); err != nil {
-				return err
-			}
 			if !d.Dropped() {
 				if err := p.writeSchemaChangeToBatch(ctx, d, b); err != nil {
 					return err
@@ -419,7 +410,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 				})
 			}
 		case *typedesc.Mutable:
-			err := p.writeTypeSchemaChange(ctx, d, fmt.Sprintf("updating privileges for type %d", d.ID))
+			err := p.writeDescToBatch(ctx, d, b)
 			if err != nil {
 				return err
 			}
