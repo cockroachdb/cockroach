@@ -11,8 +11,6 @@
 import React, { useContext, useState } from "react";
 import { Heading } from "@cockroachlabs/ui-components";
 import { Col, Row } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import {
@@ -148,7 +146,7 @@ the maximum number of statements was reached in the console.`;
           </Row>
           {txnDetails && (
             <>
-              <Row gutter={24} type="flex">
+              <Row gutter={24}>
                 <Col span={12}>
                   <SummaryCard>
                     <SummaryCardItem

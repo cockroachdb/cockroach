@@ -9,8 +9,6 @@
 // licenses/APL.txt.
 
 import { Col, Row } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import classNames from "classnames/bind";
 import React from "react";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";

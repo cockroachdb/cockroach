@@ -10,13 +10,9 @@
 
 import React from "react";
 import { Col, Row, Tabs, Tooltip } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
-import "antd/lib/tabs/style";
 import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
 import classnames from "classnames/bind";
-import "antd/lib/tooltip/style";
 import { Heading } from "@cockroachlabs/ui-components";
 
 import { Anchor } from "src/anchor";

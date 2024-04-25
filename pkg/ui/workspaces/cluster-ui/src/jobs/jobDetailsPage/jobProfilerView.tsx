@@ -14,8 +14,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import { RequestState } from "src/api";
 import { Button, InlineAlert, Icon } from "@cockroachlabs/ui-components";
 import { Row, Col } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import classNames from "classnames";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";

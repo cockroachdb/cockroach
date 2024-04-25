@@ -27,7 +27,6 @@ import { CircleFilled } from "src/icon";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import RecordingMode = cockroach.util.tracing.tracingpb.RecordingMode;
 import { Switch } from "antd";
-import "antd/lib/switch/style";
 import Long from "long";
 import { Button } from "src/button";
 import { useHistory } from "react-router-dom";

@@ -11,8 +11,13 @@
 import React, { useCallback, useState } from "react";
 import copy from "copy-to-clipboard";
 import { message, Icon } from "antd";
-import "antd/lib/message/style";
-import "antd/lib/icon/style";
+
+// import "antd/lib/message/style";
+
+
+// import "antd/lib/icon/style";
+
+
 import { Modal } from "../modal";
 import { Text, TextTypes } from "../text";
 import { Button } from "../button";

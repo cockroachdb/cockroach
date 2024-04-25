@@ -25,10 +25,6 @@ import {
   ActiveStatement,
   ExecutionContentionDetails,
 } from "src/activeExecutions";
-
-import "antd/lib/tabs/style";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import styles from "./statementDetails.module.scss";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";

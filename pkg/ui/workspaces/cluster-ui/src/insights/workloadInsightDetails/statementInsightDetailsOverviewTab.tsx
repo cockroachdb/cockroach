@@ -27,8 +27,6 @@ import { CockroachCloudContext } from "../../contexts";
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import {
   StatementDetailsLink,
   TransactionDetailsLink,
@@ -97,7 +95,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
 
   return (
     <section className={cx("section")}>
-      <Row gutter={24} type="flex">
+      <Row gutter={24}>
         <Col span={12}>
           <SummaryCard>
             <SummaryCardItem

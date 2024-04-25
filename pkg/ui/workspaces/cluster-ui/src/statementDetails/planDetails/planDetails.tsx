@@ -20,8 +20,6 @@ import { Button } from "../../button";
 import { SqlBox, SqlBoxSize } from "../../sql";
 import { SortSetting } from "../../sortedtable";
 import { Col, Row } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import {
   InsightsSortedTable,
   makeInsightsColumns,

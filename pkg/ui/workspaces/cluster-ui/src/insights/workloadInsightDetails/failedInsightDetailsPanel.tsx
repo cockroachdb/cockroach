@@ -17,9 +17,6 @@ import classNames from "classnames/bind";
 
 // TODO (xinhaoz) we should organize these common page details styles into its own file.
 import styles from "../../statementDetails/statementDetails.module.scss";
-
-import "antd/lib/row/style";
-import "antd/lib/col/style";
 import { TransactionDetailsLink } from "../workloadInsights/util";
 
 const cx = classNames.bind(styles);

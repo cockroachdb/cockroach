@@ -19,7 +19,7 @@ import classNames from "classnames/bind";
 import { CircleFilled } from "src/icon";
 import { formatDurationHours } from "./spanTable";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
+
 const cx = classNames.bind(styles);
 
 class SpanMetadataSortedTable extends SortedTable<NamedOperationMetadata> {}

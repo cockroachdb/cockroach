@@ -27,7 +27,6 @@ import {
 import classNames from "classnames/bind";
 import styles from "./databaseDetailsPage.module.scss";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import { Caution } from "@cockroachlabs/icons";
 import * as format from "../util/format";
 import { Breadcrumbs } from "../breadcrumbs";

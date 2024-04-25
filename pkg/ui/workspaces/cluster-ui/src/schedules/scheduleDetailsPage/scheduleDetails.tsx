@@ -9,8 +9,6 @@
 // licenses/APL.txt.
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Col, Row } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import Long from "long";
 import React, { useEffect } from "react";
 import Helmet from "react-helmet";

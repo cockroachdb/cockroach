@@ -23,7 +23,6 @@ import { Moment } from "moment-timezone";
 import { DatabaseTablePageDataDetails, IndexStat } from "./databaseTablePage";
 import { CircleFilled } from "../icon";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import { Anchor } from "../anchor";
 import classNames from "classnames/bind";
 import styles from "./databaseTablePage.module.scss";

@@ -10,8 +10,6 @@
 
 import React from "react";
 import { Table as AntTable, ConfigProvider } from "antd";
-import "antd/lib/table/style";
-import "antd/lib/config-provider/style";
 import type { ColumnProps } from "antd/lib/table";
 import classnames from "classnames/bind";
 import styles from "./table.module.scss";

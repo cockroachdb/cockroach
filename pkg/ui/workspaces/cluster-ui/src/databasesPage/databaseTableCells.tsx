@@ -10,7 +10,6 @@
 
 import React, { useContext } from "react";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import { CircleFilled } from "../icon";
 import { DatabasesPageDataDatabase } from "./databasesPage";
 import classNames from "classnames/bind";

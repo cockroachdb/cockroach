@@ -21,8 +21,6 @@ import {
 } from "src/timeScaleDropdown";
 import { applyBtn } from "../queryFilter/filterClasses";
 import { Menu, Dropdown } from "antd";
-import "antd/lib/menu/style";
-import "antd/lib/dropdown/style";
 import {
   limitOptions,
   limitMoreOptions,

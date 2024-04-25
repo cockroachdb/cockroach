@@ -16,7 +16,6 @@ import classNames from "classnames/bind";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import { Icon } from "@cockroachlabs/ui-components";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import { Timezone } from "src/timestamp";
 import { dateFormat, timeFormat } from "./timeScaleDropdown";
 import { TimezoneContext } from "src/contexts/timezoneContext";

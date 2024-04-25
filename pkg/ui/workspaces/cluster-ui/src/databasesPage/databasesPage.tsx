@@ -11,7 +11,6 @@
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
 import classnames from "classnames/bind";
 
