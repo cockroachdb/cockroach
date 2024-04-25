@@ -11,9 +11,11 @@
 package sqlsmith
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -38,6 +40,7 @@ var (
 		{5, scalarNoContext(makeOr)},
 		{5, scalarNoContext(makeNot)},
 		{10, makeFunc},
+		{10, scalarNoContext(makeUseSequence)},
 		{10, func(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return makeConstExpr(s, typ, refs), true
 		}},
@@ -766,6 +769,35 @@ func makeScalarSubquery(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr,
 	subq.SetType(typ)
 
 	return subq, true
+}
+
+func makeUseSequence(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if len(s.sequences) == 0 {
+		return nil, false
+	}
+	// sequences only produce integers, so we need to ensure that a cast to the
+	// target type is possible.
+	if !cast.ValidCast(types.Int, typ, cast.ContextExplicit) {
+		return nil, false
+	}
+	seq := s.sequences[s.rnd.Intn(len(s.sequences))]
+	fn := "nextval"
+	if s.d6() < 3 {
+		fn = "currval"
+	}
+	funcExpr := &tree.FuncExpr{
+		Func:  tree.WrapFunction(fn),
+		Exprs: tree.Exprs{tree.NewDString(seq.SequenceName.String())},
+	}
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
+	t, err := funcExpr.TypeCheck(context.Background(), &semaCtx, types.Int)
+	if err != nil {
+		return nil, false
+	}
+	if typ.Family() == types.IntFamily {
+		return t, true
+	}
+	return tree.NewTypedCastExpr(t, typ), true
 }
 
 // replaceDatumPlaceholderVisitor replaces occurrences of numeric and bool Datum

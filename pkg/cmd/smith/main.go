@@ -47,6 +47,7 @@ var (
 	expr          = flags.Bool("expr", false, "generate expressions instead of statements")
 	num           = flags.Int("num", 1, "number of statements / expressions to generate")
 	url           = flags.String("url", "", "database to fetch schema from")
+	execStmts     = flags.Bool("exec-stmts", false, "execute each generated statement against the db specified by url")
 	smitherOptMap = map[string]sqlsmith.SmitherOption{
 		"AvoidConsts":                             sqlsmith.AvoidConsts(),
 		"CompareMode":                             sqlsmith.CompareMode(),
@@ -162,7 +163,11 @@ func main() {
 		}
 	} else {
 		for i := 0; i < *num; i++ {
-			fmt.Print("\n", smither.Generate(), ";\n")
+			stmt := smither.Generate()
+			fmt.Print("\n", stmt, ";\n")
+			if db != nil && *execStmts {
+				_, _ = db.Exec(stmt)
+			}
 		}
 	}
 }
