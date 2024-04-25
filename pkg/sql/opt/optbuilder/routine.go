@@ -677,3 +677,11 @@ func (b *Builder) maybeAddRoutineAssignmentCasts(
 	}
 	return b.constructProject(expr, stmtScope.cols), stmtScope.makePhysicalProps()
 }
+
+func (b *Builder) withinNestedPLpgSQLCall(fn func()) {
+	defer func(origValue bool) {
+		b.insideNestedPLpgSQLCall = origValue
+	}(b.insideNestedPLpgSQLCall)
+	b.insideNestedPLpgSQLCall = true
+	fn()
+}
