@@ -2621,3 +2621,29 @@ statement error pgcode 42804 pq: RETURN cannot have a parameter in function retu
 CREATE FUNCTION void_return_expr() RETURNS VOID AS $$ BEGIN RETURN 5; END; $$ LANGUAGE PLpgSQL;
 
 subtest end
+
+# Regression test for using Unknown type in place of a wildcard for a nested
+# block with no RETURN statement (#122945).
+statement ok
+CREATE FUNCTION f1() RETURNS RECORD AS $$
+BEGIN
+  RETURN (1, 2);
+END;
+$$ LANGUAGE PLpgSQL;
+
+skipif config local-mixed-23.2
+statement error pgcode 0A000 unimplemented: wildcard return type is not yet supported in this context
+CREATE FUNCTION f2(b BOOL) RETURNS RECORD AS $$
+BEGIN
+  IF b THEN
+    RETURN f1();
+  ELSE
+    DECLARE
+    BEGIN
+    END;
+  END IF;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f1;
