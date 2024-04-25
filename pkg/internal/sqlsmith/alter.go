@@ -12,7 +12,6 @@ package sqlsmith
 
 import (
 	gosql "database/sql"
-	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -456,7 +455,7 @@ func makeAlterLocality(s *Smither) (tree.Statement, bool) {
 	}
 	regions := getClusterRegions(s)
 
-	localityLevel := tree.LocalityLevel(rand.Intn(3))
+	localityLevel := tree.LocalityLevel(s.rnd.Intn(3))
 	ast := &tree.AlterTableLocality{
 		Name: tableRef.TableName.ToUnresolvedObjectName(),
 		Locality: &tree.Locality{
@@ -467,7 +466,7 @@ func makeAlterLocality(s *Smither) (tree.Statement, bool) {
 		if len(regions) == 0 {
 			return &tree.AlterDatabaseAddRegion{}, false
 		}
-		ast.Locality.TableRegion = tree.Name(regions[rand.Intn(len(regions))])
+		ast.Locality.TableRegion = tree.Name(regions[s.rnd.Intn(len(regions))])
 	}
 	return ast, ok
 }
@@ -480,7 +479,7 @@ func makeAlterDatabaseAddRegion(s *Smither) (tree.Statement, bool) {
 	}
 
 	ast := &tree.AlterDatabaseAddRegion{
-		Region: tree.Name(regions[rand.Intn(len(regions))]),
+		Region: tree.Name(regions[s.rnd.Intn(len(regions))]),
 		Name:   tree.Name("defaultdb"),
 	}
 
@@ -495,7 +494,7 @@ func makeAlterDatabaseDropRegion(s *Smither) (tree.Statement, bool) {
 	}
 
 	ast := &tree.AlterDatabaseDropRegion{
-		Region: tree.Name(regions[rand.Intn(len(regions))]),
+		Region: tree.Name(regions[s.rnd.Intn(len(regions))]),
 		Name:   tree.Name("defaultdb"),
 	}
 
@@ -510,7 +509,7 @@ func makeAlterSurvivalGoal(s *Smither) (tree.Statement, bool) {
 		tree.SurvivalGoalRegionFailure,
 		tree.SurvivalGoalZoneFailure,
 	}
-	survivalGoal := survivalGoals[rand.Intn(len(survivalGoals))]
+	survivalGoal := survivalGoals[s.rnd.Intn(len(survivalGoals))]
 
 	ast := &tree.AlterDatabaseSurvivalGoal{
 		Name:         tree.Name("defaultdb"),
@@ -527,7 +526,7 @@ func makeAlterDatabasePlacement(s *Smither) (tree.Statement, bool) {
 		tree.DataPlacementDefault,
 		tree.DataPlacementRestricted,
 	}
-	dataPlacement := dataPlacements[rand.Intn(len(dataPlacements))]
+	dataPlacement := dataPlacements[s.rnd.Intn(len(dataPlacements))]
 
 	ast := &tree.AlterDatabasePlacement{
 		Name:      tree.Name("defaultdb"),
