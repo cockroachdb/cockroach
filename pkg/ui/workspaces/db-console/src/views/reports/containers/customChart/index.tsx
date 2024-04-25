@@ -74,6 +74,34 @@ interface UrlState {
   charts: string;
 }
 
+export const GetSources = (
+  nodesSummary: NodesSummary,
+  metricState: CustomMetricState,
+): string[] => {
+  if (!(nodesSummary?.nodeStatuses?.length > 0)) {
+    return [];
+  }
+  // If we have no nodeSource, and we're not asking for perSource metrics,
+  // then the user is asking for cluster-wide metrics. We can return an empty
+  // source list.
+  if (metricState.nodeSource === "" && !metricState.perSource) {
+    return [];
+  }
+  if (isStoreMetric(nodesSummary.nodeStatuses[0], metricState.metric)) {
+    // If a specific node is selected, return the storeIDs associated with that node.
+    // Otherwise, we're at the cluster level, so we grab each store ID.
+    return metricState.nodeSource
+      ? nodesSummary.storeIDsByNodeID[metricState.nodeSource]
+      : Object.values(nodesSummary.storeIDsByNodeID).flatMap(s => s);
+  } else {
+    // If it's not a store metric, and a specific nodeSource is chosen, just return that.
+    // Otherwise, return all known node IDs.
+    return metricState.nodeSource
+      ? [metricState.nodeSource]
+      : nodesSummary.nodeIDs;
+  }
+};
+
 export class CustomChart extends React.Component<
   CustomChartProps & RouteComponentProps
 > {
@@ -208,34 +236,6 @@ export class CustomChart extends React.Component<
     );
   };
 
-  getSources = (
-    nodesSummary: NodesSummary,
-    metricState: CustomMetricState,
-  ): string[] => {
-    if (!(nodesSummary?.nodeStatuses?.length > 0)) {
-      return [];
-    }
-    // If we have no nodeSource, and we're not asking for perSource metrics,
-    // then the user is asking for cluster-wide metrics. We can return an empty
-    // source list.
-    if (metricState.nodeSource === "" && !metricState.perSource) {
-      return [];
-    }
-    if (isStoreMetric(nodesSummary.nodeStatuses[0], metricState.metric)) {
-      // If a specific node is selected, return the storeIDs associated with that node.
-      // Otherwise, we're at the cluster level, so we grab each store ID.
-      return metricState.nodeSource
-        ? nodesSummary.storeIDsByNodeID[metricState.nodeSource]
-        : Object.values(nodesSummary.storeIDsByNodeID).flatMap(s => s);
-    } else {
-      // If it's not a store metric, and a specific nodeSource is chosen, just return that.
-      // Otherwise, return all known node IDs.
-      return metricState.nodeSource
-        ? [metricState.nodeSource]
-        : nodesSummary.nodeIDs;
-    }
-  };
-
   // This function handles the logic related to creating Metric components
   // based on perNode and perTenant flags.
   renderMetricComponents = (metrics: CustomMetricState[], index: number) => {
@@ -250,7 +250,7 @@ export class CustomChart extends React.Component<
         return "";
       }
       if (m.perSource && m.perTenant) {
-        const sources = this.getSources(nodesSummary, m);
+        const sources = GetSources(nodesSummary, m);
         return _.flatMap(sources, source => {
           return tenants.map(tenant => (
             <Metric
@@ -266,7 +266,7 @@ export class CustomChart extends React.Component<
           ));
         });
       } else if (m.perSource) {
-        const sources = this.getSources(nodesSummary, m);
+        const sources = GetSources(nodesSummary, m);
         return _.map(sources, source => (
           <Metric
             key={`${index}${i}${source}`}
@@ -280,7 +280,7 @@ export class CustomChart extends React.Component<
           />
         ));
       } else if (m.perTenant) {
-        const sources = this.getSources(nodesSummary, m);
+        const sources = GetSources(nodesSummary, m);
         return tenants.map(tenant => (
           <Metric
             key={`${index}${i}${tenant.value}`}
@@ -302,7 +302,7 @@ export class CustomChart extends React.Component<
             aggregator={m.aggregator}
             downsampler={m.downsampler}
             derivative={m.derivative}
-            sources={this.getSources(nodesSummary, m)}
+            sources={GetSources(nodesSummary, m)}
             tenantSource={m.tenantSource}
           />
         );
