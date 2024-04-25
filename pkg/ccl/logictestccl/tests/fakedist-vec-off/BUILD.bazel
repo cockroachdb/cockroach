@@ -13,10 +13,7 @@ go_test(
         "//conditions:default": {"test.Pool": "large"},
     }),
     shard_count = 28,
-    tags = [
-        "ccl_test",
-        "cpu:2",
-    ],
+    tags = ["cpu:2"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",

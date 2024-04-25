@@ -77,7 +77,6 @@ go_test(
         "stream_event_batcher_test.go",
     ],
     embed = [":streamproducer"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
