@@ -92,13 +92,13 @@ subtest end
 subtest ddl
 
 # DDL is not currently supported in UDF bodies.
-statement error pgcode 0A000 unimplemented: CREATE TABLE usage inside a function definition
+statement error pgcode 0A000 unimplemented: CREATE TABLE usage inside a function definition.*\n.*\n.*issue-v/110080
 CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'CREATE TABLE t (a INT)'
 
-statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition.*\n.*\n.*issue-v/110080
 CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'ALTER TABLE t ADD COLUMN b BOOL'
 
-statement error pgcode 0A000 unimplemented: DROP TABLE usage inside a function definition
+statement error pgcode 0A000 unimplemented: DROP TABLE usage inside a function definition.*\n.*\n.*issue-v/110080
 CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'DROP TABLE t'
 
 subtest end
