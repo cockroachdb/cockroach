@@ -130,6 +130,14 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 		return errors.Wrapf(err, "running migration for %v", v)
 	}
 
+	// Bump the version of the system database schema whenever we run a
+	// non-permanent migration.
+	if !m.Permanent() {
+		if err := upgrade.BumpSystemDatabaseSchemaVersion(ctx, v, db); err != nil {
+			return err
+		}
+	}
+
 	// Mark the upgrade as having been completed so that subsequent iterations
 	// no-op and new jobs are not created.
 	if err := migrationstable.MarkMigrationCompleted(ctx, ex, v); err != nil {

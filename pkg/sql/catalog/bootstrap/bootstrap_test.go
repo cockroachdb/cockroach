@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -139,31 +138,4 @@ func makeMetadataSchema(tenantID uint64) MetadataSchema {
 		codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	}
 	return MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
-}
-
-// TestSystemDatabaseSchemaBootstrapVersionBumped serves as a reminder to bump
-// systemschema.SystemDatabaseSchemaBootstrapVersion whenever a new upgrade
-// creates or modifies the schema of system tables. We unfortunately cannot
-// programmatically determine if an upgrade should bump the version so by
-// adding a test failure when the initial values change, the programmer and
-// code reviewers are reminded to manually check whether the version should
-// be bumped.
-func TestSystemDatabaseSchemaBootstrapVersionBumped(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// If you need to update this value (i.e. failed this test), check whether
-	// you need to bump systemschema.SystemDatabaseSchemaBootstrapVersion too.
-	const prevSystemHash = "cc22bc73bd41333a8706272d157bb1760d34c9dbbda112856a44f950637aacdb"
-	_, curSystemHash := GetAndHashInitialValuesToString(0 /* tenantID */)
-
-	if prevSystemHash != curSystemHash {
-		t.Fatalf(
-			`Check whether you need to bump systemschema.SystemDatabaseSchemaBootstrapVersion
-and then update prevSystemHash to %q.
-The current value of SystemDatabaseSchemaBootstrapVersion is %s.`,
-			curSystemHash,
-			systemschema.SystemDatabaseSchemaBootstrapVersion,
-		)
-	}
 }
