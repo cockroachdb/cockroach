@@ -169,11 +169,6 @@ module.exports = (env, argv) => {
         profile: true,
       }),
       new MomentLocalesPlugin(),
-      new webpack.NormalModuleReplacementPlugin(
-        /node_modules\/antd\/lib\/style\/index\.less/,
-        path.resolve(__dirname, "src/core/antd-patch.less"),
-      ),
-
       // Use MomentTimezoneDataPlugin to remove timezone data that we don't need.
       new MomentTimezoneDataPlugin({
         matchZones: ['Etc/UTC', 'America/New_York'],
