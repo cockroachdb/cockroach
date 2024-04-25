@@ -61,7 +61,6 @@ go_test(
         "validation_test.go",
     ],
     embed = [":cdceval"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdcevent",

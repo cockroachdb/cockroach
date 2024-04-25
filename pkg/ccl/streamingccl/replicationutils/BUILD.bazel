@@ -28,7 +28,6 @@ go_test(
     name = "replicationutils_test",
     srcs = ["utils_test.go"],
     embed = [":replicationutils"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/clusterversion",
         "//pkg/kv/kvpb",

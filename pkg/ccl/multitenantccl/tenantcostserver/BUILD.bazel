@@ -45,7 +45,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":tenantcostserver"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/kv",

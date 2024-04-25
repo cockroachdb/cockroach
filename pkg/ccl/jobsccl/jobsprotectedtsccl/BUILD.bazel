@@ -6,7 +6,6 @@ go_test(
         "jobs_protected_ts_test.go",
         "main_test.go",
     ],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

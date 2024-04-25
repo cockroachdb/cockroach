@@ -22,7 +22,6 @@ go_test(
     size = "small",
     srcs = ["encryption_spec_test.go"],
     embed = [":baseccl"],
-    tags = ["ccl_test"],
     deps = ["//pkg/util/leaktest"],
 )
 

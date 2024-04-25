@@ -54,7 +54,6 @@ go_test(
         "rowfetcher_test.go",
     ],
     embed = [":cdcevent"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdctest",

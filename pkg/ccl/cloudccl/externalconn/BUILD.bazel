@@ -10,7 +10,6 @@ go_test(
     exec_properties = {
         "dockerNetwork": "standard",
     },
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/backupccl",

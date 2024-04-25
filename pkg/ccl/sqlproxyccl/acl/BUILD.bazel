@@ -37,7 +37,6 @@ go_test(
         "watcher_test.go",
     ],
     embed = [":acl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",

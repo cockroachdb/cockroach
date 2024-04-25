@@ -30,7 +30,6 @@ go_test(
         "pg_conn_test.go",
     ],
     embed = [":interceptor"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/sql/pgwire/pgwirebase",
         "//pkg/util/leaktest",

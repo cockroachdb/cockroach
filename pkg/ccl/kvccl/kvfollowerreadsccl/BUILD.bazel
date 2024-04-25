@@ -43,7 +43,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":kvfollowerreadsccl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

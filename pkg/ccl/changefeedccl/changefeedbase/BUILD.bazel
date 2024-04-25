@@ -35,7 +35,6 @@ go_test(
         "options_test.go",
     ],
     embed = [":changefeedbase"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/ccl",
         "//pkg/clusterversion",

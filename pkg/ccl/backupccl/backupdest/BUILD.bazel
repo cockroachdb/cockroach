@@ -44,7 +44,6 @@ go_test(
         "//build/toolchains:is_heavy": {"test.Pool": "large"},
         "//conditions:default": {"test.Pool": "default"},
     }),
-    tags = ["ccl_test"],
     deps = [
         ":backupdest",
         "//pkg/ccl",

@@ -10,9 +10,7 @@ go_test(
     ],
     exec_properties = {"test.Pool": "default"},
     shard_count = 48,
-    tags = [
-        "cpu:1",
-    ],
+    tags = ["cpu:1"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",

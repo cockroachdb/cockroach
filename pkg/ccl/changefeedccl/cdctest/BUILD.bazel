@@ -47,7 +47,6 @@ go_test(
         "validator_test.go",
     ],
     embed = [":cdctest"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
