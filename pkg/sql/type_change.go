@@ -165,6 +165,14 @@ func (p *planner) writeTypeDesc(ctx context.Context, typeDesc *typedesc.Mutable)
 	return p.txn.Run(ctx, b)
 }
 
+func (p *planner) writeDescToBatch(
+	ctx context.Context, typeDesc catalog.MutableDescriptor, b *kv.Batch,
+) error {
+	return p.Descriptors().WriteDescToBatch(
+		ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), typeDesc, b,
+	)
+}
+
 // typeSchemaChanger is the struct that actually runs the type schema change.
 type typeSchemaChanger struct {
 	typeID descpb.ID
