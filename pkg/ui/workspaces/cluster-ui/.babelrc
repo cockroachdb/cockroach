@@ -7,8 +7,7 @@
   "plugins": [
     "@babel/proposal-class-properties",
     "@babel/proposal-object-rest-spread",
-    "@babel/plugin-transform-runtime",
-    ["import", { "libraryName": "antd", "style": true }]
+    "@babel/plugin-transform-runtime"
   ],
   "env": {
     "test": {
