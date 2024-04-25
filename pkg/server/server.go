@@ -2245,17 +2245,17 @@ func (s *topLevelServer) runIdempontentSQLForInitType(
 	}
 
 	initAttempt := func() error {
-		const defaulVirtuallusterName = "main"
+		const defaulVirtualClusterName = "main"
 		switch typ {
 		case serverpb.InitType_VIRTUALIZED:
 			ie := s.sqlServer.execCfg.InternalDB.Executor()
 			_, err := ie.Exec(ctx, "init-create-app-tenant", nil, /* txn */
-				"CREATE VIRTUAL CLUSTER IF NOT EXISTS $1", defaulVirtuallusterName)
+				"CREATE VIRTUAL CLUSTER IF NOT EXISTS $1", defaulVirtualClusterName)
 			if err != nil {
 				return err
 			}
 			_, err = ie.Exec(ctx, "init-default-app-tenant", nil, /* txn */
-				"ALTER VIRTUAL CLUSTER $1 START SERVICE SHARED", defaulVirtuallusterName)
+				"ALTER VIRTUAL CLUSTER $1 START SERVICE SHARED", defaulVirtualClusterName)
 			if err != nil {
 				return err
 			}
@@ -2263,7 +2263,12 @@ func (s *topLevelServer) runIdempontentSQLForInitType(
 		case serverpb.InitType_VIRTUALIZED_EMPTY:
 			ie := s.sqlServer.execCfg.InternalDB.Executor()
 			_, err := ie.Exec(ctx, "init-default-target-cluster-setting", nil, /* txn */
-				"SET CLUSTER SETTING server.controller.default_target_cluster = $1", defaulVirtuallusterName)
+				"SET CLUSTER SETTING server.controller.default_target_cluster = $1", defaulVirtualClusterName)
+			if err != nil {
+				return err
+			}
+			_, err = ie.Exec(ctx, "init-rangefeed-enabled-cluster-setting", nil, /* txn */
+				"SET CLUSTER SETTING kv.rangefeed.enabled = true")
 			if err != nil {
 				return err
 			}
