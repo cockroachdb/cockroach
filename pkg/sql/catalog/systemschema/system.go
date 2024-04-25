@@ -1205,23 +1205,18 @@ const (
 // SystemDatabaseName is the name of the system database.
 const SystemDatabaseName = catconstants.SystemDatabaseName
 
-// SystemDatabaseSchemaBootstrapVersion is the system database schema version
-// that should be used during bootstrap. It should be bumped up alongside any
-// upgrade that creates or modifies the schema of a system table.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version()
-
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
 func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 	priv := privilege.List{privilege.CONNECT}
+	latestVersion := clusterversion.Latest.Version()
 	return dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
-		Name:    SystemDatabaseName,
-		ID:      keys.SystemDatabaseID,
-		Version: 1,
+		Name:                        SystemDatabaseName,
+		ID:                          keys.SystemDatabaseID,
+		Version:                     1,
+		SystemDatabaseSchemaVersion: &latestVersion,
 		// Assign max privileges to root user.
-		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
-			priv, username.NodeUserName()),
-		SystemDatabaseSchemaVersion: &SystemDatabaseSchemaBootstrapVersion,
+		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(priv, username.NodeUserName()),
 	}).BuildImmutableDatabase()
 }
 

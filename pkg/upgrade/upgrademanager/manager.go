@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -526,6 +527,11 @@ func (m *Manager) Migrate(
 			m.postToPauseChannelAndWaitForResume(ctx)
 		}
 
+		// Bump the version of the system database schema.
+		if err := bumpSystemDatabaseSchemaVersion(ctx, cv, m.deps.DB); err != nil {
+			return err
+		}
+
 		// Finally, bump the real version cluster-wide.
 		err := bumpClusterVersion(ctx, m.deps.Cluster, cv)
 		if err != nil {
@@ -547,6 +553,31 @@ func (m *Manager) Migrate(
 	}
 
 	return nil
+}
+
+// bumpSystemDatabaseSchemaVersion bumps the SystemDatabaseSchemaVersion
+// field for the system database descriptor. It is called after every upgrade
+// step.
+func bumpSystemDatabaseSchemaVersion(
+	ctx context.Context, cs clusterversion.ClusterVersion, descDB descs.DB,
+) error {
+	return descDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		systemDBDesc, err := txn.Descriptors().MutableByID(txn.KV()).Database(ctx, keys.SystemDatabaseID)
+		if err != nil {
+			return err
+		}
+		if sv := systemDBDesc.GetSystemDatabaseSchemaVersion(); sv != nil {
+			if cs.Version.Less(*sv) {
+				return errors.AssertionFailedf(
+					"new system schema version (%#v) is lower than previous system schema version (%#v)",
+					cs.Version,
+					*sv,
+				)
+			}
+		}
+		systemDBDesc.SystemDatabaseSchemaVersion = &cs.Version
+		return txn.Descriptors().WriteDesc(ctx, false /* kvTrace */, systemDBDesc, txn.KV())
+	})
 }
 
 // bumpClusterVersion will invoke the BumpClusterVersion rpc on every node
