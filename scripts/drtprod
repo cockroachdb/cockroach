@@ -47,6 +47,19 @@ case $1 in
       set -- sql --secure "$@"
     fi
     ;;
+  "side-eye")
+    shift
+    cluster="$1"
+    key="$(gcloud secrets versions access latest --secret='side-eye-key')"
+    if [[ -z "${key}" ]]; then
+      echo "no key"
+    fi
+    echo "installing side-eye on ${cluster}..."
+    roachprod ssh $cluster -- "curl https://sh.exray.dev/ | sh -s - -t ${key}"
+    echo "configuring side-eye on $cluster..."
+    roachprod ssh $cluster -- "sudo snap set exray-agent environment=${cluster} && sudo snap restart exray-agent"
+    exit 0
+    ;;
   "dns")
     if [ "$#" -lt 2 ]; then
       echo "usage: drtprod $1 <cluster> [create]"
