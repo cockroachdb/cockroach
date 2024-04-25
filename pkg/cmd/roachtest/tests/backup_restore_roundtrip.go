@@ -50,6 +50,7 @@ const numFullBackups = 5
 type roundTripSpecs struct {
 	name                 string
 	metamorphicRangeSize bool
+	onlineRestore        bool
 	mock                 bool
 	skip                 string
 }
@@ -64,6 +65,12 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 		{
 			name:                 "backup-restore/small-ranges",
 			metamorphicRangeSize: true,
+		},
+		{
+			name:                 "backup-restore/online-restore",
+			metamorphicRangeSize: false,
+			onlineRestore:        true,
+			skip:                 "it fails consistently",
 		},
 		{
 			name: "backup-restore/mock",
@@ -115,7 +122,7 @@ func backupRestoreRoundTrip(
 	m := c.NewMonitor(ctx, roachNodes)
 
 	m.Go(func(ctx context.Context) error {
-		testUtils, err := newCommonTestUtils(ctx, t, c, roachNodes, sp.mock)
+		testUtils, err := newCommonTestUtils(ctx, t, c, roachNodes, sp.mock, sp.onlineRestore)
 		if err != nil {
 			return err
 		}
