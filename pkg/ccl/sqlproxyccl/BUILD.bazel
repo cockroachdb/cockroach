@@ -78,7 +78,6 @@ go_test(
     embed = [":sqlproxyccl"],
     exec_properties = {"test.Pool": "large"},
     shard_count = 8,
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

@@ -9,7 +9,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     shard_count = 16,
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

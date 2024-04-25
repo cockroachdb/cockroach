@@ -47,7 +47,6 @@ go_test(
         "scanner_test.go",
     ],
     embed = [":kvfeed"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

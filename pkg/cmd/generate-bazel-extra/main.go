@@ -104,14 +104,7 @@ GO_TARGETS = [`)
 	for _, label := range goLabels {
 		fmt.Fprintf(w, "    %q,\n", label)
 	}
-	fmt.Fprintln(w, `]
-
-# These suites run only the tests with the appropriate "size" (excepting those
-# tagged "flaky" or "integration") [1]. Note that tests have a default timeout
-# depending on the size [2].
-
-# [1] https://docs.bazel.build/versions/master/be/general.html#test_suite
-# [2] https://docs.bazel.build/versions/master/be/common-definitions.html#common-attributes-tests`)
+	fmt.Fprintln(w, "]")
 
 	fmt.Fprintln(w, `
 test_suite(
@@ -121,31 +114,6 @@ test_suite(
     ],
     tests = ALL_TESTS,
 )`)
-
-	fmt.Fprintln(w, `
-test_suite(
-    name = "ccl_tests",
-    tags = [
-        "-integration",
-        "ccl_test",
-    ],
-    tests = ALL_TESTS,
-)`)
-
-	for _, size := range []string{"small", "medium", "large", "enormous"} {
-		fmt.Fprintf(w, `
-test_suite(
-    name = "%[1]s_non_ccl_tests",
-    tags = [
-        "-ccl_test",
-        "-flaky",
-        "-integration",
-        "%[1]s",
-    ],
-    tests = ALL_TESTS,
-)
-`, size)
-	}
 
 	if err := w.Flush(); err != nil {
 		log.Fatal(err)
