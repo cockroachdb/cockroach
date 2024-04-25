@@ -18,6 +18,7 @@ go_library(
         "//pkg/server/settingswatcher",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/isql",
         "//pkg/sql/protoreflect",

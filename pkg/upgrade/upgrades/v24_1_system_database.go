@@ -129,5 +129,5 @@ ALTER DATABASE system SURVIVE REGION FAILURE;
 		}
 	}
 
-	return bumpSystemDatabaseSchemaVersion(ctx, cv, deps)
+	return nil
 }
