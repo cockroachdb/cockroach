@@ -13,8 +13,8 @@ cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130560
 ----
 POST: https://example.com/data
 X-Crl-Token: test-token
-Body: {"metric":{"__name__":"admission_admitted_elastic_cpu","cluster":"test-cluster","cluster_type":"SELF_HOSTED","job":"cockroachdb","node_id":"1","region":"local"},"values":[0,1,1,1],"timestamps":[17111304700,17111304800,17111304900,17111305000]}
-{"metric":{"__name__":"admission_admitted_elastic_cpu","cluster":"test-cluster","cluster_type":"SELF_HOSTED","job":"cockroachdb","node_id":"2","region":"local"},"values":[1,1,1,1,1,1],"timestamps":[17111305100,17111305200,17111305300,17111305400,17111305500,17111305600]}
+Body: {"metric":{"__name__":"admission_admitted_elastic_cpu","cluster":"test-cluster","cluster_type":"SELF_HOSTED","instance":"1","job":"cockroachdb","node_id":"1","region":"local"},"values":[0,1,1,1],"timestamps":[17111304700,17111304800,17111304900,17111305000]}
+{"metric":{"__name__":"admission_admitted_elastic_cpu","cluster":"test-cluster","cluster_type":"SELF_HOSTED","instance":"2","job":"cockroachdb","node_id":"2","region":"local"},"values":[1,1,1,1,1,1],"timestamps":[17111305100,17111305200,17111305300,17111305400,17111305500,17111305600]}
 
 
 format-datadog series-threshold=1
