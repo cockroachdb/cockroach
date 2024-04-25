@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/lib/pq/oid"
 )
 
 func (s *Smither) makeStmt() (stmt tree.Statement, ok bool) {
@@ -101,15 +102,14 @@ var (
 		{10, makeInsert},
 		{10, makeDelete},
 		{10, makeUpdate},
-		{1, makeAlter},
+		{2, makeAlter},
 		{1, makeBegin},
-		{2, makeRollback},
-		{6, makeCommit},
+		{1, makeRollback},
+		{2, makeCommit},
 		{1, makeBackup},
 		{1, makeRestore},
 		{1, makeExport},
 		{1, makeImport},
-		{1, makeCreateFunc},
 	}
 	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},
@@ -555,6 +555,14 @@ func (s *Smither) randDropBehavior() tree.DropBehavior {
 	return dropBehaviors[s.rnd.Intn(len(dropBehaviors))]
 }
 
+func (s *Smither) randDropBehaviorNoCascade() tree.DropBehavior {
+	if s.d6() < 3 {
+		// Make RESTRICT twice less likely than DEFAULT.
+		return tree.DropRestrict
+	}
+	return tree.DropDefault
+}
+
 var stringComparisons = []treecmp.ComparisonOperatorSymbol{
 	treecmp.Like,
 	treecmp.NotLike,
@@ -890,6 +898,57 @@ func makeCreateFunc(s *Smither) (tree.Statement, bool) {
 		return nil, false
 	}
 	return s.makeCreateFunc()
+}
+
+func makeDropFunc(s *Smither) (tree.Statement, bool) {
+	if s.disableUDFCreation {
+		return nil, false
+	}
+	functions.Lock()
+	defer functions.Unlock()
+	class := tree.NormalClass
+	if s.d6() < 3 {
+		class = tree.GeneratorClass
+	}
+	// fns is a map from return type OID to the list of function overloads.
+	fns := functions.fns[class]
+	if len(fns) == 0 {
+		return nil, false
+	}
+	retOIDs := make([]oid.Oid, 0, len(fns))
+	for oid := range fns {
+		retOIDs = append(retOIDs, oid)
+	}
+	// Pick a random starting point within the list of OIDs.
+	oidShift := s.rnd.Intn(len(retOIDs))
+	for i := 0; i < len(retOIDs); i++ {
+		oidPos := (i + oidShift) % len(retOIDs)
+		overloads := fns[retOIDs[oidPos]]
+		// Pick a random starting point within the list of overloads.
+		ovShift := s.rnd.Intn(len(overloads))
+		for j := 0; j < len(overloads); j++ {
+			fn := overloads[(j+ovShift)%len(overloads)]
+			if fn.overload.Type == tree.UDFRoutine {
+				routineObj := tree.RoutineObj{
+					FuncName: tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(fn.def.Name)),
+				}
+				if s.coin() {
+					// Sometimes simulate omitting the parameter specification,
+					// sometimes specify all parameters.
+					routineObj.Params = fn.overload.RoutineParams
+				}
+				return &tree.DropRoutine{
+					IfExists:  s.d6() < 3,
+					Procedure: false,
+					Routines:  tree.RoutineObjs{routineObj},
+					// TODO(#101380): use s.randDropBehavior() once DROP
+					// FUNCTION CASCADE is implemented.
+					DropBehavior: s.randDropBehaviorNoCascade(),
+				}, true
+			}
+		}
+	}
+	return nil, false
 }
 
 func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {

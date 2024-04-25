@@ -23,7 +23,13 @@ import (
 )
 
 var (
-	alters               = append(append(append(altersTableExistence, altersExistingTable...), altersTypeExistence...), altersExistingTypes...)
+	alters = append(append(append(append(append(
+		altersTableExistence,
+		altersExistingTable...),
+		altersTypeExistence...),
+		altersExistingTypes...),
+		altersFunctionExistence...),
+		altersSequenceExistence...)
 	altersTableExistence = []statementWeight{
 		{10, makeCreateTable},
 		{2, makeCreateSchema},
@@ -45,12 +51,21 @@ var (
 	}
 	altersTypeExistence = []statementWeight{
 		{5, makeCreateType},
+		{1, makeDropType},
 	}
 	altersExistingTypes = []statementWeight{
 		{5, makeAlterTypeDropValue},
 		{5, makeAlterTypeAddValue},
 		{1, makeAlterTypeRenameValue},
 		{1, makeAlterTypeRenameType},
+	}
+	altersFunctionExistence = []statementWeight{
+		{10, makeCreateFunc},
+		{1, makeDropFunc},
+	}
+	altersSequenceExistence = []statementWeight{
+		{10, makeCreateSequence},
+		{1, makeDropSequence},
 	}
 	alterTableMultiregion = []statementWeight{
 		{10, makeAlterLocality},
@@ -406,6 +421,28 @@ func makeCreateType(s *Smither) (tree.Statement, bool) {
 	return randgen.RandCreateType(s.rnd, string(name), letters), true
 }
 
+func makeDropType(s *Smither) (tree.Statement, bool) {
+	var typNames []*tree.UnresolvedObjectName
+	for len(typNames) < 1 || s.coin() {
+		// It's ok if the same type is chosen multiple times.
+		typName, ok := s.getRandUserDefinedType()
+		if !ok {
+			if len(typNames) == 0 {
+				return nil, false
+			}
+			break
+		}
+		typNames = append(typNames, typName.ToUnresolvedObjectName())
+	}
+	return &tree.DropType{
+		Names:    typNames,
+		IfExists: s.d6() < 3,
+		// TODO(#51480): use s.randDropBehavior() once DROP TYPE CASCADE is
+		// implemented.
+		DropBehavior: s.randDropBehaviorNoCascade(),
+	}, true
+}
+
 func rowsToRegionList(rows *gosql.Rows) ([]string, error) {
 	// Don't add duplicate regions to the slice.
 	regionsSet := make(map[string]struct{})
@@ -587,5 +624,32 @@ func makeAlterTypeRenameType(s *Smither) (tree.Statement, bool) {
 		Cmd: &tree.AlterTypeRename{
 			NewName: s.name("typ"),
 		},
+	}, true
+}
+
+func makeCreateSequence(s *Smither) (tree.Statement, bool) {
+	schema := s.schemas[s.rnd.Intn(len(s.schemas))]
+	name := tree.MakeTableNameWithSchema(tree.Name(s.dbName), schema.SchemaName, s.name("seq"))
+	return &tree.CreateSequence{
+		IfNotExists: s.d6() < 3,
+		Name:        name,
+	}, true
+}
+
+func makeDropSequence(s *Smither) (tree.Statement, bool) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	if len(s.sequences) == 0 {
+		return nil, false
+	}
+	var names tree.TableNames
+	for len(names) < 1 || s.coin() {
+		// It's ok if the same sequence is chosen multiple times.
+		names = append(names, s.sequences[s.rnd.Intn(len(s.sequences))].SequenceName)
+	}
+	return &tree.DropSequence{
+		Names:        names,
+		IfExists:     s.coin(),
+		DropBehavior: s.randDropBehavior(),
 	}, true
 }
