@@ -379,6 +379,7 @@ func TestStageVersionCheck(t *testing.T) {
 		AllNodes:                  true,
 		ForcePlan:                 false,
 		ForceLocalInternalVersion: false,
+		MaxConcurrency:            -1, // no limit
 	})
 	require.ErrorContains(t, err, "doesn't match cluster active version")
 	// Enable "stuck upgrade bypass" to stage plan on the cluster.
@@ -387,6 +388,7 @@ func TestStageVersionCheck(t *testing.T) {
 		AllNodes:                  true,
 		ForcePlan:                 false,
 		ForceLocalInternalVersion: true,
+		MaxConcurrency:            -1, // no limit
 	})
 	require.NoError(t, err, "force local must fix incorrect version")
 	// Check that stored plan has version matching cluster version.
