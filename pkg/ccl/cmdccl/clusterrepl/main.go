@@ -123,7 +123,6 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 	var sps streampb.StreamPartitionSpec
 	sps.Config.MinCheckpointFrequency = *checkpointInterval
 	sps.Config.BatchByteSize = int64(*batchSize)
-	sps.Config.InitialScanParallelism = int32(*parallelScan)
 	sps.Spans = append(sps.Spans, tenantSpan)
 	sps.InitialScanTimestamp = replicationProducerSpec.ReplicationStartTime
 	spsBytes, err := protoutil.Marshal(&sps)
