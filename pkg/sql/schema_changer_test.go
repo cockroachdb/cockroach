@@ -7821,3 +7821,66 @@ func TestMemoryMonitorErrorsDuringBackfillAreRetried(t *testing.T) {
 		require.Equalf(t, shouldFail.Load(), int64(2), "not all failure conditions were hit %d", shouldFail.Load())
 	})
 }
+
+// TestGrantAndSelectsWithinTransaction tests two concurrent
+// transactions on tables, where one transaction is a grant.
+// We verify that grants on tables no longer creates a job(s).
+// We also verify that the second transaction does wait for
+// the first transaction to commit.
+func TestGrantAndSelectsWithinTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	st := cluster.MakeTestingClusterSettings()
+	lease.LeaseDuration.Override(ctx, &st.SV, 15*time.Second)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	defer s.Stopper().Stop(ctx)
+
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+
+	sqlRunner.Exec(t, `CREATE USER ROACHMIN;`)
+	sqlRunner.Exec(t, `GRANT ADMIN TO ROACHMIN;`)
+	sqlRunner.Exec(t, `CREATE TABLE PROMO_CODES (my_int INT);`)
+	sqlRunner.Exec(t, `CREATE TABLE RIDES (my_int INT);`)
+
+	txn1 := sqlRunner.Begin(t)
+	txn1.Exec(`SELECT * FROM PROMO_CODES;`)
+
+	resBefore := sqlRunner.QueryStr(t, `select count(*) from [show jobs];`)
+
+	txn2 := sqlRunner.Begin(t)
+	txn2.Exec(`GRANT ALL ON TABLE PROMO_CODES TO ROACHMIN;`)
+	txn2.Exec(`GRANT ALL ON TABLE RIDES TO ROACHMIN;`)
+
+	var duration time.Duration
+	messages := make(chan struct{})
+	group := ctxgroup.WithContext(ctx)
+
+	group.GoCtx(func(ctx context.Context) error {
+		startTime := timeutil.Now()
+		err := txn2.Commit()
+		duration = timeutil.Since(startTime)
+		close(messages)
+		return err
+	})
+
+	group.GoCtx(func(ctx context.Context) error {
+		<-messages
+		err := txn1.Commit()
+		return err
+	})
+
+	err := group.Wait()
+	require.NoError(t, err)
+
+	// we verify that transaction2 did hold, it should hold for at to
+	// 15 seconds, so we check that the duration is at least 15 seconds
+	require.Greaterf(t, duration, 15*time.Second, "transaction2 did not hold for at least 15 seconds")
+
+	resAfter := sqlRunner.QueryStr(t, `select count(*) from [show jobs];`)
+	// No new jobs should have been created between resBefore to resAfter.
+	require.True(t, resBefore[0][0] == resAfter[0][0])
+
+}

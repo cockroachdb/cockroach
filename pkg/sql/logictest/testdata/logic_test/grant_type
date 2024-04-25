@@ -126,3 +126,26 @@ test           public       owner_grant_option  other_owner               ALL   
 test           public       owner_grant_option  owner_grant_option_child  USAGE           false
 test           public       owner_grant_option  public                    USAGE           false
 test           public       owner_grant_option  root                      ALL             true
+
+statement ok
+CREATE USER roach;
+CREATE TYPE custom_type1 AS ENUM ('roach1', 'roach2', 'roach3');
+CREATE TYPE custom_type2 AS ENUM ('roachA', 'roachB', 'roachC');
+CREATE TYPE custom_type3 AS ENUM ('roachI', 'roachII', 'roachIII');
+BEGIN;
+GRANT ALL ON TYPE custom_type1 TO roach;
+GRANT ALL ON TYPE custom_type2 TO roach;
+GRANT ALL ON TYPE custom_type3 TO roach;
+COMMIT
+
+query T
+select description from [show jobs] where description LIKE '%type%'
+----
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR roach
+----
+database_name  schema_name  object_name   object_type  grantee  privilege_type  is_grantable
+test           public       custom_type1  type         roach    ALL             false
+test           public       custom_type2  type         roach    ALL             false
+test           public       custom_type3  type         roach    ALL             false
