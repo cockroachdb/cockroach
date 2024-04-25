@@ -135,6 +135,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithOnDeleteRange(s.onDeleteRange),
 		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
 		rangefeed.WithOnValues(s.onValues),
+		rangefeed.WithOnMetadata(s.onMetadata),
 	}
 
 	initialTimestamp := s.spec.InitialScanTimestamp
@@ -287,6 +288,12 @@ func (s *eventStream) onSSTable(
 func (s *eventStream) onDeleteRange(ctx context.Context, delRange *kvpb.RangeFeedDeleteRange) {
 	s.seb.addDelRange(*delRange)
 	s.setErr(s.maybeFlushBatch(ctx))
+}
+func (s *eventStream) onMetadata(ctx context.Context, metadata *kvpb.RangeFeedMetadata) {
+	log.Infof(ctx, "received metadata event: %s, fromManualSplit: %t", metadata.Span, metadata.FromManualSplit)
+	if metadata.FromManualSplit {
+		s.seb.addSplitPoint(metadata.Span.Key)
+	}
 }
 
 func (s *eventStream) maybeCheckpoint(
