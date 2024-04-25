@@ -46,7 +46,6 @@ module.exports = {
     "^.+\\.jsx?$": ['babel-jest', { configFile: path.resolve(__dirname, 'babel.config.js') }],
   },
   transformIgnorePatterns: [
-    "node_modules/(?!(.*crdb-protobuf-client.*))",
   ],
   ...( isBazel ? bazelOnlySettings : {} ),
 };
