@@ -12,7 +12,6 @@ package tpcc
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"strings"
 
@@ -96,10 +95,10 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 				var oID int
 				if err := del.selectNewOrder.QueryRowTx(ctx, tx, wID, dID).Scan(&oID); err != nil {
 					// If no matching order is found, the delivery of this order is skipped.
-					if !errors.Is(err, gosql.ErrNoRows) {
-						del.config.auditor.skippedDelivieries.Add(1)
-						return err
+					if !errors.Is(err, pgx.ErrNoRows) {
+						return errors.Wrap(err, "select new_order failed")
 					}
+					del.config.auditor.skippedDelivieries.Add(1)
 					continue
 				}
 				dIDoIDPairs[dID] = oID
