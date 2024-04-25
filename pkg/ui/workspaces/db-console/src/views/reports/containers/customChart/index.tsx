@@ -37,7 +37,11 @@ import {
 } from "src/redux/metricMetadata";
 import { INodeStatus } from "src/util/proto";
 
-import { CustomChartState, CustomChartTable } from "./customMetric";
+import {
+  CustomChartState,
+  CustomChartTable,
+  CustomMetricState,
+} from "./customMetric";
 import "./customChart.styl";
 import { queryByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
@@ -197,6 +201,34 @@ export class CustomChart extends React.Component<
     );
   };
 
+  getSources = (
+    nodesSummary: NodesSummary,
+    metricState: CustomMetricState,
+  ): string[] => {
+    if (!(nodesSummary?.nodeStatuses?.length > 0)) {
+      return [];
+    }
+    // If we have no nodeSource, and we're not asking for perSource metrics,
+    // then the user is asking for cluster-wide metrics. We can return an empty
+    // source list.
+    if (metricState.nodeSource === "" && !metricState.perSource) {
+      return [];
+    }
+    if (isStoreMetric(nodesSummary.nodeStatuses[0], metricState.metric)) {
+      // If a specific node is selected, return the storeIDs associated with that node.
+      // Otherwise, we're at the cluster level, so we grab each store ID.
+      return metricState.nodeSource
+        ? nodesSummary.storeIDsByNodeID[metricState.nodeSource]
+        : Object.values(nodesSummary.storeIDsByNodeID).flatMap(s => s);
+    } else {
+      // If it's not a store metric, and a specific nodeSource is chosen, just return that.
+      // Otherwise, return all known node IDs.
+      return metricState.nodeSource
+        ? [metricState.nodeSource]
+        : nodesSummary.nodeIDs;
+    }
+  };
+
   // Render a chart of the currently selected metrics.
   renderChart = (chart: CustomChartState, index: number) => {
     const metrics = chart.metrics;
@@ -215,23 +247,17 @@ export class CustomChart extends React.Component<
           <Axis units={units} label={AxisUnits[units]}>
             {metrics.map((m, i) => {
               if (m.metric !== "") {
-                if (m.perNode) {
-                  return _.map(nodesSummary.nodeIDs, nodeID => (
+                if (m.perSource) {
+                  const sources = this.getSources(nodesSummary, m);
+                  return _.map(sources, source => (
                     <Metric
-                      key={`${index}${i}${nodeID}`}
-                      title={`${nodeID}: ${m.metric} (${i})`}
+                      key={`${index}${i}${source}`}
+                      title={`${source}: ${m.metric} (${i})`}
                       name={m.metric}
                       aggregator={m.aggregator}
                       downsampler={m.downsampler}
                       derivative={m.derivative}
-                      sources={
-                        isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
-                          ? _.map(
-                              nodesSummary.storeIDsByNodeID[nodeID] || [],
-                              n => n.toString(),
-                            )
-                          : [nodeID]
-                      }
+                      sources={[source]}
                     />
                   ));
                 } else {
@@ -243,7 +269,7 @@ export class CustomChart extends React.Component<
                       aggregator={m.aggregator}
                       downsampler={m.downsampler}
                       derivative={m.derivative}
-                      sources={m.source === "" ? [] : [m.source]}
+                      sources={this.getSources(nodesSummary, m)}
                     />
                   );
                 }
@@ -344,5 +370,8 @@ export default withRouter(
 );
 
 function isStoreMetric(nodeStatus: INodeStatus, metricName: string) {
+  if (metricName?.startsWith("cr.store")) {
+    return true;
+  }
   return _.has(nodeStatus.store_statuses[0].metrics, metricName);
 }
