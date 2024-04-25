@@ -724,6 +724,13 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				stmtScope.makeOrderingChoice(),
 			)
 
+			// Add an optimization barrier in case the projected variables are never
+			// referenced again, to prevent column-pruning rules from dropping the
+			// side effects of executing the SELECT ... INTO statement.
+			if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
+				b.addBarrier(stmtScope)
+			}
+
 			if strict {
 				// Check that the expression produces exactly one row.
 				b.addOneRowCheck(stmtScope)
@@ -870,6 +877,10 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// list (padded with NULLs), so we can assume each target variable has a
 			// corresponding element.
 			intoScope := b.projectTupleAsIntoTarget(fetchScope, t.Target)
+
+			// Add a barrier in case the projected variables are never referenced
+			// again, to prevent column-pruning rules from removing the FETCH.
+			b.addBarrier(intoScope)
 
 			// Call a continuation for the remaining PLpgSQL statements from the newly
 			// built statement that has updated variables.
@@ -1091,12 +1102,15 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(inScope *scope, ident ast.Variable, va
 		// column from the previous scope.
 		assignScope.appendColumn(col)
 	}
-	// Project the assignment as a new column.
+	// Project the assignment as a new column. If the projected expression is
+	// volatile, add barriers before and after the projection to prevent optimizer
+	// rules from reordering or removing its side effects.
 	colName := scopeColName(ident)
 	scalar := b.buildPLpgSQLExpr(val, typ, inScope)
 	b.addBarrierIfVolatile(inScope, scalar)
 	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
 	b.ob.constructProjectForScope(inScope, assignScope)
+	b.addBarrierIfVolatile(assignScope, scalar)
 	return assignScope
 }
 
