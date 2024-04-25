@@ -21,7 +21,7 @@ import { CircleFilled } from "src/icon";
 import styles from "../snapshot.module.scss";
 
 import { formatDurationHours } from "./spanTable";
-import "antd/lib/tooltip/style";
+
 const cx = classNames.bind(styles);
 
 class SpanMetadataSortedTable extends SortedTable<NamedOperationMetadata> {}

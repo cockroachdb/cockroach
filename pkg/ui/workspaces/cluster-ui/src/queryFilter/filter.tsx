@@ -13,7 +13,6 @@ import Select from "react-select";
 import { History } from "history";
 import { CaretDown, Cancel } from "@cockroachlabs/icons";
 import { Input } from "antd";
-import "antd/lib/input/style";
 import isEqual from "lodash/isEqual";
 
 import { MultiSelectCheckbox } from "../multiSelectCheckbox/multiSelectCheckbox";

@@ -10,10 +10,6 @@
 
 import React, { useContext, useState } from "react";
 import { Alert, DatePicker, Icon, TimePicker } from "antd";
-import "antd/lib/time-picker/style";
-import "antd/lib/icon/style";
-import "antd/lib/date-picker/style";
-import "antd/lib/alert/style";
 import moment, { Moment } from "moment-timezone";
 import classNames from "classnames/bind";
 import { Time as TimeIcon, ErrorCircleFilled } from "@cockroachlabs/icons";
