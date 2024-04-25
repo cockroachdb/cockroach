@@ -10,7 +10,6 @@
 
 import React, { useContext } from "react";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
 import { Link } from "react-router-dom";
 import { Caution } from "@cockroachlabs/icons";

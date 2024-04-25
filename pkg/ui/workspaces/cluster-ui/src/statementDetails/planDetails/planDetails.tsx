@@ -17,8 +17,6 @@ import classNames from "classnames/bind";
 import { Button } from "../../button";
 import { SqlBox, SqlBoxSize } from "../../sql";
 import { SortSetting } from "../../sortedtable";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import {
   InsightsSortedTable,
   makeInsightsColumns,

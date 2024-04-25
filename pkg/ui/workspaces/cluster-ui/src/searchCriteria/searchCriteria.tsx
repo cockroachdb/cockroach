@@ -11,8 +11,6 @@
 import React from "react";
 import classNames from "classnames/bind";
 import { Menu, Dropdown } from "antd";
-import "antd/lib/menu/style";
-import "antd/lib/dropdown/style";
 import { CaretDown } from "@cockroachlabs/icons";
 import { ClickParam } from "antd/lib/menu";
 

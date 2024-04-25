@@ -10,7 +10,6 @@
 
 import React from "react";
 import { Pagination as AntPagination } from "antd";
-import "antd/lib/pagination/style";
 import classNames from "classnames/bind";
 
 import styles from "./pagination.module.scss";

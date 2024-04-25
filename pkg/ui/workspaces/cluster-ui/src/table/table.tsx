@@ -11,8 +11,6 @@
 import React from "react";
 import classnames from "classnames/bind";
 import { Table as AntTable, ConfigProvider } from "antd";
-import "antd/lib/table/style";
-import "antd/lib/config-provider/style";
 
 import styles from "./table.module.scss";
 

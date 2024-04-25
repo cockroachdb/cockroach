@@ -9,8 +9,6 @@
 // licenses/APL.txt.
 import React, { useContext, useMemo, useState } from "react";
 import { Col, Row } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import classNames from "classnames/bind";
 import { Heading } from "@cockroachlabs/ui-components";
 
@@ -99,7 +97,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
 
   return (
     <section className={cx("section")}>
-      <Row gutter={24} type="flex">
+      <Row gutter={24}>
         <Col span={12}>
           <SummaryCard>
             <SummaryCardItem

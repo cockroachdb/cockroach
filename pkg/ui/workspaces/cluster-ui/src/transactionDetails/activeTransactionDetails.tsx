@@ -10,8 +10,6 @@
 
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Col, Row } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import classNames from "classnames/bind";
 import React, { useEffect } from "react";
 import Helmet from "react-helmet";

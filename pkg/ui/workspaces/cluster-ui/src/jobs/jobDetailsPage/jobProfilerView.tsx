@@ -13,8 +13,6 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Button, InlineAlert, Icon } from "@cockroachlabs/ui-components";
 import moment from "moment-timezone";
 import { Row, Col } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import classNames from "classnames";
 import long from "long";
 import classnames from "classnames/bind";

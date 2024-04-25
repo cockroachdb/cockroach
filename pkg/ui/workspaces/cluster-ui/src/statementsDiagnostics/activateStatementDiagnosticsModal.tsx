@@ -9,12 +9,6 @@
 // licenses/APL.txt.
 
 import { Button, Checkbox, Divider, Input, Radio, Select } from "antd";
-import "antd/lib/radio/style";
-import "antd/lib/button/style";
-import "antd/lib/input/style";
-import "antd/lib/checkbox/style";
-import "antd/lib/divider/style";
-import "antd/lib/select/style";
 import React, { useCallback, useImperativeHandle, useState } from "react";
 import classNames from "classnames/bind";
 import { InlineAlert } from "@cockroachlabs/ui-components";

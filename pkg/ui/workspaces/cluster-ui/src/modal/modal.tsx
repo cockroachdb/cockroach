@@ -12,7 +12,6 @@ import React from "react";
 import classNames from "classnames/bind";
 import { Modal as AntModal } from "antd";
 
-import "antd/lib/modal/style";
 import { Button } from "../button";
 import { Text, TextTypes } from "../text";
 import SpinIcon from "../icon/spin";
@@ -47,7 +46,7 @@ export const Modal: React.FC<ModalProps> = ({
     <AntModal
       title={title && <Text textType={TextTypes.Heading3}>{title}</Text>}
       className={cx("crl-modal", className)}
-      visible={visible}
+      open={visible}
       closeIcon={
         <div className={cx("crl-modal__close-icon")} onClick={onCancel}>
           &times;
