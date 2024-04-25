@@ -217,7 +217,6 @@ go_test(
         "//conditions:default": {"test.Pool": "large"},
     }),
     shard_count = 16,
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/blobs",

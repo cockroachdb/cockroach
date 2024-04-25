@@ -2625,70 +2625,10 @@ GO_TARGETS = [
     "//pkg/workload:workload_test",
 ]
 
-# These suites run only the tests with the appropriate "size" (excepting those
-# tagged "flaky" or "integration") [1]. Note that tests have a default timeout
-# depending on the size [2].
-
-# [1] https://docs.bazel.build/versions/master/be/general.html#test_suite
-# [2] https://docs.bazel.build/versions/master/be/common-definitions.html#common-attributes-tests
-
 test_suite(
     name = "all_tests",
     tags = [
         "-integration",
-    ],
-    tests = ALL_TESTS,
-)
-
-test_suite(
-    name = "ccl_tests",
-    tags = [
-        "-integration",
-        "ccl_test",
-    ],
-    tests = ALL_TESTS,
-)
-
-test_suite(
-    name = "small_non_ccl_tests",
-    tags = [
-        "-ccl_test",
-        "-flaky",
-        "-integration",
-        "small",
-    ],
-    tests = ALL_TESTS,
-)
-
-test_suite(
-    name = "medium_non_ccl_tests",
-    tags = [
-        "-ccl_test",
-        "-flaky",
-        "-integration",
-        "medium",
-    ],
-    tests = ALL_TESTS,
-)
-
-test_suite(
-    name = "large_non_ccl_tests",
-    tags = [
-        "-ccl_test",
-        "-flaky",
-        "-integration",
-        "large",
-    ],
-    tests = ALL_TESTS,
-)
-
-test_suite(
-    name = "enormous_non_ccl_tests",
-    tags = [
-        "-ccl_test",
-        "-flaky",
-        "-integration",
-        "enormous",
     ],
     tests = ALL_TESTS,
 )

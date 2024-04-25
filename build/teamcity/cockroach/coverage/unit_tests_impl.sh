@@ -11,7 +11,7 @@ $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- \
   --instrumentation_filter="//pkg/..." \
   --profile=/artifacts/profile.gz \
   --flaky_test_attempts=4 \
-  //pkg:ccl_tests
+  //pkg:all_tests
 
 lcov_file="$(bazel info output_path)/_coverage/_coverage_report.dat"
 if [ ! -f "${lcov_file}" ]; then
