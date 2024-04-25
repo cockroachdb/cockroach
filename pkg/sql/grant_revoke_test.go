@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -237,5 +238,84 @@ func TestNoOpRevoke(t *testing.T) {
 			desc := retrieveDescriptorByObjectType(objectType)
 			require.Equal(t, objectVersionBeforeRevoke, desc.GetVersion())
 		}
+	}
+}
+
+func BenchmarkGrantTables(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	for _, numTables := range []int{10, 100, 1000} {
+		b.Run(fmt.Sprintf("numTables=%d", numTables), func(b *testing.B) {
+			srv, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+			defer srv.Stopper().Stop(ctx)
+
+			sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+			sqlRun.Exec(b, `CREATE DATABASE t;`)
+			sqlRun.Exec(b, `USE t;`)
+
+			sqlRun.Exec(b, `CREATE USER ROACH;`)
+
+			for i := 0; i < numTables; i++ {
+				sqlRun.Exec(b, fmt.Sprintf(`CREATE TABLE t.a%d (k INT PRIMARY KEY);`, i))
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sqlRun.Exec(b, `GRANT ALL ON * TO ROACH;`)
+				sqlRun.Exec(b, `REVOKE ALL ON * FROM ROACH;`)
+			}
+		})
+	}
+}
+
+func BenchmarkGrantTypes(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	for _, numTypes := range []int{10, 100, 1000} {
+		b.Run(fmt.Sprintf("numTypes=%d", numTypes), func(b *testing.B) {
+			srv, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+			defer srv.Stopper().Stop(ctx)
+
+			sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+			sqlRun.Exec(b, `CREATE DATABASE t;`)
+			sqlRun.Exec(b, `USE t;`)
+
+			sqlRun.Exec(b, `CREATE USER ROACH;`)
+
+			for i := 0; i < numTypes; i++ {
+				sqlRun.Exec(b, fmt.Sprintf(`CREATE TYPE a%d AS ENUM ('roach1', 'roach2', 'roach3');`, i))
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				txn := sqlRun.Begin(b)
+				for i := 0; i < numTypes; i++ {
+					_, err := txn.Exec(fmt.Sprintf(`GRANT ALL ON TYPE a%d TO ROACH;`, i))
+					if err != nil {
+						return
+					}
+				}
+				err := txn.Commit()
+				if err != nil {
+					return
+				}
+
+				txn = sqlRun.Begin(b)
+				for i := 0; i < numTypes; i++ {
+					_, err = txn.Exec(fmt.Sprintf(`REVOKE ALL ON TYPE a%d FROM ROACH;`, i))
+					if err != nil {
+						return
+					}
+				}
+				err = txn.Commit()
+				if err != nil {
+					return
+				}
+			}
+		})
 	}
 }

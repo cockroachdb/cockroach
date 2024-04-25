@@ -2973,3 +2973,23 @@ GRANT SELECT ON TABLE t, crdb_internal.tables TO testuser;
 
 statement error pgcode 0A000 cannot mix grants between virtual and non-virtual tables
 GRANT SELECT ON TABLE crdb_internal.tables, t TO testuser;
+
+statement ok
+CREATE USER ROACH;
+CREATE TABLE table1 (count INT);
+CREATE TABLE table2 (count INT);
+BEGIN;
+GRANT ALL ON table1 TO ROACH;
+GRANT ALL ON table2 TO ROACH;
+COMMIT;
+
+query T rowsort
+select description from [show jobs] where description LIKE '%updating privileges for table%';
+----
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR roach
+----
+database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
+db             public       table1       table        roach    ALL             false
+db             public       table2       table        roach    ALL             false

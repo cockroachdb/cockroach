@@ -56,9 +56,9 @@ exp,benchmark
 5,GenerateObjects/generate_10_tables
 16,GenerateObjects/generate_10x10_schemas_and_tables_in_existing_db
 5,GenerateObjects/generate_50000_tables
-15,Grant/grant_all_on_1_table
-19,Grant/grant_all_on_2_tables
-23,Grant/grant_all_on_3_tables
+10,Grant/grant_all_on_1_table
+10,Grant/grant_all_on_2_tables
+10,Grant/grant_all_on_3_tables
 19,GrantRole/grant_1_role
 25,GrantRole/grant_2_roles
 6,Jobs/cancel_job
@@ -104,9 +104,9 @@ exp,benchmark
 4,ORMQueries/pg_type
 133,ORMQueries/prisma_column_descriptions
 3,ORMQueries/prisma_column_descriptions_updated
-15,Revoke/revoke_all_on_1_table
-19,Revoke/revoke_all_on_2_tables
-23,Revoke/revoke_all_on_3_tables
+10,Revoke/revoke_all_on_1_table
+10,Revoke/revoke_all_on_2_tables
+10,Revoke/revoke_all_on_3_tables
 17,RevokeRole/revoke_1_role
 21,RevokeRole/revoke_2_roles
 14,ShowGrants/grant_2_roles
