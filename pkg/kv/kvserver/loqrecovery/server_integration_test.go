@@ -86,7 +86,7 @@ func TestReplicaCollection(t *testing.T) {
 		var replicas loqrecoverypb.ClusterReplicaInfo
 		var stats loqrecovery.CollectionStats
 
-		replicas, stats, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
+		replicas, stats, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm, -1 /* maxConcurrency */)
 		require.NoError(t, err, "failed to retrieve replica info")
 
 		// Check counters on retrieved replica info.
@@ -158,7 +158,7 @@ func TestStreamRestart(t *testing.T) {
 		var replicas loqrecoverypb.ClusterReplicaInfo
 		var stats loqrecovery.CollectionStats
 
-		replicas, stats, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
+		replicas, stats, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm, -1 /* maxConcurrency */)
 		require.NoError(t, err, "failed to retrieve replica info")
 
 		// Check counters on retrieved replica info.
@@ -208,7 +208,7 @@ func TestGetPlanStagingState(t *testing.T) {
 
 	adm := tc.GetAdminClient(t, 0)
 
-	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{MaxConcurrency: -1 /* no limit */})
 	require.NoError(t, err)
 	for _, s := range resp.Statuses {
 		require.Nil(t, s.PendingPlanID, "no pending plan")
@@ -221,7 +221,7 @@ func TestGetPlanStagingState(t *testing.T) {
 	}
 
 	// First we test that plans are successfully picked up by status call.
-	resp, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	resp, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{MaxConcurrency: -1 /* no limit */})
 	require.NoError(t, err)
 	statuses := aggregateStatusByNode(resp)
 	require.Equal(t, &plan.PlanID, statuses[1].PendingPlanID, "incorrect plan id on node 1")
@@ -232,7 +232,7 @@ func TestGetPlanStagingState(t *testing.T) {
 	tc.StopServer(1)
 
 	testutils.SucceedsSoon(t, func() error {
-		resp, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+		resp, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{MaxConcurrency: -1 /* no limit */})
 		if err != nil {
 			return err
 		}
@@ -268,7 +268,7 @@ func TestStageRecoveryPlans(t *testing.T) {
 
 	adm := tc.GetAdminClient(t, 0)
 
-	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{MaxConcurrency: -1 /* no limit */})
 	require.NoError(t, err)
 	for _, s := range resp.Statuses {
 		require.Nil(t, s.PendingPlanID, "no pending plan")
@@ -283,12 +283,16 @@ func TestStageRecoveryPlans(t *testing.T) {
 		createRecoveryForRange(t, tc, sk, 3),
 	}
 	plan.StaleLeaseholderNodeIDs = []roachpb.NodeID{1}
-	res, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+	res, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		Plan:           &plan,
+		AllNodes:       true,
+		MaxConcurrency: -1, // no limit
+	})
 	require.NoError(t, err, "failed to stage plan")
 	require.Empty(t, res.Errors, "unexpected errors in stage response")
 
 	// First we test that plans are successfully picked up by status call.
-	resp, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	resp, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{MaxConcurrency: -1 /* no limit */})
 	require.NoError(t, err)
 	statuses := aggregateStatusByNode(resp)
 	require.Equal(t, &plan.PlanID, statuses[1].PendingPlanID, "incorrect plan id on node 1")
@@ -315,11 +319,19 @@ func TestStageBadVersions(t *testing.T) {
 	plan.Version = clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
 	plan.Version.Major -= 1
 
-	_, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+	_, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		Plan:           &plan,
+		AllNodes:       true,
+		MaxConcurrency: -1, // no limit
+	})
 	require.Error(t, err, "shouldn't stage plan with old version")
 
 	plan.Version.Major += 2
-	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		Plan:           &plan,
+		AllNodes:       true,
+		MaxConcurrency: -1, // no limit
+	})
 	require.Error(t, err, "shouldn't stage plan with future version")
 }
 
@@ -334,7 +346,7 @@ func TestStageConflictingPlans(t *testing.T) {
 
 	adm := tc.GetAdminClient(t, 0)
 
-	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{MaxConcurrency: -1 /* no limit */})
 	require.NoError(t, err)
 	for _, s := range resp.Statuses {
 		require.Nil(t, s.PendingPlanID, "no pending plan")
@@ -347,7 +359,11 @@ func TestStageConflictingPlans(t *testing.T) {
 	plan.Updates = []loqrecoverypb.ReplicaUpdate{
 		createRecoveryForRange(t, tc, sk, 3),
 	}
-	res, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+	res, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		Plan:           &plan,
+		AllNodes:       true,
+		MaxConcurrency: -1, // no limit
+	})
 	require.NoError(t, err, "failed to stage plan")
 	require.Empty(t, res.Errors, "unexpected errors in stage response")
 
@@ -355,7 +371,11 @@ func TestStageConflictingPlans(t *testing.T) {
 	plan2.Updates = []loqrecoverypb.ReplicaUpdate{
 		createRecoveryForRange(t, tc, sk, 2),
 	}
-	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan2, AllNodes: true})
+	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		Plan:           &plan2,
+		AllNodes:       true,
+		MaxConcurrency: -1, // no limit
+	})
 	require.ErrorContains(t, err,
 		fmt.Sprintf("plan %s is already staged on node n3", plan.PlanID.String()),
 		"conflicting plans must not be allowed")
@@ -372,7 +392,7 @@ func TestForcePlanUpdate(t *testing.T) {
 
 	adm := tc.GetAdminClient(t, 0)
 
-	resV, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	resV, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{MaxConcurrency: -1 /* no limit */})
 	require.NoError(t, err)
 	for _, s := range resV.Statuses {
 		require.Nil(t, s.PendingPlanID, "no pending plan")
@@ -385,15 +405,23 @@ func TestForcePlanUpdate(t *testing.T) {
 	plan.Updates = []loqrecoverypb.ReplicaUpdate{
 		createRecoveryForRange(t, tc, sk, 3),
 	}
-	resS, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+	resS, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		Plan:           &plan,
+		AllNodes:       true,
+		MaxConcurrency: -1, // no limit
+	})
 	require.NoError(t, err, "failed to stage plan")
 	require.Empty(t, resS.Errors, "unexpected errors in stage response")
 
-	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{AllNodes: true, ForcePlan: true})
+	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		AllNodes:       true,
+		ForcePlan:      true,
+		MaxConcurrency: -1, // no limit
+	})
 	require.NoError(t, err, "force plan should reset previous plans")
 
 	// Verify that plan was successfully replaced by an empty one.
-	resV, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	resV, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{MaxConcurrency: -1 /* no limit */})
 	require.NoError(t, err)
 	statuses := aggregateStatusByNode(resV)
 	require.Nil(t, statuses[1].PendingPlanID, "unexpected plan id on node 1")
@@ -417,8 +445,11 @@ func TestNodeDecommissioned(t *testing.T) {
 	plan := makeTestRecoveryPlan(ctx, t, adm)
 	plan.DecommissionedNodeIDs = []roachpb.NodeID{roachpb.NodeID(3)}
 	testutils.SucceedsSoon(t, func() error {
-		res, err := adm.RecoveryStagePlan(ctx,
-			&serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+		res, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+			Plan:           &plan,
+			AllNodes:       true,
+			MaxConcurrency: -1, // no limit
+		})
 		if err != nil {
 			return err
 		}
@@ -445,8 +476,11 @@ func TestRejectDecommissionReachableNode(t *testing.T) {
 
 	plan := makeTestRecoveryPlan(ctx, t, adm)
 	plan.DecommissionedNodeIDs = []roachpb.NodeID{roachpb.NodeID(3)}
-	_, err := adm.RecoveryStagePlan(ctx,
-		&serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+	_, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		Plan:           &plan,
+		AllNodes:       true,
+		MaxConcurrency: -1, // no limit
+	})
 	require.ErrorContains(t, err, "was planned for decommission, but is present in cluster",
 		"staging plan decommissioning live nodes must not be allowed")
 }
@@ -462,7 +496,7 @@ func TestStageRecoveryPlansToWrongCluster(t *testing.T) {
 
 	adm := tc.GetAdminClient(t, 0)
 
-	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{MaxConcurrency: -1 /* no limit */})
 	require.NoError(t, err)
 	for _, s := range resp.Statuses {
 		require.Nil(t, s.PendingPlanID, "no pending plan")
@@ -477,7 +511,11 @@ func TestStageRecoveryPlansToWrongCluster(t *testing.T) {
 	plan.Updates = []loqrecoverypb.ReplicaUpdate{
 		createRecoveryForRange(t, tc, sk, 3),
 	}
-	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		Plan:           &plan,
+		AllNodes:       true,
+		MaxConcurrency: -1, // no limit
+	})
 	require.ErrorContains(t, err, "attempting to stage plan from cluster", "failed to stage plan")
 }
 
@@ -512,6 +550,7 @@ func TestRetrieveRangeStatus(t *testing.T) {
 	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
 		DecommissionedNodeIDs: []roachpb.NodeID{rs[0].NodeID, rs[1].NodeID},
 		MaxReportedRanges:     999,
+		MaxConcurrency:        -1, // no limit
 	})
 	require.NoError(t, err, "failed to get range status")
 
@@ -531,6 +570,7 @@ func TestRetrieveRangeStatus(t *testing.T) {
 	r, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
 		DecommissionedNodeIDs: []roachpb.NodeID{rs[0].NodeID, rs[1].NodeID},
 		MaxReportedRanges:     1,
+		MaxConcurrency:        -1, // no limit
 	})
 	require.NoError(t, err, "failed to get range status")
 	require.Equal(t, r.UnavailableRanges.Error, "found more failed ranges than limit 1")
@@ -569,13 +609,17 @@ func TestRetrieveApplyStatus(t *testing.T) {
 	var replicas loqrecoverypb.ClusterReplicaInfo
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		replicas, _, err = loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
+		replicas, _, err = loqrecovery.CollectRemoteReplicaInfo(ctx, adm, -1 /* maxConcurrency */)
 		return err
 	})
 	plan, planDetails, err := loqrecovery.PlanReplicas(ctx, replicas, nil, nil, uuid.DefaultGenerator)
 	require.NoError(t, err, "failed to create a plan")
 	testutils.SucceedsSoon(t, func() error {
-		res, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+		res, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+			Plan:           &plan,
+			AllNodes:       true,
+			MaxConcurrency: -1, // no limit
+		})
 		if err != nil {
 			return err
 		}
@@ -587,6 +631,7 @@ func TestRetrieveApplyStatus(t *testing.T) {
 
 	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
 		DecommissionedNodeIDs: plan.DecommissionedNodeIDs,
+		MaxConcurrency:        -1, // no limit
 	})
 
 	require.NoError(t, err, "failed to run recovery verify")
@@ -617,6 +662,7 @@ func TestRetrieveApplyStatus(t *testing.T) {
 	r, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
 		PendingPlanID:         &plan.PlanID,
 		DecommissionedNodeIDs: plan.DecommissionedNodeIDs,
+		MaxConcurrency:        -1, // no limit
 	})
 	require.NoError(t, err, "failed to run recovery verify")
 	applied := 0
@@ -645,7 +691,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 	var replicas loqrecoverypb.ClusterReplicaInfo
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		replicas, _, err = loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
+		replicas, _, err = loqrecovery.CollectRemoteReplicaInfo(ctx, adm, -1 /* maxConcurrency */)
 		return err
 	})
 	plan, _, err := loqrecovery.PlanReplicas(ctx, replicas, nil, nil, uuid.DefaultGenerator)
@@ -657,7 +703,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 	require.NoError(t, pss[1].SavePlan(plan), "failed to inject plan into storage")
 	require.NoError(t, tc.RestartServer(1), "failed to restart server")
 
-	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{MaxConcurrency: -1 /* no limit */})
 	require.NoError(t, err, "failed to run recovery verify")
 	found := false
 	for _, s := range r.Statuses {
