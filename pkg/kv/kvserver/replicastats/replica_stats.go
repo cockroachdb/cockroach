@@ -81,7 +81,6 @@ type ReplicaStats struct {
 	// internally by flipping an active field and clearing the fields.
 	records    [6]*replicaStatsRecord
 	lastRotate time.Time
-	lastReset  time.Time
 
 	// Testing only.
 	avgRateForTesting float64
@@ -204,7 +203,6 @@ func NewReplicaStats(now time.Time, getNodeLocality LocalityOracle) *ReplicaStat
 	// Set the first record to active. All other records will be initially
 	// inactive and empty.
 	rs.records[rs.idx].activate()
-	rs.lastReset = rs.lastRotate
 	return rs
 }
 
@@ -239,7 +237,6 @@ func (rs *ReplicaStats) MergeRequestCounts(other *ReplicaStats) {
 func (rs *ReplicaStats) SplitRequestCounts(other *ReplicaStats) {
 	other.idx = rs.idx
 	other.lastRotate = rs.lastRotate
-	other.lastReset = rs.lastReset
 
 	for i := range rs.records {
 		// When the lhs isn't active, set the rhs to inactive as well.
@@ -375,7 +372,6 @@ func (rs *ReplicaStats) ResetRequestCounts(now time.Time) {
 	// Update the current idx record to be active.
 	rs.records[rs.idx].activate()
 	rs.lastRotate = now
-	rs.lastReset = rs.lastRotate
 }
 
 // SnapshotRatedSummary returns a RatedSummary representing a snapshot of the
