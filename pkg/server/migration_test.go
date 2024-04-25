@@ -19,11 +19,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -318,7 +321,9 @@ func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 
 // TestUpgradeHappensAfterMigration is a regression test to ensure that
 // upgrades run prior to attempting to upgrade the cluster to the current
-// version.
+// version. It will also verify that any migrations that modify the system
+// database schema properly update the SystemDatabaseSchemaVersion on the
+// system database descriptor.
 func TestUpgradeHappensAfterMigrations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -349,6 +354,25 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 			},
 		},
 	})
+
+	internalDB := s.ApplicationLayer().InternalDB().(descs.DB)
+	err := internalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		systemDBDesc, err := txn.Descriptors().ByID(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
+		if err != nil {
+			return err
+		}
+		systemDBVersion := systemDBDesc.DatabaseDesc().GetSystemDatabaseSchemaVersion()
+		if clusterversion.MinSupported.Version().Less(*systemDBVersion) {
+			// NB: When MinSupported is changed to 24_2, this check can change to
+			// an equality check. This is because 24.2 is the first release where
+			// https://github.com/cockroachdb/cockroach/issues/121914 has been
+			// resolved.
+			return errors.Newf("before upgrade, expected system database version (%v) to be less than or equal to clusterversion.MinSupported (%v)", *systemDBVersion, clusterversion.MinSupported.Version())
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
 	close(automaticUpgrade)
 	sr := sqlutils.MakeSQLRunner(db)
 
@@ -359,5 +383,19 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 SELECT version = crdb_internal.node_executable_version()
   FROM [SHOW CLUSTER SETTING version]`,
 		[][]string{{"true"}})
+
+	err = internalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		systemDBDesc, err := txn.Descriptors().ByID(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
+		if err != nil {
+			return err
+		}
+		systemDBVersion := systemDBDesc.DatabaseDesc().GetSystemDatabaseSchemaVersion()
+		if !systemDBVersion.Equal(clusterversion.Latest.Version()) {
+			return errors.Newf("after upgrade, expected system database version (%v) to be equal to clusterversion.Latest (%v)", *systemDBVersion, clusterversion.Latest.Version())
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
 	s.Stopper().Stop(context.Background())
 }

@@ -197,27 +197,12 @@ const (
 	// options lagging_ranges_threshold and lagging_ranges_polling_interval.
 	TODODelete_V23_2_ChangefeedLaggingRangesOpts
 
-	// ***************************************************************************
-	//            WHERE TO ADD VERSION GATES DURING 23.2 STABILITY?
-	// ---------------------------------------------------------------------------
-	// If version gate is for 23.2 (to be backported to release-23.2):
-	//    Then add new gate above this comment (immediately above this comment).
-	// If version gate is for 24.1 (upcoming 24.1 development):
-	//    Then add new gate at the end (immediately above the "Add new versions
-	//    here" comment).
-	// ***************************************************************************
-
 	// V23_2 is CockroachDB v23.2. It's used for all v23.2.x patch releases.
 	V23_2
 
 	// V24_1Start demarcates the start of cluster versions stepped through during
 	// the process of upgrading from 23.2 to 24.1.
 	V24_1Start
-
-	// *************************************************
-	// Step (1) Add new versions here.
-	// Do not add new versions to a patch release.
-	// *************************************************
 
 	// V24_1_DropPayloadAndProgressFromSystemJobsTable drop the unused payload and
 	// progress columns from system.jobs table.
@@ -268,6 +253,11 @@ const (
 	// the system tenant to ensure it is a superset of secondary tenants.
 	V24_1_AddSpanCounts
 
+	// *************************************************
+	// Step (1) Add new versions above this comment.
+	// Do not add new versions to a patch release.
+	// *************************************************
+
 	numKeys
 )
 
@@ -308,11 +298,6 @@ var versionTable = [numKeys]roachpb.Version{
 	// v24.1 versions. Internal versions must be even.
 	V24_1Start: {Major: 23, Minor: 2, Internal: 2},
 
-	// *************************************************
-	// Step (2): Add new versions here.
-	// Do not add new versions to a patch release.
-	// *************************************************
-
 	V24_1_DropPayloadAndProgressFromSystemJobsTable: {Major: 23, Minor: 2, Internal: 4},
 
 	V24_1_MigrateOldStylePTSRecords: {Major: 23, Minor: 2, Internal: 6},
@@ -327,6 +312,11 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 22},
 	V24_1_ReplicatedLockPipelining:             {Major: 23, Minor: 2, Internal: 24},
 	V24_1_AddSpanCounts:                        {Major: 23, Minor: 2, Internal: 26},
+
+	// *************************************************
+	// Step (2): Add new versions above this comment.
+	// Do not add new versions to a patch release.
+	// *************************************************
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster
