@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -102,11 +103,11 @@ func TestFileRegistryOps(t *testing.T) {
 
 		registry := &FileRegistry{FS: mem, DBDir: "/mydb"}
 		require.NoError(t, registry.Load(context.Background()))
-		registry.mu.Lock()
-		defer registry.mu.Unlock()
-		if diff := pretty.Diff(registry.mu.entries, expected); diff != nil {
+		registry.writeMu.Lock()
+		defer registry.writeMu.Unlock()
+		if diff := pretty.Diff(registry.writeMu.mu.entries, expected); diff != nil {
 			t.Log(string(debug.Stack()))
-			t.Fatalf("%s\n%v", strings.Join(diff, "\n"), registry.mu.entries)
+			t.Fatalf("%s\n%v", strings.Join(diff, "\n"), registry.writeMu.mu.entries)
 		}
 	}
 
@@ -223,7 +224,7 @@ func TestFileRegistryElideUnencrypted(t *testing.T) {
 
 	registry := &FileRegistry{FS: mem}
 	require.NoError(t, registry.Load(context.Background()))
-	require.NoError(t, registry.writeToRegistryFile(&enginepb.RegistryUpdateBatch{
+	require.NoError(t, registry.writeToRegistryFileLocked(&enginepb.RegistryUpdateBatch{
 		Updates: []*enginepb.RegistryUpdate{
 			{Filename: "test1", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte(nil)}},
 			{Filename: "test2", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("foo")}},
@@ -234,8 +235,8 @@ func TestFileRegistryElideUnencrypted(t *testing.T) {
 	// Create another pebble file registry to verify that the unencrypted file is elided on startup.
 	registry2 := &FileRegistry{FS: mem}
 	require.NoError(t, registry2.Load(context.Background()))
-	require.NotContains(t, registry2.mu.entries, "test1")
-	entry := registry2.mu.entries["test2"]
+	require.NotContains(t, registry2.writeMu.mu.entries, "test1")
+	entry := registry2.writeMu.mu.entries["test2"]
 	require.NotNil(t, entry)
 	require.Equal(t, entry.EncryptionSettings, []byte("foo"))
 	require.NoError(t, registry2.Close())
@@ -252,7 +253,7 @@ func TestFileRegistryElideNonexistent(t *testing.T) {
 	{
 		registry := &FileRegistry{FS: mem}
 		require.NoError(t, registry.Load(context.Background()))
-		require.NoError(t, registry.writeToRegistryFile(&enginepb.RegistryUpdateBatch{
+		require.NoError(t, registry.writeToRegistryFileLocked(&enginepb.RegistryUpdateBatch{
 			Updates: []*enginepb.RegistryUpdate{
 				{Filename: "foo", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("foo")}},
 				{Filename: "bar", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("bar")}},
@@ -266,10 +267,10 @@ func TestFileRegistryElideNonexistent(t *testing.T) {
 	{
 		registry := &FileRegistry{FS: mem}
 		require.NoError(t, registry.Load(context.Background()))
-		require.NotContains(t, registry.mu.entries, "foo")
-		require.Contains(t, registry.mu.entries, "bar")
-		require.NotNil(t, registry.mu.entries["bar"])
-		require.Equal(t, []byte("bar"), registry.mu.entries["bar"].EncryptionSettings)
+		require.NotContains(t, registry.writeMu.mu.entries, "foo")
+		require.Contains(t, registry.writeMu.mu.entries, "bar")
+		require.NotNil(t, registry.writeMu.mu.entries["bar"])
+		require.Equal(t, []byte("bar"), registry.writeMu.mu.entries["bar"].EncryptionSettings)
 		require.NoError(t, registry.Close())
 	}
 }
@@ -583,12 +584,12 @@ func TestFileRegistryRollover(t *testing.T) {
 	// deleted.
 	var registryFiles []string
 	accumRegistryFiles := func() {
-		registry.mu.Lock()
-		defer registry.mu.Unlock()
+		registry.writeMu.Lock()
+		defer registry.writeMu.Unlock()
 		n := len(registryFiles)
-		if registry.mu.registryFilename != "" &&
-			(n == 0 || registry.mu.registryFilename != registryFiles[n-1]) {
-			registryFiles = append(registryFiles, registry.mu.registryFilename)
+		if registry.writeMu.registryFilename != "" &&
+			(n == 0 || registry.writeMu.registryFilename != registryFiles[n-1]) {
+			registryFiles = append(registryFiles, registry.writeMu.registryFilename)
 			n++
 		}
 	}
@@ -647,13 +648,13 @@ func TestFileRegistryKeepOldFilesAndSync(t *testing.T) {
 	// deleted.
 	var registryFiles []string
 	accumRegistryFiles := func(forceCheck bool) (totalCreated int) {
-		registry.mu.Lock()
-		defer registry.mu.Unlock()
+		registry.writeMu.Lock()
+		defer registry.writeMu.Unlock()
 		n := len(registryFiles)
 		doCheck := forceCheck
-		if registry.mu.registryFilename != "" &&
-			(n == 0 || registry.mu.registryFilename != registryFiles[n-1]) {
-			registryFiles = append(registryFiles, registry.mu.registryFilename)
+		if registry.writeMu.registryFilename != "" &&
+			(n == 0 || registry.writeMu.registryFilename != registryFiles[n-1]) {
+			registryFiles = append(registryFiles, registry.writeMu.registryFilename)
 			n++
 			doCheck = true
 		}
@@ -663,10 +664,10 @@ func TestFileRegistryKeepOldFilesAndSync(t *testing.T) {
 				numObsolete = numOldRegistryFiles
 			}
 			// The obsolete files are what we expect them to be.
-			require.Equal(t, numObsolete, len(registry.mu.obsoleteRegistryFiles))
+			require.Equal(t, numObsolete, len(registry.writeMu.obsoleteRegistryFiles))
 			var expectedFiles []string
 			for i := 0; i < numObsolete; i++ {
-				require.Equal(t, registryFiles[n-2-i], registry.mu.obsoleteRegistryFiles[numObsolete-1-i])
+				require.Equal(t, registryFiles[n-2-i], registry.writeMu.obsoleteRegistryFiles[numObsolete-1-i])
 				expectedFiles = append(expectedFiles, registryFiles[n-2-i])
 			}
 			expectedFiles = append(expectedFiles, registryFiles[n-1])
@@ -730,4 +731,28 @@ func TestFileRegistryKeepOldFilesAndSync(t *testing.T) {
 	registry = &FileRegistry{FS: mem, DBDir: dir, NumOldRegistryFiles: numOldRegistryFiles}
 	require.NoError(t, registry.Load(context.Background()))
 	registryChecker.checkEntries(registry)
+}
+
+func TestFileRegistryBlockedWriteAllowsRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mem := vfs.NewMem()
+	fs := &BlockingWriteFSForTesting{FS: mem}
+
+	registry := &FileRegistry{FS: fs}
+	require.NoError(t, registry.Load(context.Background()))
+	fileEntry := &enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("foo")}
+	require.NoError(t, registry.SetFileEntry("test1", fileEntry))
+	fs.Block()
+	go func() {
+		require.NoError(t, registry.SetFileEntry("test2", fileEntry))
+	}()
+	time.Sleep(time.Millisecond)
+	require.Equal(t, fileEntry, registry.GetFileEntry("test1"))
+	snap := registry.GetRegistrySnapshot()
+	require.Equal(t, 1, len(snap.Files))
+	require.Equal(t, 1, len(registry.List()))
+	fs.WaitForBlockAndUnblock()
+	require.NoError(t, registry.Close())
 }
