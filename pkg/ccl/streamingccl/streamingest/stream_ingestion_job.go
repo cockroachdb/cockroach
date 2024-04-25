@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -574,6 +575,15 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	if !execCfg.Codec.ForSystemTenant() {
 		return nil
 	}
+
+	if jobs.HasErrJobCanceled(
+		errors.DecodeError(ctx, *s.job.Payload().FinalResumeError),
+	) {
+		telemetry.Count("physical_replication.canceled")
+	} else {
+		telemetry.Count("physical_replication.failed")
+	}
+
 	return execCfg.InternalDB.Txn(ctx, func(
 		ctx context.Context, txn isql.Txn,
 	) error {
