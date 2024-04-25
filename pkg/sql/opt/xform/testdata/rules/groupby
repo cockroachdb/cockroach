@@ -3662,3 +3662,463 @@ memo (optimized, ~6KB, required=[presentation: d:1,e:2,count:8])
  │         └── cost: 1098.72
  ├── G5: (aggregations G6)
  └── G6: (count-rows)
+
+# Test that SplitGroupByScanIntoUnionScans is not applied unnecessarily.
+
+exec-ddl
+CREATE TABLE t122638 (
+  a INT NOT NULL CHECK (a IN (0, 1, 2)),
+  b INT NOT NULL,
+  c INT NOT NULL,
+  d INT NOT NULL,
+  e INT NOT NULL,
+  PRIMARY KEY (a, b, c, d)
+)
+----
+
+# Inject statistics from:
+#
+#   SET CLUSTER SETTING sql.stats.histogram_collection.enabled = off;
+#
+#   INSERT INTO t122638 (a, b, c, d, e)
+#   SELECT i % 3, i % 10, i, i, i
+#   FROM generate_series(0, 999999) AS s(i);
+#
+exec-ddl
+ALTER TABLE t122638 INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2024-04-24 05:39:54.242649",
+          "distinct_count": 3,
+          "histo_col_type": "",
+          "null_count": 0,
+          "row_count": 1000000
+      },
+      {
+          "avg_size": 2,
+          "columns": [
+              "a",
+              "b"
+          ],
+          "created_at": "2024-04-24 05:39:54.242649",
+          "distinct_count": 30,
+          "histo_col_type": "",
+          "null_count": 0,
+          "row_count": 1000000
+      },
+      {
+          "avg_size": 6,
+          "columns": [
+              "a",
+              "b",
+              "c"
+          ],
+          "created_at": "2024-04-24 05:39:54.242649",
+          "distinct_count": 1000000,
+          "histo_col_type": "",
+          "null_count": 0,
+          "row_count": 1000000
+      },
+      {
+          "avg_size": 10,
+          "columns": [
+              "a",
+              "b",
+              "c",
+              "d"
+          ],
+          "created_at": "2024-04-24 05:39:54.242649",
+          "distinct_count": 1000000,
+          "histo_col_type": "",
+          "null_count": 0,
+          "row_count": 1000000
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "b"
+          ],
+          "created_at": "2024-04-24 05:39:54.242649",
+          "distinct_count": 10,
+          "histo_col_type": "",
+          "null_count": 0,
+          "row_count": 1000000
+      },
+      {
+          "avg_size": 4,
+          "columns": [
+              "c"
+          ],
+          "created_at": "2024-04-24 05:39:54.242649",
+          "distinct_count": 1000000,
+          "histo_col_type": "",
+          "null_count": 0,
+          "row_count": 1000000
+      },
+      {
+          "avg_size": 4,
+          "columns": [
+              "d"
+          ],
+          "created_at": "2024-04-24 05:39:54.242649",
+          "distinct_count": 1000000,
+          "histo_col_type": "",
+          "null_count": 0,
+          "row_count": 1000000
+      },
+      {
+          "avg_size": 4,
+          "columns": [
+              "e"
+          ],
+          "created_at": "2024-04-24 05:39:54.242649",
+          "distinct_count": 1000000,
+          "histo_col_type": "",
+          "null_count": 0,
+          "row_count": 1000000
+      }
+]'
+----
+
+# Group by next column in index: rule should apply.
+opt expect=SplitGroupByScanIntoUnionScans
+SELECT c, count(*) FROM t122638 WHERE b = 0 GROUP BY c ORDER BY c LIMIT 10
+----
+limit
+ ├── columns: c:3!null count:8!null
+ ├── internal-ordering: +3
+ ├── cardinality: [0 - 10]
+ ├── key: (3)
+ ├── fd: (3)-->(8)
+ ├── ordering: +3
+ ├── group-by (streaming)
+ │    ├── columns: c:3!null count_rows:8!null
+ │    ├── grouping columns: c:3!null
+ │    ├── internal-ordering: +3
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(8)
+ │    ├── ordering: +3
+ │    ├── limit hint: 10.00
+ │    ├── union-all
+ │    │    ├── columns: c:3!null
+ │    │    ├── left columns: c:32
+ │    │    ├── right columns: c:25
+ │    │    ├── ordering: +3
+ │    │    ├── limit hint: 10.00
+ │    │    ├── union-all
+ │    │    │    ├── columns: c:32!null
+ │    │    │    ├── left columns: c:11
+ │    │    │    ├── right columns: c:18
+ │    │    │    ├── ordering: +32
+ │    │    │    ├── limit hint: 10.00
+ │    │    │    ├── scan t122638
+ │    │    │    │    ├── columns: c:11!null
+ │    │    │    │    ├── constraint: /9/10/11/12: [/0/0 - /0/0]
+ │    │    │    │    ├── ordering: +11
+ │    │    │    │    └── limit hint: 10.00
+ │    │    │    └── scan t122638
+ │    │    │         ├── columns: c:18!null
+ │    │    │         ├── constraint: /16/17/18/19: [/1/0 - /1/0]
+ │    │    │         ├── ordering: +18
+ │    │    │         └── limit hint: 10.00
+ │    │    └── scan t122638
+ │    │         ├── columns: c:25!null
+ │    │         ├── constraint: /23/24/25/26: [/2/0 - /2/0]
+ │    │         ├── ordering: +25
+ │    │         └── limit hint: 10.00
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:8]
+ └── 10
+
+# Group by next column in index and another column: rule should apply.
+opt expect=SplitGroupByScanIntoUnionScans
+SELECT c, e, count(*) FROM t122638 WHERE b = 0 GROUP BY c, e ORDER BY c, e LIMIT 10
+----
+limit
+ ├── columns: c:3!null e:5!null count:8!null
+ ├── internal-ordering: +3,+5
+ ├── cardinality: [0 - 10]
+ ├── key: (3,5)
+ ├── fd: (3,5)-->(8)
+ ├── ordering: +3,+5
+ ├── group-by (streaming)
+ │    ├── columns: c:3!null e:5!null count_rows:8!null
+ │    ├── grouping columns: c:3!null e:5!null
+ │    ├── internal-ordering: +3,+5
+ │    ├── key: (3,5)
+ │    ├── fd: (3,5)-->(8)
+ │    ├── ordering: +3,+5
+ │    ├── limit hint: 10.00
+ │    ├── union-all
+ │    │    ├── columns: c:3!null e:5!null
+ │    │    ├── left columns: c:32 e:34
+ │    │    ├── right columns: c:25 e:27
+ │    │    ├── ordering: +3,+5
+ │    │    ├── limit hint: 10.00
+ │    │    ├── union-all
+ │    │    │    ├── columns: c:32!null e:34!null
+ │    │    │    ├── left columns: c:11 e:13
+ │    │    │    ├── right columns: c:18 e:20
+ │    │    │    ├── ordering: +32,+34
+ │    │    │    ├── limit hint: 10.00
+ │    │    │    ├── sort (segmented)
+ │    │    │    │    ├── columns: c:11!null e:13!null
+ │    │    │    │    ├── ordering: +11,+13
+ │    │    │    │    ├── limit hint: 10.00
+ │    │    │    │    └── scan t122638
+ │    │    │    │         ├── columns: c:11!null e:13!null
+ │    │    │    │         ├── constraint: /9/10/11/12: [/0/0 - /0/0]
+ │    │    │    │         └── ordering: +11
+ │    │    │    └── sort (segmented)
+ │    │    │         ├── columns: c:18!null e:20!null
+ │    │    │         ├── ordering: +18,+20
+ │    │    │         ├── limit hint: 10.00
+ │    │    │         └── scan t122638
+ │    │    │              ├── columns: c:18!null e:20!null
+ │    │    │              ├── constraint: /16/17/18/19: [/1/0 - /1/0]
+ │    │    │              └── ordering: +18
+ │    │    └── sort (segmented)
+ │    │         ├── columns: c:25!null e:27!null
+ │    │         ├── ordering: +25,+27
+ │    │         ├── limit hint: 10.00
+ │    │         └── scan t122638
+ │    │              ├── columns: c:25!null e:27!null
+ │    │              ├── constraint: /23/24/25/26: [/2/0 - /2/0]
+ │    │              └── ordering: +25
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:8]
+ └── 10
+
+# Group by next column in index, and index provides ordering required by
+# array_agg: rule should apply.
+opt expect=SplitGroupByScanIntoUnionScans
+SELECT c, array_agg(e)
+FROM (SELECT * FROM t122638 ORDER BY d)
+WHERE b = 0
+GROUP BY c ORDER BY c
+LIMIT 10
+----
+limit
+ ├── columns: c:3!null array_agg:8!null
+ ├── internal-ordering: +3
+ ├── cardinality: [0 - 10]
+ ├── key: (3)
+ ├── fd: (3)-->(8)
+ ├── ordering: +3
+ ├── group-by (streaming)
+ │    ├── columns: c:3!null array_agg:8!null
+ │    ├── grouping columns: c:3!null
+ │    ├── internal-ordering: +4 opt(2,3)
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(8)
+ │    ├── ordering: +3
+ │    ├── limit hint: 10.00
+ │    ├── union-all
+ │    │    ├── columns: b:2!null c:3!null d:4!null e:5!null
+ │    │    ├── left columns: b:31 c:32 d:33 e:34
+ │    │    ├── right columns: b:24 c:25 d:26 e:27
+ │    │    ├── ordering: +3,+4
+ │    │    ├── limit hint: 10.00
+ │    │    ├── union-all
+ │    │    │    ├── columns: b:31!null c:32!null d:33!null e:34!null
+ │    │    │    ├── left columns: b:10 c:11 d:12 e:13
+ │    │    │    ├── right columns: b:17 c:18 d:19 e:20
+ │    │    │    ├── ordering: +32,+33
+ │    │    │    ├── limit hint: 10.00
+ │    │    │    ├── scan t122638
+ │    │    │    │    ├── columns: b:10!null c:11!null d:12!null e:13!null
+ │    │    │    │    ├── constraint: /9/10/11/12: [/0/0 - /0/0]
+ │    │    │    │    ├── key: (11,12)
+ │    │    │    │    ├── fd: ()-->(10), (11,12)-->(13)
+ │    │    │    │    ├── ordering: +11,+12 opt(10) [actual: +11,+12]
+ │    │    │    │    └── limit hint: 10.00
+ │    │    │    └── scan t122638
+ │    │    │         ├── columns: b:17!null c:18!null d:19!null e:20!null
+ │    │    │         ├── constraint: /16/17/18/19: [/1/0 - /1/0]
+ │    │    │         ├── key: (18,19)
+ │    │    │         ├── fd: ()-->(17), (18,19)-->(20)
+ │    │    │         ├── ordering: +18,+19 opt(17) [actual: +18,+19]
+ │    │    │         └── limit hint: 10.00
+ │    │    └── scan t122638
+ │    │         ├── columns: b:24!null c:25!null d:26!null e:27!null
+ │    │         ├── constraint: /23/24/25/26: [/2/0 - /2/0]
+ │    │         ├── key: (25,26)
+ │    │         ├── fd: ()-->(24), (25,26)-->(27)
+ │    │         ├── ordering: +25,+26 opt(24) [actual: +25,+26]
+ │    │         └── limit hint: 10.00
+ │    └── aggregations
+ │         └── array-agg [as=array_agg:8, outer=(5)]
+ │              └── e:5
+ └── 10
+
+# Group by next column in index, but index does not provide ordering required by
+# array_agg: rule should not apply.
+opt expect-not=SplitGroupByScanIntoUnionScans
+SELECT c, array_agg(e)
+FROM (SELECT * FROM t122638 ORDER BY e)
+WHERE b = 0
+GROUP BY c ORDER BY c
+LIMIT 10
+----
+limit
+ ├── columns: c:3!null array_agg:8!null
+ ├── internal-ordering: +3
+ ├── cardinality: [0 - 10]
+ ├── key: (3)
+ ├── fd: (3)-->(8)
+ ├── ordering: +3
+ ├── group-by (streaming)
+ │    ├── columns: c:3!null array_agg:8!null
+ │    ├── grouping columns: c:3!null
+ │    ├── internal-ordering: +5 opt(2,3)
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(8)
+ │    ├── ordering: +3
+ │    ├── limit hint: 10.00
+ │    ├── sort
+ │    │    ├── columns: b:2!null c:3!null e:5!null
+ │    │    ├── fd: ()-->(2)
+ │    │    ├── ordering: +3,+5 opt(2) [actual: +3,+5]
+ │    │    ├── limit hint: 10.00
+ │    │    └── scan t122638
+ │    │         ├── columns: b:2!null c:3!null e:5!null
+ │    │         ├── constraint: /1/2/3/4
+ │    │         │    ├── [/0/0 - /0/0]
+ │    │         │    ├── [/1/0 - /1/0]
+ │    │         │    └── [/2/0 - /2/0]
+ │    │         └── fd: ()-->(2)
+ │    └── aggregations
+ │         └── array-agg [as=array_agg:8, outer=(5)]
+ │              └── e:5
+ └── 10
+
+# Group by column after next in index: rule should not apply.
+opt expect-not=SplitGroupByScanIntoUnionScans
+SELECT d, count(*) FROM t122638 WHERE b = 0 GROUP BY d ORDER BY d LIMIT 10
+----
+top-k
+ ├── columns: d:4!null count:8!null
+ ├── internal-ordering: +4
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (4)
+ ├── fd: (4)-->(8)
+ ├── ordering: +4
+ └── group-by (hash)
+      ├── columns: d:4!null count_rows:8!null
+      ├── grouping columns: d:4!null
+      ├── key: (4)
+      ├── fd: (4)-->(8)
+      ├── scan t122638
+      │    ├── columns: b:2!null d:4!null
+      │    ├── constraint: /1/2/3/4
+      │    │    ├── [/0/0 - /0/0]
+      │    │    ├── [/1/0 - /1/0]
+      │    │    └── [/2/0 - /2/0]
+      │    └── fd: ()-->(2)
+      └── aggregations
+           └── count-rows [as=count_rows:8]
+
+# Group by column after next in index, and index provides ordering required by
+# array_agg: rule should not apply.
+opt expect-not=SplitGroupByScanIntoUnionScans
+SELECT d, array_agg(e)
+FROM (SELECT * FROM t122638 ORDER BY c)
+WHERE b = 0
+GROUP BY d ORDER BY d
+LIMIT 10
+----
+limit
+ ├── columns: d:4!null array_agg:8!null
+ ├── internal-ordering: +4
+ ├── cardinality: [0 - 10]
+ ├── key: (4)
+ ├── fd: (4)-->(8)
+ ├── ordering: +4
+ ├── group-by (streaming)
+ │    ├── columns: d:4!null array_agg:8!null
+ │    ├── grouping columns: d:4!null
+ │    ├── internal-ordering: +3 opt(2,4)
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(8)
+ │    ├── ordering: +4
+ │    ├── limit hint: 10.00
+ │    ├── sort
+ │    │    ├── columns: b:2!null c:3!null d:4!null e:5!null
+ │    │    ├── fd: ()-->(2)
+ │    │    ├── ordering: +4,+3 opt(2) [actual: +4,+3]
+ │    │    ├── limit hint: 10.00
+ │    │    └── scan t122638
+ │    │         ├── columns: b:2!null c:3!null d:4!null e:5!null
+ │    │         ├── constraint: /1/2/3/4
+ │    │         │    ├── [/0/0 - /0/0]
+ │    │         │    ├── [/1/0 - /1/0]
+ │    │         │    └── [/2/0 - /2/0]
+ │    │         └── fd: ()-->(2)
+ │    └── aggregations
+ │         └── array-agg [as=array_agg:8, outer=(5)]
+ │              └── e:5
+ └── 10
+
+# Group by column not in index: rule should not apply.
+opt expect-not=SplitGroupByScanIntoUnionScans
+SELECT e, count(*) FROM t122638 WHERE b = 0 AND c = 0 AND d = 0 GROUP BY e ORDER BY e LIMIT 10
+----
+top-k
+ ├── columns: e:5!null count:8!null
+ ├── internal-ordering: +5
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (5)
+ ├── fd: (5)-->(8)
+ ├── ordering: +5
+ └── group-by (hash)
+      ├── columns: e:5!null count_rows:8!null
+      ├── grouping columns: e:5!null
+      ├── key: (5)
+      ├── fd: (5)-->(8)
+      ├── scan t122638
+      │    ├── columns: b:2!null c:3!null d:4!null e:5!null
+      │    ├── constraint: /1/2/3/4
+      │    │    ├── [/0/0/0/0 - /0/0/0/0]
+      │    │    ├── [/1/0/0/0 - /1/0/0/0]
+      │    │    └── [/2/0/0/0 - /2/0/0/0]
+      │    └── fd: ()-->(2-4)
+      └── aggregations
+           └── count-rows [as=count_rows:8]
+
+# Group by column not in index, and index provides ordering required by
+# array_agg: rule should not apply.
+opt expect-not=SplitGroupByScanIntoUnionScans
+SELECT e, array_agg(d)
+FROM (SELECT * FROM t122638 ORDER BY d)
+WHERE b = 0 AND c = 0 AND d = 0
+GROUP BY e ORDER BY e
+LIMIT 10
+----
+top-k
+ ├── columns: e:5!null array_agg:8!null
+ ├── internal-ordering: +5
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (5)
+ ├── fd: (5)-->(8)
+ ├── ordering: +5
+ └── group-by (hash)
+      ├── columns: e:5!null array_agg:8!null
+      ├── grouping columns: e:5!null
+      ├── key: (5)
+      ├── fd: (5)-->(8)
+      ├── scan t122638
+      │    ├── columns: b:2!null c:3!null d:4!null e:5!null
+      │    ├── constraint: /1/2/3/4
+      │    │    ├── [/0/0/0/0 - /0/0/0/0]
+      │    │    ├── [/1/0/0/0 - /1/0/0/0]
+      │    │    └── [/2/0/0/0 - /2/0/0/0]
+      │    └── fd: ()-->(2-4)
+      └── aggregations
+           └── array-agg [as=array_agg:8, outer=(4)]
+                └── d:4

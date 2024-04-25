@@ -473,6 +473,24 @@ func (c *CustomFuncs) SplitGroupByScanIntoUnionScans(
 		return nil, false
 	}
 
+	md := c.e.mem.Metadata()
+	tableMeta := md.TableMeta(sp.Table)
+	index := tableMeta.Table.Index(sp.Index)
+	if keyPrefixLength >= index.KeyColumnCount() {
+		// There is no benefit to splitting into scans of a single row each.
+		return nil, false
+	}
+
+	// If the original scan cannot provide an ordering on at least one of the
+	// grouping columns, then GenerateStreamingGroupBy will not produce a
+	// streaming grouping operation, and therefore there is no benefit to
+	// splitting into scans.
+	if !indexHasOrderingSequenceOnOne(
+		md, scan, sp, private.GroupingCols, keyPrefixLength,
+	) {
+		return nil, false
+	}
+
 	// Create a UnionAll of scans that can provide the ordering of the
 	// GroupingPrivate (if no such UnionAll is possible this will return
 	// ok=false). We pass a limit of 0 since the scans are unlimited
