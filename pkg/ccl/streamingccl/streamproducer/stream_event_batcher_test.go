@@ -49,6 +49,13 @@ func TestStreamEventBatcher(t *testing.T) {
 	require.Equal(t, 1, len(seb.batch.Ssts))
 	require.Equal(t, runningSize, seb.getSize())
 
+	splitKey := roachpb.Key("1")
+	runningSize += len(splitKey)
+	seb.addSplitPoint(splitKey)
+	require.Equal(t, 1, len(seb.batch.SplitPoints))
+	require.Equal(t, runningSize, seb.getSize())
+
+	// Reset should clear the batch.
 	seb.reset()
 	require.Equal(t, 0, seb.getSize())
 	require.Equal(t, 0, len(seb.batch.KeyValues))

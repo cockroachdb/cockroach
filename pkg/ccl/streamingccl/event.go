@@ -34,6 +34,8 @@ const (
 	// SpanConfigEvent indicates that the SpanConfig field of an event holds an updated
 	// SpanConfigRecord.
 	SpanConfigEvent
+	// SplitEvent indicates that the SplitKey field of an event holds a split key.
+	SplitEvent
 )
 
 // Event describes an event emitted by a cluster to cluster stream.  Its Type
@@ -59,6 +61,9 @@ type Event interface {
 
 	// GetSpanConfigEvent returns a SpanConfig event if the EventType is SpanConfigEvent
 	GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry
+
+	// GetSplitEvent returns the split event if the EventType is a SplitEvent
+	GetSplitEvent() *roachpb.Key
 }
 
 // kvEvent is a key value pair that needs to be ingested.
@@ -98,6 +103,11 @@ func (kve kvEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
 	return nil
 }
 
+// GetSplitEvent implements the Event interface.
+func (kve kvEvent) GetSplitEvent() *roachpb.Key {
+	return nil
+}
+
 // sstableEvent is a sstable that needs to be ingested.
 type sstableEvent struct {
 	sst kvpb.RangeFeedSSTable
@@ -130,6 +140,11 @@ func (sste sstableEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
 
 // GetSpanConfigEvent implements the Event interface.
 func (sste sstableEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
+	return nil
+}
+
+// GetSplitEvent implements the Event interface.
+func (sste sstableEvent) GetSplitEvent() *roachpb.Key {
 	return nil
 }
 
@@ -167,6 +182,11 @@ func (dre delRangeEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
 
 // GetSpanConfigEvent implements the Event interface.
 func (dre delRangeEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
+	return nil
+}
+
+// GetSplitEvent implements the Event interface.
+func (dre delRangeEvent) GetSplitEvent() *roachpb.Key {
 	return nil
 }
 
@@ -210,6 +230,11 @@ func (ce checkpointEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry
 	return nil
 }
 
+// GetSplitEvent implements the Event interface.
+func (ce checkpointEvent) GetSplitEvent() *roachpb.Key {
+	return nil
+}
+
 type spanConfigEvent struct {
 	spanConfig streampb.StreamedSpanConfigEntry
 }
@@ -246,6 +271,52 @@ func (spe spanConfigEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntr
 	return &spe.spanConfig
 }
 
+// GetSplitEvent implements the Event interface.
+func (spe spanConfigEvent) GetSplitEvent() *roachpb.Key {
+	return nil
+}
+
+type splitEvent struct {
+	splitKey roachpb.Key
+}
+
+var _ Event = splitEvent{}
+
+// Type implements the Event interface.
+func (se splitEvent) Type() EventType {
+	return SplitEvent
+}
+
+// GetKV implements the Event interface.
+func (se splitEvent) GetKV() *roachpb.KeyValue {
+	return nil
+}
+
+// GetSSTable implements the Event interface.
+func (se splitEvent) GetSSTable() *kvpb.RangeFeedSSTable {
+	return nil
+}
+
+// GetDeleteRange implements the Event interface.
+func (se splitEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
+	return nil
+}
+
+// GetResolvedSpans implements the Event interface.
+func (se splitEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
+	return nil
+}
+
+// GetSpanConfigEvent implements the Event interface.
+func (se splitEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
+	return nil
+}
+
+// GetSplitEvent implements the Event interface.
+func (se splitEvent) GetSplitEvent() *roachpb.Key {
+	return &se.splitKey
+}
+
 // MakeKVEvent creates an Event from a KV.
 func MakeKVEvent(kv roachpb.KeyValue) Event {
 	return kvEvent{kv: kv}
@@ -268,4 +339,8 @@ func MakeCheckpointEvent(resolvedSpans []jobspb.ResolvedSpan) Event {
 
 func MakeSpanConfigEvent(streamedSpanConfig streampb.StreamedSpanConfigEntry) Event {
 	return spanConfigEvent{spanConfig: streamedSpanConfig}
+}
+
+func MakeSplitEvent(splitKey roachpb.Key) Event {
+	return splitEvent{splitKey: splitKey}
 }
