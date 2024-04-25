@@ -26,7 +26,6 @@ go_test(
         "padding_test.go",
     ],
     embed = [":pgcryptocipherccl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",

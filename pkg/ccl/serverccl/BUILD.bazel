@@ -45,7 +45,6 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":serverccl"],
     exec_properties = {"test.Pool": "large"},
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

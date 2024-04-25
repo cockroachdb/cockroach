@@ -24,7 +24,6 @@ go_test(
         "throttle_test.go",
     ],
     embed = [":throttler"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",

@@ -20,7 +20,6 @@ go_test(
     name = "cdcutils_test",
     srcs = ["throttle_test.go"],
     embed = [":cdcutils"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/settings/cluster",
