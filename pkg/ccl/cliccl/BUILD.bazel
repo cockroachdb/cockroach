@@ -61,7 +61,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":cliccl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/build",
         "//pkg/ccl",

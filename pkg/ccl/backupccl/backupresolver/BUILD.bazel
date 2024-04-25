@@ -30,7 +30,6 @@ go_test(
         "targets_test.go",
     ],
     embed = [":backupresolver"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/ccl",
         "//pkg/ccl/storageccl",

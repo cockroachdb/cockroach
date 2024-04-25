@@ -17,7 +17,6 @@ go_test(
     srcs = ["tenant_token_bucket_test.go"],
     data = glob(["testdata/**"]),
     embed = [":tenanttokenbucket"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",

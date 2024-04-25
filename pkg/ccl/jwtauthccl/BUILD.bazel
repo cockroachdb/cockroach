@@ -36,7 +36,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":jwtauthccl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

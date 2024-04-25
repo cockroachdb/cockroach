@@ -40,7 +40,6 @@ go_test(
         "zone_test.go",
     ],
     embed = [":partitionccl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

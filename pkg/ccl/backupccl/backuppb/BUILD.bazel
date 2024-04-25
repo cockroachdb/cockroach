@@ -65,7 +65,6 @@ go_library(
 go_test(
     name = "backuppb_test",
     srcs = ["backup_test.go"],
-    tags = ["ccl_test"],
     deps = [
         ":backuppb",
         "//pkg/multitenant/mtinfopb",
