@@ -786,7 +786,6 @@ func constructStreamIngestionPlanSpecs(
 	}
 
 	trackedSpans := make([]roachpb.Span, 0)
-	subscribingSQLInstances := make(map[string]uint32)
 
 	// Update stream ingestion specs with their matched source node.
 	matcher := makeNodeMatcher(destSQLInstances)
@@ -799,7 +798,6 @@ func constructStreamIngestionPlanSpecs(
 			destID,
 			matcher.destNodeToLocality[destID])
 		partition := candidate.partition
-		subscribingSQLInstances[partition.ID] = uint32(destID)
 
 		partSpec := execinfrapb.StreamIngestionPartitionSpec{
 			PartitionID:       partition.ID,
@@ -823,14 +821,13 @@ func constructStreamIngestionPlanSpecs(
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
 	// node.
 	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{
-		ReplicatedTimeAtStart:   previousReplicatedTimestamp,
-		TrackedSpans:            trackedSpans,
-		JobID:                   int64(jobID),
-		StreamID:                uint64(streamID),
-		StreamAddresses:         topology.StreamAddresses(),
-		SubscribingSQLInstances: subscribingSQLInstances,
-		Checkpoint:              checkpoint,
-		PartitionSpecs:          repackagePartitionSpecs(streamIngestionSpecs),
+		ReplicatedTimeAtStart: previousReplicatedTimestamp,
+		TrackedSpans:          trackedSpans,
+		JobID:                 int64(jobID),
+		StreamID:              uint64(streamID),
+		StreamAddresses:       topology.StreamAddresses(),
+		Checkpoint:            checkpoint,
+		PartitionSpecs:        repackagePartitionSpecs(streamIngestionSpecs),
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil
