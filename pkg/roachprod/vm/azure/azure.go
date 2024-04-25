@@ -199,12 +199,74 @@ func getAzureDefaultLabelMap(opts vm.CreateOpts) map[string]string {
 }
 
 func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
-	l.Printf("adding labels to Azure VMs not yet supported")
-	return nil
+	return p.editLabels(l, vms, labels, false /*removeLabels*/)
 }
 
 func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) error {
-	l.Printf("removing labels from Azure VMs not yet supported")
+	labelsMap := make(map[string]string, len(labels))
+	for _, label := range labels {
+		labelsMap[label] = ""
+	}
+	return p.editLabels(l, vms, labelsMap, true /*removeLabels*/)
+}
+
+func (p *Provider) editLabels(
+	l *logger.Logger, vms vm.List, labels map[string]string, removeLabels bool,
+) error {
+	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
+	defer cancel()
+
+	sub, err := p.getSubscription(ctx)
+	if err != nil {
+		return err
+	}
+	client := compute.NewVirtualMachinesClient(sub)
+	if client.Authorizer, err = p.getAuthorizer(); err != nil {
+		return err
+	}
+
+	futures := make([]compute.VirtualMachinesUpdateFuture, len(vms))
+	for idx, m := range vms {
+		vmParts, err := parseAzureID(m.ProviderID)
+		if err != nil {
+			return err
+		}
+		// N.B. VirtualMachineUpdate below overwrites _all_ VM tags. Hence, we must copy all unmodified tags.
+		tags := make(map[string]*string)
+		// Copy all known VM tags.
+		for k, v := range m.Labels {
+			tags[k] = to.StringPtr(v)
+		}
+
+		if removeLabels {
+			// Remove the matching VM tags.
+			for k := range labels {
+				delete(tags, k)
+			}
+		} else {
+			// Add the new VM tags.
+			for k, v := range labels {
+				tags[k] = to.StringPtr(v)
+			}
+		}
+
+		update := compute.VirtualMachineUpdate{
+			Tags: tags,
+		}
+		futures[idx], err = client.Update(ctx, vmParts.resourceGroup, vmParts.resourceName, update)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, future := range futures {
+		if err := future.WaitForCompletionRef(ctx, client.Client); err != nil {
+			return err
+		}
+		if _, err := future.Result(client); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -406,50 +468,9 @@ func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
 
 // Extend implements the vm.Provider interface.
 func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
-	defer cancel()
-
-	sub, err := p.getSubscription(ctx)
-	if err != nil {
-		return err
-	}
-	client := compute.NewVirtualMachinesClient(sub)
-	if client.Authorizer, err = p.getAuthorizer(); err != nil {
-		return err
-	}
-
-	futures := make([]compute.VirtualMachinesUpdateFuture, len(vms))
-	for idx, m := range vms {
-		vmParts, err := parseAzureID(m.ProviderID)
-		if err != nil {
-			return err
-		}
-		// N.B. VirtualMachineUpdate below overwrites _all_ VM tags. Hence, we must copy all unmodified tags.
-		tags := make(map[string]*string)
-		// Copy all known VM tags.
-		for k, v := range m.Labels {
-			tags[k] = to.StringPtr(v)
-		}
-		// Overwrite Lifetime tag.
-		tags[vm.TagLifetime] = to.StringPtr(lifetime.String())
-		update := compute.VirtualMachineUpdate{
-			Tags: tags,
-		}
-		futures[idx], err = client.Update(ctx, vmParts.resourceGroup, vmParts.resourceName, update)
-		if err != nil {
-			return err
-		}
-	}
-
-	for _, future := range futures {
-		if err := future.WaitForCompletionRef(ctx, client.Client); err != nil {
-			return err
-		}
-		if _, err := future.Result(client); err != nil {
-			return err
-		}
-	}
-	return nil
+	return p.AddLabels(l, vms, map[string]string{
+		vm.TagLifetime: lifetime.String(),
+	})
 }
 
 // FindActiveAccount implements vm.Provider.
