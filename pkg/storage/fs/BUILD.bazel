@@ -10,6 +10,7 @@ go_library(
         "safewrite.go",
         "sticky_vfs.go",
         "temp_dir.go",
+        "test_utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/fs",
     visibility = ["//visibility:public"],
