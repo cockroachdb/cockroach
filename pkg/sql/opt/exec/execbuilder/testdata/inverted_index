@@ -3304,7 +3304,7 @@ inner-join (lookup geo_table)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── distribution: test
  ├── prune: (1,5)
- ├── inner-join (inverted geo_table@geom_index)
+ ├── inner-join (inverted geo_table@geom_index,inverted)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
@@ -3396,7 +3396,7 @@ left-join (lookup geo_table)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── distribution: test
  ├── prune: (1,5)
- ├── left-join (inverted geo_table@geom_index)
+ ├── left-join (inverted geo_table@geom_index,inverted)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
  │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
@@ -3435,7 +3435,7 @@ semi-join (lookup geo_table)
  ├── fd: (1)-->(2)
  ├── distribution: test
  ├── prune: (1)
- ├── inner-join (inverted geo_table@geom_index)
+ ├── inner-join (inverted geo_table@geom_index,inverted)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:12 continuation:17
  │    ├── first join in paired joiner; continuation column: continuation:17
  │    ├── inverted-expr
@@ -3475,7 +3475,7 @@ anti-join (lookup geo_table)
  ├── fd: (1)-->(2)
  ├── distribution: test
  ├── prune: (1)
- ├── left-join (inverted geo_table@geom_index)
+ ├── left-join (inverted geo_table@geom_index,inverted)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:12 continuation:17
  │    ├── first join in paired joiner; continuation column: continuation:17
  │    ├── inverted-expr
@@ -3562,7 +3562,7 @@ index-join t117979
  ├── fd: (1)-->(2)
  ├── distribution: test
  ├── prune: (1)
- └── scan t117979@idx_links [as=t]
+ └── scan t117979@idx_links,inverted [as=t]
       ├── columns: id:1
       ├── inverted constraint: /5/1
       │    └── spans: ["\x12str1\x00\x01", "\x12str1\x00\x01"]

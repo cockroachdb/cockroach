@@ -1487,7 +1487,7 @@ project
       ├── columns: k:1 f:3 j:4
       ├── immutable
       ├── cost: 810.262222
-      └── scan t4@_hyp_1
+      └── scan t4@_hyp_1,inverted
            ├── columns: rowid:6!null
            ├── inverted constraint: /9/6
            │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
@@ -1514,7 +1514,7 @@ project
       ├── columns: k:1 f:3 j:4!null
       ├── immutable
       ├── cost: 807.928889
-      └── scan t4@_hyp_1
+      └── scan t4@_hyp_1,inverted
            ├── columns: rowid:6!null
            ├── inverted constraint: /9/6
            │    └── spans: ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
@@ -1553,7 +1553,7 @@ project
       │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
       │         ├── cost: 138.706667
       │         ├── key: (6)
-      │         └── scan t4@_hyp_1
+      │         └── scan t4@_hyp_1,inverted
       │              ├── columns: rowid:6!null j_inverted_key:9!null
       │              ├── inverted constraint: /9/6
       │              │    └── spans
@@ -1583,7 +1583,7 @@ inner-join (lookup t4)
  ├── lookup columns are key
  ├── immutable
  ├── cost: 245.980741
- ├── inner-join (zigzag t4@_hyp_1 t4@_hyp_1)
+ ├── inner-join (zigzag t4@_hyp_1,inverted t4@_hyp_1,inverted)
  │    ├── columns: rowid:6!null
  │    ├── eq columns: [6] = [6]
  │    ├── left fixed columns: [9] = ['\x37626172000112320001']
@@ -1628,7 +1628,7 @@ project
       │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
       │         ├── cost: 19.2177778
       │         ├── key: (6)
-      │         └── scan t4@_hyp_3
+      │         └── scan t4@_hyp_3,inverted
       │              ├── columns: rowid:6!null j_inverted_key:10!null
       │              ├── constraint: /1: [/1 - /1]
       │              ├── inverted constraint: /10/6
@@ -1681,7 +1681,7 @@ project
       │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
       │         ├── cost: 18.1482853
       │         ├── key: (6)
-      │         └── scan t4@_hyp_7
+      │         └── scan t4@_hyp_7,inverted
       │              ├── columns: rowid:6!null j_inverted_key:12!null
       │              ├── constraint: /1/2: [/1/2 - /1/2]
       │              ├── inverted constraint: /12/6
@@ -1873,7 +1873,7 @@ index-join t4
  ├── immutable
  ├── cost: 25.9622223
  ├── fd: ()-->(1)
- └── scan t4@inverted
+ └── scan t4@inverted,inverted
       ├── columns: rowid:6!null
       ├── constraint: /1: [/1 - /1]
       ├── inverted constraint: /9/6
@@ -1950,7 +1950,7 @@ project
       ├── immutable
       ├── cost: 25.9511112
       ├── fd: ()-->(2)
-      └── scan t4@partial_inverted_idx,partial
+      └── scan t4@partial_inverted_idx,inverted,partial
            ├── columns: rowid:6!null
            ├── inverted constraint: /10/6
            │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
@@ -1992,7 +1992,7 @@ index-join t4
  ├── columns: j:4
  ├── immutable
  ├── cost: 808.04
- └── scan t4@_hyp_4
+ └── scan t4@_hyp_4,inverted
       ├── columns: rowid:6!null
       ├── inverted constraint: /11/6
       │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
@@ -2428,7 +2428,7 @@ delete t109974b
       │    ├── cost: 111996.67
       │    ├── key: (6,12)
       │    ├── fd: (6)-->(7), (12)-->(11,13,14)
-      │    ├── inner-join (inverted t109974b@_hyp_2)
+      │    ├── inner-join (inverted t109974b@_hyp_2,inverted)
       │    │    ├── columns: g1:11 rowid:12!null t109974a.crdb_internal_mvcc_timestamp:13 t109974a.tableoid:14 k2:23!null
       │    │    ├── inverted-expr
       │    │    │    └── st_intersects(g1:11, g2:24)

@@ -2210,7 +2210,7 @@ select
  │         │    └── st_covers('0101000000000000000000F03F000000000000F03F', geom:1) [type=bool]
  │         ├── stats: [rows=1]
  │         ├── key: (2)
- │         └── scan tab@tab_geom_idx
+ │         └── scan tab@tab_geom_idx,inverted
  │              ├── columns: rowid:2(int!null) geom_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans
