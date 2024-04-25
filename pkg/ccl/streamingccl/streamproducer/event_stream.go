@@ -135,6 +135,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithOnDeleteRange(s.onDeleteRange),
 		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
 		rangefeed.WithOnValues(s.onValues),
+		rangefeed.WithOnMetadata(s.onMetadata),
 	}
 
 	initialTimestamp := s.spec.InitialScanTimestamp
@@ -290,6 +291,14 @@ func (s *eventStream) onSSTable(
 func (s *eventStream) onDeleteRange(ctx context.Context, delRange *kvpb.RangeFeedDeleteRange) {
 	s.seb.addDelRange(*delRange)
 	s.setErr(s.maybeFlushBatch(ctx))
+}
+func (s *eventStream) onMetadata(ctx context.Context, metadata *kvpb.RangeFeedMetadata) {
+	log.VInfof(ctx, 2, "received metadata event: %s, fromManualSplit: %t, parent start key %s", metadata.Span, metadata.FromManualSplit, metadata.ParentStartKey)
+	if metadata.FromManualSplit && !metadata.Span.Key.Equal(metadata.ParentStartKey) {
+		// Only send new manual split keys (i.e. a child rangefeed start key that
+		// differs from the parent start key)
+		s.seb.addSplitPoint(metadata.Span.Key)
+	}
 }
 
 func (s *eventStream) maybeCheckpoint(
