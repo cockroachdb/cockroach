@@ -35,6 +35,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/build",  # keep
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
         "//pkg/sql/pgwire/pgcode",
