@@ -3568,8 +3568,7 @@ ALTER TABLE xyz INJECT STATISTICS '[
   }
 ]';
 
-# Regression test for #105942
-# The following should produce 2 lookup joins with a local distribution.
+# Regression test for #105942.
 query T retry
 EXPLAIN SELECT
   xyz.str,
@@ -3612,7 +3611,7 @@ vectorized: true
               table: xyz@xyz_id2_str_abc_id_idx
               spans: [/'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b' - /'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b']
 
-# The following should use a string of 4 lookup joins with a cost under 200.
+# The following should use a string of 4 lookup/index joins with a cost under 200.
 query T retry
 EXPLAIN(opt,verbose) SELECT
   x.str,
@@ -3717,4 +3716,3 @@ project
       │         ├── x.id2:12 = '68088706-02c6-47d1-b993-a421cd761f2b' [outer=(12), constraints=(/12: [/'68088706-02c6-47d1-b993-a421cd761f2b' - /'68088706-02c6-47d1-b993-a421cd761f2b']; tight), fd=()-->(12)]
       │         └── x.crdb_region:13 = 'ap-southeast-2' [outer=(13), immutable, constraints=(/13: [/'ap-southeast-2' - /'ap-southeast-2']; tight), fd=()-->(13)]
       └── filters (true)
-
