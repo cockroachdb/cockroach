@@ -178,3 +178,17 @@ func NonNegativeIntWithMaximum(maxValue int64) func(int64) error {
 		return nil
 	}
 }
+
+// NonNegativeIntWithMinimum returns a validation function that can be
+// passed to RegisterIntSetting.
+func NonNegativeIntWithMinimum(minValue int64) func(int64) error {
+	return func(v int64) error {
+		if v < 0 {
+			return errors.Errorf("cannot be set to a negative integer: %d", v)
+		}
+		if v < minValue {
+			return errors.Errorf("cannot be set to a value smaller than %d", minValue)
+		}
+		return nil
+	}
+}

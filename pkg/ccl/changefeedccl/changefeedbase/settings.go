@@ -310,6 +310,26 @@ var defaultLaggingRangesThreshold = 3 * time.Minute
 
 var defaultLaggingRangesPollingInterval = 1 * time.Minute
 
+// UsageMetricsReportingInterval is the interval at which the changefeed
+// calculates and updates its usage metric.
+var UsageMetricsReportingInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.usage.reporting_interval",
+	"the interval at which the changefeed calculates and updates its usage metric",
+	5*time.Minute,
+	settings.PositiveDuration, settings.NonNegativeDurationWithMinimum(2*time.Minute), settings.NonNegativeDurationWithMaximum(50*time.Minute),
+)
+
+// UsageMetricsReportingTimeoutPercent is the percent of
+// UsageMetricsReportingInterval that may be spent gathering the usage metrics.
+var UsageMetricsReportingTimeoutPercent = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"changefeed.usage.reporting_timeout_percent",
+	"the percent of changefeed.usage.reporting_interval that may be spent gathering the usage metrics",
+	50,
+	settings.NonNegativeIntWithMinimum(10), settings.NonNegativeIntWithMaximum(100),
+)
+
 // LaggingRangesThreshold specifies the duration by which a range must
 // be lagging behind the present to be considered as 'lagging' behind in
 // metrics.
@@ -333,3 +353,7 @@ var LaggingRangesPollingInterval = settings.RegisterDurationSetting(
 	defaultLaggingRangesPollingInterval,
 	settings.PositiveDuration,
 ).WithPublic()
+
+// DefaultLaggingRangesPollingInterval is the default polling rate at which
+// lagging ranges are checked and metrics are updated.
+var DefaultLaggingRangesPollingInterval = 1 * time.Minute

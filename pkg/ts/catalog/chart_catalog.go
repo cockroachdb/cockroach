@@ -1679,6 +1679,24 @@ var charts = []sectionDescription{
 					"changefeed.lagging_ranges",
 				},
 			},
+			{
+				Title: "Changefeed Usage Bytes",
+				Metrics: []string{
+					"changefeed.usage.table_bytes",
+				},
+			},
+			{
+				Title: "Changefeed Usage Collection Errors",
+				Metrics: []string{
+					"changefeed.usage.error_count",
+				},
+			},
+			{
+				Title: "Changefeed Usage Collection Duration",
+				Metrics: []string{
+					"changefeed.usage.query_duration",
+				},
+			},
 		},
 	},
 	{
