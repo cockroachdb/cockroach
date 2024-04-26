@@ -49,7 +49,7 @@ func TestGetLocalFiles(t *testing.T) {
 		}
 		req := &serverpb.GetFilesRequest{
 			NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
-		res, err := getLocalFiles(req, testHeapDir, "", os.Stat, os.ReadFile)
+		res, err := getLocalFiles(req, testHeapDir, "", "", os.Stat, os.ReadFile)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(res.Files))
 		require.Equal(t, "im-in-the-heap-dir", res.Files[0].Name)
@@ -66,7 +66,7 @@ func TestGetLocalFiles(t *testing.T) {
 		}
 		req := &serverpb.GetFilesRequest{
 			NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
-		_, err := getLocalFiles(req, testHeapDir, "", statFileWithErr, os.ReadFile)
+		_, err := getLocalFiles(req, testHeapDir, "", "", statFileWithErr, os.ReadFile)
 		require.ErrorContains(t, err, "stat error")
 	})
 
@@ -81,19 +81,24 @@ func TestGetLocalFiles(t *testing.T) {
 		}
 		req := &serverpb.GetFilesRequest{
 			NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
-		_, err := getLocalFiles(req, testHeapDir, "", os.Stat, readFileWithErr)
+		_, err := getLocalFiles(req, testHeapDir, "", "", os.Stat, readFileWithErr)
 		require.ErrorContains(t, err, "read error")
 	})
 
 	t.Run("dirs not implemented", func(t *testing.T) {
 		req := &serverpb.GetFilesRequest{
 			NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
-		_, err := getLocalFiles(req, "", "nonexistent", os.Stat, os.ReadFile)
+		_, err := getLocalFiles(req, "", "nonexistent", "nonexistent", os.Stat, os.ReadFile)
 		require.ErrorContains(t, err, "dump directory not configured")
 
 		req = &serverpb.GetFilesRequest{
 			NodeId: "local", Type: serverpb.FileType_GOROUTINES, Patterns: []string{"*"}}
-		_, err = getLocalFiles(req, "nonexistent", "", os.Stat, os.ReadFile)
+		_, err = getLocalFiles(req, "nonexistent", "", "nonexistent", os.Stat, os.ReadFile)
+		require.ErrorContains(t, err, "dump directory not configured")
+
+		req = &serverpb.GetFilesRequest{
+			NodeId: "local", Type: serverpb.FileType_CPU, Patterns: []string{"*"}}
+		_, err = getLocalFiles(req, "nonexistent", "nonexistent", "", os.Stat, os.ReadFile)
 		require.ErrorContains(t, err, "dump directory not configured")
 	})
 }

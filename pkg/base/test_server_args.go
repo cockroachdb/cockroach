@@ -638,6 +638,13 @@ type TestTenantArgs struct {
 	// If set, this directory should be cleaned up after the test completes.
 	HeapProfileDirName string
 
+	// CPUProfileDirName is used to initialize the same named field on the
+	// SQLServer.BaseConfig field. It is the directory name for cpu profiles
+	// using cpuprofiler. If empty, no cpu profiles will be collected during the
+	// test. If set, this directory should be cleaned up after the test
+	// completes.
+	CPUProfileDirName string
+
 	// StartDiagnosticsReporting checks cluster.TelemetryOptOut(), and
 	// if not disabled starts the asynchronous goroutine that checks for
 	// CockroachDB upgrades and periodically reports diagnostics to
