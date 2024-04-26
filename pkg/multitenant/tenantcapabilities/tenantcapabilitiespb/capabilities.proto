@@ -96,6 +96,10 @@ message TenantCapabilities {
   // CanDebugProcess, if set to true, grants the tenant the ability to
   // set vmodule on the process and run pprof profiles and tools.
   bool can_debug_process = 11;
+
+  // CanViewAllMetrics, if set to true, grants the tenant the ability
+  // to query any metrics from the host.
+  bool can_view_all_metrics = 12;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

@@ -115,6 +115,12 @@ func TestDataDriven(t *testing.T) {
 					return "ok"
 				}
 				return err.Error()
+			case "has-tsdb-all-capability":
+				err := authorizer.HasTSDBAllMetricsCapability(context.Background(), tenID)
+				if err == nil {
+					return "ok"
+				}
+				return err.Error()
 			case "set-authorizer-mode":
 				var valStr string
 				d.ScanArgs(t, "value", &valStr)

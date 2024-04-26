@@ -73,3 +73,10 @@ func (n *AllowEverythingAuthorizer) HasProcessDebugCapability(
 ) error {
 	return nil
 }
+
+// HasTSDBAllMetricsCapability implements the tenantcapabilities.Authorizer interface.
+func (n *AllowEverythingAuthorizer) HasTSDBAllMetricsCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return nil
+}
