@@ -48,7 +48,9 @@ func TestDistSenderReplicaStall(t *testing.T) {
 		// speed up the test by reducing various intervals and timeouts.
 		st := cluster.MakeTestingClusterSettings()
 		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
-		kvcoord.CircuitBreakerEnabled.Override(ctx, &st.SV, true)
+		kvcoord.CircuitBreakersMode.Override(
+			ctx, &st.SV, int64(kvcoord.DistSenderCircuitBreakersAllRanges),
+		)
 		kvcoord.CircuitBreakerCancellation.Override(ctx, &st.SV, true)
 		kvcoord.CircuitBreakerProbeThreshold.Override(ctx, &st.SV, time.Second)
 		kvcoord.CircuitBreakerProbeInterval.Override(ctx, &st.SV, time.Second)
@@ -128,7 +130,9 @@ func BenchmarkDistSenderCircuitBreakersForReplica(b *testing.B) {
 
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
 	st := cluster.MakeTestingClusterSettings()
-	kvcoord.CircuitBreakerEnabled.Override(ctx, &st.SV, true)
+	kvcoord.CircuitBreakersMode.Override(
+		ctx, &st.SV, int64(kvcoord.DistSenderCircuitBreakersAllRanges),
+	)
 
 	cbs := kvcoord.NewDistSenderCircuitBreakers(
 		ambientCtx, stopper, st, nil, kvcoord.MakeDistSenderMetrics())
@@ -186,7 +190,7 @@ func BenchmarkDistSenderCircuitBreakersTrack(b *testing.B) {
 }
 
 func benchmarkCircuitBreakersTrack(
-	b *testing.B, enable, cancel, alone bool, errType string, conc int,
+	b *testing.B, enable bool, cancel bool, alone bool, errType string, conc int,
 ) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -194,7 +198,15 @@ func benchmarkCircuitBreakersTrack(
 
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
 	st := cluster.MakeTestingClusterSettings()
-	kvcoord.CircuitBreakerEnabled.Override(ctx, &st.SV, enable)
+	if enable {
+		kvcoord.CircuitBreakersMode.Override(
+			ctx, &st.SV, int64(kvcoord.DistSenderCircuitBreakersAllRanges),
+		)
+	} else {
+		kvcoord.CircuitBreakersMode.Override(
+			ctx, &st.SV, int64(kvcoord.DistSenderCircuitBreakersNoRanges),
+		)
+	}
 	kvcoord.CircuitBreakerCancellation.Override(ctx, &st.SV, cancel)
 
 	cbs := kvcoord.NewDistSenderCircuitBreakers(
