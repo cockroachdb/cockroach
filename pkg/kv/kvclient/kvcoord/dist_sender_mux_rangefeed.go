@@ -546,11 +546,9 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 		return err
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "RangeFeed %s@%s (r%d, replica %s) disconnected with last checkpoint %s ago: %v (errInfo %v)",
+	log.Infof(ctx, "RangeFeed %s@%s (r%d, replica %s) disconnected with last checkpoint %s ago: %v (errInfo %v)",
 			active.Span, active.StartAfter, active.RangeID, active.ReplicaDescriptor,
 			timeutil.Since(active.Resolved.GoTime()), reason, errInfo)
-	}
 
 	if errInfo.evict {
 		active.resetRouting(ctx, rangecache.EvictionToken{})

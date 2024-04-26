@@ -316,6 +316,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		reason := kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT
 		if res.Split.SplitTrigger.ManualSplit {
 			reason = kvpb.RangeFeedRetryError_REASON_MANUAL_RANGE_SPLIT
+			log.Infof(ctx,"manual split at %s",&res.Split.SplitTrigger.RightDesc.StartKey)
 		}
 		b.r.disconnectRangefeedWithReason(
 			reason,
