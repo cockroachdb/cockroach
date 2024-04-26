@@ -518,8 +518,6 @@ github.com/cockroachdb/swiss v0.0.0-20240303172742-c161743eb608 h1:GXGrLNSC5+LGr
 github.com/cockroachdb/swiss v0.0.0-20240303172742-c161743eb608/go.mod h1:yBRu/cnL4ks9bgy4vAASdjIW+/xMlFwuHKqtmh3GZQg=
 github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847 h1:c7yLgqcm/3c9lYtpWeVD9NYqA9cKsKHdpQM62PHtTUM=
 github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847/go.mod h1:zq6QwlOf5SlnkVbMSr5EoBv3636FWnp+qbPhuoO21uA=
-github.com/cockroachdb/teamcity v0.0.0-20180905144921-8ca25c33eb11 h1:UAqRo5xPCyTtZznAJ9iPVpDUFxGI0a6QWtQ8E+zwJRg=
-github.com/cockroachdb/teamcity v0.0.0-20180905144921-8ca25c33eb11/go.mod h1:3299Mt0Q7PkqGqbsxhvbrTpMqRyIcZ6OMw4IEmiO09g=
 github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 h1:zuQyyAKVxetITBuuhv3BI9cMrmStnpT18zmgmTxunpo=
 github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06/go.mod h1:7nc4anLGjupUW/PeY5qiNYsdNXj7zopG+eqsS7To5IQ=
 github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40 h1:qVTb3XEv+7VVjPetop8yGbN95HfCeqZx+VMveeSJPZw=
