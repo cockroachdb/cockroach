@@ -179,10 +179,11 @@ func newTenantDoesNotHaveCapabilityError(cap tenantcapabilities.ID, req kvpb.Req
 }
 
 var (
-	errCannotQueryMetadata = errors.New("client tenant does not have capability to query cluster node metadata")
-	errCannotQueryTSDB     = errors.New("client tenant does not have capability to query timeseries data")
-	errCannotUseNodelocal  = errors.New("client tenant does not have capability to use nodelocal storage")
-	errCannotDebugProcess  = errors.New("client tenant does not have capability to debug the process")
+	errCannotQueryMetadata   = errors.New("client tenant does not have capability to query cluster node metadata")
+	errCannotQueryTSDB       = errors.New("client tenant does not have capability to query timeseries data")
+	errCannotQueryAllMetrics = errors.New("client tenant does not have capability to query non-tenant metrics")
+	errCannotUseNodelocal    = errors.New("client tenant does not have capability to use nodelocal storage")
+	errCannotDebugProcess    = errors.New("client tenant does not have capability to debug the process")
 )
 
 var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
@@ -409,7 +410,7 @@ func (a *Authorizer) HasTSDBAllMetricsCapability(
 	if !tenantcapabilities.MustGetBoolByID(
 		entry.TenantCapabilities, tenantcapabilities.CanViewAllMetrics,
 	) {
-		return errCannotQueryTSDB
+		return errCannotQueryAllMetrics
 	}
 	return nil
 }
