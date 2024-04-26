@@ -23,7 +23,6 @@ import { InsertStmtDiagnosticRequest } from "../api";
 import styles from "./activateStatementDiagnosticsModal.scss";
 
 const cx = classNames.bind(styles);
-const { Option } = Select;
 
 export interface ActivateDiagnosticsModalProps {
   activate: (insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest) => void;
@@ -167,14 +166,15 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
                       onChange={setTraceSampleRate}
                       className={cx("diagnostic__select__trace")}
                       size="large"
-                    >
-                      <Option value={0.01}>1% (recommended)</Option>
-                      <Option value={0.02}>2%</Option>
-                      <Option value={0.03}>3%</Option>
-                      <Option value={0.04}>4%</Option>
-                      <Option value={0.05}>5%</Option>
-                      <Option value={1}>100% (not recommended)</Option>
-                    </Select>
+                      options={[
+                        { value: 0.01, label: "1% (recommended)" },
+                        { value: 0.02, label: "2%" },
+                        { value: 0.03, label: "3%" },
+                        { value: 0.04, label: "4%" },
+                        { value: 0.05, label: "5%" },
+                        { value: 1, label: "100% (not recommended)" },
+                      ]}
+                    />
                     <span className={cx("diagnostic__trace-warning")}>
                       We recommend starting at 1% to minimize the impact on
                       performance.
@@ -199,7 +199,7 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
                       className={cx("diagnostic__input__min-latency-time")}
                       disabled={!conditional}
                       value={minExecLatency}
-                      onChange={e => {
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                         if (parseInt(e.target.value) > 0) {
                           setMinExecLatency(parseInt(e.target.value));
                         }
@@ -212,10 +212,11 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
                       onChange={handleSelectChange}
                       className={cx("diagnostic__select__min-latency-unit")}
                       size="large"
-                    >
-                      <Option value="seconds">seconds</Option>
-                      <Option value="milliseconds">milliseconds</Option>
-                    </Select>
+                      options={[
+                        { value: "seconds", label: "seconds" },
+                        { value: "milliseconds", milliseconds: "seconds" },
+                      ]}
+                    />
                   </div>
                 </div>
               </Radio>
@@ -260,15 +261,11 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
                     className={cx("diagnostic__select__plan-gist")}
                     size="large"
                     showSearch={true}
-                  >
-                    {planGists?.map((gist: string) => {
-                      return (
-                        <Option value={gist} key={gist}>
-                          {gist}
-                        </Option>
-                      );
-                    })}
-                  </Select>
+                    options={planGists?.map((gist: string) => ({
+                      value: gist,
+                      label: gist,
+                    }))}
+                  />
                 </div>
               </Radio>
             </Button.Group>
@@ -285,7 +282,7 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
                 className={cx("diagnostic__input__expires-after-time")}
                 disabled={!expires}
                 value={expiresAfter}
-                onChange={e => {
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   if (parseInt(e.target.value) > 0) {
                     setExpiresAfter(parseInt(e.target.value));
                   }
