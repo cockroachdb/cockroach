@@ -10,7 +10,6 @@ go_test(
     ],
     exec_properties = {"test.Pool": "large"},
     shard_count = 14,
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

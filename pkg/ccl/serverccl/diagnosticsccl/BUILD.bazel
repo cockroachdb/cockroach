@@ -6,7 +6,6 @@ go_test(
         "main_test.go",
         "reporter_test.go",
     ],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

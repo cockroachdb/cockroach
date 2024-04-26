@@ -36,7 +36,6 @@ go_test(
         "pod_test.go",
     ],
     embed = [":balancer"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/roachpb",

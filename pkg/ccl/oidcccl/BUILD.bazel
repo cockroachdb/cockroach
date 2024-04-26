@@ -43,7 +43,6 @@ go_test(
         "settings_test.go",
     ],
     embed = [":oidcccl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
