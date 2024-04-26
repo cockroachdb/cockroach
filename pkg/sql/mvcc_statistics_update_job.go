@@ -62,10 +62,10 @@ type mvccStatisticsUpdateJob struct {
 	// is not running.
 	dynamicMetrics struct {
 		livebytes *metric.Gauge
-		// tableFeedBytes is a the sum of each table in each (enterprise)
+		// changefeedTableBytes is a the sum of each table in each (enterprise)
 		// changefeed's live bytes. Tables in multiple changefeeds will be
-		// counted multiple times. This metric will be used for billing.
-		tableChangefeedBytes *metric.Gauge
+		// counted once per changefeed. This metric will be used for billing.
+		changefeedTableBytes *metric.Gauge
 	}
 }
 
@@ -109,107 +109,29 @@ func (j *mvccStatisticsUpdateJob) runTenantGlobalMetricsExporter(
 	initialRun := true
 	defer func() {
 		metricsRegistry.RemoveMetric(j.dynamicMetrics.livebytes)
-		metricsRegistry.RemoveMetric(j.dynamicMetrics.tableChangefeedBytes)
+		metricsRegistry.RemoveMetric(j.dynamicMetrics.changefeedTableBytes)
 	}()
 
 	// TODO: this queries the whole keyspace so we cant actually reuse this result
 	runTask := func() error {
-		resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(
-			ctx,
-			&roachpb.SpanStatsRequest{
-				// Fan out to all nodes. SpanStats takes care of only contacting
-				// the relevant nodes with the tenant's span.
-				NodeID: "0",
-				Spans:  []roachpb.Span{execCtx.ExecCfg().Codec.TenantSpan()},
-			},
-		)
+		liveBytes, err := j.fetchLiveBytes(ctx, execCtx)
 		if err != nil {
 			return err
 		}
-		var total int64
-		for _, stats := range resp.SpanToStats {
-			total += stats.ApproximateTotalStats.LiveBytes
-		}
-		j.dynamicMetrics.livebytes.Update(total)
 
-		// get enterprise changefeeds with data
-		var deets []jobspb.ChangefeedDetails // TODO: get this somehow
-
-		// get table ids per changefeed (by idx in above). supports old and new pb versions
-		// also set up table info map
-		feedsTableIds := make(map[int][]descpb.ID, len(deets))
-		tableSizes := make(map[descpb.ID]int64, len(deets))
-		for cdi, cd := range deets {
-			if len(cd.TargetSpecifications) > 0 {
-				for _, ts := range cd.TargetSpecifications {
-					if ts.TableID > 0 {
-						feedsTableIds[cdi] = append(feedsTableIds[cdi], ts.TableID)
-						tableSizes[ts.TableID] = 0
-					}
-				}
-			} else {
-				for id := range cd.Tables {
-					feedsTableIds[cdi] = append(feedsTableIds[cdi], id)
-					tableSizes[id] = 0
-				}
-			}
+		changefeedTableBytes, err := j.fetchTableChangefeedBytes(ctx, execCtx)
+		if err != nil {
+			return err
 		}
 
-		// fetch & fill in table descriptors
-		for id := range tableSizes {
-			// fetch table descriptor
-			var desc catalog.TableDescriptor
-			fetchTableDesc := func(
-				ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
-			) error {
-				tableDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
-				if err != nil {
-					return err
-				}
-				desc = tableDesc
-				return nil
-			}
-			if err := DescsTxn(ctx, execCtx.ExecCfg(), fetchTableDesc); err != nil {
-				if errors.Is(err, catalog.ErrDescriptorDropped) {
-					// TODO: ignore this and continue?
-					return nil
-				}
-				return err
-			}
-
-			// TODO: do we need to count the sizes of other indexes?
-			span := desc.PrimaryIndexSpan(execCtx.ExecCfg().Codec)
-
-			// TODO: do this once for all spans
-			resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(
-				ctx,
-				&roachpb.SpanStatsRequest{
-					NodeID: "0", // fan out
-					Spans:  []roachpb.Span{span},
-				},
-			)
-			if err != nil {
-				return err
-			}
-
-			for _, stats := range resp.SpanToStats {
-				tableSizes[id] += stats.ApproximateTotalStats.LiveBytes
-			}
-		}
-
-		var total2 int64
-		for _, tableIds := range feedsTableIds {
-			for _, id := range tableIds {
-				total2 += tableSizes[id]
-			}
-		}
-		j.dynamicMetrics.tableChangefeedBytes.Update(total2)
+		j.dynamicMetrics.livebytes.Update(liveBytes)
+		j.dynamicMetrics.changefeedTableBytes.Update(changefeedTableBytes)
 
 		// Only register metrics once we get our initial values. This avoids
 		// metrics from fluctuating whenever the job restarts.
 		if initialRun {
 			metricsRegistry.AddMetric(j.dynamicMetrics.livebytes)
-			metricsRegistry.AddMetric(j.dynamicMetrics.tableChangefeedBytes)
+			metricsRegistry.AddMetric(j.dynamicMetrics.changefeedTableBytes)
 			initialRun = false
 		}
 		return nil
@@ -253,13 +175,110 @@ func (j *mvccStatisticsUpdateJob) CollectProfile(_ context.Context, _ interface{
 	return nil
 }
 
-// func tableSpans(execCtx JobExecContext, tableDescs []catalog.TableDescriptor) roachpb.Spans {
-// 	var trackedSpans []roachpb.Span
-// 	for _, d := range tableDescs {
-// 		trackedSpans = append(trackedSpans, d.PrimaryIndexSpan(execCtx.ExecCfg().Codec))
-// 	}
-// 	return trackedSpans
-// }
+func (j *mvccStatisticsUpdateJob) fetchLiveBytes(
+	ctx context.Context, execCtx JobExecContext,
+) (int64, error) {
+	resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(
+		ctx,
+		&roachpb.SpanStatsRequest{
+			// Fan out to all nodes. SpanStats takes care of only contacting
+			// the relevant nodes with the tenant's span.
+			NodeID: "0",
+			Spans:  []roachpb.Span{execCtx.ExecCfg().Codec.TenantSpan()},
+		},
+	)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	for _, stats := range resp.SpanToStats {
+		total += stats.ApproximateTotalStats.LiveBytes
+	}
+	return total, nil
+}
+
+func (j *mvccStatisticsUpdateJob) fetchTableChangefeedBytes(
+	ctx context.Context, execCtx JobExecContext,
+) (int64, error) {
+	var deets []jobspb.ChangefeedDetails // TODO: get this somehow
+
+	feedsTableIds := make(map[int][]descpb.ID, len(deets))
+	tableSizes := make(map[descpb.ID]int64, len(deets))
+	for cdi, cd := range deets {
+		if len(cd.TargetSpecifications) > 0 {
+			for _, ts := range cd.TargetSpecifications {
+				if ts.TableID > 0 {
+					feedsTableIds[cdi] = append(feedsTableIds[cdi], ts.TableID)
+					tableSizes[ts.TableID] = 0
+				}
+			}
+		} else {
+			for id := range cd.Tables {
+				feedsTableIds[cdi] = append(feedsTableIds[cdi], id)
+				tableSizes[id] = 0
+			}
+		}
+	}
+
+	type spanInfo struct {
+		span  roachpb.Span
+		table descpb.ID
+	}
+
+	spanSizes := make(map[string]spanInfo, len(deets))
+	spans := make([]roachpb.Span, 0, len(deets))
+	// fetch & fill in table descriptors
+	for id := range tableSizes {
+		// fetch table descriptor
+		var desc catalog.TableDescriptor
+		fetchTableDesc := func(
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
+		) error {
+			tableDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
+			if err != nil {
+				return err
+			}
+			desc = tableDesc
+			return nil
+		}
+		if err := DescsTxn(ctx, execCtx.ExecCfg(), fetchTableDesc); err != nil {
+			if errors.Is(err, catalog.ErrDescriptorDropped) {
+				// TODO: ignore this and continue?
+				return 0, nil
+			}
+			return 0, err
+		}
+
+		// TODO: do we need to count the sizes of other indexes?
+		span := desc.PrimaryIndexSpan(execCtx.ExecCfg().Codec)
+		spans = append(spans, span)
+		spanSizes[span.Key.String()] = spanInfo{span: span, table: id}
+	}
+
+	// fetch span stats and fill in table sizes
+	resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(
+		ctx,
+		&roachpb.SpanStatsRequest{
+			NodeID: "0", // fan out
+			Spans:  spans,
+		},
+	)
+	if err != nil {
+		return 0, err
+	}
+	for spanStr, stats := range resp.SpanToStats {
+		si := spanSizes[spanStr]
+		tableSizes[si.table] += stats.ApproximateTotalStats.LiveBytes
+	}
+
+	var total int64
+	for _, tableIds := range feedsTableIds {
+		for _, id := range tableIds {
+			total += tableSizes[id]
+		}
+	}
+	return total, nil
+}
 
 func init() {
 	jobs.RegisterConstructor(
@@ -268,6 +287,12 @@ func init() {
 			exporter := &mvccStatisticsUpdateJob{job: job, st: settings}
 			exporter.dynamicMetrics.livebytes = metric.NewGauge(metric.Metadata{
 				Name:        "sql.aggregated_livebytes",
+				Help:        "Aggregated number of bytes of live data (keys plus values)",
+				Measurement: "Storage",
+				Unit:        metric.Unit_BYTES,
+			})
+			exporter.dynamicMetrics.changefeedTableBytes = metric.NewGauge(metric.Metadata{
+				Name:        "cdc.changefeed_table_livebytes",
 				Help:        "Aggregated number of bytes of live data (keys plus values)",
 				Measurement: "Storage",
 				Unit:        metric.Unit_BYTES,
