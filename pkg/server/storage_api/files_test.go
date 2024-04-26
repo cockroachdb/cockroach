@@ -51,42 +51,49 @@ func TestStatusGetFiles(t *testing.T) {
 
 	client := ts.GetStatusClient(t)
 
-	// Test fetching heap files.
-	t.Run("heap", func(t *testing.T) {
-		const testFilesNo = 3
-		for i := 0; i < testFilesNo; i++ {
-			testHeapDir := filepath.Join(storeSpec.Path, "logs", base.HeapProfileDir)
-			testHeapFile := filepath.Join(testHeapDir, fmt.Sprintf("heap%d.pprof", i))
-			if err := os.MkdirAll(testHeapDir, os.ModePerm); err != nil {
+	// Test fetching heap and cpu profiles.
+	for _, name := range []string{"heap", "cpu"} {
+		t.Run(name, func(t *testing.T) {
+			profileDir, fileFormatStr, fileType := base.HeapProfileDir, "heap%d.pprof", serverpb.FileType_HEAP
+			if name == "cpu" {
+				profileDir = base.CPUProfileDir
+				fileFormatStr = "cpu%d.pprof"
+				fileType = serverpb.FileType_CPU
+			}
+			const testFilesNo = 3
+			for i := 0; i < testFilesNo; i++ {
+				testDir := filepath.Join(storeSpec.Path, "logs", profileDir)
+				testFile := filepath.Join(testDir, fmt.Sprintf(fileFormatStr, i))
+				if err := os.MkdirAll(testDir, os.ModePerm); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(testFile, []byte(fmt.Sprintf("I'm %s profile %d", name, i)), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			request := serverpb.GetFilesRequest{NodeId: "local", Type: fileType, Patterns: []string{name + "*"}}
+			response, err := client.GetFiles(context.Background(), &request)
+			if err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(testHeapFile, []byte(fmt.Sprintf("I'm heap file %d", i)), 0644); err != nil {
-				t.Fatal(err)
-			}
-		}
 
-		request := serverpb.GetFilesRequest{
-			NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"heap*"}}
-		response, err := client.GetFiles(context.Background(), &request)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if a, e := len(response.Files), testFilesNo; a != e {
-			t.Errorf("expected %d files(s), found %d", e, a)
-		}
-
-		for i, file := range response.Files {
-			expectedFileName := fmt.Sprintf("heap%d.pprof", i)
-			if file.Name != expectedFileName {
-				t.Fatalf("expected file name %s, found %s", expectedFileName, file.Name)
+			if a, e := len(response.Files), testFilesNo; a != e {
+				t.Errorf("expected %d files(s), found %d", e, a)
 			}
-			expectedFileContents := []byte(fmt.Sprintf("I'm heap file %d", i))
-			if !bytes.Equal(file.Contents, expectedFileContents) {
-				t.Fatalf("expected file contents %s, found %s", expectedFileContents, file.Contents)
+
+			for i, file := range response.Files {
+				expectedFileName := fmt.Sprintf(fileFormatStr, i)
+				if file.Name != expectedFileName {
+					t.Fatalf("expected file name %s, found %s", expectedFileName, file.Name)
+				}
+				expectedFileContents := []byte(fmt.Sprintf("I'm %s profile %d", name, i))
+				if !bytes.Equal(file.Contents, expectedFileContents) {
+					t.Fatalf("expected file contents %s, found %s", expectedFileContents, file.Contents)
+				}
 			}
-		}
-	})
+		})
+	}
 
 	// Test fetching goroutine files.
 	t.Run("goroutines", func(t *testing.T) {

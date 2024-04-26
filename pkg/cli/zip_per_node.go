@@ -155,6 +155,9 @@ func (zc *debugZipContext) collectFileList(
 	case serverpb.FileType_GOROUTINES:
 		fileKind = "goroutine dump"
 		prefix = prefix + "/goroutines"
+	case serverpb.FileType_CPU:
+		fileKind = "cpu profile"
+		prefix = prefix + "/cpuprof"
 	default:
 		return errors.AssertionFailedf("unknown file type: %v", fileType)
 	}
@@ -371,6 +374,11 @@ func (zc *debugZipContext) collectPerNodeData(
 
 	// Collect all relevant goroutine dumps.
 	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_GOROUTINES); err != nil {
+		return err
+	}
+
+	// Collect all relevant cpu profiles.
+	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_CPU); err != nil {
 		return err
 	}
 
