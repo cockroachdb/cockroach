@@ -1,0 +1,26 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+gomock(
+    name = "tenant_status_server_generated",
+    out = "tenant_status_server_generated.go",
+    interfaces = ["TenantStatusServer"],
+    library = "//pkg/server/serverpb",
+    package = "mocks",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+go_library(
+    name = "mocks",
+    srcs = ["tenant_status_server_generated.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/server/serverpb",
+        "@com_github_golang_mock//gomock",
+    ],
+)
