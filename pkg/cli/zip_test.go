@@ -475,22 +475,15 @@ func TestUnavailableZip(t *testing.T) {
 	assert.Contains(t, out, "[cluster] requesting nodes... received response...")
 	assert.Contains(t, out, "[cluster] requesting liveness... received response...")
 	for i := 1; i < tc.NumServers()+1; i++ {
-		assert.Contains(t, out, fmt.Sprintf("[node %d] using SQL connection URL",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] retrieving SQL data",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting stacks... received response...",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting stacks with labels... received response...",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting heap profile list... received response...",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting goroutine dump list... received response...",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting log files list... received response...",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting ranges... received response...",
-			i))
+		assert.Contains(t, out, fmt.Sprintf("[node %d] using SQL connection URL", i))
+		assert.Contains(t, out, fmt.Sprintf("[node %d] retrieving SQL data", i))
+		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting stacks... received response...", i))
+		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting stacks with labels... received response...", i))
+		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting heap profile list... received response...", i))
+		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting goroutine dump list... received response...", i))
+		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting cpu profile list... received response...", i))
+		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting log files list... received response...", i))
+		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting ranges... received response...", i))
 	}
 
 	// Run debug zip against node 2.
@@ -540,6 +533,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `[node ?] ? heap profiles found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ goroutine dumps found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? goroutine dumps found`)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ cpu profiles found$`)
+	out = re.ReplaceAllString(out, `[node ?] ? cpu profiles found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ log files found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? log files found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving (memprof|memstats).*$` + "\n")
