@@ -1711,6 +1711,7 @@ func TestRangeFeedMetadataManualSplit(t *testing.T) {
 			require.Equal(t, false, meta.FromManualSplit)
 			require.Equal(t, sp.Key, meta.Span.Key)
 			require.Equal(t, sp.EndKey, meta.Span.EndKey)
+			require.Equal(t, sp.Key, meta.ParentStartKey)
 		}
 		<-initialScanDone
 
@@ -1731,6 +1732,7 @@ func TestRangeFeedMetadataManualSplit(t *testing.T) {
 				// New Rangefeed for LHS.
 				require.Equal(t, splitKey, meta.Span.EndKey)
 				require.Equal(t, sp.Key, meta.Span.Key)
+				require.Equal(t, sp.Key, meta.ParentStartKey)
 				break
 			}
 			// Due to outdated rangefeed cache, we could spawn a rangefeed with the og
@@ -1739,6 +1741,7 @@ func TestRangeFeedMetadataManualSplit(t *testing.T) {
 			// rangefeeds with the manual split flag.
 			require.Equal(t, sp.Key, meta.Span.Key)
 			require.Equal(t, sp.EndKey, meta.Span.EndKey)
+			require.Equal(t, sp.Key, meta.ParentStartKey)
 		}
 		{
 			// New Rangefeed for the RHS.
@@ -1747,6 +1750,7 @@ func TestRangeFeedMetadataManualSplit(t *testing.T) {
 			require.Equal(t, true, meta.FromManualSplit)
 			require.Equal(t, splitKey, meta.Span.Key)
 			require.Equal(t, sp.EndKey, meta.Span.EndKey)
+			require.Equal(t, sp.Key, meta.ParentStartKey)
 		}
 
 	})

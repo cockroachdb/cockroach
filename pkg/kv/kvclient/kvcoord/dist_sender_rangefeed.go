@@ -50,10 +50,10 @@ import (
 )
 
 type singleRangeInfo struct {
-	rs              roachpb.RSpan
-	startAfter      hlc.Timestamp
-	token           rangecache.EvictionToken
-	fromManualSplit bool
+	rs                      roachpb.RSpan
+	startAfter              hlc.Timestamp
+	token                   rangecache.EvictionToken
+	parentRangeFeedMetadata parentRangeFeedMetadata
 }
 
 // defRangefeedConnClass is the default rpc.ConnectionClass used for rangefeed
@@ -260,7 +260,7 @@ func (ds *DistSender) RangeFeedSpans(
 				// Register partial range feed with registry.  We do this prior to acquiring
 				// catchup scan quota so that we have some observability into the ranges
 				// that are blocked, waiting for quota.
-				active := newActiveRangeFeed(span, sri.startAfter, rr, metrics, sri.fromManualSplit)
+				active := newActiveRangeFeed(span, sri.startAfter, rr, metrics, sri.parentRangeFeedMetadata)
 
 				acquireStart := timeutil.Now()
 				if log.V(1) {
@@ -273,7 +273,7 @@ func (ds *DistSender) RangeFeedSpans(
 				}
 				if log.V(1) {
 					log.Infof(ctx, "RangeFeed starting for span %s@%s from manual split %t (quota acquired in %s)",
-						span, sri.startAfter, sri.fromManualSplit, timeutil.Since(acquireStart))
+						span, sri.startAfter, sri.parentRangeFeedMetadata.fromManualSplit, timeutil.Since(acquireStart))
 				}
 
 				// Spawn a child goroutine to process this feed.
@@ -285,7 +285,7 @@ func (ds *DistSender) RangeFeedSpans(
 				})
 
 				if cfg.withMetadata {
-					sendMetadata(eventCh, span, sri.fromManualSplit)
+					sendMetadata(eventCh, span, sri.parentRangeFeedMetadata)
 				}
 
 			case <-ctx.Done():
@@ -347,12 +347,10 @@ type RangeFeedContext struct {
 type PartialRangeFeed struct {
 	// The following fields are immutable and are initialized
 	// once the rangefeed for a range starts.
-	Span        roachpb.Span
-	StartAfter  hlc.Timestamp // exclusive
-	CreatedTime time.Time
-	// FromManualSplit is true when this rangefeed spawned due to a previous
-	// rangefeed retrying after a manual split.
-	FromManualSplit bool
+	Span                    roachpb.Span
+	StartAfter              hlc.Timestamp // exclusive
+	CreatedTime             time.Time
+	ParentRangefeedMetadata parentRangeFeedMetadata
 
 	// Fields below are mutable.
 	NodeID            roachpb.NodeID
@@ -492,13 +490,13 @@ func newRangeFeedRegistry(ctx context.Context, withDiff bool) *rangeFeedRegistry
 }
 
 func sendSingleRangeInfo(rangeCh chan<- singleRangeInfo) onRangeFn {
-	return func(ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken, fromManualSplit bool) error {
+	return func(ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken, prevMetadata parentRangeFeedMetadata) error {
 		select {
 		case rangeCh <- singleRangeInfo{
-			rs:              rs,
-			startAfter:      startAfter,
-			token:           token,
-			fromManualSplit: fromManualSplit,
+			rs:                      rs,
+			startAfter:              startAfter,
+			token:                   token,
+			parentRangeFeedMetadata: prevMetadata,
 		}:
 			return nil
 		case <-ctx.Done():
@@ -508,15 +506,29 @@ func sendSingleRangeInfo(rangeCh chan<- singleRangeInfo) onRangeFn {
 }
 
 type onRangeFn func(
-	ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken, emitStartKey bool,
+	ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken, metadata parentRangeFeedMetadata,
 ) error
 
-func sendMetadata(eventCh chan<- RangeFeedMessage, span roachpb.Span, fromManualSplit bool) {
+// parentRangeFeedMetadata contains metadata around a parent rangefeed that is being retried.
+type parentRangeFeedMetadata struct {
+	// FromManualSplit is true when the previous partial rangefeed was interrupted by
+	// a manual split.
+	fromManualSplit bool
+	// StartKey is the start key of the previous partial rangefeed. Note: if there
+	// is no parent rangefeed, the start key will be equal to the dist sender
+	// level rangefeed start key.
+	startKey roachpb.Key
+}
+
+func sendMetadata(
+	eventCh chan<- RangeFeedMessage, span roachpb.Span, parentMetadata parentRangeFeedMetadata,
+) {
 	eventCh <- RangeFeedMessage{
 		RangeFeedEvent: &kvpb.RangeFeedEvent{
 			Metadata: &kvpb.RangeFeedMetadata{
 				Span:            span,
-				FromManualSplit: fromManualSplit,
+				FromManualSplit: parentMetadata.fromManualSplit,
+				ParentStartKey:  parentMetadata.startKey,
 			},
 		},
 		RegisteredSpan: span,
@@ -537,6 +549,10 @@ func divideSpanOnRangeBoundaries(
 	// boundaries. So, as we go, keep track of the remaining uncovered part of
 	// `rs` in `nextRS`.
 	nextRS := rs
+	parentMetadata := parentRangeFeedMetadata{
+		fromManualSplit: fromManualSplit,
+		startKey:        rs.Key.AsRawKey(),
+	}
 	ri := MakeRangeIterator(ds)
 	for ri.Seek(ctx, nextRS.Key, Ascending); ri.Valid(); ri.Next(ctx) {
 		desc := ri.Desc()
@@ -545,7 +561,7 @@ func divideSpanOnRangeBoundaries(
 			return err
 		}
 		nextRS.Key = partialRS.EndKey
-		if err := onRange(ctx, partialRS, startAfter, ri.Token(), fromManualSplit); err != nil {
+		if err := onRange(ctx, partialRS, startAfter, ri.Token(), parentMetadata); err != nil {
 			return err
 		}
 		if !ri.NeedAnother(nextRS) {
@@ -562,15 +578,15 @@ func newActiveRangeFeed(
 	startAfter hlc.Timestamp,
 	rr *rangeFeedRegistry,
 	metrics *DistSenderRangeFeedMetrics,
-	fromManualSplit bool,
+	parentMetadata parentRangeFeedMetadata,
 ) *activeRangeFeed {
 	// Register partial range feed with registry.
 	active := &activeRangeFeed{
 		PartialRangeFeed: PartialRangeFeed{
-			Span:            span,
-			StartAfter:      startAfter,
-			FromManualSplit: fromManualSplit,
-			CreatedTime:     timeutil.Now(),
+			Span:                    span,
+			StartAfter:              startAfter,
+			ParentRangefeedMetadata: parentMetadata,
+			CreatedTime:             timeutil.Now(),
 		},
 	}
 
@@ -651,7 +667,7 @@ func (ds *DistSender) partialRangeFeed(
 		}
 		active.setLastError(err)
 
-		errInfo, err := handleRangefeedError(ctx, metrics, err, active.FromManualSplit)
+		errInfo, err := handleRangefeedError(ctx, metrics, err, active.ParentRangefeedMetadata.fromManualSplit)
 		if err != nil {
 			return err
 		}

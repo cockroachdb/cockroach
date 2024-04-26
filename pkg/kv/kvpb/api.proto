@@ -3274,8 +3274,13 @@ message RangeFeedDeleteRange {
 // RangefeedMetadata is a variant of RangefeedEvent that contains metadata about
 // a newly spawned partial rangefeed.
 message RangeFeedMetadata {
+  // Span is the span of the newly spawned partial rangefeed.
   Span               span               = 1 [(gogoproto.nullable) = false];
+  // FromManualSplit is true when this rangefeed spawned due to the parent
+  // rangefeed retrying after a manual split.
   bool               from_manual_split  = 2;
+  // ParentStartKey is the start key of the retried parent rangefeed.
+  bytes              parent_start_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 }
 
 // RangeFeedEvent is a union of all event types that may be returned on a
