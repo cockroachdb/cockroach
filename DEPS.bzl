@@ -65,16 +65,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_abourget_teamcity",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/abourget/teamcity",
-        sha256 = "9df6b028c9fb5bff7bdad844bda504356945fd6d3cd583c50f68d8b8e85060f6",
-        strip_prefix = "github.com/cockroachdb/teamcity@v0.0.0-20180905144921-8ca25c33eb11",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/teamcity/com_github_cockroachdb_teamcity-v0.0.0-20180905144921-8ca25c33eb11.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_aclements_go_gg",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aclements/go-gg",
