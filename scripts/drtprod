@@ -79,6 +79,48 @@ case $1 in
       done
     exit 0
     ;;
+  "datadog")
+    shift
+    cluster="${1}"
+
+    dd_api_key="$(gcloud --project=cockroach-drt secrets versions access latest --secret datadog-api-key)"
+    if [ -z "${dd_api_key}" ]; then
+      echo "Missing Datadog API key!"
+      exit 1
+    fi
+
+    dd_site="us5.datadoghq.com"
+
+    # Single quotes around the shell expansion cause it to be processed on the
+    # remote host instead of the local host.
+    roachprod ssh ${cluster} -- DD_INSTALL_ONLY=true bash -c '"$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"'
+
+    roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/datadog.yaml > /dev/null << EOF
+---
+api_key: ${dd_api_key}
+site: ${dd_site}
+tags:
+# Datadog reserved tags.
+- env:development
+- service:drt-cockroachdb
+
+# Custom tags.
+- cluster:${cluster%:*}
+- team:drt
+EOF"
+
+    roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/conf.d/cockroachdb.d/conf.yaml > /dev/null << EOF
+---
+init_config:
+instances:
+- openmetrics_endpoint: http://localhost:26258/_status/vars
+  tls_verify: false
+EOF"
+
+    roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
+
+    exit 0
+    ;;
   "create")
     if [ "$#" -lt 2 ]; then
       echo "usage: drtprod create {drt-main,drt-ua1,drt-ua2}"
