@@ -135,15 +135,24 @@ func TestMeasurePlanChange(t *testing.T) {
 	}
 }
 
-func fakeTopology(nls []sql.InstanceLocality) streamclient.Topology {
+func fakeTopology(nls []sql.InstanceLocality, tenantSpan roachpb.Span) streamclient.Topology {
 	topology := streamclient.Topology{
 		SourceTenantID: roachpb.TenantID{InternalValue: uint64(2)},
 		Partitions:     make([]streamclient.PartitionInfo, 0, len(nls)),
 	}
-	for _, nl := range nls {
+
+	// EndKey will get moved Key on the first iteration.
+	sp := roachpb.Span{EndKey: tenantSpan.Key}
+
+	for i, nl := range nls {
+		sp = roachpb.Span{Key: sp.EndKey, EndKey: sp.EndKey.Next()}
+		if i == len(nls)-1 {
+			sp.EndKey = tenantSpan.EndKey
+		}
 		partition := streamclient.PartitionInfo{
 			ID:          nl.GetInstanceID().String(),
 			SrcLocality: nl.GetLocality(),
+			Spans:       roachpb.Spans{sp},
 		}
 		topology.Partitions = append(topology.Partitions, partition)
 	}
@@ -309,7 +318,7 @@ func TestSourceDestMatching(t *testing.T) {
 			sipSpecs, _, err := constructStreamIngestionPlanSpecs(
 				ctx,
 				fakeStreamAddress,
-				fakeTopology(tc.srcNodes),
+				fakeTopology(tc.srcNodes, keys.MakeTenantSpan(roachpb.TenantID{InternalValue: 2})),
 				tc.dstNodes,
 				hlc.Timestamp{},
 				hlc.Timestamp{},
