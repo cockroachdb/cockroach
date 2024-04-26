@@ -20,7 +20,7 @@ client tenant does not have capability to query timeseries data
 
 has-tsdb-all-capability ten=10
 ----
-client tenant does not have capability to query timeseries data
+client tenant does not have capability to query non-tenant metrics
 
 # Disable the capability checks by falling back to the v22.2 behavior.
 set-authorizer-mode value=v222
@@ -96,7 +96,7 @@ client tenant does not have capability to query timeseries data
 
 has-tsdb-all-capability ten=10
 ----
-client tenant does not have capability to query timeseries data
+client tenant does not have capability to query non-tenant metrics
 
 # Set the service state to none and make sure we can't send a batch.
 upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false can_view_all_metrics=false service=none

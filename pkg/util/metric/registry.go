@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -86,6 +87,20 @@ func (r *Registry) AddMetric(metric Iterable) {
 	if log.V(2) {
 		log.Infof(context.TODO(), "added metric: %s (%T)", metric.GetName(), metric)
 	}
+}
+
+// Contains returns true if the given metric name is registered in this
+// registry. The method will automatically trim `cr.store` and
+// `cr.node` prefixes if they're present in the name, otherwise leaving
+// the input unchanged.
+func (r *Registry) Contains(name string) bool {
+	r.Lock()
+	defer r.Unlock()
+
+	name = strings.TrimPrefix(name, "cr.store.")
+	name = strings.TrimPrefix(name, "cr.node.")
+	_, ok := r.tracked[name]
+	return ok
 }
 
 // RemoveMetric removes the passed-in metric from the registry. If the metric
