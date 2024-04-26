@@ -699,7 +699,7 @@ export class DatabasesPage extends React.Component<
           )}
         </div>
         <section className={sortableTableCx("cl-table-container")}>
-          <PageConfig>
+          <PageConfig className={cx("page-config")}>
             <PageConfigItem>
               <Search
                 onSubmit={this.onSubmitSearchField}

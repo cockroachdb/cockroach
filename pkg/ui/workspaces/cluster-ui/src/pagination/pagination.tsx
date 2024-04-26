@@ -9,21 +9,17 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Pagination as AntPagination } from "antd";
+import {
+  Pagination as AntPagination,
+  PaginationProps as AntPaginationProps,
+} from "antd";
 import classNames from "classnames/bind";
 
 import styles from "./pagination.module.scss";
 
-import type { PaginationProps as AntPaginationProps } from "antd/lib/pagination";
-
 const cx = classNames.bind(styles);
 
-export type PaginationProps = Pick<
-  AntPaginationProps,
-  "pageSize" | "current" | "total" | "onChange"
->;
-
-export const Pagination: React.FC<PaginationProps> = props => {
+export const Pagination: React.FC<AntPaginationProps> = props => {
   const itemRenderer = React.useCallback(
     (
       _page: number,
