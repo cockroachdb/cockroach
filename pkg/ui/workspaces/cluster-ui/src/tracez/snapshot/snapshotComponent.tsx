@@ -118,7 +118,10 @@ export const SnapshotComponent: React.FC<{
       <div>
         <PageConfig>
           <PageConfigItem>
-            <Button onClick={takeAndLoadSnapshot} intent="secondary">
+            <Button
+              onClick={takeAndLoadSnapshot}
+              intent="secondary"
+            >
               <Icon iconName="Download" /> Take snapshot
             </Button>
           </PageConfigItem>

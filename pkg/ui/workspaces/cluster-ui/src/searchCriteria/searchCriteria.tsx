@@ -32,7 +32,7 @@ import {
 } from "../util/sqlActivityConstants";
 import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
 import { CaretDown } from "@cockroachlabs/icons";
-import { ClickParam } from "antd/lib/menu";
+import { MenuClickEventHandler } from "rc-menu/es/interface";
 const cx = classNames.bind(styles);
 const { SubMenu } = Menu;
 
@@ -74,13 +74,13 @@ export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
     </span>
   );
 
-  const changeTop = (event: ClickParam): void => {
+  const changeTop: MenuClickEventHandler = event => {
     const top = Number(event.key);
     if (top !== topValue) {
       onChangeTop(top);
     }
   };
-  const changeBy = (event: ClickParam): void => {
+  const changeBy: MenuClickEventHandler = event => {
     const by = Object.values(SqlStatsSortOptions).find(
       s => s === Number(event.key),
     );

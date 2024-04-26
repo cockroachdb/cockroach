@@ -9,12 +9,11 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Table as AntTable, ConfigProvider } from "antd";
-import type { ColumnProps } from "antd/lib/table";
+import { Table as AntTable, ConfigProvider, TablePaginationConfig } from "antd";
+import type { ColumnProps } from "antd/es/table";
 import classnames from "classnames/bind";
 import styles from "./table.module.scss";
-
-export type ColumnsConfig<T> = Array<ColumnProps<T>>;
+import type { FilterValue, SorterResult } from "antd/es/table/interface";
 
 export interface TableProps<T> {
   columns: Array<ColumnProps<T>>;
@@ -31,7 +30,9 @@ const cx = classnames.bind(styles);
 const customizeRenderEmpty = (node: React.ReactNode) => () =>
   <div className={cx("empty-table__message")}>{node}</div>;
 
-export function Table<T>(props: TableProps<T>): React.ReactElement {
+export function Table<T extends Record<string, unknown>>(
+  props: TableProps<T>,
+): React.ReactElement {
   const {
     columns,
     dataSource,
@@ -52,7 +53,11 @@ export function Table<T>(props: TableProps<T>): React.ReactElement {
         expandRowByClick
         tableLayout={tableLayout}
         pagination={{ hideOnSinglePage: true, pageSize }}
-        onChange={(pagination, filters, sorter) => {
+        onChange={(
+          pagination: TablePaginationConfig,
+          filters: Record<string, FilterValue | null>,
+          sorter: SorterResult<T>,
+        ) => {
           if (onSortingChange && sorter.column) {
             onSortingChange(
               sorter.column?.title as string,

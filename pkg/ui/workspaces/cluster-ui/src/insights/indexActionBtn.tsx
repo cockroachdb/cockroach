@@ -10,14 +10,8 @@
 
 import React, { useCallback, useState } from "react";
 import copy from "copy-to-clipboard";
-import { message, Icon } from "antd";
-
-// import "antd/lib/message/style";
-
-
-// import "antd/lib/icon/style";
-
-
+import { message } from "antd";
+import CopyOutlined from "@ant-design/icons/CopyOutlined";
 import { Modal } from "../modal";
 import { Text, TextTypes } from "../text";
 import { Button } from "../button";
@@ -176,7 +170,7 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
             type={"unstyled-link"}
             size={"small"}
             className={cx("bottom-corner")}
-            icon={<Icon type="copy" className={cx("copy-icon")} />}
+            icon={<CopyOutlined className={cx("copy-icon")} />}
             onClick={onCopyClick}
           >
             Copy

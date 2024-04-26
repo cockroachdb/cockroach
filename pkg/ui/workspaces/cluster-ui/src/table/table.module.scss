@@ -27,6 +27,14 @@
       }
     }
   }
+
+  // Sorter icons on table's header
+  :global(.ant-table-thead .ant-table-column-sorter-inner .anticon) {
+    display: flex;
+    color: $colors--neutral-4;
+    transform: scale(0.91666667) rotate(0deg);
+    font-size: $font-size--small;
+  }
   // END: Table header
 
   // Table Column
