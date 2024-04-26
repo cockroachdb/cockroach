@@ -4192,10 +4192,6 @@ func RunLogicTests(
 func RunLogicTest(
 	t *testing.T, serverArgs TestServerArgs, configIdx logictestbase.ConfigIdx, path string,
 ) {
-	// Note: there is special code in teamcity-trigger/main.go to run this package
-	// with less concurrency in the nightly stress runs. If you see problems
-	// please make adjustments there.
-
 	if skipLogicTests {
 		skip.IgnoreLint(t, "COCKROACH_LOGIC_TESTS_SKIP")
 	}

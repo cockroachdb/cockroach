@@ -26,8 +26,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 )
 
 var (
@@ -41,7 +39,7 @@ func main() {
 	flag.Parse()
 	if err := generate(*outDir); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to generate files: %v\n", err)
-		exit.WithCode(exit.UnspecifiedError())
+		os.Exit(1)
 	}
 }
 

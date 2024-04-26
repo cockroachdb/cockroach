@@ -1545,6 +1545,7 @@ func TestLint(t *testing.T) {
 			":!sql/colexec/execgen",
 			":!kv/kvpb/gen/main.go",
 			":!testutils/serverutils/fwgen/gen.go",
+			":!gen/genbzl/main.go",
 		)
 		if err != nil {
 			t.Fatal(err)
