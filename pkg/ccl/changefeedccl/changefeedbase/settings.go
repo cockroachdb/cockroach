@@ -301,6 +301,16 @@ var SinkPacerRequestSize = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+// UsageMetricsReportingInterval is the interval at which the changefeed
+// calculates and updates its usage metric.
+var UsageMetricsReportingInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"changefeed.usage.interval",
+	"the interval at which the changefeed calculates and updates its usage metric",
+	5*time.Minute,
+	settings.PositiveDuration, settings.DurationInRange(5*time.Minute, 1*time.Hour),
+)
+
 // DefaultLaggingRangesThreshold is the default duration by which a range must be
 // lagging behind the present to be considered as 'lagging' behind in metrics.
 var DefaultLaggingRangesThreshold = 3 * time.Minute

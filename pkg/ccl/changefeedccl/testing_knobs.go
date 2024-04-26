@@ -89,6 +89,9 @@ type TestingKnobs struct {
 	// PulsarClientSkipCreation skips creating the sink client when
 	// dialing.
 	PulsarClientSkipCreation bool
+
+	// SkipFirstUsageMetricsReportingWait skips the first wait in the usage metrics loop in change frontiers.
+	SkipFirstUsageMetricsReportingWait bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
