@@ -1,6 +1,7 @@
 @import "../core/index.module";
 
 .crl-dropdown {
+  @include text--body;
   display: flex;
   flex-direction: column;
 }

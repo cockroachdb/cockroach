@@ -201,12 +201,16 @@ const RangeSelect = ({
       <div className={cx("trigger-wrapper")}>
         <Dropdown
           open={isVisible}
-          onVisibleChange={onVisibleChange}
+          onOpenChange={onVisibleChange}
           placement="bottomLeft"
           trigger={["click"]}
           overlay={menu}
+          destroyPopupOnHide
         >
-          <Button className={cx("trigger-button")}>
+          <Button
+            className={cx("trigger-button")}
+            data-testid="dropdown-button"
+          >
             <div className={cx("trigger", "Select")}>
               <div>
                 <TimeLabel>{selected.timeLabel}</TimeLabel>
