@@ -109,11 +109,17 @@ export function SummaryValue(
 export function SummaryStat(
   props: SummaryStatProps & { children?: React.ReactNode },
 ) {
+  let classModifier = "number";
+
+  if (props.title === "Unavailable ranges" && props.value !== 0) {
+    classModifier = "alert-unavailable-ranges";
+  }
+
   return (
     <SummaryValue
       title={props.title}
       value={formatNumberForDisplay(props.value, props.format)}
-      classModifier="number"
+      classModifier={classModifier}
     >
       {props.children}
     </SummaryValue>
