@@ -35,11 +35,6 @@ jobs:
           labeled: T-jobs
       - uses: actions/add-to-project@v0.4.0
         with:
-          project-url: https://github.com/orgs/cockroachdb/projects/36
-          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
-          labeled: T-multitenant
-      - uses: actions/add-to-project@v0.4.0
-        with:
           project-url: https://github.com/orgs/cockroachdb/projects/45
           github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
           labeled: T-sql-queries

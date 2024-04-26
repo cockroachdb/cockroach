@@ -36,7 +36,7 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(2),
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
-		Owner:             registry.OwnerMultiTenant,
+		Owner:             registry.OwnerDisasterRecovery,
 		NonReleaseBlocker: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runMultiTenantUpgrade(ctx, t, c, t.BuildVersion())
