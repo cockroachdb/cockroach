@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // TestingKnobs are the testing knobs for changefeed.
@@ -62,6 +63,12 @@ type TestingKnobs struct {
 	// knobs as current statement time will only be available once the create changefeed statement
 	// starts executing.
 	OverrideCursor func(currentTime *hlc.Timestamp) string
+
+	// TimeSource is used to override the time source used by the changefeed (currently only used by the usage metric goroutine).
+	TimeSource timeutil.TimeSource
+
+	// OverrideExecCfg returns a modified ExecutorConfig to use under tests.
+	OverrideExecCfg func(actual *sql.ExecutorConfig) *sql.ExecutorConfig
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

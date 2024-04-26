@@ -109,6 +109,7 @@ var histogramMetricsNames = map[string]struct{}{
 	"rebalancing.replicas.queriespersecond":     {},
 	"rebalancing.replicas.cpunanospersecond":    {},
 	"sql.pre_serve.mem.max":                     {},
+	"changefeed.usage.query_duration":           {},
 }
 
 func allInternalTSMetricsNames() []string {
