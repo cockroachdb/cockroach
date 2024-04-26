@@ -92,6 +92,7 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 		return false
 	}
 
+	flushBegin := s.getTimeNow()
 	s.SQLStats.ConsumeStats(ctx, stopper,
 		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			s.doFlush(ctx, func() error {
@@ -107,6 +108,7 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 
 			return nil
 		})
+	s.cfg.FlushLatency.RecordValue(s.getTimeNow().Sub(flushBegin).Nanoseconds())
 
 	if s.cfg.Knobs != nil && s.cfg.Knobs.OnStmtStatsFlushFinished != nil {
 		s.cfg.Knobs.OnStmtStatsFlushFinished()
@@ -171,7 +173,6 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 
 func (s *PersistedSQLStats) doFlush(ctx context.Context, workFn func() error, errMsg string) {
 	var err error
-	flushBegin := s.getTimeNow()
 
 	defer func() {
 		if err != nil {
@@ -180,8 +181,6 @@ func (s *PersistedSQLStats) doFlush(ctx context.Context, workFn func() error, er
 		} else {
 			s.cfg.FlushesSuccessful.Inc(1)
 		}
-		flushDuration := s.getTimeNow().Sub(flushBegin)
-		s.cfg.FlushLatency.RecordValue(flushDuration.Nanoseconds())
 	}()
 
 	err = workFn()
