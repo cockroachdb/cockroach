@@ -33,6 +33,6 @@ storiesOf("FilterDropdown", module)
         ]}
         placeholder="Select"
       />
-      <FilterSearchOption label="Store ID" />
+      <FilterSearchOption label="Store ID" onSubmit={noop} />
     </FilterDropdown>
   ));

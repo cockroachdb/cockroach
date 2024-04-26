@@ -9,12 +9,13 @@
 // licenses/APL.txt.
 
 import React from "react";
-import classnames from "classnames/bind";
 import { Table as AntTable, ConfigProvider } from "antd";
+import classnames from "classnames/bind";
+import isArray from "lodash/isArray";
 
 import styles from "./table.module.scss";
 
-import type { ColumnProps } from "antd/lib/table";
+import type { ColumnProps } from "antd/es/table";
 
 export type ColumnsConfig<T> = Array<ColumnProps<T>>;
 
@@ -34,7 +35,9 @@ const customizeRenderEmpty = (node: React.ReactNode) => () => (
   <div className={cx("empty-table__message")}>{node}</div>
 );
 
-export function Table<T>(props: TableProps<T>): React.ReactElement {
+export function Table<T extends object>(
+  props: TableProps<T>,
+): React.ReactElement {
   const {
     columns,
     dataSource,
@@ -55,8 +58,8 @@ export function Table<T>(props: TableProps<T>): React.ReactElement {
         expandRowByClick
         tableLayout={tableLayout}
         pagination={{ hideOnSinglePage: true, pageSize }}
-        onChange={(pagination, filters, sorter) => {
-          if (onSortingChange && sorter.column) {
+        onChange={(_pagination, _filters, sorter) => {
+          if (onSortingChange && !isArray(sorter)) {
             onSortingChange(
               sorter.column?.title as string,
               sorter.order === "ascend",

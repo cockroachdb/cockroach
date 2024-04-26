@@ -778,7 +778,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
                     <section className={timePair.wrapper}>
                       <Input
                         value={filters.timeNumber}
-                        onChange={e => this.handleChange(e, "timeNumber")}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          this.handleChange(e, "timeNumber")
+                        }
                         onFocus={this.clearInput}
                         className={timePair.timeNumber}
                       />
