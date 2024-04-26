@@ -757,6 +757,7 @@ func constructStreamIngestionPlanSpecs(
 	*execinfrapb.StreamIngestionFrontierSpec,
 	error,
 ) {
+	spanGroup := roachpb.SpanGroup{}
 
 	streamIngestionSpecs := make(map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, len(destSQLInstances))
 	for _, id := range destSQLInstances {
@@ -775,8 +776,6 @@ func constructStreamIngestionPlanSpecs(
 		}
 		streamIngestionSpecs[id.GetInstanceID()] = spec
 	}
-
-	trackedSpans := make([]roachpb.Span, 0)
 
 	// Update stream ingestion specs with their matched source node.
 	matcher := makeNodeMatcher(destSQLInstances)
@@ -799,7 +798,15 @@ func constructStreamIngestionPlanSpecs(
 			DestInstanceID:    destID,
 		}
 		streamIngestionSpecs[destID].PartitionSpecs[partition.ID] = partSpec
-		trackedSpans = append(trackedSpans, partition.Spans...)
+		spanGroup.Add(partition.Spans...)
+	}
+
+	tenantSpan := keys.MakeTenantSpan(sourceTenantID)
+	if sourceTenantID == roachpb.SystemTenantID {
+		tenantSpan = roachpb.Span{Key: keys.TableDataMin, EndKey: keys.TableDataMax}
+	}
+	if !spanGroup.Encloses(tenantSpan) {
+		return nil, nil, errors.AssertionFailedf("span %s not covered by %s", tenantSpan, spanGroup.Slice())
 	}
 
 	// Remove any ingestion processors that haven't been assigned any work.
@@ -813,7 +820,7 @@ func constructStreamIngestionPlanSpecs(
 	// node.
 	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{
 		ReplicatedTimeAtStart: previousReplicatedTimestamp,
-		TrackedSpans:          trackedSpans,
+		TrackedSpans:          []roachpb.Span{tenantSpan},
 		JobID:                 int64(jobID),
 		StreamID:              uint64(streamID),
 		StreamAddresses:       topology.StreamAddresses(),
