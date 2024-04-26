@@ -1865,6 +1865,10 @@ func shouldDistributeGivenRecAndMode(
 // is reused, but if plan has logical representation (i.e. it is a planNode
 // tree), then we traverse that tree in order to determine the distribution of
 // the plan.
+//
+// The returned error, if any, indicates why we couldn't distribute the plan.
+// Note that it's possible that we choose to not distribute the plan while
+// nil error is returned.
 // WARNING: in some cases when this method returns
 // physicalplan.FullyDistributedPlan, the plan might actually run locally. This
 // is the case when
@@ -1880,38 +1884,40 @@ func getPlanDistribution(
 	distSQLMode sessiondatapb.DistSQLExecMode,
 	plan planMaybePhysical,
 	distSQLVisitor *distSQLExprCheckVisitor,
-) physicalplan.PlanDistribution {
+) (_ physicalplan.PlanDistribution, distSQLProhibitedErr error) {
 	if plan.isPhysicalPlan() {
-		return plan.physPlan.Distribution
+		// TODO(#47473): store the distSQLProhibitedErr for DistSQL spec factory
+		// too.
+		return plan.physPlan.Distribution, nil
 	}
 
 	// If this transaction has modified or created any types, it is not safe to
 	// distribute due to limitations around leasing descriptors modified in the
 	// current transaction.
 	if txnHasUncommittedTypes {
-		return physicalplan.LocalPlan
+		return physicalplan.LocalPlan, nil
 	}
 
 	if distSQLMode == sessiondatapb.DistSQLOff {
-		return physicalplan.LocalPlan
+		return physicalplan.LocalPlan, nil
 	}
 
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
 	if _, ok := plan.planNode.(*zeroNode); ok {
-		return physicalplan.LocalPlan
+		return physicalplan.LocalPlan, nil
 	}
 
 	rec, err := checkSupportForPlanNode(plan.planNode, distSQLVisitor)
 	if err != nil {
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
-		return physicalplan.LocalPlan
+		return physicalplan.LocalPlan, err
 	}
 
 	if shouldDistributeGivenRecAndMode(rec, distSQLMode) {
-		return physicalplan.FullyDistributedPlan
+		return physicalplan.FullyDistributedPlan, nil
 	}
-	return physicalplan.LocalPlan
+	return physicalplan.LocalPlan, nil
 }
 
 // golangFillQueryArguments transforms Go values into datums.

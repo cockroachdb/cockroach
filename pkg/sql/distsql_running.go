@@ -771,7 +771,21 @@ func (dsp *DistSQLPlanner) Run(
 				}
 				return false
 			}()
-			if !containsLocking && !mustUseRootTxn {
+			// We disable the usage of the Streamer API whenever usage of
+			// DistSQL was prohibited with an error. The thinking behind it is
+			// that we might have a plan where some expression (e.g. a cast to
+			// an Oid type) uses the planner's txn (which is the RootTxn), so
+			// it'd be illegal to use LeafTxns for a part of such plan.
+			// TODO(yuzefovich): this check is both excessive and insufficient.
+			// For example:
+			// - it disables the usage of the Streamer when a subquery has an
+			// Oid type, but that would have no impact on usage of the Streamer
+			// in the main query;
+			// - it might allow the usage of the Streamer even when the internal
+			// executor is used by a part of the plan, and the IE would use the
+			// RootTxn. Arguably, this would be a bug in not prohibiting the
+			// DistSQL altogether.
+			if !containsLocking && !mustUseRootTxn && planCtx.distSQLProhibitedErr == nil {
 				if evalCtx.SessionData().StreamerEnabled {
 					for _, proc := range plan.Processors {
 						if jr := proc.Spec.Core.JoinReader; jr != nil {
@@ -1783,15 +1797,16 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	skipDistSQLDiagramGeneration bool,
 	mustUseLeafTxn bool,
 ) error {
-	distributeSubquery := getPlanDistribution(
+	subqueryDistribution, distSQLProhibitedErr := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
 		planner.SessionData().DistSQLMode, subqueryPlan.plan, &planner.distSQLVisitor,
-	).WillDistribute()
+	)
 	distribute := DistributionType(LocalDistribution)
-	if distributeSubquery {
+	if subqueryDistribution.WillDistribute() {
 		distribute = FullDistribution
 	}
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
+	subqueryPlanCtx.distSQLProhibitedErr = distSQLProhibitedErr
 	subqueryPlanCtx.stmtType = tree.Rows
 	subqueryPlanCtx.skipDistSQLDiagramGeneration = skipDistSQLDiagramGeneration
 	subqueryPlanCtx.subOrPostQuery = true
@@ -2279,15 +2294,16 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	associateNodeWithComponents func(exec.Node, execComponents),
 	addTopLevelQueryStats func(stats *topLevelQueryStats),
 ) error {
-	distributePostquery := getPlanDistribution(
+	postqueryDistribution, distSQLProhibitedErr := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
 		planner.SessionData().DistSQLMode, postqueryPlan, &planner.distSQLVisitor,
-	).WillDistribute()
+	)
 	distribute := DistributionType(LocalDistribution)
-	if distributePostquery {
+	if postqueryDistribution.WillDistribute() {
 		distribute = FullDistribution
 	}
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
+	postqueryPlanCtx.distSQLProhibitedErr = distSQLProhibitedErr
 	postqueryPlanCtx.stmtType = tree.Rows
 	// Postqueries are only executed on the main query path where we skip the
 	// diagram generation.
