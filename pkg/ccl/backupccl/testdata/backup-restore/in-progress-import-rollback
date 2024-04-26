@@ -395,3 +395,59 @@ select DISTINCT index_name FROM [SHOW INDEXES FROM d2.foo2];
 foo2_pkey
 foo2_idx
 foo2_new_idx
+
+
+exec-sql
+CREATE DATABASE re_restore_test;
+USE re_restore_test;
+CREATE TABLE tab1 (i INT PRIMARY KEY, s STRING);
+INSERT INTO tab1 VALUES (42, 'pre-import');
+----
+
+query-sql
+SELECT * FROM re_restore_test.tab1;
+----
+42 pre-import
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+# Pause the import job, in order to back up the importing data.
+import expect-pausepoint
+IMPORT INTO re_restore_test.tab1 (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+exec-sql
+BACKUP DATABASE re_restore_test INTO 'nodelocal://1/with-paused-import';
+----
+
+exec-sql
+RESTORE DATABASE re_restore_test FROM LATEST IN 'nodelocal://1//with-paused-import' WITH new_db_name=re_restore_test2;
+----
+
+# Should have the pre-import state
+query-sql
+SELECT * FROM re_restore_test2.tab1;
+----
+42 pre-import
+
+# Add another row
+exec-sql
+INSERT INTO re_restore_test2.tab1 VALUES (43, 'post-import-post-restore');
+----
+
+exec-sql
+BACKUP DATABASE re_restore_test2 INTO 'nodelocal://1/after-restore';
+----
+
+exec-sql
+RESTORE DATABASE re_restore_test2 FROM LATEST IN 'nodelocal://1//after-restore' WITH new_db_name=re_restore_test3;
+----
+
+query-sql
+SELECT * FROM re_restore_test3.tab1;
+----
+42 pre-import
+43 post-import-post-restore
