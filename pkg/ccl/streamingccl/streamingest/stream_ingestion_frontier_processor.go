@@ -12,7 +12,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -75,7 +74,6 @@ type streamIngestionFrontier struct {
 
 	lastPartitionUpdate time.Time
 	lastFrontierDump    time.Time
-	partitionProgress   map[string]jobspb.StreamIngestionProgress_PartitionProgress
 
 	lastNodeLagCheck time.Time
 
@@ -113,19 +111,12 @@ func newStreamIngestionFrontierProcessor(
 	if err != nil {
 		return nil, err
 	}
-	partitionProgress := make(map[string]jobspb.StreamIngestionProgress_PartitionProgress)
-	for srcPartitionID, destSQLInstanceID := range spec.SubscribingSQLInstances {
-		partitionProgress[srcPartitionID] = jobspb.StreamIngestionProgress_PartitionProgress{
-			DestSQLInstanceID: base.SQLInstanceID(destSQLInstanceID),
-		}
-	}
 	sf := &streamIngestionFrontier{
 		flowCtx:                 flowCtx,
 		spec:                    spec,
 		input:                   input,
 		replicatedTimeAtStart:   spec.ReplicatedTimeAtStart,
 		frontier:                frontier,
-		partitionProgress:       partitionProgress,
 		metrics:                 flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
 		heartbeatSender:         heartbeatSender,
 		persistedReplicatedTime: spec.ReplicatedTimeAtStart,
@@ -427,7 +418,6 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	})
 
 	replicatedTime := f.Frontier()
-	partitionProgress := sf.partitionProgress
 
 	sf.lastPartitionUpdate = timeutil.Now()
 	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
@@ -440,7 +430,6 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 
 		progress := md.Progress
 		streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
-		streamProgress.PartitionProgress = partitionProgress
 		streamProgress.Checkpoint.ResolvedSpans = frontierResolvedSpans
 
 		// Keep the recorded replicatedTime empty until some advancement has been made
