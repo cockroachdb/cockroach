@@ -73,8 +73,10 @@ func withDebugName(name string) remoteSessionOption {
 func newRemoteSession(l *logger.Logger, command *remoteCommand) *remoteSession {
 	var loggingArgs []string
 
-	// NB: -q suppresses -E, at least on *nix.
-	loggingArgs = []string{"-q"}
+	// DEBUG(herko): Force SSH logs from CLI
+	loggingArgs = []string{
+		"-vvv", "-E", fmt.Sprintf("./ssh_%s.log", timeutil.Now().Format(`150405.000000000`)),
+	}
 	logfile := ""
 	if !command.debugDisabled {
 		var debugName = command.debugName
