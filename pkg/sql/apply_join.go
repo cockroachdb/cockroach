@@ -324,7 +324,7 @@ func runPlanInsidePlan(
 		plannerCopy.curPlan.subqueryPlans = params.p.curPlan.subqueryPlans
 	}
 
-	distributePlan := getPlanDistribution(
+	distributePlan, distSQLProhibitedErr := getPlanDistribution(
 		ctx, plannerCopy.Descriptors().HasUncommittedTypes(),
 		plannerCopy.SessionData().DistSQLMode, plan.main,
 	)
@@ -334,6 +334,7 @@ func runPlanInsidePlan(
 	}
 	evalCtx := evalCtxFactory()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
+	planCtx.distSQLProhibitedErr = distSQLProhibitedErr
 	planCtx.stmtType = recv.stmtType
 	planCtx.mustUseLeafTxn = atomic.LoadUint32(&params.p.atomic.innerPlansMustUseLeafTxn) == 1
 

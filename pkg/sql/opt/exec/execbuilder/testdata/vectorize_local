@@ -104,6 +104,52 @@ regions: <hidden>
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0U9FqE0EUffcrLvdJYUx38yAyIARDhdQ2KWnpiwSZnbnENbNz15m7mBDyWf6AXya700JrrKjYx3Pm3HsP5zB7TF88arw6PT-dXoMdGXi3XFyAhbPFbA4OFnNwowregB1VqDCwo7lpKKH-gCWuFLaRLaXEsaf2g2DmtqgLhXVoO-nplULLkVDvUWrxhBqvTeVpScZRPClQoSMxtR_W2kkiiwqn7LsmJA1GQX_7qjU9eokK39-A1A1pKL5_SxlbDkJBag5HT5G_JohknIZxZqqd0B1VvoK3mV0vL6dgjfcpCy9uplNIQi1Y7oLAc9rKSR3khYZiMJ0FRJvHBI3ZQkMNxx0Y79kaIaehGA5WRuwnSsCdtJ1o6PWD0ztijKuDwoxuU0xi1oS6PKg_T_qM63AbdPkwaDdxH9sN7VDhOfOma-Ez1wE4aJiM7xfQp7_oLU36DcOxIdQcU8ZJjPdH0f9bS-VxS69_VVL5X0rqEjlIEsk0FFEhbcl2xxafqMvx33S5pNRySPSgx8c2F4eVQnJryj8zcRctXUa2w5kMF8PcQDhKkl_LDGYhP_UG7w-Xvx0e_zS8Ojz7EQAA__9vVGhb
 
+# Regression test for using the Streamer API when we have a cast to an Oid type
+# for which DistSQL is prohibited (#122274). (Note that, unlike above, we don't
+# have 'lookup join (streamer)' here - that's the test.)
+query T
+EXPLAIN ANALYZE (DISTSQL) SELECT c.a::REGNAMESPACE FROM c JOIN d ON d.b = c.b
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows read from KV: 3 (24 B, 3 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+·
+• render
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 2
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows read: 1
+    │ KV bytes read: 8 B
+    │ KV gRPC calls: 1
+    │ estimated max memory allocated: 0 B
+    │ table: d@d_pkey
+    │ equality: (b) = (b)
+    │
+    └── • scan
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 2
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows read: 2
+          KV bytes read: 16 B
+          KV gRPC calls: 2
+          estimated max memory allocated: 0 B
+          estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+          table: c@sec
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k8-KE0EQxu8-RVEnhXZ3JgeRBiHrECXr5g-TZS8SpNNdxDE9XWN3DyaEPJYv4JPJTGdhY1xR0eP3VVVX8f1m9hg-W5S4GN2MilvQF0rKcvR2ejUZLeZXxQjelLMJaLiejadgYDYFc7GCV6AvVijQsaGpqimgfI85LgU2njWFwL6z9n3D2GxRZgIr17Sxs5cCNXtCucdYRUso8VatLJWkDPnLDAUaiqqy_bN6GEijwIJtW7sgQQnodi8a1annKPDdHcSqJgnZt68hac0ukosVu7OS5y8BPCkjYZCc1S7SvZW_gNfJXZfzArSyNqTGyV1RQIjUgObWRXhK23hZufhMQtYfnRqINo811GoLNdXsd6CsZa0iGQlZv3Clov5IAbiNTRsldP39pffGAJcHgUkdUwxRrQllfhC_n_Q1V-4YdH4atBmaD82GdijwhnnTNvCJKwfsJAwHDwF06ZfkDHkJw_z0e8Hj9j7llFvSISprz1j8Hbb8HNvLn1HL_wk12pJuz0_6TzAHfwKzpNCwC3QC8rGXs8NSIJk1pV8zcOs1zT3rfk2Ss36uNwyFmKp5EmOXSt2BD4fzXw4PfhheHp58DwAA__96rGud
+
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
 ----
