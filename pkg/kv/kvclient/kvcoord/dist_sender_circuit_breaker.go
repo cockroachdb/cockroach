@@ -63,7 +63,8 @@ const (
 	// level issue that causes a large number of circuit breakers to be tripped on
 	// a client has the potential of causing a big goroutine spike on the client.
 	// We currently don't have good scalability numbers to measure the impact of
-	// this -- so this is deemed risky.
+	// this -- once we do, we can revaluate the default mode we run in if the
+	// numbers look good. Else we may want to make these things more scalable.
 	DistSenderCircuitBreakersAllRanges
 )
 
@@ -72,7 +73,7 @@ var (
 		settings.ApplicationLevel,
 		"kv.dist_sender.circuit_breakers.mode",
 		"whether to trip circuit breakers for failing or stalled replicas",
-		"all ranges",
+		"off",
 		map[int64]string{
 			int64(DistSenderCircuitBreakersOff):               "off",
 			int64(DistSenderCircuitBreakersLivenessRangeOnly): "liveness range only",
