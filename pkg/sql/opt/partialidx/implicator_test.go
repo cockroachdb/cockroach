@@ -230,6 +230,36 @@ func BenchmarkImplicator(b *testing.B) {
 			filters: "a < 0 OR b > 10 OR c >= 10 OR d = 4 OR e = 'foo'",
 			pred:    "b > 0 OR e = 'foo'",
 		},
+		{
+			name:    "single-exact-match-virtual",
+			vars:    "a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual, d int as ((a->>'z')::INT) virtual",
+			filters: "(a->>'z')::INT >= 10",
+			pred:    "(a->>'z')::INT >= 10",
+		},
+		{
+			name:    "single-inexact-match-virtual",
+			vars:    "a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual, d int as ((a->>'z')::INT) virtual",
+			filters: "(a->>'z')::INT > 10",
+			pred:    "(a->>'z')::INT > 0",
+		},
+		{
+			name:    "single-no-match-virtual",
+			vars:    "a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual, d int as ((a->>'z')::INT) virtual",
+			filters: "(a->>'a')::INT >= 10",
+			pred:    "(a->>'b')::INT >= 10",
+		},
+		{
+			name:    "and-filters-virtual",
+			vars:    "a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual, d int as ((a->>'z')::INT) virtual, e string",
+			filters: "(a->>'x')::INT > 10 AND (a->>'y')::INT = 10 AND (a->>'z')::INT = 4 AND e = 'foo'",
+			pred:    "(a->>'y')::INT > 0 AND e = 'bar'",
+		},
+		{
+			name:    "or-filters-virtual",
+			vars:    "a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual, d int as ((a->>'z')::INT) virtual, e string",
+			filters: "(a->>'x')::INT > 10 OR (a->>'y')::INT = 10 OR (a->>'z')::INT = 4 OR e = 'foo'",
+			pred:    "(a->>'y')::INT > 0 OR e = 'bar'",
+		},
 	}
 	// Generate a few test cases with many columns to show how performance
 	// scales with respect to the number of columns.
