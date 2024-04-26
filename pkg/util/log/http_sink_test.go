@@ -161,7 +161,8 @@ func testBase(
 	// to accommodate for the overhead of the logging call compared to
 	// the timeout in the HTTP request.
 	if deadline > 0 && logDuration > deadline {
-		t.Error("Log call exceeded timeout")
+		require.LessOrEqualf(t, logDuration, deadline,
+			"Log call exceeded timeout, expected to be less than %s, got %s", deadline.String(), logDuration.String())
 	}
 
 	if hangServer {
