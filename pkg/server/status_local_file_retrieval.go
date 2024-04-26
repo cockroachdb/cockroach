@@ -130,6 +130,7 @@ func getLocalFiles(
 	req *serverpb.GetFilesRequest,
 	heapProfileDirName string,
 	goroutineDumpDirName string,
+	cpuProfileDirName string,
 	statFileFn func(string) (os.FileInfo, error),
 	readFileFn func(string) ([]byte, error),
 ) (*serverpb.GetFilesResponse, error) {
@@ -141,6 +142,8 @@ func getLocalFiles(
 		dir = heapProfileDirName
 	case serverpb.FileType_GOROUTINES: // Requesting for saved Goroutine dumps.
 		dir = goroutineDumpDirName
+	case serverpb.FileType_CPU: // Requesting for saved CPU Profiles.
+		dir = cpuProfileDirName
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "unknown file type: %s", req.Type)
 	}

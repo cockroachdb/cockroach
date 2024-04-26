@@ -256,6 +256,7 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.EnableDemoLoginEndpoint = kvServerCfg.BaseConfig.EnableDemoLoginEndpoint
 	baseCfg.DefaultZoneConfig = kvServerCfg.BaseConfig.DefaultZoneConfig
 	baseCfg.HeapProfileDirName = kvServerCfg.BaseConfig.HeapProfileDirName
+	baseCfg.CPUProfileDirName = kvServerCfg.BaseConfig.CPUProfileDirName
 	baseCfg.GoroutineDumpDirName = kvServerCfg.BaseConfig.GoroutineDumpDirName
 
 	// The ListenerFactory allows us to dynamically choose a
