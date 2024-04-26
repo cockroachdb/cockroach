@@ -113,7 +113,7 @@ export const ActiveTransactionDetails: React.FC<
           </Col>
         </Row>
         {transaction && (
-          <Row gutter={24} type="flex">
+          <Row gutter={24}>
             <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
                 <SummaryCardItem
