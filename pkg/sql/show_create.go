@@ -69,7 +69,7 @@ type ShowCreateDisplayOptions struct {
 // current database.
 func ShowCreateTable(
 	ctx context.Context,
-	p PlanHookState,
+	p *planner,
 	tn *tree.TableName,
 	dbPrefix string,
 	desc catalog.TableDescriptor,
