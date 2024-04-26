@@ -303,21 +303,21 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	return err
 }
 
-// RegisterDiskMonitors injects a monitor into each store to track an individual disk's stats.
-func (ls *Stores) RegisterDiskMonitors(
-	diskManager *disk.MonitorManager, diskPathToStore map[string]roachpb.StoreID,
-) error {
-	monitors := make(map[roachpb.StoreID]disk.Monitor)
-	for path, id := range diskPathToStore {
-		monitor, err := diskManager.Monitor(path)
-		if err != nil {
-			return err
-		}
-		monitors[id] = *monitor
-	}
+// DiskStatsMonitor abstracts disk.Monitor for testing purposes.
+type DiskStatsMonitor interface {
+	CumulativeStats() (disk.Stats, error)
+	Clone() *disk.Monitor
+	Close()
+}
+
+// RegisterDiskMonitors injects a monitor into each store to track an
+// individual disk's stats.
+func (ls *Stores) RegisterDiskMonitors(diskMonitors map[roachpb.StoreID]DiskStatsMonitor) error {
 	return ls.VisitStores(func(s *Store) error {
-		if monitor, ok := monitors[s.StoreID()]; ok {
-			s.diskMonitor = &monitor
+		if monitor, ok := diskMonitors[s.StoreID()]; ok {
+			// The disk monitor is not thread-safe, so we create a clone that can be
+			// queried in parallel for per-store stats.
+			s.diskMonitor = monitor.Clone()
 		}
 		return nil
 	})
