@@ -1,0 +1,13 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
+
+gomock(
+    name = "tenant_status_server_generated",
+    out = "tenant_status_server_generated.go",
+    interfaces = ["TenantStatusServer"],
+    library = "//pkg/server/serverpb",
+    package = "mocks",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
