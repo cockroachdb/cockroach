@@ -385,6 +385,35 @@ func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachp
 	return nil
 }
 
+func (a *Authorizer) HasTSDBAllMetricsCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	if tenID.IsSystem() {
+		return nil
+	}
+
+	entry, mode := a.getMode(ctx, tenID)
+	switch mode {
+	case authorizerModeOn:
+		break // fallthrough to the next check.
+	case authorizerModeAllowAll:
+		return nil
+	case authorizerModeV222:
+		return errCannotQueryTSDB
+	default:
+		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		return err
+	}
+
+	if !tenantcapabilities.MustGetBoolByID(
+		entry.TenantCapabilities, tenantcapabilities.CanViewAllMetrics,
+	) {
+		return errCannotQueryTSDB
+	}
+	return nil
+}
+
 // getMode retrieves the authorization mode.
 func (a *Authorizer) getMode(
 	ctx context.Context, tid roachpb.TenantID,
