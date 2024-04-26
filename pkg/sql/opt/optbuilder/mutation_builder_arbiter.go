@@ -767,6 +767,8 @@ func (h *arbiterPredicateHelper) predicateIsImpliedByArbiterPredicate(pred memo.
 		return false
 	}
 
-	_, ok = h.im.FiltersImplyPredicate(arbiterFilters, pred)
+	// TODO(mgartner): Determine if we should pass the computed columns map
+	// here.
+	_, ok = h.im.FiltersImplyPredicate(arbiterFilters, pred, nil /* computedCols */)
 	return ok
 }

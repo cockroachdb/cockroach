@@ -321,7 +321,8 @@ func (it *scanIndexIter) filtersImplyPredicate(
 	pred memo.FiltersExpr,
 ) (remainingFilters memo.FiltersExpr, ok bool) {
 	// Return the remaining filters if the filters imply the predicate.
-	if remainingFilters, ok = it.im.FiltersImplyPredicate(it.filters, pred); ok {
+	if remainingFilters, ok =
+		it.im.FiltersImplyPredicate(it.filters, pred, it.tabMeta.ComputedCols); ok {
 		return remainingFilters, true
 	}
 
@@ -333,7 +334,8 @@ func (it *scanIndexIter) filtersImplyPredicate(
 	// filters-implication are a subset of the remaining filters from
 	// originalFilters-implication.
 	if it.originalFilters != nil {
-		if remainingFilters, ok = it.im.FiltersImplyPredicate(it.originalFilters, pred); ok {
+		if remainingFilters, ok =
+			it.im.FiltersImplyPredicate(it.originalFilters, pred, it.tabMeta.ComputedCols); ok {
 			return remainingFilters, true
 		}
 	}

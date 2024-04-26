@@ -100,9 +100,15 @@ func TestImplicator(t *testing.T) {
 				d.Fatalf(t, "unexpected error while building predicate: %v\n", err)
 			}
 
+			// Build the computed columns map.
+			computedCols, err := makeComputedCols(sv, &semaCtx, &evalCtx, &f)
+			if err != nil {
+				d.Fatalf(t, "error building computed column expression: %v", err)
+			}
+
 			im := partialidx.Implicator{}
 			im.Init(&f, md, &evalCtx)
-			remainingFilters, ok := im.FiltersImplyPredicate(filters, pred)
+			remainingFilters, ok := im.FiltersImplyPredicate(filters, pred, computedCols)
 			if !ok {
 				return "false"
 			}
@@ -320,6 +326,12 @@ func BenchmarkImplicator(b *testing.B) {
 			b.Fatalf("unexpected error while building predicate: %v\n", err)
 		}
 
+		// Build the computed columns map.
+		computedCols, err := makeComputedCols(sv, &semaCtx, &evalCtx, &f)
+		if err != nil {
+			b.Fatalf("error building computed column expression: %v\n", err)
+		}
+
 		im := partialidx.Implicator{}
 		im.Init(&f, md, &evalCtx)
 		b.Run(tc.name, func(b *testing.B) {
@@ -330,7 +342,7 @@ func BenchmarkImplicator(b *testing.B) {
 				if i%10 == 0 {
 					im.ClearCache()
 				}
-				_, _ = im.FiltersImplyPredicate(filters, pred)
+				_, _ = im.FiltersImplyPredicate(filters, pred, computedCols)
 			}
 		})
 	}
@@ -406,4 +418,24 @@ func makeFiltersExpr(
 	}
 
 	return memo.FiltersExpr{f.ConstructFiltersItem(root)}, nil
+}
+
+func makeComputedCols(
+	sv testutils.ScalarVars, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
+) (map[opt.ColumnID]opt.ScalarExpr, error) {
+	if sv.ComputedCols() == nil {
+		return nil, nil
+	}
+	computedCols := make(map[opt.ColumnID]opt.ScalarExpr)
+	for col, expr := range sv.ComputedCols() {
+		b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
+		computedColExpr, err := b.Build(expr)
+		if err != nil {
+			return nil, err
+		}
+		computedCols[col] = computedColExpr
+		var sharedProps props.Shared
+		memo.BuildSharedProps(computedColExpr, &sharedProps, evalCtx)
+	}
+	return computedCols, nil
 }
