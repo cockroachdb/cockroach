@@ -622,12 +622,39 @@ func (s *Storage) generateAvailableInstanceRowsWithTxn(
 		if downRegions.ContainsPhysicalRepresentation(string(region)) {
 			continue
 		}
-		instances, err := s.getInstanceRows(ctx, region /*global*/, txn, lock.WaitPolicy_Block)
+
+		var instances []instancerow
+		getInstanceRows := func(ctx context.Context) error {
+			var err error
+			instances, err = s.getInstanceRows(ctx, region /*global*/, txn, lock.WaitPolicy_Block)
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+		// Attempt to fetch instance rows with a timeout when region liveness
+		// is used. If the region times out, we are going to probe in later
+		// on.
+		if hasTimeout, timeout := regionLiveness.GetProbeTimeout(); hasTimeout {
+			err = timeutil.RunWithTimeout(ctx, "get-instance-rows", timeout, getInstanceRows)
+		} else {
+			err = getInstanceRows(ctx)
+		}
 		if err != nil {
+			if regionliveness.IsQueryTimeoutErr(err) {
+				// Probe and mark the region potentially.
+				probeErr := regionLiveness.ProbeLivenessWithPhysicalRegion(ctx, region)
+				if probeErr != nil {
+					err = errors.WithSecondaryError(err, probeErr)
+					return err
+				}
+				return errors.Wrapf(err, "get-instance-rows timed out reading from a region")
+			}
 			return err
 		}
 		onlineInstances = append(onlineInstances, instances...)
 	}
+
 	b := txn.NewBatch()
 	for _, row := range idsToAllocate(target, regions, onlineInstances) {
 		value, err := s.rowCodec.encodeAvailableValue()

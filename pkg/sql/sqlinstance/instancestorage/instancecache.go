@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // instanceCache represents a cache over the contents of sql_instances table.
@@ -144,8 +146,27 @@ func newRangeFeedCache(
 					return err
 				}
 				instanceKeyWithRegion := roachpb.Key(instanceKeyWithRegionBytes)
-				rows, err := txn.Scan(ctx, instanceKeyWithRegion, instanceKeyWithRegion.PrefixEnd(), 0)
+				var rows []kv.KeyValue
+				scanFunc := func(ctx context.Context) error {
+					var err error
+					rows, err = txn.Scan(ctx, instanceKeyWithRegion, instanceKeyWithRegion.PrefixEnd(), 0)
+					return err
+				}
+				if hasTimeout, timeout := livenessProber.GetProbeTimeout(); hasTimeout {
+					err = timeutil.RunWithTimeout(ctx, "get-instance-cache-scan", timeout, scanFunc)
+				} else {
+					err = scanFunc(ctx)
+				}
 				if err != nil {
+					if regionliveness.IsQueryTimeoutErr(err) {
+						// Probe and mark the region potentially.
+						probeErr := livenessProber.ProbeLivenessWithPhysicalRegion(ctx, region)
+						if probeErr != nil {
+							err = errors.WithSecondaryError(err, probeErr)
+							return err
+						}
+						return errors.Wrapf(err, "get-instance-rows timed out reading from a region")
+					}
 					return err
 				}
 				for _, row := range rows {
