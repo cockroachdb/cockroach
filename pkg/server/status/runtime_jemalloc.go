@@ -81,6 +81,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 )
 
@@ -106,7 +107,7 @@ func getJemallocStats(ctx context.Context) (uint, uint, error) {
 		for i := 0; i < v.NumField(); i++ {
 			stats[i] = t.Field(i).Name + ": " + humanize.IBytes(uint64(v.Field(i).Interface().(C.size_t)))
 		}
-		log.Infof(ctx, "jemalloc stats: %s", strings.Join(stats, " "))
+		log.Infof(ctx, "jemalloc stats: %s", redact.Safe(strings.Join(stats, " ")))
 	}
 
 	// NB: the `!V(MaxInt32)` condition is a workaround to not spew this to the
