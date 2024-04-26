@@ -2047,7 +2047,7 @@ func (ds *DistSender) sendPartialBatch(
 		// and our local replica before attempting the request. If the sync
 		// makes our token invalid, we handle it similarly to a RangeNotFound or
 		// NotLeaseHolderError from a remote server.
-		if ba.ProxyRangeInfo != nil {
+		if ba.ProxyRangeInfo != nil && routingTok.Valid() {
 			routingTok.SyncTokenAndMaybeUpdateCache(ctx, &ba.ProxyRangeInfo.Lease, &ba.ProxyRangeInfo.Desc)
 		}
 		if !routingTok.Valid() {
