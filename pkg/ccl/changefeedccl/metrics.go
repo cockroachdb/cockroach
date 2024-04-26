@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -333,6 +334,86 @@ func (m *sliMetrics) recordSizeBasedFlush() {
 	m.SizeBasedFlushes.Inc(1)
 }
 
+// JobScopedBillingMetrics are aggregated metrics keeping track of
+// per-changefeed billing metrics by job_id. Note that its members are public so
+// they get registered with the metrics registry, but you should NOT modify them
+// directly.
+//
+// We're not using the AggMetrics struct because this data is on the per-feed
+// level, not the per-scope level. Also, we don't leverage any of the aggmetrics
+// components because they don't support reliable deregistration, which is
+// desirable in this use-case.
+type JobScopedBillingMetrics struct {
+	BillingTableBytes    *metric.Gauge
+	BillingErrorCount    *metric.Counter
+	BillingQueryDuration metric.IHistogram
+
+	m struct {
+		syncutil.Mutex
+		metrics map[catpb.JobID]*innerJobScopedBillingMetrics
+	}
+}
+
+type innerJobScopedBillingMetrics struct {
+	tableBytes int64
+}
+
+func (a *JobScopedBillingMetrics) MetricStruct() {}
+
+func newJobScopedBillingMetrics(histogramWindow time.Duration) *JobScopedBillingMetrics {
+	m := &JobScopedBillingMetrics{
+		BillingErrorCount: metric.NewCounter(metaChangefeedBillingErrorCount),
+		BillingQueryDuration: metric.NewHistogram(metric.HistogramOptions{
+			Metadata:     metaChangefeedBillingQueryDuration,
+			Duration:     histogramWindow,
+			BucketConfig: metric.LongRunning60mLatencyBuckets,
+			Mode:         metric.HistogramModePrometheus,
+		}),
+	}
+	m.m.metrics = make(map[catpb.JobID]*innerJobScopedBillingMetrics)
+	m.BillingTableBytes = metric.NewFunctionalGauge(metaChangefeedTableBytes, func() int64 {
+		m.m.Lock()
+		defer m.m.Unlock()
+
+		sum := int64(0)
+		for _, v := range m.m.metrics {
+			sum += v.tableBytes
+		}
+		return sum
+	})
+	return m
+}
+
+func (m *JobScopedBillingMetrics) UpdateTableBytes(
+	jobID catpb.JobID, bytes int64, queryDuration time.Duration,
+) {
+	if jobID == 0 { // don't record metrics for sinkless feeds
+		return
+	}
+	m.m.Lock()
+	defer m.m.Unlock()
+
+	if _, ok := m.m.metrics[jobID]; !ok {
+		m.m.metrics[jobID] = &innerJobScopedBillingMetrics{}
+	}
+
+	m.m.metrics[jobID].tableBytes = bytes
+	m.BillingQueryDuration.RecordValue(queryDuration.Nanoseconds())
+}
+
+func (m *JobScopedBillingMetrics) RecordError() {
+	m.BillingErrorCount.Inc(1)
+}
+
+// DeregisterJob removes the metrics for the given jobID. This should be used
+// when a job stops running to avoid overbilling.
+func (m *JobScopedBillingMetrics) DeregisterJob(jobID catpb.JobID) {
+	m.m.Lock()
+	defer m.m.Unlock()
+
+	delete(m.m.metrics, jobID)
+}
+
 type kafkaHistogramAdapter struct {
 	settings *cluster.Settings
 	wrapped  *aggmetric.Histogram
@@ -636,6 +717,24 @@ var (
 		Help:        "Number of buffered events in the parallel consumer",
 		Measurement: "Count of Events",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedTableBytes = metric.Metadata{
+		Name:        "changefeed.billing.table_bytes",
+		Help:        "Aggregated number of bytes of data per table",
+		Measurement: "Storage",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaChangefeedBillingErrorCount = metric.Metadata{
+		Name:        "changefeed.billing.error_count",
+		Help:        "Count of errors generating billing metrics for changefeeds",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedBillingQueryDuration = metric.Metadata{
+		Name:        "changefeed.billing.query_duration",
+		Help:        "Time taken by the queries to generate billing metrics for changefeeds",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 )
 
@@ -1054,6 +1153,7 @@ func (s *sliMetrics) getLaggingRangesCallback() func(int64) {
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
 	AggMetrics                     *AggMetrics
+	PerFeedAggMetrics              *JobScopedBillingMetrics
 	KVFeedMetrics                  kvevent.Metrics
 	SchemaFeedMetrics              schemafeed.Metrics
 	Failures                       *metric.Counter
@@ -1088,6 +1188,7 @@ func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
 		AggMetrics:        newAggregateMetrics(histogramWindow),
+		PerFeedAggMetrics: newJobScopedBillingMetrics(histogramWindow),
 		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
 		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),
 		ResolvedMessages:  metric.NewCounter(metaChangefeedForwardedResolvedMessages),
