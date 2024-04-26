@@ -263,7 +263,7 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		break // fallthrough to the next check.
+		break
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
@@ -290,7 +290,7 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		break // fallthrough to the next check.
+		break
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
@@ -318,7 +318,7 @@ func (a *Authorizer) HasNodelocalStorageCapability(
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		break // fallthrough to the next check.
+		break
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
@@ -345,7 +345,7 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		break // fallthrough to the next check.
+		break
 	case authorizerModeAllowAll:
 		return true
 	case authorizerModeV222:
@@ -366,7 +366,7 @@ func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachp
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		break // fallthrough to the next check.
+		break
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
@@ -381,6 +381,35 @@ func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachp
 		entry.TenantCapabilities, tenantcapabilities.CanDebugProcess,
 	) {
 		return errCannotDebugProcess
+	}
+	return nil
+}
+
+func (a *Authorizer) HasTSDBAllMetricsCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	if tenID.IsSystem() {
+		return nil
+	}
+
+	entry, mode := a.getMode(ctx, tenID)
+	switch mode {
+	case authorizerModeOn:
+		break
+	case authorizerModeAllowAll:
+		return nil
+	case authorizerModeV222:
+		return errCannotQueryTSDB
+	default:
+		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		return err
+	}
+
+	if !tenantcapabilities.MustGetBoolByID(
+		entry.TenantCapabilities, tenantcapabilities.CanViewAllMetrics,
+	) {
+		return errCannotQueryTSDB
 	}
 	return nil
 }

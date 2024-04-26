@@ -19,7 +19,8 @@ func _() {
 	_ = x[ExemptFromRateLimiting-9]
 	_ = x[TenantSpanConfigBounds-10]
 	_ = x[CanDebugProcess-11]
-	_ = x[MaxCapabilityID-11]
+	_ = x[CanViewAllMetrics-12]
+	_ = x[MaxCapabilityID-12]
 }
 
 func (i ID) String() string {
@@ -46,6 +47,8 @@ func (i ID) String() string {
 		return "span_config_bounds"
 	case CanDebugProcess:
 		return "can_debug_process"
+	case CanViewAllMetrics:
+		return "can_view_all_metrics"
 	default:
 		return "ID(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
@@ -63,7 +66,8 @@ var stringToCapabilityIDMap = map[string]ID{
 	"exempt_from_rate_limiting": 9,
 	"span_config_bounds":        10,
 	"can_debug_process":         11,
-	"MaxCapabilityID":           11,
+	"can_view_all_metrics":      12,
+	"MaxCapabilityID":           12,
 }
 
 var IDs = []ID{
@@ -74,6 +78,7 @@ var IDs = []ID{
 	CanCheckConsistency,
 	CanDebugProcess,
 	CanUseNodelocalStorage,
+	CanViewAllMetrics,
 	CanViewNodeInfo,
 	CanViewTSDBMetrics,
 	ExemptFromRateLimiting,
