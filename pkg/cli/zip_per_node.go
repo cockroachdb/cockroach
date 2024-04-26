@@ -147,23 +147,20 @@ func (zc *debugZipContext) collectCPUProfiles(
 func (zc *debugZipContext) collectFileList(
 	ctx context.Context, nodePrinter *zipReporter, id, prefix string, fileType serverpb.FileType,
 ) error {
-	// TODO: unify this in a separate commit.
-	var fileKind1, fileKind2 string
+	var fileKind string
 	switch fileType {
 	case serverpb.FileType_HEAP:
-		fileKind1 = "heap file"
-		fileKind2 = "heap profile"
+		fileKind = "heap profile"
 		prefix = prefix + "/heapprof"
 	case serverpb.FileType_GOROUTINES:
-		fileKind1 = "goroutine dump"
-		fileKind2 = "goroutine dump"
+		fileKind = "goroutine dump"
 		prefix = prefix + "/goroutines"
 	default:
 		return errors.AssertionFailedf("unknown file type: %v", fileType)
 	}
 
 	var files *serverpb.GetFilesResponse
-	s := nodePrinter.start("requesting %s list", fileKind1)
+	s := nodePrinter.start("requesting %s list", fileKind)
 	if requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			var err error
@@ -190,11 +187,11 @@ func (zc *debugZipContext) collectFileList(
 		// mostly incurred in the data transmission, not the request-response
 		// round-trip latency. Additionally, cross-node concurrency is
 		// parallelizing these transfers somehow.
-		nodePrinter.info("%d %ss found", len(files.Files), fileKind2)
+		nodePrinter.info("%d %ss found", len(files.Files), fileKind)
 		for _, file := range files.Files {
 			ctime := extractTimeFromFileName(file.Name)
 			if !zipCtx.files.isIncluded(file.Name, ctime, ctime) {
-				nodePrinter.info("skipping excluded %s: %s", file.Name, fileKind2)
+				nodePrinter.info("skipping excluded %s: %s", file.Name, fileKind)
 				continue
 			}
 
