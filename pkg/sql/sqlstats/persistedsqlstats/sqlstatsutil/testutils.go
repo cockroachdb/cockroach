@@ -20,6 +20,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -122,7 +123,7 @@ var fieldBlacklist = map[string]struct{}{
 	"AggregationInterval":     {},
 }
 
-func FillObject(t *testing.T, val reflect.Value, data *randomData) {
+func FillObject(t testutils.TestFataler, val reflect.Value, data *randomData) {
 	// Do not set the fields that are not being encoded as json.
 	if val.Kind() != reflect.Ptr {
 		t.Fatal("not a pointer type")
