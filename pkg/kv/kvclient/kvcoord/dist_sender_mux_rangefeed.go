@@ -166,10 +166,8 @@ type activeMuxRangeFeed struct {
 	*activeRangeFeed
 	rSpan roachpb.RSpan
 	roachpb.ReplicaDescriptor
-	startAfter hlc.Timestamp
-	// FromManualSplit is true when this rangefeed spawned due to a previous
-	// rangefeed retrying after a manual split.
-	fromManualSplit bool
+	startAfter              hlc.Timestamp
+	parentRangeFeedMetadata parentRangeFeedMetadata
 
 	// State pertaining to execution of rangefeed call.
 	token     rangecache.EvictionToken
@@ -215,7 +213,7 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 	rs roachpb.RSpan,
 	startAfter hlc.Timestamp,
 	token rangecache.EvictionToken,
-	fromManualSplit bool,
+	parentRangefeedMetadata parentRangeFeedMetadata,
 ) error {
 	// Bound the partial rangefeed to the partial span.
 	span := rs.AsRawSpanWithNoLocals()
@@ -224,11 +222,11 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 	stream := &activeMuxRangeFeed{
 		// TODO(msbutler): It's sad that there's a bunch of repeat metadata.
 		// Deduplicate once old style rangefeed code is banished from the codebase.
-		activeRangeFeed: newActiveRangeFeed(span, startAfter, m.registry, m.metrics, fromManualSplit),
-		rSpan:           rs,
-		startAfter:      startAfter,
-		token:           token,
-		fromManualSplit: fromManualSplit,
+		activeRangeFeed:         newActiveRangeFeed(span, startAfter, m.registry, m.metrics, parentRangefeedMetadata),
+		rSpan:                   rs,
+		startAfter:              startAfter,
+		token:                   token,
+		parentRangeFeedMetadata: parentRangefeedMetadata,
 	}
 
 	if err := stream.start(ctx, m); err != nil {
@@ -239,7 +237,7 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 	if m.cfg.withMetadata {
 		// Send metadata after the stream successfully registers to avoid sending
 		// metadata about a rangefeed that never starts.
-		sendMetadata(m.eventCh, span, fromManualSplit)
+		sendMetadata(m.eventCh, span, parentRangefeedMetadata)
 	}
 
 	return nil
@@ -542,7 +540,7 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 		}
 	}()
 
-	errInfo, err := handleRangefeedError(ctx, m.metrics, reason, active.fromManualSplit)
+	errInfo, err := handleRangefeedError(ctx, m.metrics, reason, active.ParentRangefeedMetadata.fromManualSplit)
 	if err != nil {
 		// If this is an error we cannot recover from, terminate the rangefeed.
 		return err
