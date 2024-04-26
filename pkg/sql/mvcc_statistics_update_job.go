@@ -17,6 +17,7 @@ package sql
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // TenantGlobalMetricsExporterInterval is the interval at which an external
@@ -42,6 +44,14 @@ var TenantGlobalMetricsExporterInterval = settings.RegisterDurationSetting(
 	"tenant_global_metrics_exporter_interval",
 	"the interval at which a node in the cluster will update the exported global metrics",
 	60*time.Second,
+	settings.PositiveDuration,
+)
+
+var ChangefeedTableBytesExporterInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"changefeed_table_bytes_exporter_interval",
+	"the interval at which a node in the cluster will update changefeed table bytes metric",
+	5*time.Minute,
 	settings.PositiveDuration,
 )
 
@@ -81,22 +91,82 @@ func (j *mvccStatisticsUpdateJob) Resume(ctx context.Context, execCtxI interface
 
 	execCtx := execCtxI.(JobExecContext)
 
+	eg, egCtx := errgroup.WithContext(ctx)
+
 	// Export global metrics for tenants if this is an out-of-process SQL node.
 	// All external mode tenant servers have no node IDs.
 	if _, hasNodeID := execCtx.ExecCfg().NodeInfo.NodeID.OptionalNodeID(); !hasNodeID {
-		return j.runTenantGlobalMetricsExporter(ctx, execCtx)
+		eg.Go(func() error {
+			return j.runTenantGlobalMetricsExporter(egCtx, execCtx)
+		})
 	}
+
+	eg.Go(func() error {
+		return j.runChangefeedTableBytesMetricExporter(egCtx, execCtx)
+	})
+
+	// Block until the errgroup finishes, which will only happen when an error
+	// is encountered or the context is cancelled, We should not return nil, or
+	// else the job will be marked as succeeded.
+	return eg.Wait()
 
 	// TODO(zachlite):
 	// Delete samples older than configurable setting...
 	// Collect span stats for tenant descriptors...
 	// Write new samples...
 
-	// Block until context is cancelled since there's nothing that needs to be
-	// done here. We should not return nil, or else the job will be marked as
-	// succeeded.
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+func (j *mvccStatisticsUpdateJob) runChangefeedTableBytesMetricExporter(
+	ctx context.Context, execCtx JobExecContext,
+) error {
+	metricsRegistry := execCtx.ExecCfg().MetricsRecorder.AppRegistry()
+
+	initialRun := true
+	defer func() {
+		metricsRegistry.RemoveMetric(j.dynamicMetrics.changefeedTableBytes)
+	}()
+
+	runTask := func() error {
+		changefeedTableBytes, err := j.fetchTableChangefeedBytes(ctx, execCtx)
+		if err != nil {
+			return err
+		}
+
+		j.dynamicMetrics.changefeedTableBytes.Update(changefeedTableBytes)
+
+		// Only register metrics once we get our initial values. This avoids
+		// metrics from fluctuating whenever the job restarts.
+		if initialRun {
+			metricsRegistry.AddMetric(j.dynamicMetrics.livebytes)
+			metricsRegistry.AddMetric(j.dynamicMetrics.changefeedTableBytes)
+			initialRun = false
+		}
+
+		return nil
+	}
+
+	var timer timeutil.Timer
+	defer timer.Stop()
+
+	// Fire the timer immediately to start the initial update.
+	timer.Reset(0)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			timer.Read = true
+			if err := runTask(); err != nil {
+				log.Errorf(ctx, "mvcc statistics update job error: %v", err)
+			}
+			timer.Reset(jitter(TenantGlobalMetricsExporterInterval.Get(&execCtx.ExecCfg().Settings.SV)))
+		}
+	}
+
 }
 
 // runTenantGlobalMetricsExporter executes the logic to export global metrics
@@ -109,29 +179,32 @@ func (j *mvccStatisticsUpdateJob) runTenantGlobalMetricsExporter(
 	initialRun := true
 	defer func() {
 		metricsRegistry.RemoveMetric(j.dynamicMetrics.livebytes)
-		metricsRegistry.RemoveMetric(j.dynamicMetrics.changefeedTableBytes)
 	}()
 
-	// TODO: this queries the whole keyspace so we cant actually reuse this result
 	runTask := func() error {
-		liveBytes, err := j.fetchLiveBytes(ctx, execCtx)
+		resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(
+			ctx,
+			&roachpb.SpanStatsRequest{
+				// Fan out to all nodes. SpanStats takes care of only contacting
+				// the relevant nodes with the tenant's span.
+				NodeID: "0",
+				Spans:  []roachpb.Span{execCtx.ExecCfg().Codec.TenantSpan()},
+			},
+		)
 		if err != nil {
 			return err
 		}
-
-		changefeedTableBytes, err := j.fetchTableChangefeedBytes(ctx, execCtx)
-		if err != nil {
-			return err
+		var total int64
+		for _, stats := range resp.SpanToStats {
+			total += stats.ApproximateTotalStats.LiveBytes
 		}
 
-		j.dynamicMetrics.livebytes.Update(liveBytes)
-		j.dynamicMetrics.changefeedTableBytes.Update(changefeedTableBytes)
+		j.dynamicMetrics.livebytes.Update(total)
 
 		// Only register metrics once we get our initial values. This avoids
 		// metrics from fluctuating whenever the job restarts.
 		if initialRun {
 			metricsRegistry.AddMetric(j.dynamicMetrics.livebytes)
-			metricsRegistry.AddMetric(j.dynamicMetrics.changefeedTableBytes)
 			initialRun = false
 		}
 		return nil
@@ -173,28 +246,6 @@ func (j *mvccStatisticsUpdateJob) OnFailOrCancel(
 // CollectProfile implements the jobs.Resumer interface.
 func (j *mvccStatisticsUpdateJob) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
-}
-
-func (j *mvccStatisticsUpdateJob) fetchLiveBytes(
-	ctx context.Context, execCtx JobExecContext,
-) (int64, error) {
-	resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(
-		ctx,
-		&roachpb.SpanStatsRequest{
-			// Fan out to all nodes. SpanStats takes care of only contacting
-			// the relevant nodes with the tenant's span.
-			NodeID: "0",
-			Spans:  []roachpb.Span{execCtx.ExecCfg().Codec.TenantSpan()},
-		},
-	)
-	if err != nil {
-		return 0, err
-	}
-	var total int64
-	for _, stats := range resp.SpanToStats {
-		total += stats.ApproximateTotalStats.LiveBytes
-	}
-	return total, nil
 }
 
 func (j *mvccStatisticsUpdateJob) fetchTableChangefeedBytes(
@@ -278,6 +329,10 @@ func (j *mvccStatisticsUpdateJob) fetchTableChangefeedBytes(
 		}
 	}
 	return total, nil
+}
+
+func jitter(d time.Duration) time.Duration {
+	return time.Duration(float64(d) * (0.9 + 0.2*rand.Float64()))
 }
 
 func init() {
