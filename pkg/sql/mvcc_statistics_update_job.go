@@ -24,6 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -58,6 +62,10 @@ type mvccStatisticsUpdateJob struct {
 	// is not running.
 	dynamicMetrics struct {
 		livebytes *metric.Gauge
+		// tableFeedBytes is a the sum of each table in each (enterprise)
+		// changefeed's live bytes. Tables in multiple changefeeds will be
+		// counted multiple times. This metric will be used for billing.
+		tableChangefeedBytes *metric.Gauge
 	}
 }
 
@@ -101,8 +109,10 @@ func (j *mvccStatisticsUpdateJob) runTenantGlobalMetricsExporter(
 	initialRun := true
 	defer func() {
 		metricsRegistry.RemoveMetric(j.dynamicMetrics.livebytes)
+		metricsRegistry.RemoveMetric(j.dynamicMetrics.tableChangefeedBytes)
 	}()
 
+	// TODO: this queries the whole keyspace so we cant actually reuse this result
 	runTask := func() error {
 		resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(
 			ctx,
@@ -122,10 +132,84 @@ func (j *mvccStatisticsUpdateJob) runTenantGlobalMetricsExporter(
 		}
 		j.dynamicMetrics.livebytes.Update(total)
 
+		// get enterprise changefeeds with data
+		var deets []jobspb.ChangefeedDetails // TODO: get this somehow
+
+		// get table ids per changefeed (by idx in above). supports old and new pb versions
+		// also set up table info map
+		feedsTableIds := make(map[int][]descpb.ID, len(deets))
+		tableSizes := make(map[descpb.ID]int64, len(deets))
+		for cdi, cd := range deets {
+			if len(cd.TargetSpecifications) > 0 {
+				for _, ts := range cd.TargetSpecifications {
+					if ts.TableID > 0 {
+						feedsTableIds[cdi] = append(feedsTableIds[cdi], ts.TableID)
+						tableSizes[ts.TableID] = 0
+					}
+				}
+			} else {
+				for id := range cd.Tables {
+					feedsTableIds[cdi] = append(feedsTableIds[cdi], id)
+					tableSizes[id] = 0
+				}
+			}
+		}
+
+		// fetch & fill in table descriptors
+		for id := range tableSizes {
+			// fetch table descriptor
+			var desc catalog.TableDescriptor
+			fetchTableDesc := func(
+				ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
+			) error {
+				tableDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
+				if err != nil {
+					return err
+				}
+				desc = tableDesc
+				return nil
+			}
+			if err := DescsTxn(ctx, execCtx.ExecCfg(), fetchTableDesc); err != nil {
+				if errors.Is(err, catalog.ErrDescriptorDropped) {
+					// TODO: ignore this and continue?
+					return nil
+				}
+				return err
+			}
+
+			// TODO: do we need to count the sizes of other indexes?
+			span := desc.PrimaryIndexSpan(execCtx.ExecCfg().Codec)
+
+			// TODO: do this once for all spans
+			resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(
+				ctx,
+				&roachpb.SpanStatsRequest{
+					NodeID: "0", // fan out
+					Spans:  []roachpb.Span{span},
+				},
+			)
+			if err != nil {
+				return err
+			}
+
+			for _, stats := range resp.SpanToStats {
+				tableSizes[id] += stats.ApproximateTotalStats.LiveBytes
+			}
+		}
+
+		var total2 int64
+		for _, tableIds := range feedsTableIds {
+			for _, id := range tableIds {
+				total2 += tableSizes[id]
+			}
+		}
+		j.dynamicMetrics.tableChangefeedBytes.Update(total2)
+
 		// Only register metrics once we get our initial values. This avoids
 		// metrics from fluctuating whenever the job restarts.
 		if initialRun {
 			metricsRegistry.AddMetric(j.dynamicMetrics.livebytes)
+			metricsRegistry.AddMetric(j.dynamicMetrics.tableChangefeedBytes)
 			initialRun = false
 		}
 		return nil
@@ -168,6 +252,14 @@ func (j *mvccStatisticsUpdateJob) OnFailOrCancel(
 func (j *mvccStatisticsUpdateJob) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
 }
+
+// func tableSpans(execCtx JobExecContext, tableDescs []catalog.TableDescriptor) roachpb.Spans {
+// 	var trackedSpans []roachpb.Span
+// 	for _, d := range tableDescs {
+// 		trackedSpans = append(trackedSpans, d.PrimaryIndexSpan(execCtx.ExecCfg().Codec))
+// 	}
+// 	return trackedSpans
+// }
 
 func init() {
 	jobs.RegisterConstructor(
