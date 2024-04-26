@@ -69,6 +69,10 @@ const (
 	// prefix.
 	// TODO(casper): ensure this should be consistent across the usage of APIs
 	TenantID = "TENANT_ID"
+	// TenantSpanStart and TenantSpanEnd are bool params to extend checkpoints to
+	// the tenant span start or end key.
+	TenantSpanStart = "TENANT_START"
+	TenantSpanEnd   = "TENANT_END"
 	// IngestionDatabaseID is the ID used in the generated table descriptor.
 	IngestionDatabaseID = 50 /* defaultDB */
 	// IngestionTablePrefix is the prefix of the table name used in the generated
@@ -118,6 +122,8 @@ type randomStreamConfig struct {
 	sstProbability      float64
 
 	tenantID roachpb.TenantID
+	// startTenant and endTenant extend checkpoint spans to the tenant span.
+	startTenant, endTenant bool
 }
 
 func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
@@ -182,10 +188,26 @@ func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 		}
 		c.tenantID = roachpb.MustMakeTenantID(uint64(id))
 	}
+
+	if s := streamURL.Query().Get(TenantSpanStart); s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return c, err
+		}
+		c.startTenant = b
+	}
+	if s := streamURL.Query().Get(TenantSpanEnd); s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return c, err
+		}
+		c.endTenant = b
+	}
+
 	return c, nil
 }
 
-func (c randomStreamConfig) URL(table int) string {
+func (c randomStreamConfig) URL(table int, startsTenant, finishesTenant bool) string {
 	u := &url.URL{
 		Scheme: RandomGenScheme,
 		Host:   strconv.Itoa(table),
@@ -197,6 +219,8 @@ func (c randomStreamConfig) URL(table int) string {
 	q.Add(NumPartitions, strconv.Itoa(c.numPartitions))
 	q.Add(DupProbability, fmt.Sprintf("%f", c.dupProbability))
 	q.Add(SSTProbability, fmt.Sprintf("%f", c.sstProbability))
+	q.Add(TenantSpanStart, strconv.FormatBool(startsTenant))
+	q.Add(TenantSpanEnd, strconv.FormatBool(finishesTenant))
 	q.Add(TenantID, strconv.Itoa(int(c.tenantID.ToUint64())))
 	u.RawQuery = q.Encode()
 	return u.String()
@@ -238,10 +262,17 @@ func newRandomEventGenerator(
 func (r *randomEventGenerator) generateNewEvent() streamingccl.Event {
 	var event streamingccl.Event
 	if r.numEventsSinceLastResolved == r.config.eventsPerCheckpoint {
+		sp := r.tableDesc.TableSpan(r.codec)
+		if r.config.startTenant {
+			sp.Key = keys.MakeTenantSpan(r.config.tenantID).Key
+		}
+		if r.config.endTenant {
+			sp.EndKey = keys.MakeTenantSpan(r.config.tenantID).EndKey
+		}
 		// Emit a CheckpointEvent.
 		resolvedTime := timeutil.Now()
 		hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
-		resolvedSpan := jobspb.ResolvedSpan{Span: r.tableDesc.TableSpan(r.codec), Timestamp: hlcResolvedTime}
+		resolvedSpan := jobspb.ResolvedSpan{Span: sp, Timestamp: hlcResolvedTime}
 		event = streamingccl.MakeCheckpointEvent([]jobspb.ResolvedSpan{resolvedSpan})
 		r.numEventsSinceLastResolved = 0
 	} else {
@@ -320,7 +351,7 @@ func (m *RandomStreamClient) getNextTableID() int {
 }
 
 func (m *RandomStreamClient) tableDescForID(tableID int) (*tabledesc.Mutable, error) {
-	partitionURI := m.config.URL(tableID)
+	partitionURI := m.config.URL(tableID, false, false)
 	partitionURL, err := url.Parse(partitionURI)
 	if err != nil {
 		return nil, err
@@ -360,6 +391,7 @@ func (m *RandomStreamClient) Plan(ctx context.Context, _ streampb.StreamID) (Top
 		Partitions:     make([]PartitionInfo, 0, m.config.numPartitions),
 		SourceTenantID: m.config.tenantID,
 	}
+	tenantSpan := keys.MakeTenantSpan(m.config.tenantID)
 	log.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
 
 	// Allocate table IDs and return one per partition address in the topology.
@@ -371,7 +403,7 @@ func (m *RandomStreamClient) Plan(ctx context.Context, _ streampb.StreamID) (Top
 			return Topology{}, err
 		}
 
-		partitionURI := m.config.URL(tableID)
+		partitionURI := m.config.URL(tableID, i == 0, i == m.config.numPartitions-1)
 		log.Infof(ctx, "planning random stream partition %d for tenant %d: %q", i, m.config.tenantID, partitionURI)
 
 		topology.Partitions = append(topology.Partitions,
@@ -382,6 +414,8 @@ func (m *RandomStreamClient) Plan(ctx context.Context, _ streampb.StreamID) (Top
 				Spans:             []roachpb.Span{tableDesc.TableSpan(srcCodec)},
 			})
 	}
+	topology.Partitions[0].Spans[0].Key = tenantSpan.Key
+	topology.Partitions[m.config.numPartitions-1].Spans[0].EndKey = tenantSpan.EndKey
 
 	return topology, nil
 }
