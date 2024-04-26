@@ -193,6 +193,7 @@ go_test(
         "changefeed_dist_test.go",
         "changefeed_test.go",
         "csv_test.go",
+        "encoder_json_test.go",
         "encoder_test.go",
         "event_processing_test.go",
         "helpers_test.go",
