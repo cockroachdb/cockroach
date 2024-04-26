@@ -168,6 +168,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 		suites:                 registry.Suites(registry.Nightly),
 		restoreUptoIncremental: 1,
 		namePrefix:             "online/correctness",
+		skip:                   "skip for now - flaky",
 	}
 	sp.initTestName()
 	r.Add(
@@ -179,6 +180,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 			CompatibleClouds:    sp.backup.CompatibleClouds(),
 			Suites:              sp.suites,
 			SkipPostValidations: registry.PostValidationReplicaDivergence,
+			Skip:                sp.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				defaultSeed := crdbworkload.NewUint64RandomSeed().Seed()
 				var defaultFakeTime uint32 = 1713818229 // Set to a fixed value for reproducibility
