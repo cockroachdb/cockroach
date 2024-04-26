@@ -712,6 +712,9 @@ func (dsp *DistSQLPlanner) Run(
 		// Txn can be nil in some cases, like BulkIO flows. In such a case, we
 		// cannot create a LeafTxn, so we cannot parallelize scans.
 		planCtx.parallelizeScansIfLocal = false
+		for _, flow := range flows {
+			localState.HasConcurrency = localState.HasConcurrency || execinfra.HasParallelProcessors(flow)
+		}
 	} else {
 		if planCtx.isLocal && noMutations && planCtx.parallelizeScansIfLocal {
 			// Even though we have a single flow on the gateway node, we might
