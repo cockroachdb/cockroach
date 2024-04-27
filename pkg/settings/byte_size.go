@@ -97,3 +97,14 @@ func ByteSizeWithMinimum(minVal int64) SettingOption {
 		return nil
 	})
 }
+
+// ByteSizeWithMaximum can be passed to RegisterByteSizeSetting.
+func ByteSizeWithMaximum(maxVal int64) SettingOption {
+	return WithValidateInt(func(v int64) error {
+		if v > maxVal {
+			return errors.Errorf("cannot be set to a value larger than %v",
+				humanizeutil.IBytes(maxVal))
+		}
+		return nil
+	})
+}

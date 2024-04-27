@@ -190,8 +190,8 @@ func TestDiskQueueCloseOnErr(t *testing.T) {
 	queueCfg.MaxFileSizeBytes = 1
 
 	for _, diskLimit := range []int64{
-		2,                             // Disk budget will be exceeded after the first batch.
-		mon.DefaultPoolAllocationSize, // Disk budget will be exceeded after the second batch.
+		2,                                    // Disk budget will be exceeded after the first batch.
+		int64(mon.DefaultPoolAllocationSize), // Disk budget will be exceeded after the second batch.
 	} {
 		t.Run(fmt.Sprintf("diskLimit=%s", humanizeutil.IBytes(diskLimit)), func(t *testing.T) {
 			serverCfg := &execinfra.ServerConfig{}

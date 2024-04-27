@@ -277,8 +277,8 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	// in-memory buffer at a time (single batch is not enough because the queue
 	// delays the release of the memory by one batch).
 	memoryLimit := 2 * colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize())
-	if memoryLimit < mon.DefaultPoolAllocationSize {
-		memoryLimit = mon.DefaultPoolAllocationSize
+	if memoryLimit < int64(mon.DefaultPoolAllocationSize) {
+		memoryLimit = int64(mon.DefaultPoolAllocationSize)
 	}
 
 	// We need to create a separate unlimited allocator for the spilling queue
@@ -442,8 +442,8 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 	batch.SetLength(coldata.BatchSize())
 	batchSize := colmem.GetBatchMemSize(batch)
 	memoryLimit := int64(numInputBatches) * batchSize
-	if memoryLimit < mon.DefaultPoolAllocationSize {
-		memoryLimit = mon.DefaultPoolAllocationSize
+	if memoryLimit < int64(mon.DefaultPoolAllocationSize) {
+		memoryLimit = int64(mon.DefaultPoolAllocationSize)
 		numInputBatches = int(memoryLimit / batchSize)
 	}
 	queueCfg.BufferSizeBytes = int(memoryLimit)

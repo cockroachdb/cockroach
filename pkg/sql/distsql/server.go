@@ -639,7 +639,7 @@ func (ds *ServerImpl) SetupFlow(
 		// Reserve some memory for this remote flow which is a poor man's
 		// admission control based on the RAM usage.
 		reserved := ds.memMonitor.MakeBoundAccount()
-		err := reserved.Grow(ctx, mon.DefaultPoolAllocationSize)
+		err := reserved.Grow(ctx, int64(mon.DefaultPoolAllocationSize))
 		if err != nil {
 			return err
 		}

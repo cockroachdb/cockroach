@@ -29,7 +29,7 @@ type BulkAdderOptions struct {
 	// MinBufferSize is the initial size of the BulkAdder buffer. It indicates the
 	// amount of memory we require to be able to buffer data before flushing for
 	// SST creation.
-	MinBufferSize int64
+	MinBufferSize int32
 
 	// BufferSize is the maximum size we can grow the BulkAdder buffer to.
 	MaxBufferSize func() int64

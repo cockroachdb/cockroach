@@ -147,7 +147,7 @@ func NewPreServeConnHandler(
 			Name:      "pre-conn",
 			CurCount:  metrics.PreServeCurBytes,
 			MaxHist:   metrics.PreServeMaxBytes,
-			Increment: int64(connReservationBatchSize) * baseSQLMemoryBudget,
+			Increment: int32(connReservationBatchSize) * baseSQLMemoryBudget,
 			Settings:  st,
 		}),
 	}
@@ -395,7 +395,7 @@ func (s *PreServeConnHandler) PreServe(
 	// chunks from the shared pool and these chunks should be larger than
 	// baseSQLMemoryBudget.
 	st.Reserved = s.tenantIndependentConnMonitor.MakeBoundAccount()
-	if err := st.Reserved.Grow(ctx, baseSQLMemoryBudget); err != nil {
+	if err := st.Reserved.Grow(ctx, int64(baseSQLMemoryBudget)); err != nil {
 		return conn, st, errors.Wrapf(err, "unable to pre-allocate %d bytes for this connection",
 			baseSQLMemoryBudget)
 	}
