@@ -224,13 +224,13 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	p2Key := roachpb.Key("key_2")
 	p2Span := roachpb.Span{Key: p2Key, EndKey: p2Key.Next()}
 
-	sampleKV := func() roachpb.KeyValue {
+	sampleKV := func() []roachpb.KeyValue {
 		key, err := keys.RewriteKeyToTenantPrefix(p1Key,
 			keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID)))
 		require.NoError(t, err)
 		v := roachpb.MakeValueFromString("value_1")
 		v.Timestamp = hlc.Timestamp{WallTime: 1}
-		return roachpb.KeyValue{Key: key, Value: v}
+		return []roachpb.KeyValue{{Key: key, Value: v}}
 	}
 	sampleCheckpoint := func(span roachpb.Span, ts int64) []jobspb.ResolvedSpan {
 		return []jobspb.ResolvedSpan{{Span: span, Timestamp: hlc.Timestamp{WallTime: ts}}}
@@ -928,21 +928,23 @@ func resolvedSpansMinTS(resolvedSpans []jobspb.ResolvedSpan) hlc.Timestamp {
 }
 
 func noteKeyVal(
-	validator *streamClientValidator, keyVal roachpb.KeyValue, spec streamclient.SubscriptionToken,
+	validator *streamClientValidator, keyVals []roachpb.KeyValue, spec streamclient.SubscriptionToken,
 ) {
-	if validator.rekeyer != nil {
-		rekey, _, err := validator.rekeyer.RewriteTenant(keyVal.Key)
+	for _, keyVal := range keyVals {
+		if validator.rekeyer != nil {
+			rekey, _, err := validator.rekeyer.RewriteTenant(keyVal.Key)
+			if err != nil {
+				panic(err.Error())
+			}
+			keyVal.Key = rekey
+			keyVal.Value.ClearChecksum()
+			keyVal.Value.InitChecksum(keyVal.Key)
+		}
+		err := validator.noteRow(string(spec), string(keyVal.Key), string(keyVal.Value.RawBytes),
+			keyVal.Value.Timestamp)
 		if err != nil {
 			panic(err.Error())
 		}
-		keyVal.Key = rekey
-		keyVal.Value.ClearChecksum()
-		keyVal.Value.InitChecksum(keyVal.Key)
-	}
-	err := validator.noteRow(string(spec), string(keyVal.Key), string(keyVal.Value.RawBytes),
-		keyVal.Value.Timestamp)
-	if err != nil {
-		panic(err.Error())
 	}
 }
 
@@ -960,16 +962,16 @@ func validateFnWithValidator(
 		case streamingccl.SSTableEvent:
 			kvs := storageutils.ScanSST(t, event.GetSSTable().Data)
 			for _, keyVal := range kvs.MVCCKeyValues() {
-				noteKeyVal(validator, roachpb.KeyValue{
+				noteKeyVal(validator, []roachpb.KeyValue{{
 					Key: keyVal.Key.Key,
 					Value: roachpb.Value{
 						RawBytes:  keyVal.Value,
 						Timestamp: keyVal.Key.Timestamp,
 					},
-				}, spec)
+				}}, spec)
 			}
 		case streamingccl.KVEvent:
-			noteKeyVal(validator, *event.GetKV(), spec)
+			noteKeyVal(validator, event.GetKVs(), spec)
 		case streamingccl.DeleteRangeEvent:
 			panic(errors.New("unsupported event type"))
 		}
