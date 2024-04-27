@@ -115,7 +115,9 @@ func TestInOrderResultsBuffer(t *testing.T) {
 			b.Lock()
 			numToAdd := rng.Intn(len(addOrder)) + 1
 			for i := 0; i < numToAdd; i++ {
-				b.addLocked(results[addOrder[0]])
+				r := results[addOrder[0]]
+				require.NoError(t, budget.consumeLocked(ctx, r.memoryTok.toRelease, false /* allowDebt */))
+				b.addLocked(r)
 				addOrder = addOrder[1:]
 			}
 			b.doneAddingLocked(ctx)
