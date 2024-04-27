@@ -41,13 +41,18 @@ type FeedEventPredicate func(message streamingccl.Event) bool
 // FeedErrorPredicate allows tests to match an error from ReplicationFeed.
 type FeedErrorPredicate func(err error) bool
 
-// KeyMatches makes a FeedEventPredicate that matches a given key.
+// KeyMatches makes a FeedEventPredicate that matches a given key in a kv batch.
 func KeyMatches(key roachpb.Key) FeedEventPredicate {
 	return func(msg streamingccl.Event) bool {
 		if msg.Type() != streamingccl.KVEvent {
 			return false
 		}
-		return bytes.Equal(key, msg.GetKV().Key)
+		for _, kv := range msg.GetKVs() {
+			if bytes.Equal(key, kv.Key) {
+				return true
+			}
+		}
+		return false
 	}
 }
 
@@ -107,14 +112,15 @@ func MakeReplicationFeed(t *testing.T, f FeedSource) *ReplicationFeed {
 	}
 }
 
-// ObserveKey consumes the feed until requested key has been seen (or deadline expired).
+// ObserveKey consumes the feed until requested key has been seen (or deadline
+// expired) in a batch (all of which, including subsequent keys, is consumed).
 // Note: we don't do any buffering here.  Therefore, it is required that the key
 // we want to observe will arrive at some point in the future.
 func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roachpb.KeyValue {
 	rf.consumeUntil(ctx, KeyMatches(key), func(err error) bool {
 		return false
 	})
-	return *rf.msg.GetKV()
+	return rf.msg.GetKVs()[0]
 }
 
 // ObserveAnySpanConfigRecord consumes the feed until any span config record is observed.
