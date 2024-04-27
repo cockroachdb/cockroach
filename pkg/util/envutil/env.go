@@ -380,6 +380,19 @@ func EnvOrDefaultInt64(name string, value int64) int64 {
 	return value
 }
 
+// EnvOrDefaultInt32 returns the value set by the specified environment
+// variable, if any, otherwise the specified default value.
+func EnvOrDefaultInt32(name string, value int32) int32 {
+	if str, present := getEnv(name, 1); present {
+		v, err := strconv.ParseInt(str, 0, 32)
+		if err != nil {
+			panic(fmt.Sprintf("error parsing %s: %s", name, err))
+		}
+		return int32(v)
+	}
+	return value
+}
+
 // EnvOrDefaultFloat64 returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultFloat64(name string, value float64) float64 {

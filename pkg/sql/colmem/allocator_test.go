@@ -43,7 +43,7 @@ func init() {
 
 const increment = -1
 
-func getAllocator(increment int64) (_ *colmem.Allocator, _ *mon.BoundAccount, cleanup func()) {
+func getAllocator(increment int32) (_ *colmem.Allocator, _ *mon.BoundAccount, cleanup func()) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	testMemMonitor := mon.NewMonitor(mon.Options{

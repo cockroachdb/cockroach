@@ -61,6 +61,7 @@ var importPKAdderBufferSize = func() *settings.ByteSizeSetting {
 		"kv.bulk_ingest.pk_buffer_size",
 		"the initial size of the BulkAdder buffer handling primary index imports",
 		32<<20,
+		settings.ByteSizeWithMaximum(math.MaxInt32),
 	)
 	return s
 }()
@@ -81,6 +82,7 @@ var importIndexAdderBufferSize = func() *settings.ByteSizeSetting {
 		"kv.bulk_ingest.index_buffer_size",
 		"the initial size of the BulkAdder buffer handling secondary index imports",
 		32<<20,
+		settings.ByteSizeWithMaximum(math.MaxInt32),
 	)
 	return s
 }()
@@ -105,12 +107,12 @@ var readerParallelismSetting = settings.RegisterIntSetting(
 
 // ImportBufferConfigSizes determines the minimum, maximum and step size for the
 // BulkAdder buffer used in import.
-func importBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int64, func() int64) {
+func importBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int32, func() int64) {
 	if isPKAdder {
-		return importPKAdderBufferSize.Get(&st.SV),
+		return int32(importPKAdderBufferSize.Get(&st.SV)),
 			func() int64 { return importPKAdderMaxBufferSize.Get(&st.SV) }
 	}
-	return importIndexAdderBufferSize.Get(&st.SV),
+	return int32(importIndexAdderBufferSize.Get(&st.SV)),
 		func() int64 { return importIndexAdderMaxBufferSize.Get(&st.SV) }
 }
 

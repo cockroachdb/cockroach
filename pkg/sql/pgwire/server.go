@@ -189,8 +189,8 @@ const (
 const cancelMaxWait = 1 * time.Second
 
 // baseSQLMemoryBudget is the amount of memory pre-allocated in each connection.
-var baseSQLMemoryBudget = envutil.EnvOrDefaultInt64("COCKROACH_BASE_SQL_MEMORY_BUDGET",
-	int64(2.1*float64(mon.DefaultPoolAllocationSize)))
+var baseSQLMemoryBudget = envutil.EnvOrDefaultInt32("COCKROACH_BASE_SQL_MEMORY_BUDGET",
+	int32(2.1*float64(mon.DefaultPoolAllocationSize)))
 
 // connReservationBatchSize determines for how many connections memory
 // is pre-reserved at once.
@@ -334,7 +334,7 @@ func MakeServer(
 		Name:      "conn",
 		CurCount:  server.tenantMetrics.ConnMemMetrics.CurBytesCount,
 		MaxHist:   server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
-		Increment: int64(connReservationBatchSize) * baseSQLMemoryBudget,
+		Increment: int32(connReservationBatchSize) * baseSQLMemoryBudget,
 		Settings:  st,
 	})
 	server.tenantSpecificConnMonitor.StartNoReserved(ctx, server.sqlMemoryPool)

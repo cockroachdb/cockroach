@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -59,7 +60,10 @@ var _ execinfra.Processor = &indexBackfiller{}
 
 var backfillerBufferSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
-	"schemachanger.backfiller.buffer_size", "the initial size of the BulkAdder buffer handling index backfills", 32<<20,
+	"schemachanger.backfiller.buffer_size",
+	"the initial size of the BulkAdder buffer handling index backfills",
+	32<<20,
+	settings.ByteSizeWithMaximum(math.MaxInt32),
 )
 
 var backfillerMaxBufferSize = settings.RegisterByteSizeSetting(
@@ -176,7 +180,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	ctx, span := tracing.ChildSpan(ctx, "ingestIndexEntries")
 	defer span.Finish()
 
-	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
+	minBufferSize := int32(backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV))
 	maxBufferSize := func() int64 { return backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
 	opts := kvserverbase.BulkAdderOptions{
 		Name:                     ib.desc.GetName() + " backfill",

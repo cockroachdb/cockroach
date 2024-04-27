@@ -730,7 +730,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		jr.limitedMemMonitor,
 		jr.diskMonitor,
 	)
-	if limit < mon.DefaultPoolAllocationSize {
+	if limit < int64(mon.DefaultPoolAllocationSize) {
 		// The memory limit is too low for caching, most likely to force disk
 		// spilling for testing.
 		drc.DisableCache = true

@@ -265,7 +265,7 @@ type BytesMonitor struct {
 
 	// poolAllocationSize specifies the allocation unit for requests to the
 	// pool.
-	poolAllocationSize int64
+	poolAllocationSize int32
 
 	settings *cluster.Settings
 }
@@ -352,7 +352,7 @@ func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState
 	var reservedUsed, reservedReserved int64
 	if mm.reserved != nil {
 		reservedUsed = mm.reserved.used
-		reservedReserved = mm.reserved.reserved
+		reservedReserved = int64(mm.reserved.reserved)
 	}
 	id := uintptr(unsafe.Pointer(mm))
 	var parentID uintptr
@@ -398,11 +398,11 @@ func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState
 // not cause contention when accounts cause its allocation counter to grow and
 // shrink slightly beyond and beneath an allocation block boundary. The
 // difference is expressed as a number of blocks of size `poolAllocationSize`.
-var maxAllocatedButUnusedBlocks = envutil.EnvOrDefaultInt("COCKROACH_MAX_ALLOCATED_UNUSED_BLOCKS", 10)
+var maxAllocatedButUnusedBlocks = envutil.EnvOrDefaultInt64("COCKROACH_MAX_ALLOCATED_UNUSED_BLOCKS", 10)
 
 // DefaultPoolAllocationSize specifies the unit of allocation used by a monitor
 // to reserve and release bytes to a pool.
-var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_CHUNK_SIZE", 10*1024)
+var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt32("COCKROACH_ALLOCATION_CHUNK_SIZE", 10*1024)
 
 // Options encompasses all arguments to the NewMonitor and NewUnlimitedMonitor
 // calls. If a particular option is not set, then a reasonable default will be
@@ -420,7 +420,7 @@ type Options struct {
 	CurCount *metric.Gauge
 	MaxHist  metric.IHistogram
 	// Increment is the block size used for upstream allocations from the pool.
-	Increment int64
+	Increment int32
 	Settings  *cluster.Settings
 }
 
@@ -717,7 +717,7 @@ type BoundAccount struct {
 	used int64
 	// reserved is a small buffer to amortize the cost of growing an account. It
 	// decreases as used increases (and vice-versa).
-	reserved int64
+	reserved int32
 	mon      *BytesMonitor
 }
 
@@ -820,7 +820,7 @@ func (b *BoundAccount) Allocated() int64 {
 	if b == nil {
 		return 0
 	}
-	return b.used + b.reserved
+	return b.used + int64(b.reserved)
 }
 
 // MakeBoundAccount creates a BoundAccount connected to the given monitor.
@@ -875,12 +875,13 @@ func (b *BoundAccount) Empty(ctx context.Context) {
 	if b == nil {
 		return
 	}
-	b.reserved += b.used
-	b.used = 0
-	if b.reserved > b.mon.poolAllocationSize {
-		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
+	if toRelease := int64(b.reserved) + b.used - int64(b.mon.poolAllocationSize); toRelease > 0 {
+		b.mon.releaseBytes(ctx, toRelease)
 		b.reserved = b.mon.poolAllocationSize
+	} else {
+		b.reserved += int32(b.used)
 	}
+	b.used = 0
 }
 
 // Clear releases all the cumulated allocations of an account at once and
@@ -956,14 +957,16 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 	if b == nil {
 		return nil
 	}
-	if b.reserved < x {
-		minExtra := b.mon.roundSize(x - b.reserved)
-		if err := b.mon.reserveBytes(ctx, minExtra); err != nil {
-			return err
-		}
-		b.reserved += minExtra
+	if int64(b.reserved) >= x {
+		b.reserved -= int32(x)
+		b.used += x
+		return nil
 	}
-	b.reserved -= x
+	minExtra := b.mon.roundSize(x - int64(b.reserved))
+	if err := b.mon.reserveBytes(ctx, minExtra); err != nil {
+		return err
+	}
+	b.reserved += int32(minExtra - x)
 	b.used += x
 	return nil
 }
@@ -980,10 +983,11 @@ func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 		delta = b.used
 	}
 	b.used -= delta
-	b.reserved += delta
-	if b.reserved > b.mon.poolAllocationSize {
-		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
+	if toRelease := int64(b.reserved) + delta - int64(b.mon.poolAllocationSize); toRelease > 0 {
+		b.mon.releaseBytes(ctx, toRelease)
 		b.reserved = b.mon.poolAllocationSize
+	} else {
+		b.reserved += int32(delta)
 	}
 }
 
@@ -992,16 +996,19 @@ func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 // reservation by use by future Grow() calls, and configuring the account to
 // consider that amount "earmarked" for this account, meaning that that Shrink()
 // calls will not release it back to the parent monitor.
-func (b *EarmarkedBoundAccount) Reserve(ctx context.Context, x int64) error {
+func (b *EarmarkedBoundAccount) Reserve(ctx context.Context, x int32) error {
 	if b == nil {
 		return nil
 	}
-	minExtra := b.mon.roundSize(x)
+	minExtra := b.mon.roundSize(int64(x))
 	if err := b.mon.reserveBytes(ctx, minExtra); err != nil {
 		return err
 	}
-	b.reserved += minExtra
-	b.earmark += x
+	if int64(b.reserved)+minExtra > math.MaxInt32 {
+		return errors.New("cannot reserve more than 2GiB")
+	}
+	b.reserved += int32(minExtra)
+	b.earmark += int64(x)
 	return nil
 }
 
@@ -1017,11 +1024,12 @@ func (b *EarmarkedBoundAccount) Shrink(ctx context.Context, delta int64) {
 		delta = b.used
 	}
 	b.used -= delta
-	b.reserved += delta
-	if b.reserved > b.mon.poolAllocationSize && (b.earmark == 0 || b.used+b.mon.poolAllocationSize > b.earmark) {
-		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
-		b.reserved = b.mon.poolAllocationSize
+	newReserved, poolAllocationSize := int64(b.reserved)+delta, int64(b.mon.poolAllocationSize)
+	if newReserved > poolAllocationSize && (b.earmark == 0 || b.used+poolAllocationSize > b.earmark) {
+		b.mon.releaseBytes(ctx, newReserved-poolAllocationSize)
+		newReserved = poolAllocationSize
 	}
+	b.reserved = int32(newReserved)
 }
 
 func (mm *BytesMonitor) makeBudgetExceededError(minExtra int64) error {
@@ -1127,8 +1135,9 @@ func (mm *BytesMonitor) roundSize(sz int64) int64 {
 		// edge cases in the math below if sz == math.MaxInt64.
 		return sz
 	}
-	chunks := (sz + mm.poolAllocationSize - 1) / mm.poolAllocationSize
-	return chunks * mm.poolAllocationSize
+	poolAllocationSize := int64(mm.poolAllocationSize)
+	chunks := (sz + poolAllocationSize - 1) / poolAllocationSize
+	return chunks * poolAllocationSize
 }
 
 // releaseBudget relinquishes all the monitor's allocated bytes back to the
@@ -1155,7 +1164,7 @@ func (mm *BytesMonitor) adjustBudget(ctx context.Context) {
 	// NB: mm.mu Already locked by releaseBytes().
 	var margin int64
 	if !mm.mu.relinquishAllOnReleaseBytes {
-		margin = mm.poolAllocationSize * int64(maxAllocatedButUnusedBlocks)
+		margin = int64(mm.poolAllocationSize) * maxAllocatedButUnusedBlocks
 	}
 
 	neededBytes := mm.mu.curAllocated

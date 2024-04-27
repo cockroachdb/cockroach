@@ -139,8 +139,8 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	// spilling occurs.
 	nBatchesOutputByInMemoryOp := 2 + rng.Int63n(2)
 	memoryLimitBytes := nBatchesOutputByInMemoryOp * batchMemEstimate
-	if memoryLimitBytes < mon.DefaultPoolAllocationSize {
-		memoryLimitBytes = mon.DefaultPoolAllocationSize
+	if memoryLimitBytes < int64(mon.DefaultPoolAllocationSize) {
+		memoryLimitBytes = int64(mon.DefaultPoolAllocationSize)
 		nBatchesOutputByInMemoryOp = memoryLimitBytes / batchMemEstimate
 	}
 	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimitBytes

@@ -1271,7 +1271,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	// container can buffer some rows in memory before spilling to disk. This
 	// also means we don't need to disable caching in the
 	// DiskBackedIndexedRowContainer.
-	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = mon.DefaultPoolAllocationSize
+	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = int64(mon.DefaultPoolAllocationSize)
 
 	// The two input rows are just a single 0 each. We use two input rows because
 	// matches to the first input row are never buffered.

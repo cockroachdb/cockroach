@@ -38,8 +38,8 @@ func randomSize(rnd *rand.Rand, mag int64) int64 {
 
 func TestMemoryAllocations(t *testing.T) {
 	maxs := []int64{1, 9, 10, 11, 99, 100, 101, 0}
-	hysteresisFactors := []int{1, 2, 10, 10000}
-	poolAllocSizes := []int64{1, 2, 9, 10, 11, 100}
+	hysteresisFactors := []int64{1, 2, 10, 10000}
+	poolAllocSizes := []int32{1, 2, 9, 10, 11, 100}
 	preBudgets := []int64{0, 1, 2, 9, 10, 11, 100}
 
 	rnd, seed := randutil.NewTestRand()
@@ -391,7 +391,7 @@ func TestMultiSharedGauge(t *testing.T) {
 	parent := NewMonitor(Options{
 		Name:      "root",
 		CurCount:  resourceGauge,
-		Increment: minAllocation,
+		Increment: int32(minAllocation),
 		Settings:  cluster.MakeTestingClusterSettings(),
 	})
 	parent.Start(ctx, nil, NewStandaloneBudget(100000))
