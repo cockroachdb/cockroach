@@ -707,7 +707,7 @@ func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
 
 	if event.Type() == streamingccl.KVEvent {
 		sip.metrics.AdmitLatency.RecordValue(
-			timeutil.Since(event.GetKV().Value.Timestamp.GoTime()).Nanoseconds())
+			timeutil.Since(event.GetKVs()[0].Value.Timestamp.GoTime()).Nanoseconds())
 	}
 
 	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
@@ -720,7 +720,7 @@ func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
 
 	switch event.Type() {
 	case streamingccl.KVEvent:
-		if err := sip.bufferKV(event.GetKV()); err != nil {
+		if err := sip.bufferKVs(event.GetKVs()); err != nil {
 			return err
 		}
 	case streamingccl.SSTableEvent:
@@ -792,13 +792,13 @@ func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error
 				return err
 			}
 
-			return sip.bufferKV(&roachpb.KeyValue{
+			return sip.bufferKVs([]roachpb.KeyValue{{
 				Key: keyVal.Key.Key,
 				Value: roachpb.Value{
 					RawBytes:  mvccValue.RawBytes,
 					Timestamp: keyVal.Key.Timestamp,
 				},
-			})
+			}})
 		}, func(rangeKeyVal storage.MVCCRangeKeyValue) error {
 			return sip.bufferRangeKeyVal(rangeKeyVal)
 		})
@@ -870,36 +870,37 @@ func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 	return kvDB.AdminSplit(ctx, rekey, expiration)
 }
 
-func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
+func (sip *streamIngestionProcessor) bufferKVs(kvs []roachpb.KeyValue) error {
 	// TODO: In addition to flushing when receiving a checkpoint event, we
 	// should also flush when we've buffered sufficient KVs. A buffering adder
 	// would save us here.
-	if kv == nil {
+	if kvs == nil {
 		return errors.New("kv event expected to have kv")
 	}
+	for _, kv := range kvs {
+		var err error
+		var ok bool
+		kv.Key, ok, err = sip.rekey(kv.Key)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
 
-	var err error
-	var ok bool
-	kv.Key, ok, err = sip.rekey(kv.Key)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return nil
-	}
+		if sip.rewriteToDiffKey {
+			kv.Value.ClearChecksum()
+			kv.Value.InitChecksum(kv.Key)
+		}
 
-	if sip.rewriteToDiffKey {
-		kv.Value.ClearChecksum()
-		kv.Value.InitChecksum(kv.Key)
+		sip.buffer.addKV(storage.MVCCKeyValue{
+			Key: storage.MVCCKey{
+				Key:       kv.Key,
+				Timestamp: kv.Value.Timestamp,
+			},
+			Value: kv.Value.RawBytes,
+		})
 	}
-
-	sip.buffer.addKV(storage.MVCCKeyValue{
-		Key: storage.MVCCKey{
-			Key:       kv.Key,
-			Timestamp: kv.Value.Timestamp,
-		},
-		Value: kv.Value.RawBytes,
-	})
 	return nil
 }
 

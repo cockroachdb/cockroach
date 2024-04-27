@@ -46,8 +46,8 @@ type Event interface {
 	// Type specifies which accessor will be meaningful.
 	Type() EventType
 
-	// GetKV returns a KV event if the EventType is KVEvent.
-	GetKV() *roachpb.KeyValue
+	// GetKVs returns a KV event if the EventType is KVEvent.
+	GetKVs() []roachpb.KeyValue
 
 	// GetSSTable returns a AddSSTable event if the EventType is SSTableEvent.
 	GetSSTable() *kvpb.RangeFeedSSTable
@@ -68,7 +68,7 @@ type Event interface {
 
 // kvEvent is a key value pair that needs to be ingested.
 type kvEvent struct {
-	kv roachpb.KeyValue
+	kv []roachpb.KeyValue
 }
 
 var _ Event = kvEvent{}
@@ -78,9 +78,9 @@ func (kve kvEvent) Type() EventType {
 	return KVEvent
 }
 
-// GetKV implements the Event interface.
-func (kve kvEvent) GetKV() *roachpb.KeyValue {
-	return &kve.kv
+// GetKVs implements the Event interface.
+func (kve kvEvent) GetKVs() []roachpb.KeyValue {
+	return kve.kv
 }
 
 // GetSSTable implements the Event interface.
@@ -118,8 +118,8 @@ func (sste sstableEvent) Type() EventType {
 	return SSTableEvent
 }
 
-// GetKV implements the Event interface.
-func (sste sstableEvent) GetKV() *roachpb.KeyValue {
+// GetKVs implements the Event interface.
+func (sste sstableEvent) GetKVs() []roachpb.KeyValue {
 	return nil
 }
 
@@ -160,8 +160,8 @@ func (dre delRangeEvent) Type() EventType {
 	return DeleteRangeEvent
 }
 
-// GetKV implements the Event interface.
-func (dre delRangeEvent) GetKV() *roachpb.KeyValue {
+// GetKVs implements the Event interface.
+func (dre delRangeEvent) GetKVs() []roachpb.KeyValue {
 	return nil
 }
 
@@ -205,8 +205,8 @@ func (ce checkpointEvent) Type() EventType {
 	return CheckpointEvent
 }
 
-// GetKV implements the Event interface.
-func (ce checkpointEvent) GetKV() *roachpb.KeyValue {
+// GetKVs implements the Event interface.
+func (ce checkpointEvent) GetKVs() []roachpb.KeyValue {
 	return nil
 }
 
@@ -246,8 +246,8 @@ func (spe spanConfigEvent) Type() EventType {
 	return SpanConfigEvent
 }
 
-// GetKV implements the Event interface.
-func (spe spanConfigEvent) GetKV() *roachpb.KeyValue {
+// GetKVs implements the Event interface.
+func (spe spanConfigEvent) GetKVs() []roachpb.KeyValue {
 	return nil
 }
 
@@ -288,7 +288,7 @@ func (se splitEvent) Type() EventType {
 }
 
 // GetKV implements the Event interface.
-func (se splitEvent) GetKV() *roachpb.KeyValue {
+func (se splitEvent) GetKVs() []roachpb.KeyValue {
 	return nil
 }
 
@@ -318,7 +318,7 @@ func (se splitEvent) GetSplitEvent() *roachpb.Key {
 }
 
 // MakeKVEvent creates an Event from a KV.
-func MakeKVEvent(kv roachpb.KeyValue) Event {
+func MakeKVEvent(kv []roachpb.KeyValue) Event {
 	return kvEvent{kv: kv}
 }
 
