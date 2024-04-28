@@ -477,68 +477,68 @@ func TestBasicEventSizeCalculation(t *testing.T) {
 
 	t.Run("write_value event", func(t *testing.T) {
 		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("write_value", data)
-		mem := ev.MemUsage()
+		mem := MemUsage(ev)
 		require.Equal(t, expectedCurrMemUsage, mem)
 	})
 
 	t.Run("delete_range event", func(t *testing.T) {
 		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("delete_range", data)
-		mem := ev.MemUsage()
+		mem := MemUsage(ev)
 		require.Equal(t, expectedCurrMemUsage, mem)
 	})
 
 	t.Run("write_intent event", func(t *testing.T) {
 		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("write_intent", data)
-		mem := ev.MemUsage()
+		mem := MemUsage(ev)
 		require.Equal(t, expectedCurrMemUsage, mem)
 	})
 
 	t.Run("update_intent event", func(t *testing.T) {
 		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("update_intent", data)
-		mem := ev.MemUsage()
+		mem := MemUsage(ev)
 		require.Equal(t, expectedCurrMemUsage, mem)
 	})
 
 	t.Run("commit_intent event", func(t *testing.T) {
 		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("commit_intent", data)
-		mem := ev.MemUsage()
+		mem := MemUsage(ev)
 		require.Equal(t, expectedCurrMemUsage, mem)
 	})
 
 	t.Run("abort_intent event", func(t *testing.T) {
 		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("abort_intent", data)
-		mem := ev.MemUsage()
+		mem := MemUsage(ev)
 		require.Equal(t, expectedCurrMemUsage, mem)
 	})
 
 	t.Run("abort_txn event", func(t *testing.T) {
 		ev, _, expectedCurrMemUsage, _ := generateOneLogicalOpEvent("abort_txn", data)
-		mem := ev.MemUsage()
+		mem := MemUsage(ev)
 		require.Equal(t, expectedCurrMemUsage, mem)
 	})
 
 	t.Run("ct event", func(t *testing.T) {
 		ev, _, _, expectedFutureMemUsage := generateCtEvent(data)
-		mem := ev.MemUsage()
+		mem := MemUsage(ev)
 		require.Equal(t, expectedFutureMemUsage, mem)
 	})
 
 	t.Run("initRTS event", func(t *testing.T) {
 		generateOneLogicalOpEvent("write_intent", data)
 		ev, _, _, expectedFutureMemUsage := generateInitRTSEvent()
-		mem := ev.MemUsage()
+		mem := MemUsage(ev)
 		require.Equal(t, expectedFutureMemUsage, mem)
 	})
 
 	t.Run("sst event", func(t *testing.T) {
 		ev, _, _, expectedFutureMemUsage := generateSSTEvent(t, data, st)
-		mem := ev.MemUsage()
+		mem := MemUsage(ev)
 		require.Equal(t, expectedFutureMemUsage, mem)
 	})
 
 	t.Run("sync event", func(t *testing.T) {
 		ev, _, expectedCurrMemUsage, _ := generateSyncEvent()
-		mem := ev.MemUsage()
+		mem := MemUsage(ev)
 		require.Equal(t, expectedCurrMemUsage, mem)
 	})
 }
@@ -568,7 +568,7 @@ func BenchmarkMemoryAccounting(b *testing.B) {
 		b.ResetTimer()
 
 		for _, ev := range events {
-			ev.MemUsage()
+			MemUsage(ev)
 		}
 
 		b.StopTimer()
@@ -577,7 +577,7 @@ func BenchmarkMemoryAccounting(b *testing.B) {
 		for i := 0; i < 20; i++ {
 			b.Logf("event %d: %+v\n", i+1, events[i])
 			b.Logf("chosen event: %s\n", expectedRes[i].chosenEvent)
-			memUsage := events[i].MemUsage()
+			memUsage := MemUsage(events[i])
 			require.Equal(b, expectedRes[i].memUsage, memUsage)
 			totalMemUsageSum += memUsage
 		}
