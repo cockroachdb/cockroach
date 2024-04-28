@@ -239,7 +239,7 @@ func TestEventSizeCalculation(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			mem := tc.ev.MemUsage()
+			mem := MemUsage(tc.ev)
 			require.Equal(t, tc.expectedCurrMemUsage, tc.actualCurrMemUsage)
 			require.Equal(t, tc.expectedFutureMemUsage, tc.actualFutureMemUsage)
 			if tc.actualFutureMemUsage > tc.actualCurrMemUsage {
@@ -392,5 +392,5 @@ func TestMultipleLogicalOpsEventsSizeCalculation(t *testing.T) {
 	data := generateRandomTestData(rng)
 	ev, mem := generateLogicalOpEvents(rng, data)
 	t.Logf("chosen event: %v\n", &ev)
-	require.Equal(t, ev.MemUsage(), mem)
+	require.Equal(t, MemUsage(ev), mem)
 }
