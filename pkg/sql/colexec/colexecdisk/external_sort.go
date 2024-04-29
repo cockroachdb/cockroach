@@ -259,15 +259,22 @@ func NewExternalSorter(
 	if testingVecFDsToAcquire > 0 {
 		maxNumberPartitions = testingVecFDsToAcquire
 	}
+	// Each disk queue will use up to BufferSizeBytes of RAM, so we'll reduce
+	// the memoryLimit of the partitions to sort in memory by those cache sizes.
+	diskQueueBuffersUsage := int64(maxNumberPartitions * diskQueueCfg.BufferSizeBytes)
 	if memoryLimit == 1 {
 		// If memory limit is 1, we're likely in a "force disk spill"
 		// scenario, but we don't want to artificially limit batches when we
 		// have already spilled, so we'll use a larger limit.
 		memoryLimit = execinfra.DefaultMemoryLimit
+	} else if budget := int64(100 << 10); memoryLimit < diskQueueBuffersUsage+budget {
+		// If the limit is not 1 but relatively small, we'll ensure that we have
+		// at least 100KiB of memory to work with. This memory is only utilized
+		// after we have spilled to disk, so we want to avoid sorting the data
+		// one tuple at a time (with each tuple forcing us to repartition).
+		memoryLimit = diskQueueBuffersUsage + budget
 	}
-	// Each disk queue will use up to BufferSizeBytes of RAM, so we reduce the
-	// memoryLimit of the partitions to sort in memory by those cache sizes.
-	memoryLimit -= int64(maxNumberPartitions * diskQueueCfg.BufferSizeBytes)
+	memoryLimit -= diskQueueBuffersUsage
 	// We give half of the available RAM to the in-memory sorter. Note that we
 	// will reuse that memory for each partition and will be holding onto it all
 	// the time, so we cannot "return" this usage after spilling each partition.
@@ -276,13 +283,6 @@ func NewExternalSorter(
 	inMemSortOutputLimit := inMemSortTotalMemoryLimit / 5
 	// We give another half of the available RAM to the merge operation.
 	mergeMemoryLimit := memoryLimit / 2
-	if inMemSortPartitionLimit < 1 {
-		// If the memory limit is 0, the input partitioning operator will return
-		// a zero-length batch, so make it at least 1.
-		inMemSortPartitionLimit = 1
-		inMemSortOutputLimit = 1
-		mergeMemoryLimit = 1
-	}
 	inputPartitioner := newInputPartitioningOperator(sortUnlimitedAllocator, input, inputTypes, inMemSortPartitionLimit)
 	var inMemSorter colexecop.ResettableOperator
 	if topK > 0 {
