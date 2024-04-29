@@ -198,7 +198,6 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 
 	tenantFoo := makeTenant(t, 10, true /* external */)
 	tenantBar := makeTenant(t, 11, true /* external */)
-	tenantInternal := makeTenant(t, 20, false /* external */)
 
 	// Metrics should be exported for out-of-process secondary tenants, and are
 	// correct, i.e. sql_aggregated_livebytes in SQL = sum(livebytes in KV).
@@ -221,6 +220,12 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 	})
 
 	t.Run("internal secondary tenants", func(t *testing.T) {
+		// The test seems to hang when trying to start an in-process tenant.
+		// Skip the for now.
+		skip.WithIssue(t, 120775)
+
+		tenantInternal := makeTenant(t, 20, false /* external */)
+
 		jobutils.WaitForJobToRun(t, tenantInternal.db, jobID)
 
 		// We should never get the aggregated metric in the application layer.
