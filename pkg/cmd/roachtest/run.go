@@ -134,6 +134,8 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		literalArtifactsDir = artifactsDir
 	}
 
+	roachprod.ClearClusterCache = roachtestflags.ClearClusterCache
+
 	setLogConfig(artifactsDir)
 	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
 	runnerLogPath := filepath.Join(
