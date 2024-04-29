@@ -9,10 +9,6 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/gen/genbzl",
     visibility = ["//visibility:private"],
-    deps = [
-        "//pkg/cli/exit",
-        "@com_github_cockroachdb_errors//:errors",
-    ],
 )
 
 go_binary(
