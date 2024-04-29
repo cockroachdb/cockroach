@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -96,6 +97,8 @@ var (
 	}
 
 	sshKeyUser string
+
+	fluentBitConfig fluentbit.Config
 )
 
 func initFlags() {
@@ -282,6 +285,18 @@ func initFlags() {
 
 	grafanaDumpCmd.Flags().StringVar(&grafanaDumpDir, "dump-dir", "",
 		"the absolute path to dump prometheus data to (use the contained 'prometheus-docker-run.sh' to visualize")
+
+	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogSite, "datadog-site", "us5.datadoghq.com",
+		"Datadog site to send telemetry data to")
+
+	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogAPIKey, "datadog-api-key", "",
+		"Datadog API key")
+
+	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogService, "datadog-service", "cockroachdb",
+		"Datadog service name for emitted logs")
+
+	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogTeam, "datadog-team", "",
+		"Datadog team to tag emitted logs")
 
 	sshKeysAddCmd.Flags().StringVar(&sshKeyUser, "user", config.OSUser.Username,
 		"the user to be associated with the new key",

@@ -84,6 +84,15 @@ sudo apt-get install -y \
 sudo apt-get update;
 sudo apt-get install -y postgresql;
 `,
+
+	"fluent-bit": `
+curl -fsSL https://packages.fluentbit.io/fluentbit.key | sudo gpg --no-tty --batch --yes --dearmor -o /etc/apt/keyrings/fluent-bit.gpg;
+code_name="$(. /etc/os-release && echo "${VERSION_CODENAME}")";
+echo "deb [signed-by=/etc/apt/keyrings/fluent-bit.gpg] https://packages.fluentbit.io/ubuntu/${code_name} ${code_name} main" | \
+  sudo tee /etc/apt/sources.list.d/fluent-bit.list > /dev/null;
+sudo apt-get update;
+sudo apt-get install -y fluent-bit;
+`,
 }
 
 // SortedCmds TODO(peter): document
