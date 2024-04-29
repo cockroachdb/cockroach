@@ -147,6 +147,7 @@ ORDER BY name ASC`)
 // This tests the operation of zip over secure clusters.
 func TestZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "test too slow under race")
 
@@ -178,6 +179,8 @@ func TestZip(t *testing.T) {
 // This tests the operation of zip using --include-goroutine-stacks.
 func TestZipIncludeGoroutineStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	skip.UnderRace(t, "test too slow under race")
 
 	tests := []struct {
@@ -234,6 +237,7 @@ func TestZipIncludeGoroutineStacks(t *testing.T) {
 // This tests the operation of zip using --include-range-info.
 func TestZipIncludeRangeInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "test too slow under race")
 
@@ -267,6 +271,7 @@ func TestZipIncludeRangeInfo(t *testing.T) {
 // This tests the operation of zip using --include-range-info=false.
 func TestZipExcludeRangeInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "test too slow under race")
 
@@ -301,6 +306,7 @@ func TestZipExcludeRangeInfo(t *testing.T) {
 // This tests the operation of zip running concurrently.
 func TestConcurrentZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We want a low timeout so that the test doesn't take forever;
 	// however low timeouts make race runs flaky with false positives.
@@ -355,6 +361,7 @@ func TestConcurrentZip(t *testing.T) {
 
 func TestZipSpecialNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
@@ -400,6 +407,7 @@ create table defaultdb."../system"(x int);
 // need the SSL certs dir to run a CLI test securely.
 func TestUnavailableZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t)
 	// Race builds make the servers so slow that they report spurious
@@ -545,15 +553,12 @@ func baseZipOutput(nodeId int) []string {
 		fmt.Sprintf("[node %d] using SQL connection URL", nodeId),
 		fmt.Sprintf("[node %d] retrieving SQL data", nodeId),
 		fmt.Sprintf("[node %d] requesting stacks... received response...", nodeId),
-		fmt.Sprintf("[node %d] requesting stacks with labels... received response...",
-			nodeId),
-		fmt.Sprintf("[node %d] requesting heap file list... received response...", nodeId),
-		fmt.Sprintf("[node %d] requesting goroutine dump list... received response...",
-			nodeId),
-		fmt.Sprintf("[node %d] requesting log files list... received response...",
-			nodeId),
-		fmt.Sprintf("[node %d] requesting ranges... received response...",
-			nodeId),
+		fmt.Sprintf("[node %d] requesting stacks with labels... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting heap profile list... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting goroutine dump list... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting cpu profile list... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting log files list... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting ranges... received response...", nodeId),
 	}
 	return output
 }
@@ -581,6 +586,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `[node ?] ? heap profiles found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ goroutine dumps found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? goroutine dumps found`)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ cpu profiles found$`)
+	out = re.ReplaceAllString(out, `[node ?] ? cpu profiles found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ log files found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? log files found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving (memprof|memstats|memmonitoring).*$` + "\n")
@@ -602,6 +609,7 @@ func eraseNonDeterministicZipOutput(out string) string {
 // need the SSL certs dir to run a CLI test securely.
 func TestPartialZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We want a low timeout so that the test doesn't take forever;
 	// however low timeouts make race runs flaky with false positives.
