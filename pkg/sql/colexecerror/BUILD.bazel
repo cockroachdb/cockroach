@@ -15,11 +15,24 @@ go_library(
 
 go_test(
     name = "colexecerror_test",
-    srcs = ["error_test.go"],
+    srcs = [
+        "error_test.go",
+        "main_test.go",
+    ],
     deps = [
         ":colexecerror",
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
