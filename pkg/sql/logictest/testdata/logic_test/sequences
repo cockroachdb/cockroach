@@ -921,13 +921,31 @@ DROP TABLE drop_test_tbl
 statement ok
 DROP SEQUENCE drop_test
 
-# Test that sequences can only be modified with the UPDATE permission
-# and read with the SELECT permission.
+# Test that sequences can only be:
+# - created with CREATE permission on the parent schema,
+# - modified with the UPDATE permission,
+# - read with the SELECT permission.
 
 statement ok
 CREATE SEQUENCE priv_test
 
+statement ok
+CREATE DATABASE another_db;
+
+statement ok
+CREATE SCHEMA another_db.seq_schema_allow;
+CREATE SCHEMA another_db.seq_schema_deny;
+
+statement ok
+GRANT CREATE ON SCHEMA another_db.seq_schema_allow TO testuser
+
 user testuser
+
+statement ok
+CREATE SEQUENCE another_db.seq_schema_allow.seq;
+
+statement error user testuser does not have CREATE privilege on schema seq_schema_deny
+CREATE SEQUENCE another_db.seq_schema_deny.seq;
 
 statement error pq: user testuser does not have SELECT privilege on relation priv_test
 SELECT * FROM priv_test
