@@ -16,6 +16,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -46,6 +47,11 @@ import (
 
 var runFlags = pflag.NewFlagSet(`run`, pflag.ContinueOnError)
 var tolerateErrors = runFlags.Bool("tolerate-errors", false, "Keep running on error")
+var retryErrorBackoff = runFlags.Duration(
+	"retry-errors",
+	-1,
+	"If >= 0, retry any request that hits an error after this initial duration and backing off exponentially. "+
+		"If set to -1, don't retry errors.")
 var maxRate = runFlags.Float64(
 	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
 var maxOps = runFlags.Uint64("max-ops", 0, "Maximum number of operations to run")
@@ -265,6 +271,11 @@ func workerRun(
 		if ctx.Err() != nil {
 			return
 		}
+		// Stop once we've hit the number of ops. Note this applies differently
+		// depending on how the countErrors value is set.
+		if *maxOps > 0 && numOps.Load() >= *maxOps {
+			return
+		}
 
 		// Limit how quickly the load generator sends requests based on --max-rate.
 		if limiter != nil {
@@ -272,25 +283,43 @@ func workerRun(
 				return
 			}
 		}
-
-		if err := workFn(ctx); err != nil {
+		retryAttempt := 0
+		var err error
+		// Retry failures using an exponential backoff with retryAttempt as the exponent.
+		for {
+			err = workFn(ctx)
+			if err == nil {
+				break
+			}
+			// lib/pq may return either the `context canceled` error or a
+			// `bad connection` error when performing an operation with a context
+			// that has been canceled. See https://github.com/lib/pq/pull/1000
 			if ctx.Err() != nil && (errors.Is(err, ctx.Err()) || errors.Is(err, driver.ErrBadConn)) {
-				// lib/pq may return either the `context canceled` error or a
-				// `bad connection` error when performing an operation with a context
-				// that has been canceled. See https://github.com/lib/pq/pull/1000
 				return
 			}
 			errCh <- err
-			if !*countErrors {
-				// Continue to the next iteration of the infinite loop only if
-				// we are not counting the errors.
-				continue
+
+			// A negative value for retryErrorBackoff means we don't retry.
+			if *retryErrorBackoff < 0 {
+				break
 			}
+
+			// We are about to retry this error, so increment the count of
+			// operations and wait the backoff interval.
+			if *countErrors {
+				numOps.Add(1)
+			}
+			backoffTime := *retryErrorBackoff * time.Duration(math.Pow(2, float64(retryAttempt)))
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoffTime):
+			}
+			retryAttempt += 1
 		}
 
-		v := numOps.Add(1)
-		if *maxOps > 0 && v >= *maxOps {
-			return
+		if *countErrors || err == nil {
+			numOps.Add(1)
 		}
 	}
 }
@@ -376,6 +405,11 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		formatter = &jsonFormatter{w: os.Stdout}
 	default:
 		return errors.Errorf("unknown display format: %s", *displayFormat)
+	}
+
+	// retryErrorsAfter is set we also need to tolerate errors.
+	if *retryErrorBackoff >= 0 {
+		*tolerateErrors = true
 	}
 
 	startPProfEndPoint(ctx)
