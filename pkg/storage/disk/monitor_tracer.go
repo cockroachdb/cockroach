@@ -116,7 +116,7 @@ func (m *monitorTracer) RollingWindow(t time.Time) []traceEvent {
 	windowLen := m.sizeLocked() - offset
 	events := make([]traceEvent, windowLen)
 	for i := 0; i < windowLen; i++ {
-		events[i] = m.mu.trace[(m.mu.start+offset+i)%m.capacity]
+		events[i] = *m.traceAtLocked(offset + i)
 	}
 	return events
 }
@@ -137,9 +137,9 @@ func (m *monitorTracer) String() string {
 		"IO in Progress\tIO Duration\tWeighted IO Duration\t"+
 		"Discards Completed\tDiscards Merged\tSectors Discarded\tDiscard Duration\t"+
 		"Flushes Completed\tFlush Duration\tError")
-	prevStats := m.mu.trace[m.mu.start].stats
+	prevStats := m.traceAtLocked(0).stats
 	for i := 1; i < m.sizeLocked(); i++ {
-		event := m.mu.trace[(m.mu.start+i)%m.capacity]
+		event := *m.traceAtLocked(i)
 		delta := event.stats.delta(&prevStats)
 		if event.err == nil {
 			prevStats = event.stats
@@ -156,6 +156,12 @@ func (m *monitorTracer) String() string {
 	return buf.String()
 }
 
+// traceAtLocked returns the traceEvent at the specified offset from the
+// m.mu.start. m.mu must be held.
+func (m *monitorTracer) traceAtLocked(i int) *traceEvent {
+	return &m.mu.trace[(m.mu.start+i)%m.capacity]
+}
+
 // ceilSearchLocked retrieves the offset from trace's start for the traceEvent
 // that occurred at or after a specified time, t. If all events occurred before
 // t, an error is thrown. Note that it is the responsibility of the caller to
@@ -168,8 +174,7 @@ func (m *monitorTracer) ceilSearchLocked(t time.Time) (int, bool) {
 	// Apply binary search to find the offset of the traceEvent that occurred at
 	// or after time t.
 	offset, _ := sort.Find(m.sizeLocked(), func(i int) int {
-		idx := (m.mu.start + i) % m.capacity
-		return t.Compare(m.mu.trace[idx].time)
+		return t.Compare(m.traceAtLocked(i).time)
 	})
 	if offset == m.sizeLocked() {
 		return -1, false

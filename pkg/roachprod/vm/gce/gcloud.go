@@ -1244,8 +1244,11 @@ func (p *Provider) computeInstanceArgs(
 		for i := 0; i < providerOpts.SSDCount; i++ {
 			args = append(args, "--local-ssd", "interface=NVME")
 		}
+		// Add `discard` for Local SSDs on NVMe, as is advised in:
+		// https://cloud.google.com/compute/docs/disks/add-local-ssd
+		extraMountOpts = "discard"
 		if opts.SSDOpts.NoExt4Barrier {
-			extraMountOpts = "nobarrier"
+			extraMountOpts = fmt.Sprintf("%s,nobarrier", extraMountOpts)
 		}
 	} else {
 		pdProps := []string{
