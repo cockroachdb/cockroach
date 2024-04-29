@@ -68,10 +68,6 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 	}
 	n.Name.ObjectNamePrefix = prefix
 
-	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
-		return nil, err
-	}
-
 	return &createSequenceNode{
 		n:      n,
 		dbDesc: dbDesc,
