@@ -142,6 +142,97 @@ func (zc *debugZipContext) collectCPUProfiles(
 	return nil
 }
 
+// collectFileList is a helper that retrieves all relevant files of the
+// specified FileType.
+func (zc *debugZipContext) collectFileList(
+	ctx context.Context, nodePrinter *zipReporter, id, prefix string, fileType serverpb.FileType,
+) error {
+	var fileKind string
+	switch fileType {
+	case serverpb.FileType_HEAP:
+		fileKind = "heap profile"
+		prefix = prefix + "/heapprof"
+	case serverpb.FileType_GOROUTINES:
+		fileKind = "goroutine dump"
+		prefix = prefix + "/goroutines"
+	case serverpb.FileType_CPU:
+		fileKind = "cpu profile"
+		prefix = prefix + "/cpuprof"
+	default:
+		return errors.AssertionFailedf("unknown file type: %v", fileType)
+	}
+
+	var files *serverpb.GetFilesResponse
+	s := nodePrinter.start("requesting %s list", fileKind)
+	if requestErr := zc.runZipFn(ctx, s,
+		func(ctx context.Context) error {
+			var err error
+			files, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
+				NodeId:   id,
+				Type:     fileType,
+				Patterns: zipCtx.files.retrievalPatterns(),
+				ListOnly: true,
+			})
+			return err
+		}); requestErr != nil {
+		if err := zc.z.createError(s, prefix, requestErr); err != nil {
+			return err
+		}
+	} else {
+		s.done()
+
+		// Now filter the list of files and for each file selected, retrieve it.
+		//
+		// We retrieve the files one by one to avoid loading up multiple files'
+		// worth of data server-side in one response in RAM. This sequential
+		// processing is not significantly slower than requesting multiple files
+		// at once, because these files are large and the transfer time is
+		// mostly incurred in the data transmission, not the request-response
+		// round-trip latency. Additionally, cross-node concurrency is
+		// parallelizing these transfers somehow.
+		nodePrinter.info("%d %ss found", len(files.Files), fileKind)
+		for _, file := range files.Files {
+			ctime := extractTimeFromFileName(file.Name)
+			if !zipCtx.files.isIncluded(file.Name, ctime, ctime) {
+				nodePrinter.info("skipping excluded %s: %s", file.Name, fileKind)
+				continue
+			}
+
+			// NB: for goroutine dumps, the files have a .txt.gz suffix already.
+			name := prefix + "/" + file.Name
+			fs := nodePrinter.start("retrieving %s", file.Name)
+			var onefile *serverpb.GetFilesResponse
+			if fileErr := zc.runZipFn(ctx, fs, func(ctx context.Context) error {
+				var err error
+				onefile, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
+					NodeId:   id,
+					Type:     fileType,
+					Patterns: []string{file.Name},
+					ListOnly: false, // Retrieve the file contents.
+				})
+				return err
+			}); fileErr != nil {
+				if err := zc.z.createError(fs, name, fileErr); err != nil {
+					return err
+				}
+			} else {
+				fs.done()
+
+				if len(onefile.Files) < 1 {
+					// This is possible if the file was removed in-between the
+					// list request above and the content retrieval request.
+					continue
+				}
+				file := onefile.Files[0]
+				if err := zc.z.createRaw(nodePrinter.start("writing profile"), name, file.Contents); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (zc *debugZipContext) collectPerNodeData(
 	ctx context.Context,
 	nodeDetails serverpb.NodeDetails,
@@ -276,148 +367,19 @@ func (zc *debugZipContext) collectPerNodeData(
 		return err
 	}
 
-	var profiles *serverpb.GetFilesResponse
-	s = nodePrinter.start("requesting heap file list")
-	if requestErr := zc.runZipFn(ctx, s,
-		func(ctx context.Context) error {
-			var err error
-			profiles, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
-				NodeId:   id,
-				Type:     serverpb.FileType_HEAP,
-				Patterns: zipCtx.files.retrievalPatterns(),
-				ListOnly: true,
-			})
-			return err
-		}); requestErr != nil {
-		if err := zc.z.createError(s, prefix+"/heapprof", requestErr); err != nil {
-			return err
-		}
-	} else {
-		s.done()
-
-		// Now filter the list of files and for each file selected,
-		// retrieve it.
-		//
-		// We retrieve the files one by one to avoid loading up multiple
-		// files' worth of data server-side in one response in RAM. This
-		// sequential processing is not significantly slower than
-		// requesting multiple files at once, because these files are
-		// large and the transfer time is mostly incurred in the data
-		// transmission, not the request-response roundtrip latency.
-		// Additionally, cross-node concurrency is parallelizing these
-		// transfers somehow.
-
-		nodePrinter.info("%d heap profiles found", len(profiles.Files))
-		for _, file := range profiles.Files {
-			ctime := extractTimeFromFileName(file.Name)
-			if !zipCtx.files.isIncluded(file.Name, ctime, ctime) {
-				nodePrinter.info("skipping excluded heap profile: %s", file.Name)
-				continue
-			}
-
-			name := prefix + "/heapprof/" + file.Name
-			fs := nodePrinter.start("retrieving %s", file.Name)
-			var oneprof *serverpb.GetFilesResponse
-			if fileErr := zc.runZipFn(ctx, fs, func(ctx context.Context) error {
-				var err error
-				oneprof, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
-					NodeId:   id,
-					Type:     serverpb.FileType_HEAP,
-					Patterns: []string{file.Name},
-					ListOnly: false, // Retrieve the file contents.
-				})
-				return err
-			}); fileErr != nil {
-				if err := zc.z.createError(fs, name, fileErr); err != nil {
-					return err
-				}
-			} else {
-				fs.done()
-
-				if len(oneprof.Files) < 1 {
-					// This is possible if the file was removed in-between
-					// the list request above and the content retrieval request.
-					continue
-				}
-				file := oneprof.Files[0]
-				if err := zc.z.createRaw(nodePrinter.start("writing profile"), name, file.Contents); err != nil {
-					return err
-				}
-			}
-		}
+	// Collect all relevant heap profiles.
+	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_HEAP); err != nil {
+		return err
 	}
 
-	var goroutinesResp *serverpb.GetFilesResponse
-	s = nodePrinter.start("requesting goroutine dump list")
-	if requestErr := zc.runZipFn(ctx, s,
-		func(ctx context.Context) error {
-			var err error
-			goroutinesResp, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
-				NodeId:   id,
-				Type:     serverpb.FileType_GOROUTINES,
-				Patterns: zipCtx.files.retrievalPatterns(),
-				ListOnly: true,
-			})
-			return err
-		}); requestErr != nil {
-		if err := zc.z.createError(s, prefix+"/goroutines", requestErr); err != nil {
-			return err
-		}
-	} else {
-		s.done()
+	// Collect all relevant goroutine dumps.
+	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_GOROUTINES); err != nil {
+		return err
+	}
 
-		// Now filter the list of files and for each file selected,
-		// retrieve it.
-		//
-		// We retrieve the files one by one to avoid loading up multiple
-		// files' worth of data server-side in one response in RAM. This
-		// sequential processing is not significantly slower than
-		// requesting multiple files at once, because these files are
-		// large and the transfer time is mostly incurred in the data
-		// transmission, not the request-response roundtrip latency.
-		// Additionally, cross-node concurrency is parallelizing these
-		// transfers somehow.
-
-		nodePrinter.info("%d goroutine dumps found", len(goroutinesResp.Files))
-		for _, file := range goroutinesResp.Files {
-			ctime := extractTimeFromFileName(file.Name)
-			if !zipCtx.files.isIncluded(file.Name, ctime, ctime) {
-				nodePrinter.info("skipping excluded goroutine dump: %s", file.Name)
-				continue
-			}
-
-			// NB: the files have a .txt.gz suffix already.
-			name := prefix + "/goroutines/" + file.Name
-
-			fs := nodePrinter.start("retrieving %s", file.Name)
-			var onedump *serverpb.GetFilesResponse
-			if fileErr := zc.runZipFn(ctx, fs, func(ctx context.Context) error {
-				var err error
-				onedump, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
-					NodeId:   id,
-					Type:     serverpb.FileType_GOROUTINES,
-					Patterns: []string{file.Name},
-					ListOnly: false, // Retrieve the file contents.
-				})
-				return err
-			}); fileErr != nil {
-				if err := zc.z.createError(fs, name, fileErr); err != nil {
-					return err
-				}
-			} else {
-				fs.done()
-
-				if len(onedump.Files) < 1 {
-					// This is possible if the file was removed in-between
-					// the list request above and the content retrieval request.
-					continue
-				}
-				file := onedump.Files[0]
-				if err := zc.z.createRaw(nodePrinter.start("writing dump"), name, file.Contents); err != nil {
-					return err
-				}
-			}
-		}
+	// Collect all relevant cpu profiles.
+	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_CPU); err != nil {
+		return err
 	}
 
 	var logs *serverpb.LogFilesListResponse
