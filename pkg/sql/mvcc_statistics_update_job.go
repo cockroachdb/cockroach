@@ -114,9 +114,6 @@ func (j *mvccStatisticsUpdateJob) Resume(ctx context.Context, execCtxI interface
 	// Delete samples older than configurable setting...
 	// Collect span stats for tenant descriptors...
 	// Write new samples...
-
-	<-ctx.Done()
-	return ctx.Err()
 }
 
 func (j *mvccStatisticsUpdateJob) runChangefeedTableBytesMetricExporter(
