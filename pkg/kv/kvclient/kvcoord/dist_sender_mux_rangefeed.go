@@ -557,7 +557,11 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 	}
 
 	if errInfo.resolveSpan {
-		return divideSpanOnRangeBoundaries(ctx, m.ds, active.rSpan, active.startAfter, m.startSingleRangeFeed, errInfo.manualSplit)
+		parentMetadata := parentRangeFeedMetadata{
+			fromManualSplit: errInfo.manualSplit,
+			startKey:        active.rSpan.Key.AsRawKey(),
+		}
+		return divideSpanOnRangeBoundaries(ctx, m.ds, active.rSpan, active.startAfter, m.startSingleRangeFeed, parentMetadata)
 	}
 
 	if err := active.start(ctx, m); err != nil {

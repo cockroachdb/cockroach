@@ -326,7 +326,7 @@ func divideAllSpansOnRangeBoundaries(
 		if err != nil {
 			return err
 		}
-		if err := divideSpanOnRangeBoundaries(ctx, ds, rs, stp.StartAfter, onRange, false); err != nil {
+		if err := divideSpanOnRangeBoundaries(ctx, ds, rs, stp.StartAfter, onRange, parentRangeFeedMetadata{}); err != nil {
 			return err
 		}
 	}
@@ -509,14 +509,13 @@ type onRangeFn func(
 	ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken, metadata parentRangeFeedMetadata,
 ) error
 
-// parentRangeFeedMetadata contains metadata around a parent rangefeed that is being retried.
+// parentRangeFeedMetadata contains metadata around a parent rangefeed that is
+// being retried.
 type parentRangeFeedMetadata struct {
-	// FromManualSplit is true when the previous partial rangefeed was interrupted by
-	// a manual split.
+	// FromManualSplit is true when the previous partial rangefeed was interrupted
+	// by a manual split.
 	fromManualSplit bool
-	// StartKey is the start key of the previous partial rangefeed. Note: if there
-	// is no parent rangefeed, the start key will be equal to the dist sender
-	// level rangefeed start key.
+	// StartKey is the start key of the previous partial rangefeed.
 	startKey roachpb.Key
 }
 
@@ -541,7 +540,7 @@ func divideSpanOnRangeBoundaries(
 	rs roachpb.RSpan,
 	startAfter hlc.Timestamp,
 	onRange onRangeFn,
-	fromManualSplit bool,
+	parentMetadata parentRangeFeedMetadata,
 ) error {
 	// As RangeIterator iterates, it can return overlapping descriptors (and
 	// during splits, this happens frequently), but divideAndSendRangeFeedToRanges
@@ -549,10 +548,6 @@ func divideSpanOnRangeBoundaries(
 	// boundaries. So, as we go, keep track of the remaining uncovered part of
 	// `rs` in `nextRS`.
 	nextRS := rs
-	parentMetadata := parentRangeFeedMetadata{
-		fromManualSplit: fromManualSplit,
-		startKey:        rs.Key.AsRawKey(),
-	}
 	ri := MakeRangeIterator(ds)
 	for ri.Seek(ctx, nextRS.Key, Ascending); ri.Valid(); ri.Next(ctx) {
 		desc := ri.Desc()
@@ -681,7 +676,11 @@ func (ds *DistSender) partialRangeFeed(
 			// re-resolve since this will attempt to acquire 1 or more catchup
 			// scan reservations.
 			active.releaseCatchupScan()
-			return divideSpanOnRangeBoundaries(ctx, ds, rs, startAfter, sendSingleRangeInfo(rangeCh), errInfo.manualSplit)
+			parentMetadata := parentRangeFeedMetadata{
+				fromManualSplit: errInfo.manualSplit,
+				startKey:        rs.Key.AsRawKey(),
+			}
+			return divideSpanOnRangeBoundaries(ctx, ds, rs, startAfter, sendSingleRangeInfo(rangeCh), parentMetadata)
 		}
 	}
 	return ctx.Err()
