@@ -7,6 +7,7 @@ exec-sql
 CREATE DATABASE restore;
 CREATE SCHEMA restore.myschema;
 CREATE TABLE foobar (pk int primary key);
+CREATE VIEW foobar_v AS SELECT pk FROM foobar;
 CREATE TABLE restore.myschema.table1 (pk int primary key);
 INSERT INTO restore.myschema.table1 VALUES (1);
 CREATE TYPE data.myenum AS ENUM ('hello');
