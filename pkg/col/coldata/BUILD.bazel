@@ -70,12 +70,12 @@ $(location //pkg/sql/colexec/execgen/cmd/execgen) \
     -fmt=false pkg/col/coldata/$@ > $@
 $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
 """,
-    exec_tools = [
+    tags = ["no-remote-exec"],  # keep
+    tools = [
         "//pkg/sql/colexec/execgen/cmd/execgen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "@go_sdk//:bin/go",
     ],
-    tags = ["no-remote-exec"],  # keep
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",

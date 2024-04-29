@@ -125,7 +125,7 @@ genrule(
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ exprs $(locations //pkg/sql/opt:ops)
     """,
-    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
     visibility = ["//visibility:public"],
 )
 

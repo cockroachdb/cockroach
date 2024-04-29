@@ -18,7 +18,7 @@ genrule(
           $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc)
 
     """,
-    exec_tools = [
+    tools = [
         ":plpgsql-gen",
         "@org_golang_x_tools//cmd/goyacc",
     ],

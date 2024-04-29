@@ -59,8 +59,8 @@ genrule(
         $(location event.proto) \
         >$(location json_encode_generated.go)
     """,
-    exec_tools = [
-        "//pkg/util/log/eventpb/eventpbgen:eventpbgen",
+    tools = [
+        "//pkg/util/log/eventpb/eventpbgen",
     ],
     visibility = [
         ":__pkg__",

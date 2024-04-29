@@ -18,7 +18,7 @@ genrule(
           $(location pgrepl.go) $(location @org_golang_x_tools//cmd/goyacc)
 
     """,
-    exec_tools = [
+    tools = [
         ":pgrepl-gen",
         "@org_golang_x_tools//cmd/goyacc",
     ],

@@ -35,6 +35,13 @@ build:nonogo --nolintonbuild
 build:test --crdb_test
 
 # Basic settings.
+
+# This is set to silence warnings about invalid tracking of directories from `rules_js`:
+#    WARNING: ...pkg/ui/BUILD.bazel:5:22: input 'package'...is a directory; dependency checking of directories is unsound
+# This is a bug in `rules_js` upstream (https://github.com/aspect-build/rules_js/issues/1408)
+# Currently, this is mostly fixed, except for packages that have lifecycle
+# hooks or patches. When the upstream bug is fixed, this line should be reverted.
+startup --host_jvm_args=-DBAZEL_TRACK_SOURCE_DIRECTORIES=1
 build --define gotags=bazel,gss
 build --experimental_proto_descriptor_sets_include_source_info
 build --incompatible_strict_action_env --incompatible_enable_cc_toolchain_resolution
@@ -46,6 +53,8 @@ build --ui_event_filters=-DEBUG
 query --ui_event_filters=-DEBUG
 clean --ui_event_filters=-WARNING
 info --ui_event_filters=-WARNING
+# See DEVINF-1126
+common --enable_bzlmod=false
 
 build:race --@io_bazel_rules_go//go/config:race "--test_env=GORACE=halt_on_error=1 log_path=stdout"
 test:test --test_env=TZ=
@@ -126,11 +135,10 @@ build:engflowbase --experimental_inmemory_jdeps_files
 build:engflowbase --remote_timeout=600
 build:engflowbase --nolegacy_important_outputs
 build:engflowbase --grpc_keepalive_time=30s
-build:engflowbase --experimental_remote_cache_compression=true
+build:engflowbase --remote_cache_compression=true
 build:engflowbase --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 build:engflowbase --extra_execution_platforms=//build/toolchains:cross_linux
 build:engflowbase --remote_upload_local_results=false
-build:engflowbase --remote_download_toplevel
 build:engflowbase --config=cibase
 test:engflowbase --test_env=REMOTE_EXEC=1
 test:engflowbase --test_env=GOTRACEBACK=all
