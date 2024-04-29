@@ -562,6 +562,13 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				memo.EmptyJoinPrivate,
 			)
 
+			// Add an optimization barrier in case the projected variables are never
+			// referenced again, to prevent column-pruning rules from dropping the
+			// side effects of executing the SELECT ... INTO statement.
+			if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
+				b.addBarrier(stmtScope)
+			}
+
 			// Step 2: build the INTO statement into a continuation routine that calls
 			// the previously built continuation.
 			intoScope := b.buildInto(stmtScope, t.Target)
@@ -709,6 +716,10 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			b.ob.constructProjectForScope(fetchScope, intoScope)
 
+			// Add a barrier in case the projected variables are never referenced
+			// again, to prevent column-pruning rules from removing the FETCH.
+			b.addBarrier(intoScope)
+
 			// Call a continuation for the remaining PLpgSQL statements from the newly
 			// built statement that has updated variables. Then, call the fetch
 			// continuation from the parent scope.
@@ -811,12 +822,15 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(inScope *scope, ident ast.Variable, va
 		// column from the previous scope.
 		assignScope.appendColumn(col)
 	}
-	// Project the assignment as a new column.
+	// Project the assignment as a new column. If the projected expression is
+	// volatile, add barriers before and after the projection to prevent optimizer
+	// rules from reordering or removing its side effects.
 	colName := scopeColName(ident)
 	scalar := b.buildPLpgSQLExpr(val, typ, inScope)
 	b.addBarrierIfVolatile(inScope, scalar)
 	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
 	b.ob.constructProjectForScope(inScope, assignScope)
+	b.addBarrierIfVolatile(assignScope, scalar)
 	return assignScope
 }
 
@@ -1395,8 +1409,14 @@ func (b *plpgsqlBuilder) addBarrierIfVolatile(s *scope, expr opt.ScalarExpr) {
 	var p props.Shared
 	memo.BuildSharedProps(expr, &p, b.ob.evalCtx)
 	if p.VolatilitySet.HasVolatile() {
-		s.expr = b.ob.factory.ConstructBarrier(s.expr)
+		b.addBarrier(s)
 	}
+}
+
+// addBarrier adds an optimization barrier to the given scope, in order to
+// prevent side effects from being duplicated, eliminated, or reordered.
+func (b *plpgsqlBuilder) addBarrier(s *scope) {
+	s.expr = b.ob.factory.ConstructBarrier(s.expr)
 }
 
 // buildPLpgSQLExpr parses and builds the given SQL expression into a ScalarExpr

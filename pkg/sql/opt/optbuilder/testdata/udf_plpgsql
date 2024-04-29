@@ -5463,7 +5463,7 @@ project
                      │                                                                ├── stats: [rows=1]
                      │                                                                ├── key: ()
                      │                                                                ├── fd: ()-->(17)
-                     │                                                                ├── project
+                     │                                                                ├── barrier
                      │                                                                │    ├── columns: x:13(int)
                      │                                                                │    ├── outer: (10)
                      │                                                                │    ├── cardinality: [1 - 1]
@@ -5471,31 +5471,38 @@ project
                      │                                                                │    ├── stats: [rows=1]
                      │                                                                │    ├── key: ()
                      │                                                                │    ├── fd: ()-->(13)
-                     │                                                                │    ├── prune: (13)
-                     │                                                                │    ├── project
-                     │                                                                │    │    ├── columns: stmt_fetch_3:12(tuple{int})
-                     │                                                                │    │    ├── outer: (10)
-                     │                                                                │    │    ├── cardinality: [1 - 1]
-                     │                                                                │    │    ├── volatile
-                     │                                                                │    │    ├── stats: [rows=1]
-                     │                                                                │    │    ├── key: ()
-                     │                                                                │    │    ├── fd: ()-->(12)
-                     │                                                                │    │    ├── prune: (12)
-                     │                                                                │    │    ├── values
-                     │                                                                │    │    │    ├── cardinality: [1 - 1]
-                     │                                                                │    │    │    ├── stats: [rows=1]
-                     │                                                                │    │    │    ├── key: ()
-                     │                                                                │    │    │    └── tuple [type=tuple]
-                     │                                                                │    │    └── projections
-                     │                                                                │    │         └── function: crdb_internal.plpgsql_fetch [as=stmt_fetch_3:12, type=tuple{int}, outer=(10), volatile]
-                     │                                                                │    │              ├── variable: curs:10 [type=refcursor]
-                     │                                                                │    │              ├── const: 0 [type=int]
-                     │                                                                │    │              ├── const: 1 [type=int]
-                     │                                                                │    │              └── tuple [type=tuple{int}]
-                     │                                                                │    │                   └── null [type=int]
-                     │                                                                │    └── projections
-                     │                                                                │         └── column-access: 0 [as=x:13, type=int, outer=(12)]
-                     │                                                                │              └── variable: stmt_fetch_3:12 [type=tuple{int}]
+                     │                                                                │    └── project
+                     │                                                                │         ├── columns: x:13(int)
+                     │                                                                │         ├── outer: (10)
+                     │                                                                │         ├── cardinality: [1 - 1]
+                     │                                                                │         ├── volatile
+                     │                                                                │         ├── stats: [rows=1]
+                     │                                                                │         ├── key: ()
+                     │                                                                │         ├── fd: ()-->(13)
+                     │                                                                │         ├── project
+                     │                                                                │         │    ├── columns: stmt_fetch_3:12(tuple{int})
+                     │                                                                │         │    ├── outer: (10)
+                     │                                                                │         │    ├── cardinality: [1 - 1]
+                     │                                                                │         │    ├── volatile
+                     │                                                                │         │    ├── stats: [rows=1]
+                     │                                                                │         │    ├── key: ()
+                     │                                                                │         │    ├── fd: ()-->(12)
+                     │                                                                │         │    ├── prune: (12)
+                     │                                                                │         │    ├── values
+                     │                                                                │         │    │    ├── cardinality: [1 - 1]
+                     │                                                                │         │    │    ├── stats: [rows=1]
+                     │                                                                │         │    │    ├── key: ()
+                     │                                                                │         │    │    └── tuple [type=tuple]
+                     │                                                                │         │    └── projections
+                     │                                                                │         │         └── function: crdb_internal.plpgsql_fetch [as=stmt_fetch_3:12, type=tuple{int}, outer=(10), volatile]
+                     │                                                                │         │              ├── variable: curs:10 [type=refcursor]
+                     │                                                                │         │              ├── const: 0 [type=int]
+                     │                                                                │         │              ├── const: 1 [type=int]
+                     │                                                                │         │              └── tuple [type=tuple{int}]
+                     │                                                                │         │                   └── null [type=int]
+                     │                                                                │         └── projections
+                     │                                                                │              └── column-access: 0 [as=x:13, type=int, outer=(12)]
+                     │                                                                │                   └── variable: stmt_fetch_3:12 [type=tuple{int}]
                      │                                                                └── projections
                      │                                                                     └── udf: _stmt_exec_ret_4 [as="_stmt_exec_ret_4":17, type=int, outer=(10,13), udf]
                      │                                                                          ├── args
@@ -6009,32 +6016,34 @@ project
                      │                                                                                                        │    ├── columns: found:27
                      │                                                                                                        │    └── project
                      │                                                                                                        │         ├── columns: found:27
-                     │                                                                                                        │         ├── right-join (cross)
+                     │                                                                                                        │         ├── barrier
                      │                                                                                                        │         │    ├── columns: a:13
-                     │                                                                                                        │         │    ├── limit
-                     │                                                                                                        │         │    │    ├── columns: a:13
-                     │                                                                                                        │         │    │    ├── project
-                     │                                                                                                        │         │    │    │    ├── columns: a:13
-                     │                                                                                                        │         │    │    │    └── insert t114826
-                     │                                                                                                        │         │    │    │         ├── columns: a:13 rowid:14!null
-                     │                                                                                                        │         │    │    │         ├── insert-mapping:
-                     │                                                                                                        │         │    │    │         │    ├── a:17 => a:13
-                     │                                                                                                        │         │    │    │         │    └── rowid_default:21 => rowid:14
-                     │                                                                                                        │         │    │    │         ├── return-mapping:
-                     │                                                                                                        │         │    │    │         │    ├── a:17 => a:13
-                     │                                                                                                        │         │    │    │         │    └── rowid_default:21 => rowid:14
-                     │                                                                                                        │         │    │    │         └── project
-                     │                                                                                                        │         │    │    │              ├── columns: rowid_default:21 a:17
-                     │                                                                                                        │         │    │    │              ├── project
-                     │                                                                                                        │         │    │    │              │    ├── columns: a:17
-                     │                                                                                                        │         │    │    │              │    └── scan t114826
-                     │                                                                                                        │         │    │    │              │         └── columns: a:17 rowid:18!null crdb_internal_mvcc_timestamp:19 tableoid:20
-                     │                                                                                                        │         │    │    │              └── projections
-                     │                                                                                                        │         │    │    │                   └── function: unique_rowid [as=rowid_default:21]
-                     │                                                                                                        │         │    │    └── const: 1
-                     │                                                                                                        │         │    ├── values
-                     │                                                                                                        │         │    │    └── tuple
-                     │                                                                                                        │         │    └── filters (true)
+                     │                                                                                                        │         │    └── right-join (cross)
+                     │                                                                                                        │         │         ├── columns: a:13
+                     │                                                                                                        │         │         ├── limit
+                     │                                                                                                        │         │         │    ├── columns: a:13
+                     │                                                                                                        │         │         │    ├── project
+                     │                                                                                                        │         │         │    │    ├── columns: a:13
+                     │                                                                                                        │         │         │    │    └── insert t114826
+                     │                                                                                                        │         │         │    │         ├── columns: a:13 rowid:14!null
+                     │                                                                                                        │         │         │    │         ├── insert-mapping:
+                     │                                                                                                        │         │         │    │         │    ├── a:17 => a:13
+                     │                                                                                                        │         │         │    │         │    └── rowid_default:21 => rowid:14
+                     │                                                                                                        │         │         │    │         ├── return-mapping:
+                     │                                                                                                        │         │         │    │         │    ├── a:17 => a:13
+                     │                                                                                                        │         │         │    │         │    └── rowid_default:21 => rowid:14
+                     │                                                                                                        │         │         │    │         └── project
+                     │                                                                                                        │         │         │    │              ├── columns: rowid_default:21 a:17
+                     │                                                                                                        │         │         │    │              ├── project
+                     │                                                                                                        │         │         │    │              │    ├── columns: a:17
+                     │                                                                                                        │         │         │    │              │    └── scan t114826
+                     │                                                                                                        │         │         │    │              │         └── columns: a:17 rowid:18!null crdb_internal_mvcc_timestamp:19 tableoid:20
+                     │                                                                                                        │         │         │    │              └── projections
+                     │                                                                                                        │         │         │    │                   └── function: unique_rowid [as=rowid_default:21]
+                     │                                                                                                        │         │         │    └── const: 1
+                     │                                                                                                        │         │         ├── values
+                     │                                                                                                        │         │         │    └── tuple
+                     │                                                                                                        │         │         └── filters (true)
                      │                                                                                                        │         └── projections
                      │                                                                                                        │              └── variable: a:13 [as=found:27]
                      │                                                                                                        └── projections
