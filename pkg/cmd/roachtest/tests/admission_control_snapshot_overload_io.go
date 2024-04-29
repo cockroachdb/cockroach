@@ -32,7 +32,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.ManualOnly,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(4), spec.VolumeSize(1000)),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(4), spec.VolumeSize(2000)),
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          12 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -96,18 +96,22 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 				"./cockroach workload init kv --drop --insert-count=40000000 "+
 					"--max-block-bytes=12288 --min-block-bytes=12288 {pgurl:1}")
 
-			// Kill node 3.
-			t.Status(fmt.Sprintf("killing node 3... (<%s)", time.Minute))
-			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
-
 			t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 			m.Go(func(ctx context.Context) error {
 				c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
-					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --splits=1000 --histograms=%s/stats.json --read-percent=50 --max-rate=400 --max-block-bytes=12288 --min-block-bytes=12288 --concurrency=1024 {pgurl:1}",
+					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --splits=1000 --histograms=%s/stats.json --read-percent=50 --max-rate=600 --max-block-bytes=12288 --min-block-bytes=12288 --concurrency=1024 {pgurl:1}",
 						t.PerfArtifactsDir()))
 				return nil
 			})
+
+			// Wait for data.
+			t.Status(fmt.Sprintf("waiting for data build up (<%s)", time.Hour*1))
+			time.Sleep(time.Hour * 1)
+
+			// Kill node 3.
+			t.Status(fmt.Sprintf("killing node 3... (<%s)", time.Minute))
+			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
 
 			// Wait for raft log truncation.
 			t.Status(fmt.Sprintf("waiting for raft log truncation (<%s)", time.Hour*2))
