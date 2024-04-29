@@ -2,8 +2,8 @@ package metricspoller
 
 import (
 	"context"
-	"errors"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -11,7 +11,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/errors"
 )
 
 var changefeedBillingBytes = metric.NewGauge(metric.Metadata{
@@ -36,7 +39,10 @@ func updateChangefeedBillingMetrics(ctx context.Context, execCtx sql.JobExecCont
 }
 
 func fetchChangefeedBillingBytes(ctx context.Context, execCtx sql.JobExecContext) (int64, error) {
-	var deets []jobspb.ChangefeedDetails // TODO: get this somehow
+	deets, err := getChangefeedDetails(ctx, execCtx)
+	if err != nil {
+		return 0, err
+	}
 
 	feedsTableIds := make(map[int][]descpb.ID, len(deets))
 	tableSizes := make(map[descpb.ID]int64, len(deets))
@@ -114,4 +120,45 @@ func fetchChangefeedBillingBytes(ctx context.Context, execCtx sql.JobExecContext
 		}
 	}
 	return total, nil
+}
+
+const changefeedDetailsQuery = `
+	SELECT j.id, ji.value
+	FROM system.jobs j JOIN system.job_info ji ON j.id = ji.job_id
+	WHERE status = 'running' AND job_type = 'CHANGEFEED' AND info_key = '` + jobs.LegacyPayloadKey + `'
+`
+
+// getChangefeedDetails fetches the changefeed details for all changefeeds.
+func getChangefeedDetails(ctx context.Context, execCtx sql.JobExecContext) ([]*jobspb.ChangefeedDetails, error) {
+	var deets []*jobspb.ChangefeedDetails
+	err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		it, err := txn.QueryIteratorEx(ctx, "changefeeds_billing_payloads", txn.KV(), sessiondata.NodeUserSessionDataOverride, changefeedDetailsQuery)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = it.Close() }()
+
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			row := it.Cur()
+			id, payloadBs := int64(tree.MustBeDInt(row[0])), tree.MustBeDBytes(row[1])
+			var payload jobspb.Payload
+			if err := payload.Unmarshal([]byte(payloadBs)); err != nil {
+				return errors.WithDetailf(err, "failed to unmarshal payload for job %d", id)
+			}
+
+			details := payload.GetDetails()
+			if details == nil {
+				return errors.AssertionFailedf("no details for job %d", id)
+			}
+			cfDetails, ok := details.(*jobspb.Payload_Changefeed)
+			if !ok {
+				return errors.AssertionFailedf("unexpected details type %T for job %d", details, id)
+			}
+			deets = append(deets, cfDetails.Changefeed)
+		}
+		return err
+	})
+
+	return deets, err
 }
