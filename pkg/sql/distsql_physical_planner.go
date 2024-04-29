@@ -820,7 +820,10 @@ type PlanningCtx struct {
 
 	// isLocal is set to true if we're planning this query on a single node.
 	isLocal bool
-	planner *planner
+	// distSQLProhibitedErr, if set, indicates why the plan couldn't be
+	// distributed.
+	distSQLProhibitedErr error
+	planner              *planner
 
 	// usePlannerDescriptorsForLocalFlow may be set to true to force
 	// planner.Descriptors() use for local flows.
