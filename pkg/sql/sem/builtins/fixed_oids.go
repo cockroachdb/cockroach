@@ -2420,6 +2420,7 @@ var builtinOidsArray = []string{
 	2512: `merge_statement_stats(arg1: jsonb) -> jsonb`,
 	2513: `merge_transaction_stats(arg1: jsonb) -> jsonb`,
 	2517: `jsonb_array_to_string_array(input: jsonb) -> string[]`,
+	2608: `crdb_internal.force_panic(msg: string, mode: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
