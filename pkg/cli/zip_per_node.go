@@ -194,7 +194,7 @@ func (zc *debugZipContext) collectFileList(
 		for _, file := range files.Files {
 			ctime := extractTimeFromFileName(file.Name)
 			if !zipCtx.files.isIncluded(file.Name, ctime, ctime) {
-				nodePrinter.info("skipping excluded %s: %s", file.Name, fileKind)
+				nodePrinter.info("skipping excluded %s: %s", fileKind, file.Name)
 				continue
 			}
 
