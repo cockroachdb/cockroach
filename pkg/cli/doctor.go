@@ -14,7 +14,6 @@ import (
 	"bufio"
 	"context"
 	"database/sql/driver"
-	hx "encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -373,9 +372,9 @@ func fromZipDir(
 			return errors.Wrapf(err, "failed to parse descriptor id %s", fields[0])
 		}
 
-		descBytes, err := hx.DecodeString(fields[last])
-		if err != nil {
-			return errors.Wrapf(err, "failed to decode hex descriptor %d", i)
+		descBytes, ok := interpretString(fields[last])
+		if !ok {
+			return errors.Newf("failed to decode hex descriptor %d", i)
 		}
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		descTable = append(descTable, doctor.DescriptorTableRow{ID: int64(i), DescBytes: descBytes, ModTime: ts})
@@ -432,7 +431,7 @@ func fromZipDir(
 	}
 
 	jobsTable = make(doctor.JobsTable, 0)
-	if err := slurp(zipDirPath, "system.jobs.txt", func(row string) error {
+	if err := slurp(zipDirPath, "crdb_internal.system_jobs.txt", func(row string) error {
 		fields := strings.Fields(row)
 		md := jobs.JobMetadata{}
 		md.Status = jobs.Status(fields[1])
@@ -443,23 +442,23 @@ func fromZipDir(
 		}
 		md.ID = jobspb.JobID(id)
 
-		last := len(fields) - 1
-		payloadBytes, err := hx.DecodeString(fields[last-1])
-		if err != nil {
-			// TODO(postamar): remove this check once payload redaction is improved
-			if fields[last-1] == "NULL" {
-				return nil
-			}
-			return errors.Wrapf(err, "job %d: failed to decode hex payload", id)
+		// N.B. The "created" column takes 2 positions in our fields array.
+		payloadBytes, ok := interpretString(fields[4])
+		if !ok {
+			return errors.Newf("job %d: failed to decode hex payload", id)
 		}
 		md.Payload = &jobspb.Payload{}
 		if err := protoutil.Unmarshal(payloadBytes, md.Payload); err != nil {
 			return errors.Wrap(err, "failed unmarshalling job payload")
 		}
 
-		progressBytes, err := hx.DecodeString(fields[last])
-		if err != nil {
-			return errors.Wrapf(err, "job %d: failed to decode hex progress", id)
+		// when can progress be null? if it exists but we have never started it?
+		if fields[5] == "NULL" {
+			return nil
+		}
+		progressBytes, ok := interpretString(fields[5])
+		if !ok {
+			return errors.Newf("job %d: failed to decode hex progress", id)
 		}
 		md.Progress = &jobspb.Progress{}
 		if err := protoutil.Unmarshal(progressBytes, md.Progress); err != nil {
