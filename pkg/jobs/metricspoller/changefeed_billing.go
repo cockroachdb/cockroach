@@ -141,7 +141,8 @@ func fetchTableSizes(ctx context.Context, execCtx sql.JobExecContext, tableIDs [
 const changefeedDetailsQuery = `
 	SELECT j.id, ji.value
 	FROM system.jobs j JOIN system.job_info ji ON j.id = ji.job_id
-	WHERE status = 'running' AND job_type = 'CHANGEFEED' AND info_key = '` + jobs.LegacyPayloadKey + `'
+	WHERE status IN ('running', 'paused') AND job_type = 'CHANGEFEED'
+		AND info_key = '` + jobs.LegacyPayloadKey + `'
 `
 
 // getChangefeedDetails fetches the changefeed details for all changefeeds.
