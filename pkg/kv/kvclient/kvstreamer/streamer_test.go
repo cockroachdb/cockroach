@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -554,7 +555,15 @@ func TestStreamerVaryingResponseSizes(t *testing.T) {
 
 	skip.UnderDuress(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				// We disable the randomization of some batch sizes because with
+				// some low values the test takes much longer.
+				ForceProductionValues: true,
+			},
+		},
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	runner := sqlutils.MakeSQLRunner(db)
