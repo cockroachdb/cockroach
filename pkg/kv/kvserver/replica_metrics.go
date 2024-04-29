@@ -53,6 +53,7 @@ type ReplicaMetrics struct {
 	RaftLogTooLarge       bool
 	BehindCount           int64
 	PausedFollowerCount   int64
+	RaftProposalCount     int64
 	SlowRaftProposalCount int64
 
 	QuotaPoolPercentUsed int64 // [0,100]
@@ -110,6 +111,7 @@ func (r *Replica) Metrics(
 		qpUsed:                qpUsed,
 		qpCapacity:            qpCap,
 		paused:                r.mu.pausedFollowers,
+		raftProposalCount:     r.numPendingProposalsRLocked(),
 		slowRaftProposalCount: r.mu.slowProposalCount,
 	}
 
@@ -137,6 +139,7 @@ type calcReplicaMetricsInput struct {
 	raftLogSizeTrusted    bool
 	qpUsed, qpCapacity    int64 // quota pool used and capacity bytes
 	paused                map[roachpb.ReplicaID]struct{}
+	raftProposalCount     int64
 	slowRaftProposalCount int64
 }
 
@@ -192,6 +195,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 			d.raftLogSize > raftLogTooLargeMultiple*d.raftCfg.RaftLogTruncationThreshold,
 		BehindCount:           leaderBehindCount,
 		PausedFollowerCount:   leaderPausedFollowerCount,
+		RaftProposalCount:     d.raftProposalCount,
 		SlowRaftProposalCount: d.slowRaftProposalCount,
 		QuotaPoolPercentUsed:  calcQuotaPoolPercentUsed(d.qpUsed, d.qpCapacity),
 		LatchMetrics:          d.latchMetrics,
