@@ -225,6 +225,13 @@ func CachedClusters(l *logger.Logger, fn func(clusterName string, numVMs int)) {
 	}
 }
 
+// ClearClusterCache indicates if we should ever clear the local cluster
+// cache of clusters. This flag is set to false during Azure nightly runs,
+// as the large amount of concurrent resources created will cause Azure.List
+// to return stale VM information with no error. Similar to when there is an
+// error, we do not want to remove any clusters from the cache.
+var ClearClusterCache = true
+
 // Sync grabs an exclusive lock on the roachprod state and then proceeds to
 // read the current state from the cloud and write it out to disk. The locking
 // protects both the reading and the writing in order to prevent the hazard
@@ -246,7 +253,7 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 	// Instead, we tell syncClustersCache not to remove any clusters as we
 	// can't tell if a cluster was deleted or not found due to the error.
 	// The next successful ListCloud call will clean it up.
-	overwriteMissingClusters := err == nil
+	overwriteMissingClusters := err == nil && ClearClusterCache
 	if err := syncClustersCache(l, cld, overwriteMissingClusters); err != nil {
 		return nil, err
 	}
