@@ -1732,7 +1732,7 @@ func TestRangeFeedMetadataManualSplit(t *testing.T) {
 		for {
 			// Expect a metadata event from the manual split.
 			meta := <-metadata
-			t.Logf("expected manual split new range key span %s-%s; manual split %t", meta.Span.Key, meta.Span.EndKey, meta.FromManualSplit)
+			fmt.Printf("expected manual split new range key span %s-%s; manual split %t\n", meta.Span.Key, meta.Span.EndKey, meta.FromManualSplit)
 			require.Equal(t, true, meta.FromManualSplit)
 			if !meta.Span.EndKey.Equal(sp.EndKey) {
 				// New Rangefeed for LHS.
@@ -1747,17 +1747,19 @@ func TestRangeFeedMetadataManualSplit(t *testing.T) {
 			// rangefeeds with the manual split flag.
 			require.Equal(t, sp.Key, meta.Span.Key)
 			require.Equal(t, sp.EndKey, meta.Span.EndKey)
-		}
-		{
-			// New Rangefeed for the RHS.
-			meta := <-metadata
-			t.Logf("another split new range key span %s-%s; manual %t", meta.Span.Key, meta.Span.EndKey, meta.FromManualSplit)
-			require.True(t, meta.FromManualSplit)
-			require.Equal(t, splitKey, meta.Span.Key)
-			require.Equal(t, sp.EndKey, meta.Span.EndKey)
 			require.Equal(t, sp.Key, meta.ParentStartKey)
 		}
-
+		for {
+			// New Rangefeed for the RHS.
+			meta := <-metadata
+			fmt.Printf("another split new range key span %s-%s; manual %t\n", meta.Span.Key, meta.Span.EndKey, meta.FromManualSplit)
+			require.True(t, meta.FromManualSplit)
+			if meta.Span.Key.Equal(splitKey) {
+				require.Equal(t, splitKey, meta.Span.Key)
+				require.Equal(t, sp.EndKey, meta.Span.EndKey)
+				break
+			}
+		}
 	})
 }
 

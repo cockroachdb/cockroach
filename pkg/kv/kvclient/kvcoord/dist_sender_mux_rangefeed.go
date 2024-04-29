@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"sync/atomic"
@@ -237,7 +238,9 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 	if m.cfg.withMetadata {
 		// Send metadata after the stream successfully registers to avoid sending
 		// metadata about a rangefeed that never starts.
+		fmt.Printf("sending metadata for span %s-%s\n", span.Key, span.EndKey)
 		sendMetadata(m.eventCh, span, parentRangefeedMetadata)
+		fmt.Printf("sent metadata for span %s-%s\n", span.Key, span.EndKey)
 	}
 
 	return nil
