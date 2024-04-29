@@ -38,38 +38,17 @@ func updateChangefeedBillingMetrics(ctx context.Context, execCtx sql.JobExecCont
 	return nil
 }
 
-func fetchChangefeedBillingBytes(ctx context.Context, execCtx sql.JobExecContext) (int64, error) {
-	deets, err := getChangefeedDetails(ctx, execCtx)
-	if err != nil {
-		return 0, err
-	}
-
-	feedsTableIds := make(map[int][]descpb.ID, len(deets))
-	tableSizes := make(map[descpb.ID]int64, len(deets))
-	for cdi, cd := range deets {
-		if len(cd.TargetSpecifications) > 0 {
-			for _, ts := range cd.TargetSpecifications {
-				if ts.TableID > 0 {
-					feedsTableIds[cdi] = append(feedsTableIds[cdi], ts.TableID)
-					tableSizes[ts.TableID] = 0
-				}
-			}
-		} else {
-			for id := range cd.Tables {
-				feedsTableIds[cdi] = append(feedsTableIds[cdi], id)
-				tableSizes[id] = 0
-			}
-		}
-	}
+func fetchTableSizes(ctx context.Context, execCtx sql.JobExecContext, tableIDs []descpb.ID) (map[descpb.ID]int64, error) {
+	tableSizes := make(map[descpb.ID]int64, len(tableIDs))
 
 	type spanInfo struct {
 		span  roachpb.Span
 		table descpb.ID
 	}
 
-	spanSizes := make(map[string]spanInfo, len(deets))
-	spans := make([]roachpb.Span, 0, len(deets))
-	// fetch & fill in table descriptors
+	// build list of spans for all tables
+	spanSizes := make(map[string]spanInfo, len(tableIDs))
+	spans := make([]roachpb.Span, 0, len(tableIDs))
 	for id := range tableSizes {
 		// fetch table descriptor
 		var desc catalog.TableDescriptor
@@ -88,7 +67,7 @@ func fetchChangefeedBillingBytes(ctx context.Context, execCtx sql.JobExecContext
 				// if the table was dropped, we can ignore it this cycle
 				continue
 			}
-			return 0, err
+			return nil, err
 		}
 
 		// TODO: do we need to count the sizes of other indexes?
@@ -106,11 +85,45 @@ func fetchChangefeedBillingBytes(ctx context.Context, execCtx sql.JobExecContext
 		},
 	)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	for spanStr, stats := range resp.SpanToStats {
 		si := spanSizes[spanStr]
 		tableSizes[si.table] += stats.ApproximateTotalStats.LiveBytes
+	}
+
+	return tableSizes, nil
+}
+
+func fetchChangefeedBillingBytes(ctx context.Context, execCtx sql.JobExecContext) (int64, error) {
+	deets, err := getChangefeedDetails(ctx, execCtx)
+	if err != nil {
+		return 0, err
+	}
+
+	feedsTableIds := make(map[int][]descpb.ID, len(deets))
+	tableIDs := make([]descpb.ID, 0, len(deets))
+	for cdi, cd := range deets {
+		// check both possible locations for table data due to older proto version. TODO: is this still necessary?
+		// inspired by AllTargets in changefeedccl/changefeed.go
+		if len(cd.TargetSpecifications) > 0 {
+			for _, ts := range cd.TargetSpecifications {
+				if ts.TableID > 0 {
+					feedsTableIds[cdi] = append(feedsTableIds[cdi], ts.TableID)
+					tableIDs = append(tableIDs, ts.TableID)
+				}
+			}
+		} else {
+			for id := range cd.Tables {
+				feedsTableIds[cdi] = append(feedsTableIds[cdi], id)
+				tableIDs = append(tableIDs, id)
+			}
+		}
+	}
+
+	tableSizes, err := fetchTableSizes(ctx, execCtx, tableIDs)
+	if err != nil {
+		return 0, err
 	}
 
 	var total int64
