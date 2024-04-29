@@ -99,7 +99,6 @@ require (
 	github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46
 	github.com/PuerkitoBio/goquery v1.5.1
 	github.com/VividCortex/ewma v1.1.1
-	github.com/abourget/teamcity v0.0.0-00010101000000-000000000000
 	github.com/alessio/shellescape v1.4.1
 	github.com/andy-kimball/arenaskl v0.0.0-20200617143215-f701008588b9
 	github.com/andygrunwald/go-jira v1.14.0
