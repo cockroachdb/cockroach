@@ -70,6 +70,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/rowcontainer",
+        "//pkg/sql/sem/eval",
         "//pkg/storage",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
