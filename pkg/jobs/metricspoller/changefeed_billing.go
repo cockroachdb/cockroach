@@ -95,6 +95,9 @@ func fetchTableSizes(ctx context.Context, execCtx sql.JobExecContext, tableIDs [
 	return tableSizes, nil
 }
 
+// fetchChangefeedBillingBytes fetches the total number of bytes of data watched
+// by all changefeeds. It counts tables that are watched by multiple changefeeds
+// multiple times.
 func fetchChangefeedBillingBytes(ctx context.Context, execCtx sql.JobExecContext) (int64, error) {
 	deets, err := getChangefeedDetails(ctx, execCtx)
 	if err != nil {
