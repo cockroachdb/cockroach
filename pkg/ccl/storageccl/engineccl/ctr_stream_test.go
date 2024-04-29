@@ -242,10 +242,21 @@ type testKeyManager struct {
 	activeID string
 }
 
-func (m *testKeyManager) ActiveKey(ctx context.Context) (*enginepbccl.SecretKey, error) {
+var _ PebbleKeyManager = &testKeyManager{}
+
+func (m *testKeyManager) ActiveKeyForWriter(ctx context.Context) (*enginepbccl.SecretKey, error) {
 	key, _ := m.GetKey(m.activeID)
 	return key, nil
 }
+
+func (m *testKeyManager) ActiveKeyInfoForStats() *enginepbccl.KeyInfo {
+	key, _ := m.GetKey(m.activeID)
+	if key != nil {
+		return key.Info
+	}
+	return nil
+}
+
 func (m *testKeyManager) GetKey(id string) (*enginepbccl.SecretKey, error) {
 	key, found := m.keys[id]
 	if !found {
