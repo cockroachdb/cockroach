@@ -226,8 +226,11 @@ func (s StatsWindow) Latest() Stats {
 type Monitor struct {
 	*monitoredDisk
 
-	// Tracks the time of the last invocation of IncrementalStats.
-	lastIncrementedAt time.Time
+	mu struct {
+		syncutil.Mutex
+		// Tracks the time of the last invocation of IncrementalStats.
+		lastIncrementedAt time.Time
+	}
 }
 
 // CumulativeStats returns the most-recent stats observed.
@@ -241,19 +244,28 @@ func (m *Monitor) CumulativeStats() (Stats, error) {
 	}
 }
 
-// IncrementalStats returns all stats observed since it's previous invocation.
+// updateLastIncrementedAt sets lastIncrementedAt to the current time and
+// returns the previous value.
+func (m *Monitor) swapLastIncrementedAt() time.Time {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := m.mu.lastIncrementedAt
+	m.mu.lastIncrementedAt = timeutil.Now()
+	return result
+}
+
+// IncrementalStats returns all stats observed since its previous invocation.
 // Note that the tracer has a bounded capacity and the caller must invoke this
 // method at least as frequently as every COCKROACH_DISK_TRACE_PERIOD to avoid
 // missing events.
 func (m *Monitor) IncrementalStats() StatsWindow {
-	if m.lastIncrementedAt.IsZero() {
-		m.lastIncrementedAt = timeutil.Now()
+	lastIncrementedAt := m.swapLastIncrementedAt()
+	if lastIncrementedAt.IsZero() {
 		return StatsWindow{}
 	}
 
-	events := m.tracer.RollingWindow(m.lastIncrementedAt)
-	m.lastIncrementedAt = timeutil.Now()
-	var stats []Stats
+	events := m.tracer.RollingWindow(lastIncrementedAt)
+	stats := make([]Stats, 0, len(events))
 	for _, event := range events {
 		// Ignore events where we were unable to collect disk stats.
 		if event.err == nil {

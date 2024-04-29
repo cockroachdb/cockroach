@@ -3443,7 +3443,7 @@ func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
 }
 
 // computeMetrics is a common metric computation that is used by
-// ComputeMetricsPeriodically and ComputeMetrics to compute metrics
+// ComputeMetricsPeriodically and ComputeMetrics to compute metrics.
 func (s *Store) computeMetrics(ctx context.Context) (m storage.Metrics, err error) {
 	ctx = s.AnnotateCtx(ctx)
 	if err = s.updateCapacityGauges(ctx); err != nil {
@@ -3473,17 +3473,11 @@ func (s *Store) computeMetrics(ctx context.Context) (m storage.Metrics, err erro
 		s.metrics.RdbCheckpoints.Update(int64(len(dirs)))
 	}
 
-	// Get disk stats for the disk associated with this store.
-	if s.diskMonitor != nil {
-		rollingStats := s.diskMonitor.IncrementalStats()
-		s.metrics.updateDiskStats(rollingStats)
-	}
-
 	return m, nil
 }
 
 // ComputeMetricsPeriodically computes metrics that need to be computed
-// periodically along with the regular metrics
+// periodically along with the regular metrics.
 func (s *Store) ComputeMetricsPeriodically(
 	ctx context.Context, prevMetrics *storage.MetricsForInterval, tick int,
 ) (m storage.Metrics, err error) {
@@ -3491,6 +3485,13 @@ func (s *Store) ComputeMetricsPeriodically(
 	if err != nil {
 		return m, err
 	}
+
+	// Get disk stats for the disk associated with this store.
+	if s.diskMonitor != nil {
+		rollingStats := s.diskMonitor.IncrementalStats()
+		s.metrics.updateDiskStats(rollingStats)
+	}
+
 	wt := m.Flush.WriteThroughput
 
 	if prevMetrics != nil {
