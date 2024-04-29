@@ -109,9 +109,9 @@ func TestMonitor_IncrementalStats(t *testing.T) {
 		tracer.RecordEvent(event)
 	}
 	monitor := Monitor{
-		monitoredDisk:     &monitoredDisk{tracer: tracer},
-		lastIncrementedAt: now.Add(-3 * time.Minute),
+		monitoredDisk: &monitoredDisk{tracer: tracer},
 	}
+	monitor.mu.lastIncrementedAt = now.Add(-3 * time.Minute)
 
 	rollingWindow := monitor.IncrementalStats()
 	// Skip the event collected 4 minutes ago since we last incremented 3 minutes ago.
