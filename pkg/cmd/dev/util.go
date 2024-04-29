@@ -104,6 +104,7 @@ func mustGetFlagDuration(cmd *cobra.Command, name string) time.Duration {
 
 func (d *dev) getBazelInfo(ctx context.Context, key string, extraArgs []string) (string, error) {
 	args := []string{"info", key, "--color=no"}
+	args = append(args, extraArgs...)
 	out, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
 	if err != nil {
 		return "", err
@@ -126,8 +127,8 @@ func (d *dev) getBazelBin(ctx context.Context, configArgs []string) (string, err
 	return d.getBazelInfo(ctx, "bazel-bin", configArgs)
 }
 
-func (d *dev) getExecutionRoot(ctx context.Context) (string, error) {
-	return d.getBazelInfo(ctx, "execution_root", []string{})
+func (d *dev) getExecutionRoot(ctx context.Context, configArgs []string) (string, error) {
+	return d.getBazelInfo(ctx, "execution_root", configArgs)
 }
 
 // getArchivedCdepString returns a non-empty string iff the force_build_cdeps
