@@ -49,7 +49,7 @@ func fetchTableSizes(ctx context.Context, execCtx sql.JobExecContext, tableIDs [
 	// build list of spans for all tables
 	spanSizes := make(map[string]spanInfo, len(tableIDs))
 	spans := make([]roachpb.Span, 0, len(tableIDs))
-	for id := range tableSizes {
+	for _, id := range tableIDs {
 		// fetch table descriptor
 		var desc catalog.TableDescriptor
 		fetchTableDesc := func(
@@ -73,7 +73,7 @@ func fetchTableSizes(ctx context.Context, execCtx sql.JobExecContext, tableIDs [
 		// TODO: do we need to count the sizes of other indexes?
 		span := desc.PrimaryIndexSpan(execCtx.ExecCfg().Codec)
 		spans = append(spans, span)
-		spanSizes[span.Key.String()] = spanInfo{span: span, table: id}
+		spanSizes[span.String()] = spanInfo{span: span, table: id}
 	}
 
 	// fetch span stats and fill in table sizes

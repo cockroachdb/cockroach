@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "metricspoller",
     srcs = [
+        "changefeed_billing.go",
         "job_statistics.go",
         "poller.go",
     ],
@@ -17,6 +18,9 @@ go_library(
         "//pkg/scheduledjobs",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
