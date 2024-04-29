@@ -1315,6 +1315,16 @@ order, and hence can not be applied as is.`,
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftCommandsPending = metric.Metadata{
+		Name: "raft.commands.pending",
+		Help: `Number of Raft commands proposed and pending.
+
+The number of Raft commands that the leaseholders are tracking as in-flight.
+These commands will be periodically reproposed until they are applied or until
+they fail, either unequivocally or ambiguously.`,
+		Measurement: "Commands",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRaftCommandsApplied = metric.Metadata{
 		Name: "raft.commandsapplied",
 		Help: `Number of Raft commands applied.
@@ -2694,6 +2704,7 @@ type StoreMetrics struct {
 	RaftCommandsProposed       *metric.Counter
 	RaftCommandsReproposed     *metric.Counter
 	RaftCommandsReproposedLAI  *metric.Counter
+	RaftCommandsPending        *metric.Gauge
 	RaftCommandsApplied        *metric.Counter
 	RaftLogCommitLatency       metric.IHistogram
 	RaftCommandCommitLatency   metric.IHistogram
@@ -3404,6 +3415,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftCommandsProposed:      metric.NewCounter(metaRaftCommandsProposed),
 		RaftCommandsReproposed:    metric.NewCounter(metaRaftCommandsReproposed),
 		RaftCommandsReproposedLAI: metric.NewCounter(metaRaftCommandsReproposedLAI),
+		RaftCommandsPending:       metric.NewGauge(metaRaftCommandsPending),
 		RaftCommandsApplied:       metric.NewCounter(metaRaftCommandsApplied),
 		RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
