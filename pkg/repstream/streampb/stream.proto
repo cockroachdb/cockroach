@@ -171,6 +171,7 @@ message StreamEvent {
     repeated roachpb.RangeFeedSSTable ssts = 2 [(gogoproto.nullable) = false];
     repeated roachpb.RangeFeedDeleteRange del_ranges = 3 [(gogoproto.nullable) = false];
     repeated StreamedSpanConfigEntry span_configs = 4 [(gogoproto.nullable) = false];
+    repeated bytes split_points = 5 [(gogoproto.casttype) =  "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   }
 
   // Checkpoint represents stream checkpoint.
