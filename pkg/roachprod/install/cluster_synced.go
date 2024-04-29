@@ -2668,8 +2668,8 @@ func (c *SyncedCluster) loadBalancerURL(
 	if err != nil {
 		return "", err
 	}
-	var port int
-	serviceMode := ServiceModeShared
+	port := config.DefaultSQLPort
+	serviceMode := ServiceModeExternal
 	for _, service := range services {
 		if service.VirtualClusterName == virtualClusterName && service.Instance == sqlInstance {
 			serviceMode = service.ServiceMode
