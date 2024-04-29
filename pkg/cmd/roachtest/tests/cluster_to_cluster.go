@@ -468,6 +468,8 @@ type replicationDriver struct {
 	c       cluster.Cluster
 	metrics *c2cMetrics
 	rng     *rand.Rand
+
+	shutdownNode int
 }
 
 func makeReplicationDriver(t test.Test, c cluster.Cluster, rs replicationSpec) *replicationDriver {
@@ -859,14 +861,20 @@ func (rd *replicationDriver) checkParticipatingNodes(ctx context.Context, ingest
 
 	destNodes := make(map[int]struct{})
 	for _, src := range rd.setup.src.nodes {
+		if rd.shutdownNode == src {
+			continue
+		}
 		srcTenantSQL := sqlutils.MakeSQLRunner(rd.c.Conn(ctx, rd.t.L(), src))
-
 		var dstNode int
 		rows := srcTenantSQL.Query(rd.t, `select distinct consumer_id from crdb_internal.cluster_replication_node_streams`)
+		var streams int
 		for rows.Next() {
 			require.NoError(rd.t, rows.Scan(&dstNode))
+			rd.t.L().Printf("stream on %d to %d", src, dstNode)
+			streams++
 			destNodes[dstNode] = struct{}{}
 		}
+		rd.t.L().Printf("%d streams on %d", streams, src)
 		require.NoError(rd.t, rows.Err())
 	}
 
@@ -1334,10 +1342,9 @@ type replShutdownDriver struct {
 	phase c2cPhase
 
 	// the fields below are gathered after the replication stream has started
-	srcJobID     jobspb.JobID
-	dstJobID     jobspb.JobID
-	shutdownNode int
-	watcherNode  int
+	srcJobID    jobspb.JobID
+	dstJobID    jobspb.JobID
+	watcherNode int
 }
 
 func makeReplShutdownDriver(
