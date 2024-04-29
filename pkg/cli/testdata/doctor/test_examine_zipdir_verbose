@@ -3,20 +3,24 @@ debug doctor zipdir --verbose
 debug doctor zipdir testdata/doctor/debugzip 21.11-52 --verbose
 reading testdata/doctor/debugzip/system.descriptor.txt
 reading testdata/doctor/debugzip/system.namespace.txt
-WARNING: errors occurred during the production of system.jobs.txt, contents may be missing or incomplete.
-reading testdata/doctor/debugzip/system.jobs.txt
-Examining 37 descriptors and 42 namespace entries...
+reading testdata/doctor/debugzip/crdb_internal.system_jobs.txt
+Examining 62 descriptors and 58 namespace entries...
   ParentID   0, ParentSchemaID  0: database "system" (1): processed
   ParentID   1, ParentSchemaID 29: relation "descriptor" (3): processed
+  ParentID   1, ParentSchemaID 29: relation "users" (4): expected matching namespace entry, found none
   ParentID   1, ParentSchemaID 29: relation "users" (4): processed
   ParentID   1, ParentSchemaID 29: relation "zones" (5): processed
   ParentID   1, ParentSchemaID 29: relation "settings" (6): processed
+  ParentID   1, ParentSchemaID 29: relation "descriptor_id_seq" (7): processed
   ParentID   1, ParentSchemaID 29: relation "tenants" (8): processed
+  ParentID   1, ParentSchemaID 29: relation "region_liveness" (9): processed
   ParentID   1, ParentSchemaID 29: relation "lease" (11): processed
   ParentID   1, ParentSchemaID 29: relation "eventlog" (12): processed
   ParentID   1, ParentSchemaID 29: relation "rangelog" (13): processed
+  ParentID   1, ParentSchemaID 29: relation "ui" (14): expected matching namespace entry, found none
   ParentID   1, ParentSchemaID 29: relation "ui" (14): processed
   ParentID   1, ParentSchemaID 29: relation "jobs" (15): processed
+  ParentID   1, ParentSchemaID 29: relation "web_sessions" (19): expected matching namespace entry, found none
   ParentID   1, ParentSchemaID 29: relation "web_sessions" (19): processed
   ParentID   1, ParentSchemaID 29: relation "table_statistics" (20): processed
   ParentID   1, ParentSchemaID 29: relation "locations" (21): processed
@@ -35,64 +39,150 @@ Examining 37 descriptors and 42 namespace entries...
   ParentID   1, ParentSchemaID 29: relation "statement_diagnostics" (36): processed
   ParentID   1, ParentSchemaID 29: relation "scheduled_jobs" (37): processed
   ParentID   1, ParentSchemaID 29: relation "sqlliveness" (39): processed
-  ParentID   0, ParentSchemaID  0: database "defaultdb" (50): processed
-  ParentID   0, ParentSchemaID  0: database "postgres" (51): processed
-  ParentID  52, ParentSchemaID 29: relation "users" (53): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "users" (53): processed
-  ParentID  52, ParentSchemaID 29: relation "vehicles" (54): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "vehicles" (54): processed
-  ParentID  52, ParentSchemaID 29: relation "rides" (55): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "rides" (55): processed
-  ParentID  52, ParentSchemaID 29: relation "vehicle_location_histories" (56): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "vehicle_location_histories" (56): processed
-  ParentID  52, ParentSchemaID 29: relation "promo_codes" (57): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "promo_codes" (57): processed
-  ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): processed
-  ParentID   0, ParentSchemaID  0: namespace entry "defaultdb" (50): processed
-  ParentID   0, ParentSchemaID  0: namespace entry "movr" (52): referenced schema ID 52: referenced descriptor not found
-  ParentID   0, ParentSchemaID  0: namespace entry "postgres" (51): processed
+  ParentID   1, ParentSchemaID 29: relation "migrations" (40): processed
+  ParentID   1, ParentSchemaID 29: relation "join_tokens" (41): processed
+  ParentID   1, ParentSchemaID 29: relation "statement_statistics" (42): processed
+  ParentID   1, ParentSchemaID 29: relation "transaction_statistics" (43): processed
+  ParentID   1, ParentSchemaID 29: relation "database_role_settings" (44): processed
+  ParentID   1, ParentSchemaID 29: relation "tenant_usage" (45): processed
+  ParentID   1, ParentSchemaID 29: relation "sql_instances" (46): processed
+  ParentID   1, ParentSchemaID 29: relation "span_configurations" (47): processed
+  ParentID   1, ParentSchemaID 29: relation "role_id_seq" (48): processed
+  ParentID   1, ParentSchemaID 29: relation "tenant_settings" (50): processed
+  ParentID   1, ParentSchemaID 29: relation "span_count" (51): processed
+  ParentID   1, ParentSchemaID 29: relation "privileges" (52): processed
+  ParentID   1, ParentSchemaID 29: relation "external_connections" (53): processed
+  ParentID   1, ParentSchemaID 29: relation "job_info" (54): processed
+  ParentID   1, ParentSchemaID 29: relation "span_stats_unique_keys" (55): processed
+  ParentID   1, ParentSchemaID 29: relation "span_stats_buckets" (56): processed
+  ParentID   1, ParentSchemaID 29: relation "span_stats_samples" (57): processed
+  ParentID   1, ParentSchemaID 29: relation "span_stats_tenant_boundaries" (58): processed
+  ParentID   1, ParentSchemaID 29: relation "task_payloads" (59): processed
+  ParentID   1, ParentSchemaID 29: relation "tenant_tasks" (60): processed
+  ParentID   1, ParentSchemaID 29: relation "statement_activity" (61): processed
+  ParentID   1, ParentSchemaID 29: relation "transaction_activity" (62): processed
+  ParentID   1, ParentSchemaID 29: relation "tenant_id_seq" (63): processed
+  ParentID   1, ParentSchemaID 29: relation "mvcc_statistics" (64): processed
+  ParentID   1, ParentSchemaID 29: relation "transaction_execution_insights" (65): processed
+  ParentID   1, ParentSchemaID 29: relation "statement_execution_insights" (66): processed
+  ParentID   0, ParentSchemaID  0: database "defaultdb" (100): processed
+  ParentID 100, ParentSchemaID  0: schema "public" (101): processed
+  ParentID   0, ParentSchemaID  0: database "postgres" (102): processed
+  ParentID 102, ParentSchemaID  0: schema "public" (103): expected matching namespace entry, found none
+  ParentID 102, ParentSchemaID  0: schema "public" (103): processed
+  ParentID 100, ParentSchemaID 101: relation "t" (104): expected matching namespace entry, found none
+  ParentID 100, ParentSchemaID 101: relation "t" (104): processed
+  ParentID   0, ParentSchemaID  0: namespace entry "defaultdb" (100): processed
+  ParentID   0, ParentSchemaID  0: namespace entry "postgres" (102): processed
   ParentID   0, ParentSchemaID  0: namespace entry "system" (1): processed
   ParentID   1, ParentSchemaID  0: namespace entry "public" (29): processed
   ParentID   1, ParentSchemaID 29: namespace entry "comments" (24): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "database_role_settings" (44): processed
   ParentID   1, ParentSchemaID 29: namespace entry "descriptor" (3): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "descriptor_id_seq" (7): processed
   ParentID   1, ParentSchemaID 29: namespace entry "eventlog" (12): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "external_connections" (53): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "job_info" (54): processed
   ParentID   1, ParentSchemaID 29: namespace entry "jobs" (15): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "join_tokens" (41): processed
   ParentID   1, ParentSchemaID 29: namespace entry "lease" (11): processed
   ParentID   1, ParentSchemaID 29: namespace entry "locations" (21): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "migrations" (40): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "mvcc_statistics" (64): processed
   ParentID   1, ParentSchemaID 29: namespace entry "namespace" (30): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "privileges" (52): processed
   ParentID   1, ParentSchemaID 29: namespace entry "protected_ts_meta" (31): processed
   ParentID   1, ParentSchemaID 29: namespace entry "protected_ts_records" (32): processed
   ParentID   1, ParentSchemaID 29: namespace entry "rangelog" (13): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "region_liveness" (9): processed
   ParentID   1, ParentSchemaID 29: namespace entry "replication_constraint_stats" (25): processed
   ParentID   1, ParentSchemaID 29: namespace entry "replication_critical_localities" (26): processed
   ParentID   1, ParentSchemaID 29: namespace entry "replication_stats" (27): processed
   ParentID   1, ParentSchemaID 29: namespace entry "reports_meta" (28): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "role_id_seq" (48): processed
   ParentID   1, ParentSchemaID 29: namespace entry "role_members" (23): processed
   ParentID   1, ParentSchemaID 29: namespace entry "role_options" (33): processed
   ParentID   1, ParentSchemaID 29: namespace entry "scheduled_jobs" (37): processed
   ParentID   1, ParentSchemaID 29: namespace entry "settings" (6): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "span_configurations" (47): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "span_count" (51): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "span_stats_buckets" (56): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "span_stats_samples" (57): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "span_stats_tenant_boundaries" (58): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "span_stats_unique_keys" (55): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "sql_instances" (46): processed
   ParentID   1, ParentSchemaID 29: namespace entry "sqlliveness" (39): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "statement_activity" (61): processed
   ParentID   1, ParentSchemaID 29: namespace entry "statement_bundle_chunks" (34): processed
   ParentID   1, ParentSchemaID 29: namespace entry "statement_diagnostics" (36): processed
   ParentID   1, ParentSchemaID 29: namespace entry "statement_diagnostics_requests" (35): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "statement_execution_insights" (66): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "statement_statistics" (42): processed
   ParentID   1, ParentSchemaID 29: namespace entry "table_statistics" (20): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "task_payloads" (59): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "tenant_id_seq" (63): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "tenant_settings" (50): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "tenant_tasks" (60): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "tenant_usage" (45): processed
   ParentID   1, ParentSchemaID 29: namespace entry "tenants" (8): processed
-  ParentID   1, ParentSchemaID 29: namespace entry "ui" (14): processed
-  ParentID   1, ParentSchemaID 29: namespace entry "users" (4): processed
-  ParentID   1, ParentSchemaID 29: namespace entry "web_sessions" (19): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "transaction_activity" (62): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "transaction_execution_insights" (65): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "transaction_statistics" (43): processed
   ParentID   1, ParentSchemaID 29: namespace entry "zones" (5): processed
-  ParentID  50, ParentSchemaID  0: namespace entry "public" (29): processed
-  ParentID  51, ParentSchemaID  0: namespace entry "public" (29): processed
-  ParentID  52, ParentSchemaID  0: namespace entry "public" (29): processed
-  ParentID  52, ParentSchemaID 29: namespace entry "promo_codes" (57): processed
-  ParentID  52, ParentSchemaID 29: namespace entry "rides" (55): processed
-  ParentID  52, ParentSchemaID 29: namespace entry "user_promo_codes" (58): processed
-  ParentID  52, ParentSchemaID 29: namespace entry "users" (53): processed
-  ParentID  52, ParentSchemaID 29: namespace entry "vehicle_location_histories" (56): processed
-  ParentID  52, ParentSchemaID 29: namespace entry "vehicles" (54): processed
-Examining 2 jobs...
-Processing job 587337426939772929
-Processing job 587337426984566785
-job 587337426984566785: running schema change GC refers to missing table descriptor(s) [59]; existing descriptors that still need to be dropped []; job safe to delete: true.
+  ParentID 100, ParentSchemaID  0: namespace entry "public" (101): processed
+Examining 54 jobs...
+Processing job 100
+Processing job 101
+Processing job 103
+Processing job 104
+Processing job 964747512107794433
+Processing job 964747512178409473
+Processing job 964747512718884865
+Processing job 964747710024286209
+Processing job 964747710507778049
+Processing job 964747710879694850
+Processing job 964747711558418433
+Processing job 964747712045187074
+Processing job 964747712450199553
+Processing job 964747712828178434
+Processing job 964747713334312962
+Processing job 964747713743781890
+Processing job 964747714176942082
+Processing job 964747714661318658
+Processing job 964747715167944706
+Processing job 964747716051959810
+Processing job 964747716497211394
+Processing job 964747716893278210
+Processing job 964747717594644482
+Processing job 964747718082560002
+Processing job 964747718457491458
+Processing job 964747718908346370
+Processing job 964747719412678658
+Processing job 964747719800094722
+Processing job 964747720252915714
+Processing job 964747720661532674
+Processing job 964747721087188994
+Processing job 964747721737043970
+Processing job 964747722180132866
+Processing job 964747722670243842
+Processing job 964747909510365185
+Processing job 964747910051397633
+Processing job 964747910503071745
+Processing job 964747910922731521
+Processing job 964747911466287105
+Processing job 964747912020656129
+Processing job 964747912544092161
+Processing job 964747912996388865
+Processing job 964747913445539841
+Processing job 964747913911074817
+Processing job 964747914406068225
+Processing job 964747915021942785
+Processing job 964747915585585153
+Processing job 964747916296486913
+Processing job 964747916821037057
+Processing job 964747917315833857
+Processing job 964747917852606465
+Processing job 964747918251098113
+Processing job 964747918667120641
+Processing job 964747919014232065
 ERROR: validation failed
