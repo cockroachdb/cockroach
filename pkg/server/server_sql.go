@@ -1107,6 +1107,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if externalConnKnobs := cfg.TestingKnobs.ExternalConnection; externalConnKnobs != nil {
 		execCfg.ExternalConnectionTestingKnobs = externalConnKnobs.(*externalconn.TestingKnobs)
 	}
+	var tableStatsTestingKnobs *stats.TableStatsTestingKnobs
+	if tableStatsKnobs := cfg.TestingKnobs.TableStatsKnobs; tableStatsKnobs != nil {
+		tableStatsTestingKnobs = tableStatsKnobs.(*stats.TableStatsTestingKnobs)
+	}
 
 	statsRefresher := stats.MakeRefresher(
 		cfg.AmbientCtx,
@@ -1114,6 +1118,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.circularInternalExecutor,
 		execCfg.TableStatsCache,
 		stats.DefaultAsOfTime,
+		tableStatsTestingKnobs,
 	)
 	execCfg.StatsRefresher = statsRefresher
 
