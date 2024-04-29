@@ -1123,6 +1123,9 @@ func TestScheduledJobsConsumption(t *testing.T) {
 					RetryMaxDelay:     &zeroDuration,
 				},
 			},
+			TableStatsKnobs: &stats.TableStatsTestingKnobs{
+				DisableInitialTableCollection: true,
+			},
 		},
 	})
 
@@ -1142,10 +1145,9 @@ func TestScheduledJobsConsumption(t *testing.T) {
 	after.Sub(&before)
 	require.Zero(t, after.WriteBatches)
 	require.Zero(t, after.WriteBytes)
-	// Expect up to 3 batches for initial auto-stats query, schema catalog fill,
-	// and anything else that happens once during server startup but might not be
-	// done by this point.
-	require.LessOrEqual(t, after.ReadBatches, uint64(3))
+	// Expect up to 2 batches for schema catalog fill and anything else that
+	// happens once during server startup but might not be done by this point.
+	require.LessOrEqual(t, after.ReadBatches, uint64(2))
 
 	// Make sure that at least 100 writes (deletes) are reported. The TTL job
 	// should not be exempt from cost control.
