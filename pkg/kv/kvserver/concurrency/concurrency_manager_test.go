@@ -95,7 +95,7 @@ import (
 // debug-set-discovered-locks-threshold-to-consult-txn-status-cache n=<count>
 // debug-set-batch-pushed-lock-resolution-enabled ok=<enabled>
 // debug-set-max-locks n=<count>
-// reset
+// reset [namespace|force]
 func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -634,7 +634,13 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 			case "reset":
 				if n := mon.numMonitored(); n > 0 {
-					d.Fatalf(t, "%d requests still in flight", n)
+					if d.HasArg("force") {
+						for gs := range mon.gs {
+							gs.ctxCancel()
+						}
+					} else {
+						d.Fatalf(t, "%d requests still in flight", n)
+					}
 				}
 				mon.resetSeqNums()
 				if err := c.reset(); err != nil {
@@ -1113,6 +1119,7 @@ type monitoredGoroutine struct {
 	finished int32
 
 	ctx        context.Context
+	ctxCancel  func()
 	collect    func() tracingpb.Recording
 	cancel     func()
 	prevEvents int
@@ -1128,11 +1135,13 @@ func newMonitor() *monitor {
 }
 
 func (m *monitor) runSync(opName string, fn func(context.Context)) {
-	ctx, sp := m.tr.StartSpanCtx(context.Background(), opName, tracing.WithRecording(tracingpb.RecordingVerbose))
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	ctx, sp := m.tr.StartSpanCtx(ctx, opName, tracing.WithRecording(tracingpb.RecordingVerbose))
 	g := &monitoredGoroutine{
-		opSeq:  0, // synchronous
-		opName: opName,
-		ctx:    ctx,
+		opSeq:     0, // synchronous
+		opName:    opName,
+		ctx:       ctx,
+		ctxCancel: ctxCancel,
 		collect: func() tracingpb.Recording {
 			return sp.GetConfiguredRecording()
 		},
@@ -1145,11 +1154,13 @@ func (m *monitor) runSync(opName string, fn func(context.Context)) {
 
 func (m *monitor) runAsync(opName string, fn func(context.Context)) (cancel func()) {
 	m.seq++
-	ctx, sp := m.tr.StartSpanCtx(context.Background(), opName, tracing.WithRecording(tracingpb.RecordingVerbose))
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	ctx, sp := m.tr.StartSpanCtx(ctx, opName, tracing.WithRecording(tracingpb.RecordingVerbose))
 	g := &monitoredGoroutine{
-		opSeq:  m.seq,
-		opName: opName,
-		ctx:    ctx,
+		opSeq:     m.seq,
+		opName:    opName,
+		ctx:       ctx,
+		ctxCancel: ctxCancel,
 		collect: func() tracingpb.Recording {
 			return sp.GetConfiguredRecording()
 		},
