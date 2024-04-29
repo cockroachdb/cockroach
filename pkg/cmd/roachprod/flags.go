@@ -136,6 +136,9 @@ func initFlags() {
 			"quotes, gce label name only allows hyphens (-), underscores (_), lowercase characters, numbers and "+
 			"international characters. Examples: usage=cloud-report-2021, namewithspaceinvalue='s o s'")
 
+	createCmd.Flags().BoolVar(&startOpts.EnableFluentSink,
+		"enable-fluent-sink", startOpts.EnableFluentSink, "whether to enable the fluent sink in the logging configuration")
+
 	// Allow each Provider to inject additional configuration flags
 	for _, providerName := range vm.AllProviderNames() {
 		if vm.Providers[providerName].Active() {
@@ -361,6 +364,8 @@ func initFlags() {
 			"limit the number of files that can be created by the cockroach process")
 		cmd.Flags().IntVar(&startOpts.SQLPort,
 			"sql-port", startOpts.SQLPort, "port on which to listen for SQL clients")
+		cmd.Flags().BoolVar(&startOpts.EnableFluentSink,
+			"enable-fluent-sink", startOpts.EnableFluentSink, "whether to enable the fluent sink in the logging configuration")
 	}
 
 	for _, cmd := range []*cobra.Command{

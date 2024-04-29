@@ -99,10 +99,10 @@ case $1 in
 ---
 api_key: ${dd_api_key}
 site: ${dd_site}
+hostname: \$(hostname --fqdn)
 tags:
 # Datadog reserved tags.
 - env:development
-- service:drt-cockroachdb
 
 # Custom tags.
 - cluster:${cluster%:*}
@@ -112,12 +112,78 @@ EOF"
     roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/conf.d/cockroachdb.d/conf.yaml > /dev/null << EOF
 ---
 init_config:
+
 instances:
 - openmetrics_endpoint: http://localhost:26258/_status/vars
   tls_verify: false
+  service: drt-cockroachdb
 EOF"
 
     roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
+
+    # Single quotes around the shell expansion cause it to be processed on the
+    # remote host instead of the local host.
+    roachprod ssh ${cluster} -- bash -c '"$(curl -L https://raw.githubusercontent.com/fluent/fluent-bit/master/install.sh)"'
+
+    roachprod ssh ${cluster} -- "sudo tee /etc/fluent-bit/fluent-bit.yaml > /dev/null << EOF
+---
+service:
+  flush: 1
+  daemon: off
+  http_server: on
+  http_listen: 127.0.0.1
+  http_port: 2020
+  log_level: info
+  storage.path: /tmp
+  storage.metrics: on
+  storage.max_chunks_up: 30
+  storage.sync: full
+  storage.checksum: on
+  storage.delete_irrecoverable_chunks: on
+  parsers_file: parsers.conf
+  plugins_file: plugins.conf
+pipeline:
+  inputs:
+  - name: tcp
+    tag: cockroachdb
+    listen: 127.0.0.1
+    port: 5170
+    format: json
+    storage.type: filesystem
+    alias: cockroachdb
+  outputs:
+  - name: datadog
+    match: cockroachdb
+    host: http-intake.logs.${dd_site}
+    tls: on
+    compress: gzip
+    apikey: ${dd_api_key}
+    dd_source: cockroachdb
+    dd_service: drt-cockroachdb
+    dd_tags: env:development,host:\$(hostname -f),cluster:${cluster%:*},team:drt
+    alias: cockroachdb
+    storage.total_limit_size: 25MB
+EOF"
+
+    roachprod ssh ${cluster} -- "sudo tee /etc/systemd/system/fluent-bit.service > /dev/null << EOF
+[Unit]
+Description=Fluent Bit
+Documentation=https://docs.fluentbit.io/manual/
+Requires=network.target
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/sysconfig/fluent-bit
+EnvironmentFile=-/etc/default/fluent-bit
+ExecStart=/opt/fluent-bit/bin/fluent-bit -c //etc/fluent-bit/fluent-bit.yaml
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+
+    roachprod ssh ${cluster} -- 'sudo systemctl daemon-reload && sudo systemctl enable fluent-bit && sudo systemctl restart fluent-bit'
 
     exit 0
     ;;
@@ -136,6 +202,7 @@ EOF"
           --gce-machine-type n2-standard-16 \
           --gce-pd-volume-size 10000 --local-ssd=false \
           --username drt \
+          --enable-fluent-sink \
           --lifetime 8760h
         # setup dns
         $0 dns drt-main create
@@ -149,6 +216,7 @@ EOF"
           --gce-machine-type n2-standard-8 \
           --gce-pd-volume-size 3000 --local-ssd=false \
           --username drt \
+          --enable-fluent-sink \
           --lifetime 8760h
         # setup dns
         $0 dns drt-chaos create
@@ -162,6 +230,7 @@ EOF"
           --local-ssd="true"  \
           --gce-local-ssd-count="16" \
           --username="drt" \
+          --enable-fluent-sink \
           --lifetime="8760h" \
           --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
@@ -177,6 +246,7 @@ EOF"
           --local-ssd="true"  \
           --gce-local-ssd-count="16" \
           --username="drt" \
+          --enable-fluent-sink \
           --lifetime="8760h" \
           --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
@@ -191,6 +261,7 @@ EOF"
           --gce-machine-type="n2-standard-8" \
           --os-volume-size 100 \
           --username workload \
+          --enable-fluent-sink \
           --lifetime 8760h \
           --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns

@@ -40,6 +40,9 @@ import (
 //go:embed scripts/start.sh
 var startScript string
 
+//go:embed files/cockroachdb-logging.yaml
+var loggingConfig string
+
 // sharedProcessVirtualClusterNode is a constant node that is used
 // whenever we register a service descriptor for a shared-process
 // virtual cluster. Since these virtual clusters use the system
@@ -145,6 +148,10 @@ type StartOpts struct {
 	// IsRestart allows skipping steps that are used during initial start like
 	// initialization and sequential node starts.
 	IsRestart bool
+
+	// EnableFluentSink determines whether the CockroachDB logging configuration
+	// will contain a Fluent sink.
+	EnableFluentSink bool
 }
 
 func (s *StartOpts) IsVirtualCluster() bool {
@@ -776,6 +783,11 @@ type startTemplateData struct {
 	EnvVars             []string
 }
 
+type loggingTemplateData struct {
+	LogDir           string
+	EnableFluentSink bool
+}
+
 // VirtualClusterLabel is the value used to "label" virtual cluster
 // (cockroach) processes running locally or in a VM. This is used by
 // roachprod to monitor identify such processes and monitor them.
@@ -842,6 +854,20 @@ func execStartTemplate(data startTemplateData) (string, error) {
 	return buf.String(), nil
 }
 
+func execLoggingTemplate(data loggingTemplateData) (string, error) {
+	tpl, err := template.New("loggingConfig").
+		Delims("#{", "#}").
+		Parse(loggingConfig)
+	if err != nil {
+		return "", err
+	}
+	var buf strings.Builder
+	if err := tpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
 // generateStartArgs generates cockroach binary arguments for starting a node.
 // The first argument is the command (e.g. "start").
 func (c *SyncedCluster) generateStartArgs(
@@ -882,8 +908,19 @@ func (c *SyncedCluster) generateStartArgs(
 
 	// if neither --log nor --log-config-file are present
 	if idx1 == -1 && idx2 == -1 {
-		// Specify exit-on-error=false to work around #62763.
-		args = append(args, "--log", `file-defaults: {dir: '`+logDir+`', exit-on-error: false}`)
+		loggingConfigFile, err := execLoggingTemplate(loggingTemplateData{
+			LogDir:           logDir,
+			EnableFluentSink: startOpts.EnableFluentSink,
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed rendering logging template")
+		}
+
+		if err := c.PutString(ctx, l, c.Nodes, loggingConfigFile, "cockroachdb-logging.yaml", 0644); err != nil {
+			return nil, errors.Wrap(err, "failed writing remote logging configuration: %w")
+		}
+
+		args = append(args, "--log-config-file", "cockroachdb-logging.yaml")
 	}
 
 	listenHost := ""
