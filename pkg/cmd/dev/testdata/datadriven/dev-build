@@ -71,4 +71,4 @@ dev build tests
 bazel build //pkg:all_tests --config=test --build_event_binary_file=/tmp/path
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
-bazel info bazel-bin --color=no
+bazel info bazel-bin --color=no --config=test
