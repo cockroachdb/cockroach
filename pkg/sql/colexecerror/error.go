@@ -36,6 +36,21 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 			return
 		}
 
+		// First check for error types that should only come from the vectorized
+		// engine.
+		if err, ok := panicObj.(error); ok {
+			// StorageError was caused by something below SQL, and represents an error
+			// that we'd simply like to propagate along.
+			var se *StorageError
+			// notInternalError is an error that will be returned to the client
+			// without a stacktrace, sentry report, or "internal error" designation.
+			var nie *notInternalError
+			if errors.As(err, &se) || errors.As(err, &nie) {
+				retErr = err
+				return
+			}
+		}
+
 		// Find where the panic came from and only proceed if it is related to the
 		// vectorized engine.
 		stackTrace := string(debug.Stack())
@@ -66,20 +81,11 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 		}
 		retErr = err
 
-		if _, ok := panicObj.(*StorageError); ok {
-			// A StorageError was caused by something below SQL, and represents
-			// an error that we'd simply like to propagate along.
-			// Do nothing.
-			return
-		}
-
 		annotateErrorWithoutCode := true
-		var nie *notInternalError
-		if errors.Is(err, context.Canceled) || errors.As(err, &nie) {
-			// We don't want to annotate the context cancellation and
-			// notInternalError errors in case they don't have a valid PG code
-			// so that the sentry report is not sent (errors with failed
-			// assertions get sentry reports).
+		if errors.Is(err, context.Canceled) {
+			// We don't want to annotate the context cancellation errors in case they
+			// don't have a valid PG code so that the sentry report is not sent
+			// (errors with failed assertions get sentry reports).
 			annotateErrorWithoutCode = false
 		}
 		if code := pgerror.GetPGCode(err); annotateErrorWithoutCode && code == pgcode.Uncategorized {
