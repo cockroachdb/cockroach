@@ -31,7 +31,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 	// This test requires us to come back and change the stmts in executeSupportedDDLs to be those
 	// supported in the "previous" major release.
 	r.Add(registry.TestSpec{
-		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V232-V241",
+		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V241-V242",
 		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.AllExceptAWS,
@@ -97,8 +97,8 @@ func executeSupportedDDLs(
 		return err
 	}
 
-	// DDLs supported in V23_2.
-	v232DDLs := []string{
+	// DDLs supported in V24_1.
+	v241DDLs := []string{
 		`COMMENT ON DATABASE testdb IS 'this is a database comment'`,
 		`COMMENT ON SCHEMA testdb.testsc IS 'this is a schema comment'`,
 		`COMMENT ON TABLE testdb.testsc.t IS 'this is a table comment'`,
@@ -123,6 +123,16 @@ func executeSupportedDDLs(
 		`ALTER TABLE testdb.testsc.t3 VALIDATE CONSTRAINT check_positive_not_valid`,
 	}
 
+	// DDLs supported in V24_2.
+	v242DDLs := []string{
+		`ALTER TABLE testdb.testsc.t ADD COLUMN k int, ADD COLUMN l int, DROP COLUMN l`,
+		`ALTER TABLE testdb.testsc.t ALTER COLUMN k SET DEFAULT 42`,
+		`ALTER TABLE testdb.testsc.t ALTER COLUMN k DROP DEFAULT`,
+		`CREATE DATABASE testdb2`,
+		`CREATE SCHEMA testdb2.testsc`,
+		`CREATE SEQUENCE testdb2.testsc.s`,
+	}
+
 	// Used to clean up our CREATE-d elements after we are done with them.
 	cleanup := []string{
 		`DROP INDEX testdb.testsc.t@idx`,
@@ -136,9 +146,12 @@ func executeSupportedDDLs(
 		`DROP DATABASE testdb CASCADE`,
 		`DROP OWNED BY foo`,
 		`DROP FUNCTION fn`,
+		`DROP SCHEMA testdb2.testsc`,
+		`DROP DATABASE testdb2 CASCADE`,
+		`DROP SEQUENCE testdb2.testsc.s`,
 	}
 
-	ddls := append(v232DDLs, cleanup...)
+	ddls := append(v241DDLs, append(v242DDLs, cleanup...)...)
 
 	for _, ddl := range ddls {
 		if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
@@ -152,7 +165,7 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	mvt := mixedversion.NewTest(
-		ctx, t, t.L(), c, c.All(), mixedversion.NumUpgrades(1),
+		ctx, t, t.L(), c, c.All(), mixedversion.NumUpgrades(1), mixedversion.MinimumSupportedVersion("v24.1.0"),
 	)
 
 	// Set up the testing state (e.g. create a few databases and tables) and always use declarative schema
