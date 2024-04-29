@@ -1395,7 +1395,8 @@ func (t *typeChangeResumer) OnFailOrCancel(
 		return nil
 	}(); rollbackErr != nil {
 		switch {
-		case errors.Is(rollbackErr, catalog.ErrDescriptorNotFound):
+		case errors.Is(rollbackErr, catalog.ErrDescriptorNotFound) ||
+			pgerror.GetPGCode(rollbackErr) == pgcode.UndefinedObject:
 			// If the descriptor for the ID can't be found, we assume that another
 			// job executed already and dropped the type.
 			log.Infof(
