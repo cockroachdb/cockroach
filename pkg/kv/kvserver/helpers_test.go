@@ -403,7 +403,7 @@ func (r *Replica) QuotaReleaseQueueLen() int {
 	return len(r.mu.quotaReleaseQueue)
 }
 
-func (r *Replica) NumPendingProposals() int {
+func (r *Replica) NumPendingProposals() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.numPendingProposalsRLocked()
