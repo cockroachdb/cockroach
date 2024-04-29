@@ -5642,6 +5642,31 @@ SELECT
 		},
 	),
 
+	"crdb_internal.force_vectorized_assertion_error": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "msg", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				msg := string(s)
+				err := errors.AssertionFailedf("%s", msg)
+				// Panic instead of returning the error. The vectorized panic-catcher
+				// will catch the panic and convert it into an internal error.
+				colexecerror.InternalError(err)
+				// This code is unreachable.
+				panic(err)
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.void_func": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,
