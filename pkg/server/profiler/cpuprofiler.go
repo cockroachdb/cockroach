@@ -41,7 +41,7 @@ var cpuUsageCombined = settings.RegisterIntSetting(
 		"of 0 is set, a profile will be taken every time the cpu profile"+
 		"interval has passed or the provided usage is increasing",
 	65,
-	settings.PositiveInt,
+	settings.NonNegativeInt,
 )
 
 var cpuProfileInterval = settings.RegisterDurationSetting(

@@ -1298,10 +1298,13 @@ type AggregatedBatchCommitStats struct {
 }
 
 // MetricsForInterval is a set of pebble.Metrics that need to be saved in order to
-// compute metrics according to an interval.
+// compute metrics according to an interval. The metrics recorded here are
+// cumulative values, that are used to subtract from, when the next cumulative
+// values are received.
 type MetricsForInterval struct {
-	WALFsyncLatency      prometheusgo.Metric
-	FlushWriteThroughput pebble.ThroughputMetric
+	WALFsyncLatency                prometheusgo.Metric
+	FlushWriteThroughput           pebble.ThroughputMetric
+	WALFailoverWriteAndSyncLatency prometheusgo.Metric
 }
 
 // NumSSTables returns the total number of SSTables in the LSM, aggregated
