@@ -1670,6 +1670,31 @@ var _ = func() struct{} {
 	return struct{}{}
 }()
 
+var fluentBitStartCmd = &cobra.Command{
+	Use:   `fluent-bit-start <cluster>`,
+	Short: `Install and start Fluent Bit`,
+	Long: `Install and start Fluent Bit
+
+Currently available options are:
+  datadog-site    - Datadog site (e.g., us5.datadoghq.com)
+  datadog-api-key - Datadog API key
+`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.StartFluentBit(context.Background(), config.Logger, args[0], datadogSite, datadogAPIKey)
+	}),
+}
+
+var fluentBitStopCmd = &cobra.Command{
+	Use:   `fluent-bit-stop <cluster>`,
+	Short: `Stop Fluent Bit`,
+	Long:  `Stop Fluent Bit`,
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.StopFluentBit(context.Background(), config.Logger, args[0])
+	}),
+}
+
 func main() {
 	_ = roachprod.InitProviders()
 	providerOptsContainer = vm.CreateProviderOptionsContainer()
@@ -1728,6 +1753,8 @@ func main() {
 		jaegerStartCmd,
 		jaegerStopCmd,
 		jaegerURLCmd,
+		fluentBitStartCmd,
+		fluentBitStopCmd,
 	)
 	setBashCompletionFunction()
 

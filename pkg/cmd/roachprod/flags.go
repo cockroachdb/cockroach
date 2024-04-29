@@ -96,6 +96,10 @@ var (
 	}
 
 	sshKeyUser string
+
+	// For Datadog observability.
+	datadogSite   string
+	datadogAPIKey string
 )
 
 func initFlags() {
@@ -282,6 +286,12 @@ func initFlags() {
 
 	grafanaDumpCmd.Flags().StringVar(&grafanaDumpDir, "dump-dir", "",
 		"the absolute path to dump prometheus data to (use the contained 'prometheus-docker-run.sh' to visualize")
+
+	fluentBitStartCmd.Flags().StringVar(&datadogSite, "datadog-site", "us5.datadoghq.com",
+		"Datadog site to send telemetry data to")
+
+	fluentBitStartCmd.Flags().StringVar(&datadogAPIKey, "datadog-api-key", "",
+		"Datadog API key")
 
 	sshKeysAddCmd.Flags().StringVar(&sshKeyUser, "user", config.OSUser.Username,
 		"the user to be associated with the new key",

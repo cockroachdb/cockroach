@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -2208,6 +2209,51 @@ func JaegerURL(
 		return "", err
 	}
 	return urls[0], nil
+}
+
+func StartFluentBit(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	datadogSite string,
+	datadogAPIKey string,
+) error {
+	if datadogAPIKey == "" {
+		return errors.New("Datadog API cannot be empty")
+	}
+
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	config := fluentbit.Config{
+		DatadogSite:   datadogSite,
+		DatadogAPIKey: datadogAPIKey,
+	}
+
+	return fluentbit.Install(ctx, l, c, config)
+}
+
+func StopFluentBit(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return fluentbit.Stop(ctx, l, c)
 }
 
 // DestroyDNS destroys the DNS records for the given cluster.
