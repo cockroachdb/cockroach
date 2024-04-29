@@ -1240,8 +1240,8 @@ func registerClusterToCluster(r registry.Registry) {
 		},
 		{
 			name:               "c2c/BulkOps/singleImport",
-			srcNodes:           4,
-			dstNodes:           4,
+			srcNodes:           1,
+			dstNodes:           1,
 			cpus:               8,
 			pdSize:             100,
 			workload:           replicateBulkOps{short: true, debugSkipRollback: true},
