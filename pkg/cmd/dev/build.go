@@ -173,7 +173,6 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	}
 	args = append(args, additionalBazelArgs...)
 	configArgs := getConfigArgs(args)
-	configArgs = append(configArgs, getConfigArgs(additionalBazelArgs)...)
 
 	if err := d.assertNoLinkedNpmDeps(buildTargets); err != nil {
 		return err
@@ -295,7 +294,7 @@ func (d *dev) stageArtifacts(
 			}
 			var geosDir string
 			if archived != "" {
-				execRoot, err := d.getExecutionRoot(ctx)
+				execRoot, err := d.getExecutionRoot(ctx, configArgs)
 				if err != nil {
 					return err
 				}
