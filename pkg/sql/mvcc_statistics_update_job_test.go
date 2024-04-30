@@ -49,7 +49,7 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "test is too slow to run under race")
+	skip.UnderDuress(t, "too slow")
 
 	ctx := context.Background()
 	jobID := jobs.MVCCStatisticsJobID
