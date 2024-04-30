@@ -163,7 +163,7 @@ func getCombinedStatementStatsURL(
 ) string {
 	searchParams := fmt.Sprintf("?fetch_mode.stats_type=%d&start=%d&end=%d&limit=10",
 		statsType, requestedRange[0].Unix(), requestedRange[1].Unix())
-	return `http://` + adminUIAddr + `/_status/combinedstmts` + searchParams
+	return `https://` + adminUIAddr + `/_status/combinedstmts` + searchParams
 }
 
 // timeRange is a pair of time.Time values.
@@ -203,7 +203,9 @@ func (s *sqlStatsRequestHelper) requestSQLStats(
 	for _, addr := range adminUIAddrs {
 		url := getCombinedStatementStatsURL(addr, statsType, requestedRange)
 		statsResponse := &serverpb.StatementsResponse{}
-		if err := s.client.GetJSON(ctx, url, statsResponse, httputil.IgnoreUnknownFields()); err != nil {
+		if err := retry.ForDuration(10*time.Second, func() error {
+			return s.client.GetJSON(ctx, url, statsResponse, httputil.IgnoreUnknownFields())
+		}); err != nil {
 			s.logger.Printf("error requesting stats from url: %s", url)
 			return err
 		}
