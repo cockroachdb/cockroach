@@ -175,6 +175,15 @@ SELECT i, random() FROM ROWS FROM (generate_series(1, 5)) AS i ORDER by i
 4  0.43716650508717286
 5  0.16686635296305902
 
+# Subqueries need to use the same RNG.
+statement ok
+SELECT setseed(0.1)
+
+query RR
+WITH cte(col) AS (SELECT random()) SELECT col, random() FROM cte
+----
+0.8090535001228529  0.33363615433097443
+
 # Concatenating 'empty' because the empty string doesn't work in these tests.
 query T
 SELECT concat() || 'empty'
