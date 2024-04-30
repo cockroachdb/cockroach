@@ -64,14 +64,18 @@ export function formatMetricData(
   _.each(metrics, (s, idx) => {
     const result = data.results[idx];
     if (result && canShowMetric(result)) {
-      const scaledValues = result.datapoints.map(v => ({
-        ...v,
-        // if defined scale it, otherwise remain undefined
-        value: v.value && v.value * (s.props.scale ?? 1),
-      }));
+      const transform = s.props.transform ?? (d => d);
+      const scale = s.props.scale ?? 1;
+      const scaledAndTransformedValues = transform(result.datapoints).map(
+        v => ({
+          ...v,
+          // if defined scale/transform it, otherwise remain undefined
+          value: v.value && scale * v.value,
+        }),
+      );
 
       formattedData.push({
-        values: scaledValues,
+        values: scaledAndTransformedValues,
         key: s.props.title || s.props.name,
         area: true,
         fillOpacity: 0.1,
