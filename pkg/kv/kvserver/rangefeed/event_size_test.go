@@ -134,7 +134,7 @@ func TestEventSizeCalculation(t *testing.T) {
 			expectedCurrMemUsage: int64(241),
 			actualCurrMemUsage: eventOverhead + mvccLogicalOp + mvccWriteValueOp +
 				int64(cap(key)) + int64(cap(value)) + int64(cap(prevValue)),
-			expectedFutureMemUsage: int64(201),
+			expectedFutureMemUsage: int64(209),
 			actualFutureMemUsage: futureEventBaseOverhead + rangefeedValueOverhead +
 				int64(cap(key)) + int64(cap(value)) + int64(cap(prevValue)),
 		},
@@ -146,7 +146,7 @@ func TestEventSizeCalculation(t *testing.T) {
 			expectedCurrMemUsage: int64(202),
 			actualCurrMemUsage: eventOverhead + mvccLogicalOp + mvccDeleteRangeOp +
 				int64(cap(startKey)) + int64(cap(endKey)),
-			expectedFutureMemUsage: int64(194),
+			expectedFutureMemUsage: int64(202),
 			actualFutureMemUsage: futureEventBaseOverhead + rangefeedValueOverhead +
 				int64(cap(startKey)) + int64(cap(endKey)),
 		},
@@ -179,7 +179,7 @@ func TestEventSizeCalculation(t *testing.T) {
 			expectedCurrMemUsage: int64(273),
 			actualCurrMemUsage: eventOverhead + mvccLogicalOp + mvccCommitIntentOp +
 				int64(cap(txnID)) + int64(cap(key)) + int64(cap(value)) + int64(cap(prevValue)),
-			expectedFutureMemUsage: int64(201),
+			expectedFutureMemUsage: int64(209),
 			actualFutureMemUsage: futureEventBaseOverhead + rangefeedValueOverhead +
 				int64(cap(key)) + int64(cap(value)) + int64(cap(prevValue)),
 		},
@@ -208,7 +208,7 @@ func TestEventSizeCalculation(t *testing.T) {
 			ev:                     event{ct: ctEvent{Timestamp: data.timestamp}},
 			expectedCurrMemUsage:   int64(80),
 			actualCurrMemUsage:     eventOverhead,
-			expectedFutureMemUsage: int64(152),
+			expectedFutureMemUsage: int64(160),
 			actualFutureMemUsage:   futureEventBaseOverhead + rangefeedCheckpointOverhead,
 		},
 		{
@@ -216,7 +216,7 @@ func TestEventSizeCalculation(t *testing.T) {
 			ev:                     event{initRTS: true},
 			expectedCurrMemUsage:   int64(80),
 			actualCurrMemUsage:     eventOverhead,
-			expectedFutureMemUsage: int64(152),
+			expectedFutureMemUsage: int64(160),
 			actualFutureMemUsage:   futureEventBaseOverhead + rangefeedCheckpointOverhead,
 		},
 		{
@@ -225,7 +225,7 @@ func TestEventSizeCalculation(t *testing.T) {
 			expectedCurrMemUsage: int64(1962),
 			actualCurrMemUsage: eventOverhead + sstEventOverhead +
 				int64(cap(sst)+cap(span.Key)+cap(span.EndKey)),
-			expectedFutureMemUsage: int64(1970),
+			expectedFutureMemUsage: int64(1978),
 			actualFutureMemUsage: futureEventBaseOverhead + rangefeedSSTTableOverhead +
 				int64(cap(sst)+cap(span.Key)+cap(span.EndKey)),
 		},
