@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
@@ -60,14 +61,14 @@ func registerFixtures(r registry.Registry) {
 		}
 		makeVersionFixtureAndFatal(ctx, t, c, fixtureVersion)
 	}
-	spec := registry.TestSpec{
+
+	r.Add(registry.TestSpec{
 		Name:             "generate-fixtures",
 		Timeout:          30 * time.Minute,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Fixtures),
 		Owner:            registry.OwnerDevInf,
 		Cluster:          r.MakeClusterSpec(4),
 		Run:              runFixtures,
-	}
-	r.Add(spec)
+	})
 }

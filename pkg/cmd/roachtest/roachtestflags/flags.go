@@ -362,6 +362,15 @@ var (
 		Name:  "global-seed",
 		Usage: `The global random seed used for all tests.`,
 	})
+
+	ClearClusterCache bool = true
+	_                      = registerRunFlag(&ClearClusterCache, FlagInfo{
+		Name: "clear-cluster-cache",
+		Usage: `
+						Clear the local cluster cache of missing clusters when syncing resources with
+						providers. Set this to false when running many concurrent Azure tests. Azure
+						can return stale VM information when many PUT calls are made in succession.`,
+	})
 )
 
 // The flags below override the final cluster configuration. They have no

@@ -161,11 +161,13 @@ func registerRustPostgres(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             "rust-postgres",
-		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(1, spec.CPU(16)),
-		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    "rust-postgres",
+		Owner:   registry.OwnerSQLFoundations,
+		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
+		Leases:  registry.MetamorphicLeases,
+		// This test requires custom ports but service registration is
+		// currently only supported on GCE.
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRustPostgres(ctx, t, c)
