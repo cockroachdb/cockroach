@@ -64,8 +64,7 @@ func (j *billingJob) Resume(ctx context.Context, execCtx any) error {
 	metricsRegistry := exec.ExecCfg().MetricsRecorder.AppRegistry()
 	metricsRegistry.AddMetric(changefeedBillingBytes)
 
-	// TODO: new pb job type
-	runMetrics := exec.ExecCfg().JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypePollJobsStats].(billingJobMetrics)
+	runMetrics := exec.ExecCfg().JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeChangefeedBilling].(billingJobMetrics)
 
 	var t timeutil.Timer
 	defer t.Stop()
@@ -287,7 +286,6 @@ func init() {
 		return &billingJob{job: job}
 	}
 
-	// TODO: new pb job type
-	jobs.RegisterConstructor(jobspb.TypePollJobsStats, createResumerFn,
+	jobs.RegisterConstructor(jobspb.TypeChangefeedBilling, createResumerFn,
 		jobs.DisablesTenantCostControl, jobs.WithJobMetrics(newBillingJobMetrics()))
 }

@@ -75,6 +75,7 @@ var (
 	_ ProgressDetails = MVCCStatisticsJobProgress{}
 	_ ProgressDetails = ImportRollbackProgress{}
 	_ ProgressDetails = HistoryRetentionProgress{}
+	_ ProgressDetails = ChangefeedBillingProgress{}
 )
 
 // Type returns the payload's job type and panics if the type is invalid.
@@ -221,6 +222,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypeImportRollback, nil
 	case *Payload_HistoryRetentionDetails:
 		return TypeHistoryRetention, nil
+	case *Payload_ChangefeedBillingDetails:
+		return TypeChangefeedBilling, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -268,6 +271,7 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeMVCCStatisticsUpdate:         MVCCStatisticsJobDetails{},
 	TypeImportRollback:               ImportRollbackDetails{},
 	TypeHistoryRetention:             HistoryRetentionDetails{},
+	TypeChangefeedBilling:            ChangefeedBillingDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -329,6 +333,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_ImportRollbackProgress{ImportRollbackProgress: &d}
 	case HistoryRetentionProgress:
 		return &Progress_HistoryRetentionProgress{HistoryRetentionProgress: &d}
+	case ChangefeedBillingProgress:
+		return &Progress_ChangefeedBillingProgress{ChangefeedBillingProgress: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
@@ -388,6 +394,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.ImportRollbackDetails
 	case *Payload_HistoryRetentionDetails:
 		return *d.HistoryRetentionDetails
+	case *Payload_ChangefeedBillingDetails:
+		return *d.ChangefeedBillingDetails
 	default:
 		return nil
 	}
@@ -447,6 +455,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.ImportRollbackProgress
 	case *Progress_HistoryRetentionProgress:
 		return *d.HistoryRetentionProgress
+	case *Progress_ChangefeedBillingProgress:
+		return *d.ChangefeedBillingProgress
 	default:
 		return nil
 	}
@@ -530,6 +540,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_ImportRollbackDetails{ImportRollbackDetails: &d}
 	case HistoryRetentionDetails:
 		return &Payload_HistoryRetentionDetails{HistoryRetentionDetails: &d}
+	case ChangefeedBillingDetails:
+		return &Payload_ChangefeedBillingDetails{ChangefeedBillingDetails: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -565,7 +577,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 27
+const NumJobTypes = 28
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this
