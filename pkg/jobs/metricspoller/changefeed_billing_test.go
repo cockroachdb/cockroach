@@ -64,3 +64,5 @@ func TestFetchChangefeedBillingBytes(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotZero(t, res)
 }
+
+// TODO: add test for experimental / non enterpise feeds, if they're implemented as jobs
