@@ -2075,10 +2075,6 @@ select
  └── filters
       └── f:6 = 0.0 [type=bool, outer=(6), constraints=(/6: [/0.0 - /0.0]; tight), fd=()-->(6)]
 
-# Without stats with histograms, zig-zag join may not be chosen.
-# This is OK because it can be expensive when many rows are qualified.
-# This case shows less than 1 qualified row in the constrained scan of
-# multi_col@bef_idx, so it should beat zig-zag join.
 opt
 SELECT * FROM multi_col
 WHERE a = '37685f26-4b07-40ba-9bbf-42916ed9bc61'
