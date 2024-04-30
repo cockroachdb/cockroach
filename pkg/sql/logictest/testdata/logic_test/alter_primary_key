@@ -1975,3 +1975,18 @@ idx j ASC
 t_114436_pkey j ASC
 
 subtest end
+
+subtest column_not_indexable
+
+statement ok
+CREATE TABLE tab_122871 (
+  col0_4         TSVECTOR NOT NULL,
+  col0_6         OID,
+  col0_18        REGTYPE,
+  PRIMARY KEY (col0_18 DESC)
+);
+
+statement error column col0_4 is of type tsvector and thus is not indexable
+ALTER TABLE tab_122871 ALTER PRIMARY KEY USING COLUMNS (col0_4);
+
+subtest end
