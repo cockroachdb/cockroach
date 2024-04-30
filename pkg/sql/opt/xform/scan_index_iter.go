@@ -321,8 +321,12 @@ func (it *scanIndexIter) filtersImplyPredicate(
 	pred memo.FiltersExpr,
 ) (remainingFilters memo.FiltersExpr, ok bool) {
 	// Return the remaining filters if the filters imply the predicate.
+	var computedCols map[opt.ColumnID]opt.ScalarExpr
+	if it.e.evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns {
+		computedCols = it.tabMeta.ComputedCols
+	}
 	if remainingFilters, ok =
-		it.im.FiltersImplyPredicate(it.filters, pred, it.tabMeta.ComputedCols); ok {
+		it.im.FiltersImplyPredicate(it.filters, pred, computedCols); ok {
 		return remainingFilters, true
 	}
 
@@ -335,7 +339,7 @@ func (it *scanIndexIter) filtersImplyPredicate(
 	// originalFilters-implication.
 	if it.originalFilters != nil {
 		if remainingFilters, ok =
-			it.im.FiltersImplyPredicate(it.originalFilters, pred, it.tabMeta.ComputedCols); ok {
+			it.im.FiltersImplyPredicate(it.originalFilters, pred, computedCols); ok {
 			return remainingFilters, true
 		}
 	}

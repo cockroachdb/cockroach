@@ -512,6 +512,10 @@ message LocalOnlySessionData {
   // that the optimizer should use an improved selectivity estimate for
   // multi-column predicates.
   bool optimizer_use_improved_multi_column_selectivity_estimate = 129;
+  // OptimizerProveImplicationWithVirtualComputedColumns, when true, indicates
+  // that the optimizer should use virtual computed columns to prove partial
+  // index implication.
+  bool optimizer_prove_implication_with_virtual_computed_columns = 130;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

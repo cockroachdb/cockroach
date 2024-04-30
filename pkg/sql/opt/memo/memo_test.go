@@ -454,7 +454,7 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = false
 	notStale()
 
-	// Stale optimizer_use_distinct_on_limit_hint_costing.
+	// Stale optimizer_use_improved_trigram_similarity_selectivity.
 	evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity = true
 	stale()
 	evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity = false
@@ -481,6 +481,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
 	stale()
 	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = false
+	notStale()
+
+	// Stale optimizer_prove_implication_with_virtual_computed_columns.
+	evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
+	stale()
+	evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = false
 	notStale()
 
 	// User no longer has access to view.
