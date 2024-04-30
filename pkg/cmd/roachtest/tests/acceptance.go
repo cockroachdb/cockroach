@@ -24,17 +24,17 @@ import (
 
 func registerAcceptance(r registry.Registry) {
 	testCases := map[registry.Owner][]struct {
-		name              string
-		fn                func(ctx context.Context, t test.Test, c cluster.Cluster)
-		skip              string
-		numNodes          int
-		nodeRegions       []string
-		timeout           time.Duration
-		encryptionSupport registry.EncryptionSupport
-		defaultLeases     bool
-		requiresLicense   bool
-		nativeLibs        []string
-		disallowLocal     bool
+		name               string
+		fn                 func(ctx context.Context, t test.Test, c cluster.Cluster)
+		skip               string
+		numNodes           int
+		nodeRegions        []string
+		timeout            time.Duration
+		encryptionSupport  registry.EncryptionSupport
+		defaultLeases      bool
+		requiresLicense    bool
+		nativeLibs         []string
+		incompatibleClouds []string // Already assumes AWS is incompatible.
 	}{
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
@@ -78,9 +78,10 @@ func registerAcceptance(r registry.Registry) {
 				numNodes: 3,
 			},
 			{
-				name:    "multitenant",
-				fn:      runAcceptanceMultitenant,
-				timeout: time.Minute * 20,
+				name:               "multitenant",
+				fn:                 runAcceptanceMultitenant,
+				timeout:            time.Minute * 20,
+				incompatibleClouds: []string{spec.Azure}, // Requires service registration.
 			},
 		},
 		registry.OwnerSQLFoundations: {
@@ -103,8 +104,8 @@ func registerAcceptance(r registry.Registry) {
 				nodeRegions: []string{"us-west1-b", "us-west1-b", "us-west1-b",
 					"us-west1-b", "us-west1-b", "us-west1-b",
 					"us-east1-b", "us-east1-b", "us-east1-b"},
-				requiresLicense: true,
-				disallowLocal:   true,
+				requiresLicense:    true,
+				incompatibleClouds: []string{spec.Local, spec.Azure}, // Requires service registration.
 			},
 		},
 	}
@@ -133,7 +134,7 @@ func registerAcceptance(r registry.Registry) {
 				Skip:              tc.skip,
 				EncryptionSupport: tc.encryptionSupport,
 				Timeout:           10 * time.Minute,
-				CompatibleClouds:  registry.AllExceptAWS,
+				CompatibleClouds:  registry.AllExceptAWS.Remove(tc.incompatibleClouds...),
 				Suites:            registry.Suites(registry.Nightly, registry.Quick, registry.Acceptance),
 				RequiresLicense:   tc.requiresLicense,
 			}
@@ -143,9 +144,6 @@ func registerAcceptance(r registry.Registry) {
 			}
 			if !tc.defaultLeases {
 				testSpec.Leases = registry.MetamorphicLeases
-			}
-			if tc.disallowLocal {
-				testSpec.CompatibleClouds = testSpec.CompatibleClouds.NoLocal()
 			}
 			if len(tc.nativeLibs) > 0 {
 				testSpec.NativeLibs = tc.nativeLibs

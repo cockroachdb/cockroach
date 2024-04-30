@@ -314,14 +314,17 @@ func initBulkJobPerfArtifacts(testName string, timeout time.Duration) (func(), *
 }
 
 func registerBackup(r registry.Registry) {
-
 	backup2TBSpec := r.MakeClusterSpec(10)
 	r.Add(registry.TestSpec{
-		Name:              fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
-		Owner:             registry.OwnerDisasterRecovery,
-		Benchmark:         true,
-		Cluster:           backup2TBSpec,
-		CompatibleClouds:  registry.AllExceptAWS,
+		Name:      fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
+		Owner:     registry.OwnerDisasterRecovery,
+		Benchmark: true,
+		Cluster:   backup2TBSpec,
+		// The default storage on Azure Standard_D4ds_v5 is only 150 GiB compared
+		// to 400 on GCE, which is not enough for this test. We could request a
+		// larger volume size and set spec.LocalSSDDisable if we wanted to run
+		// this on Azure.
+		CompatibleClouds:  registry.OnlyGCE,
 		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

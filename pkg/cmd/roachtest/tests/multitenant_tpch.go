@@ -155,7 +155,7 @@ func registerMultiTenantTPCH(r registry.Registry) {
 				Owner:            registry.OwnerSQLQueries,
 				Benchmark:        true,
 				Cluster:          r.MakeClusterSpec(1 /* nodeCount */),
-				CompatibleClouds: registry.AllExceptAWS,
+				CompatibleClouds: registry.CloudsWithServiceRegistration,
 				Suites:           registry.Suites(registry.Nightly),
 				Leases:           registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

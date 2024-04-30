@@ -364,6 +364,9 @@ func (bo replicateBulkOps) sourceRunCmd(tenantName string, nodes option.NodeList
 func (bo replicateBulkOps) runDriver(
 	workloadCtx context.Context, c cluster.Cluster, t test.Test, setup *c2cSetup,
 ) error {
+	if c.Cloud() != spec.GCE && !c.IsLocal() {
+		t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
+	}
 	runBackupMVCCRangeTombstones(workloadCtx, t, c, mvccRangeTombstoneConfig{
 		skipBackupRestore: true,
 		skipClusterSetup:  true,
@@ -829,10 +832,20 @@ func (rd *replicationDriver) backupAfterFingerprintMismatch(
 		rd.t.L().Printf("skip taking backups of tenants on local roachtest run")
 		return nil
 	}
-	prefix := "gs"
-	if rd.c.Cloud() == spec.AWS {
-		prefix = "s3"
+	if rd.c.Cloud() == spec.Azure {
+		rd.t.L().Printf("skip taking backups of tenants on azure, bucket not configured yet")
+		return nil
 	}
+	cloudPrefixes := map[string]string{
+		spec.GCE:   "gs",
+		spec.AWS:   "s3",
+		spec.Azure: "azure",
+	}
+	if _, ok := cloudPrefixes[rd.c.Cloud()]; !ok {
+		return errors.Errorf("backupAfterFingerprintMismatch: unsupported cloud")
+	}
+	prefix := cloudPrefixes[rd.c.Cloud()]
+
 	collection := fmt.Sprintf("%s://%s/c2c-fingerprint-mismatch/%s/%s/%s?AUTH=implicit", prefix, testutils.BackupTestingBucketLongTTL(), rd.rs.name, rd.c.Name(), tenantName)
 	fullBackupQuery := fmt.Sprintf("BACKUP INTO '%s' AS OF SYSTEM TIME '%s' with revision_history", collection, startTime.AsOfSystemTime())
 	_, err := conn.ExecContext(ctx, fullBackupQuery)
