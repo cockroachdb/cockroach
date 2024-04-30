@@ -145,7 +145,7 @@ func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 		}
 		if e.statement != nil {
 			i.registry.ObserveStatement(e.sessionID, e.statement)
-		} else {
+		} else if e.transaction != nil {
 			i.registry.ObserveTransaction(e.sessionID, e.transaction)
 		}
 		events[idx] = event{}

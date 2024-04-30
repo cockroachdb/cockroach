@@ -461,6 +461,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 	statsCollector := sslocal.NewStatsCollector(
 		st,
 		appStats,
+		insightsProvider.Writer(false /* internal */),
 		sessionphase.NewTimes(),
 		nil, /* knobs */
 	)
@@ -586,6 +587,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 		statsCollector := sslocal.NewStatsCollector(
 			st,
 			appStats,
+			insightsProvider.Writer(false /* internal */),
 			sessionphase.NewTimes(),
 			nil, /* knobs */
 		)
