@@ -1064,7 +1064,7 @@ func BenchmarkBTreeIterPrev(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if !it.Valid() {
-			it.First()
+			it.Last()
 		}
 		it.Prev()
 	}
