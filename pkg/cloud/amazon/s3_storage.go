@@ -707,7 +707,13 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 			StorageClass:         nilIfEmpty(s.conf.StorageClass),
 		})
 		err = interpretAWSError(err)
-		return errors.Wrap(err, "upload failed")
+		err = errors.Wrap(err, "upload failed")
+		// Mark with ctx's error for upstream code to not interpret this as
+		// corruption.
+		if ctx.Err() != nil {
+			err = errors.Mark(err, ctx.Err())
+		}
+		return err
 	}), nil
 }
 
@@ -738,7 +744,13 @@ func (s *s3Storage) openStreamAt(
 			// keep this string in case anyone is depending on it
 			err = errors.Wrap(err, "s3 object does not exist")
 		}
-		return nil, errors.Wrap(err, "failed to get s3 object")
+		err = errors.Wrap(err, "failed to get s3 object")
+		// Mark with ctx's error for upstream code to not interpret this as
+		// corruption.
+		if ctx.Err() != nil {
+			err = errors.Mark(err, ctx.Err())
+		}
+		return nil, err
 	}
 	return out, nil
 }
@@ -841,13 +853,24 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 		ctx, s3Input, pageFn,
 	); err != nil {
 		err = interpretAWSError(err)
-		return errors.Wrap(err, `failed to list s3 bucket`)
+		err = errors.Wrap(err, `failed to list s3 bucket`)
+		// Mark with ctx's error for upstream code to not interpret this as
+		// corruption.
+		if ctx.Err() != nil {
+			err = errors.Mark(err, ctx.Err())
+		}
+		return err
 	}
 
 	return fnErr
 }
 
-// interpretAWSError attempts to surface safe information that otherwise would be redacted
+// interpretAWSError attempts to surface safe information that otherwise would be redacted.
+//
+// We could mark the err with the Context.Err() if aerr.Code() is
+// request.CanceledErrorCode, instead of doing it in the caller. But this
+// requires knowing something about the SDK implementation (that the request.*
+// error codes are relevant, in addition to the s3.* error codes).
 func interpretAWSError(err error) error {
 	if err == nil {
 		return nil
@@ -889,6 +912,10 @@ func (s *s3Storage) Delete(ctx context.Context, basename string) error {
 	if err != nil {
 		return err
 	}
+	// TODO(sumeer): the timeout error could be interpreted as corruption in
+	// upstream CockroachDB code that is transitively using this for Pebble's
+	// disaggregated storage. Have a different implementation for that code path
+	// that only uses ctx cancellation.
 	return timeutil.RunWithTimeout(ctx, "delete s3 object",
 		cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
@@ -906,6 +933,10 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 		return 0, err
 	}
 	var out *s3.HeadObjectOutput
+	// TODO(sumeer): the timeout error could be interpreted as corruption in
+	// upstream CockroachDB code that is transitively using this for Pebble's
+	// disaggregated storage. Have a different implementation for that code path
+	// that only uses ctx cancellation.
 	err = timeutil.RunWithTimeout(ctx, "get s3 object header",
 		cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
@@ -918,7 +949,13 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 		})
 	if err != nil {
 		err = interpretAWSError(err)
-		return 0, errors.Wrap(err, "failed to get s3 object headers")
+		err = errors.Wrap(err, "failed to get s3 object headers")
+		// Mark with ctx's error for upstream code to not interpret this as
+		// corruption.
+		if ctx.Err() != nil {
+			err = errors.Mark(err, ctx.Err())
+		}
+		return 0, err
 	}
 	return *out.ContentLength, nil
 }
