@@ -137,7 +137,8 @@ CREATE TABLE virtual (
     INDEX (a) WHERE c IN (10, 20, 30),
     INDEX (lower_s),
     INDEX (a) WHERE upper_s = 'FOO',
-    INDEX (c) WHERE c > 100
+    INDEX (c) WHERE c > 100,
+    INDEX (b) WHERE upper_s IS NOT NULL
 )
 ----
 
@@ -536,8 +537,10 @@ project
       │    │    │    └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
       │    │    ├── virtual_a_idx1: filters
       │    │    │    └── upper(s:5) = 'FOO' [outer=(5), immutable]
-      │    │    └── virtual_c_idx: filters
-      │    │         └── b:3 > 90 [outer=(3), constraints=(/3: [/91 - ]; tight)]
+      │    │    ├── virtual_c_idx: filters
+      │    │    │    └── b:3 > 90 [outer=(3), constraints=(/3: [/91 - ]; tight)]
+      │    │    └── virtual_b_idx: filters
+      │    │         └── upper(s:5) IS NOT NULL [outer=(5), immutable]
       │    ├── key: (1)
       │    └── fd: (1)-->(3)
       └── filters
@@ -1973,7 +1976,7 @@ DROP INDEX idx
 
 # Constrained partial index scan with a virtual computed column in the
 # predicate.
-opt
+opt expect=GenerateConstrainedScans
 SELECT k FROM virtual WHERE a > 10 AND a < 20 AND c IN (10, 20, 30)
 ----
 project
@@ -1985,6 +1988,90 @@ project
       ├── constraint: /2/1: [/11 - /19]
       ├── key: (1)
       └── fd: (1)-->(2)
+
+opt expect=GenerateConstrainedScans
+SELECT k FROM virtual WHERE b = 10 AND upper_s = 'FOO'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null b:3!null s:5
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(5)
+      ├── index-join virtual
+      │    ├── columns: k:1!null b:3 s:5
+      │    ├── key: (1)
+      │    ├── fd: ()-->(3), (1)-->(5)
+      │    └── scan virtual@virtual_b_idx,partial
+      │         ├── columns: k:1!null b:3!null
+      │         ├── constraint: /3/1: [/10 - /10]
+      │         ├── key: (1)
+      │         └── fd: ()-->(3)
+      └── filters
+           └── upper(s:5) = 'FOO' [outer=(5), immutable]
+
+opt expect=GenerateConstrainedScans
+SELECT k FROM virtual WHERE b = 10 AND upper_s > 'FOO'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null b:3!null s:5
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(5)
+      ├── index-join virtual
+      │    ├── columns: k:1!null b:3 s:5
+      │    ├── key: (1)
+      │    ├── fd: ()-->(3), (1)-->(5)
+      │    └── scan virtual@virtual_b_idx,partial
+      │         ├── columns: k:1!null b:3!null
+      │         ├── constraint: /3/1: [/10 - /10]
+      │         ├── key: (1)
+      │         └── fd: ()-->(3)
+      └── filters
+           └── upper(s:5) > 'FOO' [outer=(5), immutable]
+
+opt expect-not=GenerateConstrainedScans set=(optimizer_prove_implication_with_virtual_computed_columns=false)
+SELECT k FROM virtual WHERE b = 10 AND upper_s = 'FOO'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null b:3!null s:5
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(5)
+      ├── scan virtual
+      │    ├── columns: k:1!null b:3 s:5
+      │    ├── computed column expressions
+      │    │    ├── c:4
+      │    │    │    └── b:3 + 10
+      │    │    ├── lower_s:6
+      │    │    │    └── lower(s:5)
+      │    │    └── upper_s:7
+      │    │         └── upper(s:5)
+      │    ├── partial index predicates
+      │    │    ├── virtual_a_idx: filters
+      │    │    │    └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
+      │    │    ├── virtual_a_idx1: filters
+      │    │    │    └── upper(s:5) = 'FOO' [outer=(5), immutable]
+      │    │    ├── virtual_c_idx: filters
+      │    │    │    └── b:3 > 90 [outer=(3), constraints=(/3: [/91 - ]; tight)]
+      │    │    └── virtual_b_idx: filters
+      │    │         └── upper(s:5) IS NOT NULL [outer=(5), immutable]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3,5)
+      └── filters
+           ├── upper(s:5) = 'FOO' [outer=(5), immutable]
+           └── b:3 = 10 [outer=(3), constraints=(/3: [/10 - /10]; tight), fd=()-->(3)]
 
 # TODO(mgartner): The normalization of the query filter from (c = 20) to ((b +
 # 10) = 20) to (b = 10) and the lack of constraints for the partial index
@@ -2017,8 +2104,10 @@ project
       │    │    │    └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
       │    │    ├── virtual_a_idx1: filters
       │    │    │    └── upper(s:5) = 'FOO' [outer=(5), immutable]
-      │    │    └── virtual_c_idx: filters
-      │    │         └── b:3 > 90 [outer=(3), constraints=(/3: [/91 - ]; tight)]
+      │    │    ├── virtual_c_idx: filters
+      │    │    │    └── b:3 > 90 [outer=(3), constraints=(/3: [/91 - ]; tight)]
+      │    │    └── virtual_b_idx: filters
+      │    │         └── upper(s:5) IS NOT NULL [outer=(5), immutable]
       │    ├── key: (1)
       │    └── fd: (1)-->(2,3)
       └── filters
