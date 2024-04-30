@@ -68,6 +68,11 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 	ts.TimeseriesStorageEnabled.Override(ctx, &settings.SV, false)
 	// Speed up the interval in which livebytes metrics are updated.
 	sql.TenantGlobalMetricsExporterInterval.Override(ctx, &settings.SV, 50*time.Millisecond)
+	// Disable load-based splitting and rebalancing as it may cause the
+	// livebytes metrics to fluctuate, and the test would end up waiting for a
+	// long time until the values stabilize.
+	kvserver.SplitByLoadEnabled.Override(ctx, &settings.SV, false)
+	kvserver.LoadBasedRebalancingMode.Override(ctx, &settings.SV, int64(kvserver.LBRebalancingOff))
 
 	// Start a cluster with 5 nodes, and 2 stores each.
 	tc := testcluster.NewTestCluster(t, 5, base.TestClusterArgs{
@@ -202,15 +207,8 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 	// Metrics should be exported for out-of-process secondary tenants, and are
 	// correct, i.e. sql_aggregated_livebytes in SQL = sum(livebytes in KV).
 	t.Run("external secondary tenants", func(t *testing.T) {
-		// Flaky test.
-		skip.WithIssue(t, 120775)
-
-		// Exact match for non stress tests, and allow values to differ by up to
-		// 5% in stress situations.
-		confidenceLevel := 0.0
-		if skip.Stress() {
-			confidenceLevel = 0.05
-		}
+		// Allow values to differ by up to 5%.
+		confidenceLevel := 0.05
 		testutils.SucceedsSoon(t, func() error {
 			return validateAggregatedLivebytes(t, tenantFoo, confidenceLevel)
 		})
@@ -220,10 +218,6 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 	})
 
 	t.Run("internal secondary tenants", func(t *testing.T) {
-		// The test seems to hang when trying to start an in-process tenant.
-		// Skip the for now.
-		skip.WithIssue(t, 120775)
-
 		tenantInternal := makeTenant(t, 20, false /* external */)
 
 		jobutils.WaitForJobToRun(t, tenantInternal.db, jobID)
