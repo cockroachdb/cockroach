@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -288,10 +289,43 @@ type Context struct {
 	RoutineSender DeferredRoutineSender
 
 	// ULIDEntropy is the entropy source for ULID generation.
+	// TODO(yuzefovich): consider making its allocation lazy, similar to how
+	// RNG is done, or use the RNG somehow.
 	ULIDEntropy ulid.MonotonicReader
 
-	// RNG is the random number generator use for the "random" built-in function.
-	RNG *rand.Rand
+	// RNGFactory, if set, provides the random number generator for the "random"
+	// built-in function.
+	//
+	// NB: do not access this field directly - use GetRNG() instead. This field
+	// is exported only for the connExecutor to pass its "external" RNGFactory.
+	RNGFactory *RNGFactory
+
+	// internal provides the random number generator for the "random" built-in
+	// function if RNGFactory is not set. This field exists to allow not setting
+	// RNGFactory on the code paths that don't need to preserve usage of the
+	// same RNG within a session.
+	internalRNGFactory RNGFactory
+}
+
+// RNGFactory is a simple wrapper to preserve the RNG throughout the session.
+type RNGFactory struct {
+	rng *rand.Rand
+}
+
+// GetRNG returns the RNG of the Context (which is lazily instantiated if
+// necessary).
+func (ec *Context) GetRNG() *rand.Rand {
+	if ec.RNGFactory != nil {
+		return ec.RNGFactory.getOrCreate()
+	}
+	return ec.internalRNGFactory.getOrCreate()
+}
+
+func (r *RNGFactory) getOrCreate() *rand.Rand {
+	if r.rng == nil {
+		r.rng, _ = randutil.NewPseudoRand()
+	}
+	return r.rng
 }
 
 // JobsProfiler is the interface used to fetch job specific execution details

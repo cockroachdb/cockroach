@@ -66,7 +66,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ulid"
@@ -2650,8 +2649,6 @@ func createSchemaChangeEvalCtx(
 			ULIDEntropy:          ulid.Monotonic(crypto_rand.Reader, 0),
 		},
 	}
-	rng, _ := randutil.NewPseudoRand()
-	evalCtx.RNG = rng
 	// TODO(andrei): This is wrong (just like on the main code path on
 	// setupFlow). Each processor should override Ctx with its own context.
 	evalCtx.SetDeprecatedContext(ctx)
