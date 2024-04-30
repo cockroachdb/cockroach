@@ -478,6 +478,10 @@ message LocalOnlySessionData {
   // statistics on virtual computed columns for cardinality estimation in the
   // optimizer.
   bool optimizer_use_virtual_computed_column_stats = 124;
+  // OptimizerProveImplicationWithVirtualComputedColumns, when true, indicates
+  // that the optimizer should use virtual computed columns to prove partial
+  // index implication.
+  bool optimizer_prove_implication_with_virtual_computed_columns = 130;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -430,6 +430,56 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = false
 	notStale()
 
+<<<<<<< HEAD
+=======
+	// Stale optimizer_use_trigram_similarity_optimization.
+	evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization = true
+	stale()
+	evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization = false
+	notStale()
+
+	// Stale optimizer_use_distinct_on_limit_hint_costing.
+	evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = false
+	notStale()
+
+	// Stale optimizer_use_improved_trigram_similarity_selectivity.
+	evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity = false
+	notStale()
+
+	// Stale pg_trgm.similarity_threshold.
+	evalCtx.SessionData().TrigramSimilarityThreshold = 0.5
+	stale()
+	evalCtx.SessionData().TrigramSimilarityThreshold = 0
+
+	// Stale opt_split_scan_limit.
+	evalCtx.SessionData().OptSplitScanLimit = 100
+	stale()
+	evalCtx.SessionData().OptSplitScanLimit = 0
+	notStale()
+
+	// Stale optimizer_use_improved_zigzag_join_costing.
+	evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = false
+	notStale()
+
+	// Stale optimizer_use_improved_multi_column_selectivity_estimate.
+	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = false
+	notStale()
+
+	// Stale optimizer_prove_implication_with_virtual_computed_columns.
+	evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
+	stale()
+	evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = false
+	notStale()
+
+>>>>>>> 50c0b438d45 (opt: add session setting for virtual computed column implication)
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)

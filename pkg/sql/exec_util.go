@@ -3761,6 +3761,10 @@ func (m *sessionDataMutator) SetOptimizerUseVirtualComputedColumnStats(val bool)
 	m.data.OptimizerUseVirtualComputedColumnStats = val
 }
 
+func (m *sessionDataMutator) SetOptimizerProveImplicationWithVirtualComputedColumns(val bool) {
+	m.data.OptimizerProveImplicationWithVirtualComputedColumns = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
