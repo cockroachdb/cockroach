@@ -683,7 +683,6 @@ go_test(
         "pgwire_internal_test.go",
         "plan_opt_test.go",
         "privileged_accessor_test.go",
-        "rand_test.go",
         "region_util_test.go",
         "rename_test.go",
         "revert_test.go",
