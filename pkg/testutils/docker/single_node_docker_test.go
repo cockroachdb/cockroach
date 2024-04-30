@@ -8,9 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:build docker
-// +build docker
-
 package docker
 
 import (
@@ -21,12 +18,13 @@ import (
 	"io"
 	"math"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -75,7 +73,14 @@ func TestSingleNodeDocker(t *testing.T) {
 		t.Fatal(errors.NewAssertionErrorWithWrappedErrf(err, "cannot get pwd"))
 	}
 
-	fsnotifyBinPath := filepath.Join(pwd, "docker-fsnotify/docker-fsnotify-bin")
+	if !bazel.BuiltWithBazel() {
+		skip.IgnoreLint(t)
+	}
+
+	fsnotifyBinPath, err := bazel.Runfile("pkg/testutils/docker/docker-fsnotify/docker-fsnotify-bin")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var dockerTests = []singleNodeDockerTest{
 		{
