@@ -1997,49 +1997,43 @@ func TestReadBeforeDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(109385),
-	})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	if _, err := sqlDB.Exec(`
+	_, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 INSERT INTO t.kv VALUES ('a', 'b');
-`); err != nil {
-		t.Fatal(err)
-	}
+`)
+	require.NoError(t, err)
 	// Test that once a table is dropped it cannot be used even when
 	// a transaction is using a timestamp from the past.
 	tx, err := sqlDB.Begin()
-	if err != nil {
-		t.Fatal(err)
+	require.NoError(t, err)
+	// When running with multi-tenant force a fixed timestamp, so that no
+	// uncertainty exists. Normally this isn't a problem on the system tenant,
+	// since the KV / system tenant are co-located.
+	if s.StartedDefaultTestTenant() {
+		_, err = tx.Exec("SET TRANSACTION AS OF SYSTEM TIME '-1ms'")
+		require.NoError(t, err)
 	}
 
-	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
-		t.Fatal(err)
-	}
-
+	_, err = sqlDB.Exec(`DROP TABLE t.kv`)
+	require.NoError(t, err)
 	rows, err := tx.Query(`SELECT * FROM t.kv`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer rows.Close()
 
 	for rows.Next() {
 		var k, v string
 		err := rows.Scan(&k, &v)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		if k != "a" || v != "b" {
 			t.Fatalf("didn't find expected row: %s %s", k, v)
 		}
 	}
-
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
+	err = tx.Commit()
+	require.NoError(t, err)
 }
 
 // Tests that transactions with timestamps within the uncertainty interval
