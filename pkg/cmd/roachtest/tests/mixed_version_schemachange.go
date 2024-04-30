@@ -51,7 +51,14 @@ func runSchemaChangeMixedVersions(
 	ctx context.Context, t test.Test, c cluster.Cluster, maxOps int, concurrency int,
 ) {
 	numFeatureRuns := 0
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), mixedversion.NumUpgrades(1))
+	mvt := mixedversion.NewTest(
+		ctx, t, t.L(), c, c.All(),
+		mixedversion.NumUpgrades(1),
+		// Always use latest predecessors, since mixed-version bug fixes only
+		// appear in the latest patch of the predecessor version.
+		// See: https://github.com/cockroachdb/cockroach/issues/121411.
+		mixedversion.AlwaysUseLatestPredecessors,
+	)
 
 	workloadNode := c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
