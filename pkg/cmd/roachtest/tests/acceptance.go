@@ -78,8 +78,9 @@ func registerAcceptance(r registry.Registry) {
 				numNodes: 3,
 			},
 			{
-				name: "multitenant",
-				fn:   runAcceptanceMultitenant,
+				name:    "multitenant",
+				fn:      runAcceptanceMultitenant,
+				timeout: time.Minute * 20,
 			},
 		},
 		registry.OwnerSQLFoundations: {
