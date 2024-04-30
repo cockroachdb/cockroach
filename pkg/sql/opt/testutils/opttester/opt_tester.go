@@ -282,8 +282,6 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	}
 	ot.f = &norm.Factory{}
 	ot.f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
-	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
-	ot.evalCtx.SessionData().OptimizerUseMultiColStats = true
 	ot.Flags.ctx = ot.ctx
 	ot.Flags.evalCtx = ot.evalCtx
 	ot.semaCtx.SearchPath = tree.EmptySearchPath
@@ -298,6 +296,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().ZigzagJoinEnabled = true
 	ot.evalCtx.SessionData().OptimizerUseForecasts = true
 	ot.evalCtx.SessionData().OptimizerUseHistograms = true
+	ot.evalCtx.SessionData().OptimizerUseMultiColStats = true
 	ot.evalCtx.SessionData().LocalityOptimizedSearch = true
 	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 	ot.evalCtx.SessionData().InsertFastPath = true
@@ -319,6 +318,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().TrigramSimilarityThreshold = 0.3
 	ot.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
 	ot.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
+	ot.evalCtx.SessionData().OptimizerUseConditionalHoistFix = true
 
 	return ot
 }
