@@ -205,7 +205,10 @@ func statisticsMutator(
 		}
 		rowCount := randNonNegInt(rng)
 		cols := map[tree.Name]*tree.ColumnTableDef{}
-		colStats := map[tree.Name]*stats.JSONStatistic{}
+		var allStats []*stats.JSONStatistic
+		// colNameToStatIdx is a mapping from column name to index within
+		// allStats for the corresponding statistic object.
+		colNameToStatIdx := map[tree.Name]int{}
 		makeHistogram := func(col *tree.ColumnTableDef) {
 			// If an index appeared before a column definition, col
 			// can be nil.
@@ -218,8 +221,8 @@ func statisticsMutator(
 			}
 			colType := tree.MustBeStaticallyKnownType(col.Type)
 			h := randHistogram(rng, colType)
-			stat := colStats[col.Name]
-			if err := stat.SetHistogram(&h); err != nil {
+			statIdx := colNameToStatIdx[col.Name]
+			if err := allStats[statIdx].SetHistogram(&h); err != nil {
 				panic(err)
 			}
 		}
@@ -235,7 +238,8 @@ func statisticsMutator(
 					avgSize = uint64(rng.Int63n(32))
 				}
 				cols[def.Name] = def
-				colStats[def.Name] = &stats.JSONStatistic{
+				colNameToStatIdx[def.Name] = len(allStats)
+				allStats = append(allStats, &stats.JSONStatistic{
 					Name:          "__auto__",
 					CreatedAt:     "2000-01-01 00:00:00+00:00",
 					RowCount:      uint64(rowCount),
@@ -243,7 +247,7 @@ func statisticsMutator(
 					DistinctCount: distinctCount,
 					NullCount:     nullCount,
 					AvgSize:       avgSize,
-				}
+				})
 				if (def.Unique.IsUnique && !def.Unique.WithoutIndex) || def.PrimaryKey.IsPrimaryKey {
 					makeHistogram(def)
 				}
@@ -259,11 +263,7 @@ func statisticsMutator(
 				}
 			}
 		}
-		if len(colStats) > 0 {
-			var allStats []*stats.JSONStatistic
-			for _, cs := range colStats {
-				allStats = append(allStats, cs)
-			}
+		if len(allStats) > 0 {
 			b, err := json.Marshal(allStats)
 			if err != nil {
 				// Should not happen.
