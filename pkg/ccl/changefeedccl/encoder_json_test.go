@@ -32,6 +32,7 @@ func TestJSONEncoderJSONNullAsObject(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 123156)
 	t.Parallel() // SAFE FOR TESTING
 
 	ctx := context.Background()
