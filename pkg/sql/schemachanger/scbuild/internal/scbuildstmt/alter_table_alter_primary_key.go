@@ -345,6 +345,19 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 			panic(pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column "+
 				"%q in primary key", col.Column))
 		}
+
+		columnType := mustRetrieveColumnTypeElem(b, tbl.TableID, colElem.ColumnID)
+		version := b.EvalCtx().Settings.Version.ActiveVersion(b)
+		// Check if the column type is indexable.
+		if !colinfo.ColumnTypeIsIndexable(columnType.Type) ||
+			(columnType.Type.Family() == types.JsonFamily && !version.IsActive(clusterversion.V23_2)) {
+			panic(unimplemented.NewWithIssueDetailf(35730,
+				columnType.Type.DebugString(),
+				"column %s is of type %s and thus is not indexable",
+				col.Column,
+				columnType.Type),
+			)
+		}
 	}
 }
 
