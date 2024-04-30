@@ -101,6 +101,13 @@ var quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	5*time.Second,
 )
 
+var ingestSplitEvent = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"physical_replication.consumer.ingest_split_event.enabled",
+	"whether to ingest split events",
+	false,
+)
+
 var streamIngestionResultTypes = []*types.T{
 	types.Bytes, // jobspb.ResolvedSpans
 }
@@ -742,6 +749,10 @@ func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
 			return err
 		}
 		return nil
+	case streamingccl.SplitEvent:
+		if err := sip.handleSplitEvent(event.GetSplitEvent()); err != nil {
+			return err
+		}
 	default:
 		return errors.Newf("unknown streaming event type %v", event.Type())
 	}
@@ -837,6 +848,26 @@ func (sip *streamIngestionProcessor) bufferRangeKeyVal(
 	}
 	sip.buffer.addRangeKey(rangeKeyVal)
 	return nil
+}
+
+func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
+	ctx, sp := tracing.ChildSpan(sip.Ctx(), "replicated-split")
+	defer sp.Finish()
+	if !ingestSplitEvent.Get(&sip.EvalCtx.Settings.SV) {
+		return nil
+	}
+
+	kvDB := sip.FlowCtx.Cfg.DB.KV()
+	rekey, ok, err := sip.rekey(*key)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	log.Infof(ctx, "replicating split at %s", rekey)
+	expiration := kvDB.Clock().Now().AddDuration(time.Hour)
+	return kvDB.AdminSplit(ctx, rekey, expiration)
 }
 
 func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {

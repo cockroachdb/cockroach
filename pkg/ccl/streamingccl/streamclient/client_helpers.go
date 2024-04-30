@@ -89,12 +89,16 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 		case len(streamEvent.Batch.SpanConfigs) > 0:
 			event = streamingccl.MakeSpanConfigEvent(streamEvent.Batch.SpanConfigs[0])
 			streamEvent.Batch.SpanConfigs = streamEvent.Batch.SpanConfigs[1:]
+		case len(streamEvent.Batch.SplitPoints) > 0:
+			event = streamingccl.MakeSplitEvent(streamEvent.Batch.SplitPoints[0])
+			streamEvent.Batch.SplitPoints = streamEvent.Batch.SplitPoints[1:]
 		}
 
 		if len(streamEvent.Batch.KeyValues) == 0 &&
 			len(streamEvent.Batch.Ssts) == 0 &&
 			len(streamEvent.Batch.DelRanges) == 0 &&
-			len(streamEvent.Batch.SpanConfigs) == 0 {
+			len(streamEvent.Batch.SpanConfigs) == 0 &&
+			len(streamEvent.Batch.SplitPoints) == 0 {
 			streamEvent.Batch = nil
 		}
 	}

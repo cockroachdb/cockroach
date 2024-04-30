@@ -33,6 +33,7 @@ func (seb *streamEventBatcher) reset() {
 	seb.batch.Ssts = seb.batch.Ssts[:0]
 	seb.batch.DelRanges = seb.batch.DelRanges[:0]
 	seb.batch.SpanConfigs = seb.batch.SpanConfigs[:0]
+	seb.batch.SplitPoints = seb.batch.SplitPoints[:0]
 }
 
 func (seb *streamEventBatcher) addSST(sst kvpb.RangeFeedSSTable) {
@@ -50,6 +51,11 @@ func (seb *streamEventBatcher) addDelRange(d kvpb.RangeFeedDeleteRange) {
 	// the subscribed span, just emit it.
 	seb.batch.DelRanges = append(seb.batch.DelRanges, d)
 	seb.size += d.Size()
+}
+
+func (seb *streamEventBatcher) addSplitPoint(k roachpb.Key) {
+	seb.batch.SplitPoints = append(seb.batch.SplitPoints, k)
+	seb.size += len(k)
 }
 
 // addSpanConfigs adds a slice of spanConfig entries that were recently flushed
