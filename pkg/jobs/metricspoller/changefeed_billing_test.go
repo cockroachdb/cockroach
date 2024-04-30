@@ -1,10 +1,11 @@
-package metricspoller
+package metricspoller_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/metricspoller"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -22,11 +23,11 @@ func TestFetchChangefeedBillingBytes(t *testing.T) {
 	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	execCfg := s.ExecutorConfig().(*sql.ExecutorConfig)
-	execCtx, close := sql.MakeJobExecContext(ctx, "test", username.NodeUserName(), nil, execCfg)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	execCtx, close := sql.MakeJobExecContext(ctx, "test", username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg)
 	defer close()
 
-	res, err := fetchChangefeedBillingBytes(ctx, execCtx)
+	res, err := metricspoller.FetchChangefeedBillingBytes(ctx, execCtx)
 	require.NoError(t, err)
 	_ = res
 }

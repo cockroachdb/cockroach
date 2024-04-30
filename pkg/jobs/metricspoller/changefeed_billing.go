@@ -29,7 +29,7 @@ func updateChangefeedBillingMetrics(ctx context.Context, execCtx sql.JobExecCont
 	metricsRegistry := execCtx.ExecCfg().MetricsRecorder.AppRegistry()
 	metricsRegistry.AddMetric(changefeedBillingBytes)
 
-	bytes, err := fetchChangefeedBillingBytes(ctx, execCtx)
+	bytes, err := FetchChangefeedBillingBytes(ctx, execCtx)
 	if err != nil {
 		return err
 	}
@@ -38,10 +38,10 @@ func updateChangefeedBillingMetrics(ctx context.Context, execCtx sql.JobExecCont
 	return nil
 }
 
-// fetchChangefeedBillingBytes fetches the total number of bytes of data watched
+// FetchChangefeedBillingBytes fetches the total number of bytes of data watched
 // by all changefeeds. It counts tables that are watched by multiple changefeeds
 // multiple times.
-func fetchChangefeedBillingBytes(ctx context.Context, execCtx sql.JobExecContext) (int64, error) {
+func FetchChangefeedBillingBytes(ctx context.Context, execCtx sql.JobExecContext) (int64, error) {
 	deets, err := getChangefeedDetails(ctx, execCtx)
 	if err != nil {
 		return 0, err
