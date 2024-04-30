@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package metricspoller_test
+package billingjob_test
 
 import (
 	"os"

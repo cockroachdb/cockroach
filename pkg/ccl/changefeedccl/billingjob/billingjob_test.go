@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package metricspoller_test
+package billingjob_test
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl" // register ccl hooks
-	"github.com/cockroachdb/cockroach/pkg/jobs/metricspoller"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/billingjob"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -60,7 +60,7 @@ func TestFetchChangefeedBillingBytes(t *testing.T) {
 	_, err = ie.ExecEx(ctx, "test-create-cf", nil, sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, stmt)
 	require.NoError(t, err)
 
-	res, err := metricspoller.FetchChangefeedBillingBytes(ctx, execCtx)
+	res, err := billingjob.FetchChangefeedBillingBytes(ctx, execCtx)
 	require.NoError(t, err)
 	assert.NotZero(t, res)
 }

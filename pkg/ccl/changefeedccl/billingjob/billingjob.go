@@ -1,11 +1,22 @@
-package metricspoller
+// Copyright 2023 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+package billingjob
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -13,22 +24,72 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
 var changefeedBillingBytes = metric.NewGauge(metric.Metadata{
-	Name:        "cdc.changefeed_table_bytes",
+	Name:        "changefeed.table_bytes",
 	Help:        "Aggregated number of bytes of data per table per changefeed",
 	Measurement: "Storage",
 	Unit:        metric.Unit_BYTES,
 })
 
-// updateChangefeedBillingMetrics emits the changefeed billing metric -- a sum of watched bytes.
-func updateChangefeedBillingMetrics(ctx context.Context, execCtx sql.JobExecContext) error {
-	metricsRegistry := execCtx.ExecCfg().MetricsRecorder.AppRegistry()
+type billingJob struct {
+	job *jobs.Job
+}
+
+// CollectProfile implements jobs.Resumer.
+func (j *billingJob) CollectProfile(ctx context.Context, execCtx any) error {
+	return nil
+}
+
+// OnFailOrCancel implements jobs.Resumer.
+func (j *billingJob) OnFailOrCancel(ctx context.Context, execCtx any, jobErr error) error {
+	return nil
+}
+
+// Resume implements jobs.Resumer.
+func (j *billingJob) Resume(ctx context.Context, execCtx any) error {
+	exec := execCtx.(sql.JobExecContext)
+
+	// The billing job is a forever running background job. It's always
+	// safe to wind the SQL pod down whenever it's running, something we
+	// indicate through the job's idle status.
+	j.job.MarkIdle(true)
+
+	metricsRegistry := exec.ExecCfg().MetricsRecorder.AppRegistry()
 	metricsRegistry.AddMetric(changefeedBillingBytes)
 
+	// TODO: new pb job type
+	runMetrics := exec.ExecCfg().JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypePollJobsStats].(billingJobMetrics)
+
+	var t timeutil.Timer
+	defer t.Stop()
+
+	for {
+		t.Reset(changefeedbase.BillingJobInterval.Get(&exec.ExecCfg().Settings.SV))
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case now := <-t.C:
+			t.Read = true
+			// TODO: add timeout?
+			if err := j.updateChangefeedBillingMetrics(ctx, execCtx.(sql.JobExecContext)); err != nil {
+				log.Errorf(ctx, "error updating changefeed billing metrics: %v", err)
+				runMetrics.NumErrors.Inc(1)
+			} else {
+				runMetrics.LastRun.Update(now.UnixNano())
+				runMetrics.Latency.RecordValue(timeutil.Since(now).Nanoseconds())
+			}
+		}
+	}
+}
+
+func (j *billingJob) updateChangefeedBillingMetrics(ctx context.Context, execCtx sql.JobExecContext) error {
 	bytes, err := FetchChangefeedBillingBytes(ctx, execCtx)
 	if err != nil {
 		return err
@@ -36,6 +97,47 @@ func updateChangefeedBillingMetrics(ctx context.Context, execCtx sql.JobExecCont
 
 	changefeedBillingBytes.Update(bytes)
 	return nil
+}
+
+var _ jobs.Resumer = &billingJob{}
+
+type billingJobMetrics struct {
+	NumErrors *metric.Counter
+	Latency   metric.IHistogram
+	LastRun   *metric.Gauge
+}
+
+func (m billingJobMetrics) MetricStruct() {}
+
+func newBillingJobMetrics() billingJobMetrics {
+	return billingJobMetrics{
+		NumErrors: metric.NewCounter(metric.Metadata{
+			Name:        "cdc.billing_job.errors",
+			Help:        "Number of errors encountered by the billing job",
+			Measurement: "errors",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  io_prometheus_client.MetricType_COUNTER,
+		}),
+		Latency: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metric.Metadata{
+				Name:        "cdc.billing_job.latency", // TODO: is there already a job latency by type metric?
+				Help:        "Latency of the billing job",
+				Measurement: "Latency",
+				Unit:        metric.Unit_NANOSECONDS,
+				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
+			},
+			Mode:         metric.HistogramModePrometheus,
+			Duration:     base.DefaultHistogramWindowInterval(),
+			BucketConfig: metric.BatchProcessLatencyBuckets,
+		}),
+		LastRun: metric.NewGauge(metric.Metadata{
+			Name:        "cdc.billing_job.last_run",
+			Help:        "Timestamp of the last run of the billing job (in nanoseconds)",
+			Measurement: "time",
+			Unit:        metric.Unit_TIMESTAMP_NS,
+			MetricType:  io_prometheus_client.MetricType_GAUGE,
+		}),
+	}
 }
 
 // FetchChangefeedBillingBytes fetches the total number of bytes of data watched
@@ -178,4 +280,14 @@ func getChangefeedDetails(ctx context.Context, execCtx sql.JobExecContext) ([]*j
 	})
 
 	return deets, err
+}
+
+func init() {
+	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+		return &billingJob{job: job}
+	}
+
+	// TODO: new pb job type
+	jobs.RegisterConstructor(jobspb.TypePollJobsStats, createResumerFn,
+		jobs.DisablesTenantCostControl, jobs.WithJobMetrics(newBillingJobMetrics()))
 }

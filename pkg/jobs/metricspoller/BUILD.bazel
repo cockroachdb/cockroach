@@ -1,9 +1,8 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "metricspoller",
     srcs = [
-        "changefeed_billing.go",
         "job_statistics.go",
         "poller.go",
     ],
@@ -18,9 +17,6 @@ go_library(
         "//pkg/scheduledjobs",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/catalog",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/descs",
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
@@ -31,33 +27,5 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_prometheus_client_model//go",
-    ],
-)
-
-go_test(
-    name = "metricspoller_test",
-    srcs = [
-        "changefeed_billing_test.go",
-        "main_test.go",
-    ],
-    deps = [
-        ":metricspoller",
-        "//pkg/base",
-        "//pkg/ccl",
-        "//pkg/ccl/changefeedccl",
-        "//pkg/security/securityassets",
-        "//pkg/security/securitytest",
-        "//pkg/security/username",
-        "//pkg/server",
-        "//pkg/sql",
-        "//pkg/sql/isql",
-        "//pkg/sql/sessiondata",
-        "//pkg/testutils/serverutils",
-        "//pkg/testutils/testcluster",
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
-        "//pkg/util/randutil",
-        "@com_github_stretchr_testify//assert",
-        "@com_github_stretchr_testify//require",
     ],
 )

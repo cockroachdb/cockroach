@@ -301,6 +301,16 @@ var SinkPacerRequestSize = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+// BillingJobInterval is the interval at which the changefeed billing job calculates
+// and updates its metric.
+var BillingJobInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"changefeed.billing_job.interval",
+	"the interval at which the changefeed billing job calculates and updates its metric",
+	5*time.Minute,
+	settings.PositiveDuration,
+)
+
 // DefaultLaggingRangesThreshold is the default duration by which a range must be
 // lagging behind the present to be considered as 'lagging' behind in metrics.
 var DefaultLaggingRangesThreshold = 3 * time.Minute
