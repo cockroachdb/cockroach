@@ -11,8 +11,8 @@
 package colexecerror
 
 import (
-	"bufio"
 	"context"
+	"runtime"
 	"runtime/debug"
 	"strings"
 
@@ -71,29 +71,53 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 			}
 		}
 
-		// For other types of errors, we need to check where the panic came from. We
-		// only want to recover from panics that originated within the vectorized
-		// engine. We treat a panic from lower in the stack as unrecoverable.
-
-		//Find where the panic came from and only proceed if it
-		// is related to the vectorized engine.
-		stackTrace := string(debug.Stack())
-		scanner := bufio.NewScanner(strings.NewReader(stackTrace))
-		panicLineFound := false
-		for scanner.Scan() {
-			if strings.Contains(scanner.Text(), panicLineSubstring) {
-				panicLineFound = true
-				break
+		// For other types of errors, we need to check whence the panic originated
+		// to know what to do. If the panic originated in the vectorized engine, we
+		// can safely return it as a normal error knowing that any illegal state
+		// will be cleaned up when the statement finishes. If the panic originated
+		// lower in the stack, however, we must treat it as unrecoverable because it
+		// could indicate an illegal state that might persist even after this
+		// statement finishes.
+		//
+		// To check whence the panic originated, we need to find the frame just
+		// before the panic frame. Looking at a few program counters starting with
+		// the caller of this deferred function should suffice.
+		var panicLineFound bool
+		var panicEmittedFrom string
+		pc := make([]uintptr, 3)
+		n := runtime.Callers(2, pc)
+		if n >= 1 {
+			frames := runtime.CallersFrames(pc[:n])
+			// A fixed number of program counters can expand to any number of frames.
+			for {
+				frame, more := frames.Next()
+				if strings.Contains(frame.File, panicLineSubstring) {
+					panicLineFound = true
+				} else if panicLineFound {
+					panicEmittedFrom = frame.Function
+					break
+				}
+				if !more {
+					break
+				}
 			}
 		}
 		if !panicLineFound {
-			panic(errors.AssertionFailedf("panic line %q not found in the stack trace\n%s", panicLineSubstring, stackTrace))
+			stackTrace := string(debug.Stack())
+			panic(errors.AssertionFailedf(
+				"panic line %q not found in the stack trace\n%s", panicLineSubstring, stackTrace,
+			))
 		}
-		if !scanner.Scan() {
-			panic(errors.AssertionFailedf("unexpectedly there is no line below the panic line in the stack trace\n%s", stackTrace))
+		if panicEmittedFrom == "" {
+			stackTrace := string(debug.Stack())
+			panic(errors.AssertionFailedf(
+				"unexpectedly there is no line below the panic line in the stack trace\n%s", stackTrace,
+			))
 		}
-		panicEmittedFrom := strings.TrimSpace(scanner.Text())
 		if !shouldCatchPanic(panicEmittedFrom) {
+			// The panic is from outside the vectorized engine. We treat it as
+			// unrecoverable because it could indicate an illegal state that might
+			// persist even after this statement finishes.
 			panic(panicObj)
 		}
 
