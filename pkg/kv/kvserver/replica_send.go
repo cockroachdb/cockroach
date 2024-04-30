@@ -1280,7 +1280,7 @@ func (ec *endCmds) done(
 	// do so if the request is consistent and was operating on the leaseholder
 	// under a valid range lease.
 	if ba.ReadConsistency == kvpb.CONSISTENT && ec.st.State == kvserverpb.LeaseState_VALID {
-		ec.repl.updateTimestampCache(ctx, &ec.st, ba, br, pErr)
+		ec.repl.updateTimestampCache(ctx, ba, br, pErr)
 	}
 
 	// Release the latches acquired by the request and exit lock wait-queues.
