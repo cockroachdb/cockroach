@@ -737,6 +737,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 	h.evalCtx.SessionData().TrigramSimilarityThreshold = 0.3
 	h.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
 	h.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
+	h.evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
 
 	// Set up the test catalog.
 	h.testCat = testcat.New()
