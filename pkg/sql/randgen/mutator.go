@@ -406,7 +406,20 @@ func foreignKeyMutator(
 	rng *rand.Rand, stmts []tree.Statement,
 ) (mutated []tree.Statement, changed bool) {
 	// Find columns in the tables.
-	cols := map[tree.TableName][]*tree.ColumnTableDef{}
+	var cols [][]*tree.ColumnTableDef
+	// tableNames is 1-to-1 mapping with cols and contains the corresponding
+	// table name.
+	var tableNames []tree.TableName
+	// tableNameToColIdx returns the index for the given table name within cols
+	// (or ok=false if not found).
+	tableNameToColIdx := func(t tree.TableName) (idx int, ok bool) {
+		for i, table := range tableNames {
+			if t == table {
+				return i, true
+			}
+		}
+		return 0, false
+	}
 	byName := map[tree.TableName]*tree.CreateTable{}
 
 	// Keep track of referencing columns since we have a limitation that a
@@ -450,7 +463,13 @@ func foreignKeyMutator(
 		for _, def := range table.Defs {
 			switch def := def.(type) {
 			case *tree.ColumnTableDef:
-				cols[table.Table] = append(cols[table.Table], def)
+				idx, ok := tableNameToColIdx(table.Table)
+				if !ok {
+					idx = len(cols)
+					cols = append(cols, []*tree.ColumnTableDef{})
+					tableNames = append(tableNames, table.Table)
+				}
+				cols[idx] = append(cols[idx], def)
 			}
 		}
 	}
@@ -478,7 +497,8 @@ func foreignKeyMutator(
 		table := tables[rng.Intn(len(tables))]
 		// Choose a random column subset.
 		var fkCols []*tree.ColumnTableDef
-		for _, c := range cols[table.Table] {
+		colIdx, _ := tableNameToColIdx(table.Table)
+		for _, c := range cols[colIdx] {
 			if c.Computed.Computed {
 				// We don't support FK references from computed columns (#46672).
 				continue
@@ -505,7 +525,8 @@ func foreignKeyMutator(
 
 		// Check if a table has the needed column types.
 	LoopTable:
-		for refTable, refCols := range cols {
+		for j, refCols := range cols {
+			refTable := tableNames[j]
 			// Prevent circular and self references because
 			// generating valid INSERTs could become impossible or
 			// difficult algorithmically.
@@ -527,6 +548,9 @@ func foreignKeyMutator(
 						// indirectly).
 						continue LoopTable
 					}
+					// Note that this iteration over the 'dependsOn' map can
+					// produce different 'stack' (i.e. with random order of
+					// table names), but it doesn't impact the cycle detection.
 					for t := range dependsOn[curTable] {
 						stack = append(stack, t)
 					}
