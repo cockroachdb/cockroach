@@ -127,7 +127,8 @@ func (s *Smither) makeDesiredTypes() []*types.T {
 }
 
 type typeInfo struct {
-	udts        map[tree.TypeName]*types.T
+	udts        []*types.T
+	udtNames    []tree.TypeName
 	seedTypes   []*types.T
 	scalarTypes []*types.T
 }
@@ -137,11 +138,12 @@ func (s *Smither) ResolveType(
 	_ context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
 	key := tree.MakeSchemaQualifiedTypeName(name.Schema(), name.Object())
-	res, ok := s.types.udts[key]
-	if !ok {
-		return nil, errors.Newf("type name %s not found by smither", name.Object())
+	for i, typeName := range s.types.udtNames {
+		if typeName == key {
+			return s.types.udts[i], nil
+		}
 	}
-	return res, nil
+	return nil, errors.Newf("type name %s not found by smither", name.Object())
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.

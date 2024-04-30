@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -125,6 +126,7 @@ func makeRestore(s *Smither) (tree.Statement, bool) {
 	func() {
 		s.lock.Lock()
 		defer s.lock.Unlock()
+		// TODO(yuzefovich): picking a backup target here is non-deterministic.
 		for name, targets = range s.bulkBackups {
 			break
 		}
@@ -219,11 +221,16 @@ func makeImport(s *Smither) (tree.Statement, bool) {
 		}
 		expr := s.bulkExports[0]
 		s.bulkExports = s.bulkExports[1:]
-		var f tree.Exprs
+		var fileNames []string
 		for name := range s.bulkFiles {
 			if strings.Contains(name, expr+"/") && !strings.HasSuffix(name, exportSchema) {
-				f = append(f, tree.NewStrVal(s.bulkSrv.URL+name))
+				fileNames = append(fileNames, name)
 			}
+		}
+		sort.Strings(fileNames)
+		var f tree.Exprs
+		for _, name := range fileNames {
+			f = append(f, tree.NewStrVal(s.bulkSrv.URL+name))
 		}
 		return f, expr
 	}()
