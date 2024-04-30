@@ -54,7 +54,8 @@ func registerSqlStatsMixedVersion(r registry.Registry) {
 func runSQLStatsMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster) {
 	roachNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, roachNodes)
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c,
+		roachNodes, mixedversion.MinimumSupportedVersion("v23.1.8"))
 	flushInterval := 2 * time.Minute
 
 	initWorkload := roachtestutil.NewCommand("./cockroach workload init tpcc").
@@ -163,7 +164,7 @@ func getCombinedStatementStatsURL(
 ) string {
 	searchParams := fmt.Sprintf("?fetch_mode.stats_type=%d&start=%d&end=%d&limit=10",
 		statsType, requestedRange[0].Unix(), requestedRange[1].Unix())
-	return `http://` + adminUIAddr + `/_status/combinedstmts` + searchParams
+	return `https://` + adminUIAddr + `/_status/combinedstmts` + searchParams
 }
 
 // timeRange is a pair of time.Time values.
