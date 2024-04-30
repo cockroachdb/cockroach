@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -80,7 +81,8 @@ func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluste
 // Runs an acceptance test on a multi-region multi-tenant cluster, which
 // will be spread across at least two regions.
 func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
+	startOptions := option.NewStartOpts(option.NoBackupSchedule)
+	c.Start(ctx, t.L(), startOptions, install.MakeClusterSettings(install.SecureOption(true)), c.All())
 	regions := strings.Split(c.Spec().GCE.Zones, ",")
 	regionOnly := func(regionAndZone string) string {
 		r := strings.Split(regionAndZone, "-")
@@ -171,44 +173,81 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 	//systemConn := sqlutils.MakeSQLRunner(conn)
 	checkStartTime := timeutil.Now()
 	count := 0
-	for timeutil.Since(checkStartTime) < time.Minute*5 {
-		res := tdb.QueryStr(t, `
-SELECT
-	locality_count
-FROM
-	(
+	tableStartKeys := []string{
+		"'%Table/'||'system.lease'::REGCLASS::OID||'/%'",
+		"'%Table/'||'system.sqlliveness'::REGCLASS::OID||'/%'",
+		"'%Table/'||'system.sql_instances'::REGCLASS::OID||'/%'",
+	}
+	const splitsForRBRTables = `
 		SELECT
-			count(*) AS locality_count
+			start_key, replicas, replica_localities, voting_replicas
 		FROM
-			(
-				SELECT
-					DISTINCT
-					range_id,
-					start_key,
-					split_part(
-						unnest(replica_localities),
-						',',
-						2
-					)
-				FROM
-					[SHOW RANGES FROM DATABASE system]
-				WHERE
-					(
-						start_key NOT LIKE '%Table/11/%'
-						AND start_key NOT LIKE '%Table/39/%'
-						AND start_key NOT LIKE '%Table/46/%'
-					)
-			)
-		GROUP BY
-			range_id
-	)
-WHERE
-	locality_count < 2;`)
-		if len(res) == 0 {
-			break
+			[SHOW RANGES FROM DATABASE system]
+		WHERE
+			start_key LIKE %s
+`
+
+	// Wait for up till 5 minutes.
+	timedOut := true
+	for timeutil.Since(checkStartTime) < time.Minute*5 {
+		if count > 0 {
+			time.Sleep(time.Second * 5)
 		}
 		count += 1
-		time.Sleep(time.Second * 5)
+		validSplits := true
+		// Confirm that local tables are split properly
+		for _, tableStartKey := range tableStartKeys {
+			func() {
+				query := fmt.Sprintf(splitsForRBRTables, tableStartKey)
+				rangeRows := tdb.Query(t, query)
+				defer func() {
+					require.NoError(t, rangeRows.Close())
+				}()
+				usedLocalities := make(map[string]struct{})
+				for rangeRows.Next() {
+					var startKey string
+					var replicaLocalities []string
+					var votingReplicas, replicas []int64
+					err := rangeRows.Scan(&startKey, pq.Array(&replicas), pq.Array(&replicaLocalities), pq.Array(&votingReplicas))
+					require.NoError(t, err)
+					replicaMap := make(map[int]string)
+					for idx := range replicaLocalities {
+						splitLocality := strings.Split(replicaLocalities[idx], ",")
+						replicaMap[int(replicas[idx])] = splitLocality[1]
+					}
+					targetLocality := ""
+					metCriteria := true
+					for _, votingReplica := range votingReplicas {
+						if targetLocality == "" {
+							targetLocality = replicaMap[int(votingReplica)]
+						}
+						if targetLocality != replicaMap[int(votingReplica)] {
+							metCriteria = false
+							continue
+						}
+					}
+					if metCriteria && targetLocality != "" {
+						usedLocalities[targetLocality] = struct{}{}
+					}
+				}
+				if len(usedLocalities) != 2 {
+					validSplits = false
+				}
+			}()
+			if !validSplits {
+				break
+			}
+		}
+		if !validSplits {
+			continue
+		}
+		timedOut = false
+		t.Status("Successfully confirmed RBR and non-RBR table states")
+		break
+	}
+	if timedOut {
+		queryStr := tdb.QueryStr(t, "SELECT * FROM [SHOW RANGES FROM DATABASE system]")
+		t.Status(fmt.Sprintf("%v", queryStr))
 	}
 	t.Status("Replication changes complete")
 
@@ -298,7 +337,7 @@ WHERE
 	t.Status("stopping the server ahead of checking for the tenant server")
 
 	// Restart the KV storage servers first.
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.Range(otherRegionNode, len(c.All())))
+	c.Start(ctx, t.L(), startOptions, install.MakeClusterSettings(install.SecureOption(true)), c.Range(otherRegionNode, len(c.All())))
 	// Re-add any dead tenants back again.
 	for _, tenant := range tenants[otherRegionNode-1:] {
 		tenant.start(ctx, t, c, "./cockroach")
