@@ -12,6 +12,7 @@ package sqlsmith
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -356,16 +357,31 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 	rightAliasName := tree.NewUnqualifiedTableName(rightAlias)
 
 	// Now look for one that satisfies our constraints (some shared prefix
-	// of type + direction), might end up being the same one. We rely on
-	// Go's non-deterministic map iteration ordering for randomness.
+	// of type + direction), might end up being the same one.
 	rightTableName, cols, ok := func() (*tree.TableIndexName, [][2]colRef, bool) {
 		s.lock.RLock()
 		defer s.lock.RUnlock()
-		for tbl, idxs := range s.indexes {
-			for idxName, idx := range idxs {
+		if len(s.tables) == 0 {
+			return nil, nil, false
+		}
+		// Iterate in deterministic but random order over all tables.
+		tableNames := make([]tree.TableName, 0, len(s.tables))
+		for t := range s.indexes {
+			tableNames = append(tableNames, t)
+		}
+		sort.Slice(tableNames, func(i, j int) bool {
+			return strings.Compare(tableNames[i].String(), tableNames[j].String()) < 0
+		})
+		s.rnd.Shuffle(len(tableNames), func(i, j int) {
+			tableNames[i], tableNames[j] = tableNames[j], tableNames[i]
+		})
+		for _, tbl := range tableNames {
+			// Iterate in deterministic but random order over all indexes.
+			idxs := s.getAllIndexesForTableRLocked(tbl)
+			for _, idx := range idxs {
 				rightTableName := &tree.TableIndexName{
 					Table: tbl,
-					Index: tree.UnrestrictedName(idxName),
+					Index: tree.UnrestrictedName(idx.Name),
 				}
 				// cols keeps track of matching column pairs.
 				var cols [][2]colRef
@@ -919,6 +935,10 @@ func makeDropFunc(s *Smither) (tree.Statement, bool) {
 	for oid := range fns {
 		retOIDs = append(retOIDs, oid)
 	}
+	// Sort the slice since iterating over fns is non-deterministic.
+	sort.Slice(retOIDs, func(i, j int) bool {
+		return retOIDs[i] < retOIDs[j]
+	})
 	// Pick a random starting point within the list of OIDs.
 	oidShift := s.rnd.Intn(len(retOIDs))
 	for i := 0; i < len(retOIDs); i++ {

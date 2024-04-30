@@ -12,6 +12,7 @@ package sqlsmith
 
 import (
 	gosql "database/sql"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -425,7 +426,7 @@ func makeDropType(s *Smither) (tree.Statement, bool) {
 	var typNames []*tree.UnresolvedObjectName
 	for len(typNames) < 1 || s.coin() {
 		// It's ok if the same type is chosen multiple times.
-		typName, ok := s.getRandUserDefinedType()
+		_, typName, ok := s.getRandUserDefinedType()
 		if !ok {
 			if len(typNames) == 0 {
 				return nil, false
@@ -458,6 +459,9 @@ func rowsToRegionList(rows *gosql.Rows) ([]string, error) {
 	for region := range regionsSet {
 		regions = append(regions, region)
 	}
+	// Make deterministic. Note that we don't need to shuffle the regions since
+	// the caller will be picking random ones from the slice.
+	sort.Strings(regions)
 	return regions, nil
 }
 
