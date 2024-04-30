@@ -112,6 +112,7 @@ var buildTargetMapping = map[string]string{
 	"swagger":              "@com_github_go_swagger_go_swagger//cmd/swagger:swagger",
 	"tests":                "//pkg:all_tests",
 	"workload":             "//pkg/cmd/workload:workload",
+	"promhelperservice":    "//pkg/cmd/promhelperservice:promhelperservice",
 }
 
 // allBuildTargets is a sorted list of all the available build targets.
