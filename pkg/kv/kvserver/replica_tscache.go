@@ -16,12 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -60,7 +60,6 @@ var ReadSummaryGlobalBudget = settings.RegisterByteSizeSetting(
 // performs a few assertions to check for proper use of the timestamp cache.
 func (r *Replica) addToTSCacheChecked(
 	ctx context.Context,
-	st *kvserverpb.LeaseStatus,
 	ba *kvpb.BatchRequest,
 	br *kvpb.BatchResponse,
 	pErr *kvpb.Error,
@@ -69,13 +68,21 @@ func (r *Replica) addToTSCacheChecked(
 	txnID uuid.UUID,
 ) {
 	// All updates to the timestamp cache must be performed below the expiration
-	// time of the leaseholder. This ensures correctness if the lease expires
-	// and is acquired by a new replica that begins serving writes immediately
-	// to the same keys at the next lease's start time.
-	if exp := st.Expiration(); exp.LessEq(ts) {
-		log.Fatalf(ctx, "Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
-			"cache after evaluating %v (resp=%v; err=%v) with lease expiration %v. The timestamp "+
-			"cache update could be lost of a non-cooperative lease change.", ts, ba, br, pErr, exp)
+	// time of the leaseholder. This ensures correctness if the lease expires and
+	// is acquired by a new replica that begins serving writes immediately to the
+	// same keys at the next lease's start time.
+	//
+	// We skip the assertion if the lease is not valid or is no longer held by
+	// this replica, assuming optimistically that the timestamp cache update was
+	// safe. We could also just skip the timestamp cache update in this case, but
+	// choose not to do in order to avoid test-only logic drifting too far from
+	// production logic.
+	if st := r.CurrentLeaseStatus(ctx); st.IsValid() && st.OwnedBy(r.StoreID()) {
+		if exp := st.Expiration(); exp.LessEq(ts) {
+			log.Fatalf(ctx, "Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
+				"cache after evaluating %v (resp=%v; err=%v) with lease expiration %v. The timestamp "+
+				"cache update could be lost on a non-cooperative lease change.", ts, ba, br, pErr, exp)
+		}
 	}
 	r.store.tsCache.Add(ctx, start, end, ts, txnID)
 }
@@ -86,14 +93,17 @@ func (r *Replica) addToTSCacheChecked(
 // called before or after a batch is done evaluating. A nil `br` indicates that
 // this method is being called before the batch is done evaluating.
 func (r *Replica) updateTimestampCache(
-	ctx context.Context,
-	st *kvserverpb.LeaseStatus,
-	ba *kvpb.BatchRequest,
-	br *kvpb.BatchResponse,
-	pErr *kvpb.Error,
+	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, pErr *kvpb.Error,
 ) {
+	// Only call the more expensive addToTSCacheChecked function in test builds.
+	// Otherwise, just add to the timestamp cache without checking the lease.
 	addToTSCache := func(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
-		r.addToTSCacheChecked(ctx, st, ba, br, pErr, start, end, ts, txnID)
+		r.store.tsCache.Add(ctx, start, end, ts, txnID)
+	}
+	if buildutil.CrdbTestBuild {
+		addToTSCache = func(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
+			r.addToTSCacheChecked(ctx, ba, br, pErr, start, end, ts, txnID)
+		}
 	}
 	// Update the timestamp cache using the timestamp at which the batch
 	// was executed. Note this may have moved forward from ba.Timestamp,
