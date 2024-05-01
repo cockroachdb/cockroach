@@ -366,31 +366,33 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 		WHERE app_name = 'min_flush_test'
 		`, [][]string{{"1"}})
 
-	// Since by default, the minimum flush interval is 10 minutes, a subsequent
-	// flush should be no-op.
-	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+	// Since by default, the minimum flush interval is 10 minutes, sending
+	// memory pressure signal should not trigger a flush.
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints = 1")
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints = 1")
+	sqlConn.Exec(t, "SELECT 1")
 
-	sqlConn.CheckQueryResults(t, `
+	for i := 0; i < 5; i++ {
+		time.Sleep(time.Millisecond * 500)
+
+		sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
 		FROM system.statement_statistics
 		WHERE app_name = 'min_flush_test'
 		`, [][]string{{"1"}})
-
-	sqlConn.CheckQueryResults(t, `
+		sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
 		FROM system.transaction_statistics
 		WHERE app_name = 'min_flush_test'
 		`, [][]string{{"1"}})
+	}
 
 	// We manually set the time to past the minimum flush interval, now the flush
 	// should succeed.
-	fakeTime.setTime(fakeTime.Now().Add(time.Hour))
+	fakeTime.setTime(fakeTime.Now().Add(time.Minute * 15))
+	sqlConn.Exec(t, "SELECT 1+1")
 
-	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
-
-	sqlConn.CheckQueryResults(t, `
+	sqlConn.CheckQueryResultsRetry(t, `
 		SELECT count(*) > 1
 		FROM system.statement_statistics
 		WHERE app_name = 'min_flush_test'
@@ -403,7 +405,11 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
+		},
+	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
@@ -425,7 +431,7 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM crdb_internal.statement_statistics
+		FROM crdb_internal.cluster_statement_statistics
 		WHERE app_name = 'flush_disabled_test'
 		`, [][]string{{"1"}})
 
@@ -434,31 +440,37 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM crdb_internal.statement_statistics
+		FROM crdb_internal.cluster_statement_statistics
 		WHERE app_name = 'flush_disabled_test'
 		`, [][]string{{"0"}})
 	})
 
 	t.Run("flush_enabled", func(t *testing.T) {
 		// Now turn back SQL Stats flush. If the flush is aborted due to violating
-		// minimum flush interval constraint, we should not be clearing in-memory
-		// stats.
-		sqlConn.Exec(t,
-			"SET CLUSTER SETTING sql.stats.flush.enabled = true")
+		// reaching table row limits, we should not be clearing in-memory stats.
+		sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.limit_table_size_check.interval = '0s'")
+		sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.persisted_rows.max = 5")
+		sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = true")
 		sqlConn.Exec(t, "SET application_name = 'flush_enabled_test'")
-		sqlConn.Exec(t, "SELECT 1")
+		for i := 0; i < 100; i++ {
+			query := `SELECT 1`
+			for j := 0; j < i; j++ {
+				query += `,1`
+			}
+			sqlConn.Exec(t, query)
+		}
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
 		FROM crdb_internal.statement_statistics
 		WHERE app_name = 'flush_enabled_test'
-		`, [][]string{{"1"}})
+		`, [][]string{{"100"}})
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
 		FROM crdb_internal.transaction_statistics
 		WHERE app_name = 'flush_enabled_test'
-		`, [][]string{{"1"}})
+		`, [][]string{{"100"}})
 
 		// First flush should flush everything into the system tables.
 		s.SQLServer().(*sql.Server).
@@ -468,44 +480,44 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 		SELECT count(*)
 		FROM system.statement_statistics
 		WHERE app_name = 'flush_enabled_test'
-		`, [][]string{{"1"}})
+		`, [][]string{{"100"}})
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
 		FROM system.transaction_statistics
 		WHERE app_name = 'flush_enabled_test'
-		`, [][]string{{"1"}})
+		`, [][]string{{"100"}})
 
-		sqlConn.Exec(t, "SELECT 1,1")
+		sqlConn.Exec(t, "SELECT 1+1")
 
-		// Second flush should be aborted due to violating the minimum flush
-		// interval requirement. Though the data should still remain in-memory.
-		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+		// Second flush should be aborted due to violating the max
+		// persisted_rows limit, but the stats should remain in-memory.
+		flushed := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
 
+		require.False(t, flushed, "expected flush to be aborted due to reaching max persisted rows")
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
 		FROM system.statement_statistics
 		WHERE app_name = 'flush_enabled_test'
-		`, [][]string{{"1"}})
+		`, [][]string{{"100"}})
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
 		FROM system.transaction_statistics
 		WHERE app_name = 'flush_enabled_test'
+		`, [][]string{{"100"}})
+
+		observerConn.CheckQueryResults(t, `
+		SELECT count(*)
+		FROM crdb_internal.cluster_statement_statistics
+		WHERE app_name = 'flush_enabled_test'
 		`, [][]string{{"1"}})
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM crdb_internal.statement_statistics
+		FROM crdb_internal.cluster_transaction_statistics
 		WHERE app_name = 'flush_enabled_test'
-		`, [][]string{{"2"}})
-
-		observerConn.CheckQueryResults(t, `
-		SELECT count(*)
-		FROM crdb_internal.transaction_statistics
-		WHERE app_name = 'flush_enabled_test'
-		`, [][]string{{"2"}})
+		`, [][]string{{"1"}})
 	})
 }
 
@@ -1248,6 +1260,7 @@ func TestSQLStatsFlushDoesntWaitForFlushSigReceiver(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
+	persistedsqlstats.MinimumInterval.Override(ctx, &tc.Server(0).ClusterSettings().SV, 0)
 	ss := tc.ApplicationLayer(0).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 	flushDoneCh := make(chan struct{})
 	ss.SetFlushDoneSignalCh(flushDoneCh)
