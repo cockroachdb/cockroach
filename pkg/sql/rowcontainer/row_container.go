@@ -626,7 +626,7 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	if f.UsingDisk() {
 		return errors.New("already using disk")
 	}
-	drc, err := MakeDiskRowContainer(f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
+	drc, err := MakeDiskRowContainer(ctx, f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
 	if err != nil {
 		return err
 	}

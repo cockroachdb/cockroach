@@ -97,6 +97,7 @@ var _ DeDupingRowContainer = &DiskRowContainer{}
 //   - ordering is the output ordering; the order in which rows should be sorted.
 //   - e is the underlying store that rows are stored on.
 func MakeDiskRowContainer(
+	ctx context.Context,
 	diskMonitor *mon.BytesMonitor,
 	typs []*types.T,
 	ordering colinfo.ColumnOrdering,
@@ -104,15 +105,15 @@ func MakeDiskRowContainer(
 ) (DiskRowContainer, error) {
 	diskMap := e.NewSortedDiskMap()
 	d := DiskRowContainer{
-		diskMap:     diskMap,
-		diskAcc:     diskMonitor.MakeBoundAccount(),
-		types:       typs,
-		ordering:    ordering,
-		diskMonitor: diskMonitor,
-		engine:      e,
-		datumAlloc:  &tree.DatumAlloc{},
+		diskMap:      diskMap,
+		diskAcc:      diskMonitor.MakeBoundAccount(),
+		bufferedRows: diskMap.NewBatchWriter(),
+		types:        typs,
+		ordering:     ordering,
+		diskMonitor:  diskMonitor,
+		engine:       e,
+		datumAlloc:   &tree.DatumAlloc{},
 	}
-	d.bufferedRows = d.diskMap.NewBatchWriter()
 
 	// The ordering is specified for a subset of the columns. These will be
 	// encoded as a key in the given order according to the given direction so
@@ -143,6 +144,9 @@ func MakeDiskRowContainer(
 		d.encodings[i] = rowenc.EncodingDirToDatumEncoding(orderInfo.Direction)
 		switch t := typs[orderInfo.ColIdx]; t.Family() {
 		case types.TSQueryFamily, types.TSVectorFamily:
+			// Ensure to close the container since we're not returning it to the
+			// caller.
+			d.Close(ctx)
 			return DiskRowContainer{}, unimplemented.NewWithIssueDetailf(
 				92165, "", "can't order by column type %s", t.SQLStringForError(),
 			)
@@ -333,7 +337,7 @@ func (d *DiskRowContainer) Sort(context.Context) {}
 func (d *DiskRowContainer) Reorder(ctx context.Context, ordering colinfo.ColumnOrdering) error {
 	// We need to create a new DiskRowContainer since its ordering can only be
 	// changed at initialization.
-	newContainer, err := MakeDiskRowContainer(d.diskMonitor, d.types, ordering, d.engine)
+	newContainer, err := MakeDiskRowContainer(ctx, d.diskMonitor, d.types, ordering, d.engine)
 	if err != nil {
 		return err
 	}
@@ -395,11 +399,15 @@ func (d *DiskRowContainer) UnsafeReset(ctx context.Context) error {
 
 // Close is part of the SortableRowContainer interface.
 func (d *DiskRowContainer) Close(ctx context.Context) {
-	// We can ignore the error here because the flushed data is immediately cleared
-	// in the following Close.
-	_ = d.bufferedRows.Close(ctx)
-	d.diskMap.Close(ctx)
-	d.diskAcc.Close(ctx)
+	if d.diskMap != nil {
+		// diskMap and bufferedRows could be nil in some error paths.
+
+		// We can ignore the error here because the flushed data is immediately
+		// cleared in the following Close.
+		_ = d.bufferedRows.Close(ctx)
+		d.diskMap.Close(ctx)
+	}
+	d.diskAcc.Close(ctx) // diskAcc is never nil
 }
 
 // diskRowIterator iterates over the rows in a DiskRowContainer.
