@@ -5,10 +5,14 @@ go_library(
     srcs = [
         "debug.go",
         "tpcc_results.go",
+        "webhook_server.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/debug",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cli/exit",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "//pkg/workload/cli",
         "//pkg/workload/histogram",
         "//pkg/workload/tpcc",
