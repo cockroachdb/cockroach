@@ -670,6 +670,7 @@ func (p *planner) User() username.SQLUsername {
 	return p.SessionData().User()
 }
 
+// TemporarySchemaName implements scbuildstmt.TemporarySchemaProvider.
 func (p *planner) TemporarySchemaName() string {
 	return temporarySchemaName(p.ExtendedEvalContext().SessionID)
 }

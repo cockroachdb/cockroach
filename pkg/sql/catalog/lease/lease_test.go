@@ -1014,7 +1014,10 @@ func TestTxnObeysTableModificationTime(t *testing.T) {
 
 	var params base.TestServerArgs
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	params.DefaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(109385)
+	// This test focuses on the transaction timestamps and when running in
+	// a non-system tenant there may be uncertainty on them (since the gateway and
+	// KV store would be seperate).
+	params.DefaultTestTenant = base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 
@@ -1997,49 +2000,43 @@ func TestReadBeforeDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(109385),
-	})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	if _, err := sqlDB.Exec(`
+	_, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 INSERT INTO t.kv VALUES ('a', 'b');
-`); err != nil {
-		t.Fatal(err)
-	}
+`)
+	require.NoError(t, err)
 	// Test that once a table is dropped it cannot be used even when
 	// a transaction is using a timestamp from the past.
 	tx, err := sqlDB.Begin()
-	if err != nil {
-		t.Fatal(err)
+	require.NoError(t, err)
+	// When running with multi-tenant force a fixed timestamp, so that no
+	// uncertainty exists. Normally this isn't a problem on the system tenant,
+	// since the KV / system tenant are co-located.
+	if s.StartedDefaultTestTenant() {
+		_, err = tx.Exec("SET TRANSACTION AS OF SYSTEM TIME '-1ms'")
+		require.NoError(t, err)
 	}
 
-	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
-		t.Fatal(err)
-	}
-
+	_, err = sqlDB.Exec(`DROP TABLE t.kv`)
+	require.NoError(t, err)
 	rows, err := tx.Query(`SELECT * FROM t.kv`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer rows.Close()
 
 	for rows.Next() {
 		var k, v string
 		err := rows.Scan(&k, &v)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		if k != "a" || v != "b" {
 			t.Fatalf("didn't find expected row: %s %s", k, v)
 		}
 	}
-
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
+	err = tx.Commit()
+	require.NoError(t, err)
 }
 
 // Tests that transactions with timestamps within the uncertainty interval
@@ -2055,60 +2052,57 @@ func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
 					MaxOffset: time.Second,
 				},
 			},
-			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(109385),
 		},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(context.Background())
 	sqlDB := tc.ApplicationLayer(0).SQLConn(t)
 
-	if _, err := sqlDB.Exec(`
+	_, err := sqlDB.Exec(`
  CREATE DATABASE t;
  CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
- `); err != nil {
-		t.Fatal(err)
-	}
+ `)
+	require.NoError(t, err)
 
 	// Create a transaction before the table is created.
 	tx, err := sqlDB.Begin()
-	if err != nil {
-		t.Fatal(err)
+	require.NoError(t, err)
+	// For multi-tenant environments the replica for node 1 and tenant on
+	// node 1 are seperate. So, the uncertainty interval is not predictable enough
+	// to guarantee if we will always see the table as "missing". So, intentionally
+	// lock the timestamp on multi-tenant.
+	if tc.StartedDefaultTestTenant() {
+		_, err = tx.Exec("SET TRANSACTION AS OF SYSTEM TIME '-1ms'")
+		require.NoError(t, err)
 	}
 
 	// Create a transaction before the table is created. Use a different
 	// node so that clock uncertainty is presumed and it gets pushed.
 	tx1, err := tc.ApplicationLayer(1).SQLConn(t, serverutils.DBName("t")).Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	if _, err := sqlDB.Exec(`
+	_, err = sqlDB.Exec(`
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-`); err != nil {
-		t.Fatal(err)
-	}
+`)
+	require.NoError(t, err)
 
 	// Was actually run in the past and so doesn't see the table.
-	if _, err := tx.Exec(`
+	_, err = tx.Exec(`
 INSERT INTO t.kv VALUES ('a', 'b');
-`); !testutils.IsError(err, "does not exist") {
-		t.Fatal(err)
-	}
+`)
+	require.ErrorContains(t, err, "does not exist")
 
 	// Not sure whether run in the past and so sees clock uncertainty push.
-	if _, err := tx1.Exec(`
+	_, err = tx1.Exec(`
 INSERT INTO t.kv VALUES ('c', 'd');
-`); err != nil {
-		t.Fatal(err)
-	}
+`)
+	require.NoError(t, err)
 
-	if err := tx.Rollback(); err != nil {
-		t.Fatal(err)
-	}
+	err = tx.Rollback()
+	require.NoError(t, err)
 
-	if err := tx1.Commit(); err != nil {
-		t.Fatal(err)
-	}
+	err = tx1.Commit()
+	require.NoError(t, err)
 }
 
 // Tests that DeleteOrphanedLeases() deletes only orphaned leases.

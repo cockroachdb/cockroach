@@ -55,6 +55,7 @@ func NewBuilderDependencies(
 	eventLogger scbuild.EventLogger,
 	referenceProviderFactory scbuild.ReferenceProviderFactory,
 	descIDGenerator eval.DescIDGenerator,
+	temporarySchemaProvider scbuild.TemporarySchemaProvider,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:       clusterID,
@@ -74,6 +75,7 @@ func NewBuilderDependencies(
 		eventLogger:              eventLogger,
 		descIDGenerator:          descIDGenerator,
 		referenceProviderFactory: referenceProviderFactory,
+		temporarySchemaProvider:  temporarySchemaProvider,
 	}
 }
 
@@ -93,6 +95,7 @@ type buildDeps struct {
 	eventLogger              scbuild.EventLogger
 	referenceProviderFactory scbuild.ReferenceProviderFactory
 	descIDGenerator          eval.DescIDGenerator
+	temporarySchemaProvider  scbuild.TemporarySchemaProvider
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -486,4 +489,8 @@ func (d *buildDeps) DescIDGenerator() eval.DescIDGenerator {
 
 func (d *buildDeps) ReferenceProviderFactory() scbuild.ReferenceProviderFactory {
 	return d.referenceProviderFactory
+}
+
+func (d *buildDeps) TemporarySchemaProvider() scbuild.TemporarySchemaProvider {
+	return d.temporarySchemaProvider
 }

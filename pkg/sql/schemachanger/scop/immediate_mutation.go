@@ -141,6 +141,17 @@ type MarkDescriptorAsPublic struct {
 	DescriptorID descpb.ID
 }
 
+type InsertTemporarySchema struct {
+	immediateMutationOp
+	DescriptorID descpb.ID
+}
+
+type InsertTemporarySchemaParent struct {
+	immediateMutationOp
+	SchemaID   descpb.ID
+	DatabaseID descpb.ID
+}
+
 // MarkDescriptorAsDropped changes the descriptor's state to DROPPED.
 type MarkDescriptorAsDropped struct {
 	immediateMutationOp
@@ -839,6 +850,7 @@ type CreateSchemaDescriptor struct {
 type CreateSequenceDescriptor struct {
 	immediateMutationOp
 	SequenceID descpb.ID
+	Temporary  bool
 }
 
 type SetSequenceOptions struct {

@@ -563,6 +563,13 @@ func (ep *DummyEvalPlanner) AutoCommit() bool {
 	return false
 }
 
+// InsertTemporarySchema is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) InsertTemporarySchema(
+	tempSchemaName string, databaseID descpb.ID, schemaID descpb.ID,
+) {
+
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 
