@@ -1488,6 +1488,9 @@ func TestingClearConstructors() func() {
 // TestingRegisterConstructor is like RegisterConstructor but returns a cleanup function
 // resets the registration for the given type.
 func TestingRegisterConstructor(typ jobspb.Type, fn Constructor, opts ...RegisterOption) func() {
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
 	var cleanupFn func()
 	if origConstructorFn, found := globalMu.constructors[typ]; found {
 		origOpts := globalMu.options[typ]
