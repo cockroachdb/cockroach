@@ -70,7 +70,9 @@ type Smither struct {
 	tables    []*tableRef
 	sequences []*sequenceRef
 	columns   map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
-	indexes   map[tree.TableName]map[tree.Name]*tree.CreateIndex
+	// Note: consider using getAllIndexesForTable helper if you need to iterate
+	// over all indexes for a particular table.
+	indexes map[tree.TableName]map[tree.Name]*tree.CreateIndex
 	// Only one of nameCounts and nameGens will be used. nameCounts is used when
 	// simpleNames is true.
 	nameCounts       map[string]int
