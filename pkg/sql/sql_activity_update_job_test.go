@@ -75,6 +75,7 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	ts := srv.ApplicationLayer()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 
 	var count int
 	row := db.QueryRow(t, "SELECT count_rows() FROM system.public.transaction_activity")
@@ -145,6 +146,7 @@ func TestMergeFunctionLogic(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 
 	appName := "TestMergeFunctionLogic"
 	db.Exec(t, "SET SESSION application_name=$1", appName)
@@ -259,6 +261,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	ts := srv.ApplicationLayer()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 
 	// Give permission to write to sys tables.
 	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
@@ -503,7 +506,9 @@ func TestSqlActivityJobRunsAfterStatsFlush(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	defer db.Close()
 
-	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING sql.stats.flush.interval = '100ms'")
+	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, "SET CLUSTER SETTING sql.stats.flush.interval = '100ms'")
 	require.NoError(t, err)
 	appName := "TestScheduledSQLStatsCompaction"
 	_, err = db.ExecContext(ctx, "SET SESSION application_name=$1", appName)
@@ -567,6 +572,7 @@ func TestTransactionActivityMetadata(t *testing.T) {
 	updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 	db.Exec(t, "SET SESSION application_name = 'test_txn_activity_table'")
 
 	// Generate some sql stats data.
@@ -634,6 +640,7 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 	// Generate a random app name each time to avoid conflicts
 	appName := "test_status_api" + uuid.FastMakeV4().String()
 	db.Exec(t, "SET SESSION application_name = $1", appName)
@@ -779,6 +786,7 @@ func TestFlushToActivityWithDifferentAggTs(t *testing.T) {
 	ts := srv.ApplicationLayer()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 
 	// Start with empty activity tables.
 	execCfg := ts.ExecutorConfig().(ExecutorConfig)
