@@ -14,6 +14,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
+        "//pkg/util/metamorphic",
         "//pkg/util/syncutil",
     ],
 )

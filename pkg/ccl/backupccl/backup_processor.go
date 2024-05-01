@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
@@ -37,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -91,14 +91,14 @@ var (
 		settings.ApplicationLevel,
 		"bulkio.backup.presplit_request_spans.enabled",
 		"split the spans that will be requests before requesting them",
-		util.ConstantWithMetamorphicTestBool("backup-presplit-spans", true),
+		metamorphic.ConstantWithMetamorphicTestBool("backup-presplit-spans", true),
 	)
 
 	sendExportRequestWithVerboseTracing = settings.RegisterBoolSetting(
 		settings.ApplicationLevel,
 		"bulkio.backup.export_request_verbose_tracing",
 		"send each export request with a verbose tracing span",
-		util.ConstantWithMetamorphicTestBool("export_request_verbose_tracing", false),
+		metamorphic.ConstantWithMetamorphicTestBool("export_request_verbose_tracing", false),
 		settings.WithName("bulkio.backup.verbose_tracing.enabled"),
 	)
 
