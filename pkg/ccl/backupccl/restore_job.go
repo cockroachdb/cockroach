@@ -751,7 +751,8 @@ func spansForAllRestoreTableIndexes(
 	tables []catalog.TableDescriptor,
 	revs []backuppb.BackupManifest_DescriptorRevision,
 	schemaOnly bool,
-) []roachpb.Span {
+	forOnlineRestore bool,
+) ([]roachpb.Span, error) {
 
 	skipTableData := func(table catalog.TableDescriptor) bool {
 		// The only table data restored during a schemaOnly restore are from system tables,
@@ -815,7 +816,22 @@ func spansForAllRestoreTableIndexes(
 		})
 		return false
 	})
-	return spans
+
+	if forOnlineRestore {
+		spans, _ = roachpb.MergeSpans(&spans)
+		tableIDMap := make(map[uint32]struct{}, len(spans))
+		for _, sp := range spans {
+			_, tableID, err := codec.DecodeTablePrefix(sp.Key)
+			if err != nil {
+				return nil, err
+			}
+			if _, exists := tableIDMap[tableID]; exists {
+				return nil, errors.Newf("restore target contains two distinct spans with table id %d. Online restore cannot handle this as it may make an empty file span", tableID)
+			}
+			tableIDMap[tableID] = struct{}{}
+		}
+	}
+	return spans, nil
 }
 
 func shouldPreRestore(table *tabledesc.Mutable) bool {
@@ -985,13 +1001,22 @@ func createImportingDescriptors(
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
-	preRestoreSpans := spansForAllRestoreTableIndexes(backupCodec, preRestoreTables, nil, details.SchemaOnly)
-	postRestoreSpans := spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, details.SchemaOnly)
+	preRestoreSpans, err := spansForAllRestoreTableIndexes(backupCodec, preRestoreTables, nil, details.SchemaOnly, details.ExperimentalOnline)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	postRestoreSpans, err := spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, details.SchemaOnly, details.ExperimentalOnline)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	var verifySpans []roachpb.Span
 	if details.VerifyData {
 		// verifySpans contains the spans that should be read and checksum'd during a
 		// verify_backup_table_data RESTORE
-		verifySpans = spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, false)
+		verifySpans, err = spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, false, details.ExperimentalOnline)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	}
 
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))

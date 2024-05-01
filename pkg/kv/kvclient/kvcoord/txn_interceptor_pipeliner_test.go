@@ -89,10 +89,11 @@ func makeMockTxnPipeliner(iter condensableSpanSetRangeIterator) (txnPipeliner, *
 	metrics := MakeTxnMetrics(time.Hour)
 	everyN := log.Every(time.Hour)
 	return txnPipeliner{
-		st:                     cluster.MakeTestingClusterSettings(),
-		wrapped:                mockSender,
-		txnMetrics:             &metrics,
-		condensedIntentsEveryN: &everyN,
+		st:                       cluster.MakeTestingClusterSettings(),
+		wrapped:                  mockSender,
+		txnMetrics:               &metrics,
+		condensedIntentsEveryN:   &everyN,
+		inflightOverBudgetEveryN: &everyN,
 		riGen: rangeIteratorFactory{
 			factory: func() condensableSpanSetRangeIterator {
 				return iter

@@ -221,12 +221,13 @@ var rejectTxnOverTrackedWritesBudget = settings.RegisterBoolSetting(
 // attached to any end transaction request that is passed through the pipeliner
 // to ensure that they the locks within them are released.
 type txnPipeliner struct {
-	st                     *cluster.Settings
-	riGen                  rangeIteratorFactory // used to condense lock spans, if provided
-	wrapped                lockedSender
-	disabled               bool
-	txnMetrics             *TxnMetrics
-	condensedIntentsEveryN *log.EveryN
+	st                       *cluster.Settings
+	riGen                    rangeIteratorFactory // used to condense lock spans, if provided
+	wrapped                  lockedSender
+	disabled                 bool
+	txnMetrics               *TxnMetrics
+	condensedIntentsEveryN   *log.EveryN
+	inflightOverBudgetEveryN *log.EveryN
 
 	// In-flight writes are intent point writes that have not yet been proved
 	// to have succeeded. They will need to be proven before the transaction
@@ -686,10 +687,26 @@ func (tp *txnPipeliner) updateLockTracking(
 		return err
 	}
 
+	// Because the in-flight writes can include locking reads, and because we
+	// don't estimate the size of the locks accurately for ranged locking reads,
+	// it is possible that ifWrites have exceeded the maxBytes threshold. That's
+	// fine for now, but we add some observability to be aware of this happening.
+	if tp.ifWrites.byteSize() > maxBytes {
+		if tp.inflightOverBudgetEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
+			log.Warningf(ctx, "a transaction's in-flight writes and locking reads have "+
+				"exceeded the intent tracking limit (kv.transaction.max_intents_bytes). "+
+				"in-flight writes and locking reads size: %d bytes, txn: %s, ba: %s",
+				tp.ifWrites.byteSize(), ba.Txn, ba.Summary())
+		}
+		tp.txnMetrics.TxnsInFlightLocksOverTrackingBudget.Inc(1)
+	}
+
 	// Deal with compacting the lock spans.
 
 	// Compute how many bytes are left for locks after accounting for the
-	// in-flight writes.
+	// in-flight writes. It's possible that locksBudget is negative, but the
+	// remainder of this function and maybeCondense handle this case (each span
+	// will be maximally condensed).
 	locksBudget := maxBytes - tp.ifWrites.byteSize()
 	// If we're below budget, there's nothing more to do.
 	if tp.lockFootprint.bytesSize() <= locksBudget {
