@@ -36,6 +36,7 @@ interface SummaryStatProps {
   value?: number;
   format?: (n: number) => string;
   aggregator?: SummaryMetricsAggregator;
+  numberAlert?: boolean;
 }
 
 interface SummaryHeadlineStatProps extends SummaryStatProps {
@@ -106,22 +107,21 @@ export function SummaryValue(
  * the value is a non-numeric value and applies an appearance modifier specific
  * to numeric values.
  */
-export function SummaryStat(
-  props: SummaryStatProps & { children?: React.ReactNode },
-) {
-  let classModifier = "number";
-
-  if (props.title === "Unavailable ranges" && props.value !== 0) {
-    classModifier = "alert-unavailable-ranges";
-  }
-
+export function SummaryStat({
+                              title,
+                              value,
+                              format,
+                              children,
+                              numberAlert = false, // Default value set here
+                            }: SummaryStatProps) {
+  const classModifier = numberAlert ? "number-alert" : "number";
   return (
     <SummaryValue
-      title={props.title}
-      value={formatNumberForDisplay(props.value, props.format)}
+      title={title}
+      value={formatNumberForDisplay(value, format)}
       classModifier={classModifier}
     >
-      {props.children}
+      {children}
     </SummaryValue>
   );
 }
