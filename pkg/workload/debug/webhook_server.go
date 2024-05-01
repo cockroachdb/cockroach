@@ -70,6 +70,7 @@ func webhookServer(cmd *cobra.Command, args []string) error {
 			defer mu.Unlock()
 			before = len(seen)
 			after = before
+			// TODO(cdc): add check for ordering guarantees using resolved timestamps and event timestamps
 			for _, i := range req.Payload {
 				if _, ok := seen[i.After.ID]; !ok {
 					seen[i.After.ID] = struct{}{}
