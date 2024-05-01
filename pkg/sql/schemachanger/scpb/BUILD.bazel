@@ -1,6 +1,6 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scpb",
@@ -64,13 +64,6 @@ proto_library(
     ],
 )
 
-go_binary(
-    name = "element-generator",
-    srcs = ["element_generator.go"],
-    gotags = ["generator"],
-    deps = ["//pkg/cli/exit"],
-)
-
 genrule(
     name = "gen-elements-interface",
     srcs = [
@@ -78,10 +71,10 @@ genrule(
     ],
     outs = ["elements_generated.go"],
     cmd = """
-        $(location :element-generator) --in $< --out $(location elements_generated.go)
+        $(location //pkg/sql/schemachanger/scpb/element-generator) --in $< --out $(location elements_generated.go)
        """,
     exec_tools = [
-        ":element-generator",
+        "//pkg/sql/schemachanger/scpb/element-generator",
     ],
     visibility = [
         ":__pkg__",
@@ -89,24 +82,14 @@ genrule(
     ],
 )
 
-go_binary(
-    name = "element-uml-generator",
-    srcs = ["element_uml_generator.go"],
-    gotags = ["generator"],
-    deps = [
-        "//pkg/cli/exit",
-        "//pkg/sql/schemachanger/scpb",
-    ],
-)
-
 genrule(
     name = "gen-elements-uml",
     outs = ["uml/table.puml"],
     cmd = """
-        $(location :element-uml-generator) --out $(location uml/table.puml)
+        $(location //pkg/sql/schemachanger/scpb/element-uml-generator) --out $(location uml/table.puml)
        """,
     exec_tools = [
-        ":element-uml-generator",
+        "//pkg/sql/schemachanger/scpb/element-uml-generator",
     ],
     visibility = [
         ":__pkg__",
