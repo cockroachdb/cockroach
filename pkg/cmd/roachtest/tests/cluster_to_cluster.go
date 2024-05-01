@@ -1257,6 +1257,9 @@ func registerClusterToCluster(r registry.Registry) {
 			// replanning and distributed catch up scans fix the poor initial plan. If
 			// max accepted latency doubles, then there's likely a regression.
 			maxAcceptedLatency: 1 * time.Hour,
+			// Skipping node distribution check because there is little data on the
+			// source when the replication stream begins.
+			skipNodeDistributionCheck: true,
 			clouds:             registry.AllExceptAWS,
 			suites:             registry.Suites(registry.Nightly),
 		},
