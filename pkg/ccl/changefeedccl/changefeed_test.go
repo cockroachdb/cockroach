@@ -6224,6 +6224,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 
 	db := tc.ServerConn(1)
 	sqlDB := sqlutils.MakeSQLRunner(db)
+	serverutils.SetClusterSetting(t, tc, "changefeed.shutdown_checkpoint.enabled", true)
 	serverutils.SetClusterSetting(t, tc, "kv.rangefeed.enabled", true)
 	serverutils.SetClusterSetting(t, tc, "kv.closed_timestamp.target_duration", 10*time.Millisecond)
 	serverutils.SetClusterSetting(t, tc, "changefeed.experimental_poll_interval", 10*time.Millisecond)

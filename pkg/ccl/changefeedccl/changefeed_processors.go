@@ -137,7 +137,7 @@ var aggregatorEmitsShutdownCheckpoint = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"changefeed.shutdown_checkpoint.enabled",
 	"upon shutdown aggregator attempts to emit an up-to-date checkpoint",
-	true,
+	false,
 )
 
 type drainWatcher <-chan struct{}
