@@ -57,7 +57,6 @@ go_test(
         "span_config_stream_client_test.go",
     ],
     embed = [":streamclient"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
