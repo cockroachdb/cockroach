@@ -44,14 +44,8 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
- │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
- │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":108}
- │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
- │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
@@ -63,20 +57,26 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
- │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":108}
- │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":108}
- │              ├── AssertColumnFamilyIsRemoved {"TableID":108}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":108}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":108}
+ │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":108}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"TableID":108}
  │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Ordinal":1,"TableID":108}
  │              ├── MakeIndexAbsent {"IndexID":1,"TableID":108}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
  ├── PreCommitPhase
@@ -148,14 +148,8 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
- │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
- │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":108}
- │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
- │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
@@ -167,20 +161,26 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
- │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":108}
- │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":108}
- │              ├── AssertColumnFamilyIsRemoved {"TableID":108}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":108}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":108}
+ │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":108}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"TableID":108}
  │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Ordinal":1,"TableID":108}
  │              ├── MakeIndexAbsent {"IndexID":1,"TableID":108}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}

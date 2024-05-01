@@ -9,4 +9,4 @@ INSERT INTO t VALUES(-3);
 EXPLAIN (DDL, SHAPE) DROP INDEX idx CASCADE;
 ----
 Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE;
- └── execute 3 system table mutations transactions
+ └── execute 4 system table mutations transactions
