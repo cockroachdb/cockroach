@@ -1,0 +1,11 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "metamorphicutil",
+    srcs = ["is_metamorphic.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/metamorphic/metamorphicutil",
+    visibility = [
+        "//pkg/testutils/skip:__pkg__",
+        "//pkg/util/metamorphic:__pkg__",
+    ],
+)
