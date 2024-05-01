@@ -723,6 +723,7 @@ message StacksRequest {
 enum FileType {
   HEAP = 0;
   GOROUTINES = 1;
+  CPU = 2;
 }
 
 message File {

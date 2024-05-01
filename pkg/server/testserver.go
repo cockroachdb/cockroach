@@ -1104,6 +1104,7 @@ func (ts *TestServer) StartTenant(
 	baseCfg.Insecure = params.ForceInsecure
 	baseCfg.Locality = params.Locality
 	baseCfg.HeapProfileDirName = params.HeapProfileDirName
+	baseCfg.CPUProfileDirName = params.CPUProfileDirName
 	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
 	baseCfg.ClusterName = ts.Cfg.ClusterName
 	baseCfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting

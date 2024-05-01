@@ -32,11 +32,11 @@ type NonGoAllocProfiler struct {
 	profiler
 }
 
-// JemallocFileNamePrefix is the prefix of jemalloc profile dumps.
-const JemallocFileNamePrefix = "jeprof"
+// jemallocFileNamePrefix is the prefix of jemalloc profile dumps.
+const jemallocFileNamePrefix = "jeprof"
 
-// JemallocFileNameSuffix is the file name extension of jemalloc profile dumps.
-const JemallocFileNameSuffix = ".jeprof"
+// jemallocFileNameSuffix is the file name extension of jemalloc profile dumps.
+const jemallocFileNameSuffix = ".jeprof"
 
 // NewNonGoAllocProfiler creates a NonGoAllocProfiler. dir is the
 // directory in which profiles are to be stored.
@@ -51,7 +51,7 @@ func NewNonGoAllocProfiler(
 
 	hp := &NonGoAllocProfiler{
 		profiler: makeProfiler(
-			newProfileStore(dumpStore, JemallocFileNamePrefix, JemallocFileNameSuffix, st),
+			newProfileStore(dumpStore, jemallocFileNamePrefix, jemallocFileNameSuffix, st),
 			zeroFloor,
 			envMemprofInterval,
 		),
