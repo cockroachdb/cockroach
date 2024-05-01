@@ -57,6 +57,8 @@ func WithTableDescriptor(tn tree.TableName, desc descpb.TableDescriptor) Smither
 	return option{
 		name: fmt.Sprintf("inject table %s", tn.FQString()),
 		apply: func(s *Smither) {
+			s.lock.Lock()
+			defer s.lock.Unlock()
 			if tn.SchemaName != "" {
 				if !slices.ContainsFunc(s.schemas, func(ref *schemaRef) bool {
 					return ref.SchemaName == tn.SchemaName

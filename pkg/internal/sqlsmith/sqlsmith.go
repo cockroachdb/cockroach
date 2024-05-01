@@ -425,7 +425,7 @@ var SimpleDatums = simpleOption("simple datums", func(s *Smither) {
 	s.simpleDatums = true
 })
 
-// SimpleScalarTypes causes the Smither to use simpler scalar types (e.g. avoid Geometry)
+// SimpleScalarTypes causes the Smither to use simpler scalar types (e.g. avoid Geometry).
 var SimpleScalarTypes = simpleOption("simple scalar types", func(s *Smither) {
 	s.simpleScalarTypes = true
 })
@@ -501,9 +501,11 @@ var OutputSort = simpleOption("output sort", func(s *Smither) {
 	s.outputSort = true
 })
 
-// MaybeSortOutput probabilistically adds ORDER by clause
+// MaybeSortOutput probabilistically adds ORDER by clause.
 var MaybeSortOutput = simpleOption("maybe output sort", func(s *Smither) {
-	s.outputSort = false
+	if s.coin() {
+		s.outputSort = false
+	}
 })
 
 // UnlikelyConstantPredicate causes the Smither to make generation of constant
@@ -567,13 +569,6 @@ var LowProbabilityWhereClauseWithJoinTables = simpleOption("low probability wher
 // source expression is nullable and the target column is not.
 var DisableInsertSelect = simpleOption("disable insert select", func(s *Smither) {
 	s.disableInsertSelect = true
-})
-
-// DisableDivision disables generation of the division operator (/) and the
-// floor division operator (//).
-// TODO(mgartner): Remove this once #86790 is addressed.
-var DisableDivision = simpleOption("disable division", func(s *Smither) {
-	s.disableDivision = true
 })
 
 // DisableDecimals disables use of decimal type columns in the query.
