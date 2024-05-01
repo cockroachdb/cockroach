@@ -222,6 +222,7 @@ go_library(
         "//pkg/workload/bank",
         "//pkg/workload/bulkingest",
         "//pkg/workload/cli",
+        "//pkg/workload/debug",
         "//pkg/workload/examples",
         "//pkg/workload/insights",
         "//pkg/workload/kv",
