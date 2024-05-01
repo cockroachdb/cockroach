@@ -26,15 +26,15 @@ import (
 
 const (
 	// 3 node CRDB cluster, plus 1 node for workload
-	numNodesNetworkLogging = 4
-	fluentBitTCPPort       = 5170
+	numNodesBufferedLogging = 4
+	fluentBitTCPPort        = 5170
 	// YAML template string defining a FluentBit and HTTP log sink, both with buffering enabled.
 	// Container ports for both sinks are left to be interpolated (%d).
-	logConfigTemplate = "{ http-defaults: { format: json-fluent, buffering: { max-staleness: 5s, flush-trigger-size: 1.0MiB, max-buffer-size: 50MiB } }, fluent-defaults: { format: json-fluent, buffering: { max-staleness: 5s, flush-trigger-size: 1.0MiB, max-buffer-size: 50MiB } }, sinks: { fluent-servers: { test-output: { channels: {INFO: all}, net: tcp, address: localhost:%d, filter: INFO, redact: false } }, http-servers: { test-output: { channels: {INFO: all}, address: http://localhost:%d, filter: INFO, method: POST, unsafe-tls: true } } } }"
+	logConfigTemplate = "{ file-defaults: { buffered-writes: false, buffering: { max-staleness: 1s, flush-trigger-size: 256KiB, max-buffer-size: 50MiB } }, http-defaults: { format: json-fluent, buffering: { max-staleness: 5s, flush-trigger-size: 1.0MiB, max-buffer-size: 50MiB } }, fluent-defaults: { format: json-fluent, buffering: { max-staleness: 5s, flush-trigger-size: 1.0MiB, max-buffer-size: 50MiB } }, sinks: { file-groups: { group-a: { channels: [ALL] }, group-b: { channels: [ALL] }, group-c: { channels: [ALL] } }, fluent-servers: { test-output: { channels: {INFO: all}, net: tcp, address: localhost:%d, filter: INFO, redact: false } }, http-servers: { test-output: { channels: {INFO: all}, address: http://localhost:%d, filter: INFO, method: POST, unsafe-tls: true } } } }"
 )
 
-func registerNetworkLogging(r registry.Registry) {
-	runNetworkLogging := func(
+func registerBufferedLogging(r registry.Registry) {
+	runBufferedLogging := func(
 		ctx context.Context,
 		t test.Test,
 		c cluster.Cluster,
@@ -74,7 +74,7 @@ func registerNetworkLogging(r registry.Registry) {
 		// Construct pgurls for the workload runner. As a roundabout way of detecting deadlocks,
 		// we set a client timeout on the workload pgclient. If the server becomes unavailable
 		// due to a deadlock, the timeout will eventually trigger and cause the test to fail.
-		// We've had network logging bugs in the past that deadlocked without the nodes dying,
+		// We've had buffered logging bugs in the past that deadlocked without the nodes dying,
 		// so this helps detect such a case.
 		secureUrls, err := roachprod.PgURL(ctx,
 			t.L(),
@@ -110,14 +110,14 @@ func registerNetworkLogging(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             "network_logging",
+		Name:             "buffered_logging",
 		Owner:            registry.OwnerObservability,
-		Cluster:          r.MakeClusterSpec(numNodesNetworkLogging),
+		Cluster:          r.MakeClusterSpec(numNodesBufferedLogging),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runNetworkLogging(ctx, t, c)
+			runBufferedLogging(ctx, t, c)
 		},
 	})
 }
