@@ -219,7 +219,6 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	status kvserverpb.LeaseStatus,
 	startKey roachpb.Key,
-	transfer bool,
 	bypassSafetyChecks bool,
 ) *leaseRequestHandle {
 	if nextLease, ok := p.RequestPending(); ok {
@@ -237,10 +236,20 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			nextLeaseHolder.ReplicaID, nextLease.Replica.ReplicaID))
 	}
 
-	acquisition := !status.Lease.OwnedBy(p.repl.store.StoreID())
-	extension := !transfer && !acquisition
+	// Who owns the previous and next lease?
+	prevLocal := status.Lease.OwnedBy(p.repl.store.StoreID())
+	nextLocal := nextLeaseHolder.StoreID == p.repl.store.StoreID()
+
+	// Assert that the lease acquisition, extension, or transfer is valid.
+	acquisition := !prevLocal && nextLocal
+	extension := prevLocal && nextLocal
+	transfer := prevLocal && !nextLocal
+	remote := !prevLocal && !nextLocal
 	_ = extension // not used, just documentation
 
+	if remote {
+		log.Fatalf(ctx, "cannot acquire/extend lease for remote replica: %v -> %v", status, nextLeaseHolder)
+	}
 	if acquisition {
 		// If this is a non-cooperative lease change (i.e. an acquisition), it
 		// is up to us to ensure that Lease.Start is greater than the end time
@@ -451,7 +460,7 @@ func (p *pendingLeaseRequest) requestLease(
 	if status.Lease.Type() == roachpb.LeaseEpoch && status.State == kvserverpb.LeaseState_EXPIRED {
 		var err error
 		// If this replica is previous & next lease holder, manually heartbeat to become live.
-		if status.OwnedBy(nextLeaseHolder.StoreID) && p.repl.store.StoreID() == nextLeaseHolder.StoreID {
+		if status.OwnedBy(nextLeaseHolder.StoreID) {
 			if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil && logFailedHeartbeatOwnLiveness.ShouldLog() {
 				log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
 			}
@@ -845,7 +854,7 @@ func (r *Replica) requestLeaseLocked(
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
 		ctx, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(),
-		false /* transfer */, false /* bypassSafetyChecks */)
+		false /* bypassSafetyChecks */)
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica. Only the
@@ -939,7 +948,7 @@ func (r *Replica) AdminTransferLease(
 		}
 
 		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(
-			ctx, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true /* transfer */, bypassSafetyChecks,
+			ctx, nextLeaseHolder, status, desc.StartKey.AsRawKey(), bypassSafetyChecks,
 		)
 		return nil, transfer, nil
 	}
