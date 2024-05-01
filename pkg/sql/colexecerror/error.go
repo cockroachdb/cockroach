@@ -42,17 +42,41 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 			// StorageError was caused by something below SQL, and represents an error
 			// that we'd simply like to propagate along.
 			var se *StorageError
-			// notInternalError is an error that will be returned to the client
-			// without a stacktrace, sentry report, or "internal error" designation.
+			// notInternalError is an error from the vectorized engine that will be
+			// returned to the client without a stacktrace, sentry report, or
+			// "internal error" designation.
 			var nie *notInternalError
 			if errors.As(err, &se) || errors.As(err, &nie) {
 				retErr = err
 				return
 			}
+			// internalError is an error from the vectorized engine that will be
+			// returned to the client with a stacktrace, sentry report, and "internal
+			// error" designation.
+			var ie *internalError
+			if errors.As(err, &ie) {
+				// If the internal error doesn't already have an error code, mark it as
+				// an assertion error so that we generate a sentry report. (We don't do
+				// this for context cancellation errors since they will be handled
+				// higher in the stack.)
+				retErr = err
+				if !errors.Is(err, context.Canceled) {
+					if code := pgerror.GetPGCode(err); code == pgcode.Uncategorized {
+						retErr = errors.NewAssertionErrorWithWrappedErrf(
+							err, "unexpected error from the vectorized engine",
+						)
+					}
+				}
+				return
+			}
 		}
 
-		// Find where the panic came from and only proceed if it is related to the
-		// vectorized engine.
+		// For other types of errors, we need to check where the panic came from. We
+		// only want to recover from panics that originated within the vectorized
+		// engine. We treat a panic from lower in the stack as unrecoverable.
+
+		// Find where the panic came from and only proceed if it
+		// is related to the vectorized engine.
 		stackTrace := string(debug.Stack())
 		scanner := bufio.NewScanner(strings.NewReader(stackTrace))
 		panicLineFound := false
@@ -193,16 +217,41 @@ func decodeNotInternalError(
 	return newNotInternalError(cause)
 }
 
-func init() {
-	errors.RegisterWrapperDecoder(errors.GetTypeKey((*notInternalError)(nil)), decodeNotInternalError)
+// internalError is an error that occurs because the vectorized engine is in an
+// unexpected state. Usually it wraps an assertion error.
+type internalError struct {
+	cause error
 }
 
-// InternalError simply panics with the provided object. It will always be
-// caught and returned as internal error to the client with the corresponding
+func newInternalError(err error) *internalError {
+	return &internalError{cause: err}
+}
+
+var (
+	_ errors.Wrapper = &internalError{}
+)
+
+func (e *internalError) Error() string { return e.cause.Error() }
+func (e *internalError) Cause() error  { return e.cause }
+func (e *internalError) Unwrap() error { return e.Cause() }
+
+func decodeInternalError(
+	_ context.Context, cause error, _ string, _ []string, _ proto.Message,
+) error {
+	return newInternalError(cause)
+}
+
+func init() {
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*notInternalError)(nil)), decodeNotInternalError)
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*internalError)(nil)), decodeInternalError)
+}
+
+// InternalError panics with the error wrapped by internalError. It will always
+// be caught and returned as internal error to the client with the corresponding
 // stack trace. This method should be called to propagate errors that resulted
 // in the vectorized engine being in an *unexpected* state.
 func InternalError(err error) {
-	panic(err)
+	panic(newInternalError(err))
 }
 
 // ExpectedError panics with the error that is wrapped by
