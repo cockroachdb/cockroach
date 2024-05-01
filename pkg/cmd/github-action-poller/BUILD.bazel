@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "github-action-poller_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/github-action-poller",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/util/timeutil",
+        "@com_github_google_go_github_v61//github",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)
+
+go_binary(
+    name = "github-action-poller",
+    embed = [":github-action-poller_lib"],
+    visibility = ["//visibility:public"],
+)
