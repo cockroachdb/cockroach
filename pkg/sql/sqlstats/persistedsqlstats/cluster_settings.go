@@ -40,7 +40,7 @@ var MinimumInterval = settings.RegisterDurationSetting(
 	"the minimum interval that SQL stats can be flushes to disk. If a "+
 		"flush operation starts within less than the minimum interval, the flush "+
 		"operation will be aborted",
-	0,
+	time.Minute*10,
 	settings.NonNegativeDuration,
 )
 
