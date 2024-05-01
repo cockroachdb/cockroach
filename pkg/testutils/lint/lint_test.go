@@ -2010,6 +2010,8 @@ func TestLint(t *testing.T) {
 			// times and merging the results: https://staticcheck.io/docs/running-staticcheck/cli/build-tags/
 			// This is more trouble than it's worth right now.
 			stream.GrepNot(`pkg/cmd/mirror/go/mirror.go`),
+			// As above, the bazel build tag has an impact here.
+			stream.GrepNot(`pkg/testutils/docker/single_node_docker_test.go`),
 		}
 		for analyzerName, config := range nogoConfig {
 			if !staticcheckCheckNameRe.MatchString(analyzerName) {
