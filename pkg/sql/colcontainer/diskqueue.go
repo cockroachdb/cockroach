@@ -440,8 +440,15 @@ func (d *diskQueue) closeFileDeserializer(ctx context.Context) error {
 	return nil
 }
 
-func (d *diskQueue) Close(ctx context.Context) error {
+func (d *diskQueue) Close(ctx context.Context) (retErr error) {
 	defer func() {
+		if d.writeFile != nil {
+			// Ensure that we always attempt to close the file in case we
+			// short-circuit the method due to an error.
+			if err := d.writeFile.Close(); err != nil {
+				retErr = errors.CombineErrors(retErr, err)
+			}
+		}
 		// Zero out the structure completely upon return. If users of this diskQueue
 		// retain a pointer to it, and we don't remove all references to large
 		// backing slices (various scratch spaces in this struct and children),
@@ -492,12 +499,21 @@ func (d *diskQueue) Close(ctx context.Context) error {
 // It is valid to call rotateFile when the diskQueue is not currently writing to
 // any file (i.e. during initialization). This will simply create the first file
 // to write to.
-func (d *diskQueue) rotateFile(ctx context.Context) error {
+func (d *diskQueue) rotateFile(ctx context.Context) (retErr error) {
 	fName := filepath.Join(d.cfg.GetPather.GetPath(ctx), d.dirName, strconv.Itoa(d.seqNo))
 	f, err := fs.CreateWithSync(d.cfg.FS, fName, bytesPerSync)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if retErr != nil {
+			// If we hit an error, then we lose the reference to newly created
+			// file - ensure that it is closed if so.
+			if err = f.Close(); err != nil {
+				retErr = errors.CombineErrors(retErr, err)
+			}
+		}
+	}()
 	d.seqNo++
 
 	if d.serializer == nil {
