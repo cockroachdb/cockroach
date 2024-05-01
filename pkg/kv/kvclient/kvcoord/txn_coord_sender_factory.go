@@ -27,14 +27,15 @@ import (
 type TxnCoordSenderFactory struct {
 	log.AmbientContext
 
-	st                     *cluster.Settings
-	wrapped                kv.Sender
-	clock                  *hlc.Clock
-	heartbeatInterval      time.Duration
-	linearizable           bool // enables linearizable behavior
-	stopper                *stop.Stopper
-	metrics                TxnMetrics
-	condensedIntentsEveryN log.EveryN
+	st                       *cluster.Settings
+	wrapped                  kv.Sender
+	clock                    *hlc.Clock
+	heartbeatInterval        time.Duration
+	linearizable             bool // enables linearizable behavior
+	stopper                  *stop.Stopper
+	metrics                  TxnMetrics
+	condensedIntentsEveryN   log.EveryN
+	inflightOverBudgetEveryN log.EveryN
 
 	testingKnobs ClientTestingKnobs
 }
@@ -64,16 +65,17 @@ func NewTxnCoordSenderFactory(
 	cfg TxnCoordSenderFactoryConfig, wrapped kv.Sender,
 ) *TxnCoordSenderFactory {
 	tcf := &TxnCoordSenderFactory{
-		AmbientContext:         cfg.AmbientCtx,
-		st:                     cfg.Settings,
-		wrapped:                wrapped,
-		clock:                  cfg.Clock,
-		stopper:                cfg.Stopper,
-		linearizable:           cfg.Linearizable,
-		heartbeatInterval:      cfg.HeartbeatInterval,
-		metrics:                cfg.Metrics,
-		condensedIntentsEveryN: log.Every(time.Second),
-		testingKnobs:           cfg.TestingKnobs,
+		AmbientContext:           cfg.AmbientCtx,
+		st:                       cfg.Settings,
+		wrapped:                  wrapped,
+		clock:                    cfg.Clock,
+		stopper:                  cfg.Stopper,
+		linearizable:             cfg.Linearizable,
+		heartbeatInterval:        cfg.HeartbeatInterval,
+		metrics:                  cfg.Metrics,
+		condensedIntentsEveryN:   log.Every(time.Second),
+		inflightOverBudgetEveryN: log.Every(time.Second),
+		testingKnobs:             cfg.TestingKnobs,
 	}
 	if tcf.st == nil {
 		tcf.st = cluster.MakeTestingClusterSettings()
