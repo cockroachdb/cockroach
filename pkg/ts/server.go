@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -106,8 +107,9 @@ type TenantServer struct {
 	tspb.UnimplementedTimeSeriesServer
 
 	log.AmbientContext
-	tenantID      roachpb.TenantID
-	tenantConnect kvtenant.Connector
+	tenantID       roachpb.TenantID
+	tenantConnect  kvtenant.Connector
+	tenantRegistry *metric.Registry
 }
 
 var _ tspb.TenantTimeSeriesServer = &TenantServer{}
@@ -121,8 +123,12 @@ func (t *TenantServer) Query(
 ) (*tspb.TimeSeriesQueryResponse, error) {
 	ctx = t.AnnotateCtx(ctx)
 	// Currently, secondary tenants are only able to view their own metrics.
-	for i := range req.Queries {
-		req.Queries[i].TenantID = t.tenantID
+	for i, q := range req.Queries {
+		// Tenant-scoped metrics get marked with the tenantID, otherwise we
+		// leave the request as-is for system-level metrics.
+		if t.tenantRegistry.Contains(q.Name) {
+			req.Queries[i].TenantID = t.tenantID
+		}
 	}
 	return t.tenantConnect.Query(ctx, req)
 }
@@ -141,12 +147,16 @@ func (s *TenantServer) RegisterGateway(
 }
 
 func MakeTenantServer(
-	ambient log.AmbientContext, tenantConnect kvtenant.Connector, tenantID roachpb.TenantID,
+	ambient log.AmbientContext,
+	tenantConnect kvtenant.Connector,
+	tenantID roachpb.TenantID,
+	registry *metric.Registry,
 ) *TenantServer {
 	return &TenantServer{
 		AmbientContext: ambient,
 		tenantConnect:  tenantConnect,
 		tenantID:       tenantID,
+		tenantRegistry: registry,
 	}
 }
 
