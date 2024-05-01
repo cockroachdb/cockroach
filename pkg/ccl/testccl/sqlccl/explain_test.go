@@ -44,7 +44,6 @@ func TestExplainRedactDDL(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	defer sqlDB.Close()
 
 	query := func(sql string) (*gosql.Rows, error) {
 		return sqlDB.QueryContext(ctx, sql)
@@ -69,12 +68,12 @@ func TestExplainRedactDDL(t *testing.T) {
 	setup = append(setup, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off;")
 	setup = append(setup, "SET statement_timeout = '5s';")
 	for _, stmt := range setup {
-		t.Log(stmt)
 		if _, err := sqlDB.ExecContext(ctx, stmt); err != nil {
 			// Ignore errors.
-			t.Log("-- ignoring error:", err)
 			continue
 		}
+		// Only log successful statements.
+		t.Log(stmt + ";")
 	}
 
 	// Check EXPLAIN (OPT, CATALOG, REDACT) for each table.
@@ -92,7 +91,6 @@ func TestExplainRedactDDL(t *testing.T) {
 	}
 	for _, table := range tables {
 		explain := "EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM " + lexbase.EscapeSQLIdent(table)
-		t.Log(explain)
 		rows, err = query(explain)
 		if err != nil {
 			// This explain should always succeed.
@@ -119,6 +117,7 @@ func TestExplainRedactDDL(t *testing.T) {
 		sqlsmith.PrefixStringConsts(pii),
 		sqlsmith.OnlySingleDMLs(),
 		sqlsmith.EnableAlters(),
+		sqlsmith.SimpleNames(),
 	)
 	if err != nil {
 		t.Fatal(err)
