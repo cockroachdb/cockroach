@@ -107,21 +107,17 @@ export function SummaryValue(
  * the value is a non-numeric value and applies an appearance modifier specific
  * to numeric values.
  */
-export function SummaryStat({
-                              title,
-                              value,
-                              format,
-                              children,
-                              numberAlert = false, // Default value set here
-                            }: SummaryStatProps) {
-  const classModifier = numberAlert ? "number-alert" : "number";
+export function SummaryStat(
+  props: SummaryStatProps & { children?: React.ReactNode },
+) {
+  const classModifier = props.numberAlert ? "number-alert" : "number";
   return (
     <SummaryValue
-      title={title}
-      value={formatNumberForDisplay(value, format)}
+      title={props.title}
+      value={formatNumberForDisplay(props.value, props.format)}
       classModifier={classModifier}
     >
-      {children}
+      {props.children}
     </SummaryValue>
   );
 }

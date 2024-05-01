@@ -72,6 +72,7 @@ export const ClusterNodeTotals: React.FC = () => {
         </span>
       }
       value={nodeCounts.total}
+      numberAlert={false}
     >
       {children}
     </SummaryStat>
@@ -130,6 +131,7 @@ export default function (props: ClusterSummaryProps) {
           }
           value={capacityPercent}
           format={formatPercentage}
+          numberAlert={false}
         >
           <SummaryStatMessage
             message={`You are using ${Bytes(capacityUsed)} of ${Bytes(
