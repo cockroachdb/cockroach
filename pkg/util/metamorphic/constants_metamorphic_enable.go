@@ -11,7 +11,7 @@
 //go:build !metamorphic_disable
 // +build !metamorphic_disable
 
-package util
+package metamorphic
 
 import "github.com/cockroachdb/cockroach/pkg/util/envutil"
 

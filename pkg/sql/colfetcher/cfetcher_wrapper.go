@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -44,7 +44,7 @@ var DirectScansEnabled = settings.RegisterBoolSetting(
 	directScansEnabledDefault,
 )
 
-var directScansEnabledDefault = util.ConstantWithMetamorphicTestBool(
+var directScansEnabledDefault = metamorphic.ConstantWithMetamorphicTestBool(
 	"direct-scans-enabled",
 	false,
 )

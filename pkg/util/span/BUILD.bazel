@@ -14,11 +14,11 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
-        "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/interval",
+        "//pkg/util/metamorphic",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],

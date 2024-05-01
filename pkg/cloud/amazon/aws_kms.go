@@ -23,8 +23,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -62,7 +62,7 @@ var reuseKMSSession = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"cloudstorage.aws.reuse_kms_session.enabled",
 	"persist the last opened AWS KMS session and reuse it when opening a new session with the same arguments",
-	util.ConstantWithMetamorphicTestBool("aws-reuse-kms", true),
+	metamorphic.ConstantWithMetamorphicTestBool("aws-reuse-kms", true),
 )
 
 var kmsClientCache struct {

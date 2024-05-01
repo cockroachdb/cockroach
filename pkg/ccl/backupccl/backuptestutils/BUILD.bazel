@@ -17,6 +17,7 @@ go_library(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
+        "//pkg/util/metamorphic",
         "//pkg/workload/bank",
         "//pkg/workload/workloadsql",
         "@com_github_cockroachdb_errors//:errors",

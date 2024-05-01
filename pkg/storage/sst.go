@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -34,7 +34,7 @@ var (
 	// adjust stats for point keys masked by range keys, but when we disable this
 	// masking we expect accurate stats and can assert this in various tests
 	// (notably kvnemesis).
-	DisableCheckSSTRangeKeyMasking = util.ConstantWithMetamorphicTestBool(
+	DisableCheckSSTRangeKeyMasking = metamorphic.ConstantWithMetamorphicTestBool(
 		"disable-checksstconflicts-range-key-masking", false)
 )
 

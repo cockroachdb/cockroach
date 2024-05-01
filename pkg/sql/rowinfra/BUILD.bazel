@@ -10,7 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/testutils/skip",
-        "//pkg/util",
+        "//pkg/util/metamorphic",
         "//pkg/util/metric",
     ],
 )

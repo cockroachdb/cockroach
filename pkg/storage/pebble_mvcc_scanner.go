@@ -25,13 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
 
-var maxItersBeforeSeek = util.ConstantWithMetamorphicTestRange(
+var maxItersBeforeSeek = metamorphic.ConstantWithMetamorphicTestRange(
 	"mvcc-max-iters-before-seek",
 	10, /* defaultValue */
 	0,  /* min */
