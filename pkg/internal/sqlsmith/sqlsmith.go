@@ -539,13 +539,6 @@ var DisableInsertSelect = simpleOption("disable insert select", func(s *Smither)
 	s.disableInsertSelect = true
 })
 
-// DisableDivision disables generation of the division operator (/) and the
-// floor division operator (//).
-// TODO(mgartner): Remove this once #86790 is addressed.
-var DisableDivision = simpleOption("disable division", func(s *Smither) {
-	s.disableDivision = true
-})
-
 // DisableDecimals disables use of decimal type columns in the query.
 var DisableDecimals = simpleOption("disable decimals", func(s *Smither) {
 	s.disableDecimals = true
