@@ -544,7 +544,7 @@ func MakeHashDiskRowContainer(
 
 // Init implements the HashRowContainer interface.
 func (h *HashDiskRowContainer) Init(
-	_ context.Context, shouldMark bool, typs []*types.T, storedEqCols columns, encodeNull bool,
+	ctx context.Context, shouldMark bool, typs []*types.T, storedEqCols columns, encodeNull bool,
 ) error {
 	h.columnEncoder.init(typs, storedEqCols, encodeNull)
 	h.shouldMark = shouldMark
@@ -565,7 +565,7 @@ func (h *HashDiskRowContainer) Init(
 	}
 
 	var err error
-	h.DiskRowContainer, err = MakeDiskRowContainer(h.diskMonitor, storedTypes, storedEqColsToOrdering(storedEqCols), h.engine)
+	h.DiskRowContainer, err = MakeDiskRowContainer(ctx, h.diskMonitor, storedTypes, storedEqColsToOrdering(storedEqCols), h.engine)
 	return err
 }
 
