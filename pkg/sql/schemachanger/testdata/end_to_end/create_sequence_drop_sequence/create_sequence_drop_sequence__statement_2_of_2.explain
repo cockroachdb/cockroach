@@ -26,9 +26,7 @@ Schema change plan for DROP SEQUENCE ‹defaultdb›.‹public›.‹sq1›; fol
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.SequenceOpt..."}
  │              ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":104}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":104}
- │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":104}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
@@ -36,11 +34,13 @@ Schema change plan for DROP SEQUENCE ‹defaultdb›.‹public›.‹sq1›; fol
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":104}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":104}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
  │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":104}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":104}
- │              └── MakeIndexAbsent {"IndexID":1,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":104}
+ │              ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
+ │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":104}
  └── PreCommitPhase
       └── Stage 1 of 1 in PreCommitPhase
            ├── 2 elements transitioning toward ABSENT
