@@ -33,6 +33,7 @@ var stopper = stop.NewStopper()
 
 // RunDocker runs the given acceptance test using a Docker cluster.
 func RunDocker(t *testing.T, testee func(t *testing.T)) {
+	maybeSkipTest(t)
 	t.Run(dockerTest, testee)
 }
 
