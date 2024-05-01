@@ -54,10 +54,10 @@ kv.closed_timestamp.side_transport_interval	duration	200ms	the interval at which
 kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration	system-visible
 kv.dist_sender.circuit_breaker.cancellation.enabled	boolean	true	when enabled, in-flight requests will be cancelled when the circuit breaker trips	application
 kv.dist_sender.circuit_breaker.cancellation.write_grace_period	duration	10s	how long after the circuit breaker trips to cancel write requests (these can't retry internally, so should be long enough to allow quorum/lease recovery)	application
-kv.dist_sender.circuit_breaker.enabled	boolean	true	enable circuit breakers for failing or stalled replicas	application
 kv.dist_sender.circuit_breaker.probe.interval	duration	3s	interval between replica probes	application
 kv.dist_sender.circuit_breaker.probe.threshold	duration	3s	duration of errors or stalls after which a replica will be probed	application
 kv.dist_sender.circuit_breaker.probe.timeout	duration	3s	timeout for replica probes	application
+kv.dist_sender.circuit_breakers.mode	enumeration	no ranges	set of ranges to trip circuit breakers for failing or stalled replicas [no ranges = 0, liveness range only = 1, all ranges = 2]	application
 kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records	system-visible
 kv.rangefeed.client.stream_startup_rate	integer	100	controls the rate per second the client will initiate new rangefeed stream for a single range; 0 implies unlimited	application
 kv.rangefeed.closed_timestamp_refresh_interval	duration	3s	the interval at which closed-timestamp updatesare delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval	system-visible
