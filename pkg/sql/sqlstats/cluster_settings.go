@@ -87,7 +87,7 @@ var MaxMemSQLStatsStmtFingerprints = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.metrics.max_mem_stmt_fingerprints",
 	"the maximum number of statement fingerprints stored in memory",
-	100000,
+	5000,
 	settings.WithPublic)
 
 // MaxMemSQLStatsTxnFingerprints specifies the maximum of unique transaction
@@ -96,7 +96,7 @@ var MaxMemSQLStatsTxnFingerprints = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.metrics.max_mem_txn_fingerprints",
 	"the maximum number of transaction fingerprints stored in memory",
-	100000,
+	5000,
 	settings.WithPublic)
 
 // MaxMemReportedSQLStatsStmtFingerprints specifies the maximum of unique statement

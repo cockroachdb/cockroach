@@ -276,8 +276,8 @@ sql.log.user_audit.reduced_config.enabled	boolean	false	enables logic to compute
 sql.metrics.index_usage_stats.enabled	boolean	true	collect per index usage statistics	application
 sql.metrics.max_mem_reported_stmt_fingerprints	integer	100000	the maximum number of reported statement fingerprints stored in memory	application
 sql.metrics.max_mem_reported_txn_fingerprints	integer	100000	the maximum number of reported transaction fingerprints stored in memory	application
-sql.metrics.max_mem_stmt_fingerprints	integer	100000	the maximum number of statement fingerprints stored in memory	application
-sql.metrics.max_mem_txn_fingerprints	integer	100000	the maximum number of transaction fingerprints stored in memory	application
+sql.metrics.max_mem_stmt_fingerprints	integer	5000	the maximum number of statement fingerprints stored in memory	application
+sql.metrics.max_mem_txn_fingerprints	integer	5000	the maximum number of transaction fingerprints stored in memory	application
 sql.metrics.statement_details.dump_to_logs.enabled	boolean	false	dump collected statement statistics to node logs when periodically cleared	application
 sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics	application
 sql.metrics.statement_details.gateway_node.enabled	boolean	false	save the gateway node for each statement fingerprint. If false, the value will be stored as 0.	application
