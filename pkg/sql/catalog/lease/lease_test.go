@@ -3641,7 +3641,7 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 func TestLeaseTableWriteFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	type filter = kvserverbase.ReplicaResponseFilter
 	var f atomic.Value

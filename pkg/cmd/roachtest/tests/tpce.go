@@ -282,7 +282,7 @@ func registerTPCE(r registry.Registry) {
 		Owner:            registry.OwnerTestEng,
 		Timeout:          4 * time.Hour,
 		Cluster:          r.MakeClusterSpec(smallNightly.nodes+1, spec.CPU(smallNightly.cpus), spec.SSD(smallNightly.ssds)),
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		// Never run with runtime assertions as this makes this test take
 		// too long to complete.
@@ -303,7 +303,7 @@ func registerTPCE(r registry.Registry) {
 		Name:             fmt.Sprintf("tpce/c=%d/nodes=%d", largeWeekly.customers, largeWeekly.nodes),
 		Owner:            registry.OwnerTestEng,
 		Benchmark:        true,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          36 * time.Hour,
 		Cluster:          r.MakeClusterSpec(largeWeekly.nodes+1, spec.CPU(largeWeekly.cpus), spec.SSD(largeWeekly.ssds)),

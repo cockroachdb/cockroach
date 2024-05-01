@@ -136,4 +136,8 @@ const (
 	// StrippedNonExistentRoles indicates that at least one role identified did
 	// not exist.
 	StrippedNonExistentRoles
+
+	// FixedIncorrectForeignKeyOrigins indicates that foreign key origin /
+	// reference IDs that should point to the current descriptor were fixed.
+	FixedIncorrectForeignKeyOrigins
 )

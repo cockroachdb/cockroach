@@ -1806,7 +1806,7 @@ type StreamingTestingKnobs struct {
 
 	// AfterReplicationFlowPlan allows the caller to inspect the ingestion and
 	// frontier specs generated for the replication job.
-	AfterReplicationFlowPlan func(map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+	AfterReplicationFlowPlan func(map[base.SQLInstanceID][]execinfrapb.StreamIngestionDataSpec,
 		*execinfrapb.StreamIngestionFrontierSpec)
 
 	AfterPersistingPartitionSpecs func()
@@ -3393,6 +3393,10 @@ func (m *sessionDataMutator) SetOverrideMultiRegionZoneConfigEnabled(val bool) {
 
 func (m *sessionDataMutator) SetDisallowFullTableScans(val bool) {
 	m.data.DisallowFullTableScans = val
+}
+
+func (m *sessionDataMutator) SetOptimizerApplyFullScanPenaltyToVirtualTables(val bool) {
+	m.data.OptimizerApplyFullScanPenaltyToVirtualTables = val
 }
 
 func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {

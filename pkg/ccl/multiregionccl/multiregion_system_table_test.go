@@ -41,7 +41,7 @@ func TestMrSystemDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "runs too slow")
+	skip.UnderRace(t, "runs too slow")
 
 	ctx := context.Background()
 
@@ -87,7 +87,7 @@ func TestMrSystemDatabase(t *testing.T) {
 
 	sDB := sqlutils.MakeSQLRunner(systemSQL)
 
-	sDB.Exec(t, `SET CLUSTER SETTING sql.multiregion.preview_multiregion_system_database.enabled = true`)
+	sDB.Exec(t, `SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true`)
 	sDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
 	sDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
 	sDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)

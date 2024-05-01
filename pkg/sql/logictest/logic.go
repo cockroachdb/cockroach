@@ -66,15 +66,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -402,7 +403,7 @@ import (
 //    Skips this entire logic test using skip.IgnoreLint(). Should be near top
 //    of test file. Note that this is different from `skipif`.
 //
-//  - skip under <deadlock/race/stress/stressrace/metamorphic/duress> [ISSUE] [args...]
+//  - skip under <deadlock/race/stress/metamorphic/duress> [ISSUE] [args...]
 //    Skips this entire logic test using skip.UnderDeadlock(), skip.UnderRace(),
 //    etc. Should be near top of test file. Note that this is different from
 //    `skipif`.
@@ -599,7 +600,7 @@ var (
 	// the entire user keyspace during cluster bootstrapping. This should not
 	// semantically affect the test data written above it, but will activate MVCC
 	// range tombstone code paths in the storage layer for testing.
-	globalMVCCRangeTombstone = util.ConstantWithMetamorphicTestBool(
+	globalMVCCRangeTombstone = metamorphic.ConstantWithTestBool(
 		"logictest-global-mvcc-range-tombstone", false)
 
 	// useMVCCRangeTombstonesForPointDeletes will use point-sized MVCC range
@@ -608,7 +609,7 @@ var (
 	// code paths in the storage/KV layer, for testing. This may result in
 	// incorrect MVCC stats for RangeKey* fields in rare cases, due to point
 	// writes not holding appropriate latches for range key stats update.
-	useMVCCRangeTombstonesForPointDeletes = util.ConstantWithMetamorphicTestBool(
+	useMVCCRangeTombstonesForPointDeletes = metamorphic.ConstantWithTestBool(
 		"logictest-use-mvcc-range-tombstones-for-point-deletes", false)
 
 	// BackupRestoreProbability is the environment variable for `3node-backup` config.
@@ -1310,7 +1311,7 @@ var _ = ((*logicTest)(nil)).newTestServerCluster
 // upgradeBinaryPath is given by the config's CockroachGoUpgradeVersion, or
 // is the locally built version if CockroachGoUpgradeVersion was not specified.
 func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath string) {
-	logsDir, err := os.MkdirTemp("", "cockroach-logs*")
+	logsDir, err := os.MkdirTemp(datapathutils.DebuggableTempDir(), "cockroach-logs*")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3108,12 +3109,6 @@ func (t *logicTest) processSubtest(
 						skip.UnderStress(t.t(), args...)
 					} else {
 						skip.UnderStressWithIssue(t.t(), githubIssueID, args...)
-					}
-				case "stressrace":
-					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
-						skip.UnderStressRace(t.t(), args...)
-					} else {
-						skip.UnderStressRaceWithIssue(t.t(), githubIssueID, args...)
 					}
 				case "metamorphic":
 					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {

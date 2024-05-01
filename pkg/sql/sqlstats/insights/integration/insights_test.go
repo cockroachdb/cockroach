@@ -891,7 +891,7 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "expensive tests")
+	skip.UnderRace(t, "expensive tests")
 
 	ctx := context.Background()
 	srv, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})

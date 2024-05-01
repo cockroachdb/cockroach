@@ -97,6 +97,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",
+        "//pkg/util/metamorphic",
         "//pkg/util/mon",
         "//pkg/util/optional",
         "//pkg/util/protoutil",

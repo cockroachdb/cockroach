@@ -623,7 +623,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "too slow under stress race")
+	skip.UnderRace(t, "too slow under stress race")
 	params := base.TestServerArgs{}
 	// Disable GC job so that the final check of crdb_internal.tables is
 	// guaranteed to not be cleaned up. Although this was never observed by a

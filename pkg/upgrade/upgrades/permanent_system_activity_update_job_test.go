@@ -27,7 +27,7 @@ import (
 // expected when creating a new cluster.
 func TestCreateActivityUpdateJobMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})

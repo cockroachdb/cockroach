@@ -49,10 +49,22 @@ func runAddColumn(
 	rng, _ := randutil.NewPseudoRand()
 	dbName := pickRandomDB(ctx, o, conn, systemDBs)
 	tableName := pickRandomTable(ctx, o, conn, dbName)
-
 	colName := fmt.Sprintf("add_column_op_%d", rng.Uint32())
+	isNotNull := rng.Float64() < 0.8
+	colQualification := ""
+	if r := rng.Float64(); r < 0.25 {
+		colQualification = "AS ('virtual') VIRTUAL"
+	} else if r < 0.5 {
+		colQualification = "AS ('stored') STORED"
+	} else {
+		colQualification = "DEFAULT 'default'"
+	}
+	if isNotNull {
+		colQualification += " NOT NULL"
+	}
+
 	o.Status(fmt.Sprintf("adding column %s to table %s.%s", colName, dbName, tableName))
-	addColStmt := fmt.Sprintf("ALTER TABLE %s.%s ADD COLUMN %s VARCHAR DEFAULT 'default'", dbName, tableName, colName)
+	addColStmt := fmt.Sprintf("ALTER TABLE %s.%s ADD COLUMN %s VARCHAR %s", dbName, tableName, colName, colQualification)
 	_, err := conn.ExecContext(ctx, addColStmt)
 	if err != nil {
 		o.Fatal(err)

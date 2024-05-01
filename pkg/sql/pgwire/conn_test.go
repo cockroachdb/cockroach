@@ -1390,15 +1390,6 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Start a pgwire "server".
-	addr := util.TestAddr
-	ln, err := net.Listen(addr.Network(), addr.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = ln.Close() }()
-	serverAddr := ln.Addr()
-	log.Infof(context.Background(), "started listener on %s", serverAddr)
 	testCases := []struct {
 		desc   string
 		query  string
@@ -1620,10 +1611,18 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		},
 	}
 
-	baseURL := fmt.Sprintf("postgres://%s/system?sslmode=disable", serverAddr)
-
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			// Start a pgwire "server".
+			addr := util.TestAddr
+			ln, err := net.Listen(addr.Network(), addr.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = ln.Close() }()
+			serverAddr := ln.Addr()
+			log.Infof(context.Background(), "started listener on %s", serverAddr)
+			baseURL := fmt.Sprintf("postgres://%s/system?sslmode=disable", serverAddr)
 
 			var netConn net.Conn
 			clientDone := sync.WaitGroup{}
@@ -1632,12 +1631,13 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 			serverReceivedConn.Add(1)
 			go func(query string) {
 				defer clientDone.Done()
-				ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				url := fmt.Sprintf("%s&%s", baseURL, query)
 				c, connErr := pgx.Connect(ctx, url)
 				if connErr != nil {
 					t.Error(connErr)
+					_ = ln.Close()
 					return
 				}
 				// ignore the error because there is no answer from the server, we are

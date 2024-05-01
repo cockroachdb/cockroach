@@ -37,10 +37,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -54,18 +54,18 @@ import (
 )
 
 var (
-	clearRangeUsingIter = util.ConstantWithMetamorphicTestBool(
+	clearRangeUsingIter = metamorphic.ConstantWithTestBool(
 		"mvcc-histories-clear-range-using-iterator", false)
-	cmdDeleteRangeTombstoneKnownStats = util.ConstantWithMetamorphicTestBool(
+	cmdDeleteRangeTombstoneKnownStats = metamorphic.ConstantWithTestBool(
 		"mvcc-histories-deleterange-tombstome-known-stats", false)
-	mvccHistoriesReader = util.ConstantWithMetamorphicTestChoice("mvcc-histories-reader",
+	mvccHistoriesReader = metamorphic.ConstantWithTestChoice("mvcc-histories-reader",
 		"engine", "readonly", "batch", "snapshot", "efos").(string)
-	mvccHistoriesUseBatch   = util.ConstantWithMetamorphicTestBool("mvcc-histories-use-batch", false)
-	mvccHistoriesPeekBounds = util.ConstantWithMetamorphicTestChoice("mvcc-histories-peek-bounds",
+	mvccHistoriesUseBatch   = metamorphic.ConstantWithTestBool("mvcc-histories-use-batch", false)
+	mvccHistoriesPeekBounds = metamorphic.ConstantWithTestChoice("mvcc-histories-peek-bounds",
 		"none", "left", "right", "both").(string)
-	sstIterVerify           = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-iter-verify", false)
-	metamorphicIteratorSeed = util.ConstantWithMetamorphicTestRange("mvcc-metamorphic-iterator-seed", 0, 0, 100000) // 0 = disabled
-	separateEngineBlocks    = util.ConstantWithMetamorphicTestBool("mvcc-histories-separate-engine-blocks", false)
+	sstIterVerify           = metamorphic.ConstantWithTestBool("mvcc-histories-sst-iter-verify", false)
+	metamorphicIteratorSeed = metamorphic.ConstantWithTestRange("mvcc-metamorphic-iterator-seed", 0, 0, 100000) // 0 = disabled
+	separateEngineBlocks    = metamorphic.ConstantWithTestBool("mvcc-histories-separate-engine-blocks", false)
 )
 
 // TestMVCCHistories verifies that sequences of MVCC reads and writes
