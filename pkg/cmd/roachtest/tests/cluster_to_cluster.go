@@ -235,6 +235,30 @@ func (tpcc replicateTPCC) runDriver(
 	return defaultWorkloadDriver(workloadCtx, setup, c, tpcc)
 }
 
+// replicateImportKV is a kv workload that runs the kv init step after the
+// replication stream has started, inducing a bulk import catchup scan workload.
+type replicateImportKV struct {
+	replicateKV
+	replicateSplits bool
+}
+
+func (ikv replicateImportKV) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
+	return ""
+}
+
+func (ikv replicateImportKV) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
+	return ikv.replicateKV.sourceInitCmd(tenantName, nodes)
+}
+
+func (ikv replicateImportKV) runDriver(
+	workloadCtx context.Context, c cluster.Cluster, t test.Test, setup *c2cSetup,
+) error {
+	if ikv.replicateSplits {
+		setup.dst.sysSQL.Exec(t, "SET CLUSTER SETTING physical_replication.consumer.ingest_split_event.enabled = true")
+	}
+	return defaultWorkloadDriver(workloadCtx, setup, c, ikv)
+}
+
 type replicateKV struct {
 	readPercent int
 
@@ -1167,6 +1191,31 @@ func registerClusterToCluster(r registry.Registry) {
 			suites:             registry.Suites(registry.Nightly),
 		},
 		{
+			// Catchup scan perf test on bulk import.
+			name:      "c2c/import/kv0",
+			benchmark: true,
+			srcNodes:  4,
+			dstNodes:  4,
+			cpus:      8,
+			// With the machine type and size we use, this is the smallest disk that
+			// gives us max write BW of 800MB/s.
+			pdSize: 1667,
+			// Write ~150GB data to disk.
+			workload: replicateImportKV{
+				replicateSplits: true,
+				replicateKV:     replicateKV{readPercent: 0, initRows: 100000000, maxBlockBytes: 1024}},
+			timeout:            1 * time.Hour,
+			maxAcceptedLatency: 1 * time.Hour,
+			// Cutover to one second after the import completes.
+			cutover: -1 * time.Second,
+			// After the import completes, the replication stream should catch up in 5 minutes.
+			cutoverTimeout: 10 * time.Minute,
+			// because PCR begins on a nearly empty cluster, skip the node distribution check.
+			skipNodeDistributionCheck: true,
+			clouds:                    registry.AllExceptAWS,
+			suites:                    registry.Suites(registry.Nightly),
+		},
+		{
 			// Large workload to test our 23.2 perf goals.
 			name:      "c2c/weekly/kv50",
 			benchmark: true,
@@ -1260,8 +1309,8 @@ func registerClusterToCluster(r registry.Registry) {
 			// Skipping node distribution check because there is little data on the
 			// source when the replication stream begins.
 			skipNodeDistributionCheck: true,
-			clouds:             registry.AllExceptAWS,
-			suites:             registry.Suites(registry.Nightly),
+			clouds:                    registry.AllExceptAWS,
+			suites:                    registry.Suites(registry.Nightly),
 		},
 		{
 			name:               "c2c/BulkOps/singleImport",
