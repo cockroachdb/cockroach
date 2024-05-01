@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -112,7 +113,8 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 	t.Status(fmt.Sprintf("initial (single node) qps: %.0f", qpsInitial))
 
 	if cfg.writeCapBytes >= 0 {
-		c.Run(ctx, option.WithNodes(limitedNode), "sudo", "systemctl", "set-property", "cockroach-system",
+		c.Run(ctx, option.WithNodes(limitedNode), "sudo", "systemctl", "set-property",
+			roachtestutil.SystemInterfaceSystemdUnitName(),
 			fmt.Sprintf("'IOWriteBandwidthMax=/mnt/data1 %d'", cfg.writeCapBytes))
 	}
 
