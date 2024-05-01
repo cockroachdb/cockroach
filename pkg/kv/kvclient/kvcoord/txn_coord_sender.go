@@ -311,10 +311,11 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		riGen.ds = ds
 	}
 	tc.interceptorAlloc.txnPipeliner = txnPipeliner{
-		st:                     tcf.st,
-		riGen:                  riGen,
-		txnMetrics:             &tc.metrics,
-		condensedIntentsEveryN: &tc.TxnCoordSenderFactory.condensedIntentsEveryN,
+		st:                       tcf.st,
+		riGen:                    riGen,
+		txnMetrics:               &tc.metrics,
+		condensedIntentsEveryN:   &tc.TxnCoordSenderFactory.condensedIntentsEveryN,
+		inflightOverBudgetEveryN: &tc.TxnCoordSenderFactory.inflightOverBudgetEveryN,
 	}
 	tc.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:      tcf.st,
