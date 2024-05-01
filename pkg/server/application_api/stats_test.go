@@ -338,6 +338,8 @@ func TestClusterResetSQLStats(t *testing.T) {
 			})
 			defer testCluster.Stopper().Stop(ctx)
 
+			persistedsqlstats.MinimumInterval.Override(ctx, &testCluster.ApplicationLayer().ClusterSettings().SV, 0)
+
 			gateway := testCluster.Server(1 /* idx */).ApplicationLayer()
 			status := gateway.StatusServer().(serverpb.SQLStatusServer)
 

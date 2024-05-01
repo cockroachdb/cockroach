@@ -349,6 +349,8 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 					b.ReportAllocs()
 					// Run flush benchmark first to initialize stats tables
 					b.Run("BenchmarkPersistedSqlStatsFlush", func(b *testing.B) {
+						persistedsqlstats.MinimumInterval.Override(context.Background(),
+							&tc.ApplicationLayer(0).ClusterSettings().SV, 0)
 						runBenchmarkPersistedSqlStatsFlush(b, tc, sqlRunner, ctx)
 					})
 
@@ -387,6 +389,7 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
+	persistedsqlstats.MinimumInterval.Override(ctx, &s.ClusterSettings().SV, 0)
 	sqlConn := sqlutils.MakeSQLRunner(conn)
 
 	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)

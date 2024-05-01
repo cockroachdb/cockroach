@@ -564,6 +564,12 @@ func testResetSQLStatsRPCForTenant(
 	controlCluster.TenantConn(0 /* idx */).
 		Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
 
+	// Set min flush to 0.
+	testCluster.TenantConn(0 /* idx */).
+		Exec(t, "SET CLUSTER SETTING sql.stats.flush.minimum_interval = '0s'")
+	controlCluster.TenantConn(0 /* idx */).
+		Exec(t, "SET CLUSTER SETTING sql.stats.flush.minimum_interval = '0s'")
+
 	defer func() {
 		// Cleanup
 		testCluster.TenantConn(0 /* idx */).

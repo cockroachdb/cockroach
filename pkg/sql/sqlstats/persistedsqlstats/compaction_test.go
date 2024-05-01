@@ -152,6 +152,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 			defer srv.Stopper().Stop(ctx)
 			server := srv.ApplicationLayer()
 
+			persistedsqlstats.MinimumInterval.Override(ctx, &server.ClusterSettings().SV, 0)
 			sqlConn := sqlutils.MakeSQLRunner(conn)
 			internalExecutor := server.InternalExecutor().(isql.Executor)
 

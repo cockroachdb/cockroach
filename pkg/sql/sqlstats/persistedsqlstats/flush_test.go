@@ -115,6 +115,7 @@ func TestSQLStatsFlush(t *testing.T) {
 
 	firstSQLConn.Exec(t, "SET application_name = 'flush_unit_test'")
 	secondSQLConn.Exec(t, "SET application_name = 'flush_unit_test'")
+	observerConn.Exec(t, `SET CLUSTER SETTING sql.stats.flush.minimum_interval = '0s'`)
 
 	// Regular inserts.
 	{
@@ -407,6 +408,8 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
+	persistedsqlstats.MinimumInterval.Override(ctx, &s.ClusterSettings().SV, 0)
+
 	observer := s.SQLConn(t)
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
@@ -517,6 +520,7 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	persistedsqlstats.MinimumInterval.Override(ctx, &s.ClusterSettings().SV, 0)
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
 
@@ -562,6 +566,8 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	srv, conn, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+
+	persistedsqlstats.MinimumInterval.Override(ctx, &s.ClusterSettings().SV, 0)
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
 	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
@@ -915,6 +921,8 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 			},
 		})
 		defer srv.Stopper().Stop(ctx)
+
+		persistedsqlstats.MinimumInterval.Override(ctx, &srv.ClusterSettings().SV, 0)
 
 		sqlConn := sqlutils.MakeSQLRunner(conn)
 		sqlConn.Exec(t,

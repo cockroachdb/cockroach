@@ -61,8 +61,6 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 	}
 
 	if flushingTooSoon {
-		log.Infof(ctx, "flush aborted due to high flush frequency. "+
-			"The minimum interval between flushes is %s", minimumFlushInterval.String())
 		return false
 	}
 

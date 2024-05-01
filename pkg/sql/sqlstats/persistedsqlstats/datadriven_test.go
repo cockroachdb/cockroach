@@ -88,6 +88,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	})
 	defer cluster.Stopper().Stop(ctx)
 
+	persistedsqlstats.MinimumInterval.Override(ctx, &cluster.ApplicationLayer(0).ClusterSettings().SV, 0)
 	server := cluster.Server(0 /* idx */).ApplicationLayer()
 	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 

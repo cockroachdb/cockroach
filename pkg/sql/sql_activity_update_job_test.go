@@ -260,6 +260,8 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	defer sqlDB.Close()
 	ts := srv.ApplicationLayer()
 
+	persistedsqlstats.MinimumInterval.Override(ctx, &ts.ClusterSettings().SV, 0)
+
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 
@@ -566,6 +568,7 @@ func TestTransactionActivityMetadata(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	defer sqlDB.Close()
 	ts := s.ApplicationLayer()
+	persistedsqlstats.MinimumInterval.Override(ctx, &ts.ClusterSettings().SV, 0)
 
 	execCfg := ts.ExecutorConfig().(ExecutorConfig)
 	st := cluster.MakeTestingClusterSettings()
@@ -784,6 +787,8 @@ func TestFlushToActivityWithDifferentAggTs(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	defer sqlDB.Close()
 	ts := srv.ApplicationLayer()
+
+	persistedsqlstats.MinimumInterval.Override(ctx, &ts.ClusterSettings().SV, 0)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
