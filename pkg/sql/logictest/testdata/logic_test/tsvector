@@ -476,3 +476,17 @@ FROM
 [1, 2, 3]
 [1, 2, 3]
 [1, 2, 3]
+
+# Regression test for hitting a nil pointer in the row-by-row engine when
+# attempting to close uninitialized disk row container (#123141).
+statement ok
+SET distsql_workmem = '2B';
+SET vectorize = off;
+
+statement error pgcode 0A000 unimplemented: can't order by column type TSQUERY
+WITH cte (col) AS (VALUES ('foo':::TSQUERY), ('bar':::TSQUERY))
+SELECT count(*) FROM cte AS cte1 JOIN cte AS cte2 ON cte1.col = cte2.col;
+
+statement ok
+RESET vectorize;
+RESET distsql_workmem;
