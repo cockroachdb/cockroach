@@ -73,6 +73,7 @@ const (
 func testDocker(
 	ctx context.Context, t *testing.T, num int, name string, containerConfig container.Config,
 ) error {
+	maybeSkipTest(t)
 	var err error
 	RunDocker(t, func(t *testing.T) {
 		var pwd string

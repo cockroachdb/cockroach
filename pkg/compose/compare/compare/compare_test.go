@@ -8,12 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// "make test" would normally test this file, but it should only be tested
-// within docker compose.
-
-//go:build compose
-// +build compose
-
 package compare
 
 import (
@@ -29,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/jackc/pgx/v4"
@@ -41,6 +36,9 @@ var (
 )
 
 func TestCompare(t *testing.T) {
+	if os.Getenv("COCKROACH_RUN_COMPOSE_COMPARE") == "" {
+		skip.IgnoreLint(t, "COCKROACH_RUN_COMPOSE_COMPARE not set")
+	}
 	// N.B. randomized SQL workload performed by this test may require CCL
 	var license = envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
 	require.NotEmptyf(t, license, "COCKROACH_DEV_LICENSE must be set")
