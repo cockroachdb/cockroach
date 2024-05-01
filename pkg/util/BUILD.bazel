@@ -5,9 +5,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "util",
     srcs = [
-        "constants.go",
-        "constants_metamorphic_disable.go",  # keep
-        "constants_metamorphic_enable.go",
         "every_n.go",
         "fast_int_map.go",
         "hash.go",
@@ -28,25 +25,28 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/build/bazel",
-        "//pkg/util/buildutil",
-        "//pkg/util/envutil",
         "//pkg/util/intsets",
         "//pkg/util/netutil/addr",
-        "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@org_golang_x_exp//constraints",
         "@org_golang_x_exp//slices",
-    ],
+    ] + select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "//pkg/util/randutil",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//pkg/util/randutil",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 go_test(
     name = "util_test",
     size = "small",
     srcs = [
-        "constants_test.go",
         "every_n_test.go",
         "fast_int_map_test.go",
         "slices_test.go",

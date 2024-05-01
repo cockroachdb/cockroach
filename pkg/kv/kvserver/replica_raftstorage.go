@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -47,7 +48,7 @@ var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 	"kv.snapshot.ingest_as_write_threshold",
 	"size below which a range snapshot ingestion will be performed as a normal write",
 	func() int64 {
-		return int64(util.ConstantWithMetamorphicTestChoice(
+		return int64(metamorphic.ConstantWithMetamorphicTestChoice(
 			"kv.snapshot.ingest_as_write_threshold",
 			100<<10, /* default value is 100KiB */
 			1<<30,   /* 1GiB causes everything to be a normal write */

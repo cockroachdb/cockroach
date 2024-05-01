@@ -24,10 +24,10 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -268,7 +268,7 @@ func (s SpanReusePercentOpt) apply(opt *tracerOptions) {
 // explicitly configured with a reuse probability. Tests vary this away from the
 // default of 100% in order to make the use-after-Finish detection reliable (see
 // panicOnUseAfterFinish).
-var spanReusePercent = util.ConstantWithMetamorphicTestRange(
+var spanReusePercent = metamorphic.ConstantWithMetamorphicTestRange(
 	"span-reuse-rate",
 	100, /* defaultValue - always reuse spans. This turns to 0 if reuseSpans is not set. */
 	0,   /* metamorphic min */

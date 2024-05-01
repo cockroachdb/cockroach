@@ -44,13 +44,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -94,7 +94,7 @@ var WriteMetadataSST = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
-	util.ConstantWithMetamorphicTestBool("write-metadata-sst", false),
+	metamorphic.ConstantWithMetamorphicTestBool("write-metadata-sst", false),
 )
 
 // WriteMetadataWithExternalSSTsEnabled controls if we write a `BACKUP_METADATA`
@@ -105,7 +105,7 @@ var WriteMetadataWithExternalSSTsEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"backup.write_metadata_with_external_ssts.enabled",
 	"write BACKUP metadata along with supporting SST files",
-	util.ConstantWithMetamorphicTestBool("backup.write_metadata_with_external_ssts.enabled", true),
+	metamorphic.ConstantWithMetamorphicTestBool("backup.write_metadata_with_external_ssts.enabled", true),
 )
 
 // IsGZipped detects whether the given bytes represent GZipped data. This check

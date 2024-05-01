@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package util
+package metamorphic
 
 import (
 	"fmt"
@@ -60,7 +60,7 @@ const (
 //
 // you should write:
 //
-// var batchSize = util.ConstantWithMetamorphicTestValue("batch-size", 64, 1)
+// var batchSize = metamorphic.ConstantWithMetamorphicTestValue("batch-size", 64, 1)
 //
 // This will often give your code a batch size of 1 in the crdb_test build
 // configuration, increasing the amount of exercise the edge conditions get.

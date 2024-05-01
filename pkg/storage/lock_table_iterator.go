@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -515,7 +515,7 @@ const defaultLockTableItersBeforeSeek = 5
 // shared locks on a single user key before seeking past them. This is used to
 // avoid iterating over all shared locks on a key when not necessary, given the
 // filtering criteria.
-var lockTableItersBeforeSeek = util.ConstantWithMetamorphicTestRange(
+var lockTableItersBeforeSeek = metamorphic.ConstantWithMetamorphicTestRange(
 	"lock-table-iters-before-seek",
 	defaultLockTableItersBeforeSeek, /* defaultValue */
 	0,                               /* min */
