@@ -70,7 +70,6 @@ var (
 		"DisableCrossJoins":          sqlsmith.DisableCrossJoins(),
 		"DisableDDLs":                sqlsmith.DisableDDLs(),
 		"DisableDecimals":            sqlsmith.DisableDecimals(),
-		"DisableDivision":            sqlsmith.DisableDivision(),
 		"DisableEverything":          sqlsmith.DisableEverything(),
 		"DisableIndexHints":          sqlsmith.DisableIndexHints(),
 		"DisableInsertSelect":        sqlsmith.DisableInsertSelect(),
@@ -101,6 +100,7 @@ var (
 		"UnlikelyConstantPredicate":  sqlsmith.UnlikelyConstantPredicate(),
 		"UnlikelyRandomNulls":        sqlsmith.UnlikelyRandomNulls(),
 
+		"DisableNondeterministicLimits":           sqlsmith.DisableNondeterministicLimits(),
 		"LowProbabilityWhereClauseWithJoinTables": sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
 	}
 	smitherOpts []string
@@ -203,11 +203,10 @@ func main() {
 	} else {
 		for i := 0; i < *num; i++ {
 			stmt := smither.Generate()
-			fmt.Print("\n", stmt, ";\n")
+			fmt.Print(sep, stmt, ";\n")
 			if db != nil && *execStmts {
 				_, _ = db.Exec(stmt)
 			}
-			fmt.Print(sep, smither.Generate(), ";\n")
 		}
 	}
 }
@@ -223,7 +222,7 @@ func parseSchemaDefinition(schemaPath string) (opts []sqlsmith.SmitherOption, _ 
 	}
 	stmts, err := parser.Parse(string(schema))
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not parse schema definition")
+		return nil, errors.Wrap(err, "could not parse schema definition")
 	}
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	st := cluster.MakeTestingClusterSettings()
