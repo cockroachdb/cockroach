@@ -191,6 +191,8 @@ type Memo struct {
 	useImprovedDistinctOnLimitHintCosting      bool
 	useImprovedTrigramSimilaritySelectivity    bool
 	trigramSimilarityThreshold                 float64
+	useImprovedZigzagJoinCosting               bool
+	useImprovedMultiColumnSelectivityEstimate  bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -268,6 +270,8 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useImprovedDistinctOnLimitHintCosting:      evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting,
 		useImprovedTrigramSimilaritySelectivity:    evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity,
 		trigramSimilarityThreshold:                 evalCtx.SessionData().TrigramSimilarityThreshold,
+		useImprovedZigzagJoinCosting:               evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting,
+		useImprovedMultiColumnSelectivityEstimate:  evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -423,6 +427,8 @@ func (m *Memo) IsStale(
 		m.useImprovedDistinctOnLimitHintCosting != evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting ||
 		m.useImprovedTrigramSimilaritySelectivity != evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity ||
 		m.trigramSimilarityThreshold != evalCtx.SessionData().TrigramSimilarityThreshold ||
+		m.useImprovedZigzagJoinCosting != evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting ||
+		m.useImprovedMultiColumnSelectivityEstimate != evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
