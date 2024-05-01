@@ -37,6 +37,7 @@ type BuildCtx interface {
 	context.Context
 	ClusterAndSessionInfo
 	SchemaFeatureChecker
+	TemporarySchemaProvider
 	BuilderState
 	EventLogState
 	TreeAnnotator
@@ -433,4 +434,12 @@ type ReferenceProvider interface {
 	ReferencedTypes() catalog.DescriptorIDSet
 	// ReferencedRelationIDs Returns all referenced relation IDs.
 	ReferencedRelationIDs() catalog.DescriptorIDSet
+}
+
+// TemporarySchemaProvider provides functions needed to help support
+// temporary schemas.
+type TemporarySchemaProvider interface {
+	// TemporarySchemaName gets the name of the temporary schema for the current
+	// session.
+	TemporarySchemaName() string
 }

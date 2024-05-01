@@ -36,6 +36,8 @@ type ImmediateMutationVisitor interface {
 	MakeValidatedPrimaryIndexPublic(context.Context, MakeValidatedPrimaryIndexPublic) error
 	MakePublicPrimaryIndexWriteOnly(context.Context, MakePublicPrimaryIndexWriteOnly) error
 	MarkDescriptorAsPublic(context.Context, MarkDescriptorAsPublic) error
+	InsertTemporarySchema(context.Context, InsertTemporarySchema) error
+	InsertTemporarySchemaParent(context.Context, InsertTemporarySchemaParent) error
 	MarkDescriptorAsDropped(context.Context, MarkDescriptorAsDropped) error
 	DrainDescriptorName(context.Context, DrainDescriptorName) error
 	AddDescriptorName(context.Context, AddDescriptorName) error
@@ -200,6 +202,16 @@ func (op MakePublicPrimaryIndexWriteOnly) Visit(ctx context.Context, v Immediate
 // Visit is part of the ImmediateMutationOp interface.
 func (op MarkDescriptorAsPublic) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.MarkDescriptorAsPublic(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op InsertTemporarySchema) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.InsertTemporarySchema(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op InsertTemporarySchemaParent) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.InsertTemporarySchemaParent(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

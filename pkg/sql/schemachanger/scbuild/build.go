@@ -89,12 +89,13 @@ func Build(
 		return scpb.CurrentState{}, stubLogSchemaChangerEventsFn, err
 	}
 	b := buildCtx{
-		Context:              ctx,
-		Dependencies:         dependencies,
-		BuilderState:         bs,
-		EventLogState:        els,
-		TreeAnnotator:        an,
-		SchemaFeatureChecker: dependencies.FeatureChecker(),
+		Context:                 ctx,
+		Dependencies:            dependencies,
+		BuilderState:            bs,
+		EventLogState:           els,
+		TreeAnnotator:           an,
+		SchemaFeatureChecker:    dependencies.FeatureChecker(),
+		TemporarySchemaProvider: dependencies.TemporarySchemaProvider(),
 	}
 	scbuildstmt.Process(b, an.GetStatement())
 
@@ -420,6 +421,7 @@ type buildCtx struct {
 	scbuildstmt.EventLogState
 	scbuildstmt.TreeAnnotator
 	scbuildstmt.SchemaFeatureChecker
+	TemporarySchemaProvider
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}

@@ -442,9 +442,15 @@ type Planner interface {
 	// and a job that owns it.
 	StartHistoryRetentionJob(ctx context.Context, desc string, protectTS hlc.Timestamp, expiration time.Duration) (jobspb.JobID, error)
 
-	// ExtendHistoryRetentionJob extends the lifetime of a a cluster-level
+	// ExtendHistoryRetention extends the lifetime of a a cluster-level
 	// protected timestamp.
 	ExtendHistoryRetention(ctx context.Context, id jobspb.JobID) error
+
+	// InsertTemporarySchema inserts a temporary schema into the current session
+	// data.
+	InsertTemporarySchema(
+		tempSchemaName string, databaseID descpb.ID, schemaID descpb.ID,
+	)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

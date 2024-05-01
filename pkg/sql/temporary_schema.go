@@ -93,6 +93,15 @@ var (
 	}
 )
 
+func (p *planner) InsertTemporarySchema(
+	tempSchemaName string, databaseID descpb.ID, schemaID descpb.ID,
+) {
+	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		m.SetTemporarySchemaName(tempSchemaName)
+		m.SetTemporarySchemaIDForDatabase(uint32(databaseID), uint32(schemaID))
+	})
+}
+
 func (p *planner) getOrCreateTemporarySchema(
 	ctx context.Context, db catalog.DatabaseDescriptor,
 ) (catalog.SchemaDescriptor, error) {
@@ -116,10 +125,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	if err := p.txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
-	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-		m.SetTemporarySchemaName(tempSchemaName)
-		m.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
-	})
+	p.InsertTemporarySchema(tempSchemaName, db.GetID(), id)
 	return p.byIDGetterBuilder().WithoutNonPublic().Get().Schema(ctx, id)
 }
 

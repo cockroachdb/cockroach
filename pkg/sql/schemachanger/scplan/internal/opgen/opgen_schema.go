@@ -22,14 +22,28 @@ func init() {
 			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_DESCRIPTOR_ADDED,
 				emit(func(this *scpb.Schema) *scop.CreateSchemaDescriptor {
+					if this.IsTemporary {
+						return nil
+					}
 					return &scop.CreateSchemaDescriptor{
 						SchemaID: this.SchemaID,
+					}
+				}),
+				emit(func(this *scpb.Schema) *scop.InsertTemporarySchema {
+					if !this.IsTemporary {
+						return nil
+					}
+					return &scop.InsertTemporarySchema{
+						DescriptorID: this.SchemaID,
 					}
 				}),
 			),
 			to(scpb.Status_PUBLIC,
 				revertible(false),
 				emit(func(this *scpb.Schema) *scop.MarkDescriptorAsPublic {
+					if this.IsTemporary {
+						return nil
+					}
 					return &scop.MarkDescriptorAsPublic{
 						DescriptorID: this.SchemaID,
 					}

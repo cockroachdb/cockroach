@@ -89,6 +89,8 @@ type Dependencies interface {
 
 	// ReferenceProviderFactory returns a ReferenceProviderFactory.
 	ReferenceProviderFactory() ReferenceProviderFactory
+
+	TemporarySchemaProvider() TemporarySchemaProvider
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating
@@ -261,4 +263,6 @@ type (
 	// FeatureChecker contains operations for checking if a schema change
 	// feature is allowed by the database administrator.
 	FeatureChecker = scbuildstmt.SchemaFeatureChecker
+
+	TemporarySchemaProvider = scbuildstmt.TemporarySchemaProvider
 )

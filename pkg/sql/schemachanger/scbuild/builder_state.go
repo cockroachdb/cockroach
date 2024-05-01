@@ -941,7 +941,9 @@ func (b *builderState) checkOwnershipOrPrivilegesOnSchemaDesc(
 	name tree.ObjectNamePrefix, sc catalog.SchemaDescriptor, p scbuildstmt.ResolveParams,
 ) {
 	switch sc.SchemaKind() {
-	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
+	case catalog.SchemaTemporary:
+		// Nothing needs to be done.
+	case catalog.SchemaPublic, catalog.SchemaVirtual:
 		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
 			"%s permission denied for schema %q", p.RequiredPrivilege.DisplayName(), name))
 	case catalog.SchemaUserDefined:
@@ -1503,7 +1505,7 @@ func (b *builderState) BuildUserPrivilegesFromDefaultPrivileges(
 	dbDefaultPrivDesc := dbDesc.GetDefaultPrivilegeDescriptor()
 
 	var scDefaultPrivDesc catalog.DefaultPrivilegeDescriptor
-	if sc != nil {
+	if sc != nil && !sc.IsTemporary {
 		b.ensureDescriptor(sc.SchemaID)
 		scDesc, err := catalog.AsSchemaDescriptor(b.descCache[sc.SchemaID].desc)
 		if err != nil {

@@ -80,12 +80,6 @@ upsert descriptor #104
   +    start: "32"
   +  unexposedParentSchemaId: 101
   +  version: "1"
-upsert descriptor #101
-  ...
-         withGrantOption: "2"
-       version: 3
-  -  version: "1"
-  +  version: "2"
 checking for feature: DROP SEQUENCE
 increment telemetry for sql.schema.drop_sequence
 write *eventpb.DropSequence to event log:

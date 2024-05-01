@@ -154,6 +154,18 @@ func (mr *MockCatalogMockRecorder) InitializeSequence(arg0, arg1 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitializeSequence", reflect.TypeOf((*MockCatalog)(nil).InitializeSequence), arg0, arg1)
 }
 
+// InsertTemporarySchema mocks base method.
+func (m *MockCatalog) InsertTemporarySchema(arg0 string, arg1, arg2 catid.DescID) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "InsertTemporarySchema", arg0, arg1, arg2)
+}
+
+// InsertTemporarySchema indicates an expected call of InsertTemporarySchema.
+func (mr *MockCatalogMockRecorder) InsertTemporarySchema(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertTemporarySchema", reflect.TypeOf((*MockCatalog)(nil).InsertTemporarySchema), arg0, arg1, arg2)
+}
+
 // MustReadImmutableDescriptors mocks base method.
 func (m *MockCatalog) MustReadImmutableDescriptors(arg0 context.Context, arg1 ...catid.DescID) ([]catalog.Descriptor, error) {
 	m.ctrl.T.Helper()
