@@ -1,4 +1,4 @@
-name: Mark stale issues and pull requests
+name: Close stale test failures and sentry issues
 
 on:
   schedule:
@@ -18,17 +18,14 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         stale-issue-message: |
            We have marked this issue as stale because it has been inactive for
-           18 months. If this issue is still relevant, removing the stale label
+           12 months. If this issue is still relevant, removing the stale label
            or adding a comment will keep it active. Otherwise, we'll close it in
-           10 days to keep the issue queue tidy. Thank you for your contribution
-           to CockroachDB!
-        stale-pr-message: 'Stale pull request message'
+           10 days to keep the issue queue tidy.
         stale-issue-label: 'no-issue-activity'
-        stale-pr-label: 'no-pr-activity'
         close-issue-label: 'X-stale'
-        close-pr-label: 'X-stale'
         # Disable this for PR's, by setting a very high bar
         days-before-pr-stale: 99999
-        days-before-issue-stale: 540
+        days-before-issue-stale: 366
         days-before-close: 10
+        any-of-issue-labels: 'C-test-failure,O-sentry'
         exempt-issue-labels: 'release-blocker,X-anchored-telemetry,X-nostale'
