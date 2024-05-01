@@ -1257,7 +1257,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	// We prefer cfg.sharedStorage, since the Locator -> Storage mapping contained
 	// in it is needed for CRDB to function properly.
 	if cfg.sharedStorage != nil {
-		esWrapper := &externalStorageWrapper{p: p, es: cfg.sharedStorage, ctx: ctx}
+		esWrapper := &externalStorageWrapper{p: p, es: cfg.sharedStorage, ctx: logCtx}
 		if ConfigureForSharedStorage == nil {
 			return nil, errors.New("shared storage requires CCL features")
 		}
@@ -1266,7 +1266,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		}
 	} else {
 		if cfg.remoteStorageFactory != nil {
-			cfg.opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: ctx, factory: cfg.remoteStorageFactory}
+			cfg.opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: logCtx, factory: cfg.remoteStorageFactory}
 		}
 	}
 

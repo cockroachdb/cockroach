@@ -20,6 +20,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -678,4 +679,19 @@ func TestReadFileAtReturnsSize(t *testing.T) {
 	rr, ok := reader.(*cloud.ResumingReader)
 	require.True(t, ok)
 	require.Equal(t, int64(len(data)), rr.Size)
+}
+
+func TestCanceledError(t *testing.T) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	cancelFunc()
+	err := ctx.Err()
+	require.Error(t, err)
+	var aerr error
+	aerr = awserr.New(request.CanceledErrorCode,
+		"request context canceled", err)
+	// Unfortunately, errors.Is returns false, so
+	// kvpb.MaybeWrapReplicaCorruptionError will think this is corruption.
+	require.False(t, errors.Is(aerr, ctx.Err()))
+	aerr = errors.Mark(aerr, ctx.Err())
+	require.True(t, errors.Is(aerr, ctx.Err()))
 }
