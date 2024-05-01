@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -91,7 +92,7 @@ var AddSSTableRewriteConcurrency = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.bulk_io_write.sst_rewrite_concurrency.per_call",
 	"concurrency to use when rewriting sstable timestamps by block, or 0 to use a loop",
-	int64(util.ConstantWithMetamorphicTestRange("addsst-rewrite-concurrency", 4, 0, 16)),
+	int64(metamorphic.ConstantWithMetamorphicTestRange("addsst-rewrite-concurrency", 4, 0, 16)),
 	settings.NonNegativeInt,
 )
 
@@ -133,7 +134,7 @@ var addSSTableCapacityRemainingLimit = settings.RegisterFloatSetting(
 // old status quo was regular seeks.
 const prefixSeekCollisionCheckRatio = 10
 
-var forceRewrite = util.ConstantWithMetamorphicTestBool("addsst-rewrite-forced", false)
+var forceRewrite = metamorphic.ConstantWithMetamorphicTestBool("addsst-rewrite-forced", false)
 
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
 // on AddSSTableRequest.

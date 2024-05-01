@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 )
 
 // hashAggregatorState represents the state of the hash aggregator operator.
@@ -178,7 +178,7 @@ func randomizeHashAggregatorMaxBuffered() {
 	if maxHashAggregatorMaxBuffered > coldata.MaxBatchSize {
 		maxHashAggregatorMaxBuffered = coldata.MaxBatchSize
 	}
-	hashAggregatorMaxBuffered = util.ConstantWithMetamorphicTestRange(
+	hashAggregatorMaxBuffered = metamorphic.ConstantWithMetamorphicTestRange(
 		"hash-aggregator-max-buffered",
 		coldata.MaxBatchSize,
 		coldata.BatchSize(),

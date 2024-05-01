@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -34,7 +34,7 @@ import (
 // maximum number of results returned by a scan is known, the scan disables
 // batch limits in the dist sender. This results in the parallelization of these
 // scans.
-var parallelScanResultThreshold = uint64(util.ConstantWithMetamorphicTestRange(
+var parallelScanResultThreshold = uint64(metamorphic.ConstantWithMetamorphicTestRange(
 	"parallel-scan-result-threshold",
 	parallelScanResultThresholdProductionValue, /* defaultValue */
 	1, /* min */

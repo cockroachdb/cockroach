@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -322,7 +323,7 @@ This counts the number of ranges with an active rangefeed that are performing ca
 // go to the leaseholder first, and instead be sent to the leaseholder through a
 // follower using a proxy request. This setting is only intended for testing to
 // stress proxy behavior.
-var metamorphicRouteToLeaseholderFirst = util.ConstantWithMetamorphicTestBool(
+var metamorphicRouteToLeaseholderFirst = metamorphic.ConstantWithMetamorphicTestBool(
 	"distsender-leaseholder-first",
 	true,
 )
