@@ -899,4 +899,30 @@ DROP FUNCTION f;
 statement error pgcode 42P13 pq: return type mismatch in function declared to return record
 CREATE FUNCTION f(OUT x INT, OUT y INT) LANGUAGE SQL AS $$ SELECT ROW(ROW(1, 2)); $$;
 
+statement ok
+CREATE FUNCTION f(x ANYELEMENT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f(0);
+
+statement ok
+SELECT f(0);
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f('0');
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x TEXT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f('0');
+
+statement ok
+DROP FUNCTION f;
+
 subtest end
