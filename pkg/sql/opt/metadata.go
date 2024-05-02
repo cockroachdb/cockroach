@@ -477,7 +477,7 @@ func (md *Metadata) CheckDependencies(
 					tryDefaultExprs,
 				)
 				if err != nil || toCheck.Oid != overload.Oid || toCheck.Version != overload.Version {
-					return false, err
+					return false, maybeSwallowMetadataResolveErr(err)
 				}
 			}
 		} else {
