@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -2553,6 +2554,71 @@ func CreateLoadBalancer(
 		err = c.Signal(ctx, l, int(unix.SIGHUP))
 		if err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// Deploy deploys a new version of cockroach to the given cluster. It currently
+// does not support clusters running external SQL instances.
+// TODO(herko): Add support for virtual clusters (external SQL processes)
+func Deploy(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName, applicationName, version string,
+	pauseDuration time.Duration,
+	sig int,
+	wait bool,
+	maxWait int,
+	secure bool,
+) error {
+	supportedApplicationNames := []string{"cockroach", "release", "customized"}
+	if !slices.Contains(supportedApplicationNames, applicationName) {
+		return errors.Errorf("unsupported application name %s, supported names are %v", applicationName, supportedApplicationNames)
+	}
+	c, err := getClusterFromCache(l, clusterName, install.SecureOption(secure))
+	if err != nil {
+		return err
+	}
+
+	stageDir := "stage-cockroach"
+	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(c.TargetNodes()), "creating staging dir",
+		fmt.Sprintf("rm -rf %[1]s && mkdir -p %[1]s", stageDir))
+	if err != nil {
+		return err
+	}
+	err = Stage(ctx, l, clusterName, "", "", stageDir, applicationName, version)
+	if err != nil {
+		return err
+	}
+
+	l.Printf("Performing rolling restart of %d nodes on %s", len(c.VMs), clusterName)
+	for _, node := range c.TargetNodes() {
+		curNode := []install.Node{node}
+
+		err = c.WithNodes(curNode).Stop(ctx, l, sig, wait, maxWait, "")
+		if err != nil {
+			return err
+		}
+
+		err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(curNode),
+			"relocate binary", fmt.Sprintf(`
+		mv -f ./cockroach ./cockroach.old \
+		&& cp ./%[1]s/cockroach ./cockroach \
+		&& rm -rf %[1]s`, stageDir))
+
+		if err != nil {
+			return err
+		}
+		err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(curNode),
+			"start cockroach", "./"+install.StartScriptPath(install.SystemInterfaceName, 0 /* sqlInstance */))
+		if err != nil {
+			l.Printf("Failed to start cockroach on node %d. The previous binary can be restored from 'cockroach.old'", node)
+			return err
+		}
+		if pauseDuration > 0 {
+			l.Printf("Pausing for %s", pauseDuration)
+			time.Sleep(pauseDuration)
 		}
 	}
 	return nil

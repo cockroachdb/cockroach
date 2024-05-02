@@ -741,7 +741,8 @@ func (c *SyncedCluster) startNodeWithResult(
 	if c.IsLocal() {
 		uploadCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
-	uploadCmd += `cat > cockroach.sh && chmod +x cockroach.sh`
+	startScriptPath := StartScriptPath(startOpts.VirtualClusterName, startOpts.SQLInstance)
+	uploadCmd += fmt.Sprintf(`cat > %[1]s && chmod +x %[1]s`, startScriptPath)
 
 	var res = &RunResultDetails{}
 	uploadOpts := defaultCmdOpts("upload-start-script")
@@ -755,7 +756,7 @@ func (c *SyncedCluster) startNodeWithResult(
 	if c.IsLocal() {
 		runScriptCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
-	runScriptCmd += "./cockroach.sh"
+	runScriptCmd += "./" + startScriptPath
 	return c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-start-script"))
 }
 
@@ -858,6 +859,14 @@ func VirtualClusterInfoFromLabel(virtualClusterLabel string) (string, int, error
 	// Remove the "cockroach-" prefix added by VirtualClusterLabel.
 	virtualClusterName := strings.TrimPrefix(labelWithoutInstance, "cockroach-")
 	return virtualClusterName, sqlInstance, nil
+}
+
+func StartScriptPath(virtualClusterName string, sqlInstance int) string {
+	// Use the default start script name for the system tenant (storage cluster).
+	if virtualClusterName == SystemInterfaceName || virtualClusterName == "" {
+		return "cockroach.sh"
+	}
+	return fmt.Sprintf("cockroach-%s.sh", VirtualClusterLabel(virtualClusterName, sqlInstance))
 }
 
 func execStartTemplate(data startTemplateData) (string, error) {
