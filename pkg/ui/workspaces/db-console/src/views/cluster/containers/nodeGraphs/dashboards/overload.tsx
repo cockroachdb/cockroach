@@ -32,12 +32,13 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph
-      title="CPU Percent"
+      title="CPU Utilization"
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
+      tooltip={`CPU utilization of the CockroachDB process as measured by the host, displayed per node.`}
     >
-      <Axis units={AxisUnits.Percentage} label="CPU">
+      <Axis units={AxisUnits.Percentage} label="CPU Utilization">
         {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.cpu.combined.percent-normalized"
@@ -49,12 +50,13 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="KV Admission Slots Exhausted"
+      title="KV Admission CPU Slots Exhausted Duration Per Second"
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
+      tooltip={`Relative time the node had exhausted slots for foreground (regular) CPU work per second of wall time, measured in microseconds/second. Increased slot exhausted duration indicates CPU resource exhaustion.`}
     >
-      <Axis label="duration (micros/sec)">
+      <Axis label="Duration (micros/sec)">
         {nodeIDs.map(nid => (
           <Metric
             key={nid}
@@ -75,8 +77,9 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
+      tooltip={`Relative time the node had exhausted IO tokens for all IO-bound work per second of wall time, measured in microseconds/second. Increased IO token exhausted duration indicates IO resource exhaustion.`}
     >
-      <Axis label="duration (micros/sec)">
+      <Axis label="Duration (micros/sec)">
         {nodeIDs.map(nid => (
           <Metric
             key={nid}
@@ -93,10 +96,10 @@ export default function (props: GraphDashboardProps) {
       title="IO Overload"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of sublevels/files in L0 normalized by admission thresholds.`}
+      tooltip={`A derived score based on Admission Control's view of the store. Admission Control attempts to maintain a score of 0.5.`}
       showMetricsInTooltip={true}
     >
-      <Axis label="IO Overload">
+      <Axis label="Score">
         {nodeIDs.map(nid => (
           <>
             <Metric
@@ -111,13 +114,13 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Elastic CPU Exhausted Duration Per Second"
+      title="Elastic CPU Tokens Exhausted Duration Per Second"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`Duration of CPU exhaustion by elastic work, in microseconds.`}
+      tooltip={`Relative time the node had exhausted tokens for background (elastic) CPU work per second of wall time, measured in microseconds/second. Increased token exhausted duration indicates CPU resource exhaustion, specifically for background (elastic) work.`}
       showMetricsInTooltip={true}
     >
-      <Axis label="duration (micros/sec)">
+      <Axis label="Duration (micros/sec)">
         {nodeIDs.map(nid => (
           <Metric
             key={nid}
@@ -134,17 +137,18 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Flow Tokens Wait Time: 75th percentile"
+      title="Flow Tokens Queueing Delay: 99th percentile"
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
+      tooltip={`The 99th percentile latency of requests waiting in the Replication Admission Control queue. This metric is indicative of store overload on replicas.`}
     >
-      <Axis units={AxisUnits.Duration} label="p75 flow token wait duration">
+      <Axis units={AxisUnits.Duration} label="Wait Duration">
         {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
-              name="cr.node.kvadmission.flow_controller.regular_wait_duration-p75"
+              name="cr.node.kvadmission.flow_controller.regular_wait_duration-p99"
               title={
                 "Regular flow token wait time " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
@@ -154,7 +158,7 @@ export default function (props: GraphDashboardProps) {
             />
             <Metric
               key={nid}
-              name="cr.node.kvadmission.flow_controller.elastic_wait_duration-p75"
+              name="cr.node.kvadmission.flow_controller.elastic_wait_duration-p99"
               title={
                 "Elastic flow token wait time " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
@@ -168,31 +172,32 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Admission Delay: 75th percentile"
+      title="Admission Queueing Delay: 99th percentile"
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
+      tooltip={`The 99th percentile latency of requests waiting in the various Admission Control queues.`}
     >
-      <Axis units={AxisUnits.Duration} label="delay for requests that waited">
+      <Axis units={AxisUnits.Duration} label="Delay Duration">
         {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
-              name="cr.node.admission.wait_durations.kv-p75"
+              name="cr.node.admission.wait_durations.kv-p99"
               title={"KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
             <Metric
               key={nid}
-              name="cr.node.admission.wait_durations.kv-stores-p75"
+              name="cr.node.admission.wait_durations.kv-stores-p99"
               title={"KV write " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
             <Metric
               key={nid}
-              name="cr.node.admission.wait_durations.sql-kv-response-p75"
+              name="cr.node.admission.wait_durations.sql-kv-response-p99"
               title={
                 "SQL-KV response " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
@@ -201,7 +206,7 @@ export default function (props: GraphDashboardProps) {
             />
             <Metric
               key={nid}
-              name="cr.node.admission.wait_durations.sql-sql-response-p75"
+              name="cr.node.admission.wait_durations.sql-sql-response-p99"
               title={
                 "SQL-SQL response " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
@@ -218,6 +223,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
+      tooltip={`Blocked replication streams per node in Replication Admission Control, separated by admission priority {regular, elastic}.`}
     >
       <Axis label="Count">
         {nodeIDs.map(nid => (
@@ -280,7 +286,7 @@ export default function (props: GraphDashboardProps) {
       title="Goroutine Scheduling Latency: 99th percentile"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`P99 scheduling latency for goroutines`}
+      tooltip={`P99 scheduling latency for goroutines. A value above 1ms here indicates high load that causes background (elastic) CPU work to be throttled.`}
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
@@ -302,7 +308,7 @@ export default function (props: GraphDashboardProps) {
       title="Runnable Goroutines per CPU"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of Goroutines waiting per CPU.`}
+      tooltip={`The number of Goroutines waiting per CPU. A value above the value set in admission.kv_slot_adjuster.overload_threshold (sampled at 1ms) is used by admission control to throttle regular CPU work.`}
       showMetricsInTooltip={true}
     >
       <Axis label="goroutines">
