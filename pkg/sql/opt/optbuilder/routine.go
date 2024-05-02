@@ -217,25 +217,26 @@ func (b *Builder) buildRoutine(
 	// Validate that the return types match the original return types defined in
 	// the function. Return types like user defined return types may change
 	// since the function was first created.
-	originalReturnType := f.ResolvedType()
-	if originalReturnType.UserDefined() {
+	if f.ResolvedType().UserDefined() {
 		funcReturnType, err := tree.ResolveType(b.ctx,
-			&tree.OIDTypeReference{OID: originalReturnType.Oid()}, b.semaCtx.TypeResolver)
+			&tree.OIDTypeReference{OID: f.ResolvedType().Oid()}, b.semaCtx.TypeResolver)
 		if err != nil {
 			panic(err)
 		}
-		if !funcReturnType.Identical(originalReturnType) {
+		if !funcReturnType.Identical(f.ResolvedType()) {
 			panic(pgerror.Newf(
 				pgcode.InvalidFunctionDefinition,
-				"return type mismatch in function declared to return %s", originalReturnType.Name(),
+				"return type mismatch in function declared to return %s", f.ResolvedType().Name(),
 			))
 		}
 	}
 
 	// Build the argument expressions.
 	var args memo.ScalarListExpr
+	var argTypes []*types.T
 	if len(f.Exprs) > 0 {
 		args = make(memo.ScalarListExpr, 0, len(f.Exprs))
+		argTypes = make([]*types.T, 0, len(f.Exprs))
 		for i, pexpr := range f.Exprs {
 			if isProc && o.RoutineParams[i].Class == tree.RoutineParamOut {
 				// For procedures, OUT parameters need to be specified in the
@@ -252,6 +253,7 @@ func (b *Builder) buildRoutine(
 				nil, /* outCol */
 				colRefs,
 			))
+			argTypes = append(argTypes, pexpr.(tree.TypedExpr).ResolvedType())
 		}
 	}
 	// Create a new scope for building the statements in the function body. We
@@ -264,60 +266,11 @@ func (b *Builder) buildRoutine(
 	// CTEs that mutate and are not at the top-level.
 	bodyScope := b.allocScope()
 	var params opt.ColList
+	var polyArgTyp *types.T
 	if o.Types.Length() > 0 {
-		// Check whether some arguments were omitted. We need to use the
-		// corresponding DEFAULT expressions if so.
-		if numDefaultsToUse := o.Types.Length() - len(args); numDefaultsToUse > 0 {
-			var defaultParamOrdinals []int
-			for i, param := range o.RoutineParams {
-				if param.DefaultVal != nil {
-					defaultParamOrdinals = append(defaultParamOrdinals, i)
-				}
-			}
-			if len(defaultParamOrdinals) < numDefaultsToUse {
-				panic(errors.AssertionFailedf(
-					"incorrect overload resolution:\nneeded args: %v\nprovided args: %v\nroutine params: %v",
-					o.Types, f.Exprs, o.RoutineParams,
-				))
-			}
-			// Skip parameters for which the arguments were specified
-			// explicitly.
-			defaultParamOrdinals = defaultParamOrdinals[len(defaultParamOrdinals)-numDefaultsToUse:]
-			for _, paramOrdinal := range defaultParamOrdinals {
-				param := o.RoutineParams[paramOrdinal]
-				if !param.IsInParam() {
-					// Such a routine shouldn't have been created in the first
-					// place.
-					panic(errors.AssertionFailedf(
-						"non-input routine parameter %d has DEFAULT expression: %v",
-						paramOrdinal, o.RoutineParams,
-					))
-				}
-				// TODO(yuzefovich): parameter type resolution logic is
-				// partially duplicated with handling of PLpgSQL routines below.
-				typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
-				if err != nil {
-					panic(err)
-				}
-				texpr, err := tree.TypeCheck(b.ctx, param.DefaultVal, b.semaCtx, typ)
-				if err != nil {
-					panic(err)
-				}
-				arg := b.buildScalar(texpr, inScope, nil /* outScope */, nil /* outCol */, colRefs)
-				if resolved := texpr.ResolvedType(); !resolved.Identical(typ) {
-					if !cast.ValidCast(resolved, typ, cast.ContextAssignment) {
-						// Missing assignment cast between these two types
-						// should've been caught earlier during creation time.
-						panic(errors.AssertionFailedf(
-							"DEFAULT expression has type %s, need type %s, assignment cast isn't possible",
-							resolved.SQLStringForError(), typ.SQLStringForError(),
-						))
-					}
-					arg = b.factory.ConstructCast(arg, typ)
-				}
-				args = append(args, arg)
-			}
-		}
+		// If necessary, add DEFAULT arguments.
+		args, argTypes = b.addDefaultArgs(f, args, argTypes, bodyScope, colRefs)
+
 		// Add all input parameters to the scope.
 		paramTypes, ok := o.Types.(tree.ParamTypes)
 		if !ok {
@@ -329,17 +282,49 @@ func (b *Builder) buildRoutine(
 				"different number of static parameters %d and actual arguments %d", len(paramTypes), len(args),
 			))
 		}
+
+		// Check the parameters for polymorphic types, and resolve to a concrete
+		// type if any exist.
+		var numPolyParams int
+		_, numPolyParams, polyArgTyp = tree.ResolvePolymorphicArgTypes(
+			paramTypes, argTypes, nil /* anyElemTyp */, true, /* enforceConsistency */
+		)
+		if numPolyParams > 0 {
+			if polyArgTyp == nil {
+				// All supplied arguments were NULL, so a type could not be resolved
+				// for the polymorphic parameters.
+				panic(pgerror.New(pgcode.DatatypeMismatch,
+					"could not determine polymorphic type because input has type unknown",
+				))
+			}
+			// If the routine returns a polymorphic type, use the resolved
+			// polymorphic argument type to determine the concrete return type.
+			b.maybeResolvePolymorphicReturnType(f, polyArgTyp)
+		}
+
+		// Add any needed casts from argument type to parameter type, and add a
+		// correctly typed column to the bodyScope for each parameter.
 		params = make(opt.ColList, len(paramTypes))
 		for i := range paramTypes {
-			paramType := &paramTypes[i]
-			argColName := funcParamColName(tree.Name(paramType.Name), i)
-			// Use the statically defined parameter type (unless it is a wildcard, in
-			// which case we use the actual argument type).
-			argType := paramType.Typ
-			if argType.IsWildcardType() {
-				argType = args[i].DataType()
+			argTyp := argTypes[i]
+			desiredTyp := maybeReplacePolymorphicType(paramTypes[i].Typ, polyArgTyp)
+			if desiredTyp.Identical(types.AnyTuple) {
+				// This is a RECORD-typed parameter. Use the actual argument type.
+				desiredTyp = argTyp
 			}
-			col := b.synthesizeColumn(bodyScope, argColName, argType, nil /* expr */, nil /* scalar */)
+			if !argTyp.Identical(desiredTyp) {
+				if !cast.ValidCast(argTyp, desiredTyp, cast.ContextAssignment) {
+					// Missing assignment cast between these two types should've been
+					// caught earlier, during routine creation or overload resolution.
+					panic(errors.AssertionFailedf(
+						"argument expression has type %s, need type %s, assignment cast isn't possible",
+						argTyp.SQLStringForError(), desiredTyp.SQLStringForError(),
+					))
+				}
+				args[i] = b.factory.ConstructCast(args[i], desiredTyp)
+			}
+			argColName := funcParamColName(tree.Name(paramTypes[i].Name), i)
+			col := b.synthesizeColumn(bodyScope, argColName, desiredTyp, nil /* expr */, nil /* scalar */)
 			col.setParamOrd(i)
 			params[i] = col.id
 		}
@@ -382,7 +367,7 @@ func (b *Builder) buildRoutine(
 		// not be executed.
 		// TODO(mgartner): This will add some planning overhead for every
 		// invocation of the function. Is there a more efficient way to do this?
-		if originalReturnType.Family() == types.VoidFamily {
+		if f.ResolvedType().Family() == types.VoidFamily {
 			stmts = append(stmts, statements.Statement[tree.Statement]{
 				AST: &tree.Select{
 					Select: &tree.ValuesClause{
@@ -429,14 +414,14 @@ func (b *Builder) buildRoutine(
 			}
 			routineParams = append(routineParams, routineParam{
 				name:  param.Name,
-				typ:   typ,
+				typ:   maybeReplacePolymorphicType(typ, polyArgTyp),
 				class: param.Class,
 			})
 		}
 		var expr memo.RelExpr
 		var physProps *physical.Required
 		plBuilder := newPLpgSQLBuilder(
-			b, def.Name, stmt.AST.Label, colRefs, routineParams, originalReturnType, isProc, outScope,
+			b, def.Name, stmt.AST.Label, colRefs, routineParams, f.ResolvedType(), isProc, outScope,
 		)
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		expr, physProps = b.finishBuildLastStmt(
@@ -451,16 +436,13 @@ func (b *Builder) buildRoutine(
 		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
 
-	// NOTE: originalReturnType may not be up-to-date after the last statement is
-	// built, so we call f.ResolvedType() again here.
-	rTyp := f.ResolvedType()
-	multiColDataSource := len(rTyp.TupleContents()) > 0 && oldInsideDataSource
+	multiColDataSource := len(f.ResolvedType().TupleContents()) > 0 && oldInsideDataSource
 	routine := b.factory.ConstructUDFCall(
 		args,
 		&memo.UDFCallPrivate{
 			Def: &memo.UDFDefinition{
 				Name:               def.Name,
-				Typ:                rTyp,
+				Typ:                f.ResolvedType(),
 				Volatility:         o.Volatility,
 				SetReturning:       isSetReturning,
 				CalledOnNullInput:  o.CalledOnNullInput,
@@ -587,6 +569,11 @@ func (b *Builder) finalizeRoutineReturnType(
 			rTyp = b.getColumnDefinitionListTypes(inScope)
 		}
 	}
+	if !f.ResolvedOverload().ReturnsRecordType {
+		if err := validateReturnType(b.ctx, b.semaCtx, rTyp, stmtScope.cols); err != nil {
+			panic(err)
+		}
+	}
 	f.SetTypeAnnotation(rTyp)
 }
 
@@ -669,13 +656,120 @@ func (b *Builder) maybeAddRoutineAssignmentCasts(
 		scalar := b.factory.ConstructVariable(cols[i].ID)
 		if !colTyp.Identical(expectedTyp) {
 			if !cast.ValidCast(colTyp, expectedTyp, cast.ContextAssignment) {
-				panic(errors.AssertionFailedf("invalid cast should have been caught earlier"))
+				panic(errors.AssertionFailedf(
+					"invalid cast from %s to %s should have been caught earlier",
+					colTyp.SQLStringForError(), expectedTyp.SQLStringForError(),
+				))
 			}
 			scalar = b.factory.ConstructAssignmentCast(scalar, expectedTyp)
 		}
 		b.synthesizeColumn(stmtScope, scopeColName(""), expectedTyp, nil /* expr */, scalar)
 	}
 	return b.constructProject(expr, stmtScope.cols), stmtScope.makePhysicalProps()
+}
+
+// addDefaultArgs adds DEFAULT arguments to the list of user-supplied arguments
+// if the user-supplied arguments are fewer than the number of parameters.
+func (b *Builder) addDefaultArgs(
+	f *tree.FuncExpr,
+	args memo.ScalarListExpr,
+	argTypes []*types.T,
+	inScope *scope,
+	colRefs *opt.ColSet,
+) (memo.ScalarListExpr, []*types.T) {
+	o := f.ResolvedOverload()
+
+	// Check whether some arguments were omitted. We need to use the
+	// corresponding DEFAULT expressions if so.
+	numDefaultsToUse := o.Types.Length() - len(args)
+	if numDefaultsToUse <= 0 {
+		return args, argTypes
+	}
+	var defaultParamOrdinals []int
+	for i, param := range o.RoutineParams {
+		if param.DefaultVal != nil {
+			defaultParamOrdinals = append(defaultParamOrdinals, i)
+		}
+	}
+	if len(defaultParamOrdinals) < numDefaultsToUse {
+		panic(errors.AssertionFailedf(
+			"incorrect overload resolution:\nneeded args: %v\nprovided args: %v\nroutine params: %v",
+			o.Types, f.Exprs, o.RoutineParams,
+		))
+	}
+	// Skip parameters for which the arguments were specified
+	// explicitly.
+	defaultParamOrdinals = defaultParamOrdinals[len(defaultParamOrdinals)-numDefaultsToUse:]
+	for _, paramOrdinal := range defaultParamOrdinals {
+		param := o.RoutineParams[paramOrdinal]
+		if !param.IsInParam() {
+			// Such a routine shouldn't have been created in the first
+			// place.
+			panic(errors.AssertionFailedf(
+				"non-input routine parameter %d has DEFAULT expression: %v",
+				paramOrdinal, o.RoutineParams,
+			))
+		}
+		// TODO(yuzefovich): parameter type resolution logic is
+		// partially duplicated with handling of PLpgSQL routines below.
+		typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
+		if err != nil {
+			panic(err)
+		}
+		texpr, err := tree.TypeCheck(b.ctx, param.DefaultVal, b.semaCtx, typ)
+		if err != nil {
+			panic(err)
+		}
+		arg := b.buildScalar(texpr, inScope, nil /* outScope */, nil /* outCol */, colRefs)
+		args = append(args, arg)
+		argTypes = append(argTypes, texpr.ResolvedType())
+	}
+	return args, argTypes
+}
+
+// maybeResolvePolymorphicReturnType checks whether the return type of the
+// routine is polymorphic and if so, uses the resolved polymorphic argument type
+// to determine the concrete return type.
+func (b *Builder) maybeResolvePolymorphicReturnType(f *tree.FuncExpr, polyArgTyp *types.T) {
+	originalRTyp := f.ResolvedType()
+	if originalRTyp.IsPolymorphicType() {
+		f.SetTypeAnnotation(maybeReplacePolymorphicType(originalRTyp, polyArgTyp))
+	} else if originalRTyp.Family() == types.TupleFamily && !f.ResolvedOverload().ReturnsRecordType {
+		var hasPolymorphicOutParam bool
+		for _, typ := range originalRTyp.TupleContents() {
+			if typ.IsPolymorphicType() {
+				hasPolymorphicOutParam = true
+				break
+			}
+		}
+		if hasPolymorphicOutParam {
+			outParamTypes := make([]*types.T, len(originalRTyp.TupleContents()))
+			for i, outParamTyp := range originalRTyp.TupleContents() {
+				outParamTypes[i] = maybeReplacePolymorphicType(outParamTyp, polyArgTyp)
+			}
+			f.SetTypeAnnotation(types.MakeLabeledTuple(outParamTypes, originalRTyp.TupleLabels()))
+		}
+	}
+}
+
+// maybeReplacePolymorphicType checks whether the given type is polymorphic and
+// if so, replaces it with the given polymorphic argument type. It returns the
+// original type if it is not polymorphic.
+func maybeReplacePolymorphicType(originalTyp, polyArgTyp *types.T) *types.T {
+	if !originalTyp.IsPolymorphicType() || polyArgTyp == nil {
+		return originalTyp
+	}
+	switch originalTyp.Family() {
+	case types.ArrayFamily:
+		if polyArgTyp.Family() == types.ArrayFamily {
+			panic(pgerror.Newf(pgcode.UndefinedObject,
+				"could not find array type for data type %s", polyArgTyp.Name(),
+			))
+		}
+		return types.MakeArray(polyArgTyp)
+	default:
+		return polyArgTyp
+	}
 }
 
 func (b *Builder) withinNestedPLpgSQLCall(fn func()) {
