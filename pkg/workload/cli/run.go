@@ -259,9 +259,7 @@ func workerRun(
 	limiter *rate.Limiter,
 	workFn func(context.Context) error,
 ) {
-	if wg != nil {
-		defer wg.Done()
-	}
+	defer wg.Done()
 
 	for {
 		if ctx.Err() != nil {
