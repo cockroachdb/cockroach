@@ -327,7 +327,8 @@ func TestStageBadVersions(t *testing.T) {
 	})
 	require.Error(t, err, "shouldn't stage plan with old version")
 
-	plan.Version.Major += 2
+	plan.Version = clusterversion.Latest.Version()
+	plan.Version.Major += 1
 	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
 		Plan:           &plan,
 		AllNodes:       true,
