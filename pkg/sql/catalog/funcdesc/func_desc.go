@@ -809,7 +809,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		ret.RoutineParams = append(ret.RoutineParams, routineParam)
 	}
 	ret.ReturnType = tree.FixedReturnType(desc.ReturnType.Type)
-	ret.ReturnsRecordType = desc.ReturnType.Type.Identical(types.AnyTuple)
+	ret.ReturnsRecordType = !desc.IsProcedure() && desc.ReturnType.Type.Identical(types.AnyTuple)
 	ret.Types = signatureTypes
 	ret.Volatility, err = desc.getOverloadVolatility()
 	if err != nil {

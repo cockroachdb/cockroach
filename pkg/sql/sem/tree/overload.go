@@ -1047,8 +1047,70 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 	}
 
+	// Remove any overloads with polymorphic parameters for which the supplied
+	// argument types are invalid.
+	s.overloadIdxs = filterOverloads(s.overloadIdxs, s.overloads, func(o overloadImpl) bool {
+		ol, ok := o.(*Overload)
+		if !ok || ol.Type == BuiltinRoutine {
+			// Don't filter builtin routines.
+			return true
+		}
+		params := ol.Types.(ParamTypes)
+		var outParams ParamTypes
+		if ol.Type == ProcedureRoutine && foundOutParams {
+			outParams = ol.OutParamTypes.(ParamTypes)
+		}
+		hasPolymorphicTyp := false
+		for i := range params {
+			if params[i].Typ.IsPolymorphicType() {
+				hasPolymorphicTyp = true
+				break
+			}
+		}
+		if !hasPolymorphicTyp {
+			return true
+		}
+		argTypes := make([]*types.T, 0, len(params))
+		outArgTypes := make([]*types.T, 0, len(outParams))
+		for i := range s.exprs {
+			typedExpr, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any)
+			if err != nil {
+				panic(errors.HandleAsAssertionFailure(err))
+			}
+			if ol.Type == ProcedureRoutine && foundOutParams {
+				if _, isOutParam := toParamOrdinal(i, ol.OutParamOrdinals); isOutParam {
+					// A CALL statement must specify an argument for each OUT parameter
+					// of the procedure.
+					outArgTypes = append(outArgTypes, typedExpr.ResolvedType())
+					continue
+				}
+			}
+			argTypes = append(argTypes, typedExpr.ResolvedType())
+		}
+		// Check the concrete types of the arguments supplied for IN parameters.
+		// Only pass the parameters up to len(argTypes), since polymorphic type
+		// checking for default expressions happens later.
+		var anyElemTyp *types.T
+		if ok, _, anyElemTyp = ResolvePolymorphicArgTypes(
+			params[:len(argTypes)], argTypes, nil /* anyElemTyp */, false, /* enforceConsistency */
+		); !ok {
+			return false
+		}
+		if ol.Type != ProcedureRoutine || !foundOutParams {
+			return true
+		}
+		// Check the concrete types of the arguments supplied for OUT parameters.
+		// Use the concrete type previously resolved from ANYELEMENT IN parameters.
+		// Note that DEFAULT expressions cannot be used for OUT parameters, so there
+		// is no need to truncate the outParams slice.
+		ok, _, _ = ResolvePolymorphicArgTypes(
+			outParams, outArgTypes, anyElemTyp, false, /* enforceConsistency */
+		)
+		return ok
+	})
+
 	// If we typed any exprs as AnyCollatedString but have a concrete collated
-	// string type, redo the types using the contrete type. Note we're probably
+	// string type, redo the types using the concrete type. Note we're probably
 	// still lacking full compliance with PG on collation handling:
 	// https://www.postgresql.org/docs/current/collation.html#id-1.6.11.4.4
 	if ambiguousCollatedTypes {
