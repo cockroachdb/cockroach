@@ -23,6 +23,7 @@ bazel test //pkg/acceptance:acceptance_test \
   --test_arg=-l="$ARTIFACTSDIR" \
   --test_arg=-b=$COCKROACH \
   --test_env=COCKROACH_DEV_LICENSE \
+  --test_env=COCKROACH_RUN_ACCEPTANCE=true \
   --test_env=TZ=America/New_York \
   --test_timeout=1800 \
   --build_event_binary_file=bes.bin

@@ -1,11 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-
-go_library(
-    name = "compose",
-    srcs = ["empty.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/compose",
-    visibility = ["//visibility:public"],
-)
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "compose_test",
@@ -15,14 +8,13 @@ go_test(
         "//c-deps:libgeos",
         "//pkg/compose:compare/docker-compose.yml",
     ],
-    embed = [":compose"],
-    gotags = ["compose"],
     tags = [
         "integration",
         "no-remote-exec",
     ],
     deps = [
         "//pkg/build/bazel",
+        "//pkg/testutils/skip",
         "//pkg/util/envutil",
     ],
 )
