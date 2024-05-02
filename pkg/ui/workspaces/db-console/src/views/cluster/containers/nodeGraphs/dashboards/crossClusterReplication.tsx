@@ -58,7 +58,7 @@ export default function (props: GraphDashboardProps) {
       <Axis units={AxisUnits.Duration} label="duration">
         <Metric
           downsampler={TimeSeriesQueryAggregator.MIN}
-          aggregator={TimeSeriesQueryAggregator.AVG}
+          aggregator={TimeSeriesQueryAggregator.MAX}
           name="cr.node.physical_replication.replicated_time_seconds"
           title="Replication Lag"
           transform={datapoints =>
