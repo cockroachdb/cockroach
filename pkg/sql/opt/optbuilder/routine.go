@@ -285,21 +285,23 @@ func (b *Builder) buildRoutine(
 
 		// Check the parameters for polymorphic types, and resolve to a concrete
 		// type if any exist.
-		var numPolyParams int
-		_, numPolyParams, polyArgTyp = tree.ResolvePolymorphicArgTypes(
-			paramTypes, argTypes, nil /* anyElemTyp */, true, /* enforceConsistency */
-		)
-		if numPolyParams > 0 {
-			if polyArgTyp == nil {
-				// All supplied arguments were NULL, so a type could not be resolved
-				// for the polymorphic parameters.
-				panic(pgerror.New(pgcode.DatatypeMismatch,
-					"could not determine polymorphic type because input has type unknown",
-				))
+		if b.evalCtx.SessionData().OptimizerUsePolymorphicParameterFix {
+			var numPolyParams int
+			_, numPolyParams, polyArgTyp = tree.ResolvePolymorphicArgTypes(
+				paramTypes, argTypes, nil /* anyElemTyp */, true, /* enforceConsistency */
+			)
+			if numPolyParams > 0 {
+				if polyArgTyp == nil {
+					// All supplied arguments were NULL, so a type could not be resolved
+					// for the polymorphic parameters.
+					panic(pgerror.New(pgcode.DatatypeMismatch,
+						"could not determine polymorphic type because input has type unknown",
+					))
+				}
+				// If the routine returns a polymorphic type, use the resolved
+				// polymorphic argument type to determine the concrete return type.
+				b.maybeResolvePolymorphicReturnType(f, polyArgTyp)
 			}
-			// If the routine returns a polymorphic type, use the resolved
-			// polymorphic argument type to determine the concrete return type.
-			b.maybeResolvePolymorphicReturnType(f, polyArgTyp)
 		}
 
 		// Add any needed casts from argument type to parameter type, and add a
