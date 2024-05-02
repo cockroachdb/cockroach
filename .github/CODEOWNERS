@@ -115,6 +115,9 @@
 /pkg/sql/zone*.go            @cockroachdb/sql-foundations
 /pkg/cmd/sql-bootstrap-data/ @cockroachdb/sql-foundations
 
+#!/pkg/sql/logictest/tests/cockroach-go-testserver-*/*.go @cockroachdb/sql-foundations-noreview
+#!/pkg/sql/logictest/tests/local-mixed-*/*.go             @cockroachdb/sql-foundations-noreview
+
 # Beware to not assign the CLI package directory to a single team, at
 # least until we heavily refactor the package to extract team-specific
 # functionality into sub-packages assigned to their respective teams.
