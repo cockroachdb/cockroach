@@ -32,26 +32,26 @@ CREATE EXTERNAL CONNECTION kafka AS 'kafka://broker.address.com:9092';
 query-sql
 SHOW CREATE ALL EXTERNAL CONNECTIONS
 ----
-gs CREATE EXTERNAL CONNECTION 'gs' AS 'gs://bucket?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg=='
-kafka CREATE EXTERNAL CONNECTION 'kafka' AS 'kafka://broker.address.com:9092'
-kms CREATE EXTERNAL CONNECTION 'kms' AS 'gcp-kms:///cmk?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg=='
-nodelocal CREATE EXTERNAL CONNECTION 'nodelocal' AS 'nodelocal://1/foo'
-s3 CREATE EXTERNAL CONNECTION 's3' AS 's3://bucket?AUTH=specified&AWS_ACCESS_KEY_ID=key&AWS_SECRET_ACCESS_KEY=secret-key'
+gs CREATE EXTERNAL CONNECTION 'gs' AS 'gs://bucket?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg==' STORAGE
+kafka CREATE EXTERNAL CONNECTION 'kafka' AS 'kafka://broker.address.com:9092' STORAGE
+kms CREATE EXTERNAL CONNECTION 'kms' AS 'gcp-kms:///cmk?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg==' KMS
+nodelocal CREATE EXTERNAL CONNECTION 'nodelocal' AS 'nodelocal://1/foo' STORAGE
+s3 CREATE EXTERNAL CONNECTION 's3' AS 's3://bucket?AUTH=specified&AWS_ACCESS_KEY_ID=key&AWS_SECRET_ACCESS_KEY=secret-key' STORAGE
 
 query-sql
 SHOW CREATE EXTERNAL CONNECTION nodelocal
 ----
-nodelocal CREATE EXTERNAL CONNECTION 'nodelocal' AS 'nodelocal://1/foo'
+nodelocal CREATE EXTERNAL CONNECTION 'nodelocal' AS 'nodelocal://1/foo' STORAGE
 
 query-sql
 SHOW CREATE EXTERNAL CONNECTION kms
 ----
-kms CREATE EXTERNAL CONNECTION 'kms' AS 'gcp-kms:///cmk?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg=='
+kms CREATE EXTERNAL CONNECTION 'kms' AS 'gcp-kms:///cmk?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg==' KMS
 
 query-sql
 SHOW CREATE EXTERNAL CONNECTION kafka
 ----
-kafka CREATE EXTERNAL CONNECTION 'kafka' AS 'kafka://broker.address.com:9092'
+kafka CREATE EXTERNAL CONNECTION 'kafka' AS 'kafka://broker.address.com:9092' STORAGE
 
 
 enable-check-external-storage

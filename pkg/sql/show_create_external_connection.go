@@ -29,7 +29,14 @@ import (
 var showCreateExternalConnectionColumns = colinfo.ResultColumns{
 	{Name: "connection_name", Typ: types.String},
 	{Name: "create_statement", Typ: types.String},
+	{Name: "connection_type", Typ: types.String},
 }
+
+const (
+	connNameIdx = iota
+	createExtConnStmtIdx
+	connTypeIdx
+)
 
 func loadExternalConnections(
 	params runParams, n *tree.ShowCreateExternalConnections,
@@ -122,13 +129,14 @@ func (p *planner) ShowCreateExternalConnection(
 			var rows []tree.Datums
 			for _, conn := range connections {
 				row := tree.Datums{
-					scheduleIDIdx: tree.NewDString(conn.ConnectionName()),
-					createStmtIdx: tree.NewDString(conn.UnredactedConnectionStatement()),
+					connNameIdx:          tree.NewDString(conn.ConnectionName()),
+					createExtConnStmtIdx: tree.NewDString(conn.UnredactedConnectionStatement()),
+					connTypeIdx:          tree.NewDString(conn.ConnectionType().String()),
 				}
 				rows = append(rows, row)
 			}
 
-			v := p.newContainerValuesNode(showCreateTableColumns, len(rows))
+			v := p.newContainerValuesNode(showCreateExternalConnectionColumns, len(rows))
 			for _, row := range rows {
 				if _, err := v.rows.AddRow(ctx, row); err != nil {
 					v.Close(ctx)
