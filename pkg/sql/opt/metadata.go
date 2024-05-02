@@ -446,7 +446,7 @@ func (md *Metadata) CheckDependencies(
 					tree.UDFRoutine|tree.BuiltinRoutine|tree.ProcedureRoutine,
 				)
 				if err != nil || toCheck.Oid != overload.Oid || toCheck.Version != overload.Version {
-					return false, err
+					return false, maybeSwallowMetadataResolveErr(err)
 				}
 			}
 		} else {
