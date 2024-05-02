@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/marusama/semaphore"
@@ -68,7 +69,7 @@ type NewColOperatorArgs struct {
 	LocalVectorSources map[int32]any
 	DiskQueueCfg       colcontainer.DiskQueueCfg
 	FDSemaphore        semaphore.Semaphore
-	ExprHelper         *ExprHelper
+	SemaCtx            *tree.SemaContext
 	Factory            coldata.ColumnFactory
 	MonitorRegistry    *MonitorRegistry
 	TypeResolver       *descs.DistSQLTypeResolver
