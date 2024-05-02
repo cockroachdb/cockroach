@@ -3594,4 +3594,30 @@ ALTER TYPE e105259 RENAME VALUE 'foo' TO 'bar'
 statement error pgcode 22P02 invalid input value for enum e105259: "foo"
 SELECT f()
 
+statement ok
+CREATE FUNCTION f(x ANYELEMENT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f(0);
+
+statement ok
+SELECT f(0);
+
+statement ok
+DROP FUNCTION f(ANYELEMENT);
+CREATE FUNCTION f(x INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f('0');
+
+statement ok
+DROP FUNCTION f(INT);
+CREATE FUNCTION f(x TEXT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f('0');
+
+statement ok
+DROP FUNCTION f(TEXT);
+
 subtest end
