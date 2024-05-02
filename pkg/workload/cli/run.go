@@ -398,11 +398,17 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		}
 	}
 
+	// We never want this to block, but once it hits 10M, it is good enough
+	// for the tests we currently have. Also its not clear how we should
+	// handle the ramp period with the limiter, but for now we simply allow
+	// overallocation during the ramp.
 	var limiter *rate.Limiter
 	if *maxRate > 0 {
-		// Create a limiter using maxRate specified on the command line and
-		// with allowed burst of 1 at the maximum allowed rate.
-		limiter = rate.NewLimiter(rate.Limit(*maxRate), 1)
+		// Create a limiter using maxRate specified on the command line and with
+		// allowed burst of 10M at the maximum allowed rate. We consume the
+		// burst before starting the ramp, but this allows recovery from a
+		// cluster slowdown.
+		limiter = rate.NewLimiter(rate.Limit(*maxRate), 10_000_000)
 	}
 
 	maybeLogRandomSeed(ctx, gen)
@@ -501,16 +507,35 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			defer cancel()
 		}
 
+		// Remove the entire ramp burst from the limiter before starting the
+		// workload. The burst is intented to be filled if the nodes temporarily
+		// slow down.
+		if limiter != nil {
+			limiter.ReserveN(timeutil.Now(), limiter.Burst())
+		}
+		numWorkers := len(ops.WorkerFns)
+		sleepPerWorker := *ramp / time.Duration(numWorkers)
+		workerTimeSlice := float64(sleepPerWorker) / float64(time.Second)
+		permitsPerWorker := *maxRate / float64(numWorkers)
 		for i, workFn := range ops.WorkerFns {
-			go func(i int, workFn func(context.Context) error) {
-				// If a ramp period was specified, start all of the workers
-				// gradually.
-				if rampCtx != nil {
-					rampPerWorker := *ramp / time.Duration(len(ops.WorkerFns))
-					time.Sleep(time.Duration(i) * rampPerWorker)
+			// If a ramp period was specified, start all of the workers
+			// gradually.
+			if rampCtx != nil {
+				if *maxRate > 0 {
+					// Wait for additional permits for the workers that haven't
+					// started yet. This is a decreasing sequence as we expect
+					// the workers that have already lauched to be allocated the
+					// remaining tokens that we don't get.
+					numToReserve := int(permitsPerWorker * (float64(numWorkers - i)) * workerTimeSlice)
+					limiter.ReserveN(timeutil.Now(), numToReserve)
 				}
+				time.Sleep(sleepPerWorker)
+			}
+			// TODO(baptist): Remove copy once lint:loopvarcapture is removed.
+			workFn := workFn
+			go func() {
 				workerRun(workersCtx, errCh, &wg, limiter, workFn)
-			}(i, workFn)
+			}()
 		}
 
 		if rampCtx != nil {
