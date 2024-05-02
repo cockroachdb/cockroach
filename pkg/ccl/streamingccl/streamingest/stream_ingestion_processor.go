@@ -852,6 +852,7 @@ func (sip *streamIngestionProcessor) bufferRangeKeyVal(
 
 func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 	ctx, sp := tracing.ChildSpan(sip.Ctx(), "replicated-split")
+	log.Infof(ctx, "received replicating split event!")
 	defer sp.Finish()
 	if !ingestSplitEvent.Get(&sip.EvalCtx.Settings.SV) {
 		return nil
@@ -863,6 +864,7 @@ func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 		return err
 	}
 	if !ok {
+		log.Infof(ctx, "not rekeying split at %s", *key)
 		return nil
 	}
 	log.Infof(ctx, "replicating split at %s", rekey)

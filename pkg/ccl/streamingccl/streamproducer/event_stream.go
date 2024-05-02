@@ -302,11 +302,17 @@ func (s *eventStream) onDeleteRange(ctx context.Context, delRange *kvpb.RangeFee
 	s.setErr(s.maybeFlushBatch(ctx))
 }
 func (s *eventStream) onMetadata(ctx context.Context, metadata *kvpb.RangeFeedMetadata) {
-	log.VInfof(ctx, 2, "received metadata event: %s, fromManualSplit: %t, parent start key %s", metadata.Span, metadata.FromManualSplit, metadata.ParentStartKey)
+	log.Infof(ctx, "received metadata event: %s, fromManualSplit: %t, parent start key %s", metadata.Span, metadata.FromManualSplit, metadata.ParentStartKey)
 	if metadata.FromManualSplit && !metadata.Span.Key.Equal(metadata.ParentStartKey) {
+		if s.addMu != nil {
+			s.addMu.Lock()
+			defer s.addMu.Unlock()
+		}
 		// Only send new manual split keys (i.e. a child rangefeed start key that
 		// differs from the parent start key)
+		log.Infof(ctx,"sent split point %s", metadata.Span.Key)
 		s.seb.addSplitPoint(metadata.Span.Key)
+		s.setErr(s.maybeFlushBatch(ctx))
 	}
 }
 
