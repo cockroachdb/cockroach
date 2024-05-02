@@ -79,7 +79,7 @@ func (sm *streamMerger) NextBatch(
 	}
 
 	cmp, err := CompareEncDatumRowForMerge(
-		sm.left.types, lrow, rrow, sm.left.ordering, sm.right.ordering,
+		sm.left.types, sm.right.types, lrow, rrow, sm.left.ordering, sm.right.ordering,
 		sm.nullEquality, &sm.datumAlloc, evalCtx,
 	)
 	if err != nil {
@@ -108,7 +108,7 @@ func (sm *streamMerger) NextBatch(
 // a DatumAlloc which is used for decoding if any underlying EncDatum is not
 // yet decoded.
 func CompareEncDatumRowForMerge(
-	lhsTypes []*types.T,
+	lhsTypes, rhsTypes []*types.T,
 	lhs, rhs rowenc.EncDatumRow,
 	leftOrdering, rightOrdering colinfo.ColumnOrdering,
 	nullEquality bool,
@@ -144,7 +144,7 @@ func CompareEncDatumRowForMerge(
 			}
 			continue
 		}
-		cmp, err := lhs[lIdx].Compare(lhsTypes[lIdx], da, evalCtx, &rhs[rIdx])
+		cmp, err := lhs[lIdx].CompareEx(lhsTypes[lIdx], da, evalCtx, &rhs[rIdx], rhsTypes[rIdx])
 		if err != nil {
 			return 0, err
 		}
