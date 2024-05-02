@@ -529,7 +529,7 @@ func fromZipDir(
 				return errors.Wrap(err, "failed unmarshalling job payload")
 			}
 
-			// when can progress be null? if it exists but we have never started it?
+			// Skip NULL job payloads.
 			if fields[5] == "NULL" {
 				return nil
 			}
@@ -554,9 +554,8 @@ func fromZipDir(
 			Payload  string `json:"hex_payload"`
 			Progress string `json:"hex_progress"`
 		}, 0)
-		// TODO(before merge): when does this happen?
-		if err := parseJSONFile(zipDirPath, "system.jobs.json", &jobsTableJSON); err != nil {
-			return nil, nil, nil, errors.Wrapf(err, "failed to parse system.jobs.json")
+		if err := parseJSONFile(zipDirPath, "crdb_internal.system_jobs.json", &jobsTableJSON); err != nil {
+			return nil, nil, nil, errors.Wrapf(err, "failed to parse crdb_internal.system_jobs.json")
 		}
 		for _, job := range jobsTableJSON {
 			row := jobs.JobMetadata{
