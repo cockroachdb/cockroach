@@ -1551,6 +1551,8 @@ func (t *T) Name() string {
 			return "oidvector"
 		case oid.T_int2vector:
 			return "int2vector"
+		case oid.T_anyarray:
+			return "anyarray"
 		}
 		return t.ArrayContents().Name() + "[]"
 
@@ -1688,6 +1690,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 			return "oidvector"
 		case oid.T_int2vector:
 			return "int2vector"
+		case oid.T_anyarray:
+			return "anyarray"
 		}
 		// If we have a typemod specified then pass it down when
 		// formatting the array type.
@@ -2165,6 +2169,18 @@ func (t *T) IsWildcardType() bool {
 		// Note that pointer comparison is insufficient since we might have
 		// deserialized t from disk.
 		if t.Identical(wildcard) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsPolymorphicType returns true if the type can be used as the parameter or
+// return-type of a polymorphic function. Note that this does not include RECORD
+// (AnyTuple) or RECORD[].
+func (t *T) IsPolymorphicType() bool {
+	for _, poly := range []*T{Any, AnyArray, AnyEnum, AnyEnumArray} {
+		if t.Identical(poly) {
 			return true
 		}
 	}

@@ -1,0 +1,686 @@
+statement ok
+CREATE TYPE greetings AS ENUM('hi', 'hello', 'yo');
+CREATE TYPE foo AS ENUM('bar', 'baz');
+CREATE TYPE typ AS (x INT, y INT);
+
+subtest poly_in
+
+# Polymorphic ANYELEMENT parameter.
+statement ok
+CREATE PROCEDURE p(x ANYELEMENT) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CALL p(1);
+CALL p('foo'::TEXT);
+CALL p(False);
+CALL p(NULL::INT);
+CALL p('hi'::greetings);
+CALL p(ARRAY[1, 2, 3]);
+
+# TODO(#94718): Postgres returns an error here.
+statement ok
+CALL p('foo');
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+CALL p(NULL);
+
+# Polymorphic ANYARRAY parameter.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYARRAY) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CALL p(ARRAY[1, 2, 3]);
+CALL p(ARRAY['one', 'two', 'three']);
+CALL p(NULL::INT[]);
+CALL p('{1, 2, 3}'::INT[]);
+
+# TODO(#94718): Postgres returns a different error here.
+statement error pgcode 42883 pq: procedure p\(string\) does not exist
+CALL p('{1, 2, 3}');
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+CALL p(NULL);
+
+statement error pgcode 42883 pq: procedure p\(int\) does not exist
+CALL p(1);
+
+statement error pgcode 42883 pq: procedure p\(greetings\) does not exist
+CALL p('hi'::greetings);
+
+# TODO(#123048): uncomment these.
+## Polymorphic ANYENUM parameter.
+#statement ok
+#DROP PROCEDURE p;
+#CREATE PROCEDURE p(x ANYENUM) LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#CALL p('hi'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hi');
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(1);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(ARRAY[1, 2, 3]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(ROW(1, 2)::typ);
+
+# The supplied arguments for ANYELEMENT parameters must have the same type.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYELEMENT, y ANYELEMENT) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CALL p(1, 2);
+CALL p(NULL, 1);
+CALL p(ARRAY[1, 2], ARRAY[3, 4]);
+CALL p('hi'::greetings, 'hello'::greetings);
+
+# TODO(#94718): this should succeed.
+statement error pgcode 42883 pq: procedure p\(int, string\) does not exist
+CALL p(1, '2');
+
+# TODO(#94718): this should succeed.
+statement error pgcode 42883 pq: procedure p\(greetings, string\) does not exist
+CALL p('hi'::greetings, 'hello');
+
+# TODO(#94718): this should fail with unknown type error.
+# statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+statement ok
+CALL p('1', '2');
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+CALL p(NULL, NULL);
+
+statement error pgcode 42883 pq: procedure p\(int, bool\) does not exist
+CALL p(1, False);
+
+statement error pgcode 42883 pq: procedure p\(int\[\], bool\[\]\) does not exist
+CALL p(ARRAY[1, 2], ARRAY[False, True]);
+
+# The supplied arguments for ANYARRAY parameters must have the same type, and
+# be part of the ARRAY family.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYARRAY, y ANYARRAY) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CALL p(ARRAY[1, 2, 3], ARRAY[4, 5, 6]);
+CALL p(ARRAY[True, False], ARRAY[False, NULL]);
+CALL p(NULL, ARRAY[1, 2]);
+CALL p(ARRAY['hi'::greetings, 'hello'::greetings], ARRAY['yo'::greetings, NULL]);
+CALL p(ARRAY[ROW(1, 2)::typ, NULL], ARRAY[ROW(3, 4)::typ]);
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+CALL p(NULL, NULL);
+
+# TODO(#94718): this should fail with unknown type error.
+statement error pgcode 42883 pq: procedure p\(string, string\) does not exist
+CALL p('{1, 2}', '{3, 4}');
+
+statement error pgcode 42883 pq: procedure p\(int, int\) does not exist
+CALL p(1, 2);
+
+statement error pgcode 42883 pq: procedure p\(int\[\], int\) does not exist
+CALL p(ARRAY[1, 2], 3);
+
+statement error pgcode 42883 pq: procedure p\(greetings, greetings\) does not exist
+CALL p('hi'::greetings, 'hello'::greetings);
+
+# TODO(#123048): uncomment these.
+## The supplied arguments for ANYENUM parameters must have the same type, and
+## be part of the ENUM family.
+#statement ok
+#DROP PROCEDURE p;
+#CREATE PROCEDURE p(x ANYENUM, y ANYENUM) LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#CALL p('hi'::greetings, 'hello'::greetings);
+#CALL p('hi', 'hello'::greetings);
+#CALL p('hi'::greetings, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(NULL, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hi', 'hello');
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(1, 2);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(ARRAY[1, 2], ARRAY[3, 4]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(ROW(1, 2)::typ, ROW(3, 4)::typ);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hi'::greetings, 'bar'::foo);
+
+# The supplied element type of an ANYARRAY parameter must match the concrete
+# type of an ANYELEMENT parameter.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYARRAY, y ANYELEMENT) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CALL p(ARRAY[1, 2], 1);
+CALL p(ARRAY[1, 2], NULL);
+CALL p(NULL, 1);
+CALL p(ARRAY[True], False);
+CALL p(ARRAY['hi'], 'hello');
+CALL p(ARRAY['hi'::greetings], 'hello'::greetings);
+CALL p(ARRAY['hi']::greetings[], 'hello'::greetings);
+
+# TODO(#94718): this should succeed.
+statement error pgcode 42883 pq: procedure p\(int\[\], string\) does not exist
+CALL p(ARRAY[1, 2], '1');
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+CALL p(NULL, NULL);
+
+statement error pgcode 42883 pq: procedure p\(string\[\], greetings\) does not exist
+CALL p(ARRAY['hi'], 'hello'::greetings);
+
+statement error pgcode 42883 pq: procedure p\(greetings, string\[\]\) does not exist
+CALL p('hello'::greetings, ARRAY['hi']);
+
+statement error pgcode 42883 pq: procedure p\(int, int\) does not exist
+CALL p(1, 2);
+
+statement error pgcode 42883 pq: procedure p\(int\[\], int\[\]\) does not exist
+CALL p(ARRAY[1, 2], ARRAY[3, 4]);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYELEMENT, y ANYARRAY) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CALL p(1, ARRAY[1, 2]);
+CALL p(NULL, ARRAY[1, 2]);
+CALL p(1, NULL);
+CALL p(False, ARRAY[True]);
+CALL p('hello', ARRAY['hi']);
+CALL p('hello'::greetings, ARRAY['hi'::greetings]);
+CALL p('hello'::greetings, ARRAY['hi']::greetings[]);
+
+# TODO(#94718): this should succeed.
+statement error pgcode 42883 pq: procedure p\(string, int\[\]\) does not exist
+CALL p('1', ARRAY[1, 2]);
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+CALL p(NULL, NULL);
+
+statement error pgcode 42883 pq: procedure p\(string\[\], greetings\) does not exist
+CALL p(ARRAY['hi'], 'hello'::greetings);
+
+statement error pgcode 42883 pq: procedure p\(greetings, string\[\]\) does not exist
+CALL p('hello'::greetings, ARRAY['hi']);
+
+statement error pgcode 42883 pq: procedure p\(int, int\) does not exist
+CALL p(1, 2);
+
+statement error pgcode 42883 pq: procedure p\(int\[\], int\[\]\) does not exist
+CALL p(ARRAY[1, 2], ARRAY[3, 4]);
+
+# TODO(#123048): uncomment these.
+## The concrete type of an ANYELEMENT parameter must match that of an
+## ANYENUM parameter.
+#statement ok
+#DROP PROCEDURE p;
+#CREATE PROCEDURE p(x ANYENUM, y ANYELEMENT) LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#CALL p('hi'::greetings, 'hello'::greetings);
+#CALL p('hi'::greetings, 'hello');
+#CALL p('hi'::greetings, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(NULL, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hello', 'hi');
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hello'::greetings, 1);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(1, 'hello'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hello'::greetings, ARRAY[1, 2]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(ARRAY[1, 2], 'hello'::greetings);
+#
+#statement ok
+#DROP PROCEDURE p;
+#CREATE PROCEDURE p(x ANYELEMENT, y ANYENUM) LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#CALL p('hi'::greetings, 'hello'::greetings);
+#CALL p('hi', 'hello'::greetings);
+#CALL p(NULL, 'hi'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(NULL, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hello', 'hi');
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hello'::greetings, 1);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(1, 'hello'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hello'::greetings, ARRAY[1, 2]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(ARRAY[1, 2], 'hello'::greetings);
+#
+## The supplied element type of an ANYARRAY parameter must match the supplied
+## type of an ANYENUM parameter.
+#statement ok
+#DROP PROCEDURE p;
+#CREATE PROCEDURE p(x ANYARRAY, y ANYENUM) LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#CALL p(ARRAY['hi'::greetings], 'hello'::greetings);
+#CALL p(ARRAY['hi']::greetings[], 'hello'::greetings);
+#CALL p(ARRAY['hi']::greetings[], 'hello');
+#CALL p(NULL, 'hi'::greetings);
+#CALL p(ARRAY['hi'::greetings], NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(NULL, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hello'::greetings, 'hi'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(ARRAY['hello']::greetings[], ARRAY['hi'::greetings]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(ARRAY[1, 2], 'hi'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(ARRAY['hi'::greetings], 10);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(ARRAY['hi'::greetings], 'bar'::foo);
+#
+#statement ok
+#DROP PROCEDURE p;
+#CREATE PROCEDURE p(x ANYENUM, y ANYARRAY) LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#CALL p('hello'::greetings, ARRAY['hi'::greetings]);
+#CALL p('hello'::greetings, ARRAY['hi']::greetings[]);
+#CALL p('hello', ARRAY['hi']::greetings[]);
+#CALL p('hi'::greetings, NULL);
+#CALL p(NULL, ARRAY['hi'::greetings]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(NULL, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hello'::greetings, 'hi'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(ARRAY['hello']::greetings[], ARRAY['hi'::greetings]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('hi'::greetings, ARRAY[1, 2]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p(10, ARRAY['hi'::greetings]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#CALL p('bar'::foo, ARRAY['hi'::greetings]);
+
+# It's possible to return using a polymorphic parameter type, but the actual
+# argument type must match the return type.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYELEMENT, OUT y INT) LANGUAGE SQL AS $$ SELECT x; $$;
+
+query I
+CALL p(1, NULL);
+----
+1
+
+query I
+CALL p(2, NULL);
+----
+2
+
+query I
+CALL p(NULL::INT, NULL);
+----
+NULL
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+CALL p('foo'::TEXT, NULL);
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+CALL p(True, NULL);
+
+statement ok
+DROP PROCEDURE p;
+
+subtest poly_out
+
+# Polymorphic OUT parameter with no polymorphic IN parameter.
+statement error pgcode 42P13 pq: cannot determine result data type
+CREATE PROCEDURE p(OUT x ANYELEMENT) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+# Polymorphic ANYARRAY OUT parameter with no polymorphic IN parameter.
+statement error pgcode 42P13 pq: cannot determine result data type
+CREATE PROCEDURE p(OUT x ANYARRAY) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+# Polymorphic OUT parameter and non-polymorphic IN parameter.
+statement error pgcode 42P13 pq: cannot determine result data type
+CREATE PROCEDURE p(x INT, OUT y ANYELEMENT) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+# Polymorphic OUT parameters and non-polymorphic IN parameter.
+statement error pgcode 42P13 pq: cannot determine result data type
+CREATE PROCEDURE p(x INT, OUT y ANYARRAY, z OUT ANYELEMENT) LANGUAGE SQL AS $$ SELECT 1, 2; $$;
+
+subtest poly_in_out
+
+# Polymorphic INOUT parameter.
+#
+# Note: When the proc is called, Postgres returns an error with the message:
+# "cannot display a value of type anyelement". This seems like an oversight, so
+# the difference is probably ok. See #123454.
+statement ok
+CREATE PROCEDURE p(INOUT x ANYELEMENT) LANGUAGE SQL AS $$ SELECT x; $$;
+
+query I
+CALL p(1);
+----
+1
+
+query B
+CALL p(True);
+----
+true
+
+query T
+CALL p(ARRAY[1, 2]);
+----
+{1,2}
+
+# Polymorphic IN parameter and polymorphic OUT parameter.
+#
+# Note: When the proc is called, Postgres returns an error with the message:
+# "cannot display a value of type anyelement". This seems like an oversight, so
+# the difference is probably ok. See #123454.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYELEMENT, OUT y ANYELEMENT) LANGUAGE SQL AS $$ SELECT x; $$;
+
+query I
+CALL p(1, NULL);
+----
+1
+
+query B
+CALL p(True, NULL);
+----
+true
+
+query T
+CALL p(ARRAY[1, 2], NULL);
+----
+{1,2}
+
+# ANYELEMENT parameter is used to determine final type of ANYARRAY return type.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYELEMENT, OUT y ANYARRAY) LANGUAGE SQL AS $$ SELECT ARRAY[x]; $$;
+
+query T
+CALL p(1, NULL);
+----
+{1}
+
+query T
+CALL p(True, NULL);
+----
+{t}
+
+statement error pgcode 42704 pq: could not find array type for data type int\[\]
+CALL p(ARRAY[1, 2], NULL);
+
+# ANYARRAY parameter is used to determine final type of ANYELEMENT return type.
+#
+# Note: When the proc is called, Postgres returns an error with the message:
+# "cannot display a value of type anyelement". This seems like an oversight, so
+# the difference is probably ok. See #123454.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYARRAY, OUT y ANYELEMENT) LANGUAGE SQL AS $$ SELECT x[1]; $$;
+
+query I
+CALL p(ARRAY[1, 2], NULL);
+----
+1
+
+query B
+CALL p(ARRAY[True, False], NULL);
+----
+true
+
+# The concrete type supplied for a polymorphic OUT parameter must be compatible
+# with the polymorphic IN parameter(s).
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYELEMENT, OUT y ANYELEMENT) LANGUAGE SQL AS $$ SELECT x; $$;
+
+statement error pgcode 42883 pq: procedure p\(bool, bool\[\]\) does not exist
+CALL p(true, ARRAY[True]);
+
+statement error pgcode 42883 pq: procedure p\(int, int\[\]\) does not exist
+CALL p(1, ARRAY[2]);
+
+statement error pgcode 42883 pq: procedure p\(int, bool\) does not exist
+CALL p(1, True);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYELEMENT, OUT y ANYARRAY) LANGUAGE SQL AS $$ SELECT ARRAY[x]; $$;
+
+statement error pgcode 42883 pq: procedure p\(bool, bool\) does not exist
+CALL p(true, false);
+
+statement error pgcode 42883 pq: procedure p\(int, int\) does not exist
+CALL p(1, 2);
+
+subtest default_values
+
+# Polymorphic parameter with a default value.
+#
+# Note: When the proc is called, Postgres returns an error with the message:
+# "cannot display a value of type anyelement". This seems like an oversight, so
+# the difference is probably ok. See #123454.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(OUT ret ANYELEMENT, x ANYELEMENT DEFAULT 1) LANGUAGE SQL AS $$ SELECT x; $$;
+
+query I
+CALL p(NULL);
+----
+1
+
+query B
+CALL p(NULL, True);
+----
+true
+
+query T
+CALL p(NULL, 'foo'::TEXT);
+----
+foo
+
+# Second polymorphic parameter has a default value.
+#
+# Note: When the proc is called, Postgres returns an error with the message:
+# "cannot display a value of type anyelement". This seems like an oversight, so
+# the difference is probably ok. See #123454.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(OUT ret ANYELEMENT, x ANYELEMENT, y ANYELEMENT DEFAULT 1) LANGUAGE SQL AS $$ SELECT y; $$;
+
+query I
+CALL p(NULL, 1);
+----
+1
+
+query I
+CALL p(NULL, 1, 2);
+----
+2
+
+query T
+CALL p(NULL, 'foo'::TEXT, 'bar'::TEXT);
+----
+bar
+
+query B
+CALL p(NULL, True, False);
+----
+false
+
+statement error pgcode 42804 pq: arguments declared \"anyelement\" are not all alike
+CALL p(NULL, True);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYARRAY, OUT ret ANYARRAY, y ANYARRAY DEFAULT ARRAY[1, 2]) LANGUAGE SQL AS $$ SELECT y; $$;
+
+query T
+CALL p(ARRAY[4, 5], NULL);
+----
+{1,2}
+
+statement error pgcode 42804 pq: arguments declared \"anyarray\" are not all alike
+CALL p(ARRAY[True], NULL);
+
+# TODO(#123048): uncomment this case.
+#statement error pgcode 42804 pq: arguments declared \"anyenum\" are not all alike
+#DROP PROCEDURE p;
+#CREATE PROCEDURE p(OUT ret ANYENUM, x ANYENUM, y ANYENUM DEFAULT 'hello'::greetings) LANGUAGE SQL AS $$ SELECT y; $$;
+#CALL p(NULL, 'bar'::foo);
+
+# Two default values with incompatible types.
+#
+# Note: When the proc is called, Postgres returns an error with the message:
+# "cannot display a value of type anyelement". This seems like an oversight, so
+# the difference is probably ok. See #123454.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(OUT ret ANYELEMENT, x ANYELEMENT DEFAULT True, y ANYELEMENT DEFAULT 1) LANGUAGE SQL AS $$ SELECT x; $$;
+
+query I
+CALL p(NULL, 10);
+----
+10
+
+query I
+CALL p(NULL, 10, 100);
+----
+10
+
+statement error pgcode 42804 pq: arguments declared \"anyelement\" are not all alike
+CALL p(NULL);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYELEMENT DEFAULT 10, y ANYARRAY DEFAULT ARRAY[1, 2]) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CALL p();
+CALL p(1);
+CALL p(1, ARRAY[100]);
+CALL p(True, ARRAY[False]);
+
+statement error pgcode 42804 pq: argument declared anyarray is not consistent with argument declared anyelement
+CALL p(True);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x ANYELEMENT DEFAULT True, y ANYARRAY DEFAULT ARRAY[1, 2]) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CALL p(1);
+CALL p(1, ARRAY[100]);
+CALL p(True, ARRAY[False]);
+
+statement error pgcode 42804 pq: argument declared anyarray is not consistent with argument declared anyelement
+CALL p();
+
+statement ok
+DROP PROCEDURE p;
+
+statement error pgcode 42804 pq: argument of DEFAULT must be type anyarray, not type int
+CREATE PROCEDURE p(x ANYARRAY DEFAULT 1) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+subtest drop_procedure
+
+statement ok
+CREATE PROCEDURE p(OUT y INT, x ANYELEMENT) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement error pgcode 42883 pq: procedure p\(int\) does not exist
+DROP PROCEDURE p(OUT INT, INT);
+
+statement error pgcode 42883 pq: procedure p\(string\) does not exist
+DROP PROCEDURE p(OUT INT, TEXT);
+
+statement error pgcode 42883 pq: procedure p\(\) does not exist
+DROP PROCEDURE p(OUT INT);
+
+statement error pgcode 42883 pq: procedure p\(\) does not exist
+DROP PROCEDURE p();
+
+statement error pgcode 42883 pq: procedure p\(anyarray\) does not exist
+DROP PROCEDURE p(OUT INT, ANYARRAY);
+
+statement ok
+DROP PROCEDURE p(OUT INT, ANYELEMENT);
+
+statement ok
+CREATE PROCEDURE p(x INT, OUT ret INT) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement error pgcode 42883 pq: procedure p\(anyarray\) does not exist
+DROP PROCEDURE p(ANYARRAY, OUT INT);
+
+statement error pgcode 42883 pq: procedure p\(anyelement\) does not exist
+DROP PROCEDURE p(ANYELEMENT, OUT INT);
+
+statement ok
+DROP PROCEDURE p(INT, OUT INT);
+
+subtest regression_123239
+
+# Note: When the proc is called, Postgres returns an error with the message:
+# "cannot display a value of type anyelement". This seems like an oversight, so
+# the difference is probably ok. See #123454.
+statement ok
+CREATE OR REPLACE PROCEDURE dup (INOUT f2 ANYELEMENT, OUT f3 ANYARRAY) AS 'SELECT $1, ARRAY[$1,$1]' LANGUAGE SQL;
+
+query IT
+CALL dup(22, NULL);
+----
+22  {22,22}
+
+subtest end
