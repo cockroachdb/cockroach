@@ -2620,7 +2620,7 @@ NULL
 statement error pgcode 42804 pq: RETURN cannot have a parameter in function returning void
 CREATE FUNCTION void_return_expr() RETURNS VOID AS $$ BEGIN RETURN 5; END; $$ LANGUAGE PLpgSQL;
 
-subtest end
+subtest regression_122945
 
 # Regression test for using Unknown type in place of a wildcard for a nested
 # block with no RETURN statement (#122945).
@@ -2647,3 +2647,78 @@ $$ LANGUAGE PLpgSQL;
 
 statement ok
 DROP FUNCTION f1;
+
+subtest polymorphic_types
+
+statement ok
+DROP FUNCTION f();
+DROP FUNCTION f(INT, INT);
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYELEMENT) RETURNS ANYELEMENT AS $$
+  BEGIN
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(100);
+----
+100
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYARRAY) RETURNS ANYELEMENT AS $$
+  BEGIN
+    RETURN x[1];
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(ARRAY[100, 200]);
+----
+100
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYARRAY) RETURNS ANYARRAY AS $$
+  BEGIN
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f(ARRAY[100, 200]);
+----
+{100,200}
+
+statement ok
+DROP FUNCTION f;
+
+statement error pgcode 42P13 pq: cannot determine result data type
+CREATE FUNCTION f() RETURNS ANYELEMENT AS $$
+  DECLARE
+    x ANYELEMENT := 1;
+  BEGIN
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: unable to coerce type int to anyelement
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x ANYELEMENT := 1;
+  BEGIN
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: unable to coerce type int to anyelement
+CREATE FUNCTION f(y ANYELEMENT) RETURNS ANYELEMENT AS $$
+  DECLARE
+    x ANYELEMENT := 1;
+  BEGIN
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+subtest end
