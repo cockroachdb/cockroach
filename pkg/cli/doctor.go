@@ -452,7 +452,7 @@ func fromZipDir(
 			return errors.Wrap(err, "failed unmarshalling job payload")
 		}
 
-		// when can progress be null? if it exists but we have never started it?
+		// Skip NULL job payloads.
 		if fields[5] == "NULL" {
 			return nil
 		}
