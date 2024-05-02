@@ -189,6 +189,10 @@ func ExamineDescriptors(
 	for _, row := range descTable {
 		id := descpb.ID(row.ID)
 		desc := descLookupFn(id)
+		// No need to validate dropped descriptors
+		if desc.Dropped() {
+			continue
+		}
 		ve := cb.ValidateWithRecover(ctx, version, desc)
 		for _, err := range ve {
 			problemsFound = true
