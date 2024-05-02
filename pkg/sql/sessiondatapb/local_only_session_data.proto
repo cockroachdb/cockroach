@@ -520,6 +520,10 @@ message LocalOnlySessionData {
   // huge cost should be assigned to plans that have full scans of virtual
   // tables when DisallowFullTableScans is set.
   bool optimizer_apply_full_scan_penalty_to_virtual_tables = 131;
+  // OptimizerUsePolymorphicParameterFix, when true, causes the optimizer to
+  // validate a routine's polymorphic parameters during overload resolution
+  // and type-checking.
+  bool optimizer_use_polymorphic_parameter_fix = 132;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
