@@ -430,7 +430,7 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 
 	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		md.Progress.GetRestore().TotalDownloadRequired = total
-		md.Progress.RunningStatus = fmt.Sprintf("Downloading %s of restored data...", sz(total))
+		md.Progress.RunningStatus = fmt.Sprintf("Downloading %s of backup data...", sz(total))
 		ju.UpdateProgress(md.Progress)
 		return nil
 	}); err != nil {
