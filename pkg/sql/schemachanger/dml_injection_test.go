@@ -345,7 +345,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"CREATE INDEX idx ON tbl (i) USING HASH",
 			},
 			schemaChange: "ALTER TABLE tbl DROP COLUMN i CASCADE",
-			skipIssue:    111619,
 		},
 		{
 			desc: "drop column with composite index + fk",
@@ -407,7 +406,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"CREATE INDEX idx ON tbl ((i + 1))",
 			},
 			schemaChange: "ALTER TABLE tbl DROP COLUMN i CASCADE",
-			skipIssue:    111608,
 		},
 		{
 			desc:         "create materialized view from index",

@@ -635,6 +635,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
+  kind: Precedence
+  rule: New primary index should go public only after columns being dropped move to WRITE_ONLY
 - from: [ColumnDefaultExpression:{DescID: 104, ColumnID: 3, Expr: unique_rowid()}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: Precedence

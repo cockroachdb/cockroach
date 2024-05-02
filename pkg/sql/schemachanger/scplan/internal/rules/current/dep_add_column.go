@@ -116,7 +116,7 @@ func init() {
 func init() {
 	registerDepRule(
 		"ensure columns are in increasing order",
-		scgraph.SameStagePrecedence,
+		scgraph.Precedence,
 		"later-column", "earlier-column",
 		func(from, to NodeVars) rel.Clauses {
 			status := rel.Var("status")
