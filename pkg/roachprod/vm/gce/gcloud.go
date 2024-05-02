@@ -153,7 +153,7 @@ func (jsonVM *jsonVM) toVM(
 
 	// Check "lifetime" label.
 	var lifetime time.Duration
-	if lifetimeStr, ok := jsonVM.Labels["lifetime"]; ok {
+	if lifetimeStr, ok := jsonVM.Labels[vm.TagLifetime]; ok {
 		if lifetime, err = time.ParseDuration(lifetimeStr); err != nil {
 			vmErrors = append(vmErrors, vm.ErrNoExpiration)
 		}
@@ -2303,7 +2303,7 @@ func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 // Extend TODO(peter): document
 func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
 	return p.AddLabels(l, vms, map[string]string{
-		"lifetime": lifetime.String(),
+		vm.TagLifetime: lifetime.String(),
 	})
 }
 
