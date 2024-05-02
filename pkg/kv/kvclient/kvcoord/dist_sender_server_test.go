@@ -13,6 +13,7 @@ package kvcoord_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"sort"
@@ -4801,5 +4802,113 @@ func TestPartialPartition(t *testing.T) {
 
 				tc.Stopper().Stop(ctx)
 			})
+	}
+}
+
+// TestProxyTracing...
+func TestProxyTracing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	const numServers = 3
+	const numRanges = 3
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+	kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
+	kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+	closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+
+	var p rpc.Partitioner
+	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+		ServerArgsPerNode: func() map[int]base.TestServerArgs {
+			perNode := make(map[int]base.TestServerArgs)
+			for i := 0; i < numServers; i++ {
+				ctk := rpc.ContextTestingKnobs{}
+				// Partition between n1 and n3.
+				p.RegisterTestingKnobs(roachpb.NodeID(i+1), [][2]roachpb.NodeID{{1, 3}}, &ctk)
+				perNode[i] = base.TestServerArgs{
+					Settings: st,
+					Knobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							ContextTestingKnobs: ctk,
+						},
+					},
+				}
+			}
+			return perNode
+		}(),
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Set up the mapping after the nodes have started and we have their
+	// addresses.
+	for i := 0; i < numServers; i++ {
+		g := tc.Servers[i].StorageLayer().GossipI().(*gossip.Gossip)
+		addr := g.GetNodeAddr().String()
+		nodeID := g.NodeID.Get()
+		p.RegisterNodeAddr(addr, nodeID)
+	}
+
+	conn := tc.Conns[0]
+
+	// Create a table and pin the leaseholder replicas to n3. The partition
+	// between n1 and n3 will lead to re-routing via n2, which we expect captured
+	// in the trace.
+	_, err := conn.Exec("CREATE TABLE t (i INT)")
+	require.NoError(t, err)
+	_, err = conn.Exec("ALTER TABLE t CONFIGURE ZONE USING num_replicas=3, lease_preferences='[[+dc=dc3]]', constraints='[]'")
+	require.NoError(t, err)
+	_, err = conn.Exec(
+		fmt.Sprintf("INSERT INTO t(i) select generate_series(1,%d)", numRanges-1))
+	require.NoError(t, err)
+	_, err = conn.Exec("ALTER TABLE t SPLIT AT SELECT i FROM t")
+	require.NoError(t, err)
+
+	leaseCount := func(node int) int {
+		var count int
+		err := conn.QueryRow(fmt.Sprintf(
+			"SELECT count(*) FROM [SHOW RANGES FROM TABLE t WITH DETAILS] WHERE lease_holder = %d", node),
+		).Scan(&count)
+		require.NoError(t, err)
+		return count
+	}
+
+	checkLeaseCount := func(node, expectedLeaseCount int) error {
+		if count := leaseCount(node); count != expectedLeaseCount {
+			require.NoError(t, tc.GetFirstStoreFromServer(t, 0).
+				ForceLeaseQueueProcess())
+			return errors.Errorf("expected %d leases on node %d, found %d",
+				expectedLeaseCount, node, count)
+		}
+		return nil
+	}
+
+  require.NoError(t, tc.WaitForFullReplication())
+
+	// Wait until the leaseholder for the ranges are on n3.
+	testutils.SucceedsSoon(t, func() error {
+		return checkLeaseCount(3, numRanges)
+	})
+
+	p.EnablePartition(true)
+
+	testutils.SucceedsSoon(t, func() error {
+		_, err = conn.Exec("SET TRACING = on; SELECT FROM t where i = 987654321; SET TRACING = off")
+		return err
+	})
+
+	var rows *sql.Rows
+	rows, err = conn.QueryContext(ctx, "SELECT message, tag, location "+
+		"FROM [SHOW TRACE FOR SESSION] "+
+		"WHERE location LIKE 'kv%' "+
+		"LIMIT 100",
+	)
+	require.NoError(t, err)
+	for rows.Next() {
+		var message, tag, location string
+		require.NoError(t, rows.Scan(&message, &tag, &location))
+		t.Log(fmt.Sprintf("%s %s %s", location, tag, message))
 	}
 }

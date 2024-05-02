@@ -1384,14 +1384,13 @@ func checkNoUnknownRequest(reqs []kvpb.RequestUnion) *kvpb.UnsupportedRequestErr
 
 func (n *Node) batchInternal(
 	ctx context.Context, tenID roachpb.TenantID, args *kvpb.BatchRequest,
-) (*kvpb.BatchResponse, error) {
+) (br *kvpb.BatchResponse, _ error) {
 	if detail := checkNoUnknownRequest(args.Requests); detail != nil {
-		var br kvpb.BatchResponse
+		br = &kvpb.BatchResponse{}
 		br.Error = kvpb.NewError(detail)
-		return &br, nil
+		return br, nil
 	}
 
-	var br *kvpb.BatchResponse
 	var reqSp spanForRequest
 	ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
 	// NB: wrapped to delay br evaluation to its value when returning.
@@ -1540,7 +1539,6 @@ func (n *Node) maybeProxyRequest(
 	}
 
 	log.VEventf(ctx, 2, "proxy request for %v after local error %v", ba, pErr)
-	// TODO(baptist): Correctly set up the span / tracing.
 	br, pErr := n.proxySender.Send(ctx, ba)
 	if pErr == nil {
 		log.VEvent(ctx, 2, "proxy request completed")

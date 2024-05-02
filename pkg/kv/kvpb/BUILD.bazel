@@ -38,6 +38,7 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//extgrpc",
