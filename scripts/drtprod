@@ -157,10 +157,10 @@ EOF"
         roachprod create drt-ua1 \
           --clouds="gce" \
           --gce-zones="us-east1-c" \
-          --nodes="7" \
-          --gce-machine-type="n2-standard-24" \
+          --nodes="5" \
+          --gce-machine-type="n2-standard-16" \
           --local-ssd="true"  \
-          --gce-local-ssd-count="16" \
+          --gce-local-ssd-count="8" \
           --username="drt" \
           --lifetime="8760h" \
           --gce-image "ubuntu-2204-jammy-v20240319"
@@ -172,10 +172,10 @@ EOF"
         roachprod create drt-ua2 \
           --clouds="gce" \
           --gce-zones="us-east1-c" \
-          --nodes="7" \
-          --gce-machine-type="n2d-standard-24" \
+          --nodes="5" \
+          --gce-machine-type="n2-standard-16" \
           --local-ssd="true"  \
-          --gce-local-ssd-count="16" \
+          --gce-local-ssd-count="8" \
           --username="drt" \
           --lifetime="8760h" \
           --gce-image "ubuntu-2204-jammy-v20240319"
