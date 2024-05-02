@@ -10,7 +10,11 @@
 
 package clusterversion
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // Key is a unique identifier for a version of CockroachDB.
 type Key int
@@ -425,4 +429,27 @@ func ListBetween(from, to roachpb.Version) []roachpb.Version {
 		}
 	}
 	return cvs
+}
+
+// StringForPersistence returns the string representation of the given
+// version in cases where that version needs to be persisted. This
+// takes backwards compatibility into account, making sure that we use
+// the old version formatting if we need to continue supporting
+// releases that don't understand it.
+//
+// TODO(renato): remove this function once MinSupported is at least 24.1.
+func StringForPersistence(v roachpb.Version) string {
+	return stringForPersistenceWithMinSupported(v, MinSupported.Version())
+}
+
+func stringForPersistenceWithMinSupported(v, minSupported roachpb.Version) string {
+	// newFormattingVersion is the version in which the new version
+	// formatting (#115223) was introduced.
+	newFormattingVersion := roachpb.Version{Major: 24, Minor: 1}
+
+	if minSupported.AtLeast(newFormattingVersion) || v.IsFinal() {
+		return v.String()
+	}
+
+	return fmt.Sprintf("%d.%d-%d", v.Major, v.Minor, v.Internal)
 }
