@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "element-uml-generator_lib",
+    srcs = ["element_uml_generator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb/element-uml-generator",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cli/exit",
+        "//pkg/sql/schemachanger/scpb",
+    ],
+)
+
+go_binary(
+    name = "element-uml-generator",
+    embed = [":element-uml-generator_lib"],
+    visibility = ["//visibility:public"],
+)

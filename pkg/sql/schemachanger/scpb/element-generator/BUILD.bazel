@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "element-generator_lib",
+    srcs = ["element_generator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb/element-generator",
+    visibility = ["//visibility:private"],
+    deps = ["//pkg/cli/exit"],
+)
+
+go_binary(
+    name = "element-generator",
+    embed = [":element-generator_lib"],
+    visibility = ["//visibility:public"],
+)
