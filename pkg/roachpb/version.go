@@ -86,6 +86,20 @@ func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
 	}
 }
 
+// OldRepresentation returns the string representation of this
+// function prior to the change in formatting to make them more
+// readable (#115223). This is necessary in case we are persisting the
+// version and need to be backwards compatible.
+//
+// TODO(renato): remove this function once MinSupported is at least 24.1.
+func (v Version) OldRepresentation() string {
+	if v.IsFinal() {
+		return v.String()
+	}
+
+	return fmt.Sprintf("%d.%d-%d", v.Major, v.Minor, v.Internal)
+}
+
 // IsFinal returns true if this is a final version (as opposed to a transitional
 // internal version during upgrade).
 //

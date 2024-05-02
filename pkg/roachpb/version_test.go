@@ -28,11 +28,17 @@ func TestParseVersion(t *testing.T) {
 		{s: "23.1-upgrading-to-23.2-step-004", v: Version{Major: 23, Minor: 1, Internal: 4}, roundtrip: true},
 		{s: "1000023.1-upgrading-to-1000023.2-step-004", v: Version{Major: 1000023, Minor: 1, Internal: 4}, roundtrip: true},
 		{s: "23.1-4", v: Version{Major: 23, Minor: 1, Internal: 4}},
+		{ /* old representation */ v: Version{Major: 23, Minor: 1, Internal: 4}},
 		{s: "23.1-upgrading-step-004", v: Version{Major: 23, Minor: 1, Internal: 4}},
 	}
 	for _, tc := range testData {
 		t.Run("", func(t *testing.T) {
-			v, err := ParseVersion(tc.s)
+			versionStr := tc.s
+			if tc.s == "" {
+				versionStr = tc.v.OldRepresentation()
+			}
+
+			v, err := ParseVersion(versionStr)
 			require.NoError(t, err)
 			require.Equal(t, tc.v, v)
 			if tc.roundtrip {
@@ -125,6 +131,28 @@ func TestReleaseSeries(t *testing.T) {
 			res, ok := tc.v.ReleaseSeries()
 			require.True(t, ok)
 			require.Equal(t, tc.s, res)
+		})
+	}
+}
+
+func TestOldRepresentaiton(t *testing.T) {
+	testCases := []struct {
+		v        Version
+		expected string
+	}{
+		{
+			v:        Version{Major: 23, Minor: 1},
+			expected: "23.1",
+		},
+		{
+			v:        Version{Major: 23, Minor: 1, Internal: 10},
+			expected: "23.1-10",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tc.expected, tc.v.OldRepresentation())
 		})
 	}
 }
