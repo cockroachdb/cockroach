@@ -2171,6 +2171,18 @@ func (t *T) IsWildcardType() bool {
 	return false
 }
 
+// IsPolymorphicType returns true if the type can be used as the parameter or
+// return-type of a polymorphic function. Note that this does not include RECORD
+// (AnyTuple) or RECORD[].
+func (t *T) IsPolymorphicType() bool {
+	for _, poly := range []*T{Any, AnyArray, AnyEnum, AnyEnumArray} {
+		if t.Identical(poly) {
+			return true
+		}
+	}
+	return false
+}
+
 // Size returns the size, in bytes, of this type once it has been marshaled to
 // a byte buffer. This is typically called to determine the size of the buffer
 // that needs to be allocated before calling Marshal.

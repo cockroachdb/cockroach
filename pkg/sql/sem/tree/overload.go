@@ -1047,8 +1047,51 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 	}
 
+	// Remove any overloads with polymorphic parameters for which the supplied
+	// argument types are invalid.
+	s.overloadIdxs = filterOverloads(s.overloadIdxs, s.overloads, func(o overloadImpl) bool {
+		ol, ok := o.(*Overload)
+		if !ok || ol.Type == BuiltinRoutine {
+			// Don't filter builtin routines.
+			return true
+		}
+		params := ol.Types.(ParamTypes)
+		hasPolymorphicTyp := false
+		for i := range params {
+			if params[i].Typ.IsPolymorphicType() {
+				hasPolymorphicTyp = true
+				break
+			}
+		}
+		if hasPolymorphicTyp {
+			argTypes := make([]*types.T, 0, len(params))
+			for i := range s.exprs {
+				if ol.Type == ProcedureRoutine && foundOutParams {
+					_, isOutParam := toParamOrdinal(i, ol.OutParamOrdinals)
+					if isOutParam {
+						// A CALL statement must specify an argument for each OUT parameter
+						// of the procedure, but the type of that argument is ignored.
+						continue
+					}
+				}
+				typedExpr, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any)
+				if err != nil {
+					panic(errors.HandleAsAssertionFailure(err))
+				}
+				argTypes = append(argTypes, typedExpr.ResolvedType())
+			}
+			// Only pass the parameters up to len(argTypes), since polymorphic type
+			// checking for default expressions happens later.
+			ok, _ = ResolvePolymorphicArgTypes(
+				params[:len(argTypes)], argTypes, false, /* enforceConsistency */
+			)
+			return ok
+		}
+		return true
+	})
+
 	// If we typed any exprs as AnyCollatedString but have a concrete collated
-	// string type, redo the types using the contrete type. Note we're probably
+	// string type, redo the types using the concrete type. Note we're probably
 	// still lacking full compliance with PG on collation handling:
 	// https://www.postgresql.org/docs/current/collation.html#id-1.6.11.4.4
 	if ambiguousCollatedTypes {
