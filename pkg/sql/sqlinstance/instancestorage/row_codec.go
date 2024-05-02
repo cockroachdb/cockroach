@@ -14,6 +14,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -244,7 +245,7 @@ func (d *rowCodec) encodeValue(
 			return tree.NewDString(sqlAddr)
 		},
 		binaryVersionColumnIdx: func() tree.Datum {
-			return tree.NewDString(binaryVersion.String())
+			return tree.NewDString(clusterversion.StringForPersistence(binaryVersion))
 		},
 	}
 	for i, f := range columnsToEncode {

@@ -181,3 +181,38 @@ func TestReleaseSeries(t *testing.T) {
 		require.Equalf(t, expected, k.ReleaseSeries(), "version: %s", k)
 	}
 }
+
+func TestStringForPersistence(t *testing.T) {
+	testCases := []struct {
+		v            roachpb.Version
+		minSupported roachpb.Version
+		expected     string
+	}{
+		{
+			v:            roachpb.Version{Major: 23, Minor: 2},
+			minSupported: roachpb.Version{Major: 23, Minor: 2},
+			expected:     "23.2",
+		},
+		{
+			v:            roachpb.Version{Major: 24, Minor: 1},
+			minSupported: roachpb.Version{Major: 23, Minor: 2},
+			expected:     "24.1",
+		},
+		{
+			v:            roachpb.Version{Major: 24, Minor: 1, Internal: 10},
+			minSupported: roachpb.Version{Major: 23, Minor: 2},
+			expected:     "24.1-10",
+		},
+		{
+			v:            roachpb.Version{Major: 24, Minor: 1, Internal: 10},
+			minSupported: roachpb.Version{Major: 24, Minor: 1},
+			expected:     "24.1-upgrading-step-010",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tc.expected, stringForPersistenceWithMinSupported(tc.v, tc.minSupported))
+		})
+	}
+}
