@@ -286,10 +286,12 @@ type dmsetupDiskStaller struct {
 
 var _ diskStaller = (*dmsetupDiskStaller)(nil)
 
-func (s *dmsetupDiskStaller) device() string { return getDevice(s.t, s.c) }
+func (s *dmsetupDiskStaller) device(nodes option.NodeListOption) string {
+	return getDevice(s.t, s.c, nodes)
+}
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
-	dev := s.device()
+	dev := s.device(s.c.All())
 	s.c.Run(ctx, s.c.All(), `sudo umount -f /mnt/data1 || true`)
 	s.c.Run(ctx, s.c.All(), `sudo dmsetup remove_all`)
 	err := s.c.RunE(ctx, s.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
@@ -358,26 +360,34 @@ func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOp
 	}
 }
 
-func (s *cgroupDiskStaller) device() (major, minor int) {
-	// TODO(jackson): Programmatically determine the device major,minor numbers.
-	// eg,:
-	//    deviceName := getDevice(s.t, s.c)
-	//    `cat /proc/partitions` and find `deviceName`
-	switch s.c.Cloud() {
-	case spec.GCE:
-		// ls -l /dev/sdb
-		// brw-rw---- 1 root disk 8, 16 Mar 27 22:08 /dev/sdb
-		return 8, 16
-	default:
-		s.t.Fatalf("unsupported cloud %q", s.c.Cloud())
+func (s *cgroupDiskStaller) device(nodes option.NodeListOption) (major, minor int) {
+	res, err := s.c.RunWithDetailsSingleNode(context.TODO(), s.t.L(), nodes[:1], "lsblk | grep /mnt/data1 | awk '{print $2}'")
+	if err != nil {
+		s.t.Fatalf("error when determining block device: %s", err)
 		return 0, 0
 	}
+	parts := strings.Split(strings.TrimSpace(res.Stdout), ":")
+	if len(parts) != 2 {
+		s.t.Fatalf("unexpected output from lsblk: %s", res.Stdout)
+		return 0, 0
+	}
+	major, err = strconv.Atoi(parts[0])
+	if err != nil {
+		s.t.Fatalf("error when determining block device: %s", err)
+		return 0, 0
+	}
+	minor, err = strconv.Atoi(parts[1])
+	if err != nil {
+		s.t.Fatalf("error when determining block device: %s", err)
+		return 0, 0
+	}
+	return major, minor
 }
 
 func (s *cgroupDiskStaller) setThroughput(
 	ctx context.Context, nodes option.NodeListOption, readOrWrite string, bytesPerSecond int,
 ) {
-	major, minor := s.device()
+	major, minor := s.device(nodes)
 	s.c.Run(ctx, nodes, "sudo", "/bin/bash", "-c", fmt.Sprintf(
 		"'echo %d:%d %d > /sys/fs/cgroup/blkio/blkio.throttle.%s_bps_device'",
 		major,
@@ -387,14 +397,11 @@ func (s *cgroupDiskStaller) setThroughput(
 	))
 }
 
-func getDevice(t test.Test, c cluster.Cluster) string {
-	switch c.Cloud() {
-	case spec.GCE:
-		return "/dev/sdb"
-	case spec.AWS:
-		return "/dev/nvme1n1"
-	default:
-		t.Fatalf("unsupported cloud %q", c.Cloud())
+func getDevice(t test.Test, c cluster.Cluster, nodes option.NodeListOption) string {
+	res, err := c.RunWithDetailsSingleNode(context.TODO(), t.L(), nodes[:1], "lsblk | grep /mnt/data1 | awk '{print $1}'")
+	if err != nil {
+		t.Fatalf("error when determining block device: %s", err)
 		return ""
 	}
+	return "/dev/" + strings.TrimSpace(res.Stdout)
 }
