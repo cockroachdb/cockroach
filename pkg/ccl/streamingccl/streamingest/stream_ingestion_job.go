@@ -510,12 +510,13 @@ func maybeRevertToCutoverTimestamp(
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize != 0 {
 		batchSize = p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize
 	}
+	p.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicatedTimeSeconds.Update(0)
 	if err := revertccl.RevertSpansFanout(ctx,
 		p.ExecCfg().DB,
 		p,
 		remainingSpansToRevert,
 		cutoverTimestamp,
-		// TODO(ssd): It should be safe for us to ingore the
+		// TODO(ssd): It should be safe for us to ignore the
 		// GC threshold. Why aren't we?
 		false, /* ignoreGCThreshold */
 		batchSize,
@@ -567,6 +568,7 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	// longer needed as this ingestion job is in 'reverting' status and we won't resume
 	// ingestion anymore.
 	jobExecCtx := execCtx.(sql.JobExecContext)
+	jobExecCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicatedTimeSeconds.Update(0)
 	completeProducerJob(ctx, s.job, jobExecCtx.ExecCfg().InternalDB, false)
 
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
