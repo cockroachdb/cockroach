@@ -582,7 +582,7 @@ type vectorizedFlowCreator struct {
 
 	streamIDToInputOp map[execinfrapb.StreamID]colexecargs.OpWithMetaInfo
 	streamIDToSpecIdx map[execinfrapb.StreamID]int
-	exprHelper        *colexecargs.ExprHelper
+	semaCtx           *tree.SemaContext
 	typeResolver      descs.DistSQLTypeResolver
 
 	// numOutboxes counts how many colrpc.Outbox'es have been set up on this
@@ -627,7 +627,6 @@ var vectorizedFlowCreatorPool = sync.Pool{
 		return &vectorizedFlowCreator{
 			streamIDToInputOp: make(map[execinfrapb.StreamID]colexecargs.OpWithMetaInfo),
 			streamIDToSpecIdx: make(map[execinfrapb.StreamID]int),
-			exprHelper:        colexecargs.NewExprHelper(),
 		}
 	},
 }
@@ -643,13 +642,15 @@ func newVectorizedFlowCreator(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 ) *vectorizedFlowCreator {
+	typeResolver := flowBase.NewTypeResolver(flowBase.Txn)
+	semaCtx := tree.MakeSemaContext(typeResolver)
 	creator := vectorizedFlowCreatorPool.Get().(*vectorizedFlowCreator)
 	*creator = vectorizedFlowCreator{
 		f:                 flowBase,
 		streamIDToInputOp: creator.streamIDToInputOp,
 		streamIDToSpecIdx: creator.streamIDToSpecIdx,
-		exprHelper:        creator.exprHelper,
-		typeResolver:      flowBase.NewTypeResolver(flowBase.Txn),
+		semaCtx:           &semaCtx,
+		typeResolver:      typeResolver,
 		procIdxQueue:      creator.procIdxQueue,
 		opChains:          creator.opChains,
 		recordingStats:    recordingStats,
@@ -703,14 +704,10 @@ func (s *vectorizedFlowCreator) Release() {
 	for i := range s.releasables {
 		s.releasables[i] = nil
 	}
-	if s.exprHelper != nil {
-		s.exprHelper.SemaCtx = nil
-	}
 	s.monitorRegistry.Reset()
 	*s = vectorizedFlowCreator{
 		streamIDToInputOp: s.streamIDToInputOp,
 		streamIDToSpecIdx: s.streamIDToSpecIdx,
-		exprHelper:        s.exprHelper,
 		// procIdxQueue is a slice of ints, so it's ok to just slice up to 0 to
 		// prime it for reuse.
 		procIdxQueue:    s.procIdxQueue[:0],
@@ -1189,16 +1186,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 				LocalVectorSources:   s.f.GetLocalVectorSources(),
 				DiskQueueCfg:         s.diskQueueCfg,
 				FDSemaphore:          s.fdSemaphore,
-				ExprHelper:           s.exprHelper,
+				SemaCtx:              s.semaCtx,
 				Factory:              factory,
 				MonitorRegistry:      &s.monitorRegistry,
 				TypeResolver:         &s.typeResolver,
 			}
 			numOldMonitors := len(s.monitorRegistry.GetMonitors())
-			if args.ExprHelper.SemaCtx == nil {
-				semaCtx := tree.MakeSemaContext(&s.typeResolver)
-				args.ExprHelper.SemaCtx = &semaCtx
-			}
 			var result *colexecargs.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
 			if result != nil {
