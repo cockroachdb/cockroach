@@ -1,17 +1,8 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-
-go_library(
-    name = "compare",
-    srcs = ["empty.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/compose/compare/compare",
-    visibility = ["//visibility:public"],
-)
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "compare_test",
     srcs = ["compare_test.go"],
-    embed = [":compare"],
-    gotags = ["compose"],
     tags = [
         "integration",
         "no-remote-exec",
@@ -22,6 +13,7 @@ go_test(
         "//pkg/internal/sqlsmith",
         "//pkg/sql/randgen",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
         "//pkg/util/envutil",
         "//pkg/util/randutil",
         "@com_github_jackc_pgx_v4//:pgx",

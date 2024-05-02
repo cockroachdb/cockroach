@@ -8,14 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:build acceptance
-// +build acceptance
-
-// Acceptance tests are comparatively slow to run, so we use the above build
-// tag to separate invocations of `go test` which are intended to run the
-// acceptance tests from those which are not. The corollary file to this one
-// is test_main.go
-
 package acceptance
 
 import (
@@ -29,11 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func MainTest(m *testing.M) {
+func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
@@ -55,4 +48,10 @@ func RunTests(m *testing.M) int {
 		stopper.Stop(ctx)
 	}()
 	return m.Run()
+}
+
+func maybeSkipTest(t *testing.T) {
+	if os.Getenv("COCKROACH_RUN_ACCEPTANCE") == "" {
+		skip.IgnoreLint(t, "COCKROACH_RUN_ACCEPTANCE not set")
+	}
 }

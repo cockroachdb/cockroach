@@ -38,6 +38,7 @@ func TestCompose(t *testing.T) {
 }
 
 func testCompose(t *testing.T, path string, exitCodeFrom string) {
+	maybeSkipTest(t)
 	if bazel.BuiltWithBazel() {
 		// Copy runfiles symlink content to a temporary directory to avoid broken symlinks in docker.
 		tmpComposeDir := t.TempDir()

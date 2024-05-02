@@ -5,7 +5,7 @@ go_library(
     testonly = 1,
     srcs = [
         "flags.go",
-        "test_acceptance.go",  # keep
+        "test_acceptance.go",
         "util_cluster.go",
         "util_docker.go",
     ],
@@ -15,17 +15,17 @@ go_library(
         "//pkg/acceptance/cluster",
         "//pkg/base",
         "//pkg/build/bazel",
-        "//pkg/security/securityassets",  # keep
-        "//pkg/security/securitytest",  # keep
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
         "//pkg/security/username",
-        "//pkg/server",  # keep
+        "//pkg/server",
         "//pkg/testutils",
-        "//pkg/testutils/serverutils",  # keep
+        "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
-        "//pkg/testutils/testcluster",  # keep
+        "//pkg/testutils/testcluster",
         "//pkg/util/envutil",
         "//pkg/util/log",
-        "//pkg/util/randutil",  # keep
+        "//pkg/util/randutil",
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_containerd_containerd//platforms",
@@ -43,7 +43,6 @@ go_test(
         "compose_test.go",
         "debug_remote_test.go",
         "generated_cli_test.go",
-        "main_test.go",
     ],
     data = glob([
         "testdata/**",
@@ -52,7 +51,6 @@ go_test(
         "//pkg/cli:interactive_tests",
     ],
     embed = [":acceptance"],
-    gotags = ["acceptance"],
     shard_count = 16,
     tags = [
         "integration",
@@ -61,7 +59,6 @@ go_test(
     deps = [
         "//pkg/acceptance/cluster",
         "//pkg/build/bazel",
-        "//pkg/security",  # keep
         "//pkg/security/username",
         "//pkg/testutils/skip",
         "//pkg/util/log",
