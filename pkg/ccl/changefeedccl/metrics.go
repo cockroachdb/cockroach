@@ -367,11 +367,13 @@ func (a *PerFeedAggMetrics) closeSliMetrics(jobID catpb.JobID) {
 	delete(a.m.metrics, jobID)
 }
 
-func newPerFeedAggMetrics(histogramWindow time.Duration) *PerFeedAggMetrics {
+func newPerFeedAggMetrics(_ time.Duration) *PerFeedAggMetrics {
 	b := aggmetric.MakeBuilder("job_id")
-	return &PerFeedAggMetrics{
+	m := &PerFeedAggMetrics{
 		TableBytes: b.Gauge(metaChangefeedTableBytes),
 	}
+	m.m.metrics = make(map[catpb.JobID]*perFeedSliMetrics)
+	return m
 }
 
 type perFeedSliMetrics struct {
