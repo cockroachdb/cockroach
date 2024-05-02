@@ -495,6 +495,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin = false
 	notStale()
 
+	// Stale optimizer_use_polymorphic_parameter_fix.
+	evalCtx.SessionData().OptimizerUsePolymorphicParameterFix = true
+	stale()
+	evalCtx.SessionData().OptimizerUsePolymorphicParameterFix = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)

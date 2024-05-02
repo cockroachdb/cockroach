@@ -311,7 +311,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "function result type must be specified"))
 		}
 	}
-	if funcReturnType.IsPolymorphicType() || sawPolymorphicOutParam {
+	if b.evalCtx.SessionData().OptimizerUsePolymorphicParameterFix &&
+		(funcReturnType.IsPolymorphicType() || sawPolymorphicOutParam) {
 		// The routine return type has or contains a polymorphic type. Validate that
 		// there is at least one polymorphic IN parameter.
 		if !sawPolymorphicInParam {
