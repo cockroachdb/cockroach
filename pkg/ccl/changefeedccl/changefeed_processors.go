@@ -1323,7 +1323,7 @@ func (cf *changeFrontier) runBillingMetricReporting(ctx context.Context) {
 			return
 		}
 
-		// TODO: timing metric?
+		// TODO: timing metric? updated_at metric?
 		res, err := FetchChangefeedBillingBytes(ctx, cf.flowCtx.EvalCtx.JobExecContext.(sql.JobExecContext))
 		if err != nil {
 			log.Warningf(ctx, "failed to fetch billing bytes: %v", err)
