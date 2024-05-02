@@ -3033,6 +3033,13 @@ func (c *SyncedCluster) allPublicAddrs(ctx context.Context) (string, error) {
 	return strings.Join(addrs, ","), nil
 }
 
+// WithNodes creates a new copy of SyncedCluster with the given nodes.
+func (c *SyncedCluster) WithNodes(nodes Nodes) *SyncedCluster {
+	clusterCopy := *c
+	clusterCopy.Nodes = nodes
+	return &clusterCopy
+}
+
 // GenFilenameFromArgs given a list of cmd args, returns an alphahumeric string up to
 // `maxLen` in length with hyphen delimiters, suitable for use in a filename.
 // e.g. ["/bin/bash", "-c", "'sudo dmesg > dmesg.txt'"] -> binbash-c-sudo-dmesg
