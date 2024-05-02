@@ -305,6 +305,28 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Goroutine Scheduling Latency: 99.9th percentile"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`P99.9 scheduling latency for goroutines. A value above 1ms typically indicates high load.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Duration} label="latency">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.go.scheduler_latency-p99.9"
+              title={nodeDisplayName(nodeDisplayNameByID, nid)}
+              sources={[nid]}
+              downsampleMax
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Runnable Goroutines per CPU"
       sources={nodeSources}
       tenantSource={tenantSource}
@@ -318,6 +340,29 @@ export default function (props: GraphDashboardProps) {
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={[nid]}
           />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="LSM L0 Sublevels"
+      sources={storeSources}
+      tenantSource={tenantSource}
+      tooltip={`Number of sublevels in L0 of the LSM. A value above 20 typically indicates that the store is overloaded.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="Count">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.store.storage.l0-sublevels"
+              title={
+                "L0 Sublevels " + nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            />
+          </>
         ))}
       </Axis>
     </LineGraph>,
