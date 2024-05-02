@@ -1643,83 +1643,73 @@ type sinkKnobs struct {
 	kafkaInterceptor func(m *sarama.ProducerMessage, client kafkaClient) error
 }
 
-// fakeKafkaSink is a sink that arranges for fake kafka client and producer
+// deprecatedFakeKafkaSink is a sink that arranges for fake kafka client and producer
 // to be used.
-type fakeKafkaSink struct {
+type deprecatedFakeKafkaSink struct {
 	Sink
 	tg     *teeGroup
 	feedCh chan *sarama.ProducerMessage
 	knobs  *sinkKnobs
 }
 
-var _ Sink = (*fakeKafkaSink)(nil)
+var _ Sink = (*deprecatedFakeKafkaSink)(nil)
 
 // Dial implements Sink interface
-func (s *fakeKafkaSink) Dial() error {
-	if batchingSink, ok := s.Sink.(*batchingSink); ok {
-		if sinkClient, ok := batchingSink.client.(*kafkaSinkClient); ok {
-			conn, _ := mockServer.Dial()
-			client := &fakeKafkaClient{config}
-			sinkClient.client = client
+func (s *deprecatedFakeKafkaSink) Dial() error {
+	kafka := s.Sink.(*kafkaSink)
+	kafka.knobs.OverrideClientInit = func(config *sarama.Config) (kafkaClient, error) {
+		client := &fakeKafkaClient{config}
+		return client, nil
+	}
+
+	kafka.knobs.OverrideAsyncProducerFromClient = func(client kafkaClient) (sarama.AsyncProducer, error) {
+		// The producer we give to kafka sink ignores close call.
+		// This is because normally, kafka sinks owns the producer and so it closes it.
+		// But in this case, if we let the sink close this producer, the test will panic
+		// because we will attempt to send acknowledgements on a closed channel.
+		producer := &asyncIgnoreCloseProducer{newAsyncProducerMock(100)}
+
+		interceptor := func(m *sarama.ProducerMessage) bool {
+			if s.knobs != nil && s.knobs.kafkaInterceptor != nil {
+				err := s.knobs.kafkaInterceptor(m, client)
+				if err != nil {
+					select {
+					case producer.errorsCh <- &sarama.ProducerError{Msg: m, Err: err}:
+					case <-s.tg.done:
+					}
+					return true
+				}
+			}
+			return false
 		}
-		return &notifyFlushSink{Sink: s, sync: ss}
-	} else if kafka, ok := s.Sink.(*kafkaSink); ok {
 
-		// kafka := s.Sink.(*kafkaSink)
-		kafka.knobs.OverrideClientInit = func(config *sarama.Config) (kafkaClient, error) {
-			client := &fakeKafkaClient{config}
-			return client, nil
-		}
+		s.tg.tee(interceptor, producer.inputCh, s.feedCh, producer.successesCh)
+		return producer, nil
+	}
 
-		kafka.knobs.OverrideAsyncProducerFromClient = func(client kafkaClient) (sarama.AsyncProducer, error) {
-			// The producer we give to kafka sink ignores close call.
-			// This is because normally, kafka sinks owns the producer and so it closes it.
-			// But in this case, if we let the sink close this producer, the test will panic
-			// because we will attempt to send acknowledgements on a closed channel.
-			producer := &asyncIgnoreCloseProducer{newAsyncProducerMock(100)}
-
-			interceptor := func(m *sarama.ProducerMessage) bool {
+	kafka.knobs.OverrideSyncProducerFromClient = func(client kafkaClient) (sarama.SyncProducer, error) {
+		return &syncIgnoreCloseProducer{&syncProducerMock{
+			overrideSend: func(m *sarama.ProducerMessage) error {
 				if s.knobs != nil && s.knobs.kafkaInterceptor != nil {
 					err := s.knobs.kafkaInterceptor(m, client)
 					if err != nil {
-						select {
-						case producer.errorsCh <- &sarama.ProducerError{Msg: m, Err: err}:
-						case <-s.tg.done:
-						}
-						return true
+						return err
 					}
 				}
-				return false
-			}
-
-			s.tg.tee(interceptor, producer.inputCh, s.feedCh, producer.successesCh)
-			return producer, nil
-		}
-
-		kafka.knobs.OverrideSyncProducerFromClient = func(client kafkaClient) (sarama.SyncProducer, error) {
-			return &syncIgnoreCloseProducer{&syncProducerMock{
-				overrideSend: func(m *sarama.ProducerMessage) error {
-					if s.knobs != nil && s.knobs.kafkaInterceptor != nil {
-						err := s.knobs.kafkaInterceptor(m, client)
-						if err != nil {
-							return err
-						}
-					}
-					select {
-					case s.feedCh <- m:
-					case <-kafka.stopWorkerCh:
-					case <-s.tg.done:
-					}
-					return nil
-				},
-			}}, nil
-		}
-
-		return kafka.Dial()
+				select {
+				case s.feedCh <- m:
+				case <-kafka.stopWorkerCh:
+				case <-s.tg.done:
+				}
+				return nil
+			},
+		}}, nil
 	}
+
+	return kafka.Dial()
 }
 
-func (s *fakeKafkaSink) Topics() []string {
+func (s *deprecatedFakeKafkaSink) Topics() []string {
 	if sink, ok := s.Sink.(*kafkaSink); ok {
 		return sink.Topics()
 	}
@@ -1814,13 +1804,22 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 	// Fixed sized buffer is probably okay at this point, but we should probably
 	// have  a proper fix.
 	feedCh := make(chan *sarama.ProducerMessage, 1024)
+	ss := &sinkSynchronizer{}
 	wrapSink := func(s Sink) Sink {
-		return &fakeKafkaSink{
-			Sink:   s,
-			tg:     tg,
-			feedCh: feedCh,
-			knobs:  k.knobs,
+		if batchingSink, ok := s.(*batchingSink); ok {
+			if sinkClient, ok := batchingSink.client.(*kafkaSinkClient); ok {
+				sinkClient.client = &fakeKafkaClient{}
+			}
+			return &notifyFlushSink{Sink: s, sync: ss}
+		} else if _, ok := s.(*deprecatedPubsubSink); ok {
+			return &deprecatedFakeKafkaSink{
+				Sink:   s,
+				tg:     tg,
+				feedCh: feedCh,
+				knobs:  k.knobs,
+			}
 		}
+		return s
 	}
 
 	c := &kafkaFeed{

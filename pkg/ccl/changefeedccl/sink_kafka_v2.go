@@ -91,7 +91,7 @@ func makeKafkaClient(
 }
 
 func (kc *kafkaSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
-	kb := &kafkaBuffer{topic: topic}
+	kb := &kafkaBuffer{kc: kc, topic: topic}
 	return kb
 }
 
@@ -208,13 +208,25 @@ func makeKafkaSink(
 	ctx context.Context,
 	u sinkURL,
 	targets changefeedbase.Targets,
-	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	jsonConfig changefeedbase.SinkSpecificJSONConfig,
 	parallelism int,
 	pacerFactory func() *admission.Pacer,
 	source timeutil.TimeSource,
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
+	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
+		// TODO: Change to kafka defaults
+		Flush: sinkBatchConfig{
+			Frequency: jsonDuration(10 * time.Millisecond),
+			Messages:  100,
+			Bytes:     1e6,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
 	if schemaTopic := u.consumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
@@ -223,13 +235,7 @@ func makeKafkaSink(
 
 	m := mb(requiresResourceAccounting)
 
-	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonStr, sinkJSONConfig{})
-
-	if err != nil {
-		return nil, err
-	}
-
-	kafkaCfg, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings))
+	kafkaCfg, err := buildKafkaConfig(ctx, u, jsonConfig, m.getKafkaThrottlingMetrics(settings))
 	if err != nil {
 		return nil, err
 	}

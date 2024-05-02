@@ -3666,7 +3666,7 @@ func TestChangefeedOutputTopics(t *testing.T) {
 		tg := newTeeGroup()
 		feedCh := make(chan *sarama.ProducerMessage, 1024)
 		wrapSink := func(s Sink) Sink {
-			return &fakeKafkaSink{
+			return &deprecatedFakeKafkaSink{
 				Sink:   s,
 				tg:     tg,
 				feedCh: feedCh,
