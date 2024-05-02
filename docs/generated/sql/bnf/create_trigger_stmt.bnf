@@ -1,0 +1,2 @@
+create_trigger_stmt ::=
+	'CREATE' 'TRIGGER' unrestricted_name create_trigger_timing create_trigger_event_list 'ON' table_name opt_create_trigger_level 'EXECUTE' create_trigger_func_or_proc func_name '(' ')'
