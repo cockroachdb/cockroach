@@ -115,7 +115,7 @@ func (d *partitionStreamDecoder) pop() streamingccl.Event {
 	}
 
 	if d.e.Batch != nil {
-		event := streamingccl.MakeKVEvent(d.e.Batch.KeyValues[0])
+		event := streamingccl.MakeKVEvent([]roachpb.KeyValue{d.e.Batch.KeyValues[0]})
 		d.e.Batch.KeyValues = d.e.Batch.KeyValues[1:]
 		if len(d.e.Batch.KeyValues) == 0 {
 			d.e.Batch = nil

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -280,7 +281,7 @@ func (r *randomEventGenerator) generateNewEvent() streamingccl.Event {
 		if len(r.systemKVs) > 0 {
 			systemKV := r.systemKVs[0]
 			systemKV.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			event = streamingccl.MakeKVEvent(systemKV)
+			event = streamingccl.MakeKVEvent([]roachpb.KeyValue{systemKV})
 			r.systemKVs = r.systemKVs[1:]
 			return event
 		}
@@ -295,7 +296,7 @@ func (r *randomEventGenerator) generateNewEvent() streamingccl.Event {
 			}
 			event = streamingccl.MakeSSTableEvent(r.sstMaker(keyVals))
 		} else {
-			event = streamingccl.MakeKVEvent(makeRandomKey(r.rng, r.config, r.codec, r.tableDesc))
+			event = streamingccl.MakeKVEvent([]roachpb.KeyValue{makeRandomKey(r.rng, r.config, r.codec, r.tableDesc)})
 		}
 		r.numEventsSinceLastResolved++
 	}
@@ -674,17 +675,15 @@ func duplicateEvent(event streamingccl.Event) streamingccl.Event {
 		copy(resolvedSpans, event.GetResolvedSpans())
 		dup = streamingccl.MakeCheckpointEvent(resolvedSpans)
 	case streamingccl.KVEvent:
-		eventKV := event.GetKV()
-		rawBytes := make([]byte, len(eventKV.Value.RawBytes))
-		copy(rawBytes, eventKV.Value.RawBytes)
-		keyVal := roachpb.KeyValue{
-			Key: event.GetKV().Key.Clone(),
-			Value: roachpb.Value{
-				RawBytes:  rawBytes,
-				Timestamp: eventKV.Value.Timestamp,
-			},
+		kvs := event.GetKVs()
+		res := make([]roachpb.KeyValue, len(kvs))
+		var a bufalloc.ByteAllocator
+		for i := range kvs {
+			res[i].Key = kvs[i].Key.Clone()
+			res[i].Value.Timestamp = kvs[i].Value.Timestamp
+			a, res[i].Value.RawBytes = a.Copy(kvs[i].Value.RawBytes, 0)
 		}
-		dup = streamingccl.MakeKVEvent(keyVal)
+		dup = streamingccl.MakeKVEvent(res)
 	case streamingccl.SSTableEvent:
 		sst := event.GetSSTable()
 		dataCopy := make([]byte, len(sst.Data))
