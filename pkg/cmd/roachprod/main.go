@@ -543,6 +543,30 @@ cluster setting will be set to its value.
 	}),
 }
 
+var updateTargetsCmd = &cobra.Command{
+	Use:   "update-targets <cluster>",
+	Short: "update prometheus target configurations for a cluster",
+	Long: `Update prometheus target configurations of each node of a cluster.
+
+The "start" command updates the prometheus target configuration every time. But, in case of any  
+failure, this command can be used to update the configurations. 
+
+The --args and --env flags can be used to pass arbitrary command line flags and
+environment variables to the cockroach process.
+` + tagHelp + `
+The default prometheus url is https://grafana.testeng.crdb.io/. This can be overwritten by using the
+environment variable COCKROACH_PROM_HOST_URL
+`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		clusterSettingsOpts := []install.ClusterSettingOption{
+			install.TagOption(tag),
+			install.EnvOption(nodeEnv),
+		}
+		return roachprod.UpdateTargets(context.Background(), config.Logger, args[0], clusterSettingsOpts...)
+	}),
+}
+
 var stopCmd = &cobra.Command{
 	Use:   "stop <cluster> [--sig] [--wait]",
 	Short: "stop nodes on a cluster",
@@ -617,8 +641,6 @@ environment variables to the cockroach process.
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
 		}
-		// TODO(DarrylWong): remove once #117125 is addressed.
-		startOpts.AdminUIPort = 0
 
 		startOpts.Target = install.StartSharedProcessForVirtualCluster
 		// If the user passed an `--external-nodes` option, we are
@@ -1711,6 +1733,7 @@ func main() {
 		statusCmd,
 		monitorCmd,
 		startCmd,
+		updateTargetsCmd,
 		stopCmd,
 		startInstanceCmd,
 		stopInstanceCmd,

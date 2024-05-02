@@ -25,6 +25,12 @@ var DefaultClient = NewClientWithTimeout(StandardHTTPTimeout)
 // StandardHTTPTimeout is the default timeout to use for HTTP connections.
 const StandardHTTPTimeout time.Duration = 3 * time.Second
 
+// RequestHeaders are the headers to be part of the request
+type RequestHeaders struct {
+	ContentType   string
+	Authorization string
+}
+
 // NewClientWithTimeout defines a http.Client with the given timeout.
 func NewClientWithTimeout(timeout time.Duration) *Client {
 	return NewClientWithTimeouts(timeout, timeout)
@@ -69,11 +75,56 @@ func Post(
 	return DefaultClient.Post(ctx, url, contentType, body)
 }
 
+// Put does like http.Put but uses the provided context and obeys its cancellation.
+// It also uses the default client with a default 3 second timeout.
+func Put(
+	ctx context.Context, url string, h *RequestHeaders, body io.Reader,
+) (resp *http.Response, err error) {
+	return DefaultClient.Put(ctx, url, h, body)
+}
+
+// Delete does like http.Delete but uses the provided context and obeys its cancellation.
+// It also uses the default client with a default 3 second timeout.
+func Delete(ctx context.Context, url string, h *RequestHeaders) (resp *http.Response, err error) {
+	return DefaultClient.Delete(ctx, url, h)
+}
+
 // Get does like http.Client.Get but uses the provided context and obeys its cancellation.
 func (c *Client) Get(ctx context.Context, url string) (resp *http.Response, err error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
+	}
+	return c.Do(req)
+}
+
+// Put does like http.Client.Put but uses the provided context and obeys its cancellation.
+func (c *Client) Put(
+	ctx context.Context, url string, h *RequestHeaders, body io.Reader,
+) (resp *http.Response, err error) {
+	req, err := http.NewRequestWithContext(ctx, "PUT", url, body)
+	if err != nil {
+		return nil, err
+	}
+	if h.ContentType != "" {
+		req.Header.Set("Content-Type", h.ContentType)
+	}
+	if h.Authorization != "" {
+		req.Header.Set("Authorization", h.Authorization)
+	}
+	return c.Do(req)
+}
+
+// Delete does like http.Client.Delete but uses the provided context and obeys its cancellation.
+func (c *Client) Delete(
+	ctx context.Context, url string, h *RequestHeaders,
+) (resp *http.Response, err error) {
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if h.Authorization != "" {
+		req.Header.Set("Authorization", h.Authorization)
 	}
 	return c.Do(req)
 }

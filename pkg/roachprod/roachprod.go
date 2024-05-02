@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
@@ -48,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/replay"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -55,6 +57,13 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"golang.org/x/sys/unix"
+)
+
+const (
+	// defaultPrometheusHostUrl for prometheus cluster config
+	defaultPrometheusHostUrl = "https://grafana.testeng.crdb.io/promhelpers"
+	// prometheusHostUrlEnv is the environment variable to override defaultPrometheusHostUrl
+	prometheusHostUrlEnv = "COCKROACH_PROM_HOST_URL"
 )
 
 // verifyClusterName ensures that the given name conforms to
@@ -715,8 +724,7 @@ func DefaultStartOpts() install.StartOpts {
 		InitTarget:         1,
 		SQLPort:            0,
 		VirtualClusterName: install.SystemInterfaceName,
-		// TODO(DarrylWong): revert back to 0 once #117125 is addressed.
-		AdminUIPort: config.DefaultAdminUIPort,
+		AdminUIPort:        0,
 	}
 }
 
@@ -732,7 +740,52 @@ func Start(
 	if err != nil {
 		return err
 	}
-	return c.Start(ctx, l, startOpts)
+	if err = c.Start(ctx, l, startOpts); err != nil {
+		return err
+	}
+	updatePrometheusTargets(ctx, l, c)
+	return nil
+}
+
+// UpdateTargets updates prometheus target configurations for a cluster.
+func UpdateTargets(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	clusterSettingsOpts ...install.ClusterSettingOption,
+) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName, clusterSettingsOpts...)
+	if err != nil {
+		return err
+	}
+	updatePrometheusTargets(ctx, l, c)
+	return nil
+}
+
+// updatePrometheusTargets updates the prometheus instance cluster config. Any error is logged and ignored.
+func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.SyncedCluster) {
+	nodeIPPorts := make([]string, len(c.Nodes))
+	for i, node := range c.VMs {
+		if node.Provider == gce.ProviderName {
+			// only gce is supported for prometheus
+			desc, err := c.DiscoverService(ctx, install.Node(i+1), "", install.ServiceTypeUI, 0)
+			if err != nil {
+				l.Errorf("error getting the port for node %d: %v", i+1, err)
+				continue
+			}
+			nodeIPPorts[i] = fmt.Sprintf("%s:%d", node.PublicIP, desc.Port)
+		}
+	}
+	if len(nodeIPPorts) > 0 {
+		if err := promhelperclient.UpdatePrometheusTargets(ctx,
+			envutil.EnvOrDefaultString(prometheusHostUrlEnv, defaultPrometheusHostUrl),
+			c.Name, false, nodeIPPorts, l); err != nil {
+			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
+		}
+	}
 }
 
 // Monitor monitors the status of cockroach nodes in a cluster.
@@ -779,6 +832,8 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 	if err != nil {
 		return err
 	}
+
+	deleteClusterConfig(clusterName, l)
 	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait, "")
 }
 
@@ -1328,7 +1383,18 @@ func destroyCluster(cld *cloud.Cloud, l *logger.Logger, clusterName string) erro
 		l.Printf("Destroying cluster %s with %d nodes", clusterName, len(c.VMs))
 	}
 
+	deleteClusterConfig(clusterName, l)
+
 	return cloud.DestroyCluster(l, c)
+}
+
+// deleteClusterConfig deletes the prometheus instance cluster config. Any error is logged and ignored.
+func deleteClusterConfig(clusterName string, l *logger.Logger) {
+	if err := promhelperclient.DeleteClusterConfig(context.Background(),
+		envutil.EnvOrDefaultString(prometheusHostUrlEnv, defaultPrometheusHostUrl),
+		clusterName, false, l); err != nil {
+		l.Errorf("deleting cluster config failed: %v", err)
+	}
 }
 
 func destroyLocalCluster(ctx context.Context, l *logger.Logger, clusterName string) error {
