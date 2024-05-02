@@ -693,6 +693,14 @@ func (ts *testState) HasTSDBQueryCapability(_ context.Context, tenID roachpb.Ten
 	}
 }
 
+func (ts *testState) HasTSDBAllMetricsCapability(_ context.Context, tenID roachpb.TenantID) error {
+	if ts.capabilities[tenID].CanViewAllMetrics {
+		return nil
+	} else {
+		return errors.New("unauthorized")
+	}
+}
+
 func (ts *testState) HasNodelocalStorageCapability(
 	_ context.Context, tenID roachpb.TenantID,
 ) error {
@@ -783,6 +791,9 @@ func (fakeAuthorizer) HasNodeStatusCapability(_ context.Context, tenID roachpb.T
 	return nil
 }
 func (fakeAuthorizer) HasTSDBQueryCapability(_ context.Context, tenID roachpb.TenantID) error {
+	return nil
+}
+func (fakeAuthorizer) HasTSDBAllMetricsCapability(_ context.Context, tenID roachpb.TenantID) error {
 	return nil
 }
 func (fakeAuthorizer) HasNodelocalStorageCapability(

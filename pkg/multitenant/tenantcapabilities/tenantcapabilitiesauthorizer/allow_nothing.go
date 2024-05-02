@@ -72,3 +72,10 @@ func (n *AllowNothingAuthorizer) HasProcessDebugCapability(
 ) error {
 	return errors.New("operation blocked")
 }
+
+// HasTSDBAllMetricsCapability implements the tenantcapabilities.Authorizer interface.
+func (n *AllowNothingAuthorizer) HasTSDBAllMetricsCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return errors.New("operation blocked")
+}

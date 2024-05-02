@@ -179,10 +179,11 @@ func newTenantDoesNotHaveCapabilityError(cap tenantcapabilities.ID, req kvpb.Req
 }
 
 var (
-	errCannotQueryMetadata = errors.New("client tenant does not have capability to query cluster node metadata")
-	errCannotQueryTSDB     = errors.New("client tenant does not have capability to query timeseries data")
-	errCannotUseNodelocal  = errors.New("client tenant does not have capability to use nodelocal storage")
-	errCannotDebugProcess  = errors.New("client tenant does not have capability to debug the process")
+	errCannotQueryMetadata   = errors.New("client tenant does not have capability to query cluster node metadata")
+	errCannotQueryTSDB       = errors.New("client tenant does not have capability to query timeseries data")
+	errCannotQueryAllMetrics = errors.New("client tenant does not have capability to query non-tenant metrics")
+	errCannotUseNodelocal    = errors.New("client tenant does not have capability to use nodelocal storage")
+	errCannotDebugProcess    = errors.New("client tenant does not have capability to debug the process")
 )
 
 var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
@@ -263,7 +264,7 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		break // fallthrough to the next check.
+		break
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
@@ -290,7 +291,7 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		break // fallthrough to the next check.
+		break
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
@@ -318,7 +319,7 @@ func (a *Authorizer) HasNodelocalStorageCapability(
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		break // fallthrough to the next check.
+		break
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
@@ -345,7 +346,7 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		break // fallthrough to the next check.
+		break
 	case authorizerModeAllowAll:
 		return true
 	case authorizerModeV222:
@@ -366,7 +367,7 @@ func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachp
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		break // fallthrough to the next check.
+		break
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
@@ -381,6 +382,35 @@ func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachp
 		entry.TenantCapabilities, tenantcapabilities.CanDebugProcess,
 	) {
 		return errCannotDebugProcess
+	}
+	return nil
+}
+
+func (a *Authorizer) HasTSDBAllMetricsCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	if tenID.IsSystem() {
+		return nil
+	}
+
+	entry, mode := a.getMode(ctx, tenID)
+	switch mode {
+	case authorizerModeOn:
+		break
+	case authorizerModeAllowAll:
+		return nil
+	case authorizerModeV222:
+		return errCannotQueryTSDB
+	default:
+		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		return err
+	}
+
+	if !tenantcapabilities.MustGetBoolByID(
+		entry.TenantCapabilities, tenantcapabilities.CanViewAllMetrics,
+	) {
+		return errCannotQueryAllMetrics
 	}
 	return nil
 }
