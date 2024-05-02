@@ -2068,7 +2068,7 @@ func TestLint(t *testing.T) {
 			// engine, don't forget to "register" the newly added package in
 			// sql/colexecerror/error.go file.
 			"sql/col*",
-			":!sql/colexecerror/error.go",
+			":!sql/colexecerror/error*.go",
 			// This exception is because execgen itself uses panics during code
 			// generation - not at execution time. The (glob,exclude) directive
 			// (see git help gitglossary) makes * behave like a normal, single dir

@@ -11,9 +11,8 @@
 package colexecerror
 
 import (
-	"bufio"
 	"context"
-	"runtime/debug"
+	"runtime"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -36,25 +35,78 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 			return
 		}
 
-		// Find where the panic came from and only proceed if it is related to the
-		// vectorized engine.
-		stackTrace := string(debug.Stack())
-		scanner := bufio.NewScanner(strings.NewReader(stackTrace))
-		panicLineFound := false
-		for scanner.Scan() {
-			if strings.Contains(scanner.Text(), panicLineSubstring) {
-				panicLineFound = true
-				break
+		// First check for error types that should only come from the vectorized
+		// engine.
+		if err, ok := panicObj.(error); ok {
+			// StorageError was caused by something below SQL, and represents an error
+			// that we'd simply like to propagate along.
+			var se *StorageError
+			// notInternalError is an error from the vectorized engine that we'd
+			// simply like to propagate along.
+			var nie *notInternalError
+			// internalError is an error from the vectorized engine that might need to
+			// be returned to the client with a stacktrace, sentry report, and
+			// "internal error" designation.
+			var ie *internalError
+			passthrough := errors.As(err, &se) || errors.As(err, &nie)
+			if errors.As(err, &ie) {
+				// Unwrap so that internalError doesn't show up in sentry reports.
+				retErr = ie.Unwrap()
+				// If the internal error doesn't already have an error code, mark it as
+				// an assertion error so that we generate a sentry report. (We don't do
+				// this for StorageError, notInternalError, or context.Canceled to avoid
+				// creating unnecessary sentry reports.)
+				if !passthrough && !errors.Is(retErr, context.Canceled) {
+					if code := pgerror.GetPGCode(retErr); code == pgcode.Uncategorized {
+						retErr = errors.NewAssertionErrorWithWrappedErrf(
+							retErr, "unexpected error from the vectorized engine",
+						)
+					}
+				}
+				return
+			}
+			if passthrough {
+				retErr = err
+				return
 			}
 		}
-		if !panicLineFound {
-			panic(errors.AssertionFailedf("panic line %q not found in the stack trace\n%s", panicLineSubstring, stackTrace))
+
+		// For other types of errors, we need to check whence the panic originated
+		// to know what to do. If the panic originated in the vectorized engine, we
+		// can safely return it as a normal error knowing that any illegal state
+		// will be cleaned up when the statement finishes. If the panic originated
+		// lower in the stack, however, we must treat it as unrecoverable because it
+		// could indicate an illegal state that might persist even after this
+		// statement finishes.
+		//
+		// To check whence the panic originated, we find the frame just before the
+		// panic frame.
+		var panicLineFound bool
+		var panicEmittedFrom string
+		// We should be able to find it within 3 program counters, starting with the
+		// caller of this deferred function (2 above the runtime.Callers frame).
+		pc := make([]uintptr, 3)
+		n := runtime.Callers(2, pc)
+		if n >= 1 {
+			frames := runtime.CallersFrames(pc[:n])
+			// A fixed number of program counters can expand to any number of frames.
+			for {
+				frame, more := frames.Next()
+				if strings.Contains(frame.File, panicLineSubstring) {
+					panicLineFound = true
+				} else if panicLineFound {
+					panicEmittedFrom = frame.Function
+					break
+				}
+				if !more {
+					break
+				}
+			}
 		}
-		if !scanner.Scan() {
-			panic(errors.AssertionFailedf("unexpectedly there is no line below the panic line in the stack trace\n%s", stackTrace))
-		}
-		panicEmittedFrom := strings.TrimSpace(scanner.Text())
 		if !shouldCatchPanic(panicEmittedFrom) {
+			// The panic is from outside the vectorized engine (or we didn't find it
+			// in the stack). We treat it as unrecoverable because it could indicate
+			// an illegal state that might persist even after this statement finishes.
 			panic(panicObj)
 		}
 
@@ -66,20 +118,11 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 		}
 		retErr = err
 
-		if _, ok := panicObj.(*StorageError); ok {
-			// A StorageError was caused by something below SQL, and represents
-			// an error that we'd simply like to propagate along.
-			// Do nothing.
-			return
-		}
-
 		annotateErrorWithoutCode := true
-		var nie *notInternalError
-		if errors.Is(err, context.Canceled) || errors.As(err, &nie) {
-			// We don't want to annotate the context cancellation and
-			// notInternalError errors in case they don't have a valid PG code
-			// so that the sentry report is not sent (errors with failed
-			// assertions get sentry reports).
+		if errors.Is(err, context.Canceled) {
+			// We don't want to annotate the context cancellation errors in case they
+			// don't have a valid PG code so that the sentry report is not sent
+			// (errors with failed assertions get sentry reports).
 			annotateErrorWithoutCode = false
 		}
 		if code := pgerror.GetPGCode(err); annotateErrorWithoutCode && code == pgcode.Uncategorized {
@@ -106,6 +149,9 @@ const (
 	sqlColPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/col"
 	sqlRowPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/row"
 	sqlSemPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/sem"
+	// When running BenchmarkCatchVectorizedRuntimeError under bazel, the
+	// repository prefix is missing.
+	testSqlColPackagesPrefix = "pkg/sql/col"
 )
 
 // shouldCatchPanic checks whether the panic that was emitted from
@@ -135,7 +181,8 @@ func shouldCatchPanic(panicEmittedFrom string) bool {
 		strings.HasPrefix(panicEmittedFrom, execinfraPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlColPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlRowPackagesPrefix) ||
-		strings.HasPrefix(panicEmittedFrom, sqlSemPackagesPrefix)
+		strings.HasPrefix(panicEmittedFrom, sqlSemPackagesPrefix) ||
+		strings.HasPrefix(panicEmittedFrom, testSqlColPackagesPrefix)
 }
 
 // StorageError is an error that was created by a component below the sql
@@ -183,16 +230,41 @@ func decodeNotInternalError(
 	return newNotInternalError(cause)
 }
 
-func init() {
-	errors.RegisterWrapperDecoder(errors.GetTypeKey((*notInternalError)(nil)), decodeNotInternalError)
+// internalError is an error that occurs because the vectorized engine is in an
+// unexpected state. Usually it wraps an assertion error.
+type internalError struct {
+	cause error
 }
 
-// InternalError simply panics with the provided object. It will always be
-// caught and returned as internal error to the client with the corresponding
+func newInternalError(err error) *internalError {
+	return &internalError{cause: err}
+}
+
+var (
+	_ errors.Wrapper = &internalError{}
+)
+
+func (e *internalError) Error() string { return e.cause.Error() }
+func (e *internalError) Cause() error  { return e.cause }
+func (e *internalError) Unwrap() error { return e.Cause() }
+
+func decodeInternalError(
+	_ context.Context, cause error, _ string, _ []string, _ proto.Message,
+) error {
+	return newInternalError(cause)
+}
+
+func init() {
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*notInternalError)(nil)), decodeNotInternalError)
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*internalError)(nil)), decodeInternalError)
+}
+
+// InternalError panics with the error wrapped by internalError. It will always
+// be caught and returned as internal error to the client with the corresponding
 // stack trace. This method should be called to propagate errors that resulted
 // in the vectorized engine being in an *unexpected* state.
 func InternalError(err error) {
-	panic(err)
+	panic(newInternalError(err))
 }
 
 // ExpectedError panics with the error that is wrapped by
