@@ -710,3 +710,26 @@ query TT
 SELECT 0::REGROLE, 0::REGROLE::TEXT;
 ----
 -  -
+
+# Regression test for using the correct type when decoding EncDatum of Oid type
+# family (#123474).
+statement ok
+CREATE TABLE t123474 (
+  col_0 REGROLE, col_1 OID, col_2 INT,
+  INDEX (col_1 DESC) STORING (col_2),
+  INDEX (col_0) STORING (col_1)
+);
+INSERT INTO t123474 (col_0, col_1, col_2) VALUES (0, 0, 0);
+SET testing_optimizer_random_seed = 6047211422050928467;
+SET testing_optimizer_disable_rule_probability = 0.500000;
+
+query T
+SELECT t2.col_1
+  FROM t123474 AS t1 JOIN t123474 AS t2 ON (t1.col_0) = (t2.col_1)
+  ORDER BY t1.col_0;
+----
+0
+
+statement ok
+RESET testing_optimizer_random_seed;
+RESET testing_optimizer_disable_rule_probability;

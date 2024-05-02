@@ -397,6 +397,15 @@ func (ed *EncDatum) Fingerprint(
 func (ed *EncDatum) Compare(
 	typ *types.T, a *tree.DatumAlloc, evalCtx *eval.Context, rhs *EncDatum,
 ) (int, error) {
+	return ed.CompareEx(typ, a, evalCtx, rhs, typ)
+}
+
+// CompareEx is the same as Compare but allows specifying the type of RHS
+// EncDatum in case it's different from ed (e.g. we might be comparing Oid
+// family types with different Oids).
+func (ed *EncDatum) CompareEx(
+	typ *types.T, a *tree.DatumAlloc, evalCtx *eval.Context, rhs *EncDatum, rhsTyp *types.T,
+) (int, error) {
 	// TODO(radu): if we have both the Datum and a key encoding available, which
 	// one would be faster to use?
 	if ed.encoding == rhs.encoding && ed.encoded != nil && rhs.encoded != nil {
@@ -410,7 +419,7 @@ func (ed *EncDatum) Compare(
 	if err := ed.EnsureDecoded(typ, a); err != nil {
 		return 0, err
 	}
-	if err := rhs.EnsureDecoded(typ, a); err != nil {
+	if err := rhs.EnsureDecoded(rhsTyp, a); err != nil {
 		return 0, err
 	}
 	return ed.Datum.CompareError(evalCtx, rhs.Datum)
@@ -553,11 +562,27 @@ func (r EncDatumRow) Compare(
 	evalCtx *eval.Context,
 	rhs EncDatumRow,
 ) (int, error) {
-	if len(r) != len(types) || len(rhs) != len(types) {
-		panic(errors.AssertionFailedf("length mismatch: %d types, %d lhs, %d rhs\n%+v\n%+v\n%+v", len(types), len(r), len(rhs), types, r, rhs))
+	return r.CompareEx(types, a, ordering, evalCtx, rhs, types)
+}
+
+// CompareEx is the same as Compare but allows specifying a different type
+// schema for RHS row.
+func (r EncDatumRow) CompareEx(
+	types []*types.T,
+	a *tree.DatumAlloc,
+	ordering colinfo.ColumnOrdering,
+	evalCtx *eval.Context,
+	rhs EncDatumRow,
+	rhsTypes []*types.T,
+) (int, error) {
+	if len(r) != len(types) || len(rhs) != len(rhsTypes) || len(r) != len(rhs) {
+		panic(errors.AssertionFailedf(
+			"length mismatch: %d types, %d rhs types, %d lhs, %d rhs\n%+v\n%+v\n%+v",
+			len(types), len(rhsTypes), len(r), len(rhs), types, r, rhs,
+		))
 	}
 	for _, c := range ordering {
-		cmp, err := r[c.ColIdx].Compare(types[c.ColIdx], a, evalCtx, &rhs[c.ColIdx])
+		cmp, err := r[c.ColIdx].CompareEx(types[c.ColIdx], a, evalCtx, &rhs[c.ColIdx], rhsTypes[c.ColIdx])
 		if err != nil {
 			return 0, err
 		}
