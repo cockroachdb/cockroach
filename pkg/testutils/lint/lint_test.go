@@ -598,6 +598,9 @@ func TestLint(t *testing.T) {
 			{re: `\bos\.(Getenv|LookupEnv)\("COCKROACH`,
 				excludes: []string{
 					":!cmd/bazci/githubpost",
+					":!acceptance/test_acceptance.go",           // For COCKROACH_RUN_ACCEPTANCE
+					":!compose/compare/compare/compare_test.go", // For COCKROACH_RUN_COMPOSE_COMPARE
+					":!compose/compose_test.go",                 // For COCKROACH_RUN_COMPOSE
 				},
 			},
 			{
@@ -623,18 +626,21 @@ func TestLint(t *testing.T) {
 					":!testutils/bazelcodecover/code_cover_on.go", // For BAZEL_COVER_DIR.
 					":!util/log/tracebacks.go",
 					":!util/sdnotify/sdnotify_unix.go",
-					":!util/grpcutil",                        // GRPC_GO_* variables
-					":!roachprod",                            // roachprod requires AWS environment variables
-					":!cli/env.go",                           // The CLI needs the PGHOST variable.
-					":!cli/start.go",                         // The CLI needs the GOMEMLIMIT and GOGC variables.
-					":!internal/codeowners/codeowners.go",    // For BAZEL_TEST.
-					":!internal/team/team.go",                // For BAZEL_TEST.
-					":!util/log/test_log_scope.go",           // For TEST_UNDECLARED_OUTPUT_DIR, REMOTE_EXEC
-					":!testutils/datapathutils/data_path.go", // For TEST_UNDECLARED_OUTPUT_DIR, REMOTE_EXEC
-					":!testutils/backup.go",                  // For BACKUP_TESTING_BUCKET
-					":!compose/compose_test.go",              // For PATH.
-					":!testutils/skip/skip.go",               // For REMOTE_EXEC.
-					":!build/engflow/engflow.go",             // For GITHUB_ACTIONS_BRANCH, etc.
+					":!util/grpcutil",                           // GRPC_GO_* variables
+					":!roachprod",                               // roachprod requires AWS environment variables
+					":!cli/env.go",                              // The CLI needs the PGHOST variable.
+					":!cli/start.go",                            // The CLI needs the GOMEMLIMIT and GOGC variables.
+					":!internal/codeowners/codeowners.go",       // For BAZEL_TEST.
+					":!internal/team/team.go",                   // For BAZEL_TEST.
+					":!util/log/test_log_scope.go",              // For TEST_UNDECLARED_OUTPUT_DIR, REMOTE_EXEC
+					":!testutils/datapathutils/data_path.go",    // For TEST_UNDECLARED_OUTPUT_DIR, REMOTE_EXEC
+					":!testutils/backup.go",                     // For BACKUP_TESTING_BUCKET
+					":!compose/compose_test.go",                 // For PATH.
+					":!testutils/skip/skip.go",                  // For REMOTE_EXEC.
+					":!build/engflow/engflow.go",                // For GITHUB_ACTIONS_BRANCH, etc.
+					":!acceptance/test_acceptance.go",           // For COCKROACH_RUN_ACCEPTANCE
+					":!compose/compare/compare/compare_test.go", // For COCKROACH_RUN_COMPOSE_COMPARE
+					":!compose/compose_test.go",                 // For COCKROACH_RUN_COMPOSE
 				},
 			},
 		} {
