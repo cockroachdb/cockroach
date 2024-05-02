@@ -52,6 +52,11 @@ type Config struct {
 	FlushesFailed           *metric.Counter
 	FlushedFingerprintCount *metric.Counter
 
+	// FlushesSkipped is incremented when a flush is skipped due to not
+	// meeting the minimum interval between flushes or due to the
+	// persisted tables being full.
+	FlushesSkipped *metric.Counter
+
 	// Testing knobs.
 	Knobs *sqlstats.TestingKnobs
 }
@@ -203,8 +208,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			minimumFlushInterval := MinimumInterval.Get(&s.cfg.Settings.SV)
 			flushedTooSoon = minimumFlushInterval > 0 && now.Before(s.lastFlushStarted.Add(minimumFlushInterval))
 			if flushedTooSoon {
-				log.Infof(ctx, "flush aborted due to high flush frequency. "+
-					"The minimum interval between flushes is %s", minimumFlushInterval.String())
+				s.cfg.FlushesSkipped.Inc(1)
 				continue
 			}
 
