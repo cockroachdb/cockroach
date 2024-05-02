@@ -15,10 +15,11 @@ import (
 	"fmt"
 	"math/rand"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
@@ -92,20 +93,32 @@ func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOp
 	}
 }
 
-func (s *cgroupDiskStaller) device() (major, minor int) {
+func (s *cgroupDiskStaller) device(nodes option.NodeListOption) (major, minor int) {
 	// TODO(jackson): Programmatically determine the device major,minor numbers.
 	// eg,:
 	//    deviceName := getDevice(s.t, s.c)
 	//    `cat /proc/partitions` and find `deviceName`
-	switch s.c.Cloud() {
-	case spec.GCE:
-		// ls -l /dev/sdb
-		// brw-rw---- 1 root disk 8, 16 Mar 27 22:08 /dev/sdb
-		return 8, 16
-	default:
-		s.f.Fatalf("unsupported cloud %q", s.c.Cloud())
+	res, err := s.c.RunWithDetailsSingleNode(context.TODO(), s.f.L(), option.WithNodes(nodes[:1]), "lsblk | grep /mnt/data1 | awk '{print $2}'")
+	if err != nil {
+		s.f.Fatalf("error when determining block device: %s", err)
 		return 0, 0
 	}
+	parts := strings.Split(strings.TrimSpace(res.Stdout), ":")
+	if len(parts) != 2 {
+		s.f.Fatalf("unexpected output from lsblk: %s", res.Stdout)
+		return 0, 0
+	}
+	major, err = strconv.Atoi(parts[0])
+	if err != nil {
+		s.f.Fatalf("error when determining block device: %s", err)
+		return 0, 0
+	}
+	minor, err = strconv.Atoi(parts[1])
+	if err != nil {
+		s.f.Fatalf("error when determining block device: %s", err)
+		return 0, 0
+	}
+	return major, minor
 }
 
 type throughput struct {
@@ -134,7 +147,7 @@ func (rw bandwidthReadWrite) cgroupV2BandwidthProp() string {
 func (s *cgroupDiskStaller) setThroughput(
 	ctx context.Context, nodes option.NodeListOption, rw bandwidthReadWrite, bw throughput,
 ) error {
-	maj, min := s.device()
+	maj, min := s.device(nodes)
 	cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", SystemInterfaceSystemdUnitName()+".service", "io.max")
 
 	bytesPerSecondStr := "max"
@@ -151,25 +164,11 @@ func (s *cgroupDiskStaller) setThroughput(
 	))
 }
 
-func GetDiskDevice(f Fataler, c cluster.Cluster) string {
-	s := c.Spec()
-	switch c.Cloud() {
-	case spec.GCE:
-		switch s.LocalSSD {
-		case spec.LocalSSDDisable:
-			return "/dev/sdb"
-		case spec.LocalSSDPreferOn, spec.LocalSSDDefault:
-			// TODO(jackson): These spec values don't guarantee that we are actually
-			// using local SSDs, just that we might've.
-			return "/dev/nvme0n1"
-		default:
-			f.Fatalf("unsupported LocalSSD enum %v", s.LocalSSD)
-			return ""
-		}
-	case spec.AWS:
-		return "/dev/nvme1n1"
-	default:
-		f.Fatalf("unsupported cloud %q", c.Cloud())
+func GetDiskDevice(f Fataler, c cluster.Cluster, nodes option.NodeListOption) string {
+	res, err := c.RunWithDetailsSingleNode(context.TODO(), f.L(), option.WithNodes(nodes[:1]), "lsblk | grep /mnt/data1 | awk '{print $1}'")
+	if err != nil {
+		f.Fatalf("error when determining block device: %s", err)
 		return ""
 	}
+	return "/dev/" + strings.TrimSpace(res.Stdout)
 }
