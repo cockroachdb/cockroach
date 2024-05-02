@@ -492,6 +492,7 @@ const (
 	StateExhausted
 )
 
+// TODO: here?
 // MoveToDraining switches the processor to the StateDraining. Only metadata is
 // returned from now on. In this state, the processor is expected to drain its
 // inputs (commonly by using DrainHelper()).

@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -333,6 +335,49 @@ func (m *sliMetrics) recordSizeBasedFlush() {
 	m.SizeBasedFlushes.Inc(1)
 }
 
+// PerFeedAggMetrics are aggregated metrics keeping track of per-changefeed stats
+// by job_id.
+type PerFeedAggMetrics struct {
+	TableBytes *aggmetric.AggGauge
+
+	m struct {
+		syncutil.Mutex
+		metrics map[catpb.JobID]*perFeedSliMetrics
+	}
+}
+
+func (a *PerFeedAggMetrics) MetricStruct() {}
+
+func (a *PerFeedAggMetrics) getOrCreateSLIMetrics(jobID catpb.JobID) *perFeedSliMetrics {
+	a.m.Lock()
+	defer a.m.Unlock()
+	if m, ok := a.m.metrics[jobID]; ok {
+		return m
+	}
+	m := &perFeedSliMetrics{
+		TableBytes: a.TableBytes.AddChild(strconv.FormatInt(int64(jobID), 10)),
+	}
+	a.m.metrics[jobID] = m
+	return m
+}
+
+func (a *PerFeedAggMetrics) closeSliMetrics(jobID catpb.JobID) {
+	a.m.Lock()
+	defer a.m.Unlock()
+	delete(a.m.metrics, jobID)
+}
+
+func newPerFeedAggMetrics(histogramWindow time.Duration) *PerFeedAggMetrics {
+	b := aggmetric.MakeBuilder("job_id")
+	return &PerFeedAggMetrics{
+		TableBytes: b.Gauge(metaChangefeedTableBytes),
+	}
+}
+
+type perFeedSliMetrics struct {
+	TableBytes *aggmetric.Gauge
+}
+
 type kafkaHistogramAdapter struct {
 	settings *cluster.Settings
 	wrapped  *aggmetric.Histogram
@@ -636,6 +681,12 @@ var (
 		Help:        "Number of buffered events in the parallel consumer",
 		Measurement: "Count of Events",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedTableBytes = metric.Metadata{
+		Name:        "changefeed.table_bytes",
+		Help:        "Aggregated number of bytes of data per table",
+		Measurement: "Storage",
+		Unit:        metric.Unit_BYTES,
 	}
 )
 
@@ -1054,6 +1105,7 @@ func (s *sliMetrics) getLaggingRangesCallback() func(int64) {
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
 	AggMetrics                     *AggMetrics
+	PerFeedAggMetrics              *PerFeedAggMetrics
 	KVFeedMetrics                  kvevent.Metrics
 	SchemaFeedMetrics              schemafeed.Metrics
 	Failures                       *metric.Counter
@@ -1084,10 +1136,16 @@ func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 	return m.AggMetrics.getOrCreateScope(scope)
 }
 
+// getPerFeedSLIMetrics returns per-feed SLIMeterics associated with the specified jobID.
+func (m *Metrics) getPerFeedSLIMetrics(jobID catpb.JobID) *perFeedSliMetrics {
+	return m.PerFeedAggMetrics.getOrCreateSLIMetrics(jobID)
+}
+
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
 		AggMetrics:        newAggregateMetrics(histogramWindow),
+		PerFeedAggMetrics: newPerFeedAggMetrics(histogramWindow),
 		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
 		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),
 		ResolvedMessages:  metric.NewCounter(metaChangefeedForwardedResolvedMessages),

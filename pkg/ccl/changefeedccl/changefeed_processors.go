@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -959,6 +961,8 @@ type changeFrontier struct {
 	// metrics are monitoring counters shared between all changefeeds.
 	metrics    *Metrics
 	sliMetrics *sliMetrics
+	// per-feed metrics
+	perFeedSliMetrics *perFeedSliMetrics
 
 	// sliMetricsID and metricsID uniquely identify the changefeed in the metrics's
 	// map (a shared struct across all changefeeds on the node) and the sliMetrics's
@@ -967,6 +971,8 @@ type changeFrontier struct {
 	sliMetricsID int64
 
 	knobs TestingKnobs
+
+	wg sync.WaitGroup
 }
 
 const (
@@ -1210,6 +1216,8 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		return
 	}
 	cf.sliMetrics = sli
+	cf.perFeedSliMetrics = cf.metrics.getPerFeedSLIMetrics(cf.spec.JobID)
+
 	cf.sink, err = getResolvedTimestampSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
 		cf.spec.User(), cf.spec.JobID, sli)
 
@@ -1282,6 +1290,13 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 
 	cf.sliMetricsID = cf.sliMetrics.claimId()
 
+	// start the billing metric reporting goroutine
+	cf.wg.Add(1)
+	go func() {
+		defer cf.wg.Done()
+		cf.runBillingMetricReporting(ctx)
+	}()
+
 	// TODO(dan): It's very important that we de-register from the metric because
 	// if we orphan an entry in there, our monitoring will lie (say the changefeed
 	// is behind when it may not be). We call this in `close` but that doesn't
@@ -1293,6 +1308,30 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		<-ctx.Done()
 		cf.closeMetrics()
 	}()
+}
+
+func (cf *changeFrontier) runBillingMetricReporting(ctx context.Context) {
+	var t timeutil.Timer
+	defer t.Stop()
+
+	for {
+		t.Reset(changefeedbase.BillingMetricsReportingInterval.Get(&cf.flowCtx.Cfg.Settings.SV))
+		select {
+		case <-t.C:
+			t.Read = true
+		case <-ctx.Done():
+			return
+		}
+
+		// TODO: timing metric?
+		res, err := FetchChangefeedBillingBytes(ctx, cf.flowCtx.EvalCtx.JobExecContext.(sql.JobExecContext))
+		if err != nil {
+			log.Warningf(ctx, "failed to fetch billing bytes: %v", err)
+			// TODO: errors metric
+			continue
+		}
+		cf.perFeedSliMetrics.TableBytes.Update(res)
+	}
 }
 
 func (cf *changeFrontier) close() {
@@ -1325,6 +1364,7 @@ func (cf *changeFrontier) closeMetrics() {
 	}()
 
 	cf.sliMetrics.closeId(cf.sliMetricsID)
+	cf.metrics.PerFeedAggMetrics.closeSliMetrics(cf.spec.JobID) // TODO: clean up
 }
 
 // Next is part of the RowSource interface.

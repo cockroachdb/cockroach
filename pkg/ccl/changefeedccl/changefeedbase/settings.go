@@ -301,12 +301,12 @@ var SinkPacerRequestSize = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
-// BillingJobInterval is the interval at which the changefeed billing job calculates
-// and updates its metric.
-var BillingJobInterval = settings.RegisterDurationSetting(
+// BillingMetricsReportingInterval is the interval at which the changefeed
+// calculates and updates its billing metric.
+var BillingMetricsReportingInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
-	"changefeed.billing_job.interval",
-	"the interval at which the changefeed billing job calculates and updates its metric",
+	"changefeed.billing.interval",
+	"the interval at which the changefeed calculates and updates its billing metric",
 	5*time.Minute,
 	settings.PositiveDuration,
 )
