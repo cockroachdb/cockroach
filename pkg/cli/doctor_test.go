@@ -20,7 +20,14 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
-var descriptorWithFKMutation = `'{
+func descriptorWithFKMutation(isDropped bool) string {
+	dropState := ``
+	dropTime := ``
+	if isDropped {
+		dropState = `"state": "DROP",`
+		dropTime = `"dropTime": "1713940113794672911",`
+	}
+	return `'{
       "table": {
           "columns": [
               {
@@ -32,8 +39,9 @@ var descriptorWithFKMutation = `'{
                       "width": 64
                   }
               }
-          ],
-          "createAsOfTime": {
+          ],` +
+		dropTime +
+		`"createAsOfTime": {
               "logical": 1,
               "wallTime": "1713940112376217646"
           },
@@ -133,15 +141,18 @@ var descriptorWithFKMutation = `'{
           },
           "replacementOf": {
               "time": {}
-          },
-          "unexposedParentSchemaId": 381,
+          },` +
+		dropState +
+		`"unexposedParentSchemaId": 381,
           "version": "2"
       }
   }'`
+}
 
 // This test doctoring a secure cluster.
 func TestDoctorCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	//
 	c := NewCLITest(TestCLIParams{T: t})
 	defer c.Cleanup()
 
@@ -177,13 +188,15 @@ func TestDoctorClusterBroken(t *testing.T) {
 	c := NewCLITest(TestCLIParams{T: t, DisableAutoStats: true})
 	defer c.Cleanup()
 
-	jobDesc := fmt.Sprintf("SELECT crdb_internal.unsafe_upsert_descriptor('foo'::regclass::oid::int,"+
-		"crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', %s::jsonb), true)", descriptorWithFKMutation)
+	desc := fmt.Sprintf("SELECT crdb_internal.unsafe_upsert_descriptor('foo'::regclass::oid::int,"+
+		"crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', %s::jsonb), true)", descriptorWithFKMutation(false /* isDropped */))
 
-	// Introduce a descriptor with an attached job mutation (along with other issues).
+	// Introduce a descriptor with an attached job mutation (along with other issues). We want to ensure that the number of
+	// jobs created is deterministic (auto table stats will be collected due to the "schema change" on foo); therefore,
+	// we should disable automatic stats collection and instead create our own.
 	c.RunWithArgs([]string{"sql", "-e", strings.Join([]string{
 		"CREATE TABLE foo (i INT)",
-		jobDesc,
+		desc,
 		"CREATE STATISTICS foo_stats FROM foo",
 		"SELECT pg_catalog.pg_sleep(1)",
 	}, ";\n"),
@@ -197,6 +210,38 @@ func TestDoctorClusterBroken(t *testing.T) {
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
 		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_cluster_jobs"), func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+}
+
+// TestDoctorClusterDropped tests that debug doctor examine will avoid validating dropped descriptors.
+func TestDoctorClusterDropped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
+
+	desc := fmt.Sprintf("SELECT crdb_internal.unsafe_upsert_descriptor('foo'::regclass::oid::int,"+
+		"crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', %s::jsonb), true)", descriptorWithFKMutation(true /* isDropped */))
+	// Introduce a dropped descriptor with an attached job mutation (along with other issues).
+	c.RunWithArgs([]string{"sql", "-e", strings.Join([]string{
+		"CREATE TABLE foo (i INT)",
+		desc,
+		"INSERT INTO system.users VALUES ('node', NULL, true, 3)",
+		"GRANT node TO root",
+		"DELETE FROM system.namespace WHERE name = 'foo'",
+		"SELECT pg_catalog.pg_sleep(1)",
+	}, ";\n"),
+	})
+
+	t.Run("examine", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor examine cluster")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_cluster_dropped"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})
