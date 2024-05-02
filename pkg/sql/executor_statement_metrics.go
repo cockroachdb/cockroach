@@ -81,6 +81,7 @@ type StatsMetrics struct {
 	SQLStatsFlushesFailed           *metric.Counter
 	SQLStatsFlushLatency            metric.IHistogram
 	SQLStatsRemovedRows             *metric.Counter
+	SQLStatsFlushesSkipped          *metric.Counter
 
 	SQLTxnStatsCollectionOverhead metric.IHistogram
 }

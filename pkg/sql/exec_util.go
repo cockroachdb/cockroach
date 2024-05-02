@@ -1115,6 +1115,12 @@ var (
 		Measurement: "failed flushes",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaSQLStatsFlushesSkipped = metric.Metadata{
+		Name:        "sql.stats.flushes.skipped.count",
+		Help:        "Number of SQL Stats flushes that were skipped",
+		Measurement: "skipped flushes",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaSQLStatsFlushLatency = metric.Metadata{
 		Name:        "sql.stats.flush.latency",
 		Help:        "The latency of SQL Stats flushes to persistent storage. Includes failed flush attempts",

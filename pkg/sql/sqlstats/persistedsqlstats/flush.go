@@ -61,6 +61,7 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 
 		if limitReached {
 			log.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
+			s.cfg.FlushesSkipped.Inc(1)
 			return false
 		}
 	}
