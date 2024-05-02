@@ -3236,6 +3236,12 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
+				RaftConfig: base.RaftConfig{
+					// We plan to increment the manual clock by MinStatsDuration a few
+					// times below and would like for leases to not expire. Configure a
+					// longer lease duration to achieve this.
+					RangeLeaseDuration: 10 * replicastats.MinStatsDuration,
+				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						WallClock: manualClock,
