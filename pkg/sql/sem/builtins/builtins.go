@@ -26,6 +26,7 @@ import (
 	"math/bits"
 	"net"
 	"regexp/syntax"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -5682,6 +5683,50 @@ SELECT
 				// Golang's 'panic' and would convert it into an internal
 				// error).
 				colexecerror.NonCatchablePanic(msg)
+				// This code is unreachable.
+				panic(msg)
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "msg", Typ: types.String}, {Name: "mode", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// The user must have REPAIRCLUSTER to use this builtin.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				msg := string(s)
+				mode, ok := tree.AsDString(args[1])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[1])
+				}
+				switch string(mode) {
+				case "internalAssertion":
+					err := errors.AssertionFailedf("%s", msg)
+					// Panic instead of returning the error. The vectorized panic-catcher
+					// will catch the panic and convert it into an internal error.
+					colexecerror.InternalError(err)
+				case "indexOutOfRange":
+					msg += string(msg[math.MaxInt])
+				case "divideByZero":
+					var foo []int
+					msg += strconv.Itoa(len(msg) / len(foo))
+				case "contextCanceled":
+					panic(context.Canceled)
+				default:
+					return nil, errors.Newf(
+						"expected mode to be one of: internalAssertion, indexOutOfRange, divideByZero, contextCanceled",
+					)
+				}
 				// This code is unreachable.
 				panic(msg)
 			},
