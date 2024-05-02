@@ -285,13 +285,16 @@ func (b *Builder) buildRoutine(
 
 		// Check the parameters for polymorphic types, and resolve to a concrete
 		// type if any exist.
-		_, polyArgTyp := tree.ResolvePolymorphicArgTypes(
-			paramTypes, argTypes, true, /* enforceConsistency */
-		)
-		if polyArgTyp != nil {
-			// If the routine returns a polymorphic type, use the resolved polymorphic
-			// argument type to determine the concrete return type.
-			b.maybeResolvePolymorphicReturnType(f, polyArgTyp)
+		var polyArgTyp *types.T
+		if b.evalCtx.SessionData().OptimizerUsePolymorphicParameterFix {
+			_, polyArgTyp = tree.ResolvePolymorphicArgTypes(
+				paramTypes, argTypes, true, /* enforceConsistency */
+			)
+			if polyArgTyp != nil {
+				// If the routine returns a polymorphic type, use the resolved polymorphic
+				// argument type to determine the concrete return type.
+				b.maybeResolvePolymorphicReturnType(f, polyArgTyp)
+			}
 		}
 
 		// Add any needed casts from argument type to parameter type, and add a

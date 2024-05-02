@@ -516,6 +516,10 @@ message LocalOnlySessionData {
   // that the optimizer should use virtual computed columns to prove partial
   // index implication.
   bool optimizer_prove_implication_with_virtual_computed_columns = 130;
+  // OptimizerUsePolymorphicParameterFix, when true, causes the optimizer to
+  // validate a routine's polymorphic parameters during overload resolution
+  // and type-checking.
+  bool optimizer_use_polymorphic_parameter_fix = 131;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
