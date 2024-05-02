@@ -49,3 +49,12 @@ a >= 2 AND b > 0
 (a, b) > (2, 0)
 ----
 false
+
+# We do not prove implication in this case because a + 10 > 4 is normalized to
+# a > -6 before a + 10 can be replaced with b.
+predtest vars=(a int, b int as (a + 10) virtual)
+a + 10 > 4
+=>
+a + 10 IS NOT NULL
+----
+false
