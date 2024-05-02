@@ -3182,6 +3182,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		behindCount               int64
 		pausedFollowerCount       int64
 		ioOverload                float64
+		pendingRaftProposalCount  int64
 		slowRaftProposalCount     int64
 
 		locks                          int64
@@ -3260,6 +3261,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 		}
 		pausedFollowerCount += metrics.PausedFollowerCount
+		pendingRaftProposalCount += metrics.PendingRaftProposalCount
 		slowRaftProposalCount += metrics.SlowRaftProposalCount
 		behindCount += metrics.BehindCount
 		loadStats := rep.loadStats.Stats()
@@ -3322,6 +3324,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 	s.metrics.RaftPausedFollowerCount.Update(pausedFollowerCount)
 	s.metrics.IOOverload.Update(ioOverload)
+	s.metrics.RaftCommandsPending.Update(pendingRaftProposalCount)
 	s.metrics.SlowRaftRequests.Update(slowRaftProposalCount)
 
 	var averageLockHoldDurationNanos int64
