@@ -15,7 +15,9 @@
 # at all possible.
 #
 # LocalityOptimizedSearch can be planned under the following conditions:
-#  - A scan is known to produce at most one row.
+#  - A hard limit or known maximum cardinality of the original scan could be
+#    satisfied by a local-only scan. Thus, locality optimized search typically
+#    requires queries to filter by unique keys or have a LIMIT clause.
 #  - The scan contains multiple spans, with some spans targeting partitions on
 #    local nodes (relative to the gateway region), and some targeting partitions
 #    on remote nodes. It is not known which span will produce the row.
