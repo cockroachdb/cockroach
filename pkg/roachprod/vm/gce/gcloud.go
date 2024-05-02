@@ -41,8 +41,8 @@ import (
 const (
 	defaultProject = "cockroach-ephemeral"
 	ProviderName   = "gce"
-	DefaultImage   = "ubuntu-2204-jammy-v20230727"
-	ARM64Image     = "ubuntu-2204-jammy-arm64-v20230727"
+	DefaultImage   = "ubuntu-2204-jammy-v20240319"
+	ARM64Image     = "ubuntu-2204-jammy-arm64-v20240319"
 	// TODO(DarrylWong): Upgrade FIPS to Ubuntu 22 when it is available.
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
