@@ -1371,9 +1371,27 @@ func AddLabels(l *logger.Logger, clusterName string, labels map[string]string) e
 		return err
 	}
 
-	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+	err = vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
 		return p.AddLabels(l, vms, labels)
 	})
+	if err != nil {
+		return err
+	}
+
+	// Adding labels is not supported for local clusters, we don't
+	// need to update the local cluster cache.
+	if config.IsLocalClusterName(clusterName) {
+		return nil
+	}
+
+	// Update the tags in the local cluster cache.
+	for _, m := range c.Cluster.VMs {
+		for k, v := range labels {
+			m.Labels[k] = v
+		}
+	}
+
+	return saveCluster(l, &c.Cluster)
 }
 
 func RemoveLabels(l *logger.Logger, clusterName string, labels []string) error {
@@ -1382,9 +1400,20 @@ func RemoveLabels(l *logger.Logger, clusterName string, labels []string) error {
 		return err
 	}
 
-	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+	err = vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
 		return p.RemoveLabels(l, vms, labels)
 	})
+	if err != nil {
+		return err
+	}
+
+	// Update the tags in the local cluster cache.
+	for _, m := range c.Cluster.VMs {
+		for _, label := range labels {
+			delete(m.Labels, label)
+		}
+	}
+	return saveCluster(l, &c.Cluster)
 }
 
 // Create TODO
