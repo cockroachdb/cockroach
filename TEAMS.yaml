@@ -107,3 +107,5 @@ cockroachdb/migrations:
 cockroachdb/release-eng:
   label: T-release
   triage_column_id: 9149730
+cockroachdb/db-server:
+  label: T-db-server

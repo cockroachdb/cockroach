@@ -37,6 +37,7 @@ const (
 	OwnerStorage          Owner = `storage`
 	OwnerTestEng          Owner = `test-eng`
 	OwnerDevInf           Owner = `dev-inf`
+	OwnerDBServer         Owner = `db-server`
 )
 
 // IsValid returns true if the owner is valid, i.e. it has a corresponding team
