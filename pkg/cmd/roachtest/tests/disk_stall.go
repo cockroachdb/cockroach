@@ -448,10 +448,12 @@ type dmsetupDiskStaller struct {
 
 var _ diskStaller = (*dmsetupDiskStaller)(nil)
 
-func (s *dmsetupDiskStaller) device() string { return roachtestutil.GetDiskDevice(s.t, s.c) }
+func (s *dmsetupDiskStaller) device(nodes option.NodeListOption) string {
+	return roachtestutil.GetDiskDevice(s.t, s.c, nodes)
+}
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
-	dev := s.device()
+	dev := s.device(s.c.All())
 	// snapd will run "snapd auto-import /dev/dm-0" via udev triggers when
 	// /dev/dm-0 is created. This possibly interferes with the dmsetup create
 	// reload, so uninstall snapd.
