@@ -168,14 +168,19 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			}
 		})
 
-		initialDelay := s.nextFlushInterval()
 		var timer timeutil.Timer
-		timer.Reset(initialDelay)
 
-		log.Infof(ctx, "starting sql-stats-worker with initial delay: %s", initialDelay)
+		log.Infof(ctx, "starting sql-stats-worker")
+		flushedTooSoon := false
 		for {
-			waitInterval := s.nextFlushInterval()
-			timer.Reset(waitInterval)
+			if !flushedTooSoon || timer.Read {
+				// Only reset the interval if the last flush attempt
+				// was not aborted due to high frequency - in that case,
+				// we should keep the current timer.
+				waitInterval := s.nextFlushInterval()
+				timer.Reset(waitInterval)
+			}
+			flushedTooSoon = false
 
 			select {
 			case <-timer.C:
@@ -192,6 +197,15 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 				return
 			case <-stopper.ShouldQuiesce():
 				return
+			}
+
+			now := s.getTimeNow()
+			minimumFlushInterval := MinimumInterval.Get(&s.cfg.Settings.SV)
+			flushedTooSoon = minimumFlushInterval > 0 && now.Before(s.lastFlushStarted.Add(minimumFlushInterval))
+			if flushedTooSoon {
+				log.Infof(ctx, "flush aborted due to high flush frequency. "+
+					"The minimum interval between flushes is %s", minimumFlushInterval.String())
+				continue
 			}
 
 			flushed := s.MaybeFlush(ctx, stopper)
