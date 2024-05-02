@@ -13,6 +13,7 @@ package kvcoord_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"sort"
