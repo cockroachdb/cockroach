@@ -3411,6 +3411,8 @@ func (ex *connExecutor) recordTransactionFinish(
 		)
 	}
 
+	ex.statsCollector.ObserveTransaction(ctx, transactionFingerprintID, recordedTxnStats)
+
 	return ex.statsCollector.RecordTransaction(
 		ctx,
 		transactionFingerprintID,
