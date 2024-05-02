@@ -313,6 +313,9 @@ const (
 	// the system tenant to ensure it is a superset of secondary tenants.
 	V24_1_AddSpanCounts
 
+	// V24_1 is CockroachDB v24.1. It's used for all v24.1.x patch releases.
+	V24_1
+
 	numKeys
 )
 
@@ -382,6 +385,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 22},
 	V24_1_ReplicatedLockPipelining:             {Major: 23, Minor: 2, Internal: 24},
 	V24_1_AddSpanCounts:                        {Major: 23, Minor: 2, Internal: 26},
+	V24_1:                                      {Major: 24, Minor: 1, Internal: 0},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster
@@ -396,14 +400,6 @@ const MinSupported Key = V23_1
 // Note: this is always the last element of SupportedPreviousReleases(); it is
 // also provided as a constant for convenience.
 const PreviousRelease Key = V23_2
-
-// V24_1 is a placeholder that will eventually be replaced by the actual 24.1
-// version Key, but in the meantime it points to the latest Key. The placeholder
-// is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 24.1 and has completed all associated migrations; most
-// version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 24.1.
-const V24_1 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
@@ -422,7 +418,7 @@ const DevelopmentBranch = false
 // version key, e.g. to V23_2 on the release-23.2 branch once it is minted.
 // Setting it has the effect of ensuring no versions are subsequently added (see
 // TestFinalVersion).
-const finalVersion Key = -1
+const finalVersion Key = V24_1
 
 // Version returns the roachpb.Version corresponding to a key.
 func (k Key) Version() roachpb.Version {
