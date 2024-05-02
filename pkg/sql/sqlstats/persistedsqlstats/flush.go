@@ -36,63 +36,45 @@ import (
 // 2. The flush is called too soon after the last flush (`sql.stats.flush.minimum_interval`).
 // 3. We have reached the limit of the number of rows in the system table.
 func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stopper) bool {
-	now := s.getTimeNow()
-
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)
-	minimumFlushInterval := MinimumInterval.Get(&s.cfg.Settings.SV)
-
 	enabled := SQLStatsFlushEnabled.Get(&s.cfg.Settings.SV)
-	flushingTooSoon := now.Before(s.lastFlushStarted.Add(minimumFlushInterval))
-
-	// Reset stats is performed individually for statement and transaction stats
-	// within SQLStats.ConsumeStats function. Here, we reset stats only when
-	// sql stats flush is disabled.
-	if !enabled && allowDiscardWhenDisabled {
-		defer func() {
-			if err := s.SQLStats.Reset(ctx); err != nil {
-				log.Warningf(ctx, "fail to reset in-memory SQL Stats: %s", err)
-			}
-		}()
-	}
 
 	// Handle early abortion of the flush.
 	if !enabled {
+		if allowDiscardWhenDisabled {
+			// Reset stats is performed individually for statement and transaction stats
+			// within SQLStats.ConsumeStats function. Here, we reset stats only when
+			// sql stats flush is disabled.
+			if err := s.SQLStats.Reset(ctx); err != nil {
+				log.Warningf(ctx, "fail to reset in-memory SQL Stats: %s", err)
+			}
+		}
 		return false
 	}
 
-	if flushingTooSoon {
-		log.Infof(ctx, "flush aborted due to high flush frequency. "+
-			"The minimum interval between flushes is %s", minimumFlushInterval.String())
-		return false
+	if sqlStatsLimitTableSizeEnabled.Get(&s.SQLStats.GetClusterSettings().SV) {
+		// We only check the statement count as there should always be at least as many statements as transactions.
+		limitReached, err := s.StmtsLimitSizeReached(ctx)
+		if err != nil {
+			log.Errorf(ctx, "encountered an error at flush, checking for statement statistics size limit: %v", err)
+		}
+
+		if limitReached {
+			log.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
+			return false
+		}
 	}
 
+	aggregatedTs := s.ComputeAggregatedTs()
 	fingerprintCount := s.SQLStats.GetTotalFingerprintCount()
 	s.cfg.FlushedFingerprintCount.Inc(fingerprintCount)
 	if log.V(1) {
 		log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
 			fingerprintCount, s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(s.lastFlushStarted))
 	}
-	s.lastFlushStarted = now
-
-	aggregatedTs := s.ComputeAggregatedTs()
-
-	// We only check the statement count as there should always be at least as many statements as transactions.
-	limitReached := false
-
-	var err error
-	if sqlStatsLimitTableSizeEnabled.Get(&s.SQLStats.GetClusterSettings().SV) {
-		limitReached, err = s.StmtsLimitSizeReached(ctx)
-	}
-
-	if err != nil {
-		log.Errorf(ctx, "encountered an error at flush, checking for statement statistics size limit: %v", err)
-	}
-	if limitReached {
-		log.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
-		return false
-	}
 
 	flushBegin := s.getTimeNow()
+	s.lastFlushStarted = flushBegin
 	s.SQLStats.ConsumeStats(ctx, stopper,
 		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			s.doFlush(ctx, func() error {
