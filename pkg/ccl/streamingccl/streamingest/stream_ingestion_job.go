@@ -510,12 +510,14 @@ func maybeRevertToCutoverTimestamp(
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize != 0 {
 		batchSize = p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize
 	}
+	// On cutover, replication has stopped so therefore should set replicated time to 0
+	p.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicatedTimeSeconds.Update(0)
 	if err := revertccl.RevertSpansFanout(ctx,
 		p.ExecCfg().DB,
 		p,
 		remainingSpansToRevert,
 		cutoverTimestamp,
-		// TODO(ssd): It should be safe for us to ingore the
+		// TODO(ssd): It should be safe for us to ignore the
 		// GC threshold. Why aren't we?
 		false, /* ignoreGCThreshold */
 		batchSize,
@@ -555,7 +557,7 @@ func activateTenant(
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-// There is a know race between the ingestion processors shutting down, and
+// There is a known race between the ingestion processors shutting down, and
 // OnFailOrCancel being invoked. As a result of which we might see some keys
 // leftover in the keyspace if a ClearRange were to be issued here. In general
 // the tenant keyspace of a failed/canceled ingestion job should be treated as
@@ -568,6 +570,10 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	// ingestion anymore.
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	completeProducerJob(ctx, s.job, jobExecCtx.ExecCfg().InternalDB, false)
+	// On a job fail or cancel, replication has permanently stopped so set replicated time to 0.
+	// This value can be inadvertently overriden due to the race condition between job cancellation/failure
+	// and the shutdown of ingestion processors.
+	jobExecCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicatedTimeSeconds.Update(0)
 
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	execCfg := jobExecCtx.ExecCfg()
