@@ -430,6 +430,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = false
 	notStale()
 
+	// Stale optimizer_prove_implication_with_virtual_computed_columns.
+	evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
+	stale()
+	evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)

@@ -187,6 +187,7 @@ type Memo struct {
 	useLockOpForSerializable                   bool
 	useProvidedOrderingFix                     bool
 	useVirtualComputedColumnStats              bool
+	proveImplicationWithVirtualComputedCols    bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -260,6 +261,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useLockOpForSerializable:                   evalCtx.SessionData().OptimizerUseLockOpForSerializable,
 		useProvidedOrderingFix:                     evalCtx.SessionData().OptimizerUseProvidedOrderingFix,
 		useVirtualComputedColumnStats:              evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats,
+		proveImplicationWithVirtualComputedCols:    evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -411,6 +413,7 @@ func (m *Memo) IsStale(
 		m.useLockOpForSerializable != evalCtx.SessionData().OptimizerUseLockOpForSerializable ||
 		m.useProvidedOrderingFix != evalCtx.SessionData().OptimizerUseProvidedOrderingFix ||
 		m.useVirtualComputedColumnStats != evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats ||
+		m.proveImplicationWithVirtualComputedCols != evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
