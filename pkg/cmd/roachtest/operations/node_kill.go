@@ -13,6 +13,7 @@ package operations
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -20,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -79,11 +79,28 @@ func runNodeKill(
 	}
 	o.Status(fmt.Sprintf("killing node %s with signal %d", node.NodeIDsString(), signal))
 
-	stopOpts := option.StopVirtualClusterOpts(install.SystemInterfaceName, node)
-	stopOpts.RoachprodOpts.Sig = signal
-	stopOpts.RoachprodOpts.Wait = true
-	stopOpts.RoachprodOpts.MaxWait = 300 // 5 minutes
-	c.StopServiceForVirtualCluster(ctx, o.L(), stopOpts)
+	err := c.RunE(ctx, option.WithNodes(node), "pkill", fmt.Sprintf("-%d", signal), "-f", "cockroach\\ start")
+	if err != nil {
+		o.Fatal(err)
+	}
+	o.Status(fmt.Sprintf("sent signal %d to node %s, waiting for process to exit", signal, node.NodeIDsString()))
+
+	for {
+		if err := ctx.Err(); err != nil {
+			o.Fatal(err)
+		}
+		err := c.RunE(ctx, option.WithNodes(node), "pgrep", "-f", "cockroach\\ start")
+		if err != nil {
+			if strings.Contains(err.Error(), "status 1") {
+				// pgrep returns error code 1 if no processes are found.
+				break
+			}
+			o.Fatal(err)
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+
 	o.Status(fmt.Sprintf("killed node %s with signal %d", node.NodeIDsString(), signal))
 
 	return &cleanupNodeKill{
