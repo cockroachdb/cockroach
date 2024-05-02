@@ -495,7 +495,8 @@ func performCastWithoutPrecisionTruncation(
 				false, /* skipHexPrefix */
 			)
 		case *tree.DOid:
-			s = t.String()
+			// The "unknown" oid has special handling.
+			s = tree.AsStringWithFlags(t, tree.FmtPgwireText)
 		case *tree.DJSON:
 			s = t.JSON.String()
 		case *tree.DTSQuery:
@@ -953,9 +954,6 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DInt:
 			return performIntToOidCast(ctx, evalCtx.Planner, t, *v)
 		case *tree.DString:
-			if t.Oid() != oid.T_oid && string(*v) == tree.ZeroOidValue {
-				return tree.WrapAsZeroOid(t), nil
-			}
 			return ParseDOid(ctx, evalCtx, string(*v), t)
 		}
 	case types.TupleFamily:
@@ -1001,6 +999,10 @@ func performCastWithoutPrecisionTruncation(
 func performIntToOidCast(
 	ctx context.Context, res Planner, t *types.T, v tree.DInt,
 ) (tree.Datum, error) {
+	if v == 0 {
+		// This is the "unknown" oid.
+		return tree.NewDOidWithType(tree.UnknownOidValue, t), nil
+	}
 	// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 	// store OIDs as signed 32-bit integers, so we implement the cast
 	// by converting to a uint32 first. This matches Postgres behavior.
@@ -1023,15 +1025,10 @@ func performIntToOidCast(
 				return nil, err
 			}
 			name = typ.PGName()
-		} else if v == 0 {
-			return tree.WrapAsZeroOid(t), nil
 		}
 		return tree.NewDOidWithTypeAndName(o, t, name), nil
 
 	case oid.T_regproc, oid.T_regprocedure:
-		if v == 0 {
-			return tree.WrapAsZeroOid(t), nil
-		}
 		name, _, err := res.ResolveFunctionByOID(ctx, oid.Oid(v))
 		if err != nil {
 			if errors.Is(err, tree.ErrRoutineUndefined) {
@@ -1042,10 +1039,6 @@ func performIntToOidCast(
 		return tree.NewDOidWithTypeAndName(o, t, name.Object()), nil
 
 	default:
-		if v == 0 {
-			return tree.WrapAsZeroOid(t), nil
-		}
-
 		dOid, errSafeToIgnore, err := res.ResolveOIDFromOID(ctx, t, tree.NewDOid(o))
 		if err != nil {
 			if !errSafeToIgnore {
