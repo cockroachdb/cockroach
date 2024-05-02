@@ -1384,14 +1384,13 @@ func checkNoUnknownRequest(reqs []kvpb.RequestUnion) *kvpb.UnsupportedRequestErr
 
 func (n *Node) batchInternal(
 	ctx context.Context, tenID roachpb.TenantID, args *kvpb.BatchRequest,
-) (*kvpb.BatchResponse, error) {
+) (br *kvpb.BatchResponse, _ error) {
 	if detail := checkNoUnknownRequest(args.Requests); detail != nil {
-		var br kvpb.BatchResponse
+		br = &kvpb.BatchResponse{}
 		br.Error = kvpb.NewError(detail)
-		return &br, nil
+		return br, nil
 	}
 
-	var br *kvpb.BatchResponse
 	var reqSp spanForRequest
 	ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
 	// NB: wrapped to delay br evaluation to its value when returning.
@@ -1540,7 +1539,6 @@ func (n *Node) maybeProxyRequest(
 	}
 
 	log.VEventf(ctx, 2, "proxy request for %v after local error %v", ba, pErr)
-	// TODO(baptist): Correctly set up the span / tracing.
 	br, pErr := n.proxySender.Send(ctx, ba)
 	if pErr == nil {
 		log.VEvent(ctx, 2, "proxy request completed")
@@ -1712,7 +1710,17 @@ func (sp *spanForRequest) finish(br *kvpb.BatchResponse, redactOpt redactOpt) {
 		if needRedaction {
 			redactRecording(rec)
 		}
-		br.CollectedSpans = append(br.CollectedSpans, rec...)
+		// There may be duplicate spans when proxying a request, in which case we
+		// need to deduplicate them here.
+		existingResponseSpans := make(map[tracingpb.SpanID]struct{}, len(br.CollectedSpans))
+		for _, s := range br.CollectedSpans {
+			existingResponseSpans[s.SpanID] = struct{}{}
+		}
+		for _, span := range rec {
+			if _, ok := existingResponseSpans[span.SpanID]; !ok {
+				br.CollectedSpans = append(br.CollectedSpans, span)
+			}
+		}
 	}
 }
 
