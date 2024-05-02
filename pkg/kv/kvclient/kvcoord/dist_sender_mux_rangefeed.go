@@ -237,7 +237,9 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 	if m.cfg.withMetadata {
 		// Send metadata after the stream successfully registers to avoid sending
 		// metadata about a rangefeed that never starts.
-		sendMetadata(m.eventCh, span, parentRangefeedMetadata)
+		if err := sendMetadata(ctx, m.eventCh, span, parentRangefeedMetadata); err != nil {
+			return err
+		}
 	}
 
 	return nil

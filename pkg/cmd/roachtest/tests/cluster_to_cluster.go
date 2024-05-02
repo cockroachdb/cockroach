@@ -1196,8 +1196,8 @@ func registerClusterToCluster(r registry.Registry) {
 			// Catchup scan perf test on bulk import.
 			name:      "c2c/import/kv0",
 			benchmark: true,
-			srcNodes:  1,
-			dstNodes:  1,
+			srcNodes:  4,
+			dstNodes:  4,
 			cpus:      8,
 			// With the machine type and size we use, this is the smallest disk that
 			// gives us max write BW of 800MB/s.
@@ -1205,7 +1205,7 @@ func registerClusterToCluster(r registry.Registry) {
 			// Write ~150GB data to disk.
 			workload: replicateImportKV{
 				replicateSplits: true,
-				replicateKV:     replicateKV{readPercent: 0, initRows: 10000000, maxBlockBytes: 1024}},
+				replicateKV:     replicateKV{readPercent: 0, initRows: 100000000, maxBlockBytes: 1024}},
 			timeout:            1 * time.Hour,
 			maxAcceptedLatency: 1 * time.Hour,
 			// Cutover to one second after the import completes.
@@ -1221,8 +1221,8 @@ func registerClusterToCluster(r registry.Registry) {
 			// Catchup scan perf test on bulk import.
 			name:      "c2c/import/nosplit/kv0",
 			benchmark: true,
-			srcNodes:  1,
-			dstNodes:  1,
+			srcNodes:  4,
+			dstNodes:  4,
 			cpus:      8,
 			// With the machine type and size we use, this is the smallest disk that
 			// gives us max write BW of 800MB/s.
@@ -1230,7 +1230,7 @@ func registerClusterToCluster(r registry.Registry) {
 			// Write ~150GB data to disk.
 			workload: replicateImportKV{
 				replicateSplits: false,
-				replicateKV:     replicateKV{readPercent: 0, initRows: 10000000, maxBlockBytes: 1024}},
+				replicateKV:     replicateKV{readPercent: 0, initRows: 100000000, maxBlockBytes: 1024}},
 			timeout:            1 * time.Hour,
 			maxAcceptedLatency: 1 * time.Hour,
 			// Cutover to one second after the import completes.
