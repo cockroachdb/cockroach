@@ -310,7 +310,7 @@ func (s *eventStream) onMetadata(ctx context.Context, metadata *kvpb.RangeFeedMe
 		}
 		// Only send new manual split keys (i.e. a child rangefeed start key that
 		// differs from the parent start key)
-		log.Infof(ctx,"sent split point %s", metadata.Span.Key)
+		log.Infof(ctx, "sent split point %s", metadata.Span.Key)
 		s.seb.addSplitPoint(metadata.Span.Key)
 		s.setErr(s.maybeFlushBatch(ctx))
 	}
@@ -368,6 +368,9 @@ func (s *eventStream) flushBatch(ctx context.Context) error {
 	return s.sendFlush(ctx, &streampb.StreamEvent{Batch: &s.seb.batch})
 }
 func (s *eventStream) sendFlush(ctx context.Context, event *streampb.StreamEvent) error {
+	if (event.Batch != nil) && len(event.Batch.SplitPoints) > 0 {
+		log.Infof(ctx, "flushing %d split points", len(event.Batch.SplitPoints))
+	}
 	data, err := protoutil.Marshal(event)
 	if err != nil {
 		return err

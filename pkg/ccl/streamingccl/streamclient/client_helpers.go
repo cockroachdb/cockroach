@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/jackc/pgx/v4"
 )
@@ -40,6 +41,9 @@ func subscribeInternal(
 		var streamEvent streampb.StreamEvent
 		if err := protoutil.Unmarshal(data, &streamEvent); err != nil {
 			return nil, err
+		}
+		if streamEvent.Batch != nil && len(streamEvent.Batch.SplitPoints) > 0 {
+			log.Infof(ctx, "batch contains %d split events", len(streamEvent.Batch.SplitPoints))
 		}
 		bufferedEvent = &streamEvent
 		return parseEvent(bufferedEvent), nil

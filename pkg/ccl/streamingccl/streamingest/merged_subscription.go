@@ -43,7 +43,6 @@ func mergeSubscriptions(
 					if !ok {
 						return sub.Err()
 					}
-
 					pe := partitionEvent{
 						Event:     event,
 						partition: partition,

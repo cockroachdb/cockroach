@@ -671,6 +671,7 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 		select {
 		case event, ok := <-sip.mergedSubscription.Events():
 			if !ok {
+				log.Info(sip.Ctx(), "merged subscription closing")
 				// eventCh is closed, flush and exit.
 				if err := sip.flush(); err != nil {
 					return err
@@ -855,6 +856,7 @@ func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 	log.Infof(ctx, "received replicating split event!")
 	defer sp.Finish()
 	if !ingestSplitEvent.Get(&sip.EvalCtx.Settings.SV) {
+		log.Info(ctx, "split setting not set")
 		return nil
 	}
 
