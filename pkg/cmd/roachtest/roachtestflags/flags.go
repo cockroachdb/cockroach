@@ -136,6 +136,13 @@ var (
 		lead to cluster unavailability or operation failures.`,
 	})
 
+	SkipOperationValidations bool = false
+	_                             = registerRunOpsFlag(&SkipOperationValidations, FlagInfo{
+		Name: "skip-validations",
+		Usage: `Skips any pre-operation and post-operation validations specified in the
+		operation's spec.`,
+	})
+
 	CockroachEAPath string
 	_               = registerRunFlag(&CockroachEAPath, FlagInfo{
 		Name: "cockroach-ea",

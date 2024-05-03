@@ -37,6 +37,8 @@ type OperationCleanup interface {
 	Cleanup(ctx context.Context, o operation.Operation, c cluster.Cluster)
 }
 
+type ValidationFunc func(ctx context.Context, o operation.Operation, c cluster.Cluster) error
+
 // OperationSpec is a spec for a roachtest operation.
 type OperationSpec struct {
 	Skip string // if non-empty, operation will be skipped
@@ -55,6 +57,16 @@ type OperationSpec struct {
 	// CompatibleClouds is the set of clouds this operation can run on (e.g. AllClouds,
 	// OnlyGCE, etc). Must be set.
 	CompatibleClouds CloudSet
+
+	// PreValidation is a function that runs before the operation is run. If a non-nil
+	// midValidation is returned, it is run after the operation is run but before any
+	// associated cleanup functions are completed. If a non-nil postValidation
+	// ValidationFunc is returned, it is run after the operation and any associated
+	// cleanup functions are completed. If an error is returned from this pre validation
+	// function, the operation will not be run.
+	PreValidation func(
+		ctx context.Context, o operation.Operation, c cluster.Cluster,
+	) (midValidation, postValidation ValidationFunc, err error)
 
 	// Dependencies specify the types of resources required for this roachtest
 	// operation to work. This will be used in filtering eligible operations to
