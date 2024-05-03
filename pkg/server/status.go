@@ -743,7 +743,7 @@ func (s *systemStatusServer) Gossip(
 		return nil, err
 	}
 
-	if req.Redact {
+	if req.Redact && DebugZipSensitiveFieldsRedactionEnabled.Get(&s.st.SV) {
 		gossipData = s.redactGossipResponse(gossipData)
 	}
 
@@ -1178,7 +1178,7 @@ func (s *statusServer) Details(
 			return nil, err
 		}
 
-		if req.Redact {
+		if req.Redact && DebugZipSensitiveFieldsRedactionEnabled.Get(&s.st.SV) {
 			detailsResponse = s.redactDetailsResponse(detailsResponse)
 		}
 
@@ -1198,7 +1198,7 @@ func (s *statusServer) Details(
 		resp.SQLAddress = *addr
 	}
 
-	if req.Redact {
+	if req.Redact && DebugZipSensitiveFieldsRedactionEnabled.Get(&s.st.SV) {
 		resp = s.redactDetailsResponse(resp)
 	}
 
@@ -1797,7 +1797,7 @@ func (s *statusServer) NodesList(
 		return nil, err
 	}
 
-	if request != nil && request.Redact {
+	if request != nil && request.Redact && DebugZipSensitiveFieldsRedactionEnabled.Get(&s.st.SV) {
 		nodeListResponse = s.redactNodeListResponse(nodeListResponse)
 	}
 
@@ -1843,7 +1843,7 @@ func (s *systemStatusServer) Nodes(
 		return nil, srverrors.ServerError(ctx, err)
 	}
 
-	if req != nil && req.Redact {
+	if req != nil && req.Redact && DebugZipSensitiveFieldsRedactionEnabled.Get(&s.st.SV) {
 		resp = s.redactNodesResponse(resp)
 	}
 
@@ -2052,7 +2052,7 @@ func (s *statusServer) nodeStatus(
 		return nil, srverrors.ServerError(ctx, err)
 	}
 
-	if req.Redact {
+	if req != nil && req.Redact && DebugZipSensitiveFieldsRedactionEnabled.Get(&s.st.SV) {
 		nodeStatus = *s.redactNodeStatusResponse(&nodeStatus)
 	}
 
@@ -2347,7 +2347,7 @@ func (s *systemStatusServer) Ranges(
 		resp.Next = int32(next)
 	}
 
-	if req.Redact {
+	if req.Redact && DebugZipSensitiveFieldsRedactionEnabled.Get(&s.st.SV) {
 		resp = s.redactRangesResponse(resp)
 	}
 

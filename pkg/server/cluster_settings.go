@@ -12,6 +12,11 @@ package server
 
 import "github.com/cockroachdb/cockroach/pkg/settings"
 
+const (
+	baseDebugZipSettingName                            = "debug.zip"
+	DebugZipSensitiveFieldsRedactionEnabledSettingName = baseDebugZipSettingName + "redact_sensitive.enabled"
+)
+
 // SQLStatsResponseMax controls the maximum number of statements and transactions returned by the
 // CombinedStatements endpoint.
 var SQLStatsResponseMax = settings.RegisterIntSetting(
@@ -50,3 +55,14 @@ var PersistedInsightsUIEnabled = settings.RegisterBoolSetting(
 	"sql.stats.persisted_insights.ui.enabled",
 	"enable the insights endpoint to get data from the persisted insights tables",
 	false)
+
+// DebugZipSensitiveFieldsRedactionEnabled guards whether hostname / ip address and other sensitive fields
+// should be redacted in the debug zip
+var DebugZipSensitiveFieldsRedactionEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	DebugZipSensitiveFieldsRedactionEnabledSettingName,
+	"enables or disables hostname / ip address redaction in debug zip",
+	false,
+	settings.WithPublic,
+	settings.WithReportable(true),
+)
