@@ -9,6 +9,8 @@
 #   maintaining team ownership) prefixing the line with `#!`.
 #   (This will hide the line from GitHub, but our internal tooling continues to
 #   parse it).
+#   Note that it is customary also to use a team name with `-noreview` suffix in
+#   the lines that start with `#!` (the suffix is trimmed in codeowners package).
 # - there is a special team @cockroachdb/unowned (only to be used with #! prefix as
 #   to not confuse Github) for the rare situations in which a file has no canonical owner.
 #   Please use this sparingly.
@@ -114,6 +116,9 @@
 /pkg/sql/schema*.go          @cockroachdb/sql-foundations
 /pkg/sql/zone*.go            @cockroachdb/sql-foundations
 /pkg/cmd/sql-bootstrap-data/ @cockroachdb/sql-foundations
+
+#!/pkg/sql/logictest/tests/cockroach-go-testserver-*/*.go @cockroachdb/sql-foundations-noreview
+#!/pkg/sql/logictest/tests/local-mixed-*/*.go             @cockroachdb/sql-foundations-noreview
 
 # Beware to not assign the CLI package directory to a single team, at
 # least until we heavily refactor the package to extract team-specific
