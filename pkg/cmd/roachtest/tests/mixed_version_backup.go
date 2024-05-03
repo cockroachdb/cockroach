@@ -2276,6 +2276,11 @@ func (bc *backupCollection) verifyBackupCollection(
 		restoreCmd, bc.uri(), aostFor(bc.restoreAOST), optionsStr,
 	)
 	l.Printf("Running restore: %s", restoreStmt)
+	if d.testUtils.onlineRestore {
+		if err := d.testUtils.Exec(ctx,rng,"SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_do_download_files'"); err != nil {
+			return fmt.Errorf("backup %s: error setting pausepoint: %w", bc.name, err)
+		}
+	}
 	var jobID int
 	if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
 		return fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
@@ -2284,24 +2289,40 @@ func (bc *backupCollection) verifyBackupCollection(
 	if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
 		return err
 	}
+	var restoredContents []tableContents
 	if d.testUtils.onlineRestore {
 		var downloadJobID int
 		if err := d.testUtils.QueryRow(ctx, rng, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`).Scan(&downloadJobID); err != nil {
 			return err
 		}
+		// COMPUTE FINGERPRINTS BEFORE DOWNLOAD JOB BEGINS
+    var err error 
+		restoredContents, err = d.computeTableContents(
+			ctx, l, rng, restoredTables, bc.contents, "", /* timestamp */
+		)
+		if err != nil {
+			return fmt.Errorf("backup %s: error loading restored contents: %w", bc.name, err)
+		}
+		if err := d.testUtils.Exec(ctx,rng,"RESET CLUSTER SETTING jobs.debug.pausepoints"); err != nil {
+			return fmt.Errorf("backup %s: error resetting pausepoint: %w", bc.name, err)
+		}
+		// RESUME AND COMPLETE
+		if err := d.testUtils.Exec(ctx,rng,"RESUME JOB $1", downloadJobID); err != nil {
+			return fmt.Errorf("backup %s: error resuming download job: %w", bc.name, err)
+		}
 		if err := d.testUtils.waitForJobSuccess(ctx, l, rng, downloadJobID, internalSystemJobs); err != nil {
 			return err
 		}
+	} else {
+		var err error
+		restoredContents, err = d.computeTableContents(
+			ctx, l, rng, restoredTables, bc.contents, "", /* timestamp */
+		)
+	
+		if err != nil {
+			return fmt.Errorf("backup %s: error loading restored contents: %w", bc.name, err)
+		}
 	}
-
-	restoredContents, err := d.computeTableContents(
-		ctx, l, rng, restoredTables, bc.contents, "", /* timestamp */
-	)
-
-	if err != nil {
-		return fmt.Errorf("backup %s: error loading restored contents: %w", bc.name, err)
-	}
-
 	for j, contents := range bc.contents {
 		table := bc.tables[j]
 		restoredTableContents := restoredContents[j]
