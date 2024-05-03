@@ -148,6 +148,10 @@ type StartOpts struct {
 	// IsRestart allows skipping steps that are used during initial start like
 	// initialization and sequential node starts.
 	IsRestart bool
+
+	// EnableFluentSink determines whether to enable the fluent-servers attribute
+	// in the CockroachDB logging configuration.
+	EnableFluentSink bool
 }
 
 func (s *StartOpts) IsVirtualCluster() bool {
@@ -903,21 +907,25 @@ func (c *SyncedCluster) generateStartArgs(
 
 	// if neither --log nor --log-config-file are present
 	if idx1 == -1 && idx2 == -1 {
-		loggingConfig, err := execLoggingTemplate(loggingTemplateData{
-			LogDir: logDir,
-		})
-		if err != nil {
-			return nil, errors.Wrap(err, "failed rendering logging template")
+		if !startOpts.EnableFluentSink {
+			args = append(args, "--log", `file-defaults: {dir: '`+logDir+`', exit-on-error: false}`)
+		} else {
+			loggingConfig, err := execLoggingTemplate(loggingTemplateData{
+				LogDir: logDir,
+			})
+			if err != nil {
+				return nil, errors.Wrap(err, "failed rendering logging template")
+			}
+
+			loggingConfigFile := fmt.Sprintf("cockroachdb-logging%s.yaml",
+				virtualClusterDirSuffix(startOpts.VirtualClusterName, startOpts.SQLInstance))
+
+			if err := c.PutString(ctx, l, Nodes{node}, loggingConfig, loggingConfigFile, 0644); err != nil {
+				return nil, errors.Wrap(err, "failed writing remote logging configuration: %w")
+			}
+
+			args = append(args, "--log-config-file", loggingConfigFile)
 		}
-
-		loggingConfigFile := fmt.Sprintf("cockroachdb-logging%s.yaml",
-			virtualClusterDirSuffix(startOpts.VirtualClusterName, startOpts.SQLInstance))
-
-		if err := c.PutString(ctx, l, c.Nodes, loggingConfig, loggingConfigFile, 0644); err != nil {
-			return nil, errors.Wrap(err, "failed writing remote logging configuration: %w")
-		}
-
-		args = append(args, "--log-config-file", loggingConfigFile)
 	}
 
 	listenHost := ""
