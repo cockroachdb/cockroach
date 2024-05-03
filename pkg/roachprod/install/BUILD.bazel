@@ -17,6 +17,7 @@ go_library(
         "staging.go",
     ],
     embedsrcs = [
+        "files/cockroachdb-logging.yaml",
         "scripts/download.sh",
         "scripts/start.sh",
         "scripts/open_ports.sh",
