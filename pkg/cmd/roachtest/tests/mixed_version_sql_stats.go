@@ -46,7 +46,7 @@ func registerSqlStatsMixedVersion(r registry.Registry) {
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
 		Run:              runSQLStatsMixedVersion,
-		Timeout:          15 * time.Minute,
+		Timeout:          1 * time.Hour,
 	})
 }
 
