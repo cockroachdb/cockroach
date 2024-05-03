@@ -188,7 +188,7 @@ func newCluster(
 // name is set to select a load balancer.
 func preferLoadBalancer(name string) bool {
 	parts := strings.Split(name, ":")
-	return len(parts) == 2 && parts[1] == "L"
+	return len(parts) == 2 && strings.ToLower(parts[1]) == "lb"
 }
 
 // userClusterNameRegexp returns a regexp that matches all clusters owned by the
