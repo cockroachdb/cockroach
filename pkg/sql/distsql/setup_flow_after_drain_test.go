@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // Test that we can send a setup flow request to the distSQLSrv after the
@@ -39,7 +40,7 @@ func TestSetupFlowAfterDrain(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	cfg := s.DistSQLServer().(*ServerImpl).ServerConfig
 
-	remoteFlowRunner := flowinfra.NewRemoteFlowRunner(cfg.AmbientContext, cfg.Stopper, nil /* acc */)
+	remoteFlowRunner := flowinfra.NewRemoteFlowRunner(cfg.AmbientContext, cfg.Stopper, mon.NewStandaloneUnlimitedAccount())
 	remoteFlowRunner.Init(cfg.Metrics)
 	distSQLSrv := NewServer(
 		ctx,

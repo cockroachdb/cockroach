@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
@@ -78,6 +79,7 @@ func newMemPebbleSSTReader(
 ) (storage.SimpleMVCCIterator, error) {
 
 	inMemorySSTs := make([][]byte, 0, len(storeFiles))
+	memAcc := mon.NewStandaloneUnlimitedAccount()
 
 	for _, sf := range storeFiles {
 		f, _, err := getFileWithRetry(ctx, sf.FilePath, sf.Store)
@@ -90,7 +92,7 @@ func newMemPebbleSSTReader(
 			return nil, err
 		}
 		if encryption != nil {
-			content, err = DecryptFile(ctx, content, encryption.Key, nil /* mm */)
+			content, err = DecryptFile(ctx, content, encryption.Key, memAcc)
 			if err != nil {
 				return nil, err
 			}

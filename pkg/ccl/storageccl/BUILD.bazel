@@ -52,6 +52,7 @@ go_test(
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/mon",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",
     ],

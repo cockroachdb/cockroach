@@ -126,8 +126,8 @@ type EvalContext interface {
 
 	// GetResponseMemoryAccount returns a memory account to be used when
 	// generating BatchResponses. Currently only used for MVCC scans, and only
-	// non-nil on those paths (a nil account is safe to use since it functions
-	// as an unlimited account).
+	// non-nil on those paths (a nil account is replaced with standalone
+	// unlimited one later).
 	GetResponseMemoryAccount() *mon.BoundAccount
 
 	GetMaxBytes(context.Context) int64

@@ -1598,10 +1598,6 @@ func EncodeSecondaryIndexes(
 	if len(secondaryIndexEntries) > 0 {
 		panic(errors.AssertionFailedf("length of secondaryIndexEntries was non-zero"))
 	}
-
-	if indexBoundAccount == nil || indexBoundAccount.Monitor() == nil {
-		panic(errors.AssertionFailedf("memory monitor passed to EncodeSecondaryIndexes was nil"))
-	}
 	const sizeOfIndexEntry = int64(unsafe.Sizeof(IndexEntry{}))
 
 	for i := range indexes {

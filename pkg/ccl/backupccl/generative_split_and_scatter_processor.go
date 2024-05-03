@@ -404,11 +404,13 @@ func makeBackupMetadata(
 ) ([]backuppb.BackupManifest, backupinfo.LayerToBackupManifestFileIterFactory, error) {
 
 	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	memAcc := flowCtx.EvalCtx.Planner.Mon().MakeBoundAccount()
+	defer memAcc.Close(ctx)
 
 	kmsEnv := backupencryption.MakeBackupKMSEnv(execCfg.Settings, &execCfg.ExternalIODirConfig,
 		execCfg.InternalDB, spec.User())
 
-	backupManifests, _, err := backupinfo.LoadBackupManifestsAtTime(ctx, nil, spec.URIs,
+	backupManifests, _, err := backupinfo.LoadBackupManifestsAtTime(ctx, &memAcc, spec.URIs,
 		spec.User(), execCfg.DistSQLSrv.ExternalStorageFromURI, spec.Encryption, &kmsEnv, spec.EndTime)
 	if err != nil {
 		return nil, nil, err

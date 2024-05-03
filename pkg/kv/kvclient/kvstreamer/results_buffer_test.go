@@ -56,7 +56,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
-	budget := newBudget(nil /* acc */, math.MaxInt /* limitBytes */)
+	budget := newBudget(mon.NewStandaloneUnlimitedAccount(), math.MaxInt /* limitBytes */)
 	diskBuffer := TestResultDiskBufferConstructor(tempEngine, diskMonitor)
 	b := newInOrderResultsBuffer(budget, diskBuffer)
 	defer b.close(ctx)
@@ -115,7 +115,9 @@ func TestInOrderResultsBuffer(t *testing.T) {
 			b.Lock()
 			numToAdd := rng.Intn(len(addOrder)) + 1
 			for i := 0; i < numToAdd; i++ {
-				b.addLocked(results[addOrder[0]])
+				r := results[addOrder[0]]
+				require.NoError(t, budget.consumeLocked(ctx, r.memoryTok.toRelease, false /* allowDebt */))
+				b.addLocked(r)
 				addOrder = addOrder[1:]
 			}
 			b.doneAddingLocked(ctx)
