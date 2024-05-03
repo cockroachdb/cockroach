@@ -1976,6 +1976,11 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	}
 
 	fingerprintAOST := latestIncBackupEndTime
+	if fingerprintAOST == "" {
+		// If latestIncBackupEndTime is empty, we never took an incremental backup.
+		// Fingerprint on the full backup endtime instead.
+		fingerprintAOST = fullBackupEndTime
+	}
 	if collection.restoreAOST != "" {
 		fingerprintAOST = collection.restoreAOST
 	}
