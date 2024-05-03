@@ -457,6 +457,37 @@ func TestReducedAuditConfig(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatal(errors.Newf("unexpected number of entries found (not 1)"))
 	}
+
+	// Open 3rd connection for the test user. Regression test for #123592.
+	testUserDb3 := s.ApplicationLayer().SQLConn(t, serverutils.User(username.TestUser))
+	testRunner3 := sqlutils.MakeSQLRunner(testUserDb3)
+
+	// Run a query on the new connection. The new connection will cause the reduced audit config to be re-computed.
+	// The user now has a corresponding audit setting. We use a new query here to differentiate.
+	testRunner3.ExecMultiple(t,
+		`BEGIN`,
+		`SELECT * FROM u`,
+		`COMMIT`,
+	)
+
+	log.FlushFiles()
+
+	entries, err = log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`error getting user role memberships`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Expect the number of entries to be 0.
+	if len(entries) != 0 {
+		t.Fatal(errors.Newf("unexpected entries found"))
+	}
 }
 
 func setupQueries(t *testing.T, rootRunner *sqlutils.SQLRunner) {
