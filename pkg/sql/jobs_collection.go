@@ -38,7 +38,7 @@ type txnJobsCollection struct {
 	// job for a relation in one transaction. These jobs will be created and
 	// queued at commit time.
 	uniqueToCreate map[descpb.ID]*jobs.Record
-	// uniqueToCreate contains job records that are not unique to a descriptor
+	// nonUniqueToCreate contains job records that are not unique to a descriptor
 	// IDs. These jobs will be created and queued at commit time.
 	nonUniqueToCreate []*jobs.Record
 }
