@@ -89,6 +89,14 @@ const (
 	// across tenant boundaries.
 	CanDebugProcess // can_debug_process
 
+	// CanViewAllMetrics describes the ability of a tenant to read host
+	// metrics. This is desired in cases where a shared-process tenant is
+	// used for physical replication, and a single process-wide metric
+	// view from the tenant is preferable. The capability is wider than
+	// would be preferred (Ideally it would gate access to just "System"
+	// metrics, but this implementation is simpler).
+	CanViewAllMetrics // can_view_all_metrics
+
 	MaxCapabilityID ID = iota - 1
 )
 
@@ -120,6 +128,7 @@ var capabilities = [MaxCapabilityID + 1]Capability{
 	ExemptFromRateLimiting: boolCapability(ExemptFromRateLimiting),
 	TenantSpanConfigBounds: spanConfigBoundsCapability(TenantSpanConfigBounds),
 	CanDebugProcess:        boolCapability(CanDebugProcess),
+	CanViewAllMetrics:      boolCapability(CanViewAllMetrics),
 }
 
 // EnableAll enables maximum access to services.

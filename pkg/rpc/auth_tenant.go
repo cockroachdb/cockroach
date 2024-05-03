@@ -384,17 +384,23 @@ func (a tenantAuthorizer) authSpanConfigConformance(
 	return nil
 }
 
-// authTSDBQuery authorizes the provided tenant to invoke the TSDB Query RPC
-// with the provided args. A non-system tenant is only allowed to query its own
-// time series.
+// authTSDBQuery authorizes the provided tenant to invoke the TSDB
+// Query RPC with the provided args. A non-system tenant is allowed to
+// query metric names in its registry as long as the TenantID is set on
+// the query. System-level queries are permitted without a TenantID.
 func (a tenantAuthorizer) authTSDBQuery(
 	ctx context.Context, id roachpb.TenantID, request *tspb.TimeSeriesQueryRequest,
 ) error {
 	for _, query := range request.Queries {
 		if !query.TenantID.IsSet() {
-			return authError("tsdb query with unspecified tenant not permitted")
-		}
-		if !query.TenantID.Equal(id) {
+			// If tenantID is unset, we make sure the tenant has permission
+			// to query all metrics.
+			if err := a.capabilitiesAuthorizer.HasTSDBAllMetricsCapability(ctx, id); err != nil {
+				return authError(err.Error())
+			}
+		} else if !query.TenantID.Equal(id) {
+			// Regardless of permissions, if you set a tenantID it should still
+			// only be this one.
 			return authErrorf("tsdb query with invalid tenant not permitted")
 		}
 	}
