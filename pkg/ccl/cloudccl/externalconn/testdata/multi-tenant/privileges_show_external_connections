@@ -1,0 +1,52 @@
+subtest usage-privilege-on-ec
+
+# Create an external connection as root, only root should be able to SHOW this object.
+exec-sql
+CREATE EXTERNAL CONNECTION foo_conn AS 'nodelocal://1/foo'
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION bar_conn AS 'nodelocal://1/bar'
+----
+
+query-sql
+SHOW CREATE ALL EXTERNAL CONNECTIONS
+----
+bar_conn CREATE EXTERNAL CONNECTION 'bar_conn' AS 'nodelocal://1/bar' STORAGE
+foo_conn CREATE EXTERNAL CONNECTION 'foo_conn' AS 'nodelocal://1/foo' STORAGE
+
+exec-sql
+CREATE USER testuser
+----
+
+exec-sql
+GRANT SYSTEM VIEWCLUSTERMETADATA TO testuser
+----
+
+query-sql user=testuser
+SHOW CREATE ALL EXTERNAL CONNECTIONS;
+----
+
+query-sql user=testuser
+SHOW CREATE EXTERNAL CONNECTION foo_conn;
+----
+
+exec-sql
+GRANT USAGE ON EXTERNAL CONNECTION foo_conn TO testuser;
+----
+
+query-sql user=testuser
+SHOW CREATE ALL EXTERNAL CONNECTIONS
+----
+foo_conn CREATE EXTERNAL CONNECTION 'foo_conn' AS 'nodelocal://1/foo' STORAGE
+
+query-sql user=testuser
+SHOW CREATE EXTERNAL CONNECTION foo_conn
+----
+foo_conn CREATE EXTERNAL CONNECTION 'foo_conn' AS 'nodelocal://1/foo' STORAGE
+
+query-sql user=testuser
+SHOW CREATE EXTERNAL CONNECTION bar_conn
+----
+
+subtest end

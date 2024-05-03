@@ -65,9 +65,23 @@ func loadExternalConnections(
 	}
 
 	for _, row := range rows {
-		connectionName := tree.MustBeDString(row[0])
+		connectionName := string(tree.MustBeDString(row[0]))
+
+		// Check that the user has USAGE privileges on the External Connection object.
+		ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
+			ConnectionName: connectionName,
+		}
+		hasPriv, err := params.p.HasPrivilege(params.ctx, ecPrivilege,
+			privilege.USAGE, params.p.User())
+		if err != nil {
+			return nil, err
+		}
+		if !hasPriv {
+			continue
+		}
+
 		connection, err := externalconn.LoadExternalConnection(
-			params.ctx, string(connectionName), params.p.InternalSQLTxn(),
+			params.ctx, connectionName, params.p.InternalSQLTxn(),
 		)
 		if err != nil {
 			return nil, err
