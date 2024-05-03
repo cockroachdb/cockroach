@@ -99,10 +99,10 @@ case $1 in
 ---
 api_key: ${dd_api_key}
 site: ${dd_site}
+hostname: \$(hostname)
 tags:
 # Datadog reserved tags.
 - env:development
-- service:drt-cockroachdb
 
 # Custom tags.
 - cluster:${cluster%:*}
@@ -112,13 +112,19 @@ EOF"
     roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/conf.d/cockroachdb.d/conf.yaml > /dev/null << EOF
 ---
 init_config:
+
 instances:
 - openmetrics_endpoint: http://localhost:26258/_status/vars
   tls_verify: false
+  service: drt-cockroachdb
 EOF"
 
     roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
 
+    roachprod fluent-bit-start ${cluster} \
+      --datadog-api-key "${dd_api_key}" \
+      --datadog-service drt-cockroachdb \
+      --datadog-team drt
     exit 0
     ;;
   "create")

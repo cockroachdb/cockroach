@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "fluentbit",
+    srcs = ["fluentbit.go"],
+    embedsrcs = [
+        "files/fluent-bit.service",
+        "files/fluent-bit.yaml.tmpl",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
