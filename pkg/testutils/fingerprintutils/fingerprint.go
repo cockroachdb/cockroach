@@ -22,6 +22,7 @@ import (
 
 type FingerprintOption struct {
 	AOST            hlc.Timestamp
+	AostString      string
 	Stripped        bool
 	RevisionHistory bool
 	StartTime       hlc.Timestamp
@@ -30,6 +31,12 @@ type FingerprintOption struct {
 func AOST(aost hlc.Timestamp) func(*FingerprintOption) {
 	return func(opt *FingerprintOption) {
 		opt.AOST = aost
+	}
+}
+
+func AOSTString(aostString string) func(*FingerprintOption) {
+	return func(opt *FingerprintOption) {
+		opt.AostString = aostString
 	}
 }
 
@@ -77,6 +84,9 @@ func FingerprintTable(
 	aostCmd := ""
 	if !opts.AOST.IsEmpty() {
 		aostCmd = fmt.Sprintf("AS OF SYSTEM TIME '%s'", opts.AOST.AsOfSystemTime())
+	}
+	if opts.AostString != "" {
+		aostCmd = fmt.Sprintf("AS OF SYSTEM TIME '%s'", opts.AostString)
 	}
 
 	cmd := fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint(crdb_internal.table_span(%d),true) %s`, tableID, aostCmd)

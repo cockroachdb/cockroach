@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -588,37 +589,51 @@ func newFingerprintContents(db *gosql.DB, table string) *fingerprintContents {
 	return &fingerprintContents{db: db, table: table}
 }
 
+func getTableID(db *gosql.DB, dbName, tableName string) (uint32, error) {
+	tableIDQuery := `
+	SELECT tables.id FROM system.namespace tables
+		JOIN system.namespace dbs ON dbs.id = tables."parentID"
+		JOIN system.namespace schemas ON schemas.id = tables."parentSchemaID"
+		WHERE dbs.name = $1 AND schemas.name = $2 AND tables.name = $3
+	`
+	var tableID uint32
+	result := db.QueryRow(
+		tableIDQuery, dbName,
+		"public",
+		tableName,
+	)
+	if err := result.Scan(&tableID); err != nil {
+		return 0, err
+	}
+	return tableID, nil
+}
+
 // Load computes the fingerprints for the underlying table and stores
 // the contents in the `fingeprints` field.
 func (fc *fingerprintContents) Load(
 	ctx context.Context, l *logger.Logger, timestamp string, _ tableContents,
 ) error {
 	l.Printf("computing fingerprints for table %s", fc.table)
-	query := fmt.Sprintf(
-		"SELECT index_name, fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s]%s ORDER BY index_name",
-		fc.table, aostFor(timestamp),
-	)
-	rows, err := fc.db.QueryContext(ctx, query)
+	sep := strings.Split(fc.table, ".")
+	tableID, err := getTableID(fc.db, sep[0], sep[1])
 	if err != nil {
-		return fmt.Errorf("error when running query [%s]: %w", query, err)
-	}
-	defer rows.Close()
-
-	var fprints []string
-	for rows.Next() {
-		var indexName, fprint string
-		if err := rows.Scan(&indexName, &fprint); err != nil {
-			return fmt.Errorf("error computing fingerprint for table %s, index %s: %w", fc.table, indexName, err)
-		}
-
-		fprints = append(fprints, fmt.Sprintf("%s:%s", indexName, fprint /* actualFingerprint */))
+		return err
 	}
 
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("error iterating over fingerprint rows for table %s: %w", fc.table, err)
+	//query := fmt.Sprintf(
+	//	"SELECT index_name, fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s]%s ORDER BY index_name",
+	//	fc.table, aostFor(timestamp),
+	//)
+	fprint, err := fingerprintutils.FingerprintTable(ctx, fc.db, tableID,
+		fingerprintutils.AOSTString(timestamp),
+		fingerprintutils.Stripped(),
+	)
+	if err != nil {
+		return err
 	}
 
-	fc.fingerprints = strings.Join(fprints, "\n")
+	fc.fingerprints = fmt.Sprintf("%s:%d", sep[1], fprint /* actualFingerprint */)
+
 	return nil
 }
 

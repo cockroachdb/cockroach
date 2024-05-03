@@ -250,6 +250,7 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
+        "//pkg/testutils/fingerprintutils",
         "//pkg/testutils/floatcmp",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/release",
