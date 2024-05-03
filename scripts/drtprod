@@ -30,15 +30,15 @@ case $1 in
     if [[ "$*" != *"--restart"* ]]; then
       # implied for long-lived DRT clusters; avoid on init w/ --restart=false.
       shift
-      set -- start "--restart" "$@"
+      set -- start "--enable-fluent-sink" "--restart" "$@"
     fi
     if [[ "$*" != *"--secure"* ]]; then
       shift
-      set -- start "--secure" "$@"
+      set -- start "--enable-fluent-sink" "--secure" "$@"
     fi
     if [[ "$*" != *"--sql-port 26257"* ]]; then
       shift
-      set -- start "--sql-port" "26257" "$@"
+      set -- start "--enable-fluent-sink" "--sql-port" "26257" "$@"
     fi
     ;;
   "sql")

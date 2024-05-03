@@ -376,6 +376,9 @@ func initFlags() {
 			"limit the number of files that can be created by the cockroach process")
 		cmd.Flags().IntVar(&startOpts.SQLPort,
 			"sql-port", startOpts.SQLPort, "port on which to listen for SQL clients")
+		cmd.Flags().BoolVar(&startOpts.EnableFluentSink,
+			"enable-fluent-sink", startOpts.EnableFluentSink,
+			"whether to enable the fluent-servers attribute in the CockroachDB logging configuration")
 	}
 
 	for _, cmd := range []*cobra.Command{
