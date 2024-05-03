@@ -296,8 +296,8 @@ func deserializeColumnarBatchesFromArrow(
 		ctx,
 		// This allocator is not connected to the memory accounting system since
 		// the accounting for these batches will be done by the SQL client, so
-		// we pass nil here.
-		nil, /* unlimitedAcc */
+		// we pass a standalone unlimited account here.
+		mon.NewStandaloneUnlimitedAccount(), /* unlimitedAcc */
 		// It'll be the responsibility of the SQL client to update the
 		// datum-backed vectors with the eval context, so we use the factory
 		// with no eval context.
