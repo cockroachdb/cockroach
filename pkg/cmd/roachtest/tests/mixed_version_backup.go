@@ -624,6 +624,7 @@ func (fc *fingerprintContents) Load(
 	//	"SELECT index_name, fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s]%s ORDER BY index_name",
 	//	fc.table, aostFor(timestamp),
 	//)
+
 	fprint, err := fingerprintutils.FingerprintTable(ctx, fc.db, tableID,
 		fingerprintutils.AOSTString(timestamp),
 		fingerprintutils.Stripped(),
@@ -2282,6 +2283,15 @@ func (bc *backupCollection) verifyBackupCollection(
 
 	if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
 		return err
+	}
+	if d.testUtils.onlineRestore {
+		var downloadJobID int
+		if err := d.testUtils.QueryRow(ctx, rng, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`).Scan(&downloadJobID); err != nil {
+			return err
+		}
+		if err := d.testUtils.waitForJobSuccess(ctx, l, rng, downloadJobID, internalSystemJobs); err != nil {
+			return err
+		}
 	}
 
 	restoredContents, err := d.computeTableContents(
