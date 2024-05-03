@@ -960,6 +960,7 @@ func PgURL(
 
 	nodes := c.TargetNodes()
 	ips := make([]string, len(nodes))
+
 	if opts.External {
 		for i := 0; i < len(nodes); i++ {
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
