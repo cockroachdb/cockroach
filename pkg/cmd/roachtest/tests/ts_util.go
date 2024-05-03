@@ -21,30 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 )
 
-// tsQueryType represents the type of the time series query to retrieve. In
-// most cases, tests are verifying either the "total" or "rate" metrics, so
-// this enum type simplifies the API of tspb.Query.
-type tsQueryType int
-
-const (
-	// total indicates to query the total of the metric. Specifically,
-	// downsampler will be average, aggregator will be sum, and derivative will
-	// be none.
-	total tsQueryType = iota
-	// rate indicates to query the rate of change of the metric. Specifically,
-	// downsampler will be average, aggregator will be sum, and derivative will
-	// be non-negative derivative.
-	rate
-)
-
 // defaultSamplePeriod is the default sampling period for getMetrics.
 const defaultSamplePeriod = time.Minute
-
-type tsQuery struct {
-	name      string
-	queryType tsQueryType
-	sources   []string
-}
 
 func mustGetMetrics(
 	ctx context.Context,
@@ -52,7 +30,7 @@ func mustGetMetrics(
 	t test.Test,
 	adminURL string,
 	start, end time.Time,
-	tsQueries []tsQuery,
+	tsQueries []roachtestutil.TsQuery,
 ) tspb.TimeSeriesQueryResponse {
 	response, err := getMetrics(ctx, c, t, adminURL, start, end, tsQueries)
 	if err != nil {
@@ -67,57 +45,9 @@ func getMetrics(
 	t test.Test,
 	adminURL string,
 	start, end time.Time,
-	tsQueries []tsQuery,
+	tsQueries []roachtestutil.TsQuery,
 ) (tspb.TimeSeriesQueryResponse, error) {
-	return getMetricsWithSamplePeriod(ctx, c, t, adminURL, start, end, defaultSamplePeriod, tsQueries)
-}
-
-func getMetricsWithSamplePeriod(
-	ctx context.Context,
-	c cluster.Cluster,
-	t test.Test,
-	adminURL string,
-	start, end time.Time,
-	samplePeriod time.Duration,
-	tsQueries []tsQuery,
-) (tspb.TimeSeriesQueryResponse, error) {
-	url := "http://" + adminURL + "/ts/query"
-	queries := make([]tspb.Query, len(tsQueries))
-	for i := 0; i < len(tsQueries); i++ {
-		switch tsQueries[i].queryType {
-		case total:
-			queries[i] = tspb.Query{
-				Name:             tsQueries[i].name,
-				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
-				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
-				Sources:          tsQueries[i].sources,
-			}
-		case rate:
-			queries[i] = tspb.Query{
-				Name:             tsQueries[i].name,
-				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
-				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
-				Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
-				Sources:          tsQueries[i].sources,
-			}
-		default:
-			panic("unexpected")
-		}
-	}
-	request := tspb.TimeSeriesQueryRequest{
-		StartNanos: start.UnixNano(),
-		EndNanos:   end.UnixNano(),
-		// Ask for one minute intervals. We can't just ask for the whole hour
-		// because the time series query system does not support downsampling
-		// offsets.
-		SampleNanos: samplePeriod.Nanoseconds(),
-		Queries:     queries,
-	}
-	var response tspb.TimeSeriesQueryResponse
-	client := roachtestutil.DefaultHTTPClient(c, t.L(), roachtestutil.HTTPTimeout(500*time.Millisecond))
-	err := client.PostProtobuf(ctx, url, &request, &response)
-	return response, err
-
+	return roachtestutil.GetMetricsWithSamplePeriod(ctx, c, t, adminURL, start, end, defaultSamplePeriod, tsQueries)
 }
 
 func verifyTxnPerSecond(
@@ -134,9 +64,9 @@ func verifyTxnPerSecond(
 		t.Fatal(err)
 	}
 	adminURL := adminUIAddrs[0]
-	response := mustGetMetrics(ctx, c, t, adminURL, start, end, []tsQuery{
-		{name: "cr.node.txn.commits", queryType: rate},
-		{name: "cr.node.txn.commits", queryType: total},
+	response := mustGetMetrics(ctx, c, t, adminURL, start, end, []roachtestutil.TsQuery{
+		{Name: "cr.node.txn.commits", QueryType: roachtestutil.Rate},
+		{Name: "cr.node.txn.commits", QueryType: roachtestutil.Total},
 	})
 
 	// Drop the first two minutes of datapoints as a "ramp-up" period.
@@ -185,8 +115,8 @@ func verifyLookupsPerSec(
 		t.Fatal(err)
 	}
 	adminURL := adminUIAddrs[0]
-	response := mustGetMetrics(ctx, c, t, adminURL, start, end, []tsQuery{
-		{name: "cr.node.distsender.rangelookups", queryType: rate},
+	response := mustGetMetrics(ctx, c, t, adminURL, start, end, []roachtestutil.TsQuery{
+		{Name: "cr.node.distsender.rangelookups", QueryType: roachtestutil.Rate},
 	})
 
 	// Drop the first two minutes of datapoints as a "ramp-up" period.

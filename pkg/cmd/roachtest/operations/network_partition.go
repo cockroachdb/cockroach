@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 )
 
 type cleanupNetworkPartition struct {
@@ -98,6 +99,7 @@ func registerNetworkPartition(r registry.Registry) {
 		Owner:            registry.OwnerKV,
 		Timeout:          1 * time.Minute,
 		CompatibleClouds: registry.AllClouds,
+		PreValidation:    roachtestutil.ValidateQPSRecovers,
 		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
 		Run:              createNetworkFullPartition,
 	})
@@ -106,6 +108,7 @@ func registerNetworkPartition(r registry.Registry) {
 		Owner:            registry.OwnerKV,
 		Timeout:          1 * time.Minute,
 		CompatibleClouds: registry.AllClouds,
+		PreValidation:    roachtestutil.ValidateQPSRecovers,
 		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
 		Run:              createNetworkPartialPartition,
 	})
