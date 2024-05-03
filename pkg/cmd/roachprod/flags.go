@@ -48,7 +48,7 @@ var (
 	listJSON              bool
 	listMine              bool
 	listPattern           string
-	secure                = false
+	insecure              = false
 	virtualClusterName    string
 	sqlInstance           int
 	extraSSHOptions       = ""
@@ -396,8 +396,8 @@ func initFlags() {
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
 	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, loadBalanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd, jaegerStartCmd, grafanaAnnotationCmd} {
-		cmd.Flags().BoolVar(&secure,
-			"secure", false, "use a secure cluster")
+		cmd.Flags().BoolVar(&insecure,
+			"insecure", insecure, "use an insecure cluster")
 	}
 	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd, stopInstanceCmd, loadBalanceCmd, jaegerStartCmd} {
 		cmd.Flags().StringVar(&virtualClusterName,
