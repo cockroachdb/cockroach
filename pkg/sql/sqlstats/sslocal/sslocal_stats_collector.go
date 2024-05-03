@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -27,7 +28,9 @@ import (
 // StatsCollector is used to collect statistics for transactions and
 // statements for the entire lifetime of a session.
 type StatsCollector struct {
-	sqlstats.ApplicationStats
+	// currentTransactionStatements is the current transaction's statement statistics.
+	// They will be flushed to flushTarget when the transaction is done.
+	ApplicationStats sqlstats.ApplicationStats
 
 	// stmtFingerprintID is the fingerprint ID of the current statement we are
 	// recording. Note that we don't observe sql stats for all statements (e.g. COMMIT).
@@ -60,8 +63,6 @@ type StatsCollector struct {
 	st    *cluster.Settings
 	knobs *sqlstats.TestingKnobs
 }
-
-var _ sqlstats.ApplicationStats = &StatsCollector{}
 
 // NewStatsCollector returns an instance of StatsCollector.
 func NewStatsCollector(
@@ -323,4 +324,30 @@ func (s *StatsCollector) ObserveTransaction(
 // container is at capacity.
 func (s *StatsCollector) StatementsContainerFull() bool {
 	return s.uniqueServerCounts.GetStatementCount() >= s.uniqueServerCounts.UniqueStmtFingerprintLimit.Get(&s.st.SV)
+}
+
+// RecordStatement records the statistics of a statement.
+func (s *StatsCollector) RecordStatement(
+	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
+) (appstatspb.StmtFingerprintID, error) {
+	return s.ApplicationStats.RecordStatement(ctx, key, value)
+}
+
+// RecordTransaction records the statistics of a transaction.
+func (s *StatsCollector) RecordTransaction(
+	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
+) error {
+	return s.ApplicationStats.RecordTransaction(ctx, key, value)
+}
+
+func (s *StatsCollector) RecordStatementExecStats(
+	key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats,
+) error {
+	return s.ApplicationStats.RecordStatementExecStats(key, stats)
+}
+
+func (s *StatsCollector) IterateStatementStats(
+	ctx context.Context, opts sqlstats.IteratorOptions, f sqlstats.StatementVisitor,
+) error {
+	return s.flushTarget.IterateStatementStats(ctx, opts, f)
 }
