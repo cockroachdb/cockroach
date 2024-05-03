@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -222,6 +223,7 @@ type Refresher struct {
 	ex      isql.Executor
 	cache   *TableStatisticsCache
 	randGen autoStatsRand
+	knobs   *TableStatsTestingKnobs
 
 	// mutations is the buffered channel used to pass messages containing
 	// metadata about SQL mutations to the background Refresher thread.
@@ -280,6 +282,17 @@ type settingOverride struct {
 	settings catpb.AutoStatsSettings
 }
 
+// TableStatsTestingKnobs contains testing knobs for table statistics.
+type TableStatsTestingKnobs struct {
+	// DisableInitialTableCollection, if set, indicates that the "initial table
+	// collection" performed by the Refresher should be skipped.
+	DisableInitialTableCollection bool
+}
+
+var _ base.ModuleTestingKnobs = &TableStatsTestingKnobs{}
+
+func (k *TableStatsTestingKnobs) ModuleTestingKnobs() {}
+
 // MakeRefresher creates a new Refresher.
 func MakeRefresher(
 	ambientCtx log.AmbientContext,
@@ -287,6 +300,7 @@ func MakeRefresher(
 	ex isql.Executor,
 	cache *TableStatisticsCache,
 	asOfTime time.Duration,
+	knobs *TableStatsTestingKnobs,
 ) *Refresher {
 	randSource := rand.NewSource(rand.Int63())
 
@@ -296,6 +310,7 @@ func MakeRefresher(
 		ex:               ex,
 		cache:            cache,
 		randGen:          makeAutoStatsRand(randSource),
+		knobs:            knobs,
 		mutations:        make(chan mutation, refreshChanBufferLen),
 		settings:         make(chan settingOverride, refreshChanBufferLen),
 		asOfTime:         asOfTime,
@@ -431,6 +446,9 @@ func (r *Refresher) Start(
 		for {
 			select {
 			case <-initialTableCollection:
+				if r.knobs != nil && r.knobs.DisableInitialTableCollection {
+					continue
+				}
 				r.ensureAllTables(ctx, &r.st.SV, initialTableCollectionDelay)
 				if len(r.mutationCounts) > 0 {
 					ensuringAllTables = true
