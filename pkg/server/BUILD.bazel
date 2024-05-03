@@ -510,6 +510,8 @@ go_test(
         "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/appstatspb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/sql/roleoption",

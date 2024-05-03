@@ -28,8 +28,8 @@ import (
 // we still need to test that the upgrade happens as expected when creating a
 // new cluster.
 func TestSQLStatsTTLChange(t *testing.T) {
-	skip.UnderStressRace(t)
 	defer leaktest.AfterTest(t)()
+	skip.UnderStressRace(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})

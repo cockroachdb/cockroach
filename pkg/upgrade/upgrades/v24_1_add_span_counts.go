@@ -28,5 +28,5 @@ func addSpanCountTable(
 	if err := createSystemTable(ctx, d.DB, d.Settings, d.Codec, systemschema.SpanCountTable, tree.LocalityLevelTable); err != nil {
 		return err
 	}
-	return bumpSystemDatabaseSchemaVersion(ctx, cv, d)
+	return nil
 }
