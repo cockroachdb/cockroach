@@ -739,9 +739,8 @@ func NewColOperator(
 		args.Factory = coldataext.NewExtendedColumnFactory(flowCtx.EvalCtx)
 	}
 	factory := args.Factory
-	if args.ExprHelper == nil {
-		args.ExprHelper = colexecargs.NewExprHelper()
-		args.ExprHelper.SemaCtx = flowCtx.NewSemaContext(flowCtx.Txn)
+	if args.SemaCtx == nil {
+		args.SemaCtx = flowCtx.NewSemaContext(flowCtx.Txn)
 	}
 	if args.MonitorRegistry == nil {
 		args.MonitorRegistry = &colexecargs.MonitorRegistry{}
@@ -981,7 +980,7 @@ func NewColOperator(
 				EstimatedRowCount: args.Spec.EstimatedRowCount,
 			}
 			newAggArgs.Constructors, newAggArgs.ConstArguments, newAggArgs.OutputTypes, err = colexecagg.ProcessAggregations(
-				ctx, evalCtx, args.ExprHelper.SemaCtx, aggSpec.Aggregations, spec.Input[0].ColumnTypes,
+				ctx, evalCtx, args.SemaCtx, aggSpec.Aggregations, spec.Input[0].ColumnTypes,
 			)
 			if err != nil {
 				return r, err
@@ -1313,7 +1312,7 @@ func NewColOperator(
 				EstimatedRowCount: args.Spec.EstimatedRowCount,
 			}
 			newAggArgs.Constructors, newAggArgs.ConstArguments, newAggArgs.OutputTypes, err = colexecagg.ProcessAggregations(
-				ctx, evalCtx, args.ExprHelper.SemaCtx, aggSpec.Aggregations, joinOutputTypes,
+				ctx, evalCtx, args.SemaCtx, aggSpec.Aggregations, joinOutputTypes,
 			)
 			if err != nil {
 				return r, err
@@ -1640,7 +1639,7 @@ func NewColOperator(
 							ColIdx: colIdx,
 						}}
 						aggArgs.Constructors, aggArgs.ConstArguments, aggArgs.OutputTypes, err =
-							colexecagg.ProcessAggregations(ctx, flowCtx.EvalCtx, args.ExprHelper.SemaCtx, aggregations, argTypes)
+							colexecagg.ProcessAggregations(ctx, flowCtx.EvalCtx, args.SemaCtx, aggregations, argTypes)
 						var toClose colexecop.Closers
 						var aggFnsAlloc *colexecagg.AggregateFuncsAlloc
 						if (aggType != execinfrapb.Min && aggType != execinfrapb.Max) ||
@@ -1693,8 +1692,10 @@ func NewColOperator(
 				return r, err
 			}
 			outputIdx := len(spec.Input[0].ColumnTypes)
-			result.Root = colexec.NewInsertOp(ctx, flowCtx, core.Insert, inputs[0].Root, spec.ResultTypes, outputIdx,
-				getStreamingAllocator(ctx, args), args.ExprHelper.SemaCtx)
+			result.Root = colexec.NewInsertOp(
+				ctx, flowCtx, core.Insert, inputs[0].Root, spec.ResultTypes,
+				outputIdx, getStreamingAllocator(ctx, args), args.SemaCtx,
+			)
 			result.ColumnTypes = spec.ResultTypes
 
 		default:
@@ -1803,6 +1804,23 @@ func NewColOperator(
 	return r, err
 }
 
+// processExpr processes the given expression and returns a well-typed
+// expression.
+//
+// evalCtx will not be mutated.
+func processExpr(
+	ctx context.Context,
+	expr execinfrapb.Expression,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	typs []*types.T,
+) (tree.TypedExpr, error) {
+	if expr.LocalExpr != nil {
+		return expr.LocalExpr, nil
+	}
+	return execinfrapb.DeserializeExpr(ctx, expr, typs, semaCtx, evalCtx)
+}
+
 // planAndMaybeWrapFilter plans a filter. If the filter is unsupported, it is
 // planned as a wrapped filterer processor.
 func (r opResult) planAndMaybeWrapFilter(
@@ -1814,7 +1832,7 @@ func (r opResult) planAndMaybeWrapFilter(
 	factory coldata.ColumnFactory,
 ) error {
 	err := r.planFilterExpr(
-		ctx, flowCtx, filter, args.StreamingMemAccount, factory, args.ExprHelper,
+		ctx, flowCtx, args.SemaCtx, filter, args.StreamingMemAccount, factory,
 	)
 	if err != nil {
 		// Filter expression planning failed. Fall back to planning the filter
@@ -1921,7 +1939,7 @@ func (r *postProcessResult) planPostProcessSpec(
 		exprs := make([]tree.TypedExpr, len(post.RenderExprs))
 		var err error
 		for i := range exprs {
-			exprs[i], err = args.ExprHelper.ProcessExpr(ctx, post.RenderExprs[i], flowCtx.EvalCtx, r.ColumnTypes)
+			exprs[i], err = processExpr(ctx, post.RenderExprs[i], flowCtx.EvalCtx, args.SemaCtx, r.ColumnTypes)
 			if err != nil {
 				return err
 			}
@@ -2022,12 +2040,12 @@ func (r opResult) finishScanPlanning(op colfetcher.ScanOperator, resultTypes []*
 func (r opResult) planFilterExpr(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	semaCtx *tree.SemaContext,
 	filter execinfrapb.Expression,
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
-	helper *colexecargs.ExprHelper,
 ) error {
-	expr, err := helper.ProcessExpr(ctx, filter, flowCtx.EvalCtx, r.ColumnTypes)
+	expr, err := processExpr(ctx, filter, flowCtx.EvalCtx, semaCtx, r.ColumnTypes)
 	if err != nil {
 		return err
 	}
