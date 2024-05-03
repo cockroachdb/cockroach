@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/lib/pq/oid"
 	"golang.org/x/exp/slices"
 )
 
@@ -3937,9 +3936,7 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	}, `SELECT
 	quote_ident(schema_id::REGNAMESPACE::STRING) AS schema,
 	quote_ident(name) AS name,
-	array_to_string(proargnames, ',') AS args,
-	proargtypes AS argtypes,
-	pronargdefaults as numdefaults
+	array_to_string(proargnames, ',') AS args
 FROM
 	functions
 	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000)
@@ -3971,7 +3968,6 @@ FROM
 	var droppingEnumMembers []string
 	var possibleBodyReferences []string
 	var possibleParamReferences []string
-	var possibleParamReferencesWithDefaults []string
 	var possibleReturnReferences []string
 	var fnDuplicate bool
 
@@ -3982,44 +3978,6 @@ FROM
 		}
 		possibleReturnReferences = append(possibleReturnReferences, enum["name"].(string))
 		possibleParamReferences = append(possibleParamReferences, fmt.Sprintf(`enum_%d %s`, i, enum["name"]))
-	}
-	// PGLSN was added in 23.2.
-	pgLSNNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V23_2.Version())
-	if err != nil {
-		return nil, err
-	}
-	// REFCURSOR was added in 23.2.
-	refCursorNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V23_2.Version())
-	if err != nil {
-		return nil, err
-	}
-
-	// Generate random parameters / values for builtin types.
-	for i, typeVal := range randgen.SeedTypes {
-		// If we have types where invalid values can exist then skip over these,
-		// since randgen will not introspect to generate valid values (i.e. OID
-		// and REGCLASS).
-		if typeVal.Identical(types.AnyTuple) ||
-			typeVal.IsWildcardType() ||
-			typeVal == types.RegClass ||
-			typeVal.Family() == types.OidFamily ||
-			(pgLSNNotSupported && typeVal.Family() == types.PGLSNFamily) ||
-			(refCursorNotSupported && typeVal.Family() == types.RefCursorFamily) {
-			continue
-		}
-		possibleReturnReferences = append(possibleReturnReferences, typeVal.SQLStandardName())
-		possibleParamReferences = append(possibleParamReferences, fmt.Sprintf("val_%d %s", i+len(enums), typeVal.SQLStandardName()))
-		optionalDefaultValue := randgen.RandDatum(og.params.rng, typeVal, true)
-		possibleParamReferencesWithDefaults = append(possibleParamReferencesWithDefaults, fmt.Sprintf("val_%d %s DEFAULT %s",
-			i+len(enums)+len(randgen.SeedTypes),
-			typeVal.SQLStandardName(),
-			tree.AsStringWithFlags(optionalDefaultValue, tree.FmtParsable)))
 	}
 
 	for _, member := range enumMembers {
@@ -4045,41 +4003,14 @@ FROM
 			args := ""
 			if function["args"] != nil {
 				args = function["args"].(string)
-				argTypesStr := strings.Split(function["argtypes"].(string), " ")
-				argTypes := make([]int, 0, len(argTypesStr))
-				// Determine how many default arguemnts should be used.
-				numDefaultArgs := int(function["numdefaults"].(int16))
-				if numDefaultArgs > 0 {
-					numDefaultArgs = rand.Intn(numDefaultArgs)
-				}
-				// Populate the arguments for this signature, and select some number
-				// of default arguments.
-				for _, oidStr := range argTypesStr {
-					oid, err := strconv.Atoi(oidStr)
-					if err != nil {
-						return nil, err
-					}
-					argTypes = append(argTypes, oid)
-				}
 				argIn := strings.Builder{}
-				for idx := range strings.Split(args, ",") {
-					// We have hit the default arguments that we want to not populate.
-					if idx > len(argTypesStr)-numDefaultArgs {
-						break
-					}
+				// TODO(fqazi): Longer term we should populate actual arguments and
+				// not just NULLs.
+				for range strings.Split(args, ",") {
 					if argIn.Len() > 0 {
 						argIn.WriteString(",")
 					}
-					// Resolve the type for each column and if possible generate a random
-					// value via randgen.
-					oidValue := oid.Oid(argTypes[idx])
-					typ, ok := types.OidToType[oidValue]
-					if !ok {
-						argIn.WriteString("NULL")
-					} else {
-						randomDatum := randgen.RandDatum(og.params.rng, typ, true)
-						argIn.WriteString(tree.AsStringWithFlags(randomDatum, tree.FmtParsable))
-					}
+					argIn.WriteString("NULL")
 				}
 				args = argIn.String()
 			}
@@ -4103,12 +4034,8 @@ FROM
 		},
 		"ParamRefs": func() (string, error) {
 			refs, err := PickBetween(og.params.rng, 1, 99, possibleParamReferences)
-			if err != nil {
-				return "", err
-			}
-			refsWithDefaults, err := PickBetween(og.params.rng, 1, 99, possibleParamReferencesWithDefaults)
 			if useParamRefs && err == nil {
-				return strings.Join(append(refs, refsWithDefaults...), ", "), nil
+				return strings.Join(refs, ", "), nil
 			}
 			return "", nil //nolint:returnerrcheck
 		},
@@ -4182,7 +4109,7 @@ func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opS
 			FROM functions
 			JOIN LATERAL (
 				SELECT
-					COALESCE(array_agg(replace(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname), 'pg_catalog.', '')), '{}') AS funcargs
+					COALESCE(array_agg(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname)), '{}') AS funcargs
 				FROM pg_catalog.pg_type
 				JOIN LATERAL (
 					SELECT unnest(proargtypes) AS oid FROM pg_catalog.pg_proc WHERE oid = (id + 100000)
@@ -4263,7 +4190,7 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 			FROM functions
 			JOIN LATERAL (
 				SELECT
-					COALESCE(array_agg(replace(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname), 'pg_catalog.', '')), '{}') AS funcargs
+					COALESCE(array_agg(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname)), '{}') AS funcargs
 				FROM pg_catalog.pg_type
 				JOIN LATERAL (
 					SELECT unnest(proargtypes) AS oid FROM pg_catalog.pg_proc WHERE oid = (id + 100000)
@@ -4356,7 +4283,7 @@ func (og *operationGenerator) alterFunctionSetSchema(
 			FROM functions
 			JOIN LATERAL (
 				SELECT
-					COALESCE(array_agg(replace(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname), 'pg_catalog.', '')), '{}') AS funcargs
+					COALESCE(array_agg(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname)), '{}') AS funcargs
 				FROM pg_catalog.pg_type
 				JOIN LATERAL (
 					SELECT unnest(proargtypes) AS oid FROM pg_catalog.pg_proc WHERE oid = (id + 100000)
