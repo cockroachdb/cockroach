@@ -575,11 +575,13 @@ func TestReplicateManualSplit(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, replicationtestutils.DefaultTenantStreamingClustersArgs)
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.SrcNumNodes = 3
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
-	c.DestSysSQL.Exec(t, "SET CLUSTER SETTING physical_replication.consumer.ingest_split_event.enabled = true")
+	serverutils.SetClusterSetting(t,c.DestCluster, "physical_replication.consumer.ingest_split_event.enabled",true)
 
-	c.SrcTenantSQL.Exec(t, "CREATE TABLE foo AS SELECT generate_series(1, 100)")
+	c.SrcTenantSQL.Exec(t, "CREATE TABLE d.foo AS SELECT generate_series(1, 100)")
 	var fooTableID int
 	c.SrcTenantSQL.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'foo'").Scan(&fooTableID)
 
@@ -589,18 +591,38 @@ func TestReplicateManualSplit(t *testing.T) {
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 	c.WaitUntilReplicatedTime(c.SrcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
 
-	c.SrcTenantSQL.Exec(t, "ALTER TABLE foo SPLIT AT VALUES (50)")
-	expectedSplitKey := fmt.Sprintf("Table/%d/1/50", fooTableID)
-	splitKeyQuery := fmt.Sprintf("SELECT count(*) FROM crdb_internal.ranges WHERE start_pretty ~ '%s'", expectedSplitKey)
+	c.SrcTenantSQL.Exec(t, "ALTER TABLE d.foo SPLIT AT VALUES (25),(50),(75)")
+	c.SrcTenantSQL.Exec(t,"ALTER TABLE d.foo SCATTER")
 
-	testutils.SucceedsSoon(t, func() error {
-		var splitKeyPresent int
-		c.DestSysSQL.QueryRow(t, splitKeyQuery).Scan(&splitKeyPresent)
-		if splitKeyPresent == 0 {
-			return errors.Newf("split key not present")
+	timeout := 45 * time.Second
+	if skip.Duress() {
+		timeout *= 5
+	}
+	testutils.SucceedsWithin(t, func() error {
+		var leaseHolderCount int
+		c.SrcTenantSQL.QueryRow(t,
+			`SELECT count(DISTINCT lease_holder) FROM [SHOW RANGES FROM DATABASE d WITH DETAILS]`).
+			Scan(&leaseHolderCount)
+		require.Greater(t, leaseHolderCount, 0)
+		if leaseHolderCount < 2 {
+			return errors.New("leaseholders not scattered yet")
 		}
 		return nil
-	})
+	}, timeout)
+
+  for _, key := range []int{25, 50, 75} {
+		expectedSplitKey := fmt.Sprintf("Table/%d/1/%d", fooTableID,key)
+		splitKeyQuery := fmt.Sprintf("SELECT count(*) FROM crdb_internal.ranges WHERE start_pretty ~ '%s'", expectedSplitKey)
+
+		testutils.SucceedsSoon(t, func() error {
+			var splitKeyPresent int
+			c.DestSysSQL.QueryRow(t, splitKeyQuery).Scan(&splitKeyPresent)
+			if splitKeyPresent == 0 {
+				return errors.Newf("split key not present")
+			}
+			return nil
+		})
+	}
 }
 
 func TestTenantStreamingDeleteRange(t *testing.T) {
