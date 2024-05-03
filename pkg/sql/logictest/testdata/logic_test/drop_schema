@@ -6,3 +6,18 @@ CREATE DATABASE test2
 
 statement error pq: cannot drop schema "public"
 DROP SCHEMA test2.public
+
+# Regression test for ALTER TYPE ... DROP VALUE followed by DROP SCHEMA CASCADE.
+# The type schema change should never be executed, since the DROP SCHEMA would
+# have already removed the type.
+statement ok
+CREATE SCHEMA schema_123539;
+
+statement ok
+CREATE TYPE schema_123539.enum_123539 AS ENUM ('s', 't');
+
+statement ok
+BEGIN;
+ALTER TYPE schema_123539.enum_123539 DROP VALUE 's';
+DROP SCHEMA schema_123539 CASCADE;
+COMMIT;
