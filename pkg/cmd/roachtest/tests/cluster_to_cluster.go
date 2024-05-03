@@ -1211,7 +1211,7 @@ func registerClusterToCluster(r registry.Registry) {
 			// Cutover to one second after the import completes.
 			cutover: -1 * time.Second,
 			// After the import completes, the replication stream should catch up in 5 minutes.
-			cutoverTimeout: 10 * time.Minute,
+			cutoverTimeout: 1 * time.Second,
 			// because PCR begins on a nearly empty cluster, skip the node distribution check.
 			skipNodeDistributionCheck: true,
 			clouds:                    registry.AllExceptAWS,
