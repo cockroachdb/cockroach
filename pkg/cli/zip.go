@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -95,7 +96,7 @@ func (zc *debugZipContext) forAllNodes(
 	ctx context.Context,
 	nodesList *serverpb.NodesListResponse,
 	redactedNodesList *serverpb.NodesListResponse,
-	fn func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodeStatus *statuspb.NodeStatus, redactedNodeDetails serverpb.NodeDetails) error,
+	fn func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodeStatus *statuspb.NodeStatus, redactedNodeDetails serverpb.NodeDetails, settings *cluster.Settings) error,
 ) error {
 	if nodesList == nil {
 		// Nothing to do, return
@@ -105,7 +106,7 @@ func (zc *debugZipContext) forAllNodes(
 		// Sequential case. Simplify.
 		for _, nodeDetails := range nodesList.Nodes {
 			var nodeStatus *statuspb.NodeStatus
-			if err := fn(ctx, nodeDetails, nodeStatus, zc.getRedactedNodeDetails(redactedNodesList, nodeDetails.NodeID)); err != nil {
+			if err := fn(ctx, nodeDetails, nodeStatus, zc.getRedactedNodeDetails(redactedNodesList, nodeDetails.NodeID), serverCfg.Settings); err != nil {
 				return err
 			}
 		}
@@ -129,7 +130,7 @@ func (zc *debugZipContext) forAllNodes(
 			}
 			defer zc.sem.Release(1)
 
-			nodeErrs <- fn(ctx, nodeDetails, nodeStatus, zc.getRedactedNodeDetails(redactedNodesList, nodeDetails.NodeID))
+			nodeErrs <- fn(ctx, nodeDetails, nodeStatus, zc.getRedactedNodeDetails(redactedNodesList, nodeDetails.NodeID), serverCfg.Settings)
 		}(nodeDetails, nodeStatus)
 	}
 	wg.Wait()
@@ -323,7 +324,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			}
 
 			// Collect the per-node data.
-			if err := zc.forAllNodes(ctx, nodesList, redactedNodesList, func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodesStatus *statuspb.NodeStatus, redactedNodeDetails serverpb.NodeDetails) error {
+			if err := zc.forAllNodes(ctx, nodesList, redactedNodesList, func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodesStatus *statuspb.NodeStatus, redactedNodeDetails serverpb.NodeDetails, settings *cluster.Settings) error {
 				return zc.collectPerNodeData(ctx, nodeDetails, nodesStatus, livenessByNodeID, redactedNodeDetails)
 			}); err != nil {
 				return err

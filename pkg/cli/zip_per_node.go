@@ -37,13 +37,13 @@ func makePerNodeZipRequests(prefix, id string, status serverpb.StatusClient) []z
 	return []zipRequest{
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
-				return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Redact: zipCtx.redact})
+				return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Redact: shouldRedact()})
 			},
 			pathName: prefix + "/details",
 		},
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
-				return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id, Redact: zipCtx.redact})
+				return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id, Redact: shouldRedact()})
 			},
 			pathName: prefix + "/gossip",
 		},
@@ -538,7 +538,7 @@ func (zc *debugZipContext) collectPerNodeData(
 		s = nodePrinter.start("requesting ranges")
 		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
 			var err error
-			ranges, err = zc.status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id, Redact: zipCtx.redact})
+			ranges, err = zc.status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id, Redact: shouldRedact()})
 			return err
 		}); requestErr != nil {
 			if err := zc.z.createError(s, prefix+"/ranges", requestErr); err != nil {

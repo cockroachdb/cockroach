@@ -122,11 +122,11 @@ func (zc *debugZipContext) collectClusterData(
 			if err != nil {
 				return err
 			}
-			nodesStatus, err = zc.status.Nodes(ctx, &serverpb.NodesRequest{Redact: zipCtx.redact})
+			nodesStatus, err = zc.status.Nodes(ctx, &serverpb.NodesRequest{Redact: shouldRedact()})
 			if err != nil {
 				return err
 			}
-			nodesListRedacted, err = zc.status.NodesList(ctx, &serverpb.NodesListRequest{Redact: zipCtx.redact})
+			nodesListRedacted, err = zc.status.NodesList(ctx, &serverpb.NodesListRequest{Redact: shouldRedact()})
 			return err
 		})
 
@@ -145,7 +145,7 @@ func (zc *debugZipContext) collectClusterData(
 			// In case the NodesList() RPC failed), we still want to inspect the
 			// per-node endpoints on the head node.
 			s = zc.clusterPrinter.start("retrieving the node status")
-			firstNodeDetails, err := zc.status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local", Redact: zipCtx.redact})
+			firstNodeDetails, err := zc.status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local", Redact: shouldRedact()})
 			if err != nil {
 				return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, err
 			}
@@ -220,4 +220,8 @@ func (zc *debugZipContext) collectClusterData(
 	}
 
 	return nodesList, nodesListRedacted, livenessByNodeID, nil
+}
+
+func shouldRedact() bool {
+	return zipCtx.redact && DebugZipSensitiveFieldsRedactionEnabled.Get(&serverCfg.Settings.SV)
 }
