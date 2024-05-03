@@ -68,8 +68,9 @@ func evalNewLease(
 	}
 
 	// Ensure either an Epoch is set or Start < Expiration.
-	if (lease.Type() == roachpb.LeaseExpiration && lease.GetExpiration().LessEq(lease.Start.ToTimestamp())) ||
-		(lease.Type() == roachpb.LeaseEpoch && lease.Expiration != nil) {
+	leaseType := lease.Type()
+	if (leaseType == roachpb.LeaseExpiration && lease.GetExpiration().LessEq(lease.Start.ToTimestamp())) ||
+		((leaseType == roachpb.LeaseEpoch || leaseType == roachpb.LeaseDistributedMultiEpoch) && lease.Expiration != nil) {
 		// This amounts to a bug.
 		return newFailedLeaseTrigger(isTransfer),
 			&kvpb.LeaseRejectedError{
@@ -102,9 +103,12 @@ func evalNewLease(
 				Message:   "sequence number should not be set",
 			}
 	}
+	// DME-based leases won't be proposed until v24.2 is finalized, so the
+	// equivalence check only needs to be after a point in history when we first
+	// started allowing expiration-based to other lease equivalence.
 	isV24_1 := rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start)
 	var priorReadSum *rspb.ReadSummary
-	if prevLease.Equivalent(lease, isV24_1 /* expToEpochEquiv */) {
+	if prevLease.Equivalent(lease, isV24_1 /* expToEpochOrDMEEquiv */) {
 		// If the proposed lease is equivalent to the previous lease, it is
 		// given the same sequence number. This is subtle, but is important
 		// to ensure that leases which are meant to be considered the same

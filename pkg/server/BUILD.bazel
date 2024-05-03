@@ -125,6 +125,8 @@ go_library(
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/closedts/sidetransport",
+        "//pkg/kv/kvserver/dme_liveness",
+        "//pkg/kv/kvserver/dme_liveness/dme_livenesspb",
         "//pkg/kv/kvserver/kvadmission",
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontroller",

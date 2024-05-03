@@ -166,6 +166,12 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaLeaseDMECount = metric.Metadata{
+		Name:        "leases.dme",
+		Help:        "Number of replica leaseholders using dme-based leases",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaLeaseLivenessCount = metric.Metadata{
 		Name:        "leases.liveness",
 		Help:        "Number of replica leaseholders for the liveness range(s)",
@@ -2522,6 +2528,7 @@ type StoreMetrics struct {
 	LeaseTransferErrorCount        *metric.Counter
 	LeaseExpirationCount           *metric.Gauge
 	LeaseEpochCount                *metric.Gauge
+	LeaseDMECount                  *metric.Gauge
 	LeaseLivenessCount             *metric.Gauge
 	LeaseViolatingPreferencesCount *metric.Gauge
 	LeaseLessPreferredCount        *metric.Gauge
@@ -3230,6 +3237,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LeaseTransferErrorCount:        metric.NewCounter(metaLeaseTransferErrorCount),
 		LeaseExpirationCount:           metric.NewGauge(metaLeaseExpirationCount),
 		LeaseEpochCount:                metric.NewGauge(metaLeaseEpochCount),
+		LeaseDMECount:                  metric.NewGauge(metaLeaseDMECount),
 		LeaseLivenessCount:             metric.NewGauge(metaLeaseLivenessCount),
 		LeaseViolatingPreferencesCount: metric.NewGauge(metaLeaseViolatingPreferencesCount),
 		LeaseLessPreferredCount:        metric.NewGauge(metaLeaseLessPreferredCount),

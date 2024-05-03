@@ -13,6 +13,7 @@ package cockroach.kv.kvserver.storagepb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb";
 
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "util/hlc/timestamp.proto";
 
@@ -79,7 +80,17 @@ enum LeaseState {
 
 // LeaseStatus holds the lease state, the current clock time at which the
 // state is accurate, the request time at which the status is accurate, the
-// lease iself, and optionally the liveness if the lease is epoch-based.
+// lease itself, and optionally the liveness if the lease is epoch-based.
+//
+// LeaseStatus is not persisted anywhere, it seems. It is part of the
+// serverpb.RangeInfo proto.
+//
+// We don't populate a future expiration time for a VALID dme-based lease. At
+// non-leaseholders, the LeaseState can be VALID even if there isn't a
+// supporting quorum, as long as support has not been explicitly withdrawn. So
+// such cases of "VALID" can't provide a reasonable future expiration time
+// since in the next instant we may find out that support has been explicitly
+// withdrawn and the lease would become invalid.
 message LeaseStatus {
   // Lease which this status describes.
   roachpb.Lease lease = 1 [(gogoproto.nullable) = false];
@@ -97,4 +108,22 @@ message LeaseStatus {
   // The minimum observed timestamp on a transaction that is respected by this lease.
   util.hlc.Timestamp min_valid_observed_timestamp = 7 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  // The descriptor(s) when the lease status was evaluated. The first descriptor
+  // has definitely been applied, and the later ones may be pending.
+  //
+  // When evaluating lease status at a non-leaseholder there must only be one
+  // descriptor in this list. This is for two reasons. First, if the dme-lease
+  // is found to be EXPIRED, we need to have the specific descriptor under
+  // which it was expired, and be certain that the descriptor applied (since
+  // the later descriptors may never apply, and so their generation can get
+  // reused). This is needed to correctly propose a new lease, whether it is
+  // dme-based or not. Second, regardless of whether the previous lease was
+  // dme-based or not, if the new lease is dme-based, we need to populate a
+  // descriptor in the lease proposal.
+  //
+  // This field is only used if the existing lease is dme-based or the new
+  // lease proposal using this status is dme-based.
+  //
+  // TODO(sumeer): to avoid a slice allocation, can use two nullable fields.
+  repeated roachpb.RangeDescriptor descriptors = 8 [(gogoproto.nullable) = false];
 }

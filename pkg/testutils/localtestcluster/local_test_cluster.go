@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
@@ -258,7 +259,14 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		rangeFeedFactory,
 		zonepb.DefaultZoneConfigRef(),
 	)
-
+	cfg.DMEManager = dme_liveness.NewManager(dme_liveness.Options{
+		NodeID: nodeID,
+		Clock:  cfg.Clock,
+		LivenessExpiryInterval: func() time.Duration {
+			return cfg.RangeLeaseDuration
+		},
+	})
+	ltc.stopper.AddCloser(cfg.DMEManager)
 	ltc.Store = kvserver.NewStore(ctx, cfg, ltc.Eng, nodeDesc)
 
 	var initialValues []roachpb.KeyValue

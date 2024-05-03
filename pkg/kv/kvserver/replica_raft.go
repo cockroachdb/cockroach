@@ -2295,6 +2295,9 @@ func shouldCampaignOnLeaseRequestRedirect(
 	if shouldUseExpirationLease {
 		return false
 	}
+	// TODO(sumeer): do we need to change this for dme-based leases. The
+	// following code is only considering epoch-based leases.
+
 	// Determine if we think the leader is alive, if we don't have the leader in
 	// the descriptor we assume it is, since it could be an indication that this
 	// replica is behind.

@@ -51,6 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness/dme_livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -90,7 +92,8 @@ var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	// false by default. Metamorphically enabled in tests, but not in deadlock
 	// builds because TestClusters are usually so slow that they're unable
 	// to maintain leases/leadership/liveness.
-	!syncutil.DeadlockEnabled &&
+	false &&
+		!syncutil.DeadlockEnabled &&
 		util.ConstantWithMetamorphicTestBool("kv.expiration_leases_only.enabled", false),
 )
 
@@ -128,6 +131,11 @@ var EagerLeaseAcquisitionConcurrency = settings.RegisterIntSetting(
 	256,
 	settings.NonNegativeInt,
 )
+
+var PreferDMEBaseLeaseOverEpochBasedLease = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lease.prefer_dme_based_lease_over_epoch_based_lease.enabled",
+	"controls whether dme-based leases are preferred over epoch-based leases", false)
 
 // LeaseCheckPreferencesOnAcquisitionEnabled controls whether lease preferences
 // are checked upon acquiring a new lease. If the new lease violates the
@@ -313,6 +321,17 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		if status.State != kvserverpb.LeaseState_EXPIRED {
 			log.Fatalf(ctx, "cannot acquire lease from another node before it has expired: %v", status)
 		}
+		if status.Lease.DMELease != nil {
+			n := len(status.Descriptors)
+			if n != 1 {
+				// Since this is not the leaseholder, it should not be evaluating a
+				// lease with multiple RangeDescriptors. At this point we don't know
+				// which descriptor caused the expiry, so can't propose a new lease,
+				// whether it is a dme-based lease or not.
+				log.Fatalf(ctx, "trying to replace dme-based lease from another node, but have "+
+					"provided %d RangeDescriptors", n)
+			}
+		}
 	}
 
 	// No request in progress. Let's propose a Lease command asynchronously.
@@ -324,6 +343,12 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		Start:      status.Now,
 		Replica:    nextLeaseHolder,
 		ProposedTS: &status.Now,
+	}
+	if acquisition && status.Lease.DMELease != nil {
+		// Replacing a dme-based lease.
+		reqLease.ExpiredDMELease = &roachpb.ExpiredDistributedMultiEpochLease{
+			RangeGeneration: status.Descriptors[0].Generation,
+		}
 	}
 
 	if p.repl.shouldUseExpirationLeaseRLocked() ||
@@ -344,7 +369,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// record).
 		reqLease.Expiration = &hlc.Timestamp{}
 		*reqLease.Expiration = status.Now.ToTimestamp().Add(int64(p.repl.store.cfg.RangeLeaseDuration), 0)
-	} else {
+	} else if !p.repl.preferDMEBasedLeaseOverEpochBasedLease() {
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
 		l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
 		if !ok || l.Epoch == 0 {
@@ -356,6 +381,52 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			return llHandle
 		}
 		reqLease.Epoch = l.Epoch
+	} else {
+		// We have a problem here. Only the first descriptor is guaranteed to have
+		// applied. If the current leaseholder proposes with the generation set to
+		// an unapplied generation, we have no guarantee that it will apply. Even
+		// worse, some other descriptor may apply and reuse that generation. For
+		// now, we just do the safe thing and propose under the applied
+		// descriptor. This means there is a high probability that a lease
+		// extension at the leaseholder, or a lease transfer by the leaseholder,
+		// when a descriptor change is pending will fail.
+		desc := status.Descriptors[0]
+		adjustedStart, leaseEpoch, err := p.repl.store.cfg.DMEManager.EpochAndSupportForLeaseProposal(
+			reqLease.Start, dme_livenesspb.StoreIdentifier{
+				NodeID:  reqLease.Replica.NodeID,
+				StoreID: reqLease.Replica.StoreID,
+			}, desc)
+		if err != nil {
+			llHandle.resolve(kvpb.NewError(&kvpb.LeaseRejectedError{
+				Existing:  status.Lease,
+				Requested: reqLease,
+				Message:   "don't have support for dme-based lease at its start time",
+			}))
+		}
+		minExpiration := hlc.Timestamp{}
+		prevLH := status.Lease.Replica
+		prevLH.Type = 0
+		nextLH := nextLeaseHolder
+		nextLH.Type = 0
+		if prevLH == nextLH {
+			if status.Lease.Expiration != nil {
+				// Replacing an expiration-based lease with a dme-based lease, and this
+				// is likely to qualify as an extension.
+				minExpiration = *status.Lease.Expiration
+			} else if status.Lease.DMELease != nil {
+				// Replacing a dme-based lease with another dme-based lease, and this
+				// is likely to qualify as an extension. Inherit the min expiration.
+				minExpiration = status.Lease.DMELease.MinExpiration
+			}
+		}
+		reqLease.Start = adjustedStart
+		reqLease.DMELease = &roachpb.DistributedMultiEpochLease{
+			Epoch:             leaseEpoch,
+			MinExpiration:     minExpiration,
+			RangeGeneration:   desc.Generation,
+			PrevLeaseSequence: status.Lease.Sequence,
+			PrevLeaseProposal: *status.Lease.ProposedTS,
+		}
 	}
 
 	var leaseReq kvpb.Request
@@ -386,7 +457,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		}
 	}
 
-	err := p.requestLeaseAsync(ctx, nextLeaseHolder, status, leaseReq, limiter)
+	err := p.requestLeaseAsync(ctx, reqLease, status, leaseReq, limiter)
 	if err != nil {
 		if errors.Is(err, stop.ErrThrottled) {
 			llHandle.resolve(kvpb.NewError(err))
@@ -419,7 +490,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 // leaseReq must be consistent with the LeaseStatus.
 func (p *pendingLeaseRequest) requestLeaseAsync(
 	parentCtx context.Context,
-	nextLeaseHolder roachpb.ReplicaDescriptor,
+	nextLease roachpb.Lease,
 	status kvserverpb.LeaseStatus,
 	leaseReq kvpb.Request,
 	limiter *quotapool.IntPool,
@@ -456,7 +527,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// RPC, but here we submit the request directly to the local replica.
 			growstack.Grow()
 
-			err := p.requestLease(ctx, nextLeaseHolder, status, leaseReq)
+			err := p.requestLease(ctx, nextLease, status, leaseReq)
 			// Error will be handled below.
 
 			// We reset our state below regardless of whether we've gotten an error or
@@ -498,7 +569,7 @@ var logFailedHeartbeatOwnLiveness = log.Every(10 * time.Second)
 // since it does not coordinate with other in-flight lease requests.
 func (p *pendingLeaseRequest) requestLease(
 	ctx context.Context,
-	nextLeaseHolder roachpb.ReplicaDescriptor,
+	nextLease roachpb.Lease,
 	status kvserverpb.LeaseStatus,
 	leaseReq kvpb.Request,
 ) error {
@@ -512,8 +583,10 @@ func (p *pendingLeaseRequest) requestLease(
 	// then we instead heartbeat to become live.
 	if status.Lease.Type() == roachpb.LeaseEpoch && status.State == kvserverpb.LeaseState_EXPIRED {
 		var err error
-		// If this replica is previous & next lease holder, manually heartbeat to become live.
-		if status.OwnedBy(nextLeaseHolder.StoreID) && p.repl.store.StoreID() == nextLeaseHolder.StoreID {
+		// If this replica is previous & next lease holder, and the next lease is
+		// epoch-based, manually heartbeat to become live.
+		if status.OwnedBy(nextLease.Replica.StoreID) && p.repl.store.StoreID() == nextLease.Replica.StoreID &&
+			nextLease.Type() == roachpb.LeaseEpoch {
 			if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil && logFailedHeartbeatOwnLiveness.ShouldLog() {
 				log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
 			}
@@ -522,9 +595,14 @@ func (p *pendingLeaseRequest) requestLease(
 			// However, we only do so in the event that the next leaseholder is
 			// considered live at this time. If not, there's no sense in
 			// incrementing the expired leaseholder's epoch.
-			if !p.repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(nextLeaseHolder.NodeID).IsLive(livenesspb.EpochLease) {
+			//
+			// If the next lease is a dme-based lease, this dependency on node
+			// liveness is unnecessary. But the outer if-block is predicated on the
+			// previous lease being epoch-based, so we were recently dependent on
+			// node liveness, and so we don't bother removing this dependency.
+			if !p.repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(nextLease.Replica.NodeID).IsLive(livenesspb.EpochLease) {
 				err = errors.Errorf("not incrementing epoch on n%d because next leaseholder (n%d) not live",
-					status.Liveness.NodeID, nextLeaseHolder.NodeID)
+					status.Liveness.NodeID, nextLease.Replica.NodeID)
 				log.VEventf(ctx, 1, "%v", err)
 			} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
 				// If we get ErrEpochAlreadyIncremented, someone else beat
@@ -592,7 +670,7 @@ func (p *pendingLeaseRequest) requestLease(
 	// NB:
 	// RequestLease always bypasses the circuit breaker (i.e. will prefer to
 	// get stuck on an unavailable range rather than failing fast; see
-	// `(*RequestLeaseRequest).flags()`). This enables the caller to chose
+	// `(*RequestLeaseRequest).flags()`). This enables the caller to choose
 	// between either behavior for themselves: if they too want to bypass
 	// the circuit breaker, they simply don't check for the circuit breaker
 	// while waiting for their lease handle. If they want to fail-fast, they
@@ -730,6 +808,8 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *kvpb.Error) *leaseRequestH
 //   - the read is served by the old lease holder (which has not processed the
 //     change in lease holdership).
 //   - the client fails to read their own write.
+//
+// Replica.mu must be held at least in read mode.
 func (r *Replica) leaseStatus(
 	ctx context.Context,
 	lease roachpb.Lease,
@@ -738,6 +818,10 @@ func (r *Replica) leaseStatus(
 	minValidObservedTS hlc.ClockTimestamp,
 	reqTS hlc.Timestamp,
 ) kvserverpb.LeaseStatus {
+	descriptors := []roachpb.RangeDescriptor{*r.mu.state.Desc}
+	if r.mu.pendingRangeDescriptor != nil {
+		descriptors = append(descriptors, *r.mu.pendingRangeDescriptor)
+	}
 	status := kvserverpb.LeaseStatus{
 		Lease: lease,
 		// NOTE: it would not be correct to accept either only the request time
@@ -750,11 +834,14 @@ func (r *Replica) leaseStatus(
 		Now:                       now,
 		RequestTime:               reqTS,
 		MinValidObservedTimestamp: minValidObservedTS,
+		Descriptors:               descriptors,
 	}
+	ownedLocally := lease.OwnedBy(r.store.StoreID())
+	maxOffset := r.store.Clock().MaxOffset()
 	var expiration hlc.Timestamp
 	if lease.Type() == roachpb.LeaseExpiration {
 		expiration = lease.GetExpiration()
-	} else {
+	} else if lease.Type() == roachpb.LeaseEpoch {
 		l, ok := r.store.cfg.NodeLiveness.GetLiveness(lease.Replica.NodeID)
 		status.Liveness = l.Liveness
 		if !ok || status.Liveness.Epoch < lease.Epoch {
@@ -781,10 +868,70 @@ func (r *Replica) leaseStatus(
 			return status
 		}
 		expiration = status.Liveness.Expiration.ToTimestamp()
+	} else if lease.Type() == roachpb.LeaseDistributedMultiEpoch {
+		if lease.DMELease.RangeGeneration > status.Descriptors[0].Generation {
+			panic(errors.AssertionFailedf(
+				"current lease has been applied at a range descriptor generation %d that is "+
+					"greater than the latest range descriptor %d in the state machine",
+				lease.DMELease.RangeGeneration, status.Descriptors[0].Generation))
+		}
+		expiration = lease.DMELease.MinExpiration
+		if !expiration.IsEmpty() && hlc.Timestamp(now).Less(expiration) {
+			// Valid
+		} else {
+			var supportStatus dme_liveness.SupportStatus
+			var err error
+			supportStatus, expiration, err = r.store.cfg.DMEManager.HasSupport(
+				now, dme_livenesspb.StoreIdentifier{
+					NodeID:  lease.Replica.NodeID,
+					StoreID: lease.Replica.StoreID,
+				}, lease.DMELease.Epoch, status.Descriptors)
+			if err != nil {
+				status.State = kvserverpb.LeaseState_ERROR
+				status.ErrInfo = err.Error()
+				return status
+			}
+			if supportStatus == dme_liveness.SupportWithdrawn ||
+				(ownedLocally && supportStatus == dme_liveness.CurrentlyUnsupported) {
+				status.State = kvserverpb.LeaseState_EXPIRED
+				return status
+			} else if supportStatus == dme_liveness.Supported {
+				// Two cases:
+				//
+				// - At leaseholder: The expiration value can only be optimistic if
+				//   the leaseholder makes a descriptor change before the expiration
+				//   that causes it to lose support. But it has not made that
+				//   descriptor change yet, so no other store could already be in that
+				//   future at a time less than expiration, and holding the lease.
+				//
+				// - At non-leaseholder: The expiration value can be arbitrarily
+				//   wrong, and it is also possible that support has been withdrawn
+				//   and this store does not know it yet, because of a stale
+				//   descriptor. This is safe. We only need eventual consistency, for
+				//   liveness.
+				//
+				// Use the expiration time below.
+			} else {
+				// !ownedLocally && support == CurrentlyUnsupported
+				//
+				// We can't claim the lease is expired, since we could be wrong, and
+				// an expired status can be used to propose a new lease. The
+				// DME-liveness subsystem is responsible for ensuring that the system
+				// will not permanently remain in this CurrentlyUnsupported state. So
+				// in this uncertain state we pretend that the lease is valid up to
+				// maxOffset in the future. This status is not remembered somewhere,
+				// so it is ok that we later decide, say at now + delta, that the
+				// lease has SupportWithdrawn.
+				expiration = hlc.Timestamp(now)
+				expiration.Forward(reqTS)
+				expiration = expiration.Add(int64(maxOffset), 1)
+			}
+		}
+	} else {
+		panic("unknown lease type")
 	}
-	maxOffset := r.store.Clock().MaxOffset()
 	stasis := expiration.Add(-int64(maxOffset), 0)
-	ownedLocally := lease.OwnedBy(r.store.StoreID())
+
 	// NB: the order of these checks is important, and goes from stronger to
 	// weaker reasons why the lease may be considered invalid. For example,
 	// EXPIRED or PROSCRIBED must take precedence over UNUSABLE, because some
@@ -890,6 +1037,11 @@ func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
 	}
 
 	return settingEnabled || r.requiresExpirationLeaseRLocked()
+}
+
+func (r *Replica) preferDMEBasedLeaseOverEpochBasedLease() bool {
+	// TODO(sumeer): add cluster version gate.
+	return PreferDMEBaseLeaseOverEpochBasedLease.Get(&r.ClusterSettings().SV)
 }
 
 // requestLeaseLocked executes a request to obtain or extend a lease
@@ -1134,6 +1286,8 @@ func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Time
 	} else {
 		_, leaseRenewal = r.store.cfg.NodeLivenessDurations()
 	}
+	// TODO(sumeer): consider dme-based leases
+
 	leaseRenewalMinusStasis := leaseRenewal - r.store.Clock().MaxOffset()
 	if leaseRenewalMinusStasis < 0 {
 		// If maxOffset > leaseRenewal, such that present time operations risk
@@ -1593,8 +1747,21 @@ func (r *Replica) HasCorrectLeaseType(lease roachpb.Lease) bool {
 }
 
 func (r *Replica) hasCorrectLeaseTypeRLocked(lease roachpb.Lease) bool {
-	hasExpirationLease := lease.Type() == roachpb.LeaseExpiration
-	return hasExpirationLease == r.shouldUseExpirationLeaseRLocked()
+	if lease.Type() == roachpb.LeaseNone {
+		return true
+	}
+	shouldUseExpirationLease := r.shouldUseExpirationLeaseRLocked()
+	preferDMEOverEpoch := r.preferDMEBasedLeaseOverEpochBasedLease()
+	switch lease.Type() {
+	case roachpb.LeaseExpiration:
+		return shouldUseExpirationLease
+	case roachpb.LeaseEpoch:
+		return !shouldUseExpirationLease && !preferDMEOverEpoch
+	case roachpb.LeaseDistributedMultiEpoch:
+		return !shouldUseExpirationLease && preferDMEOverEpoch
+	default:
+		panic("unknown lease")
+	}
 }
 
 // LeasePreferencesStatus represents the state of satisfying lease preferences.

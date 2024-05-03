@@ -468,6 +468,68 @@ type Replica struct {
 		// The state of the Raft state machine. Updated only when raftMu and mu are
 		// both held.
 		state kvserverpb.ReplicaState
+		// The descriptor proposed by this leaseholder that has not yet been
+		// applied. This is used, in addition to state.Desc, to maintain a
+		// dme-based lease.
+		//
+		// Descriptor changes happen via a 2PC transaction
+		// (execChangeReplicasTxn), which first writes the new descriptor, so that
+		// the txn record is on the same range, and synchronous intent resolution
+		// on txn commit resolves the intent. The put on the RangeDescriptor holds
+		// a "lock" on the RangeDescriptor key at the leaseholder, which is not
+		// released until after application of the intent resolution.
+		//
+		// We start tracking a pending RangeDescriptor post "lock" acquisition,
+		// when the leaseholder proposes the EndTxn containing the ChangeReplicas,
+		// above Raft. This acquires a read latch on the RangeDescriptor key.
+		// Consider the following cases.
+		//
+		// Case 1: txn commits
+		//
+		// Each replica (somehow) eventually sees the new RangeDescriptor. This
+		// can be via a snapshot application or raft log entry application.
+		//
+		// For the latter, state.Desc is updated in
+		// handleNonTrivialReplicatedEvalResult, which happens after the
+		// persistent state machine is updated. So there is a small lag from when
+		// the persistent state is updated to when it is reflected in state.Desc.
+		// The lease object in the state machine must be with the same leaseholder
+		// for the application to succeed. Since the leaseholder will not release
+		// the read latch until state.Desc is updated, it will not allow any new
+		// puts to the RangeDescriptor despite this lag (even though the
+		// persistent state machine has been updated). If a new leaseholder takes
+		// over after application, that new leaseholder must have applied the new
+		// RangeDescriptor before applying the lease, so the RangeDescriptor is
+		// not pending.
+		//
+		// For the former, which is possible when the leaseholder is split from
+		// the leader and receives a snapshot, we will retain this
+		// pendingRangeDescriptor if it has a higher generation than the
+		// descriptor in the snapshot.
+		//
+		// Case 2: txn aborts or raft proposal fails
+		//
+		// After we start tracking this pendingRangeDescriptor, due to the EndTxn
+		// raft proposal, something can go wrong, e.g. the raft proposal can fail
+		// (which should get retried), or the txn can abort. We currently don't
+		// notice such failures and the leaseholder will continue tracking the
+		// pending RangeDescriptor which can result in false positives wrt losing
+		// the lease. This is safe, but not ideal.
+		// TODO(sumeer): fix this.
+		//
+		// Overall, we need to track at most one pending RangeDescriptor at the
+		// leaseholder. If the leaseholder falls behind after proposing, it is
+		// possible that it can receive a snapshot to help it catchup. The
+		// snapshot could contain a Desc.Generation less than the proposed one --
+		// this does not mean the proposal has failed. For pending
+		// RangeDescriptors, the generation is not unique, since a failed txn can
+		// cause the generation to be reused.
+		//
+		// TODO(sumeer):
+		// - clear this when state.Lease is updated (either via state machine
+		//   application or snapshot) and this replica is not the leaseholder.
+		//   This serves as a crude form of garbage collection.
+		pendingRangeDescriptor *roachpb.RangeDescriptor
 		// Last index/term written to the raft log (not necessarily durable locally
 		// or committed by the group). Note that lastTermNotDurable may be 0 (and
 		// thus invalid) even when lastIndexNotDurable is known, in which case the
@@ -530,6 +592,9 @@ type Replica struct {
 		// - a lease cannot be used after a transfer is initiated. Moreover, even
 		// lease extension that were in flight at the time of the transfer cannot be
 		// used, if they eventually apply.
+		//
+		// NB: this is initialized on every Replica, not just the leaseholder, but
+		// only used when this Replica is the leaseholder.
 		minLeaseProposedTS hlc.ClockTimestamp
 
 		// minValidObservedTimestamp is the minimum timestamp from an external

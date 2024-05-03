@@ -33,6 +33,7 @@ PROTOBUF_SRCS = [
     "//pkg/kv/kvserver/concurrency/isolation:isolation_go_proto",
     "//pkg/kv/kvserver/concurrency/lock:lock_go_proto",
     "//pkg/kv/kvserver/concurrency/poison:poison_go_proto",
+    "//pkg/kv/kvserver/dme_liveness/dme_livenesspb:dme_livenesspb_go_proto",
     "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb:kvflowcontrolpb_go_proto",
     "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb:kvflowinspectpb_go_proto",
     "//pkg/kv/kvserver/kvserverpb:kvserverpb_go_proto",

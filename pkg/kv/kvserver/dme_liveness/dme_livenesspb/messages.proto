@@ -1,0 +1,125 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.dme_liveness.dme_livenesspb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/dme_liveness/dme_livenesspb";
+
+import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+
+message Epoch {
+  int64 epoch = 1;
+}
+
+message StoreIdentifier {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  int32 store_id = 2 [(gogoproto.customname) = "StoreID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+}
+
+// Heartbeat is a request for support.
+message Heartbeat {
+  int64 epoch = 1;
+  util.hlc.Timestamp sender_time = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  util.hlc.Timestamp end_time = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.Timestamp"];
+}
+
+// Support is a building block for SupportState, which is propagated to other
+// stores. When s1 is seeking support from s2, the Support.epoch at s2 can
+// never be more than 1 higher than an epoch that has actually existed at s1.
+message Support {
+  int64 epoch = 1;
+  // If empty, Epoch is not currently supported.
+  util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.Timestamp"];
+}
+
+// SupportForOtherBySingle, contains information from the For store, regarding
+// the support it receives from the By store. For is not included here.
+message SupportForOtherBySingle {
+  StoreIdentifier by = 1 [(gogoproto.nullable) = false];
+  Support support = 2 [(gogoproto.nullable) = false];
+}
+
+message SupportForOtherBy {
+  StoreIdentifier for = 1 [(gogoproto.nullable) = false];
+  repeated SupportForOtherBySingle support = 2 [(gogoproto.nullable) = false];
+}
+
+// SupportByOtherFor, contains information from the By store, regarding the
+// support it provides to the For store. By is not included here.
+message SupportByOtherForSingle {
+  StoreIdentifier for = 1 [(gogoproto.nullable) = false];
+  Support support = 2 [(gogoproto.nullable) = false];
+}
+
+message SupportByOtherFor {
+  StoreIdentifier by = 1 [(gogoproto.nullable) = false];
+  repeated SupportByOtherForSingle support = 2 [(gogoproto.nullable) = false];
+}
+
+// SupportState is the support state provided by a store. The ForOtherBy.For
+// and ByOtherFor.By values are equal, and represent the state providing
+// store. The now value is sampled after reading the support state, so the
+// support state can be stale, but not from the future of now.
+message SupportState {
+  util.hlc.Timestamp state_time = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  SupportForOtherBy for_other_by = 2 [(gogoproto.nullable) = false];
+  SupportByOtherFor by_other_for = 3 [(gogoproto.nullable) = false];
+}
+
+// TODO: update comment.
+// MessageSender is responsible for retransmitting the latest Heartbeat,
+// SupportState for the given Header until it is known to have been received
+// (backoff is allowed). Since the number of distinct Headers is
+// O(num-stores), the state remembered in the MessageSender is small.
+//
+// MessageSender is responsible for retransmitting the latest WithdrawSupport
+// for the given (Header, WithdrawSupport.Store). In the worst-case this is
+// O(num-stores^2) of space.
+message Header {
+  StoreIdentifier from = 1 [(gogoproto.nullable) = false];
+  StoreIdentifier to = 2 [(gogoproto.nullable) = false];
+}
+
+// RPC message in the prototype implementation, which does not gossip
+// SupportState.
+
+message HeartbeatRequest {
+  Header header = 1 [(gogoproto.nullable) = false];
+  Heartbeat heartbeat = 2 [(gogoproto.nullable) = false];
+}
+
+message HeartbeatResponse {
+  bool heartbeat_ack = 1;
+  util.hlc.Timestamp responder_time = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+}
+
+message SupportStateRequest {
+  Header header = 1 [(gogoproto.nullable) = false];
+
+  // The Header.From value is redundant in that it is equal to ForOtherBy.For
+  // and ByOtherFor.By values. We are calling this "local" since this is not
+  // being propagated by gossip yet, so it is the local state of the from
+  // store.
+  SupportState support_state_local = 2 [(gogoproto.nullable) = false];
+}
+
+message SupportStateResponse {}
+
+service DMELiveness {
+  rpc Heartbeat (HeartbeatRequest) returns (HeartbeatResponse) {}
+  rpc SupportState (SupportStateRequest) returns (SupportStateResponse) {}
+}
