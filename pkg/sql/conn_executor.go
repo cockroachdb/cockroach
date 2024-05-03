@@ -1145,6 +1145,7 @@ func (s *Server) newConnExecutor(
 		ex.server.insights.Writer(ex.sessionData().Internal),
 		ex.phaseTimes,
 		s.sqlStats.GetCounters(),
+		ex.extraTxnState.fromOuterTxn,
 		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
@@ -1258,6 +1259,9 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	if err := ex.extraTxnState.sqlCursors.closeAll(cursorCloseForExplicitClose); err != nil {
 		log.Warningf(ctx, "error closing cursors: %v", err)
 	}
+
+	// Free any memory used by the stats collector.
+	ex.statsCollector.Free(ctx)
 
 	var payloadErr error
 	if closeType == normalClose {
