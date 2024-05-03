@@ -576,6 +576,10 @@ const (
 	// users authenticate.
 	AuthRootCert
 
+	// DefaultAuthMode is the auth mode used for functions that don't
+	// take an auth mode or the user doesn't specify one.
+	DefaultAuthMode = AuthUserCert
+
 	DefaultUser     = "roachprod"
 	DefaultPassword = "cockroachdb"
 )
@@ -655,7 +659,12 @@ func (c *SyncedCluster) NodeUIPort(
 //
 // CAUTION: this function should not be used by roachtest writers. Use ExecSQL below.
 func (c *SyncedCluster) ExecOrInteractiveSQL(
-	ctx context.Context, l *logger.Logger, virtualClusterName string, sqlInstance int, args []string,
+	ctx context.Context,
+	l *logger.Logger,
+	virtualClusterName string,
+	sqlInstance int,
+	authMode PGAuthMode,
+	args []string,
 ) error {
 	if len(c.Nodes) != 1 {
 		return fmt.Errorf("invalid number of nodes for interactive sql: %d", len(c.Nodes))
@@ -664,7 +673,7 @@ func (c *SyncedCluster) ExecOrInteractiveSQL(
 	if err != nil {
 		return err
 	}
-	url := c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, AuthRootCert)
+	url := c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, authMode)
 	binary := cockroachNodeBinary(c, c.Nodes[0])
 	allArgs := []string{binary, "sql", "--url", url}
 	allArgs = append(allArgs, ssh.Escape(args))
@@ -680,6 +689,7 @@ func (c *SyncedCluster) ExecSQL(
 	nodes Nodes,
 	virtualClusterName string,
 	sqlInstance int,
+	authMode PGAuthMode,
 	args []string,
 ) ([]*RunResultDetails, error) {
 	display := fmt.Sprintf("%s: executing sql", c.Name)
@@ -694,7 +704,7 @@ func (c *SyncedCluster) ExecSQL(
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 			}
 			cmd += cockroachNodeBinary(c, node) + " sql --url " +
-				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, AuthRootCert) + " " +
+				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, authMode) + " " +
 				ssh.Escape(args)
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
 		})
@@ -1154,9 +1164,8 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 		// We use the first node in the virtual cluster to create the user.
 		firstNode := c.TargetNodes()[0]
 		results, err := c.ExecSQL(
-			ctx, l, Nodes{firstNode}, virtualClusterName, sqlInstance, []string{
-				"-e", stmts,
-			})
+			ctx, l, Nodes{firstNode}, virtualClusterName, sqlInstance, AuthRootCert,
+			[]string{"-e", stmts})
 
 		if err != nil || results[0].Err != nil {
 			err := errors.CombineErrors(err, results[0].Err)
@@ -1339,9 +1348,9 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts,
 ) (int, error) {
 	runSQL := func(stmt string) (string, error) {
-		results, err := startOpts.StorageCluster.ExecSQL(ctx, l, startOpts.StorageCluster.Nodes[:1], "", 0, []string{
-			"--format", "csv", "-e", stmt,
-		})
+		results, err := startOpts.StorageCluster.ExecSQL(
+			ctx, l, startOpts.StorageCluster.Nodes[:1], "", 0, DefaultAuthMode,
+			[]string{"--format", "csv", "-e", stmt})
 		if err != nil {
 			return "", err
 		}

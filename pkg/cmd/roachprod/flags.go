@@ -96,6 +96,16 @@ var (
 		"user-cert":     install.AuthUserCert,
 	}
 
+	defaultAuthMode = func() string {
+		for modeStr, mode := range pgAuthModes {
+			if mode == install.DefaultAuthMode {
+				return modeStr
+			}
+		}
+
+		panic(fmt.Errorf("could not find string for default auth mode"))
+	}()
+
 	sshKeyUser string
 
 	fluentBitConfig fluentbit.Config
@@ -186,8 +196,12 @@ func initFlags() {
 		"external", false, "return pgurls for external connections")
 	pgurlCmd.Flags().StringVar(&pgurlCertsDir,
 		"certs-dir", install.CockroachNodeCertsDir, "cert dir to use for secure connections")
-	pgurlCmd.Flags().StringVar(&authMode,
-		"auth-mode", "root", fmt.Sprintf("form of authentication to use, valid auth-modes: %v", maps.Keys(pgAuthModes)))
+
+	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd} {
+		cmd.Flags().StringVar(&authMode,
+			"auth-mode", defaultAuthMode, fmt.Sprintf("form of authentication to use, valid auth-modes: %v", maps.Keys(pgAuthModes)))
+	}
+
 	pprofCmd.Flags().DurationVar(&pprofOpts.Duration,
 		"duration", 30*time.Second, "Duration of profile to capture")
 	pprofCmd.Flags().BoolVar(&pprofOpts.Heap,
