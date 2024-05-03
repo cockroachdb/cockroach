@@ -19,11 +19,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -318,7 +321,9 @@ func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 
 // TestUpgradeHappensAfterMigration is a regression test to ensure that
 // upgrades run prior to attempting to upgrade the cluster to the current
-// version.
+// version. It will also verify that any migrations that modify the system
+// database schema properly update the SystemDatabaseSchemaVersion on the
+// system database descriptor.
 func TestUpgradeHappensAfterMigrations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -349,6 +354,27 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 			},
 		},
 	})
+
+	internalDB := s.ApplicationLayer().InternalDB().(descs.DB)
+	err := internalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		systemDBDesc, err := txn.Descriptors().ByID(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
+		if err != nil {
+			return err
+		}
+		systemDBVersion := systemDBDesc.DatabaseDesc().GetSystemDatabaseSchemaVersion()
+		// NB: When MinSupported is changed to 24_2, this check can change to
+		// an equality check. This is because 24.2 is the first release where
+		// https://github.com/cockroachdb/cockroach/issues/121914 has been
+		// resolved.
+		require.False(
+			t, clusterversion.MinSupported.Version().Less(*systemDBVersion),
+			"before upgrade, expected system database version (%v) to be less than or equal to clusterversion.MinSupported (%v)",
+			*systemDBVersion, clusterversion.MinSupported.Version(),
+		)
+		return nil
+	})
+	require.NoError(t, err)
+
 	close(automaticUpgrade)
 	sr := sqlutils.MakeSQLRunner(db)
 
@@ -359,5 +385,25 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 SELECT version = crdb_internal.node_executable_version()
   FROM [SHOW CLUSTER SETTING version]`,
 		[][]string{{"true"}})
+
+	// After the upgrade, make sure the new system database version is equal to
+	// the SystemDatabaseSchemaBootstrapVersion. This serves two purposes:
+	// - reminder to bump SystemDatabaseSchemaBootstrapVersion.
+	// - ensure that upgrades have run and updated the system database version.
+	err = internalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		systemDBDesc, err := txn.Descriptors().ByID(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
+		if err != nil {
+			return err
+		}
+		systemDBVersion := systemDBDesc.DatabaseDesc().GetSystemDatabaseSchemaVersion()
+		require.Equalf(
+			t, systemschema.SystemDatabaseSchemaBootstrapVersion, *systemDBVersion,
+			"after upgrade, expected system database version (%v) to be equal to systemschema.SystemDatabaseSchemaBootstrapVersion (%v)",
+			*systemDBVersion, systemschema.SystemDatabaseSchemaBootstrapVersion,
+		)
+		return nil
+	})
+	require.NoError(t, err)
+
 	s.Stopper().Stop(context.Background())
 }

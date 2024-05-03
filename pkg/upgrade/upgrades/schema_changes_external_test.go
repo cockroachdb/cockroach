@@ -69,6 +69,7 @@ type schemaChangeTestCase struct {
 // exponential backoff to the system.jobs table, but was retrofitted to prevent
 // regressions.
 func TestMigrationWithFailures(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	const createTableBefore = `
 CREATE TABLE test.test_table (
 	id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
@@ -173,6 +174,7 @@ CREATE TABLE test.test_table (
 // alters a column in a table multiple times with failures at different stages
 // of the migration.
 func TestMigrationWithFailuresMultipleAltersOnSameColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 
 	const createTableBefore = `
 CREATE TABLE test.test_table (

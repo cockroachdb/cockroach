@@ -522,6 +522,17 @@ func (m *Manager) Migrate(
 			}
 		}
 
+		// Bump the version of the system database schema if this is the final
+		// version for a release.
+		// NB: The final version never has an associated migration, which is why we
+		// bump the SystemDatabaseSchemaVersion here; we cannot do it inside of
+		// runMigration.
+		if clusterVersion.Equal(clusterversion.Latest.Version()) && clusterVersion.IsFinal() {
+			if err := upgrade.BumpSystemDatabaseSchemaVersion(ctx, cv.Version, m.deps.DB); err != nil {
+				return err
+			}
+		}
+
 		if m.knobs.InterlockPausePoint == upgradebase.AfterMigration {
 			m.postToPauseChannelAndWaitForResume(ctx)
 		}
@@ -621,6 +632,7 @@ func (m *Manager) runMigration(
 		// since this code doesn't do retries and we also don't want to complicate
 		// test only code.
 		ctx := startup.WithoutChecks(ctx)
+		v := mig.Version()
 		alreadyCompleted, err := migrationstable.CheckIfMigrationCompleted(
 			ctx, version, nil /* txn */, m.ie, false /* enterpriseEnabled */, migrationstable.ConsistentRead,
 		)
@@ -630,13 +642,13 @@ func (m *Manager) runMigration(
 
 		switch upg := mig.(type) {
 		case *upgrade.SystemUpgrade:
-			if err := upg.Run(ctx, mig.Version(), m.SystemDeps()); err != nil {
+			if err := upg.Run(ctx, v, m.SystemDeps()); err != nil {
 				return err
 			}
 		case *upgrade.TenantUpgrade:
 			// The TenantDeps used here are incomplete, but enough for the "permanent
 			// upgrades" that run under this testing knob.
-			if err := upg.Run(ctx, mig.Version(), upgrade.TenantDeps{
+			if err := upg.Run(ctx, v, upgrade.TenantDeps{
 				KVDB:             m.deps.DB.KV(),
 				DB:               m.deps.DB,
 				Codec:            m.codec,
@@ -651,8 +663,15 @@ func (m *Manager) runMigration(
 			}
 		}
 
-		if err := migrationstable.MarkMigrationCompleted(ctx, m.ie, mig.Version()); err != nil {
+		if err := migrationstable.MarkMigrationCompleted(ctx, m.ie, v); err != nil {
 			return err
+		}
+		// Bump the version of the system database schema whenever we run a
+		// non-permanent migration.
+		if !mig.Permanent() {
+			if err := upgrade.BumpSystemDatabaseSchemaVersion(ctx, v, m.deps.DB); err != nil {
+				return err
+			}
 		}
 		return nil
 	} else {

@@ -149,5 +149,5 @@ func upgradeSystemLeasesDescriptor(
 	}); err != nil {
 		return err
 	}
-	return bumpSystemDatabaseSchemaVersion(ctx, version, deps)
+	return nil
 }
