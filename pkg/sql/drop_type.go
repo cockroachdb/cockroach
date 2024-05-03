@@ -292,6 +292,17 @@ func (p *planner) dropTypeImpl(
 		return err
 	}
 
+	// For this type descriptor, delete queued schema change jobs from the job
+	// cache. If the job had already been scheduled, we would also need to mark
+	// these jobs as successful, but that should never happen for types.
+	//
+	// Note that we still wait for jobs removed from the cache to finish running
+	// after the transaction, since they're not removed from the jobsCollection.
+	// Also, changes made here do not affect schema change jobs created in this
+	// transaction with no mutation ID; they remain in the cache, and will be
+	// updated when writing the job record to drop the table.
+	delete(p.ExtendedEvalContext().jobs.uniqueToCreate, typeDesc.ID)
+
 	if err := p.removeBackRefsFromAllTypesInType(ctx, typeDesc); err != nil {
 		return err
 	}
