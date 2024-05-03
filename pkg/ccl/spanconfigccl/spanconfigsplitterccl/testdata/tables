@@ -36,6 +36,6 @@ DROP TABLE db.t2;
 ----
 
 # Dropped tables should not observe any splits.
-splits id=107
+splits last_seen_id
 ----
 = 0
