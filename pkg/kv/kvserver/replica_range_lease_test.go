@@ -138,6 +138,7 @@ func TestReplicaLeaseStatus(t *testing.T) {
 				Ident: &roachpb.StoreIdent{StoreID: 1, NodeID: 1},
 				cfg:   StoreConfig{Clock: clock, NodeLiveness: l},
 			}}
+			r.mu.state.Desc = &roachpb.RangeDescriptor{}
 			var empty livenesspb.Liveness
 			if maybeLiveness := tc.liveness; maybeLiveness != empty {
 				l.TestingMaybeUpdate(ctx, liveness.Record{Liveness: maybeLiveness})
@@ -150,6 +151,7 @@ func TestReplicaLeaseStatus(t *testing.T) {
 			}
 			assert.Equal(t, kvserverpb.LeaseStatus{
 				Lease: tc.lease, Now: tc.now, RequestTime: tc.reqTS, State: tc.want, Liveness: tc.liveness,
+				Descriptors: []roachpb.RangeDescriptor{*r.mu.state.Desc},
 			}, got)
 		})
 	}
