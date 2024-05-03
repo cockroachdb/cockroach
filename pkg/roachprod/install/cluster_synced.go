@@ -444,7 +444,7 @@ func (c *SyncedCluster) Stop(
 		}
 		return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
 	} else {
-		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, []string{
+		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, DefaultAuthMode, []string{
 			"-e", fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName),
 		})
 		if err != nil || res[0].Err != nil {

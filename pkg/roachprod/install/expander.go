@@ -160,7 +160,7 @@ func (e *expander) maybeExpandPgURL(
 	}
 	switch m[1] {
 	case ":L":
-		url, err := c.loadBalancerURL(ctx, l, virtualClusterName, sqlInstance, AuthUserCert)
+		url, err := c.loadBalancerURL(ctx, l, virtualClusterName, sqlInstance, DefaultAuthMode)
 		return url, url != "", err
 	default:
 		if e.pgURLs[virtualClusterName] == nil {

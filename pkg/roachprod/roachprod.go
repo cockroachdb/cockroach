@@ -441,6 +441,7 @@ func SQL(
 	secure bool,
 	tenantName string,
 	tenantInstance int,
+	authMode install.PGAuthMode,
 	cmdArray []string,
 ) error {
 	c, err := getClusterFromCache(l, clusterName, install.SecureOption(secure))
@@ -448,10 +449,10 @@ func SQL(
 		return err
 	}
 	if len(c.Nodes) == 1 {
-		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, cmdArray)
+		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, authMode, cmdArray)
 	}
 
-	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
+	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, authMode, cmdArray)
 	if err != nil {
 		return err
 	}
@@ -2087,7 +2088,9 @@ func StartJaeger(
 		if err != nil {
 			return err
 		}
-		_, err = c.ExecSQL(ctx, l, nodes, virtualClusterName, 0, []string{"-e", setupStmt})
+		_, err = c.ExecSQL(
+			ctx, l, nodes, virtualClusterName, 0, install.DefaultAuthMode, []string{"-e", setupStmt},
+		)
 		if err != nil {
 			return err
 		}

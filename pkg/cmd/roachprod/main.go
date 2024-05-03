@@ -1007,7 +1007,12 @@ var sqlCmd = &cobra.Command{
 	Long:  "Run `cockroach sql` on a remote cluster.\n",
 	Args:  cobra.MinimumNArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.SQL(context.Background(), config.Logger, args[0], !insecure, virtualClusterName, sqlInstance, args[1:])
+		auth, ok := pgAuthModes[authMode]
+		if !ok {
+			return errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
+		}
+
+		return roachprod.SQL(context.Background(), config.Logger, args[0], !insecure, virtualClusterName, sqlInstance, auth, args[1:])
 	}),
 }
 
@@ -1027,7 +1032,6 @@ Defaults to root if not passed. Available auth-modes are:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-
 		auth, ok := pgAuthModes[authMode]
 		if !ok {
 			return errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
