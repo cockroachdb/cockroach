@@ -348,6 +348,11 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 			}
 			if typ.Identical(types.AnyTuple) {
 				panic(recordVarErr)
+			} else if typ.IsPolymorphicType() {
+				// NOTE: Postgres also returns an "unsupported" error.
+				panic(pgerror.Newf(pgcode.FeatureNotSupported,
+					"variable \"%s\" has pseudo-type %s", dec.Var, typ.Name(),
+				))
 			}
 			b.addVariable(dec.Var, typ)
 			if dec.Expr != nil {
