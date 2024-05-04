@@ -325,6 +325,14 @@ func alterTenantRestartReplication(
 		)
 	}
 
+	if tenInfo.DataState != mtinfopb.DataStateReady {
+		return errors.Newf("cannot start replication for tenant %q (%s) in state %s (is replication or a restore already running?)",
+			tenInfo.Name,
+			dstTenantID,
+			tenInfo.DataState,
+		)
+	}
+
 	if alterTenantStmt.Options.ExpirationWindowSet() {
 		return CannotSetExpirationWindowErr
 	}
