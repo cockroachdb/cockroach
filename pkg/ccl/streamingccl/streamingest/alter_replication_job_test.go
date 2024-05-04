@@ -105,6 +105,10 @@ func TestAlterTenantCompleteToLatest(t *testing.T) {
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 START REPLICATION OF $2 ON $3`,
 		args.DestTenantName, args.SrcTenantName, c.SrcURL.String())
 
+	c.DestSysSQL.ExpectErr(c.T, `is replication or a restore already running`,
+		`ALTER TENANT $1 START REPLICATION OF $2 ON $3`,
+		args.DestTenantName, args.SrcTenantName, c.SrcURL.String())
+
 	// Wait for the resumed replication to advance.
 	_, ingestionJobID = replicationtestutils.GetStreamJobIds(t, ctx, c.DestSysSQL, args.DestTenantName)
 	targetReplicatedTime = c.SrcCluster.Server(0).Clock().Now()
