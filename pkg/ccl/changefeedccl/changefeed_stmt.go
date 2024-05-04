@@ -1374,9 +1374,11 @@ func reconcileJobStateWithLocalState(
 	// progress, and the resulting progress record persisted back to the jobs
 	// table.
 	var highWater hlc.Timestamp
-	if hw := localState.progress.GetHighWater(); hw != nil {
-		highWater = *hw
+	hw := localState.progress.GetHighWater()
+	if hw == nil || hw.IsEmpty() {
+		return nil
 	}
+	highWater = *hw
 
 	// Build frontier based on tracked spans.
 	sf, err := span.MakeFrontierAt(highWater, localState.trackedSpans...)
