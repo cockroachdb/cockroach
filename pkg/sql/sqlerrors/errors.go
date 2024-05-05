@@ -111,14 +111,11 @@ func NewInvalidAssignmentCastError(
 // NewGeneratedAlwaysAsIdentityColumnOverrideError creates an error for
 // explicitly writing a column created with `GENERATED ALWAYS AS IDENTITY`
 // syntax.
-// TODO(janexing): Should add a HINT with "Use OVERRIDING SYSTEM VALUE
-// to override." once issue #68201 is resolved.
-// Check also: https://github.com/cockroachdb/cockroach/issues/68201.
 func NewGeneratedAlwaysAsIdentityColumnOverrideError(columnName string) error {
-	return errors.WithDetailf(
+	return errors.WithHint(errors.WithDetailf(
 		pgerror.Newf(pgcode.GeneratedAlways, "cannot insert into column %q", columnName),
 		"Column %q is an identity column defined as GENERATED ALWAYS", columnName,
-	)
+	), "Use OVERRIDING SYSTEM VALUE to override")
 }
 
 // NewGeneratedAlwaysAsIdentityColumnUpdateError creates an error for
