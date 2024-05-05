@@ -201,8 +201,48 @@ EOF"
           --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
         $0 dns workload-ua create || $0 dns workload-ua
-        # TODO(dt): push the pg-urls for ua2 and ua2 to it.
-        # TODO(dt): push a systemd unit file to it to run tpcc workload.
+        
+        # push cockroach to the worker to run its built-in workloads
+        roachprod stage workload-ua:1 cockroach
+        roachprod stage workload-ua:1 workload
+        
+        # Push certs for both clusters to the worker.
+        roachprod get drt-ua1:1 certs certs.ua1
+        roachprod put workload-ua:1 certs.ua1
+        roachprod get drt-ua2:1 certs certs.ua2
+        roachprod put workload-ua:1 certs.ua2
+        roachprod ssh workload-ua:1 -- "chmod 0600 certs.ua1/* certs.ua2/*"
+        rm -rf certs.ua1 certs.ua2
+        
+        # Setup pgurls for worklooads to use.
+        roachprod ssh workload-ua:1 -- "
+        echo \"$(roachprod pgurl drt-ua1 --secure --cluster=main | sed 's/=certs/=certs.ua1/g' | sed "s/'//g" )\" > pgurls.ua1.txt; 
+        echo \"$(roachprod pgurl drt-ua2 --secure --cluster=main | sed 's/=certs/=certs.ua2/g' | sed "s/'//g" )\" > pgurls.ua2.txt;
+        ln -sf pgurls.ua1.txt pgurls.txt"
+      
+        # Setup the tpcc workload runner as a script invoked by systemd.
+        roachprod ssh workload-ua:1 -- 'cat - > tpcc << EOF 
+#!/usr/bin/env bash
+
+exec ./cockroach workload run tpcc \
+  --warehouses=150000 --workers=100 --wait=false --tolerate-errors --display-every 60s \$(cat /home/ubuntu/pgurls.txt)
+EOF'
+        roachprod ssh workload-ua:1 -- "chmod +x ./tpcc;
+sudo tee /etc/systemd/system/tpcc.service > /dev/null << EOF
+[Unit]
+Description=tpcc load generator
+
+[Service]
+WorkingDirectory=/home/ubuntu
+User=ubuntu
+ExecStart=/home/ubuntu/tpcc
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+        roachprod ssh workload-ua -- "sudo systemctl daemon-reload; sudo systemctl enable tpcc.service; sudo systemctl start tpcc.service"
         ;;
       *)
         echo
