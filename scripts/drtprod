@@ -224,8 +224,14 @@ EOF"
         roachprod ssh workload-ua:1 -- 'cat - > tpcc << EOF 
 #!/usr/bin/env bash
 
-exec ./cockroach workload run tpcc \
-  --warehouses=150000 --workers=100 --wait=false --tolerate-errors --display-every 60s \$(cat /home/ubuntu/pgurls.txt)
+exec ./cockroach workload run tpcc \\
+  --warehouses=150000 \\
+  --max-rate=1200 \\
+  --workers=100 \\
+  --wait=false \\
+  --tolerate-errors \\
+  --display-every 60s \\
+  \$(cat /home/ubuntu/pgurls.txt)
 EOF'
         roachprod ssh workload-ua:1 -- "chmod +x ./tpcc;
 sudo tee /etc/systemd/system/tpcc.service > /dev/null << EOF
