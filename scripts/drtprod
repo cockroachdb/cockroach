@@ -93,7 +93,7 @@ case $1 in
 
     # Single quotes around the shell expansion cause it to be processed on the
     # remote host instead of the local host.
-    roachprod ssh ${cluster} -- DD_INSTALL_ONLY=true bash -c '"$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"'
+    roachprod ssh ${cluster} -- DD_INSTALL_ONLY=true DD_API_KEY=${dd_api_key} bash -c '"$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"'
 
     roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/datadog.yaml > /dev/null << EOF
 ---
