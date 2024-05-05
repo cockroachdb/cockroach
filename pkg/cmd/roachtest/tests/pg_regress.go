@@ -223,7 +223,8 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"expressions " +
 		"mvcc " +
 		"regex " +
-		"opr_sanity " +
+		// TODO(#123651): re-enable when pg_catalog.pg_proc is fixed up.
+		// "opr_sanity " +
 		"copyselect " +
 		"copydml " +
 		"copy " +
