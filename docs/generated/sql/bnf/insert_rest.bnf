@@ -1,4 +1,6 @@
 insert_rest ::=
 	select_stmt
+	| overriding_value select_stmt
 	| '(' insert_column_list ')' select_stmt
+	| '(' insert_column_list ')' overriding_value select_stmt
 	| 'DEFAULT' 'VALUES'
