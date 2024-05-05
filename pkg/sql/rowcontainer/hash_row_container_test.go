@@ -356,7 +356,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 	const numCols = 2
 	rows := randgen.MakeRepeatedIntRows(numRowsInBucket, numRows, numCols)
 	storedEqColumns := columns{0}
-	types := []*types.T{types.Int, types.Int}
+	typs := []*types.T{types.Int, types.Int}
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	getRowContainer := func() *HashDiskBackedRowContainer {
@@ -364,7 +364,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 		err = rc.Init(
 			ctx,
 			true, /* shouldMark */
-			types,
+			typs,
 			storedEqColumns,
 			true, /*encodeNull */
 		)
@@ -456,7 +456,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 			t.Fatal(err)
 		}
 		func() {
-			i, err := rc.NewBucketIterator(ctx, rows[0], storedEqColumns)
+			i, err := rc.NewBucketIterator(ctx, rows[0], storedEqColumns, types.OneIntCol)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -479,7 +479,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 			t.Fatal("unexpectedly using memory")
 		}
 		func() {
-			i, err := rc.NewBucketIterator(ctx, rows[0], storedEqColumns)
+			i, err := rc.NewBucketIterator(ctx, rows[0], storedEqColumns, types.OneIntCol)
 			if err != nil {
 				t.Fatal(err)
 			}
