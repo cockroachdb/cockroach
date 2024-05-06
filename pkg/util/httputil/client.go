@@ -27,13 +27,25 @@ const StandardHTTPTimeout time.Duration = 3 * time.Second
 
 // NewClientWithTimeout defines a http.Client with the given timeout.
 func NewClientWithTimeout(timeout time.Duration) *Client {
+	return NewClientWithTimeouts(timeout, timeout)
+}
+
+// NewClientWithTimeouts defines a http.Client with the given dialer and client timeouts.
+func NewClientWithTimeouts(dialerTimeout, clientTimeout time.Duration) *Client {
+	t := http.DefaultTransport.(*http.Transport)
 	return &Client{&http.Client{
-		Timeout: timeout,
+		Timeout: clientTimeout,
 		Transport: &http.Transport{
 			// Don't leak a goroutine on OSX (the TCP level timeout is probably
 			// much higher than on linux).
-			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+			DialContext:       (&net.Dialer{Timeout: dialerTimeout}).DialContext,
 			DisableKeepAlives: true,
+
+			Proxy:                 t.Proxy,
+			MaxIdleConns:          t.MaxIdleConns,
+			IdleConnTimeout:       t.IdleConnTimeout,
+			TLSHandshakeTimeout:   t.TLSHandshakeTimeout,
+			ExpectContinueTimeout: t.ExpectContinueTimeout,
 		},
 	}}
 }
