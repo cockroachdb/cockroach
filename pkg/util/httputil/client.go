@@ -12,6 +12,8 @@ package httputil
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"net"
 	"net/http"
@@ -32,6 +34,25 @@ func NewClientWithTimeout(timeout time.Duration) *Client {
 
 // NewClientWithTimeouts defines a http.Client with the given dialer and client timeouts.
 func NewClientWithTimeouts(dialerTimeout, clientTimeout time.Duration) *Client {
+	return NewClientWithTimeoutsCustomCA(dialerTimeout, clientTimeout, "")
+}
+
+// NewClientWithTimeoutsCustomCA defines a http.Client with the given dialer and client timeouts and custom CA pem.
+func NewClientWithTimeoutsCustomCA(
+	dialerTimeout, clientTimeout time.Duration, customCAPem string,
+) *Client {
+	var tlsConf *tls.Config
+	if customCAPem != "" {
+		roots, err := x509.SystemCertPool()
+		if err != nil {
+			return nil
+		}
+		if !roots.AppendCertsFromPEM([]byte(customCAPem)) {
+			return nil
+		}
+		tlsConf = &tls.Config{RootCAs: roots}
+	}
+	t := http.DefaultTransport.(*http.Transport)
 	return &Client{&http.Client{
 		Timeout: clientTimeout,
 		Transport: &http.Transport{
@@ -39,6 +60,15 @@ func NewClientWithTimeouts(dialerTimeout, clientTimeout time.Duration) *Client {
 			// much higher than on linux).
 			DialContext:       (&net.Dialer{Timeout: dialerTimeout}).DialContext,
 			DisableKeepAlives: true,
+
+			Proxy:                 t.Proxy,
+			MaxIdleConns:          t.MaxIdleConns,
+			IdleConnTimeout:       t.IdleConnTimeout,
+			TLSHandshakeTimeout:   t.TLSHandshakeTimeout,
+			ExpectContinueTimeout: t.ExpectContinueTimeout,
+
+			// Add our custom CA.
+			TLSClientConfig: tlsConf,
 		},
 	}}
 }

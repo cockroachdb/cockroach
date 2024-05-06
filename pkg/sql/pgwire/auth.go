@@ -553,7 +553,8 @@ func (p *authPipe) LogAuthFailed(
 		p.loggedFailure = true
 		var errStr redact.RedactableString
 		if detailedErr != nil {
-			errStr = redact.Sprint(detailedErr)
+			// should we apply redact here?
+			errStr = redact.Sprint(detailedErr) //.Redact()
 		}
 		ev := &eventpb.ClientAuthenticationFailed{
 			CommonConnectionDetails: p.connDetails,

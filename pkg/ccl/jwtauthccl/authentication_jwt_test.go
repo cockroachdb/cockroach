@@ -15,6 +15,10 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -146,6 +150,7 @@ func TestJWTEnabledCheck(t *testing.T) {
 	// Now the validate call gets past the enabled check and fails on the next check (issuer check).
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
+	require.EqualValues(t, "token issued by issuer1", errors.GetAllDetails(err)[0])
 }
 
 func TestJWTSingleKey(t *testing.T) {
@@ -174,6 +179,7 @@ func TestJWTSingleKey(t *testing.T) {
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: unable to validate token")
+	require.EqualValues(t, "unable to fetch jwks: Get \"issuer1/.well-known/openid-configuration\": unsupported protocol scheme \"\"", errors.GetAllDetails(err)[0])
 
 	// Set the JWKS cluster setting.
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, false)
@@ -182,6 +188,7 @@ func TestJWTSingleKey(t *testing.T) {
 	// Now the validate call gets past the token validity check and fails on the next check (subject matching user).
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
+	require.EqualValues(t, "token issued for [test_user1] and login was for invalid_user", errors.GetAllDetails(err)[0])
 }
 
 func TestJWTSingleKeyWithoutKeyAlgorithm(t *testing.T) {
@@ -220,6 +227,7 @@ func TestJWTSingleKeyWithoutKeyAlgorithm(t *testing.T) {
 	// Now the validate call gets past the token validity check and fails on the next check (subject matching user).
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
+	require.EqualValues(t, "token issued for [test_user1] and login was for invalid_user", errors.GetAllDetails(err)[0])
 }
 
 func TestJWTMultiKey(t *testing.T) {
@@ -259,6 +267,7 @@ func TestJWTMultiKey(t *testing.T) {
 	// Now jwk2 token passes the validity check and fails on the next check (subject matching user).
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
+	require.EqualValues(t, "token issued for [test_user1] and login was for invalid_user", errors.GetAllDetails(err)[0])
 }
 
 func TestExpiredToken(t *testing.T) {
@@ -283,6 +292,7 @@ func TestExpiredToken(t *testing.T) {
 	// Validation fails with an invalid token error for tokens with an expiration date in the past.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid token")
+	require.EqualValues(t, "unable to parse token: exp not satisfied", errors.GetAllDetails(err)[0])
 }
 
 func TestKeyIdMismatch(t *testing.T) {
@@ -343,15 +353,18 @@ func TestIssuerCheck(t *testing.T) {
 	// Validation fails with no issuer are configured.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token1, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
+	require.EqualValues(t, "token issued by issuer1", errors.GetAllDetails(err)[0])
 
 	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	// Validation fails with an issuer error when the issuer in the token is not in cluster's accepted issuers.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token1, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
+	require.EqualValues(t, "token issued by issuer1", errors.GetAllDetails(err)[0])
 
 	// Validation succeeds when the issuer in the token is equal to the cluster's accepted issuers.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token2, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
+	require.EqualValues(t, "token issued for [test_user1] and login was for invalid_user", errors.GetAllDetails(err)[0])
 
 	// Set the cluster setting to accept issuer values of either "issuer" or "issuer2".
 	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, "[\""+issuer1+"\", \""+issuer2+"\"]")
@@ -359,11 +372,12 @@ func TestIssuerCheck(t *testing.T) {
 	// Validation succeeds when the issuer in the token is an element of the cluster's accepted issuers.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token1, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
+	require.EqualValues(t, "token issued for [test_user1] and login was for invalid_user", errors.GetAllDetails(err)[0])
 
 	// Validation succeeds when the issuer in the token is an element of the cluster's accepted issuers.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token2, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
-
+	require.EqualValues(t, "token issued for [test_user1] and login was for invalid_user", errors.GetAllDetails(err)[0])
 }
 
 func TestSubjectCheck(t *testing.T) {
@@ -389,11 +403,13 @@ func TestSubjectCheck(t *testing.T) {
 	// "invalid" but the token is for the user "test2".
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
+	require.EqualValues(t, "token issued for [test_user1] and login was for invalid_user", errors.GetAllDetails(err)[0])
 
 	// Validation passes the subject check when the username matches the subject and then fails on the next
 	// check (audience field not matching).
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid audience")
+	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
 }
 
 func TestClaimMissing(t *testing.T) {
@@ -419,6 +435,7 @@ func TestClaimMissing(t *testing.T) {
 	// Validation fails with missing claim
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), missingClaimToken, identMap)
 	require.ErrorContains(t, err, "JWT authentication: missing claim")
+	require.EqualValues(t, "token does not contain a claim for groups", errors.GetAllDetails(err)[0])
 }
 
 func TestIntegerClaimValue(t *testing.T) {
@@ -445,6 +462,7 @@ func TestIntegerClaimValue(t *testing.T) {
 	// the integer claim is implicitly cast to a string
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), intClaimToken, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid audience")
+	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
 }
 
 func TestSingleClaim(t *testing.T) {
@@ -476,6 +494,7 @@ func TestSingleClaim(t *testing.T) {
 	// check (audience field not matching).
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid audience")
+	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
 }
 
 func TestMultipleClaim(t *testing.T) {
@@ -507,8 +526,10 @@ func TestMultipleClaim(t *testing.T) {
 	// check (audience field not matching).
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid audience")
+	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username2), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid audience")
+	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
 }
 
 func TestSubjectMappingCheck(t *testing.T) {
@@ -536,14 +557,17 @@ func TestSubjectMappingCheck(t *testing.T) {
 	// but they try to log in with username1.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
+	require.EqualValues(t, "token issued for [test_user1] and login was for test_user1", errors.GetAllDetails(err)[0])
 
 	// Validation fails if there is a map for the issuer but no mapping rule matches.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token2, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
+	require.EqualValues(t, "the value [test_user2] for the issuer issuer2 is invalid", errors.GetAllDetails(err)[0])
 
 	// Validation passes the subject check when the username matches the mapped subject.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username2), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid audience")
+	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
 }
 
 func TestSubjectReservedUser(t *testing.T) {
@@ -570,10 +594,12 @@ func TestSubjectReservedUser(t *testing.T) {
 	// You cannot log in as root or other reserved users using token based auth when mapped to root.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString("root"), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid identity")
+	require.EqualValues(t, "cannot use JWT auth to login to a reserved user root", errors.GetAllDetails(err)[0])
 
 	// You cannot log in as root or other reserved users using token based auth when no map is involved.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString("root"), token2, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid identity")
+	require.EqualValues(t, "cannot use JWT auth to login to a reserved user root", errors.GetAllDetails(err)[0])
 }
 
 func TestAudienceCheck(t *testing.T) {
@@ -601,6 +627,7 @@ func TestAudienceCheck(t *testing.T) {
 	// Validation fails with an audience error when the audience in the token doesn't match the cluster's audience.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid audience")
+	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
 
 	// Update the audience field to "test_cluster".
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
@@ -683,6 +710,7 @@ func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	// Validation fails with an audience error when the audience in the token doesn't match the cluster's audience.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid audience")
+	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
 
 	// Update the audience field to "test_cluster".
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
@@ -738,6 +766,7 @@ func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	// Validation fails with an audience error when the audience in the token doesn't match the cluster's audience.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid audience")
+	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
 
 	// Update the audience field to "test_cluster".
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
@@ -751,4 +780,28 @@ func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	// Validation passes the audience check now that both audiences are accepted.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.NoError(t, err)
+}
+
+func TestJWTAuthCanUseHTTPProxy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(fmt.Sprintf("proxied-%s", r.URL)))
+	}))
+	defer proxy.Close()
+
+	// Normally, we would set proxy via HTTP_PROXY environment variable.
+	// However, if we run multiple tests in this package, and earlier tests
+	// happen to create an http client, then the DefaultTransport will have
+	// been been initialized with an empty Proxy.  So, set proxy directly.
+	http.DefaultTransport.(*http.Transport).Proxy = func(_ *http.Request) (*url.URL, error) {
+		return url.Parse(proxy.URL)
+	}
+	defer func() {
+		http.DefaultTransport.(*http.Transport).Proxy = nil
+	}()
+
+	res, err := getHttpResponse(ctx, "http://my-server/.well-known/openid-configuration")
+	require.NoError(t, err)
+	require.EqualValues(t, "proxied-http://my-server/.well-known/openid-configuration", string(res))
 }
