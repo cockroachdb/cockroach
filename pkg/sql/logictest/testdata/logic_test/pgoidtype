@@ -733,3 +733,22 @@ SELECT t2.col_1
 statement ok
 RESET testing_optimizer_random_seed;
 RESET testing_optimizer_disable_rule_probability;
+
+# Regression test for using the correct type when decoding EncDatum of Oid type
+# when probing the row-by-row hash table (#123548).
+statement ok
+CREATE TABLE t123548_1 (col1 REGCLASS, INDEX (col1));
+CREATE TABLE t123548_2 (col2 OID, UNIQUE (col2));
+INSERT INTO t123548_1 VALUES (0);
+INSERT INTO t123548_2 VALUES (0);
+SET testing_optimizer_random_seed = 5928357781746163642;
+SET testing_optimizer_disable_rule_probability = 1.000000;
+
+query T
+SELECT col1 FROM t123548_1 JOIN t123548_2 ON col1 = col2;
+----
+-
+
+statement ok
+RESET testing_optimizer_random_seed;
+RESET testing_optimizer_disable_rule_probability;
