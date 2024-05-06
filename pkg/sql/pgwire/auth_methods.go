@@ -705,7 +705,7 @@ type JWTVerifier interface {
 		_ username.SQLUsername,
 		_ []byte,
 		_ *identmap.Conf,
-	) error
+	) (detailedErrorMsg []byte, authError error)
 }
 
 var jwtVerifier JWTVerifier
@@ -714,8 +714,8 @@ type noJWTConfigured struct{}
 
 func (c *noJWTConfigured) ValidateJWTLogin(
 	_ context.Context, _ *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
-) error {
-	return errors.New("JWT token authentication requires CCL features")
+) (detailedErrorMsg []byte, authError error) {
+	return nil, errors.New("JWT token authentication requires CCL features")
 }
 
 // ConfigureJWTAuth is a hook for the `jwtauthccl` library to add JWT login support. It's called to
@@ -780,9 +780,10 @@ func authJwtToken(
 		if len(token) == 0 {
 			return security.NewErrPasswordUserAuthFailed(user)
 		}
-		if err = jwtVerifier.ValidateJWTLogin(ctx, execCfg.Settings, user, []byte(token), identMap); err != nil {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
-			return err
+		if detailedErrorMsg, authError := jwtVerifier.ValidateJWTLogin(ctx, execCfg.Settings, user, []byte(token), identMap); authError != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID,
+				errors.Join(authError, errors.New(string(detailedErrorMsg))))
+			return authError
 		}
 		c.LogAuthOK(ctx)
 		return nil
