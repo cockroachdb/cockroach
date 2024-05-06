@@ -2584,7 +2584,8 @@ type mockPulsarServer struct {
 
 func makeMockPulsarServer() *mockPulsarServer {
 	return &mockPulsarServer{
-		msgCh: make(chan *pulsar.ProducerMessage, 2048),
+		// TODO(#118899): Make msgCh a buffered channel for async message sending.
+		msgCh: make(chan *pulsar.ProducerMessage),
 	}
 }
 
@@ -2638,12 +2639,14 @@ func (p *mockPulsarProducer) SendAsync(
 	m *pulsar.ProducerMessage,
 	f func(pulsar.MessageID, *pulsar.ProducerMessage, error),
 ) {
+	log.Infof(ctx, "SendAsync start %d", len(p.pulsarServer.msgCh))
 	select {
 	case <-ctx.Done():
 		f(nil, m, ctx.Err())
 	case p.pulsarServer.msgCh <- m:
 		f(nil, m, nil)
 	}
+	log.Infof(ctx, "SendAsync end")
 }
 
 func (p *mockPulsarProducer) LastSequenceID() int64 {
