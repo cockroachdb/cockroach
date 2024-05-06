@@ -361,12 +361,6 @@ func (t *txnStats) sizeUnsafeLocked() int64 {
 	return txnStatsShallowSize + stmtFingerprintIDsSize + dataSize
 }
 
-func (t *txnStats) mergeStats(stats *appstatspb.TransactionStatistics) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.mu.data.Add(stats)
-}
-
 // stmtStats holds per-statement statistics.
 type stmtStats struct {
 	// ID is the statementFingerprintID constructed using the stmtKey fields.
