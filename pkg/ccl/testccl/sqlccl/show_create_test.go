@@ -37,6 +37,11 @@ func TestShowCreateRedactableValues(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// To check for PII leaks, we inject a single unlikely string into some of the
 	// query constants produced by SQLSmith, and then search the redacted SHOW
 	// CREATE statement for this string.
@@ -56,7 +61,7 @@ func TestShowCreateRedactableValues(t *testing.T) {
 	// Check all redactable SHOW CREATE statements at once by using
 	// crdb_internal.create_statements.
 	checkAllShowCreateRedactable := func() {
-		rows, err := sqlDB.QueryContext(
+		rows, err := conn.QueryContext(
 			ctx, "SELECT create_statement, create_redactable FROM crdb_internal.create_statements",
 		)
 		if err != nil {
@@ -79,7 +84,7 @@ func TestShowCreateRedactableValues(t *testing.T) {
 	setup = append(setup, "SET statement_timeout = '30s';")
 	for _, stmt := range setup {
 		t.Log(stmt)
-		if _, err := sqlDB.ExecContext(ctx, stmt); err != nil {
+		if _, err := conn.ExecContext(ctx, stmt); err != nil {
 			// Ignore errors.
 			t.Log("-- ignoring error:", err)
 			continue
@@ -101,7 +106,7 @@ func TestShowCreateRedactableValues(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		alter := alterSmith.Generate()
 		t.Log(alter)
-		if _, err := sqlDB.ExecContext(ctx, alter); err != nil {
+		if _, err := conn.ExecContext(ctx, alter); err != nil {
 			// Ignore errors.
 			t.Log("-- ignoring error:", err)
 			continue
@@ -123,7 +128,7 @@ func TestShowCreateRedactableValues(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		view := "CREATE VIEW v" + strconv.Itoa(i) + " AS " + smith.Generate()
 		t.Log(view)
-		if _, err := sqlDB.ExecContext(ctx, view); err != nil {
+		if _, err := conn.ExecContext(ctx, view); err != nil {
 			// Ignore errors.
 			t.Log("-- ignoring error:", err)
 			continue
