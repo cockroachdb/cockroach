@@ -187,17 +187,29 @@ func run(
 					)
 				}
 			} else {
+				licenseFiles := []release.ArchiveFile{
+					{
+						LocalAbsolutePath: filepath.Join(o.PkgDir, "licenses", "LICENSE.txt"),
+						ArchiveFilePath:   "LICENSE.txt",
+					},
+					{
+						LocalAbsolutePath: filepath.Join(o.PkgDir, "licenses", "THIRD-PARTY-NOTICES.txt"),
+						ArchiveFilePath:   "THIRD-PARTY-NOTICES.txt",
+					},
+				}
 				for _, provider := range providers {
 					crdbFiles := append(
 						[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.AbsolutePath, "cockroach")},
 						release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.Platform)...,
 					)
+					crdbFiles = append(crdbFiles, licenseFiles...)
 					crdbBody, err := release.CreateArchive(o.Platform, o.VersionStr, "cockroach", crdbFiles)
 					if err != nil {
 						log.Fatalf("cannot create crdb release archive %s", err)
 					}
 
 					sqlFiles := []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.CockroachSQLAbsolutePath, "cockroach-sql")}
+					sqlFiles = append(sqlFiles, licenseFiles...)
 					sqlBody, err := release.CreateArchive(o.Platform, o.VersionStr, "cockroach-sql", sqlFiles)
 					if err != nil {
 						log.Fatalf("cannot create sql release archive %s", err)
