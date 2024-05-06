@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1593,9 +1594,9 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	probDupAccessWithWeakerStr := 0.5
 	probOnlyRead := possibleProbOnlyRead[rng.Intn(len(possibleProbOnlyRead))]
 
-	if syncutil.DeadlockEnabled {
-		// We've seen 10,000 requests to be too much when running a deadlock build.
-		// Override numRequests to the lowest option (1,000) for deadlock builds.
+	if syncutil.DeadlockEnabled || util.RaceEnabled {
+		// We've seen 10,000 requests to be too much when running a deadlock/race
+		// build. Override numRequests to the lowest option (1,000) for such builds.
 		numRequests = 1000
 	}
 
