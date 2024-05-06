@@ -86,6 +86,7 @@ func TestDataDriven(t *testing.T) {
 		// it into the schema changer.
 		splitter := spanconfigsplitter.New(tenant.ExecCfg().Codec, scKnobs)
 
+		var lastSeenID descpb.ID
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "exec-sql":
@@ -114,11 +115,14 @@ func TestDataDriven(t *testing.T) {
 					d.ScanArgs(t, "table", &tbName)
 					tbl := tenant.LookupTableByName(ctx, dbName, tbName)
 					objID = tbl.GetID()
+				case d.HasArg("last_seen_id"):
+					objID = lastSeenID
 				default:
 					d.Fatalf(t, "insufficient/improper args (%v) provided to split", d.CmdArgs)
 				}
 
 				steps.Reset()
+				lastSeenID = objID
 				splits, err := splitter.Splits(ctx, tenant.LookupTableDescriptorByID(ctx, objID))
 				require.NoError(t, err)
 				steps.WriteString(fmt.Sprintf("= %d", splits))
