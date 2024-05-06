@@ -214,6 +214,13 @@ func (l *Logger) RootLogger() *Logger {
 // If the parent Logger was logging to a file, the new Logger will log to a file
 // in the same dir called <name>.log.
 func (l *Logger) ChildLogger(name string, opts ...loggerOption) (*Logger, error) {
+	// If this logger instance is redirecting to `/dev/null` (most
+	// likely tests), there's no point trying to create a child
+	// logger. Return the current logger instance itself.
+	if l.path == "/dev/null" {
+		return l, nil
+	}
+
 	// If the parent Logger is not logging to a file, then the child will not
 	// either. However, the child will write to Stdout/Stderr with a prefix.
 	if l.File == nil {
