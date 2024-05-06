@@ -1122,12 +1122,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		}
 	}
 
+	var tableStatsTestingKnobs *stats.TableStatsTestingKnobs
+	if tableStatsKnobs := cfg.TestingKnobs.TableStatsKnobs; tableStatsKnobs != nil {
+		tableStatsTestingKnobs = tableStatsKnobs.(*stats.TableStatsTestingKnobs)
+	}
 	statsRefresher := stats.MakeRefresher(
 		cfg.AmbientCtx,
 		cfg.Settings,
 		cfg.circularInternalExecutor,
 		execCfg.TableStatsCache,
 		stats.DefaultAsOfTime,
+		tableStatsTestingKnobs,
 	)
 	execCfg.StatsRefresher = statsRefresher
 
