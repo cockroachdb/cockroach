@@ -781,7 +781,12 @@ func authJwtToken(
 			return security.NewErrPasswordUserAuthFailed(user)
 		}
 		if err = jwtVerifier.ValidateJWTLogin(ctx, execCfg.Settings, user, []byte(token), identMap); err != nil {
+			// We are logging unsafe part of error also. Should we change this
+			// behaviour? Also, should we look into obtaining more specific auth
+			// failure reason here?
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
+			// we are returning unsafe error to client in description but only safe
+			// log parts are sent to sentry. is this correct way to handle this?
 			return err
 		}
 		c.LogAuthOK(ctx)

@@ -26,6 +26,9 @@ const (
 	JWTAuthJWKSSettingName          = baseJWTAuthSettingName + "jwks"
 	JWTAuthClaimSettingName         = baseJWTAuthSettingName + "claim"
 	JWKSAutoFetchEnabledSettingName = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
+	//JWTAuthClientTimeoutSettingName  = baseJWTAuthSettingName + "client.timeout"
+	//JWTAuthClientCustomCASettingName = baseJWTAuthSettingName + "client.custom_ca"
+	//JWTAuthClientSystemProxyEnabledSettingName = baseJWTAuthSettingName + "client.system_proxy.enabled"
 )
 
 // JWTAuthClaim sets the JWT claim that is parsed to get the username.
@@ -83,6 +86,28 @@ var JWKSAutoFetchEnabled = settings.RegisterBoolSetting(
 	false,
 	settings.WithReportable(true),
 )
+
+//// JWTClientTimeout is a cluster setting used for setting jwt http client interactions.
+//var JWTClientTimeout = settings.RegisterDurationSetting(
+//	settings.ApplicationLevel,
+//	JWTAuthClientTimeoutSettingName,
+//	"sets the timeout for jwt http client operations",
+//	httputil.StandardHTTPTimeout,
+//	settings.WithPublic)
+//
+//var JWTClientCustomCA = settings.RegisterStringSetting(
+//	settings.ApplicationLevel,
+//	JWTAuthClientCustomCASettingName,
+//	"sets the custom root CA (appended to system's default CAs) for verifying "+
+//		"certificates when interacting with jwt internal HTTPS client",
+//	"",
+//	settings.WithPublic)
+//var JWTClientSystemProxyEnabled = settings.RegisterBoolSetting(
+//	settings.ApplicationLevel,
+//	JWTAuthClientSystemProxyEnabledSettingName,
+//	"enables jwt http client to use the system proxy set",
+//	true,
+//	settings.WithPublic)
 
 func validateJWTAuthIssuers(values *settings.Values, s string) error {
 	var issuers []string

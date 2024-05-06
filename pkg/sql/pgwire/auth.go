@@ -552,8 +552,10 @@ func (p *authPipe) LogAuthFailed(
 		// reason is likely to be more specific than at a higher point in the stack.
 		p.loggedFailure = true
 		var errStr redact.RedactableString
+		// should we actually perform the redact here?
 		if detailedErr != nil {
-			errStr = redact.Sprint(detailedErr)
+			// should we apply redact here?
+			errStr = redact.Sprint(detailedErr).Redact()
 		}
 		ev := &eventpb.ClientAuthenticationFailed{
 			CommonConnectionDetails: p.connDetails,
