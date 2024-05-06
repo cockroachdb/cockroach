@@ -63,7 +63,6 @@ func (q *minMaxQueue) get(pos int) uint32 {
 }
 
 // getFirst returns the element at the start of the minMaxQueue.
-// gcassert:inline
 func (q *minMaxQueue) getFirst() uint32 {
 	if q.empty {
 		colexecerror.InternalError(errors.AssertionFailedf("getting first from empty minMaxQueue"))

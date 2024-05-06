@@ -3135,6 +3135,8 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.force_panic"></a><code>crdb_internal.force_panic(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.force_panic"></a><code>crdb_internal.force_panic(msg: <a href="string.html">string</a>, mode: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.force_retry"></a><code>crdb_internal.force_retry(val: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(names: <a href="string.html">string</a>, counts: <a href="int.html">int</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
