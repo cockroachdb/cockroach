@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/errors"
@@ -276,9 +277,21 @@ func TryFilterInvertedIndexBySimilarity(
 			// Create a key for the trigram. The trigram is encoded so that it
 			// can be correctly compared to histogram upper bounds, which are
 			// also encoded. The byte slice is pre-sized to hold the trigram
-			// plus two extra bytes for the prefix and terminator.
-			k := make([]byte, 0, len(trgms[j])+2)
+			// plus three extra bytes for the prefix, escape, and terminator.
+			needCap := len(trgms[j]) + 3
+			k := make([]byte, 0, needCap)
 			k = encoding.EncodeStringAscending(k, trgms[j])
+			if buildutil.CrdbTestBuild {
+				if cap(k) != needCap {
+					panic(errors.AssertionFailedf(
+						"reallocated capacity for trigram %v with length %d", trgms[j], len(trgms[j])),
+					)
+				} else if len(k) != cap(k) {
+					panic(errors.AssertionFailedf(
+						"excessive capacity for trigram %v with length %d", trgms[j], len(trgms[j])),
+					)
+				}
+			}
 			key := constraint.MakeKey(tree.NewDEncodedKey(tree.DEncodedKey(k)))
 
 			var span constraint.Span
@@ -428,7 +441,7 @@ func similarityTrigramsToScan(s string, similarityThreshold float64) []string {
 			i++
 		}
 
-		// If there are still trigrams to remove, remove trigrams as the end of
+		// If there are still trigrams to remove, remove trigrams at the end of
 		// the slice.
 		if toRemove > 0 {
 			trgms = trgms[:len(trgms)-toRemove]

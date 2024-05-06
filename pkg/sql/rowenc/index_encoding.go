@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -1119,12 +1120,24 @@ func encodeTrigramInvertedIndexTableKeys(
 	for i := range trigrams {
 		// Make sure to copy inKey into a new byte slice to avoid aliasing.
 		inKeyLen := len(inKey)
-		// Pre-size the outkey - we know we're going to encode the trigram plus 2
-		// extra bytes for the prefix and terminator.
-		outKey := make([]byte, inKeyLen, inKeyLen+len(trigrams[i])+2)
+		// Pre-size the outkey - we know we're going to encode the trigram plus
+		// three extra bytes for the prefix, escape, and terminator.
+		needCap := inKeyLen + len(trigrams[i]) + 3
+		outKey := make([]byte, inKeyLen, needCap)
 		copy(outKey, inKey)
 		newKey := encoding.EncodeStringAscending(outKey, trigrams[i])
 		outKeys[i] = newKey
+		if buildutil.CrdbTestBuild {
+			if cap(newKey) != needCap {
+				panic(errors.AssertionFailedf(
+					"reallocated capacity for trigram %v with length %d", trigrams[i], len(trigrams[i])),
+				)
+			} else if len(newKey) != cap(newKey) {
+				panic(errors.AssertionFailedf(
+					"excessive capacity for trigram %v with length %d", trigrams[i], len(trigrams[i])),
+				)
+			}
+		}
 	}
 	return outKeys, nil
 }
