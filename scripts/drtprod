@@ -30,15 +30,15 @@ case $1 in
     if [[ "$*" != *"--restart"* ]]; then
       # implied for long-lived DRT clusters; avoid on init w/ --restart=false.
       shift
-      set -- start "--restart" "$@"
+      set -- start "--enable-fluent-sink" "--restart" "$@"
     fi
     if [[ "$*" != *"--secure"* ]]; then
       shift
-      set -- start "--secure" "$@"
+      set -- start "--enable-fluent-sink" "--secure" "$@"
     fi
     if [[ "$*" != *"--sql-port 26257"* ]]; then
       shift
-      set -- start "--sql-port" "26257" "$@"
+      set -- start "--enable-fluent-sink" "--sql-port" "26257" "$@"
     fi
     ;;
   "sql")
@@ -129,7 +129,7 @@ EOF"
     ;;
   "create")
     if [ "$#" -lt 2 ]; then
-      echo "usage: drtprod create {drt-main,drt-ua1,drt-ua2}"
+      echo "usage: drtprod create {drt-main,drt-chaos,drt-ua1,drt-ua2}"
       exit 1
     fi
     case "${2}" in
@@ -152,10 +152,13 @@ EOF"
           --gce-managed \
           --gce-zones "us-east1-d,us-east1-b,us-east1-c" \
           --nodes 6 \
-          --gce-machine-type n2-standard-8 \
-          --gce-pd-volume-size 3000 --local-ssd=false \
+          --gce-machine-type n2-standard-16 \
+          --gce-local-ssd-count="4" \
+          --gce-enable-multiple-stores \
+          --local-ssd=true \
           --username drt \
-          --lifetime 8760h
+          --lifetime="8760h" \
+          --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
         $0 dns drt-chaos create
         ;;

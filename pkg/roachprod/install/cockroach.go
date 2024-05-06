@@ -148,6 +148,10 @@ type StartOpts struct {
 	// IsRestart allows skipping steps that are used during initial start like
 	// initialization and sequential node starts.
 	IsRestart bool
+
+	// EnableFluentSink determines whether to enable the fluent-servers attribute
+	// in the CockroachDB logging configuration.
+	EnableFluentSink bool
 }
 
 func (s *StartOpts) IsVirtualCluster() bool {
@@ -576,6 +580,10 @@ const (
 	// users authenticate.
 	AuthRootCert
 
+	// DefaultAuthMode is the auth mode used for functions that don't
+	// take an auth mode or the user doesn't specify one.
+	DefaultAuthMode = AuthUserCert
+
 	DefaultUser     = "roachprod"
 	DefaultPassword = "cockroachdb"
 )
@@ -655,7 +663,12 @@ func (c *SyncedCluster) NodeUIPort(
 //
 // CAUTION: this function should not be used by roachtest writers. Use ExecSQL below.
 func (c *SyncedCluster) ExecOrInteractiveSQL(
-	ctx context.Context, l *logger.Logger, virtualClusterName string, sqlInstance int, args []string,
+	ctx context.Context,
+	l *logger.Logger,
+	virtualClusterName string,
+	sqlInstance int,
+	authMode PGAuthMode,
+	args []string,
 ) error {
 	if len(c.Nodes) != 1 {
 		return fmt.Errorf("invalid number of nodes for interactive sql: %d", len(c.Nodes))
@@ -664,7 +677,7 @@ func (c *SyncedCluster) ExecOrInteractiveSQL(
 	if err != nil {
 		return err
 	}
-	url := c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, AuthRootCert)
+	url := c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, authMode)
 	binary := cockroachNodeBinary(c, c.Nodes[0])
 	allArgs := []string{binary, "sql", "--url", url}
 	allArgs = append(allArgs, ssh.Escape(args))
@@ -680,6 +693,7 @@ func (c *SyncedCluster) ExecSQL(
 	nodes Nodes,
 	virtualClusterName string,
 	sqlInstance int,
+	authMode PGAuthMode,
 	args []string,
 ) ([]*RunResultDetails, error) {
 	display := fmt.Sprintf("%s: executing sql", c.Name)
@@ -694,7 +708,7 @@ func (c *SyncedCluster) ExecSQL(
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 			}
 			cmd += cockroachNodeBinary(c, node) + " sql --url " +
-				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, AuthRootCert) + " " +
+				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, authMode) + " " +
 				ssh.Escape(args)
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
 		})
@@ -903,21 +917,25 @@ func (c *SyncedCluster) generateStartArgs(
 
 	// if neither --log nor --log-config-file are present
 	if idx1 == -1 && idx2 == -1 {
-		loggingConfig, err := execLoggingTemplate(loggingTemplateData{
-			LogDir: logDir,
-		})
-		if err != nil {
-			return nil, errors.Wrap(err, "failed rendering logging template")
+		if !startOpts.EnableFluentSink {
+			args = append(args, "--log", `file-defaults: {dir: '`+logDir+`', exit-on-error: false}`)
+		} else {
+			loggingConfig, err := execLoggingTemplate(loggingTemplateData{
+				LogDir: logDir,
+			})
+			if err != nil {
+				return nil, errors.Wrap(err, "failed rendering logging template")
+			}
+
+			loggingConfigFile := fmt.Sprintf("cockroachdb-logging%s.yaml",
+				virtualClusterDirSuffix(startOpts.VirtualClusterName, startOpts.SQLInstance))
+
+			if err := c.PutString(ctx, l, Nodes{node}, loggingConfig, loggingConfigFile, 0644); err != nil {
+				return nil, errors.Wrap(err, "failed writing remote logging configuration: %w")
+			}
+
+			args = append(args, "--log-config-file", loggingConfigFile)
 		}
-
-		loggingConfigFile := fmt.Sprintf("cockroachdb-logging%s.yaml",
-			virtualClusterDirSuffix(startOpts.VirtualClusterName, startOpts.SQLInstance))
-
-		if err := c.PutString(ctx, l, c.Nodes, loggingConfig, loggingConfigFile, 0644); err != nil {
-			return nil, errors.Wrap(err, "failed writing remote logging configuration: %w")
-		}
-
-		args = append(args, "--log-config-file", loggingConfigFile)
 	}
 
 	listenHost := ""
@@ -1154,9 +1172,8 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 		// We use the first node in the virtual cluster to create the user.
 		firstNode := c.TargetNodes()[0]
 		results, err := c.ExecSQL(
-			ctx, l, Nodes{firstNode}, virtualClusterName, sqlInstance, []string{
-				"-e", stmts,
-			})
+			ctx, l, Nodes{firstNode}, virtualClusterName, sqlInstance, AuthRootCert,
+			[]string{"-e", stmts})
 
 		if err != nil || results[0].Err != nil {
 			err := errors.CombineErrors(err, results[0].Err)
@@ -1339,9 +1356,9 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts,
 ) (int, error) {
 	runSQL := func(stmt string) (string, error) {
-		results, err := startOpts.StorageCluster.ExecSQL(ctx, l, startOpts.StorageCluster.Nodes[:1], "", 0, []string{
-			"--format", "csv", "-e", stmt,
-		})
+		results, err := startOpts.StorageCluster.ExecSQL(
+			ctx, l, startOpts.StorageCluster.Nodes[:1], "", 0, DefaultAuthMode,
+			[]string{"--format", "csv", "-e", stmt})
 		if err != nil {
 			return "", err
 		}

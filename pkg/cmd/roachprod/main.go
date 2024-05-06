@@ -486,7 +486,7 @@ These resources will automatically be destroyed when the cluster is destroyed.
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		return roachprod.CreateLoadBalancer(context.Background(), config.Logger,
-			args[0], secure, virtualClusterName, sqlInstance,
+			args[0], !insecure, virtualClusterName, sqlInstance,
 		)
 	}),
 }
@@ -505,10 +505,11 @@ var startCmd = &cobra.Command{
 	Short: "start nodes on a cluster",
 	Long: `Start nodes on a cluster.
 
-The --secure flag can be used to start nodes in secure mode (i.e. using
-certs). When specified, there is a one time initialization for the cluster to
-create and distribute the certs. Note that running some modes in secure mode
-and others in insecure mode is not a supported Cockroach configuration.
+Nodes are started in secure mode by default and there is a one time
+initialization for the cluster to create and distribute the certs.
+Note that running some modes in secure mode and others in insecure
+mode is not a supported Cockroach configuration. To start nodes in
+insecure mode, use the --insecure flag.
 
 As a debugging aid, the --sequential flag starts the nodes sequentially so node
 IDs match hostnames. Otherwise nodes are started in parallel.
@@ -534,7 +535,7 @@ cluster setting will be set to its value.
 		clusterSettingsOpts := []install.ClusterSettingOption{
 			install.TagOption(tag),
 			install.PGUrlCertsDirOption(pgurlCertsDir),
-			install.SecureOption(secure),
+			install.SecureOption(!insecure),
 			install.UseTreeDistOption(useTreeDist),
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
@@ -590,10 +591,11 @@ default. To start an external process instance, pass the
 --external-cluster flag indicating where the SQL server processes
 should be started.
 
-The --secure flag can be used to start nodes in secure mode (i.e. using
-certs). When specified, there is a one time initialization for the cluster to
-create and distribute the certs. Note that running some modes in secure mode
-and others in insecure mode is not a supported Cockroach configuration.
+Nodes are started in secure mode by default and there is a one time
+initialization for the cluster to create and distribute the certs.
+Note that running some modes in secure mode and others in insecure
+mode is not a supported Cockroach configuration. To start nodes in
+insecure mode, use the --insecure flag.
 
 As a debugging aid, the --sequential flag starts the services
 sequentially; otherwise services are started in parallel.
@@ -612,7 +614,7 @@ environment variables to the cockroach process.
 		clusterSettingsOpts := []install.ClusterSettingOption{
 			install.TagOption(tag),
 			install.PGUrlCertsDirOption(pgurlCertsDir),
-			install.SecureOption(secure),
+			install.SecureOption(!insecure),
 			install.UseTreeDistOption(useTreeDist),
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
@@ -664,7 +666,7 @@ non-terminating signal (e.g. SIGHUP), unless you also configure --max-wait.
 			SQLInstance:        sqlInstance,
 		}
 		clusterName := args[0]
-		return roachprod.StopServiceForVirtualCluster(context.Background(), config.Logger, clusterName, secure, stopOpts)
+		return roachprod.StopServiceForVirtualCluster(context.Background(), config.Logger, clusterName, !insecure, stopOpts)
 	}),
 }
 
@@ -841,7 +843,7 @@ var runCmd = &cobra.Command{
 	Args: cobra.MinimumNArgs(1),
 	Run: wrap(func(_ *cobra.Command, args []string) error {
 		return roachprod.Run(context.Background(), config.Logger, args[0], extraSSHOptions, tag,
-			secure, os.Stdout, os.Stderr, args[1:], install.RunOptions{FailOption: install.FailSlow})
+			!insecure, os.Stdout, os.Stderr, args[1:], install.RunOptions{FailOption: install.FailSlow})
 	}),
 }
 
@@ -1005,7 +1007,12 @@ var sqlCmd = &cobra.Command{
 	Long:  "Run `cockroach sql` on a remote cluster.\n",
 	Args:  cobra.MinimumNArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.SQL(context.Background(), config.Logger, args[0], secure, virtualClusterName, sqlInstance, args[1:])
+		auth, ok := pgAuthModes[authMode]
+		if !ok {
+			return errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
+		}
+
+		return roachprod.SQL(context.Background(), config.Logger, args[0], !insecure, virtualClusterName, sqlInstance, auth, args[1:])
 	}),
 }
 
@@ -1014,7 +1021,7 @@ var pgurlCmd = &cobra.Command{
 	Short: "generate pgurls for the nodes in a cluster",
 	Long: `Generate pgurls for the nodes in a cluster.
 
---auth-mode specifies the method of authentication if --secure is passed.
+--auth-mode specifies the method of authentication unless --insecure is passed.
 Defaults to root if not passed. Available auth-modes are:
 
 	root: authenticates with the root user and root certificates
@@ -1025,7 +1032,6 @@ Defaults to root if not passed. Available auth-modes are:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-
 		auth, ok := pgAuthModes[authMode]
 		if !ok {
 			return errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
@@ -1033,7 +1039,7 @@ Defaults to root if not passed. Available auth-modes are:
 
 		urls, err := roachprod.PgURL(context.Background(), config.Logger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
 			External:           external,
-			Secure:             secure,
+			Secure:             !insecure,
 			VirtualClusterName: virtualClusterName,
 			SQLInstance:        sqlInstance,
 			Auth:               auth,
@@ -1081,7 +1087,7 @@ var adminurlCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		urls, err := roachprod.AdminURL(
-			context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance, adminurlPath, adminurlIPs, urlOpen, secure,
+			context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance, adminurlPath, adminurlIPs, urlOpen, !insecure,
 		)
 		if err != nil {
 			return err
@@ -1208,13 +1214,14 @@ var grafanaURLCmd = &cobra.Command{
 }
 
 var grafanaAnnotationCmd = &cobra.Command{
-	Use:   `grafana-annotation <host> <text> --secure --tags [<tag1>, ...] --dashboard-uid <dashboard-uid> --time-range [<start-time>, <end-time>]`,
+	Use:   `grafana-annotation <host> <text> --tags [<tag1>, ...] --dashboard-uid <dashboard-uid> --time-range [<start-time>, <end-time>]`,
 	Short: `adds an annotation to the specified grafana instance`,
 	Long: fmt.Sprintf(`Adds an annotation to the specified grafana instance
 
---secure indicates if the grafana instance needs an authentication token to connect
-to. If set, a service account json and audience will be read in from the environment
-variables %s and %s to attempt authentication through google IDP.
+By default, we assume the grafana instance needs an authentication token to connect
+to. A service account json and audience will be read in from the environment
+variables %s and %s to attempt authentication through google IDP. Use the --insecure
+option when a token is not necessary.
 
 --tags specifies the tags the annotation should have.
 
@@ -1228,7 +1235,7 @@ creates an annotation over time range.
 
 Example:
 # Create an annotation over time range 1-100 on the centralized grafana instance, which needs authentication.
-roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --secure --tags my-cluster --tags test-run-1 --dashboard-uid overview --time-range 1,100
+roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --tags my-cluster --tags test-run-1 --dashboard-uid overview --time-range 1,100
 `, grafana.ServiceAccountJson, grafana.ServiceAccountAudience),
 	Args: cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
@@ -1251,7 +1258,7 @@ roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --
 			return errors.Newf("Too many arguments for --time-range, expected 1 or 2, got: %d", len(grafanaTimeRange))
 		}
 
-		return roachprod.AddGrafanaAnnotation(context.Background(), args[0] /* host */, secure, req)
+		return roachprod.AddGrafanaAnnotation(context.Background(), args[0] /* host */, !insecure, req)
 	}),
 }
 
@@ -1261,7 +1268,7 @@ var jaegerStartCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		return roachprod.StartJaeger(context.Background(), config.Logger, args[0],
-			virtualClusterName, secure, jaegerConfigNodes)
+			virtualClusterName, !insecure, jaegerConfigNodes)
 	}),
 }
 
