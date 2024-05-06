@@ -371,6 +371,7 @@ func (r *testRunner) Run(
 				lopt,
 				topt,
 				l,
+				n*count,
 			)
 
 			if err != nil {
@@ -552,6 +553,7 @@ func (r *testRunner) runWorker(
 	lopt loggingOpt,
 	topt testOpts,
 	l *logger.Logger,
+	maxTotalFailures int,
 ) error {
 	stdout := lopt.stdout
 
@@ -608,6 +610,14 @@ func (r *testRunner) runWorker(
 				// The context has been canceled. No need to continue.
 				return errors.Wrap(ctx.Err(), "worker ctx done")
 			}
+		}
+
+		// stop the tests if the failure rate has been exceeded
+		r.status.Lock()
+		failureRate := float64(len(r.status.fail)) / float64(maxTotalFailures)
+		r.status.Unlock()
+		if failureRate > roachtestflags.AutoKillThreshold {
+			return errors.Errorf("failure rate %.2f exceeds limit %.2f", failureRate, roachtestflags.AutoKillThreshold)
 		}
 
 		wStatus.SetTest(nil /* test */, testToRunRes{})
@@ -1140,7 +1150,10 @@ func (r *testRunner) runTest(
 		// Only include tests with a Run function in the summary output.
 		if s.Run != nil {
 			if t.Failed() {
-				r.status.fail[t] = struct{}{}
+				errWithOwner := failuresAsErrorWithOwnership(t.failures())
+				if errWithOwner == nil || !errWithOwner.InfraFlake {
+					r.status.fail[t] = struct{}{}
+				}
 			} else if s.Skip != "" {
 				r.status.skip[t] = struct{}{}
 			} else {
