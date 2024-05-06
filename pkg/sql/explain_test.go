@@ -551,6 +551,7 @@ func TestExplainRedact(t *testing.T) {
 	smith, err := sqlsmith.NewSmither(sqlDB, rng,
 		sqlsmith.PrefixStringConsts(pii),
 		sqlsmith.DisableDDLs(),
+		sqlsmith.SimpleNames(),
 	)
 	if err != nil {
 		t.Fatal(err)

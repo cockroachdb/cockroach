@@ -32,11 +32,21 @@ func GenerateAndCheckRedactedExplainsForPII(
 	containsPII func(explain, output string) error,
 ) {
 	// Generate a few random statements.
-	statements := make([]string, num)
+	statements := make([]string, 0, num)
 	t.Log("generated statements:")
-	for i := range statements {
-		statements[i] = smith.Generate()
-		t.Log(statements[i])
+	for len(statements) < num {
+		stmt := smith.Generate()
+		// Try vanilla EXPLAIN on this stmt to ensure that it is sound.
+		_, err := query("EXPLAIN " + stmt)
+		if err != nil {
+			// We shouldn't see any internal errors - ignore all others.
+			if strings.Contains(err.Error(), "internal error") {
+				t.Error(err)
+			}
+		} else {
+			statements = append(statements, stmt)
+			t.Log(stmt + ";")
+		}
 	}
 
 	// Gather EXPLAIN variants to test.
@@ -98,7 +108,7 @@ func GenerateAndCheckRedactedExplainsForPII(
 									} else if !strings.Contains(msg, "syntax error") {
 										// Skip logging syntax errors, since they're expected to be
 										// common and uninteresting.
-										t.Logf("encountered non-internal error: %s\n", err)
+										t.Logf("encountered non-internal error: %s\n%s\n\n", err, explain)
 									}
 									continue
 								}
