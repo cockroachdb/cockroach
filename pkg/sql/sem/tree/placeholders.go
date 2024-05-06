@@ -18,16 +18,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/redact"
 )
 
 // PlaceholderIdx is the 0-based index of a placeholder. Placeholder "$1"
 // has PlaceholderIdx=0.
 type PlaceholderIdx uint16
 
+var _ redact.SafeValue = PlaceholderIdx(0)
+
 // MaxPlaceholderIdx is the maximum allowed value of a PlaceholderIdx.
 // The pgwire protocol is limited to 2^16 placeholders, so we limit the IDs to
 // this range as well.
 const MaxPlaceholderIdx = math.MaxUint16
+
+// SafeValue implements the redact.SafeValue interface.
+func (idx PlaceholderIdx) SafeValue() {}
 
 // String returns the index as a placeholder string representation ($1, $2 etc).
 func (idx PlaceholderIdx) String() string {
