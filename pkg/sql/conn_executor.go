@@ -1133,6 +1133,7 @@ func (s *Server) newConnExecutor(
 		applicationStats,
 		ex.server.insights.Writer(ex.sessionData().Internal),
 		ex.phaseTimes,
+		s.sqlStats.GetCounters(),
 		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {

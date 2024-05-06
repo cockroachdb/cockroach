@@ -461,6 +461,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		appStats,
 		insightsProvider.Writer(false /* internal */),
 		sessionphase.NewTimes(),
+		sqlStats.GetCounters(),
 		nil, /* knobs */
 	)
 
@@ -592,6 +593,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			appStats,
 			insightsProvider.Writer(false /* internal */),
 			sessionphase.NewTimes(),
+			sqlStats.GetCounters(),
 			nil, /* knobs */
 		)
 

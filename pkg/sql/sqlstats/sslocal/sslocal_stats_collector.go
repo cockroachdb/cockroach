@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/redact"
 )
 
@@ -47,8 +48,11 @@ type StatsCollector struct {
 	sendInsights bool
 
 	flushTarget sqlstats.ApplicationStats
-	st          *cluster.Settings
-	knobs       *sqlstats.TestingKnobs
+
+	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters
+
+	st    *cluster.Settings
+	knobs *sqlstats.TestingKnobs
 }
 
 var _ sqlstats.ApplicationStats = &StatsCollector{}
@@ -59,14 +63,16 @@ func NewStatsCollector(
 	appStats sqlstats.ApplicationStats,
 	insights insights.Writer,
 	phaseTime *sessionphase.Times,
+	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters,
 	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
 	return &StatsCollector{
-		ApplicationStats: appStats,
-		insightsWriter:   insights,
-		phaseTimes:       phaseTime.Clone(),
-		st:               st,
-		knobs:            knobs,
+		ApplicationStats:   appStats,
+		phaseTimes:         phaseTime.Clone(),
+		insightsWriter:     insights,
+		uniqueServerCounts: uniqueServerCounts,
+		st:                 st,
+		knobs:              knobs,
 	}
 }
 
@@ -293,4 +299,10 @@ func (s *StatsCollector) ObserveTransaction(
 	}
 
 	s.insightsWriter.ObserveTransaction(value.SessionID, &insight)
+}
+
+// StatementsContainerFull returns true if the current statement
+// container is at capacity.
+func (s *StatsCollector) StatementsContainerFull() bool {
+	return s.uniqueServerCounts.GetStatementCount() >= s.uniqueServerCounts.UniqueStmtFingerprintLimit.Get(&s.st.SV)
 }
