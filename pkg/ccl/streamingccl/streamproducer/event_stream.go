@@ -364,6 +364,8 @@ func (s *eventStream) flushBatch(ctx context.Context) error {
 		return nil
 	}
 	s.debug.Flushes.Batches.Add(1)
+	s.debug.Flushes.Bytes.Add(int64(s.seb.size))
+
 	defer s.seb.reset()
 	return s.sendFlush(ctx, &streampb.StreamEvent{Batch: &s.seb.batch})
 }

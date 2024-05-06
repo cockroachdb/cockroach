@@ -382,6 +382,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"prev_ts",
 			"batches",
 			"checkpoints",
+			"megabytes",
 			"last_checkpoint",
 			"rf_checkpoints",
 			"rf_advances",
