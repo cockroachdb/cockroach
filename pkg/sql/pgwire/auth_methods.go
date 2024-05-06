@@ -781,7 +781,10 @@ func authJwtToken(
 			return security.NewErrPasswordUserAuthFailed(user)
 		}
 		if err = jwtVerifier.ValidateJWTLogin(ctx, execCfg.Settings, user, []byte(token), identMap); err != nil {
+			// We are logging unsafe part of error also. Also, should we look into
+			// obtaining more specific auth failure reason here?
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
+			// we are returning unsafe error to client
 			return err
 		}
 		c.LogAuthOK(ctx)

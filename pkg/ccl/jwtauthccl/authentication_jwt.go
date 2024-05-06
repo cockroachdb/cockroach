@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -71,6 +72,8 @@ type jwtAuthenticatorConf struct {
 	jwks                 jwk.Set
 	claim                string
 	jwksAutoFetchEnabled bool
+	clientTimeout        time.Duration
+	customCA             string
 }
 
 // reloadConfig locks mutex and then refreshes the values in conf from the cluster settings.
@@ -91,6 +94,8 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 		jwks:                 mustParseJWKS(JWTAuthJWKS.Get(&st.SV)),
 		claim:                JWTAuthClaim.Get(&st.SV),
 		jwksAutoFetchEnabled: JWKSAutoFetchEnabled.Get(&st.SV),
+		clientTimeout:        JWTClientTimeout.Get(&st.SV),
+		customCA:             JWTClientCustomCA.Get(&st.SV),
 	}
 
 	if !authenticator.mu.conf.enabled && conf.enabled {
@@ -146,7 +151,8 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	// The token will be parsed again later to actually verify the signature.
 	unverifiedToken, err := jwt.Parse(tokenBytes)
 	if err != nil {
-		return errors.Newf("JWT authentication: invalid token")
+		return errors.WithDetailf(
+			errors.Newf("JWT authentication: invalid token"), "token parsing failed: %v", err)
 	}
 
 	// Check for issuer match against configured issuers.
@@ -168,9 +174,11 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	var jwkSet jwk.Set
 	// If auto-fetch is enabled, fetch the JWKS remotely from the issuer's well known jwks url.
 	if authenticator.mu.conf.jwksAutoFetchEnabled {
-		jwkSet, err = remoteFetchJWKS(ctx, issuerUrl)
+		jwkSet, err = authenticator.remoteFetchJWKS(ctx, issuerUrl)
 		if err != nil {
-			return errors.Newf("JWT authentication: unable to validate token")
+			return errors.WithDetailf(
+				errors.Newf("JWT authentication: unable to validate token"),
+				"unable to fetch jwks: %v", err)
 		}
 	} else {
 		jwkSet = authenticator.mu.conf.jwks
@@ -179,7 +187,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	// Now that both the issuer and key-id are matched, parse the token again to validate the signature.
 	parsedToken, err := jwt.Parse(tokenBytes, jwt.WithKeySet(jwkSet), jwt.WithValidate(true), jwt.InferAlgorithmFromKey(true))
 	if err != nil {
-		return errors.Newf("JWT authentication: invalid token")
+		return errors.WithDetailf(errors.Newf("JWT authentication: invalid token"), "unable to parse token: %v", err)
 	}
 
 	// Extract all requested principals from the token. By default, we take it from the subject unless they specify
@@ -269,12 +277,14 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 }
 
 // remoteFetchJWKS fetches the JWKS from the provided URI.
-func remoteFetchJWKS(ctx context.Context, issuerUrl string) (jwk.Set, error) {
-	jwksUrl, err := getJWKSUrl(ctx, issuerUrl)
+func (authenticator *jwtAuthenticator) remoteFetchJWKS(
+	ctx context.Context, issuerUrl string,
+) (jwk.Set, error) {
+	jwksUrl, err := authenticator.getJWKSUrl(ctx, issuerUrl)
 	if err != nil {
 		return nil, err
 	}
-	body, err := getHttpResponse(ctx, jwksUrl)
+	body, err := getHttpResponse(ctx, jwksUrl, authenticator)
 	if err != nil {
 		return nil, err
 	}
@@ -286,12 +296,14 @@ func remoteFetchJWKS(ctx context.Context, issuerUrl string) (jwk.Set, error) {
 }
 
 // getJWKSUrl returns the JWKS URI from the OpenID configuration endpoint.
-func getJWKSUrl(ctx context.Context, issuerUrl string) (string, error) {
+func (authenticator *jwtAuthenticator) getJWKSUrl(
+	ctx context.Context, issuerUrl string,
+) (string, error) {
 	type OIDCConfigResponse struct {
 		JWKSUri string `json:"jwks_uri"`
 	}
 	openIdConfigEndpoint := getOpenIdConfigEndpoint(issuerUrl)
-	body, err := getHttpResponse(ctx, openIdConfigEndpoint)
+	body, err := getHttpResponse(ctx, openIdConfigEndpoint, authenticator)
 	if err != nil {
 		return "", err
 	}
@@ -311,8 +323,11 @@ func getOpenIdConfigEndpoint(issuerUrl string) string {
 	return openIdConfigEndpoint
 }
 
-var getHttpResponse = func(ctx context.Context, url string) ([]byte, error) {
-	resp, err := httputil.Get(ctx, url)
+var getHttpResponse = func(ctx context.Context, url string, authenticator *jwtAuthenticator) ([]byte, error) {
+	responseTimeout := authenticator.mu.conf.clientTimeout
+	httpClient := httputil.NewClientWithTimeoutsCustomCA(
+		responseTimeout, responseTimeout, authenticator.mu.conf.customCA)
+	resp, err := httpClient.Get(context.Background(), url)
 	if err != nil {
 		return nil, err
 	}
@@ -352,6 +367,12 @@ var ConfigureJWTAuth = func(
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	JWKSAutoFetchEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
+		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
+	})
+	JWTClientTimeout.SetOnChange(&st.SV, func(ctx context.Context) {
+		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
+	})
+	JWTClientCustomCA.SetOnChange(&st.SV, func(ctx context.Context) {
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	return &authenticator
