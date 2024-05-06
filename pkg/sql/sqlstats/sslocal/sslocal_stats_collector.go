@@ -28,7 +28,8 @@ import (
 // StatsCollector is used to collect statistics for transactions and
 // statements for the entire lifetime of a session.
 type StatsCollector struct {
-	// currentTransactionStatements is the current transaction's statement statistics.
+
+	// ApplicationStats contains the current transaction's statement statistics.
 	// They will be flushed to flushTarget when the transaction is done.
 	ApplicationStats sqlstats.ApplicationStats
 
@@ -50,8 +51,14 @@ type StatsCollector struct {
 	// statement insights.
 	sendInsights bool
 
+	// flushTarget is the sql stats container for the current application.
+	// This is the target where the statement stats are flushed to upon
+	// transaction completion. Note that these are the global stats for the
+	// application.
 	flushTarget sqlstats.ApplicationStats
 
+	// uniqueServerCounts is a pointer to the statement and transaction
+	// fingerprint counters tracked per server.
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters
 
 	st    *cluster.Settings
@@ -68,7 +75,8 @@ func NewStatsCollector(
 	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
 	return &StatsCollector{
-		ApplicationStats:   appStats,
+		flushTarget:        appStats,
+		ApplicationStats:   appStats.NewApplicationStatsWithInheritedOptions(),
 		insightsWriter:     insights,
 		phaseTimes:         phaseTime.Clone(),
 		uniqueServerCounts: uniqueServerCounts,
@@ -103,8 +111,6 @@ func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *se
 // The current application stats are reset for the new transaction.
 func (s *StatsCollector) StartTransaction() {
 	s.sendInsights = s.shouldObserveInsights()
-	s.flushTarget = s.ApplicationStats
-	s.ApplicationStats = s.flushTarget.NewApplicationStatsWithInheritedOptions()
 }
 
 // EndTransaction informs the StatsCollector that the current txn has
@@ -128,19 +134,12 @@ func (s *StatsCollector) EndTransaction(
 		ctx, s.ApplicationStats, transactionFingerprintID,
 	)
 
-	discardedStats += s.flushTarget.MergeApplicationTransactionStats(
-		ctx,
-		s.ApplicationStats,
-	)
-
 	// Avoid taking locks if no stats are discarded.
 	if discardedStats > 0 {
 		s.flushTarget.MaybeLogDiscardMessage(ctx)
 	}
 
-	s.ApplicationStats.Free(ctx)
-	s.ApplicationStats = s.flushTarget
-	s.flushTarget = nil
+	s.ApplicationStats.Clear(ctx)
 }
 
 // ShouldSample returns two booleans, the first one indicates whether we
@@ -150,17 +149,8 @@ func (s *StatsCollector) EndTransaction(
 func (s *StatsCollector) ShouldSample(
 	fingerprint string, implicitTxn bool, database string,
 ) (previouslySampled bool, savePlanForStats bool) {
-	sampledInFlushTarget := false
-	savePlanForStatsInFlushTarget := true
 
-	if s.flushTarget != nil {
-		sampledInFlushTarget, savePlanForStatsInFlushTarget = s.flushTarget.ShouldSample(fingerprint, implicitTxn, database)
-	}
-
-	sampledInAppStats, savePlanForStatsInAppStats := s.ApplicationStats.ShouldSample(fingerprint, implicitTxn, database)
-	previouslySampled = sampledInFlushTarget || sampledInAppStats
-	savePlanForStats = savePlanForStatsInFlushTarget && savePlanForStatsInAppStats
-	return previouslySampled, savePlanForStats
+	return s.flushTarget.ShouldSample(fingerprint, implicitTxn, database)
 }
 
 // UpgradeImplicitTxn informs the StatsCollector that the current txn has been
@@ -314,14 +304,15 @@ func (s *StatsCollector) StatementsContainerFull() bool {
 func (s *StatsCollector) RecordStatement(
 	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
 ) (appstatspb.StmtFingerprintID, error) {
-	return s.ApplicationStats.RecordStatement(ctx, key, value)
+	return s.currentTransactionStatementStats.RecordStatement(ctx, key, value)
 }
 
 // RecordTransaction records the statistics of a transaction.
+// Transaction stats are always recorded directly on the flushTarget.
 func (s *StatsCollector) RecordTransaction(
 	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
 ) error {
-	return s.ApplicationStats.RecordTransaction(ctx, key, value)
+	return s.flushTarget.RecordTransaction(ctx, key, value)
 }
 
 func (s *StatsCollector) RecordStatementExecStats(

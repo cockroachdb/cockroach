@@ -103,6 +103,9 @@ type ApplicationStats interface {
 	// Free frees the current ApplicationStats and zeros out the memory counts
 	// and fingerprint counts.
 	Free(context.Context)
+
+	// Clear is like Free but also prepares the container for reuse.
+	Clear(context.Context)
 }
 
 // IteratorOptions provides the ability to the caller to change how it iterates
