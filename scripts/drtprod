@@ -127,6 +127,70 @@ EOF"
       --datadog-team drt
     exit 0
     ;;
+  "ua-setup")
+    # Make sure both clusters have rangefeeds enabled.
+    $0 sql drt-ua1:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+    $0 sql drt-ua2:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+
+    # Create external connection on each cluster to the other.
+    ua2="$(roachprod ssh drt-ua2:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
+    $0 sql drt-ua1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ua2' AS '${ua2}'" 
+    ua1="$(roachprod ssh drt-ua1:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
+    $0 sql drt-ua2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ua1' AS '${ua1}'" 
+
+    # Setup the main tenant, on ua1 initilly.
+    $0 sql drt-ua1:1 -- -e "CREATE VIRTUAL CLUSTER main"
+    $0 sql drt-ua1:1 -- -e "ALTER VIRTUAL CLUSTER main START SERVICE SHARED"
+    $0 sql drt-ua1:1 --cluster=main -- -e "CREATE USER roachprod WITH PASSWORD 'cockroachdb'"
+    $0 sql drt-ua1:1 --cluster=main -- -e "GRANT admin TO roachprod"
+    
+    # Set the default tenant on both.
+    $0 sql drt-ua1:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+    $0 sql drt-ua2:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+
+    # Setup replication to ua2.
+    $0 sql drt-ua2:1 --cluster=system -- -e "CREATE VIRTUAL CLUSTER main FROM REPLICATION OF main ON 'external://drt-ua1'"
+    exit 0
+    ;;
+  "ua-failover")
+    if [ "$#" -lt 2 ]; then
+      echo "usage: $0 failover {drt-ua1,drt-ua2}"
+      echo
+      echo "fails the ua workload over to the specified ua cluster, setting the other as a standby"
+      exit 1
+    fi
+    shift
+    cluster=$1
+    shift
+    case "${cluster}" in
+      "drt-ua1")
+        standby=drt-ua2
+        pgurls=pgurls.ua1.txt
+        ;;
+      "drt-ua2")
+        standby=drt-ua1
+        pgurls=pgurls.ua2.txt
+        ;;
+      *)
+        echo "unknown cluster: ${cluster}"
+        exit 1
+        ;;
+    esac
+    echo "stopping workload..."
+    $0 ssh workload-ua:1 -- "sudo systemctl stop tpcc"
+    echo "cutting over..."
+    $0 sql $cluster:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main COMPLETE REPLICATION TO LATEST"
+    $0 sql $cluster:1 --cluster=system -- -e "SELECT status FROM [SHOW JOBS WHEN COMPLETE SELECT id FROM system.jobs WHERE job_type = 'REPLICATION STREAM INGESTION'];"
+    echo "cutover complete; restarting workload..."
+
+    $0 sql $cluster:1 --cluster=system -- -e "ALTER TENANT MAIN START SERVICE SHARED"
+    $0 ssh workload-ua:1 -- "ln -sf $pgurls pgurls.txt; sudo systemctl start tpcc"
+    echo "restarted workload; configuing new standby..."
+    $0 sql $standby:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main STOP SERVICE"
+    $0 sql $standby:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main START REPLICATION OF main ON 'external://$cluster'"
+    echo "started replication in other direction."
+    exit 0
+    ;;
   "create")
     if [ "$#" -lt 2 ]; then
       echo "usage: drtprod create {drt-main,drt-chaos,drt-ua1,drt-ua2}"
