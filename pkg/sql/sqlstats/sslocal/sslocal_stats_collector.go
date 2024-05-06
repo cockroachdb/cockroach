@@ -68,7 +68,8 @@ func NewStatsCollector(
 	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
 	return &StatsCollector{
-		ApplicationStats:   appStats,
+		flushTarget:        appStats,
+		ApplicationStats:   appStats.NewApplicationStatsWithInheritedOptions(),
 		insightsWriter:     insights,
 		phaseTimes:         phaseTime.Clone(),
 		uniqueServerCounts: uniqueServerCounts,
@@ -103,8 +104,6 @@ func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *se
 // The current application stats are reset for the new transaction.
 func (s *StatsCollector) StartTransaction() {
 	s.sendInsights = s.shouldObserveInsights()
-	s.flushTarget = s.ApplicationStats
-	s.ApplicationStats = s.flushTarget.NewApplicationStatsWithInheritedOptions()
 }
 
 // EndTransaction informs the StatsCollector that the current txn has
@@ -128,19 +127,12 @@ func (s *StatsCollector) EndTransaction(
 		ctx, s.ApplicationStats, transactionFingerprintID,
 	)
 
-	discardedStats += s.flushTarget.MergeApplicationTransactionStats(
-		ctx,
-		s.ApplicationStats,
-	)
-
 	// Avoid taking locks if no stats are discarded.
 	if discardedStats > 0 {
 		s.flushTarget.MaybeLogDiscardMessage(ctx)
 	}
 
-	s.ApplicationStats.Free(ctx)
-	s.ApplicationStats = s.flushTarget
-	s.flushTarget = nil
+	s.ApplicationStats.Clear(ctx)
 }
 
 // ShouldSample returns two booleans, the first one indicates whether we
@@ -150,17 +142,8 @@ func (s *StatsCollector) EndTransaction(
 func (s *StatsCollector) ShouldSample(
 	fingerprint string, implicitTxn bool, database string,
 ) (previouslySampled bool, savePlanForStats bool) {
-	sampledInFlushTarget := false
-	savePlanForStatsInFlushTarget := true
 
-	if s.flushTarget != nil {
-		sampledInFlushTarget, savePlanForStatsInFlushTarget = s.flushTarget.ShouldSample(fingerprint, implicitTxn, database)
-	}
-
-	sampledInAppStats, savePlanForStatsInAppStats := s.ApplicationStats.ShouldSample(fingerprint, implicitTxn, database)
-	previouslySampled = sampledInFlushTarget || sampledInAppStats
-	savePlanForStats = savePlanForStatsInFlushTarget && savePlanForStatsInAppStats
-	return previouslySampled, savePlanForStats
+	return s.flushTarget.ShouldSample(fingerprint, implicitTxn, database)
 }
 
 // UpgradeImplicitTxn informs the StatsCollector that the current txn has been
@@ -321,7 +304,7 @@ func (s *StatsCollector) RecordStatement(
 func (s *StatsCollector) RecordTransaction(
 	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
 ) error {
-	return s.ApplicationStats.RecordTransaction(ctx, key, value)
+	return s.flushTarget.RecordTransaction(ctx, key, value)
 }
 
 func (s *StatsCollector) RecordStatementExecStats(
