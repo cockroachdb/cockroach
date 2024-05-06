@@ -942,7 +942,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 // GenerateTrigramSimilarityInvertedIndexScans generates scans on inverted
 // trigram indexes that are constrained by similarity filters (e.g.,
-// `s & % 'foo'`). It is similar conceptually to GenerateInvertedIndexScans, but
+// `s % 'foo'`). It is similar conceptually to GenerateInvertedIndexScans, but
 // it produces expression trees optimized specially for similarity filters. The
 // resulting expressions:
 //

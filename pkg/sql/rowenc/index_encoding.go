@@ -1119,9 +1119,9 @@ func encodeTrigramInvertedIndexTableKeys(
 	for i := range trigrams {
 		// Make sure to copy inKey into a new byte slice to avoid aliasing.
 		inKeyLen := len(inKey)
-		// Pre-size the outkey - we know we're going to encode the trigram plus 2
-		// extra bytes for the prefix and terminator.
-		outKey := make([]byte, inKeyLen, inKeyLen+len(trigrams[i])+2)
+		// Pre-size the outkey - we know we're going to encode the trigram plus
+		// three extra bytes for the prefix, escape, and terminator.
+		outKey := make([]byte, inKeyLen, inKeyLen+len(trigrams[i])+3)
 		copy(outKey, inKey)
 		newKey := encoding.EncodeStringAscending(outKey, trigrams[i])
 		outKeys[i] = newKey
