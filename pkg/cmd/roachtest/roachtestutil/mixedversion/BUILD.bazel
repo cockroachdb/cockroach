@@ -17,6 +17,7 @@ go_library(
         "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
         "//pkg/cmd/roachtest/test",
@@ -49,6 +50,7 @@ go_test(
     embed = [":mixedversion"],
     deps = [
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
         "//pkg/roachpb",
@@ -59,6 +61,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/version",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
