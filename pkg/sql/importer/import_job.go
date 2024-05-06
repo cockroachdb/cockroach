@@ -107,11 +107,12 @@ var processorsPerNode = settings.RegisterIntSetting(
 
 var performConstraintValidation = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
-	"bulkio.import.constraint_validation.enabled",
+	"bulkio.import.constraint_validation.unsafe.enabled",
 	"should import perform constraint validation after data load. "+
 		"NOTE: this setting should not be used on production clusters, as it could result in "+
 		"incorrect query results if the imported data set violates constraints (i.e. contains duplicates).",
 	true,
+	settings.WithUnsafe,
 )
 
 type preparedSchemaMetadata struct {
