@@ -88,8 +88,9 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 					},
 				},
 				InboundFKs: []descpb.ForeignKeyConstraint{
-					{OriginTableID: 12345},
-					{OriginTableID: 105},
+					{OriginTableID: 12345, ReferencedTableID: 104},
+					{OriginTableID: 12345, ReferencedTableID: 12345},
+					{OriginTableID: 105, ReferencedTableID: 104},
 				},
 				ReplacementOf: descpb.TableDescriptor_Replacement{ID: 12345},
 				Privileges:    badPrivilege,
@@ -159,6 +160,55 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 			desc := b.BuildCreatedMutableTable()
 			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
 			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedNonExistentRoles))
+			require.Equal(t, out.BuildCreatedMutableTable().TableDesc(), desc.TableDesc())
+		})
+	}
+}
+
+func TestFixIncorrectFKOriginTableID(t *testing.T) {
+	type testCase struct {
+		name                  string
+		input, expectedOutput descpb.TableDescriptor
+	}
+	testData := []testCase{
+		{
+			name: "incorrect FK Origin Table ID",
+			input: descpb.TableDescriptor{
+				Name: "foo",
+				ID:   104,
+				InboundFKs: []descpb.ForeignKeyConstraint{
+					{OriginTableID: 32, ReferencedTableID: 1},
+					{OriginTableID: 64, ReferencedTableID: 2},
+				},
+				OutboundFKs: []descpb.ForeignKeyConstraint{
+					{OriginTableID: 1, ReferencedTableID: 32},
+					{OriginTableID: 2, ReferencedTableID: 64},
+				},
+			},
+			expectedOutput: descpb.TableDescriptor{
+				Name: "foo",
+				ID:   104,
+				InboundFKs: []descpb.ForeignKeyConstraint{
+					{OriginTableID: 32, ReferencedTableID: 104},
+					{OriginTableID: 64, ReferencedTableID: 104},
+				},
+				OutboundFKs: []descpb.ForeignKeyConstraint{
+					{OriginTableID: 104, ReferencedTableID: 32},
+					{OriginTableID: 104, ReferencedTableID: 64},
+				},
+			},
+		},
+	}
+
+	for _, test := range testData {
+		t.Run(test.name, func(t *testing.T) {
+			b := NewBuilder(&test.input)
+			require.NoError(t, b.RunPostDeserializationChanges())
+			out := NewBuilder(&test.expectedOutput)
+			require.NoError(t, out.RunPostDeserializationChanges())
+			desc := b.BuildCreatedMutableTable()
+			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.FixedIncorrectForeignKeyOrigins))
+			require.False(t, out.BuildCreatedMutableTable().GetPostDeserializationChanges().Contains(catalog.FixedIncorrectForeignKeyOrigins))
 			require.Equal(t, out.BuildCreatedMutableTable().TableDesc(), desc.TableDesc())
 		})
 	}
