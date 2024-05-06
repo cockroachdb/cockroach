@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -298,7 +299,7 @@ func NewColumnReferencedByPartialIndex(droppingColumn, partialIndex string) erro
 			droppingColumn, partialIndex,
 		),
 		"drop the partial index first, then drop the column",
-	), errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/pull/97372"})
+	), errors.IssueLink{IssueURL: build.MakeIssueURL(97372)})
 }
 
 // NewColumnReferencedByPartialUniqueWithoutIndexConstraint is almost the same as
@@ -314,7 +315,7 @@ func NewColumnReferencedByPartialUniqueWithoutIndexConstraint(
 			droppingColumn, partialUWIConstraint,
 		),
 		"drop the unique constraint first, then drop the column",
-	), errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/pull/97372"})
+	), errors.IssueLink{IssueURL: build.MakeIssueURL(97372)})
 }
 
 // NewUniqueConstraintReferencedByForeignKeyError generates an error to be

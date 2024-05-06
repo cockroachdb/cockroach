@@ -18,6 +18,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/build",
         "//pkg/docs",
         "//pkg/sql/pgwire/pgcode",
         "@com_github_cockroachdb_errors//:errors",
