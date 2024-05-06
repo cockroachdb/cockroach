@@ -32,6 +32,7 @@ func NewClientWithTimeout(timeout time.Duration) *Client {
 
 // NewClientWithTimeouts defines a http.Client with the given dialer and client timeouts.
 func NewClientWithTimeouts(dialerTimeout, clientTimeout time.Duration) *Client {
+	t := http.DefaultTransport.(*http.Transport)
 	return &Client{&http.Client{
 		Timeout: clientTimeout,
 		Transport: &http.Transport{
@@ -39,6 +40,12 @@ func NewClientWithTimeouts(dialerTimeout, clientTimeout time.Duration) *Client {
 			// much higher than on linux).
 			DialContext:       (&net.Dialer{Timeout: dialerTimeout}).DialContext,
 			DisableKeepAlives: true,
+
+			Proxy:                 t.Proxy,
+			MaxIdleConns:          t.MaxIdleConns,
+			IdleConnTimeout:       t.IdleConnTimeout,
+			TLSHandshakeTimeout:   t.TLSHandshakeTimeout,
+			ExpectContinueTimeout: t.ExpectContinueTimeout,
 		},
 	}}
 }
