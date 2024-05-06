@@ -81,11 +81,15 @@ func (s *mockStorage) PutObject(i *release.PutObjectInput) error {
 type mockExecRunner struct {
 	fakeBazelBin string
 	cmds         []string
+	pkgDir       string
 }
 
 func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 	if r.fakeBazelBin == "" {
 		panic("r.fakeBazelBin not set")
+	}
+	if r.pkgDir == "" {
+		panic("r.pkgDir not set")
 	}
 	if c.Dir == "" {
 		return nil, fmt.Errorf("`Dir` must be specified")
@@ -132,6 +136,8 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 			}
 		}
 		paths = append(paths, path, pathSQL)
+		paths = append(paths, filepath.Join(r.pkgDir, "licenses", "LICENSE.txt"))
+		paths = append(paths, filepath.Join(r.pkgDir, "licenses", "THIRD-PARTY-NOTICES.txt"))
 		ext := release.SharedLibraryExtensionFromPlatform(platform)
 		if platform != release.PlatformMacOSArm && platform != release.PlatformWindows {
 			for _, lib := range release.CRDBSharedLibraries {
@@ -473,6 +479,7 @@ func TestProvisional(t *testing.T) {
 			fakeBazelBin, cleanup := testutils.TempDir(t)
 			defer cleanup()
 			runner.fakeBazelBin = fakeBazelBin
+			runner.pkgDir = dir
 			flags := test.flags
 			flags.pkgDir = dir
 			execFn := release.ExecFn{MockExecFn: runner.run}
