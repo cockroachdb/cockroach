@@ -5941,6 +5941,9 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 		for i := 0; i < 5; i++ {
 			beforeCreate := timeutil.Now()
 			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d) RETURNING cluster_logical_timestamp()`, i))
+			// Read the event from the sink.
+			_, err := foo.Next()
+			require.NoError(t, err)
 			verifyLogsWithEmittedBytesAndMessages(t, jobID, beforeCreate.UnixNano(), interval.Nanoseconds(), false)
 		}
 	}
@@ -6007,12 +6010,20 @@ func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
 		beforeInsert := timeutil.Now()
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1)`)
+		// Read the events from the sinks.
+		_, err := foo.Next()
+		require.NoError(t, err)
+		_, err = foo2.Next()
+		require.NoError(t, err)
 		verifyLogsWithEmittedBytesAndMessages(t, job1, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
 		verifyLogsWithEmittedBytesAndMessages(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
 		require.NoError(t, foo.Close())
 
 		beforeInsert = timeutil.Now()
 		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (2)`)
+		// Read the events from the sinks.
+		_, err = foo2.Next()
+		require.NoError(t, err)
 		verifyLogsWithEmittedBytesAndMessages(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
 		require.NoError(t, foo2.Close())
 	}
@@ -7539,8 +7550,7 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 		}
 	}
 
-	// TODO(#119289): re-enable pulsar
-	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestOmitSinks("pulsar"))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestChangefeedOnlyInitialScanCSVSinkless(t *testing.T) {
