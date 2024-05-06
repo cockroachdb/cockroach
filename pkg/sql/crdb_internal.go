@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"sort"
@@ -8996,6 +8997,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 
 	batches INT,
 	checkpoints INT,
+	megabytes FLOAT,
 	last_checkpoint INTERVAL,
 	
 	rf_checkpoints INT,
@@ -9038,6 +9040,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 
 				tree.NewDInt(tree.DInt(s.Flushes.Batches.Load())),
 				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints.Load())),
+				tree.NewDFloat(tree.DFloat(math.Round(float64(s.Flushes.Bytes.Load())/float64(1<<18))/4)),
 				age(time.UnixMicro(s.LastCheckpoint.Micros.Load())),
 
 				tree.NewDInt(tree.DInt(s.RF.Checkpoints.Load())),

@@ -24,7 +24,7 @@ type DebugProducerStatus struct {
 		ResolvedMicros        atomic.Int64
 	}
 	Flushes struct {
-		Batches, Checkpoints atomic.Int64
+		Batches, Checkpoints, Bytes atomic.Int64
 	}
 	LastCheckpoint struct {
 		Micros atomic.Int64
