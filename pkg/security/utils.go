@@ -10,7 +10,11 @@
 
 package security
 
-import "crypto/x509"
+import (
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"fmt"
+)
 
 // KeyUsageToString returns the list of key usages described by the bitmask.
 // This list may not up-to-date with https://golang.org/pkg/crypto/x509/#KeyUsage
@@ -79,4 +83,58 @@ func ExtKeyUsageToString(eku x509.ExtKeyUsage) string {
 	default:
 		return "unknown"
 	}
+}
+
+// GenerateRDNSequenceFromSpecMap takes a list subject DN fields and
+// corresponding values. It generates pkix.RDNSequence for these fields. The
+// returned  sequence could then used to generate cert.Subject and
+// cert.RawSubject for creating a mock crypto/x509 certificate object.
+func GenerateRDNSequenceFromSpecMap(
+	subjectSpecMap [][]string,
+) (RDNSeq pkix.RDNSequence, err error) {
+	var (
+		oidCountry            = []int{2, 5, 4, 6}
+		oidOrganization       = []int{2, 5, 4, 10}
+		oidOrganizationalUnit = []int{2, 5, 4, 11}
+		oidCommonName         = []int{2, 5, 4, 3}
+		oidLocality           = []int{2, 5, 4, 7}
+		oidProvince           = []int{2, 5, 4, 8}
+		oidStreetAddress      = []int{2, 5, 4, 9}
+		oidUID                = []int{0, 9, 2342, 19200300, 100, 1, 1}
+		oidDC                 = []int{0, 9, 2342, 19200300, 100, 1, 25}
+	)
+
+	for _, fieldAndValue := range subjectSpecMap {
+		field := fieldAndValue[0]
+		fieldValue := fieldAndValue[1]
+		var attrTypeAndValue pkix.AttributeTypeAndValue
+		switch field {
+		case "CN":
+			attrTypeAndValue.Type = oidCommonName
+		case "L":
+			attrTypeAndValue.Type = oidLocality
+		case "ST":
+			attrTypeAndValue.Type = oidProvince
+		case "O":
+			attrTypeAndValue.Type = oidOrganization
+		case "OU":
+			attrTypeAndValue.Type = oidOrganizationalUnit
+		case "C":
+			attrTypeAndValue.Type = oidCountry
+		case "STREET":
+			attrTypeAndValue.Type = oidStreetAddress
+		case "DC":
+			attrTypeAndValue.Type = oidDC
+		case "UID":
+			attrTypeAndValue.Type = oidUID
+		default:
+			return nil, fmt.Errorf("found unknown field value %q in spec map", field)
+		}
+		attrTypeAndValue.Value = fieldValue
+		RDNSeq = append(RDNSeq, pkix.RelativeDistinguishedNameSET{
+			attrTypeAndValue,
+		})
+	}
+
+	return RDNSeq, nil
 }

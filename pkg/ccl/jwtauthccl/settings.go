@@ -19,13 +19,14 @@ import (
 
 // All cluster settings necessary for the JWT authentication feature.
 const (
-	baseJWTAuthSettingName          = "server.jwt_authentication."
-	JWTAuthAudienceSettingName      = baseJWTAuthSettingName + "audience"
-	JWTAuthEnabledSettingName       = baseJWTAuthSettingName + "enabled"
-	JWTAuthIssuersSettingName       = baseJWTAuthSettingName + "issuers"
-	JWTAuthJWKSSettingName          = baseJWTAuthSettingName + "jwks"
-	JWTAuthClaimSettingName         = baseJWTAuthSettingName + "claim"
-	JWKSAutoFetchEnabledSettingName = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
+	baseJWTAuthSettingName           = "server.jwt_authentication."
+	JWTAuthAudienceSettingName       = baseJWTAuthSettingName + "audience"
+	JWTAuthEnabledSettingName        = baseJWTAuthSettingName + "enabled"
+	JWTAuthIssuersSettingName        = baseJWTAuthSettingName + "issuers"
+	JWTAuthJWKSSettingName           = baseJWTAuthSettingName + "jwks"
+	JWTAuthClaimSettingName          = baseJWTAuthSettingName + "claim"
+	JWKSAutoFetchEnabledSettingName  = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
+	JWTAuthClientCustomCASettingName = baseJWTAuthSettingName + "client.custom_ca"
 )
 
 // JWTAuthClaim sets the JWT claim that is parsed to get the username.
@@ -83,6 +84,14 @@ var JWKSAutoFetchEnabled = settings.RegisterBoolSetting(
 	false,
 	settings.WithReportable(true),
 )
+
+var JWTClientCustomCA = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	JWTAuthClientCustomCASettingName,
+	"sets the custom root CA (appended to system's default CAs) for verifying "+
+		"certificates when interacting with jwt internal HTTPS client",
+	"",
+	settings.WithPublic)
 
 func validateJWTAuthIssuers(values *settings.Values, s string) error {
 	var issuers []string
