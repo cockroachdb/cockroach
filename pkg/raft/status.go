@@ -28,8 +28,9 @@ import (
 // The Progress is only populated on the leader.
 type Status struct {
 	BasicStatus
-	Config   tracker.Config
-	Progress map[uint64]tracker.Progress
+	Config           tracker.Config
+	Progress         map[uint64]tracker.Progress
+	LeadSupportUntil StoreLivenessExpiration
 }
 
 // BasicStatus contains basic information about the Raft peer. It does not allocate.
@@ -73,6 +74,7 @@ func getStatus(r *raft) Status {
 	s.BasicStatus = getBasicStatus(r)
 	if s.RaftState == StateLeader {
 		s.Progress = getProgressCopy(r)
+		s.LeadSupportUntil = leadSupportUntil(r)
 	}
 	s.Config = r.trk.Config.Clone()
 	return s
