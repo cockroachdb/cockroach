@@ -37,8 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -428,7 +428,7 @@ func (s *ColIndexJoin) UsedStreamer() bool {
 // result batches. TODO(drewk): once the Streamer work is finished, the fetcher
 // logic will be able to control result size without sacrificing parallelism, so
 // we can remove this limit.
-var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
+var inputBatchSizeLimit = int64(metamorphic.ConstantWithMetamorphicTestRange(
 	"ColIndexJoin-batch-size",
 	productionIndexJoinBatchSize, /* defaultValue */
 	1,                            /* min */
@@ -439,7 +439,7 @@ var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
 // execinfra.joinReaderIndexJoinStrategyBatchSizeDefault.
 const productionIndexJoinBatchSize = 4 << 20 /* 4MiB */
 
-var usingStreamerInputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
+var usingStreamerInputBatchSizeLimit = int64(metamorphic.ConstantWithMetamorphicTestRange(
 	"ColIndexJoin-using-streamer-batch-size",
 	productionIndexJoinUsingStreamerBatchSize, /* defaultValue */
 	1, /* min */

@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -88,7 +88,7 @@ const DefaultColdataBatchSize = 1024
 // confirmed to be very good using tpchvec/bench benchmark on TPC-H queries
 // (the best number according to that benchmark was 1280, but it was negligibly
 // better, so we decided to keep 1024 as it is a power of 2).
-var defaultBatchSize = int64(util.ConstantWithMetamorphicTestRange(
+var defaultBatchSize = int64(metamorphic.ConstantWithMetamorphicTestRange(
 	"coldata-batch-size",
 	DefaultColdataBatchSize, /* defaultValue */
 	// min is set to 3 to match colexec's minBatchSize setting.

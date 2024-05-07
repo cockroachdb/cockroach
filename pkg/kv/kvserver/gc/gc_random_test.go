@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
@@ -93,7 +94,7 @@ var (
 
 	// smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
 	// bugs in time-bound iterators.
-	smallEngineBlocks = util.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
+	smallEngineBlocks = metamorphic.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
 )
 
 const lockAgeThreshold = 2 * time.Hour

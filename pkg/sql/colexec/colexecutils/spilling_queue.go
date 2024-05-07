@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
@@ -93,7 +93,7 @@ type SpillingQueue struct {
 
 // spillingQueueInitialItemsLen is the initial capacity of the in-memory buffer
 // of the spilling queues (memory limit permitting).
-var spillingQueueInitialItemsLen = int64(util.ConstantWithMetamorphicTestRange(
+var spillingQueueInitialItemsLen = int64(metamorphic.ConstantWithMetamorphicTestRange(
 	"spilling-queue-initial-len",
 	64 /* defaultValue */, 1 /* min */, 16, /* max */
 ))

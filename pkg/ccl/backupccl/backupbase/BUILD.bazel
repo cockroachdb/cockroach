@@ -10,6 +10,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/settings",
-        "//pkg/util",
+        "//pkg/util/metamorphic",
     ],
 )

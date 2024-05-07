@@ -20,12 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
 // mvccIncrementalIteratorMetamorphicTBI will randomly enable TBIs.
-var mvccIncrementalIteratorMetamorphicTBI = util.ConstantWithMetamorphicTestBool(
+var mvccIncrementalIteratorMetamorphicTBI = metamorphic.ConstantWithMetamorphicTestBool(
 	"mvcc-incremental-iter-tbi", true)
 
 // MVCCIncrementalIterator iterates over the diff of the key range
@@ -240,7 +241,7 @@ func NewMVCCIncrementalIterator(
 	// using a TBI unless StartTime is set. However, we always vary it in
 	// metamorphic test builds, for better test coverage of both paths.
 	useTBI := opts.StartTime.IsSet()
-	if util.IsMetamorphicBuild() { // NB: always randomize when metamorphic
+	if metamorphic.IsMetamorphicBuild() { // NB: always randomize when metamorphic
 		useTBI = mvccIncrementalIteratorMetamorphicTBI
 	}
 
@@ -898,7 +899,7 @@ func (i *MVCCIncrementalIterator) assertInvariants() error {
 	}
 
 	// If startTime is empty, the TBI should be disabled in non-metamorphic builds.
-	if !util.IsMetamorphicBuild() && i.startTime.IsEmpty() && i.timeBoundIter != nil {
+	if !metamorphic.IsMetamorphicBuild() && i.startTime.IsEmpty() && i.timeBoundIter != nil {
 		return errors.AssertionFailedf("TBI enabled without i.startTime")
 	}
 

@@ -5,5 +5,5 @@ go_library(
     srcs = ["mutations_util.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/mutations",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util"],
+    deps = ["//pkg/util/metamorphic"],
 )

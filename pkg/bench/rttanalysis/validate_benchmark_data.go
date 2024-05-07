@@ -23,8 +23,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
@@ -62,7 +62,7 @@ var (
 // RunBenchmarkExpectationTests runs tests to validate or rewrite the contents
 // of the benchmark expectations file.
 func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
-	if util.IsMetamorphicBuild() {
+	if metamorphic.IsMetamorphicBuild() {
 		execTestSubprocess(t)
 		return
 	}
@@ -185,7 +185,7 @@ func execTestSubprocess(t *testing.T) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, util.DisableMetamorphicEnvVar+"=t")
+	cmd.Env = append(cmd.Env, metamorphic.DisableMetamorphicEnvVar+"=t")
 	t.Log(cmd.Args)
 	if err := cmd.Run(); err != nil {
 		t.FailNow()

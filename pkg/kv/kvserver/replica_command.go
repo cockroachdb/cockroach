@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -65,7 +66,7 @@ var EnableEstimatedMVCCStatsInSplit = settings.RegisterBoolSetting(
 	"kv.split.estimated_mvcc_stats.enabled",
 	"if enabled, MVCC stats will be computed estimated (as opposed to "+
 		"computed accurately) during splits",
-	util.ConstantWithMetamorphicTestBool("kv.split.estimated_mvcc_stats.enabled", true))
+	metamorphic.ConstantWithMetamorphicTestBool("kv.split.estimated_mvcc_stats.enabled", true))
 
 // EnableMVCCStatsRecomputationInSplit controls whether the MVCC stats for a
 // range are re-computed at the beginning of the split (in AdminSplit). Doing so
@@ -78,7 +79,7 @@ var EnableMVCCStatsRecomputationInSplit = settings.RegisterBoolSetting(
 	"kv.split.mvcc_stats_recomputation.enabled",
 	"if enabled, MVCC stats will be recomputed at the beginning of a split "+
 		"to prevent stats estimates from drifting",
-	util.ConstantWithMetamorphicTestBool("kv.split.mvcc_stats_recomputation.enabled", true))
+	metamorphic.ConstantWithMetamorphicTestBool("kv.split.mvcc_stats_recomputation.enabled", true))
 
 // mergeApplicationTimeout is the timeout when waiting for a merge command to be
 // applied on all range replicas. There doesn't appear to be any strong reason

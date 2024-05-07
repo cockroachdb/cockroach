@@ -29,12 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -165,7 +165,7 @@ var WebhookV2Enabled = settings.RegisterBoolSetting(
 	"if enabled, this setting enables a new implementation of the webhook sink"+
 		" that allows for a much higher throughput",
 	// TODO: delete the original webhook sink code
-	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink.enabled", true),
+	metamorphic.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink.enabled", true),
 	settings.WithName("changefeed.new_webhook_sink.enabled"),
 )
 
@@ -177,7 +177,7 @@ var PubsubV2Enabled = settings.RegisterBoolSetting(
 	"if enabled, this setting enables a new implementation of the pubsub sink"+
 		" that allows for a higher throughput",
 	// TODO: delete the original pubsub sink code
-	util.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink.enabled", true),
+	metamorphic.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink.enabled", true),
 	settings.WithName("changefeed.new_pubsub_sink.enabled"),
 )
 

@@ -28,9 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -235,7 +235,7 @@ type DatumRowConverter struct {
 	db *kv.DB
 }
 
-var kvDatumRowConverterBatchSize = util.ConstantWithMetamorphicTestValue(
+var kvDatumRowConverterBatchSize = metamorphic.ConstantWithMetamorphicTestValue(
 	"datum-row-converter-batch-size",
 	5000, /* defaultValue */
 	1,    /* metamorphicValue */

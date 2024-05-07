@@ -39,8 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -689,7 +689,7 @@ func MemberOfWithAdminOption(
 	return memberships, nil
 }
 
-var defaultSingleQueryForRoleMembershipCache = util.ConstantWithMetamorphicTestBool(
+var defaultSingleQueryForRoleMembershipCache = metamorphic.ConstantWithMetamorphicTestBool(
 	"resolve-membership-single-scan-enabled",
 	true, /* defaultValue */
 )

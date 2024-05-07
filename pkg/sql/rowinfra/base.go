@@ -14,7 +14,7 @@ package rowinfra
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 )
 
 // RowLimit represents a response limit expressed in terms of number of result
@@ -46,7 +46,7 @@ const ProductionKVBatchSize KeyLimit = 100000
 // defaultBatchBytesLimit is the maximum number of bytes a scan request can
 // return.
 var defaultBatchBytesLimit = BytesLimit(skip.ClampMetamorphicConstantUnderStress(
-	util.ConstantWithMetamorphicTestRange(
+	metamorphic.ConstantWithMetamorphicTestRange(
 		"default-batch-bytes-limit",
 		defaultBatchBytesLimitProductionValue, /* defaultValue */
 		1,                                     /* min */

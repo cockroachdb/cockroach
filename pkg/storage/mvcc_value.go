@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -151,7 +151,7 @@ func EncodeMVCCValueForExport(mvccValue MVCCValue, b []byte) ([]byte, bool, erro
 // When running a metamorphic build, disable the simple MVCC value encoding to
 // prevent code from assuming that the MVCCValue encoding is identical to the
 // roachpb.Value encoding.
-var disableSimpleValueEncoding = util.ConstantWithMetamorphicTestBool(
+var disableSimpleValueEncoding = metamorphic.ConstantWithMetamorphicTestBool(
 	"mvcc-value-disable-simple-encoding", false)
 
 // DisableMetamorphicSimpleValueEncoding disables the disableSimpleValueEncoding

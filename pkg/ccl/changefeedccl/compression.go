@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 	"github.com/klauspost/compress/zstd"
 	"github.com/klauspost/pgzip"
@@ -24,7 +24,7 @@ var useFastGzip = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"changefeed.fast_gzip.enabled",
 	"use fast gzip implementation",
-	util.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithMetamorphicTestBool(
 		"changefeed.fast_gzip.enabled", true,
 	),
 	settings.WithPublic)

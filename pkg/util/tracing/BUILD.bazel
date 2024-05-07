@@ -21,11 +21,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/settings",
-        "//pkg/util",
         "//pkg/util/allstacks",
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/iterutil",
+        "//pkg/util/metamorphic",
         "//pkg/util/netutil/addr",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",

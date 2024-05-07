@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -165,7 +165,7 @@ var requestQuota = settings.RegisterIntSetting(
 	"changefeed.parallel_io.request_quota",
 	"the number of requests which can be admitted into the parallelio"+
 		" system before blocking the producer",
-	int64(util.ConstantWithMetamorphicTestChoice(
+	int64(metamorphic.ConstantWithMetamorphicTestChoice(
 		"changefeed.parallel_io.request_quota",
 		128, 16, 32, 64, 256).(int)),
 	settings.IntInRange(1, 256),
