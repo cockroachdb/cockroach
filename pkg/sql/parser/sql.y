@@ -1290,6 +1290,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_default_privileges_stmt
 %type <tree.Statement> show_enums_stmt
+%type <tree.Statement> show_external_connections_stmt
 %type <tree.Statement> show_fingerprints_stmt opt_with_show_fingerprints_options fingerprint_options_list fingerprint_options
 %type <tree.Statement> show_functions_stmt
 %type <tree.Statement> show_procedures_stmt
@@ -2805,7 +2806,7 @@ alter_table_cmd:
 | ALTER opt_column column_name DROP IDENTITY
   {
     $$.val = &tree.AlterTableDropIdentity{Column: tree.Name($3), IfExists: false}
-  }  
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP IDENTITY IF EXISTS
 | ALTER opt_column column_name DROP IDENTITY IF EXISTS
   {
@@ -7431,7 +7432,7 @@ zone_value:
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TRANSFER, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS,
 // SHOW SCHEDULES, SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW COMMIT TIMESTAMP,
-// SHOW FULL TABLE SCANS, SHOW CREATE EXTERNAL CONNECTIONS
+// SHOW FULL TABLE SCANS, SHOW CREATE EXTERNAL CONNECTIONS, SHOW EXTERNAL CONNECTIONS
 show_stmt:
   show_backup_stmt           // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt          // EXTEND WITH HELP: SHOW COLUMNS
@@ -7442,6 +7443,7 @@ show_stmt:
 | show_local_or_virtual_cluster_csettings_stmt // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt        // EXTEND WITH HELP: SHOW DATABASES
 | show_enums_stmt            // EXTEND WITH HELP: SHOW ENUMS
+| show_external_connections_stmt // EXTEND WITH HELP: SHOW EXTERNAL CONNECTIONS
 | show_types_stmt            // EXTEND WITH HELP: SHOW TYPES
 | show_fingerprints_stmt
 | show_functions_stmt        // EXTEND WITH HELP: SHOW FUNCTIONS
@@ -8198,6 +8200,23 @@ show_enums_stmt:
     }
 }
 | SHOW ENUMS error // SHOW HELP: SHOW ENUMS
+
+// %Help: SHOW EXTERNAL CONNECTIONS - list external connections
+// %Category: Misc
+// %Text:
+// SHOW EXTERNAL CONNECTIONS
+// SHOW EXTERNAL CONNECTION <connection_name>
+show_external_connections_stmt:
+  SHOW EXTERNAL CONNECTIONS
+  {
+    $$.val = &tree.ShowExternalConnections{}
+  }
+| SHOW EXTERNAL CONNECTIONS error // SHOW HELP: SHOW EXTERNAL CONNECTIONS
+| SHOW EXTERNAL CONNECTION string_or_placeholder
+ {
+   $$.val = &tree.ShowExternalConnections{ConnectionLabel: $4.expr()}
+ }
+| SHOW EXTERNAL CONNECTION error // SHOW HELP: SHOW EXTERNAL CONNECTIONS
 
 // %Help: SHOW TYPES - list user defined types
 // %Category: Misc

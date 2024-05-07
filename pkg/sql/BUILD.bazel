@@ -229,6 +229,7 @@ go_library(
         "show_create_clauses.go",
         "show_create_external_connection.go",
         "show_create_schedule.go",
+        "show_external_connection.go",
         "show_fingerprints.go",
         "show_histogram.go",
         "show_stats.go",
