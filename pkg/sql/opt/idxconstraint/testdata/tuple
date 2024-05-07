@@ -450,6 +450,7 @@ index-constraints vars=(a int, b int) index=(a, b)
 index-constraints vars=(a int, b int) index=(a, b)
 (a, b) IN ((3, NULL))
 ----
+contradiction
 
 index-constraints vars=(a int, b int) index=(a, b)
 (a, b) IN ((1, 2), (NULL, 4))

@@ -193,6 +193,7 @@ a = 1 AND b = 2 AND c = 3 AND d IN (4,5,6)
 index-constraints vars=(a int, b int) index=(a, b)
 (a = 1) AND (b > 5) AND (b < 1)
 ----
+contradiction
 
 # Verify that we ignore mixed-type comparisons (they would result in incorrect
 # encodings, see #4313). We don't have testcases for IN because those error
@@ -225,6 +226,7 @@ Remaining filter: (a, b) >= (1, 2.5)
 index-constraints vars=(a int, b int) index=(a, b)
 a >= 1 AND (a, b) < (1, 2) AND b = 5
 ----
+contradiction
 
 index-constraints vars=(a int, b int) index=(a, b)
 (a >= 1 AND (a, b) < (1, 2) OR a > 3) AND b = 5
@@ -272,6 +274,7 @@ Remaining filter: ((a = 5) OR ((a = 3) AND ((b = 8) OR (a = 11)))) OR ((a = 4) O
 index-constraints vars=(a int, b int, c int) index=(a, b)
 ((a = 3 AND b = 8) OR (a = 2 AND b = 8) OR (a = 3 AND b = 11)) AND ((a = 3 AND b = 4) OR (a = 2 AND b = 3) OR (a = 3 AND b = 4))
 ----
+contradiction
 
 index-constraints vars=(a int, b int, c int) index=(a, b)
 ((a = 3 AND b = 8) OR (a = 2 AND b = 8) OR (a = 3 AND b = 11)) OR ((a = 3 AND b = 4) OR (a = 2 AND b = 3) OR (a = 3 AND b = 4))

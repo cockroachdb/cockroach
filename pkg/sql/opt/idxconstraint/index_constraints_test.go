@@ -142,8 +142,12 @@ func TestIndexConstraints(t *testing.T) {
 				var result constraint.Constraint
 				ic.Constraint(&result)
 				var buf bytes.Buffer
-				for i := 0; i < result.Spans.Count(); i++ {
-					fmt.Fprintf(&buf, "%s\n", result.Spans.Get(i))
+				if result.IsContradiction() {
+					fmt.Fprintf(&buf, "contradiction\n")
+				} else {
+					for i := 0; i < result.Spans.Count(); i++ {
+						fmt.Fprintf(&buf, "%s\n", result.Spans.Get(i))
+					}
 				}
 				remainingFilter := ic.RemainingFilters()
 				if !remainingFilter.IsTrue() {

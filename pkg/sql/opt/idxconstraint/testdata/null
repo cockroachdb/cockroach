@@ -42,10 +42,12 @@ a IS NOT NULL
 index-constraints vars=(a int not null) index=(a)
 a IS NULL
 ----
+contradiction
 
 index-constraints vars=(a int not null) index=(a)
 a IS NOT DISTINCT FROM NULL
 ----
+contradiction
 
 index-constraints vars=(a int not null) index=(a)
 a IS NOT NULL

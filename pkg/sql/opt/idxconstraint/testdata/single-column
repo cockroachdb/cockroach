@@ -1,10 +1,12 @@
 index-constraints vars=(a int) index=(a)
 NULL
 ----
+contradiction
 
 index-constraints vars=(a int) index=(a)
 false
 ----
+contradiction
 
 index-constraints vars=(a int) index=(a)
 true
@@ -115,30 +117,37 @@ a = 2
 index-constraints vars=(a int) index=(a)
 NULL
 ----
+contradiction
 
 index-constraints vars=(a int) index=(a)
 a > NULL
 ----
+contradiction
 
 index-constraints vars=(a int) index=(a)
 a < NULL
 ----
+contradiction
 
 index-constraints vars=(a int) index=(a)
 a >= NULL
 ----
+contradiction
 
 index-constraints vars=(a int) index=(a)
 a >= NULL
 ----
+contradiction
 
 index-constraints vars=(a int) index=(a)
 a = NULL
 ----
+contradiction
 
 index-constraints vars=(a int) index=(a)
 a != NULL
 ----
+contradiction
 
 index-constraints vars=(a bool) index=(a)
 a

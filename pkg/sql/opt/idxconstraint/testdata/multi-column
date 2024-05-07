@@ -13,10 +13,12 @@ Remaining filter: a = 1
 index-constraints vars=(a int, b int) index=(a, b)
 a = 1 AND b > NULL
 ----
+contradiction
 
 index-constraints vars=(a int, b int) index=(a, b)
 b = 1 AND a > NULL
 ----
+contradiction
 
 index-constraints vars=(a int) index=(a)
 a > 2 AND a < 4
@@ -103,6 +105,7 @@ a = 1 AND b > 3 AND b < 8
 index-constraints vars=(a int) index=(a)
 a > 2 AND a < 1
 ----
+contradiction
 
 index-constraints vars=(a int, b int) index=(a, b)
 a = 1 AND b != 2
