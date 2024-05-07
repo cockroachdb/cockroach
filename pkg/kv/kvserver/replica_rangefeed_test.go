@@ -1367,6 +1367,8 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 123551)
+
 	ctx := context.Background()
 	var scratchRangeID int64 // accessed atomically
 	// nudgeSeen will be set if a request filter sees the signature of the
