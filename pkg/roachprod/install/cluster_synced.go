@@ -563,7 +563,7 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 			}
 		} else {
 			rmCmds := []string{
-				`sudo find /mnt/data* -maxdepth 1 -type f -not -name .roachprod-initialized -exec rm -f {} \;`,
+				fmt.Sprintf(`sudo find /mnt/data* -maxdepth 1 -type f -not -name %s -exec rm -f {} \;`, vm.InitializedFile),
 				`sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data}`,
 				`sudo rm -fr logs* data*`,
 			}
@@ -1365,7 +1365,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			res := &RunResultDetails{Node: node}
 			var err error
-			cmd := "test -e /mnt/data1/.roachprod-initialized"
+			cmd := fmt.Sprintf("test -e %s", vm.DisksInitializedFile)
 			opts := defaultCmdOpts("wait-init")
 			for j := 0; j < 600; j++ {
 				res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, opts)

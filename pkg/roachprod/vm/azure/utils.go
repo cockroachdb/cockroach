@@ -22,8 +22,9 @@ import (
 // created from /mnt/data<disknum> to the mount point.
 // azureStartupArgs specifies template arguments for the setup template.
 type azureStartupArgs struct {
-	RemoteUser      string // The uname for /data* directories.
-	AttachedDiskLun *int   // Use attached disk, with specified LUN; Use local ssd if nil.
+	RemoteUser           string // The uname for /data* directories.
+	AttachedDiskLun      *int   // Use attached disk, with specified LUN; Use local ssd if nil.
+	DisksInitializedFile string // File to touch when disks are initialized.
 }
 
 const azureStartupTemplate = `#!/bin/bash
@@ -107,7 +108,7 @@ sed -i'~' 's/enabled=1/enabled=0/' /etc/default/apport
 sed -i'~' '/.*kernel\\.core_pattern.*/c\\' /etc/sysctl.conf
 echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 sysctl --system  # reload sysctl settings
-touch /mnt/data1/.roachprod-initialized
+touch {{ .DisksInitializedFile }}
 `
 
 // evalStartupTemplate evaluates startup template defined above and returns

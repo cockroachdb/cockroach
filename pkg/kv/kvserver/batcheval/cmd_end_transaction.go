@@ -1227,7 +1227,7 @@ func splitTriggerHelper(
 				"from the in-split stats; pre-split: %+v, in-split: %+v",
 				statsInput.PreSplitStats, statsInput.AbsPreSplitBothStored)
 		}
-		log.Infof(ctx, "falling back to accurate stats computation because %v", reason)
+		log.KvDistribution.Infof(ctx, "falling back to accurate stats computation because %v", reason)
 		h, err = makeSplitStatsHelper(statsInput)
 	} else if statsInput.UseEstimatesBecauseExternalBytesArePresent {
 		h, err = makeCrudelyEstimatedSplitStatsHelper(statsInput)
