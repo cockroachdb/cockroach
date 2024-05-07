@@ -1222,6 +1222,10 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n%s", node, cmd, output)
 		res.Err = errors.WithDetail(res.Err, detailMsg)
 	}
+	if res.RemoteExitStatus == 100 && (strings.Contains(nodeCmd, "apt") || strings.Contains(nodeCmd, "apt-get")) {
+		detailMsg := fmt.Sprintf("apt-get failure %s", res.Stdout+res.Stderr)
+		res.Err = errors.WithDetail(res.Err, detailMsg)
+	}
 	return res, nil
 }
 
