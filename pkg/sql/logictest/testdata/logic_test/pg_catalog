@@ -2886,6 +2886,7 @@ null_ordered_last                                          off                 N
 on_update_rehome_row_enabled                               on                  NULL      NULL        NULL        string
 opt_split_scan_limit                                       2048                NULL      NULL        NULL        string
 optimizer_always_use_histograms                            on                  NULL      NULL        NULL        string
+optimizer_apply_full_scan_penalty_to_virtual_tables        off                 NULL      NULL        NULL        string
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                              on                  NULL      NULL        NULL        string
 optimizer_prove_implication_with_virtual_computed_columns  on                  NULL      NULL        NULL        string
@@ -3070,6 +3071,7 @@ null_ordered_last                                          off                 N
 on_update_rehome_row_enabled                               on                  NULL  user     NULL      on                  on
 opt_split_scan_limit                                       2048                NULL  user     NULL      2048                2048
 optimizer_always_use_histograms                            on                  NULL  user     NULL      on                  on
+optimizer_apply_full_scan_penalty_to_virtual_tables        off                 NULL  user     NULL      off                 off
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                              on                  NULL  user     NULL      on                  on
 optimizer_prove_implication_with_virtual_computed_columns  on                  NULL  user     NULL      on                  on
@@ -3253,6 +3255,7 @@ on_update_rehome_row_enabled                               NULL    NULL     NULL
 opt_split_scan_limit                                       NULL    NULL     NULL     NULL        NULL
 optimizer                                                  NULL    NULL     NULL     NULL        NULL
 optimizer_always_use_histograms                            NULL    NULL     NULL     NULL        NULL
+optimizer_apply_full_scan_penalty_to_virtual_tables        NULL    NULL     NULL     NULL        NULL
 optimizer_hoist_uncorrelated_equality_subqueries           NULL    NULL     NULL     NULL        NULL
 optimizer_merge_joins_enabled                              NULL    NULL     NULL     NULL        NULL
 optimizer_prove_implication_with_virtual_computed_columns  NULL    NULL     NULL     NULL        NULL

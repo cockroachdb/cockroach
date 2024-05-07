@@ -780,9 +780,19 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	stats := scan.Relational().Statistics()
 	rowCount := stats.RowCount
 	if isUnfiltered && c.evalCtx != nil && c.evalCtx.SessionData().DisallowFullTableScans {
-		isLarge := !stats.Available || rowCount > c.evalCtx.SessionData().LargeFullScanRows
-		if isLarge {
-			return hugeCost
+		if !scan.IsVirtualTable(c.mem.Metadata()) || c.evalCtx.SessionData().OptimizerApplyFullScanPenaltyToVirtualTables {
+			// Don't apply the huge cost to full scans of virtual tables since
+			// we don't reject them anyway. In other words, we would only
+			// penalize plans with full scans of virtual tables, which might
+			// force us to choose a plan that is actually worse but doesn't get
+			// the huge cost since it doesn't contain a full scan (e.g. we could
+			// do a virtual table lookup join instead).
+			// TODO(#123783): once we start rejecting plans with full scans of
+			// virtual tables, we should apply the cost penalty here.
+			isLarge := !stats.Available || rowCount > c.evalCtx.SessionData().LargeFullScanRows
+			if isLarge {
+				return hugeCost
+			}
 		}
 	}
 

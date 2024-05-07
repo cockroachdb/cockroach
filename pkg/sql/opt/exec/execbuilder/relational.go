@@ -604,6 +604,8 @@ func (b *Builder) scanParams(
 			if b.evalCtx.SessionData().DisallowFullTableScans &&
 				(b.flags.IsSet(exec.PlanFlagContainsLargeFullTableScan) ||
 					b.flags.IsSet(exec.PlanFlagContainsLargeFullIndexScan)) {
+				// TODO(#123783): this code might need an adjustment for virtual
+				// tables.
 				err = errors.WithHint(err,
 					"try overriding the `disallow_full_table_scans` or increasing the `large_full_scan_rows` cluster/session settings",
 				)
@@ -753,8 +755,13 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 	}
 	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
 
-	// Save if we planned a full table/index scan on the builder so that the
-	// planner can be made aware later. We only do this for non-virtual tables.
+	// Save if we planned a full (large) table/index scan on the builder so that
+	// the planner can be made aware later. We only do this for non-virtual
+	// tables.
+	// TODO(#27611): consider doing this for virtual tables too once we have
+	// stats for them and adjust the comments if so.
+	// TODO(#123783): not setting the plan flags allows plans with full scans of
+	// virtual tables to not be rejected when disallow_full_table_scans is set.
 	relProps := scan.Relational()
 	stats := relProps.Statistics()
 	if !tab.IsVirtualTable() && isUnfiltered {
