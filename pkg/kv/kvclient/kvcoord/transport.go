@@ -240,6 +240,8 @@ func (gt *grpcTransport) sendBatch(
 				"trying to ingest remote spans but there is no recording span set up")
 		}
 		span.ImportRemoteRecording(reply.CollectedSpans)
+		// XXX:
+		reply.CollectedSpans = nil
 	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "ba: %s RPC error", ba.String())
@@ -376,6 +378,8 @@ func (s *senderTransport) SendNext(
 			panic("trying to ingest remote spans but there is no recording span set up")
 		}
 		span.ImportRemoteRecording(br.CollectedSpans)
+		/// XXXX:
+		br.CollectedSpans = nil
 	}
 
 	return br, nil

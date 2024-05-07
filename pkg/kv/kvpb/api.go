@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	tracingpb "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -769,8 +771,21 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 	}
 	h.Now.Forward(o.Now)
 	h.RangeInfos = append(h.RangeInfos, o.RangeInfos...)
+	checkDuplicateSpans(h.CollectedSpans, o.CollectedSpans)
 	h.CollectedSpans = append(h.CollectedSpans, o.CollectedSpans...)
 	return nil
+}
+
+func checkDuplicateSpans(a, b []tracingpb.RecordedSpan) {
+	seen := make(map[tracingpb.SpanID]struct{}, len(a))
+	for _, s := range a {
+		seen[s.SpanID] = struct{}{}
+	}
+	for _, s := range b {
+		if _, ok := seen[s.SpanID]; ok {
+			log.Warningf(context.Background(), "duplicate span %v", s)
+		}
+	}
 }
 
 // SetHeader implements the Response interface.

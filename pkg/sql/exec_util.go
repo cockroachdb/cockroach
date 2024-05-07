@@ -2881,7 +2881,8 @@ func getMessagesForSubtrace(
 	span spanWithIndex, allSpans []tracingpb.RecordedSpan, seenSpans map[tracingpb.SpanID]struct{},
 ) ([]logRecordRow, error) {
 	if _, ok := seenSpans[span.SpanID]; ok {
-		return nil, errors.Errorf("duplicate span %d", span.SpanID)
+    log.Infof(context.Background(), "DUPLICATE SPANS %d", span.SpanID)
+		// return nil, errors.Errorf("duplicate span %d", span.SpanID)
 	}
 	var allLogs []logRecordRow
 
