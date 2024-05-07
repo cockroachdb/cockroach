@@ -137,7 +137,91 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Flow Tokens Queueing Delay: 99th percentile"
+      title="Admission Queueing Delay – Foreground (Regular) CPU"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      showMetricsInTooltip={true}
+      tooltip={`The 99th percentile latency of requests waiting in the various Admission Control CPU queues.`}
+    >
+      <Axis units={AxisUnits.Duration} label="Delay Duration">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_durations.kv-p99"
+              title={"KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
+              sources={[nid]}
+              downsampleMax
+            />
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_durations.sql-kv-response-p99"
+              title={
+                "SQL-KV response " + nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+              downsampleMax
+            />
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_durations.sql-sql-response-p99"
+              title={
+                "SQL-SQL response " + nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+              downsampleMax
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Admission Queueing Delay – Store"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      showMetricsInTooltip={true}
+      tooltip={`The 99th percentile latency of requests waiting in the Admission Control store queue.`}
+    >
+      <Axis units={AxisUnits.Duration} label="Delay Duration">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_durations.kv-stores-p99"
+              title={"KV write " + nodeDisplayName(nodeDisplayNameByID, nid)}
+              sources={[nid]}
+              downsampleMax
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Admission Queueing Delay – Background (Elastic) CPU"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      showMetricsInTooltip={true}
+      tooltip={`The 99th percentile latency of requests waiting in the Admission Control elastic CPU queue.`}
+    >
+      <Axis units={AxisUnits.Duration} label="Delay Duration">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_durations.elastic-cpu-p99"
+              title={"KV write " + nodeDisplayName(nodeDisplayNameByID, nid)}
+              sources={[nid]}
+              downsampleMax
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Admission Queueing Delay – Replication Admission Control"
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
@@ -162,53 +246,6 @@ export default function (props: GraphDashboardProps) {
               title={
                 "Elastic flow token wait time " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
-              }
-              sources={[nid]}
-              downsampleMax
-            />
-          </>
-        ))}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Admission Queueing Delay: 99th percentile"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-      showMetricsInTooltip={true}
-      tooltip={`The 99th percentile latency of requests waiting in the various Admission Control queues.`}
-    >
-      <Axis units={AxisUnits.Duration} label="Delay Duration">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.admission.wait_durations.kv-p99"
-              title={"KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-            <Metric
-              key={nid}
-              name="cr.node.admission.wait_durations.kv-stores-p99"
-              title={"KV write " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-            <Metric
-              key={nid}
-              name="cr.node.admission.wait_durations.sql-kv-response-p99"
-              title={
-                "SQL-KV response " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
-              sources={[nid]}
-              downsampleMax
-            />
-            <Metric
-              key={nid}
-              name="cr.node.admission.wait_durations.sql-sql-response-p99"
-              title={
-                "SQL-SQL response " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
               downsampleMax
