@@ -504,11 +504,6 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 	}
 
 	downloadSpans := mainRestoreData.getSpans()
-	if !preRestoreData.isEmpty() {
-		// Order the pre restore data first so they are downloaded first.
-		downloadSpans = preRestoreData.getSpans()
-		downloadSpans = append(downloadSpans, mainRestoreData.getSpans()...)
-	}
 
 	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
 	downloadJobRecord := jobs.Record{
