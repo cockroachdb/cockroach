@@ -814,6 +814,10 @@ index 1b2d434683..d371fe3f63 100644
 +--     return substr(encode(sha256($1::bytea), '"'"'hex'"'"'), 1, 32);
 `},
 	// Add ordering for some statements.
+	// TODO(#123705): remove the patch to comment out a query against
+	// pg_catalog.pg_am vtable.
+	// TODO(#123706): remove the patch to comment out a query against
+	// pg_catalog.pg_attribute vtable.
 	{"type_sanity.sql", `diff --git a/src/test/regress/sql/type_sanity.sql b/src/test/regress/sql/type_sanity.sql
 index 79ec410a6c..417d3dcdb2 100644
 --- a/src/test/regress/sql/type_sanity.sql
@@ -847,6 +851,35 @@ index 79ec410a6c..417d3dcdb2 100644
 +ORDER BY t1.oid;
 
  -- Look for array types whose typalign isn'"'"'t sufficient
+
+@@ -385,10 +388,10 @@ WHERE pc.relkind IN ('"'"'i'"'"', '"'"'I'"'"') and
+     pa.amtype != '"'"'i'"'"';
+
+ -- Tables, matviews etc should have AMs of type '"'"'t'"'"'
+-SELECT pc.oid, pc.relname, pa.amname, pa.amtype
+-FROM pg_class as pc JOIN pg_am AS pa ON (pc.relam = pa.oid)
+-WHERE pc.relkind IN ('"'"'r'"'"', '"'"'t'"'"', '"'"'m'"'"') and
+-    pa.amtype != '"'"'t'"'"';
++-- SELECT pc.oid, pc.relname, pa.amname, pa.amtype
++-- FROM pg_class as pc JOIN pg_am AS pa ON (pc.relam = pa.oid)
++-- WHERE pc.relkind IN ('"'"'r'"'"', '"'"'t'"'"', '"'"'m'"'"') and
++--     pa.amtype != '"'"'t'"'"';
+
+ -- **************** pg_attribute ****************
+
+@@ -402,9 +405,9 @@ WHERE a1.attrelid = 0 OR a1.atttypid = 0 OR a1.attnum = 0 OR
+
+ -- Cross-check attnum against parent relation
+
+-SELECT a1.attrelid, a1.attname, c1.oid, c1.relname
+-FROM pg_attribute AS a1, pg_class AS c1
+-WHERE a1.attrelid = c1.oid AND a1.attnum > c1.relnatts;
++-- SELECT a1.attrelid, a1.attname, c1.oid, c1.relname
++-- FROM pg_attribute AS a1, pg_class AS c1
++-- WHERE a1.attrelid = c1.oid AND a1.attnum > c1.relnatts;
+
+ -- Detect missing pg_attribute entries: should have as many non-system
+ -- attributes as parent relation expects
 `},
 	// Add ordering for some statements.
 	{"opr_sanity.sql", `diff --git a/src/test/regress/sql/opr_sanity.sql b/src/test/regress/sql/opr_sanity.sql
