@@ -503,7 +503,20 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 		return nil
 	}
 
+	kr, err := MakeKeyRewriterFromRekeys(execConfig.Codec, mainRestoreData.getRekeys(), mainRestoreData.getTenantRekeys(),
+		false /* restoreTenantFromStream */)
+	if err != nil {
+		return errors.Wrap(err, "creating key rewriter from rekeys")
+	}
+
 	downloadSpans := mainRestoreData.getSpans()
+	for i := range downloadSpans {
+		var err error
+		downloadSpans[i], err = rewriteSpan(kr, downloadSpans[i], execinfrapb.ElidePrefix_None)
+		if err != nil {
+			return err
+		}
+	}
 
 	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
 	downloadJobRecord := jobs.Record{
