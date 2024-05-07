@@ -78,6 +78,7 @@ go_library(
         "//pkg/sql/sqlstats",
         "//pkg/sql/stats",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/floatcmp",
         "//pkg/testutils/physicalplanutils",
         "//pkg/testutils/release",
