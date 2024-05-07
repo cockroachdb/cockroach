@@ -285,7 +285,9 @@ func (ds *DistSender) RangeFeedSpans(
 				})
 
 				if cfg.withMetadata {
-					sendMetadata(eventCh, span, sri.parentRangeFeedMetadata)
+					if err := sendMetadata(ctx, eventCh, span, sri.parentRangeFeedMetadata); err != nil {
+						return err
+					}
 				}
 
 			case <-ctx.Done():
@@ -520,9 +522,13 @@ type parentRangeFeedMetadata struct {
 }
 
 func sendMetadata(
-	eventCh chan<- RangeFeedMessage, span roachpb.Span, parentMetadata parentRangeFeedMetadata,
-) {
-	eventCh <- RangeFeedMessage{
+	ctx context.Context,
+	eventCh chan<- RangeFeedMessage,
+	span roachpb.Span,
+	parentMetadata parentRangeFeedMetadata,
+) error {
+	select {
+	case eventCh <- RangeFeedMessage{
 		RangeFeedEvent: &kvpb.RangeFeedEvent{
 			Metadata: &kvpb.RangeFeedMetadata{
 				Span:            span,
@@ -531,6 +537,10 @@ func sendMetadata(
 			},
 		},
 		RegisteredSpan: span,
+	}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
