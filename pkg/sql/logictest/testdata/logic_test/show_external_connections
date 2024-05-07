@@ -1,0 +1,70 @@
+# Here are tests for basic output of SHOW EXTERNAL CONNECTIONS
+# and various privileges scenarios. Tests for URI redaction for cloud providers
+# are located at pkg/ccl/cloudccl/externalconn/testdata
+
+statement ok
+CREATE EXTERNAL CONNECTION foo_conn AS 'nodelocal://1/foo';
+CREATE EXTERNAL CONNECTION bar_conn AS 'nodelocal://1/bar';
+
+query TTT colnames,rowsort
+SHOW EXTERNAL CONNECTIONS
+----
+connection_name connection_uri    connection_type
+bar_conn        nodelocal://1/bar STORAGE
+foo_conn        nodelocal://1/foo STORAGE
+
+query TTT colnames,rowsort
+SHOW EXTERNAL CONNECTION foo_conn
+----
+connection_name connection_uri  connection_type
+foo_conn        nodelocal://1/foo STORAGE
+
+user testuser
+
+query TTT colnames,rowsort
+SHOW EXTERNAL CONNECTIONS
+----
+connection_name connection_uri  connection_type
+
+statement error pq: must have USAGE privilege or be owner of the External Connection "foo_conn"
+SHOW EXTERNAL CONNECTION foo_conn
+
+user root
+
+statement ok
+GRANT USAGE ON EXTERNAL CONNECTION foo_conn TO testuser;
+
+user testuser
+
+query TTT colnames,rowsort
+SHOW EXTERNAL CONNECTIONS
+----
+connection_name connection_uri  connection_type
+foo_conn        nodelocal://1/foo STORAGE
+
+query TTT colnames,rowsort
+SHOW EXTERNAL CONNECTION foo_conn
+----
+connection_name connection_uri  connection_type
+foo_conn        nodelocal://1/foo STORAGE
+
+statement error pq: must have USAGE privilege or be owner of the External Connection "bar_conn"
+SHOW EXTERNAL CONNECTION bar_conn
+
+user root
+
+statement ok
+GRANT SYSTEM EXTERNALCONNECTION TO testuser;
+
+user testuser
+
+# Owner should able to access their own connection
+statement ok
+CREATE EXTERNAL CONNECTION baz_conn AS 'nodelocal://1/baz';
+
+query TTT colnames,rowsort
+SHOW EXTERNAL CONNECTIONS
+----
+connection_name connection_uri    connection_type
+foo_conn        nodelocal://1/foo STORAGE
+baz_conn        nodelocal://1/baz STORAGE

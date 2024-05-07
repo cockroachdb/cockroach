@@ -38,6 +38,9 @@ type ExternalConnection interface {
 	// `externalconn.NewMutableExternalConnection` for mutating an External
 	// Connection object.
 	ConnectionProto() *connectionpb.ConnectionDetails
+	// RedactedConnectionURI returns the connection URI with sensitive information
+	// redacted.
+	RedactedConnectionURI() string
 }
 
 // connectionParserFactory is the factory method that takes in an endpoint URI

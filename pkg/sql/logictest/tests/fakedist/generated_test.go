@@ -1863,6 +1863,13 @@ func TestLogic_show_default_privileges(
 	runLogicTest(t, "show_default_privileges")
 }
 
+func TestLogic_show_external_connections(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_external_connections")
+}
+
 func TestLogic_show_fingerprints(
 	t *testing.T,
 ) {
