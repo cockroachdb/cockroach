@@ -69,7 +69,7 @@ const (
 var parseJSONDefaultConfig = func() (cfg parseConfig) {
 	cfg.impl = util.ConstantWithMetamorphicTestChoice(
 		"parse-json-impl", useFastJSONParser, useStdGoJSON,
-	).(parseJSONImplType)
+	)
 	return cfg
 }()
 

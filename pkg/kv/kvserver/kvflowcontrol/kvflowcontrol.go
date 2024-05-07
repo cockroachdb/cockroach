@@ -44,7 +44,7 @@ var Mode = settings.RegisterEnumSetting(
 		"kv.snapshot.ingest_as_write_threshold",
 		modeDict[ApplyToElastic], /* default value */
 		modeDict[ApplyToAll],     /* other value */
-	).(string),
+	),
 	map[int64]string{
 		int64(ApplyToElastic): modeDict[ApplyToElastic],
 		int64(ApplyToAll):     modeDict[ApplyToAll],
