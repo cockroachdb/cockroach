@@ -685,7 +685,10 @@ func (p *Provider) createVM(
 	opts vm.CreateOpts,
 	providerOpts ProviderOpts,
 ) (machine compute.VirtualMachine, err error) {
-	startupArgs := azureStartupArgs{RemoteUser: remoteUser}
+	startupArgs := azureStartupArgs{
+		RemoteUser:           remoteUser,
+		DisksInitializedFile: vm.DisksInitializedFile,
+	}
 	if !opts.SSDOpts.UseLocalSSD {
 		// We define lun42 explicitly in the data disk request below.
 		lun := 42
