@@ -1021,6 +1021,13 @@ var pgurlCmd = &cobra.Command{
 	Short: "generate pgurls for the nodes in a cluster",
 	Long: `Generate pgurls for the nodes in a cluster.
 
+The command generates postgres urls for the specified nodes in a cluster.
+Both the nodes or a load balancer can be specified as the target of the pgurl.
+
+Examples of <cluster>:
+	cluster-name:1-3
+	cluster-name:lb
+
 --auth-mode specifies the method of authentication unless --insecure is passed.
 Defaults to root if not passed. Available auth-modes are:
 

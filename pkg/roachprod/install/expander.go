@@ -23,8 +23,8 @@ import (
 )
 
 var parameterRe = regexp.MustCompile(`{[^{}]*}`)
-var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+|:L)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
-var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+|:L)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
+var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+|:(?i)lb)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
+var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+|:(?i)lb)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)}`)
 var storeDirRe = regexp.MustCompile(`{store-dir(:[0-9]+)?}`)
@@ -158,8 +158,8 @@ func (e *expander) maybeExpandPgURL(
 	if err != nil {
 		return "", false, err
 	}
-	switch m[1] {
-	case ":L":
+	switch strings.ToLower(m[1]) {
+	case ":lb":
 		url, err := c.loadBalancerURL(ctx, l, virtualClusterName, sqlInstance, DefaultAuthMode)
 		return url, url != "", err
 	default:
@@ -187,8 +187,8 @@ func (e *expander) maybeExpandPgHost(
 		return "", false, err
 	}
 
-	switch m[1] {
-	case ":L":
+	switch strings.ToLower(m[1]) {
+	case ":lb":
 		services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL, ServiceInstancePredicate(sqlInstance))
 		if err != nil {
 			return "", false, err
