@@ -9,6 +9,7 @@ set -euo pipefail
 
 # Bump this counter to force rebuilding `dev` on all machines.
 DEV_VERSION=87
+>>>>>>> 8cd75662ec4 (build,compose: build libgeos for compose tests)
 
 THIS_DIR=$(cd "$(dirname "$0")" && pwd)
 BINARY_DIR=$THIS_DIR/bin/dev-versions
