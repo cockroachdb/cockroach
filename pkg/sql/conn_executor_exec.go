@@ -3344,12 +3344,6 @@ func (ex *connExecutor) recordTransactionFinish(
 	txnTime := txnEnd.Sub(txnStart)
 	ex.totalActiveTimeStopWatch.Stop()
 
-	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
-		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(
-			ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL,
-		)
-	}
-
 	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 	// client connection, and is Server.InternalMetrics for internal executors.
 	if contentionDuration := ex.extraTxnState.accumulatedStats.ContentionTime.Nanoseconds(); contentionDuration > 0 {
@@ -3403,6 +3397,12 @@ func (ex *connExecutor) recordTransactionFinish(
 		// TODO(107318): add readonly
 		SessionData: ex.sessionData(),
 		TxnErr:      txnErr,
+	}
+
+	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
+		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(
+			ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL, recordedTxnStats,
+		)
 	}
 
 	ex.maybeRecordRetrySerializableContention(ev.txnID, transactionFingerprintID, txnErr)
