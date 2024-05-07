@@ -784,6 +784,8 @@ func GetCGoMemStats(ctx context.Context) *CGoMemStats {
 	}
 }
 
+var netstatEvery = log.Every(time.Minute)
+
 // SampleEnvironment queries the runtime system for various interesting metrics,
 // storing the resulting values in the set of metric gauges maintained by
 // RuntimeStatSampler. This makes runtime statistics more convenient for
@@ -852,7 +854,9 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	var deltaNet net.IOCountersStat
 	netCounters, err := getSummedNetStats(ctx)
 	if err != nil {
-		log.Ops.Warningf(ctx, "problem fetching net stats: %s; net stats will be empty.", err)
+		if netstatEvery.ShouldLog() {
+			log.Ops.Warningf(ctx, "problem fetching net stats: %s; net stats will be empty.", err)
+		}
 	} else {
 		deltaNet = netCounters
 		subtractNetworkCounters(&deltaNet, rsr.last.net)
