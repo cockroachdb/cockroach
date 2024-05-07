@@ -1563,6 +1563,11 @@ func TestSchemaChangeComparator_show_default_privileges(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/show_default_privileges"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_show_external_connections(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/show_external_connections"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_show_fingerprints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/show_fingerprints"
