@@ -166,7 +166,7 @@ func countLeasesNonMultiRegion(
 	ctx context.Context, txn isql.Txn, at hlc.Timestamp, whereClauses []string,
 ) (int, error) {
 	stmt := fmt.Sprintf(
-		`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE 
+		`SELECT "nodeID" FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE 
 crdb_region=$2 AND`,
 		at.AsOfSystemTime(),
 	) + strings.Join(whereClauses, " OR ")
@@ -183,7 +183,34 @@ crdb_region=$2 AND`,
 	if values == nil {
 		return 0, errors.New("failed to count leases")
 	}
-	count := int(tree.MustBeDInt(values[0]))
+
+	nodeM := make(map[int]int)
+	for _, v := range values {
+		nodeID := int(tree.MustBeDInt(v[0]))
+		nodeM[nodeID] = 1
+	}
+
+	// query live node
+	nodeStatus, err := s.execConfig.StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return 0, err
+	}
+	nodeLiveList := make(map[roachpb.NodeID]int)
+	for _, n := range nodeStatus.Nodes {
+		// filter dead node
+		if nodeStatus.LivenessByNodeID[n.Desc.NodeID] == storagepb.NodeLivenessStatus_DEAD {
+			continue
+		}
+		nodeLiveList[n.Desc.NodeID] = 1
+	}
+	// Calculate how many surviving nodes currently hold a lease for tableID
+	count := 0
+	for k := range nodeIDMp {
+		if nodeLiveList[roachpb.NodeID(k)] != 0 {
+			count++
+		}
+	}
+	//count := int(tree.MustBeDInt(values[0]))
 	return count, nil
 }
 
