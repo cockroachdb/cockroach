@@ -109,7 +109,37 @@ tags:
 - team:drt
 EOF"
 
-    roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/conf.d/cockroachdb.d/conf.yaml > /dev/null << EOF
+    case $cluster in
+      "workload-chaos")
+        roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/conf.d/openmetrics.d/conf.yaml > /dev/null << EOF
+---
+init_config:
+
+instances:
+  - openmetrics_endpoint: http://localhost:2112/metrics
+    namespace: workload1
+    raw_metric_prefix: workload_
+    metrics:
+    - tpcc_.*
+    - kv_.*
+  - openmetrics_endpoint: http://localhost:2113/metrics
+    namespace: workload2
+    raw_metric_prefix: workload_
+    metrics:
+    - tpcc_.*
+    - kv_.*
+  - openmetrics_endpoint: http://localhost:2114/metrics
+    namespace: workload3
+    raw_metric_prefix: workload_
+    metrics:
+    - tpcc_.*
+    - kv_.*
+EOF"
+        roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
+        ;;
+
+      *)
+        roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/conf.d/cockroachdb.d/conf.yaml > /dev/null << EOF
 ---
 init_config:
 
@@ -118,13 +148,14 @@ instances:
   tls_verify: false
   service: drt-cockroachdb
 EOF"
+        roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
 
-    roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
-
-    roachprod fluent-bit-start ${cluster} \
-      --datadog-api-key "${dd_api_key}" \
-      --datadog-service drt-cockroachdb \
-      --datadog-team drt
+        roachprod fluent-bit-start ${cluster} \
+          --datadog-api-key "${dd_api_key}" \
+          --datadog-service drt-cockroachdb \
+          --datadog-team drt
+        ;;
+    esac
     exit 0
     ;;
   "ua-setup")
