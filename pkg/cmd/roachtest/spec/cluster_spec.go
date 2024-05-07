@@ -331,6 +331,8 @@ func (s *ClusterSpec) RoachprodOpts(
 		return vm.CreateOpts{}, nil, "", errors.Errorf("unsupported cloud %v", cloud)
 	}
 	if cloud != GCE {
+		// TODO(DarrylWong): support specifying SSD count on other providers, see: #123777.
+		// Once done, revisit all tests that set SSD count to see if they can run on non GCE.
 		if s.SSDs != 0 {
 			return vm.CreateOpts{}, nil, "", errors.Errorf("specifying SSD count is not yet supported on %s", cloud)
 		}
