@@ -69,6 +69,11 @@ func TestGenerateParse(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	rnd, seed := randutil.NewTestRand()
 	t.Log("seed:", seed)
 
@@ -121,8 +126,11 @@ func TestGenerateParse(t *testing.T) {
 		}
 		fmt.Print("STMT: ", i, "\n", stmt, ";\n\n")
 		if *flagExec {
-			db.Exec(t, `SET statement_timeout = '9s'`)
-			if _, err := sqlDB.Exec(stmt); err != nil {
+			_, err = conn.ExecContext(ctx, `SET statement_timeout = '9s'`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = conn.ExecContext(ctx, stmt); err != nil {
 				es := err.Error()
 				if !seen[es] {
 					seen[es] = true

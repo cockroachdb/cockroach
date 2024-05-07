@@ -11,6 +11,7 @@
 package tests
 
 import (
+	"context"
 	gosql "database/sql"
 	"strings"
 	"testing"
@@ -24,26 +25,46 @@ import (
 // GenerateAndCheckRedactedExplainsForPII generates num random statements and
 // checks that the output of all variants of EXPLAIN (REDACT) on each random
 // statement does not contain injected PII.
+//
+// The caller is expected to have set statement timeout on the connection.
 func GenerateAndCheckRedactedExplainsForPII(
 	t *testing.T,
 	smith *sqlsmith.Smither,
 	num int,
-	query func(sql string) (*gosql.Rows, error),
+	conn *gosql.Conn,
 	containsPII func(explain, output string) error,
 ) {
+	ctx := context.Background()
+	// We expect that the caller has set non-zero statement timeout - double
+	// check that.
+	rows, err := conn.QueryContext(ctx, "SHOW statement_timeout;")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var timeout int
+		if err = rows.Scan(&timeout); err != nil {
+			t.Fatal(err)
+		}
+		if timeout == 0 {
+			t.Fatal("expected non-zero timeout")
+		}
+	}
+
 	// Generate a few random statements.
 	statements := make([]string, 0, num)
 	t.Log("generated statements:")
 	for len(statements) < num {
 		stmt := smith.Generate()
 		// Try vanilla EXPLAIN on this stmt to ensure that it is sound.
-		_, err := query("EXPLAIN " + stmt)
+		rows, err := conn.QueryContext(ctx, "EXPLAIN "+stmt)
 		if err != nil {
 			// We shouldn't see any internal errors - ignore all others.
 			if strings.Contains(err.Error(), "internal error") {
 				t.Error(err)
 			}
 		} else {
+			rows.Close()
 			statements = append(statements, stmt)
 			t.Log(stmt + ";")
 		}
@@ -95,7 +116,7 @@ func GenerateAndCheckRedactedExplainsForPII(
 							}
 							for _, stmt := range statements {
 								explain := cmd + " (" + mode + flag + "REDACT) " + stmt
-								rows, err := query(explain)
+								rows, err := conn.QueryContext(ctx, explain)
 								if err != nil {
 									// There are many legitimate errors that could be returned
 									// that don't indicate a PII leak or a test failure. For
