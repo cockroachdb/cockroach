@@ -136,6 +136,11 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	grp := ctxgroup.WithContext(ctx)
 	grp.Go(func() error {
 		<-indexValidationQueryWait
+		defer func() {
+			// Always unblock the validation query, even if something
+			// fails here.
+			indexValidationQueryResume <- struct{}{}
+		}()
 		getTableRangeIDs := func(t *testing.T) ([]int64, error) {
 			t.Helper()
 			rows, err := db.QueryContext(ctx, "WITH r AS (SHOW RANGES FROM TABLE t) SELECT range_id FROM r ORDER BY start_key")
@@ -160,6 +165,7 @@ func TestValidationWithProtectedTS(t *testing.T) {
 			return err
 		}
 		const retryTxnErrorSubstring = "restart transaction"
+		const replicaGCError = "must be after replica GC threshold"
 		for {
 			if _, err := db.ExecContext(ctx, "BEGIN"); err != nil {
 				return err
@@ -175,7 +181,8 @@ func TestValidationWithProtectedTS(t *testing.T) {
 			}
 			_, err = db.ExecContext(ctx, "COMMIT")
 			if err != nil {
-				if strings.Contains(err.Error(), retryTxnErrorSubstring) {
+				if strings.Contains(err.Error(), retryTxnErrorSubstring) ||
+					strings.Contains(err.Error(), replicaGCError) {
 					err = nil
 					continue
 				}
@@ -190,7 +197,6 @@ func TestValidationWithProtectedTS(t *testing.T) {
 				return err
 			}
 		}
-		indexValidationQueryResume <- struct{}{}
 		return nil
 	})
 	grp.Go(func() error {
@@ -199,12 +205,21 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	})
 
 	require.NoError(t, grp.Wait())
-	// Validate the rows were removed due to the drop
-	res := r.QueryStr(t, `SELECT n FROM t@foo`)
+	// Validate the rows were removed due to the delete.
+	// Note: Because of the low GC timestamp we can hit "must be after replica GC
+	// threshold" errors.
+	var res [][]string
+	testutils.SucceedsSoon(t, func() error {
+		rows, err := r.DB.QueryContext(ctx, `SELECT n FROM t@foo`)
+		if err != nil {
+			return err
+		}
+		res, err = sqlutils.RowsToStrMatrix(rows)
+		return err
+	})
 	if len(res) != 1 {
 		t.Errorf("expected %d entries, got %d", 1, len(res))
 	}
-	require.NoError(t, db.Close())
 }
 
 // TestBackfillQueryWithProtectedTS backfills a query into a table and confirms
