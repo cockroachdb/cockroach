@@ -1585,7 +1585,11 @@ func (r *Registry) stepThroughStateMachine(
 			log.Errorf(ctx, "%s job %d: stepping through state %s with unexpected error: %+v", jobType, job.ID(), status, jobErr)
 		}
 	} else {
-		log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), status)
+		if jobType == jobspb.TypeAutoCreateStats {
+			log.VInfof(ctx, 1, "%s job %d: stepping through state %s", jobType, job.ID(), status)
+		} else {
+			log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), status)
+		}
 	}
 	jm := r.metrics.JobMetrics[jobType]
 	onExecutionFailed := func(cause error) error {
