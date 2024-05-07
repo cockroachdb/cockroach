@@ -1,0 +1,118 @@
+From a79ea27e36a1c56ae48dc36ce48549c9787ca4b7 Mon Sep 17 00:00:00 2001
+From: Roland Shoemaker <bracewell@google.com>
+Date: Thu, 25 Apr 2024 13:09:54 -0700
+Subject: [PATCH] [release-branch.go1.21] cmd/go: disallow -lto_library in LDFLAGS
+
+The darwin linker allows setting the LTO library with the -lto_library
+flag. This wasn't caught by our "safe linker flags" check because it
+was covered by the -lx flag used for linking libraries. This change
+adds a specific check for excluded flags which otherwise satisfy our
+existing checks.
+
+Loading a mallicious LTO library would allow an attacker to cause the
+linker to execute abritrary code when "go build" was called.
+
+Thanks to Juho Forsén of Mattermost for reporting this issue.
+
+Fixes #67119
+Fixes #67121
+Fixes CVE-2024-24787
+
+Change-Id: I77ac8585efbdbdfd5f39c39ed623b9408a0f9eaf
+Reviewed-on: https://go-internal-review.googlesource.com/c/go/+/1380
+Reviewed-by: Russ Cox <rsc@google.com>
+Reviewed-by: Damien Neil <dneil@google.com>
+(cherry picked from commit 9a79141fbbca1105e5c786f15e38741ca7843290)
+Reviewed-on: https://go-internal-review.googlesource.com/c/go/+/1401
+Reviewed-by: Tatiana Bradley <tatianabradley@google.com>
+Reviewed-on: https://go-review.googlesource.com/c/go/+/583795
+Reviewed-by: David Chase <drchase@google.com>
+LUCI-TryBot-Result: Go LUCI <golang-scoped@luci-project-accounts.iam.gserviceaccount.com>
+---
+
+diff --git a/src/cmd/go/internal/work/security.go b/src/cmd/go/internal/work/security.go
+index 270a34e..db49eb6 100644
+--- a/src/cmd/go/internal/work/security.go
++++ b/src/cmd/go/internal/work/security.go
+@@ -141,6 +141,12 @@
+ 	"-x",
+ }
+ 
++var invalidLinkerFlags = []*lazyregexp.Regexp{
++	// On macOS this means the linker loads and executes the next argument.
++	// Have to exclude separately because -lfoo is allowed in general.
++	re(`-lto_library`),
++}
++
+ var validLinkerFlags = []*lazyregexp.Regexp{
+ 	re(`-F([^@\-].*)`),
+ 	re(`-l([^@\-].*)`),
+@@ -231,12 +237,12 @@
+ 
+ func checkCompilerFlags(name, source string, list []string) error {
+ 	checkOverrides := true
+-	return checkFlags(name, source, list, validCompilerFlags, validCompilerFlagsWithNextArg, checkOverrides)
++	return checkFlags(name, source, list, nil, validCompilerFlags, validCompilerFlagsWithNextArg, checkOverrides)
+ }
+ 
+ func checkLinkerFlags(name, source string, list []string) error {
+ 	checkOverrides := true
+-	return checkFlags(name, source, list, validLinkerFlags, validLinkerFlagsWithNextArg, checkOverrides)
++	return checkFlags(name, source, list, invalidLinkerFlags, validLinkerFlags, validLinkerFlagsWithNextArg, checkOverrides)
+ }
+ 
+ // checkCompilerFlagsForInternalLink returns an error if 'list'
+@@ -245,7 +251,7 @@
+ // external linker).
+ func checkCompilerFlagsForInternalLink(name, source string, list []string) error {
+ 	checkOverrides := false
+-	if err := checkFlags(name, source, list, validCompilerFlags, validCompilerFlagsWithNextArg, checkOverrides); err != nil {
++	if err := checkFlags(name, source, list, nil, validCompilerFlags, validCompilerFlagsWithNextArg, checkOverrides); err != nil {
+ 		return err
+ 	}
+ 	// Currently the only flag on the allow list that causes problems
+@@ -258,7 +264,7 @@
+ 	return nil
+ }
+ 
+-func checkFlags(name, source string, list []string, valid []*lazyregexp.Regexp, validNext []string, checkOverrides bool) error {
++func checkFlags(name, source string, list []string, invalid, valid []*lazyregexp.Regexp, validNext []string, checkOverrides bool) error {
+ 	// Let users override rules with $CGO_CFLAGS_ALLOW, $CGO_CFLAGS_DISALLOW, etc.
+ 	var (
+ 		allow    *regexp.Regexp
+@@ -290,6 +296,11 @@
+ 		if allow != nil && allow.FindString(arg) == arg {
+ 			continue Args
+ 		}
++		for _, re := range invalid {
++			if re.FindString(arg) == arg { // must be complete match
++				goto Bad
++			}
++		}
+ 		for _, re := range valid {
+ 			if re.FindString(arg) == arg { // must be complete match
+ 				continue Args
+diff --git a/src/cmd/go/testdata/script/darwin_lto_library_ldflag.txt b/src/cmd/go/testdata/script/darwin_lto_library_ldflag.txt
+new file mode 100644
+index 0000000..d7acefd
+--- /dev/null
++++ b/src/cmd/go/testdata/script/darwin_lto_library_ldflag.txt
+@@ -0,0 +1,17 @@
++[!GOOS:darwin] skip
++[!cgo] skip
++
++! go build
++stderr 'invalid flag in #cgo LDFLAGS: -lto_library'
++
++-- go.mod --
++module ldflag
++
++-- main.go --
++package main
++
++// #cgo CFLAGS: -flto
++// #cgo LDFLAGS: -lto_library bad.dylib
++import "C"
++
++func main() {}
+\ No newline at end of file
