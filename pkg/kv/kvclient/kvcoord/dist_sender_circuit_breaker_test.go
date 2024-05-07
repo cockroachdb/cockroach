@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -84,7 +86,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 		_, err := db.Inc(ctx, key, 1)
 		require.NoError(t, err)
 		tc.WaitForValues(t, key, []int64{1, 1, 1})
-		t.Logf("moved lease to n3")
+		t.Log("moved lease to n3")
 
 		// Deadlock n3.
 		repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
@@ -92,7 +94,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 		mu := repl3.GetMutexForTesting()
 		mu.Lock()
 		defer mu.Unlock()
-		t.Logf("deadlocked n3")
+		t.Log("deadlocked n3")
 
 		// Perform a read from n1, which will stall. Eventually, the lease will be
 		// picked up by a different node. The DistSender should detect this and retry
@@ -103,7 +105,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 			for {
 				require.NoError(t, ctx.Err())
 
-				t.Logf("sending Get request")
+				t.Log("sending Get request")
 				ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 				kv, err := db.Get(ctx, key)
 				cancel()
@@ -113,11 +115,156 @@ func TestDistSenderReplicaStall(t *testing.T) {
 				}
 			}
 		} else {
-			t.Logf("sending Get request")
+			t.Log("sending Get request")
 			kv, err := db.Get(ctx, key)
 			require.NoError(t, err)
 			t.Logf("Get returned %s", kv)
 		}
+	})
+}
+
+// TestDistSenderCircuitBreakerModes validates the behavior of DistSender after
+// a range stall caused by a locked mutex. It tests two different ranges
+// (liveness and regular) and all three different circuit breaker modes.
+func TestDistSenderCircuitBreakerModes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "scratchRange", func(t *testing.T, scratchRange bool) {
+		testutils.RunValues(
+			t,
+			"mode",
+			[]kvcoord.DistSenderCircuitBreakersMode{
+				kvcoord.DistSenderCircuitBreakersNoRanges,
+				kvcoord.DistSenderCircuitBreakersLivenessRangeOnly,
+				kvcoord.DistSenderCircuitBreakersAllRanges,
+			},
+			func(t *testing.T, mode kvcoord.DistSenderCircuitBreakersMode) {
+				ctx := context.Background()
+
+				// The lease won't move unless we use expiration-based leases. We also
+				// speed up the test by reducing various intervals and timeouts.
+				st := cluster.MakeTestingClusterSettings()
+				kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+				kvcoord.CircuitBreakersMode.Override(ctx, &st.SV, int64(mode))
+				kvcoord.CircuitBreakerCancellation.Override(ctx, &st.SV, true)
+				kvcoord.CircuitBreakerProbeThreshold.Override(ctx, &st.SV, time.Second)
+				kvcoord.CircuitBreakerProbeInterval.Override(ctx, &st.SV, time.Second)
+				kvcoord.CircuitBreakerProbeTimeout.Override(ctx, &st.SV, time.Second)
+
+				tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+					ReplicationMode: base.ReplicationManual,
+					ServerArgs: base.TestServerArgs{
+						Settings: st,
+						RaftConfig: base.RaftConfig{
+							RaftTickInterval:           200 * time.Millisecond,
+							RaftHeartbeatIntervalTicks: 1,
+							RaftElectionTimeoutTicks:   3,
+							RangeLeaseDuration:         time.Second,
+						},
+					},
+				})
+				defer tc.Stopper().Stop(ctx)
+
+				db := tc.Server(0).ApplicationLayer().DB()
+
+				key := tc.ScratchRange(t)
+				desc := tc.AddVotersOrFatal(t, keys.NodeLivenessPrefix, tc.Targets(1, 2)...)
+				tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
+				// Ensure the n1 DistSender cache is up-to-date to force the
+				// first scan after a partition to attempt scanning from the
+				// deadlocked store.
+				_, err := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness).ScanNodeVitalityFromKV(ctx)
+				require.NoError(t, err)
+				// Upreplicate the liveness range and put on n3.
+				if scratchRange {
+					// We only use the scratch range for the non-liveness mode.
+					desc = tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+					t.Logf("created %s", desc)
+					// Move the lease to n3, and make sure everyone has applied it by
+					// replicating a write.
+					tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
+
+					_, err := db.Inc(ctx, key, 1)
+					require.NoError(t, err)
+					// Ensure the n1 DistSender cache is up-to-date.
+					tc.WaitForValues(t, key, []int64{1, 1, 1})
+					t.Log("moved lease to n3")
+				}
+
+				// Deadlock either liveness or the scratch range.
+				repl, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+				require.NoError(t, err)
+				mu := repl.GetMutexForTesting()
+				mu.Lock()
+				defer mu.Unlock()
+				t.Logf("deadlocked range on n3 - %v", desc)
+
+				if scratchRange {
+					// Perform a read from n1, which will stall. Eventually, the lease will be
+					// picked up by a different node. The DistSender should detect this and retry
+					// the read there.
+					t.Log("sending Get request to blocked range")
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					_, err := db.Get(ctx, key)
+					cancel()
+					if mode == kvcoord.DistSenderCircuitBreakersAllRanges {
+						require.NoError(t, err)
+					} else {
+						require.Error(t, err)
+					}
+				} else {
+					// Scan the liveness range to ensure the circuit breaker is working.
+					scanError := false
+					// Check that we get the correct value directly from KV as
+					// well as from gossip. The leases may end up on either n1
+					// or n2. The SucceedsSoon looping is necessary for the
+					// IsLive check below. After the liveness lease has moved,
+					// we need to wait until all the other nodes have seen the
+					// new leaseholder and updated their liveness records
+					// against it.
+					testutils.SucceedsSoon(t, func() error {
+						// We allow a long timeout here to prevent failures in race or
+						// stress builds. Unfortunately this means the NoRanges circuit
+						// breaker test takes longer to complete.
+						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+						defer cancel()
+						nl, err := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness).ScanNodeVitalityFromKV(ctx)
+						if err != nil {
+							t.Logf("attempt to scan node vitality resulted in %v", err)
+							scanError = true
+							return nil
+						}
+						// We wait until the new leaseholder has seen the node heartbeat
+						// to validate we don't block any internal threads either.
+						if !nl[1].IsLive(livenesspb.DistSender) {
+							return errors.Errorf("expected n1 to be live")
+						}
+						return nil
+					})
+
+					// In NoRanges mode, we always expect to see a timeout or other error.
+					if mode == kvcoord.DistSenderCircuitBreakersNoRanges {
+						require.True(t, scanError)
+					} else {
+						// If the circuit breaker on the liveness range is enabled,
+						// we don't expect to ever see timeout or other errors as it
+						// should retry in DistSender and not get stuck.
+						require.False(t, scanError)
+						// Also verify liveness updates propagate by gossip. This
+						// validates that a new leader is established and broadcasts the
+						// liveness information.
+						testutils.SucceedsSoon(t, func() error {
+							t.Log("read liveness from gossip on n2")
+							node2Cache := tc.Server(1).NodeLiveness().(*liveness.NodeLiveness).GetNodeVitalityFromCache(1)
+							if !node2Cache.IsLive(livenesspb.DistSender) {
+								return errors.Errorf("expected n1 to be live")
+							}
+							return nil
+						})
+					}
+				}
+			})
 	})
 }
 
