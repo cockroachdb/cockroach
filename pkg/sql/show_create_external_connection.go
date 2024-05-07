@@ -31,15 +31,19 @@ var showCreateExternalConnectionColumns = colinfo.ResultColumns{
 	{Name: "create_statement", Typ: types.String},
 }
 
-func loadExternalConnections(
-	params runParams, n *tree.ShowCreateExternalConnections,
-) ([]externalconn.ExternalConnection, error) {
-	var connections []externalconn.ExternalConnection
-	var rows []tree.Datums
+const (
+	createConnNameIdx = iota
+	createConnStmtIdx
+)
 
-	if n.ConnectionLabel != nil {
+func getConnectionNames(
+	params runParams, connectionLabel tree.Expr, checkUsagePrivilege bool,
+) ([]string, error) {
+	var names []string
+	var rows []tree.Datums
+	if connectionLabel != nil {
 		name, err := params.p.ExprEvaluator(externalConnectionOp).String(
-			params.ctx, n.ConnectionLabel,
+			params.ctx, connectionLabel,
 		)
 		if err != nil {
 			return nil, err
@@ -58,9 +62,34 @@ func loadExternalConnections(
 	}
 
 	for _, row := range rows {
-		connectionName := tree.MustBeDString(row[0])
+		name := string(tree.MustBeDString(row[0]))
+
+		if checkUsagePrivilege {
+			// Check that the user has USAGE privileges on the External Connection object.
+			ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
+				ConnectionName: name,
+			}
+			hasPriv, err := params.p.HasPrivilege(params.ctx, ecPrivilege,
+				privilege.USAGE, params.p.User())
+			if err != nil {
+				return nil, err
+			}
+			if !hasPriv {
+				continue
+			}
+		}
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+func loadExternalConnections(
+	params runParams, connectionNames []string,
+) ([]externalconn.ExternalConnection, error) {
+	var connections []externalconn.ExternalConnection
+	for _, name := range connectionNames {
 		connection, err := externalconn.LoadExternalConnection(
-			params.ctx, string(connectionName), params.p.InternalSQLTxn(),
+			params.ctx, name, params.p.InternalSQLTxn(),
 		)
 		if err != nil {
 			return nil, err
@@ -113,8 +142,13 @@ func (p *planner) ShowCreateExternalConnection(
 		name:    name,
 		columns: showCreateExternalConnectionColumns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			connections, err := loadExternalConnections(
-				runParams{ctx: ctx, p: p, extendedEvalCtx: &p.extendedEvalCtx}, n)
+			params := runParams{ctx: ctx, p: p, extendedEvalCtx: &p.extendedEvalCtx}
+			connectionNames, err := getConnectionNames(params, n.ConnectionLabel, false)
+			if err != nil {
+				return nil, err
+			}
+
+			connections, err := loadExternalConnections(params, connectionNames)
 			if err != nil {
 				return nil, err
 			}
@@ -122,13 +156,13 @@ func (p *planner) ShowCreateExternalConnection(
 			var rows []tree.Datums
 			for _, conn := range connections {
 				row := tree.Datums{
-					scheduleIDIdx: tree.NewDString(conn.ConnectionName()),
-					createStmtIdx: tree.NewDString(conn.UnredactedConnectionStatement()),
+					createConnNameIdx: tree.NewDString(conn.ConnectionName()),
+					createConnStmtIdx: tree.NewDString(conn.UnredactedConnectionStatement()),
 				}
 				rows = append(rows, row)
 			}
 
-			v := p.newContainerValuesNode(showCreateTableColumns, len(rows))
+			v := p.newContainerValuesNode(showCreateExternalConnectionColumns, len(rows))
 			for _, row := range rows {
 				if _, err := v.rows.AddRow(ctx, row); err != nil {
 					v.Close(ctx)

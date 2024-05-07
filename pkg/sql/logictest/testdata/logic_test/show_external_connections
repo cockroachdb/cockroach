@@ -1,0 +1,52 @@
+statement ok
+CREATE EXTERNAL CONNECTION foo_conn AS 'nodelocal://1/foo';
+CREATE EXTERNAL CONNECTION bar_conn AS 'nodelocal://1/bar';
+
+query TT colnames,rowsort
+SHOW EXTERNAL CONNECTIONS
+----
+connection_name connection_type
+bar_conn        STORAGE
+foo_conn        STORAGE
+
+query TT colnames,rowsort
+SHOW EXTERNAL CONNECTION foo_conn
+----
+connection_name connection_type
+foo_conn        STORAGE
+
+user testuser
+
+query TT colnames,rowsort
+SHOW EXTERNAL CONNECTIONS
+----
+connection_name connection_type
+
+query TT colnames,rowsort
+SHOW EXTERNAL CONNECTION foo_conn;
+----
+connection_name connection_type
+
+user root
+
+statement ok
+GRANT USAGE ON EXTERNAL CONNECTION foo_conn TO testuser;
+
+user testuser
+
+query TT colnames,rowsort
+SHOW EXTERNAL CONNECTIONS
+----
+connection_name connection_type
+foo_conn        STORAGE
+
+query TT colnames,rowsort
+SHOW EXTERNAL CONNECTION foo_conn
+----
+connection_name connection_type
+foo_conn        STORAGE
+
+query TT colnames,rowsort
+SHOW EXTERNAL CONNECTION bar_conn
+----
+connection_name connection_type
