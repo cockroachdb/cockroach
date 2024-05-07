@@ -62,6 +62,8 @@ const (
 	SuperRegions
 	// CreateExternalConnection represents the SHOW CREATE EXTERNAL CONNECTION command.
 	CreateExternalConnection
+	// ExternalConnection represents the SHOW EXTERNAL CONNECTION command.
+	ExternalConnection
 )
 
 var showTelemetryNameMap = map[ShowTelemetryType]string{
@@ -85,6 +87,7 @@ var showTelemetryNameMap = map[ShowTelemetryType]string{
 	FullTableScans:           "full_table_scans",
 	SuperRegions:             "super_regions",
 	CreateExternalConnection: "create_external_connection",
+	ExternalConnection:       "external_connection",
 }
 
 func (s ShowTelemetryType) String() string {
