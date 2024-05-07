@@ -415,6 +415,10 @@ message LocalOnlySessionData {
   // that the optimizer should use an improved selectivity estimate for
   // multi-column predicates.
   bool optimizer_use_improved_multi_column_selectivity_estimate = 129;
+  // OptimizerApplyFullScanPenaltyToVirtualTables, when true, indicates that the
+  // huge cost should be assigned to plans that have full scans of virtual
+  // tables when DisallowFullTableScans is set.
+  bool optimizer_apply_full_scan_penalty_to_virtual_tables = 131;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
