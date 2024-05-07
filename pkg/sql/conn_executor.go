@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -58,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -4072,17 +4070,6 @@ func (ex *connExecutor) maybeSetSQLLivenessSession() error {
 	return nil
 }
 
-func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
-	ctx context.Context, descID descpb.ID,
-) error {
-	if err := ex.planner.waitForDescriptorSchemaChanges(
-		ctx, descID, *ex.extraTxnState.schemaChangerState,
-	); err != nil {
-		return err
-	}
-	return ex.resetTransactionOnSchemaChangeRetry(ctx)
-}
-
 // initStatementResult initializes res according to a query.
 //
 // cols represents the columns of the result rows. Should be nil if
@@ -4362,41 +4349,6 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 			ex.planner.execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
 		}
 	}
-}
-
-// runPreCommitStages is part of the new schema changer infrastructure to
-// mutate descriptors prior to committing a SQL transaction.
-func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
-	scs := ex.extraTxnState.schemaChangerState
-	if len(scs.state.Targets) == 0 {
-		return nil
-	}
-	deps := newSchemaChangerTxnRunDependencies(
-		ctx,
-		ex.planner.SessionData(),
-		ex.planner.User(),
-		ex.server.cfg,
-		ex.planner.InternalSQLTxn(),
-		ex.extraTxnState.descCollection,
-		ex.planner.EvalContext(),
-		ex.planner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		scs.jobID,
-		scs.stmts,
-	)
-	ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
-	after, jobID, err := scrun.RunPreCommitPhase(
-		ctx, ex.server.cfg.DeclarativeSchemaChangerTestingKnobs, deps, scs.state,
-	)
-	if err != nil {
-		return err
-	}
-	scs.state = after
-	scs.jobID = jobID
-	if jobID != jobspb.InvalidJobID {
-		ex.extraTxnState.jobs.addCreatedJobID(jobID)
-		log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
-	}
-	return nil
 }
 
 func (ex *connExecutor) getDescIDGenerator() eval.DescIDGenerator {
