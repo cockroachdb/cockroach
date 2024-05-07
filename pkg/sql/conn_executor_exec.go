@@ -3195,7 +3195,6 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 	ex.extraTxnState.transactionStatementFingerprintIDs = nil
 	ex.extraTxnState.numRows = 0
-	ex.extraTxnState.shouldCollectTxnExecutionStats = false
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 	ex.extraTxnState.idleLatency = 0
 	ex.extraTxnState.rowsRead = 0
@@ -3203,9 +3202,9 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.rowsWritten = 0
 	ex.extraTxnState.rowsWrittenLogged = false
 	ex.extraTxnState.rowsReadLogged = false
-	if txnExecStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); txnExecStatsSampleRate > 0 {
-		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
-	}
+
+	txnExecStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV)
+	ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
 
 	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 	// client connection, and is Server.InternalMetrics for internal executors.
