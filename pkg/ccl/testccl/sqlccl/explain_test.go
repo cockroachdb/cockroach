@@ -10,7 +10,6 @@ package sqlccl
 
 import (
 	"context"
-	gosql "database/sql"
 	"strings"
 	"testing"
 
@@ -45,8 +44,9 @@ func TestExplainRedactDDL(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	query := func(sql string) (*gosql.Rows, error) {
-		return sqlDB.QueryContext(ctx, sql)
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// To check for PII leaks, we inject a single unlikely string into some of the
@@ -68,7 +68,7 @@ func TestExplainRedactDDL(t *testing.T) {
 	setup = append(setup, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off;")
 	setup = append(setup, "SET statement_timeout = '5s';")
 	for _, stmt := range setup {
-		if _, err := sqlDB.ExecContext(ctx, stmt); err != nil {
+		if _, err := conn.ExecContext(ctx, stmt); err != nil {
 			// Ignore errors.
 			continue
 		}
@@ -77,7 +77,7 @@ func TestExplainRedactDDL(t *testing.T) {
 	}
 
 	// Check EXPLAIN (OPT, CATALOG, REDACT) for each table.
-	rows, err := query("SELECT table_name FROM [SHOW TABLES]")
+	rows, err := conn.QueryContext(ctx, "SELECT table_name FROM [SHOW TABLES]")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestExplainRedactDDL(t *testing.T) {
 	}
 	for _, table := range tables {
 		explain := "EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM " + lexbase.EscapeSQLIdent(table)
-		rows, err = query(explain)
+		rows, err = conn.QueryContext(ctx, explain)
 		if err != nil {
 			// This explain should always succeed.
 			t.Fatal(err)
@@ -124,5 +124,5 @@ func TestExplainRedactDDL(t *testing.T) {
 	}
 	defer smith.Close()
 
-	tests.GenerateAndCheckRedactedExplainsForPII(t, smith, numStatements, query, containsPII)
+	tests.GenerateAndCheckRedactedExplainsForPII(t, smith, numStatements, conn, containsPII)
 }

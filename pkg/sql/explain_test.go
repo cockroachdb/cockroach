@@ -13,7 +13,6 @@ package sql_test
 import (
 	"bytes"
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -521,8 +520,9 @@ func TestExplainRedact(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
 
-	query := func(sql string) (*gosql.Rows, error) {
-		return sqlDB.QueryContext(ctx, sql)
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// To check for PII leaks, we inject a single unlikely string into some of the
@@ -544,9 +544,12 @@ func TestExplainRedact(t *testing.T) {
 	setup = append(setup, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off;")
 	setup = append(setup, "ANALYZE seed;")
 	setup = append(setup, "SET statement_timeout = '5s';")
-	t.Log(strings.Join(setup, "\n"))
-	db := sqlutils.MakeSQLRunner(sqlDB)
-	db.ExecMultiple(t, setup...)
+	for _, stmt := range setup {
+		if _, err := conn.ExecContext(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+		t.Log(stmt + ";")
+	}
 
 	smith, err := sqlsmith.NewSmither(sqlDB, rng,
 		sqlsmith.PrefixStringConsts(pii),
@@ -558,5 +561,5 @@ func TestExplainRedact(t *testing.T) {
 	}
 	defer smith.Close()
 
-	tests.GenerateAndCheckRedactedExplainsForPII(t, smith, numStatements, query, containsPII)
+	tests.GenerateAndCheckRedactedExplainsForPII(t, smith, numStatements, conn, containsPII)
 }
