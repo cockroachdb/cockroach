@@ -173,6 +173,7 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

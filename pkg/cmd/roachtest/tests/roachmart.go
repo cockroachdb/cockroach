@@ -81,6 +81,7 @@ func registerRoachmart(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRoachmart(ctx, t, c, v)
 			},
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 }

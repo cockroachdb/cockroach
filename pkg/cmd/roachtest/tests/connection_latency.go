@@ -113,6 +113,7 @@ func registerConnectionLatencyTest(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numNodes, 1, false /*password*/)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 
 	geoZones := []string{regionUsEast, regionUsWest, regionEuWest}
@@ -131,6 +132,7 @@ func registerConnectionLatencyTest(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones, false /*password*/)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 
 	r.Add(registry.TestSpec{
@@ -143,5 +145,6 @@ func registerConnectionLatencyTest(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones, true /*password*/)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }

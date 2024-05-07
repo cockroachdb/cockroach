@@ -177,5 +177,6 @@ func registerDrop(r registry.Registry) {
 			}
 			runDrop(ctx, t, c, warehouses, numNodes)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
