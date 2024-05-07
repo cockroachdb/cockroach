@@ -117,8 +117,8 @@ func (e *expander) maybeExpandMap(
 // instance is provided, the first instance is assumed.
 func extractVirtualClusterInfo(matches []string) (string, int, error) {
 	// Defaults if the passed in group match is empty.
-	virtualClusterName := SystemInterfaceName
-	sqlInstance := 0
+	var virtualClusterName string
+	var sqlInstance int
 
 	// Extract the cluster name and instance matches.
 	trim := func(s string) string {
