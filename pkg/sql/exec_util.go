@@ -3395,6 +3395,10 @@ func (m *sessionDataMutator) SetDisallowFullTableScans(val bool) {
 	m.data.DisallowFullTableScans = val
 }
 
+func (m *sessionDataMutator) SetOptimizerApplyFullScanPenaltyToVirtualTables(val bool) {
+	m.data.OptimizerApplyFullScanPenaltyToVirtualTables = val
+}
+
 func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
 }
