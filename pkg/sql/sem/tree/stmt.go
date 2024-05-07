@@ -2068,6 +2068,17 @@ func (*ShowCreateExternalConnections) StatementTag() string {
 }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowExternalConnections) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowExternalConnections) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowExternalConnections) StatementTag() string {
+	return "SHOW EXTERNAL CONNECTIONS"
+}
+
+// StatementReturnType implements the Statement interface.
 func (*ShowCommitTimestamp) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -2407,6 +2418,7 @@ func (n *ShowEnums) String() string                           { return AsString(
 func (n *ShowFullTableScans) String() string                  { return AsString(n) }
 func (n *ShowCreateRoutine) String() string                   { return AsString(n) }
 func (n *ShowCreateExternalConnections) String() string       { return AsString(n) }
+func (n *ShowExternalConnections) String() string             { return AsString(n) }
 func (n *ShowRoutines) String() string                        { return AsString(n) }
 func (n *ShowGrants) String() string                          { return AsString(n) }
 func (n *ShowHistogram) String() string                       { return AsString(n) }

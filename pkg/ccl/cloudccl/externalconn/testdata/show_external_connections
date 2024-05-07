@@ -1,0 +1,50 @@
+# Connection URIs should be redacted
+subtest redact-connection-uri
+
+disable-check-external-storage
+----
+
+disable-check-kms
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION nodelocal AS 'nodelocal://1/foo';
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION kms AS 'gcp-kms:///cmk?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg==';
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION s3 AS 's3://bucket?AUTH=specified&AWS_ACCESS_KEY_ID=key&AWS_SECRET_ACCESS_KEY=secret-key';
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION gs AS 'gs://bucket?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg==';
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION kafka AS 'kafka://broker.address.com:9092?topic_prefix=bar_&tls_enabled=true&ca_cert=Zm9vCg==&sasl_enabled=true&sasl_user=fake_user&sasl_password=fake_password&sasl_mechanism=SCRAM-SHA-256';
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION blob AS 'azure-storage://bucket/path?AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud';
+----
+
+query-sql
+SHOW EXTERNAL CONNECTIONS
+----
+blob azure-storage://bucket/path?AZURE_ACCOUNT_KEY=redacted&AZURE_ACCOUNT_NAME=foo&AZURE_ENVIRONMENT=AzureUSGovernmentCloud STORAGE
+gs gs://bucket?AUTH=specified&BEARER_TOKEN=redacted STORAGE
+kafka kafka://broker.address.com:9092?ca_cert=redacted&sasl_enabled=true&sasl_mechanism=SCRAM-SHA-256&sasl_password=redacted&sasl_user=fake_user&tls_enabled=true&topic_prefix=bar_ STORAGE
+kms gcp-kms:///redacted?AUTH=specified&BEARER_TOKEN=redacted KMS
+nodelocal nodelocal://1/foo STORAGE
+s3 s3://bucket?AUTH=specified&AWS_ACCESS_KEY_ID=key&AWS_SECRET_ACCESS_KEY=redacted STORAGE
+
+enable-check-external-storage
+----
+
+enable-check-kms
+----
+
+subtest end
