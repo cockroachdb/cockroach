@@ -375,6 +375,11 @@ func alterTenantRestartReplication(
 		return err
 	}
 
+	var revertTo hlc.Timestamp
+	if tenInfo.PreviousSourceTenant != nil {
+		revertTo = tenInfo.PreviousSourceTenant.CutoverAsOf
+	}
+
 	return errors.Wrap(createReplicationJob(
 		ctx,
 		p,
@@ -383,6 +388,7 @@ func alterTenantRestartReplication(
 		dstTenantID,
 		retentionTTLSeconds,
 		resumeTS,
+		revertTo,
 		revertFirst,
 		jobID,
 		&tree.CreateTenantFromReplication{
