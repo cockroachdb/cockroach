@@ -61,6 +61,7 @@ go_library(
         "//pkg/util/version",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_datadog_datadog_go//statsd",
         "@com_github_lib_pq//:pq",
         "@com_github_petermattis_goid//:goid",
         "@com_github_prometheus_client_golang//prometheus",
