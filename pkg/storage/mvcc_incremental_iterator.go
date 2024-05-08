@@ -26,7 +26,7 @@ import (
 )
 
 // mvccIncrementalIteratorMetamorphicTBI will randomly enable TBIs.
-var mvccIncrementalIteratorMetamorphicTBI = metamorphic.ConstantWithMetamorphicTestBool(
+var mvccIncrementalIteratorMetamorphicTBI = metamorphic.ConstantWithTestBool(
 	"mvcc-incremental-iter-tbi", true)
 
 // MVCCIncrementalIterator iterates over the diff of the key range

@@ -71,7 +71,7 @@ var (
 	// have grown abnormally large. RaftLogTruncationThreshold will typically not
 	// trigger it, unless the average log entry is <= 160 bytes. The key size is
 	// ~16 bytes, so Pebble point deletion batches will be bounded at ~1.6MB.
-	raftLogTruncationClearRangeThreshold = kvpb.RaftIndex(metamorphic.ConstantWithMetamorphicTestRange(
+	raftLogTruncationClearRangeThreshold = kvpb.RaftIndex(metamorphic.ConstantWithTestRange(
 		"raft-log-truncation-clearrange-threshold", 100000 /* default */, 1 /* min */, 1e6 /* max */))
 
 	// raftDisableLeaderFollowsLeaseholder disables lease/leader colocation.
