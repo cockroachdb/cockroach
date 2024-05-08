@@ -67,10 +67,10 @@ exp,benchmark
 6,Jobs/resume_job
 8,Jobs/jobs_page_default
 8,Jobs/jobs_page_latest_50
-8,Jobs/jobs_page_type_filtered
-8,Jobs/jobs_page_type_filtered_no_matches
+6-9,Jobs/jobs_page_type_filtered
+6-9,Jobs/jobs_page_type_filtered_no_matches
 3,Jobs/show_job
-6-8,Jobs/show_jobs
+6-9,Jobs/show_jobs
 3,ORMQueries/activerecord_type_introspection_query
 0,ORMQueries/asyncpg_types
 0,ORMQueries/column_descriptions_json_agg
