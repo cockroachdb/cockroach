@@ -439,6 +439,7 @@
 /pkg/cmd/generate-staticcheck/ @cockroachdb/dev-inf
 /pkg/cmd/generate-cgo/       @cockroachdb/dev-inf
 /pkg/cmd/geoviz/             @cockroachdb/spatial
+/pkg/cmd/github-action-poller/            @cockroachdb/dev-inf
 /pkg/cmd/github-post/        @cockroachdb/test-eng
 /pkg/cmd/github-pull-request-make/ @cockroachdb/dev-inf
 /pkg/cmd/gossipsim/          @cockroachdb/kv-prs
