@@ -48,6 +48,8 @@ var (
 	listJSON              bool
 	listMine              bool
 	listPattern           string
+	isSecure              bool   // Set based on the values passed to --secure and --insecure
+	secure                = true // DEPRECATED
 	insecure              = false
 	virtualClusterName    string
 	sqlInstance           int
@@ -413,6 +415,10 @@ func initFlags() {
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
 	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, loadBalanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd, jaegerStartCmd, grafanaAnnotationCmd} {
+		// TODO(renato): remove --secure once the default of secure
+		// clusters has existed in roachprod long enough.
+		cmd.Flags().BoolVar(&secure,
+			"secure", secure, "use a secure cluster (DEPRECATED: clusters are secure by default; use --insecure to create insecure clusters.)")
 		cmd.Flags().BoolVar(&insecure,
 			"insecure", insecure, "use an insecure cluster")
 	}
