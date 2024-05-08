@@ -202,6 +202,9 @@ func TestOnlineRestoreWaitForDownload(t *testing.T) {
 	var downloadJobID jobspb.JobID
 	sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
 	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
+	sqlDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.tenant_span_stats(
+		ARRAY(SELECT(crdb_internal.table_span('data2.bank'::regclass::oid::int)[1], crdb_internal.table_span('data2.bank'::regclass::oid::int)[2]))
+	) WHERE (stats->>'external_file_bytes')::int > 0`, [][]string{})
 }
 
 // TestOnlineRestoreTenant runs an online restore of a tenant and ensures the
