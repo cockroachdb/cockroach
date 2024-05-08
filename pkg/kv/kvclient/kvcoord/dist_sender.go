@@ -323,7 +323,7 @@ This counts the number of ranges with an active rangefeed that are performing ca
 // go to the leaseholder first, and instead be sent to the leaseholder through a
 // follower using a proxy request. This setting is only intended for testing to
 // stress proxy behavior.
-var metamorphicRouteToLeaseholderFirst = metamorphic.ConstantWithMetamorphicTestBool(
+var metamorphicRouteToLeaseholderFirst = metamorphic.ConstantWithTestBool(
 	"distsender-leaseholder-first",
 	true,
 )

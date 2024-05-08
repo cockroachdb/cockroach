@@ -34,7 +34,7 @@ import (
 // maximum number of results returned by a scan is known, the scan disables
 // batch limits in the dist sender. This results in the parallelization of these
 // scans.
-var parallelScanResultThreshold = uint64(metamorphic.ConstantWithMetamorphicTestRange(
+var parallelScanResultThreshold = uint64(metamorphic.ConstantWithTestRange(
 	"parallel-scan-result-threshold",
 	parallelScanResultThresholdProductionValue, /* defaultValue */
 	1, /* min */

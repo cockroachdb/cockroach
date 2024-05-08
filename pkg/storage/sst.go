@@ -34,7 +34,7 @@ var (
 	// adjust stats for point keys masked by range keys, but when we disable this
 	// masking we expect accurate stats and can assert this in various tests
 	// (notably kvnemesis).
-	DisableCheckSSTRangeKeyMasking = metamorphic.ConstantWithMetamorphicTestBool(
+	DisableCheckSSTRangeKeyMasking = metamorphic.ConstantWithTestBool(
 		"disable-checksstconflicts-range-key-masking", false)
 )
 
