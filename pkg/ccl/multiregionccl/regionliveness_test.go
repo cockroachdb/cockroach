@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -202,7 +204,7 @@ func TestRegionLivenessProber(t *testing.T) {
 			if _, ok := regions[expectedRegions[1]]; ok {
 				return errors.AssertionFailedf("removed region detected %s", expectedRegions[1])
 			}
-			// Similarly query the unavailable physcial regions
+			// Similarly query the unavailable physical regions
 			unavailablePhysicalRegions, err := regionProber.QueryUnavailablePhysicalRegions(ctx, txn, true /*filterAvailable*/)
 			if err != nil {
 				return err
@@ -442,4 +444,131 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	_, err = tx.Exec("INSERT INTO t2 VALUES(5)")
 	require.ErrorContainsf(t, grp.Wait(), "context canceled", "connection should have been dropped, node is dead.")
 	require.ErrorContainsf(t, tx.Commit(), "TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn", "connection should have been dropped, node is dead.")
+}
+
+// TestRegionLivenessProberForSQLInstances validates that regional avaibility issues
+// can be also be detected when allocating rows inside the sqlinstances table.
+func TestRegionLivenessProberForSQLInstances(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// This test forces the SQL liveness TTL be a small number,
+	// which makes the heartbeats even more critical. Under stress and
+	// race environments this test becomes even more sensitive, if
+	// we can't send heartbeats within 20 seconds.
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
+
+	ctx := context.Background()
+
+	// Enable settings required for configuring a tenant's system database as
+	// multi-region. and enable region liveness for testing.
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettings()
+		//	instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		regionliveness.RegionLivenessEnabled.Override(ctx, &cs.SV, true)
+		instancestorage.PreallocatedCount.Override(ctx, &cs.SV, 1)
+		return cs
+	}
+	defer regionliveness.TestingSetUnavailableAtTTLOverride(testingRegionLivenessTTL)()
+
+	expectedRegions := []string{
+		"us-east",
+		"us-west",
+		"us-south",
+	}
+	keyToSlow := struct {
+		syncutil.Mutex
+		prefix []byte
+	}{}
+	testCluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(t,
+		expectedRegions,
+		1,
+		base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+					scan := request.Requests[0].GetScan()
+					keyToSlow.Lock()
+					prefixToCheck := keyToSlow.prefix
+					keyToSlow.Unlock()
+					if scan != nil && len(prefixToCheck) > 0 {
+						if len(scan.Key) >= len(prefixToCheck) && scan.Key[:len(prefixToCheck)].Equal(prefixToCheck) {
+							time.Sleep(time.Second * 30)
+						}
+					}
+					return nil
+				},
+			},
+		},
+		multiregionccltestutils.WithSettings(makeSettings()))
+	defer cleanup()
+
+	id, err := roachpb.MakeTenantID(11)
+	require.NoError(t, err)
+
+	var tenants []serverutils.ApplicationLayerInterface
+	var tenantSQL []*gosql.DB
+	blockProbeQuery := atomic.Bool{}
+	defer regionliveness.TestingSetProbeLivenessTimeout(
+		func() {
+			// Timeout attempts to probe intentionally.
+			if blockProbeQuery.Swap(false) {
+				time.Sleep(testingRegionLivenessProbeTimeout)
+			}
+		})()
+
+	for _, s := range testCluster.Servers {
+		tenantArgs := base.TestTenantArgs{
+			Settings: makeSettings(),
+			TenantID: id,
+			Locality: s.Locality(),
+		}
+		ts, tenantDB := serverutils.StartTenant(t, s, tenantArgs)
+		tenants = append(tenants, ts)
+		tenantSQL = append(tenantSQL, tenantDB)
+	}
+	// Convert into a multi-region DB.
+	_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system SET PRIMARY REGION '%s'", testCluster.Servers[0].Locality().Tiers[0].Value))
+	require.NoError(t, err)
+	for i := 1; i < len(expectedRegions); i++ {
+		_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system ADD REGION '%s'", expectedRegions[i]))
+		require.NoError(t, err)
+	}
+	// Override the table timeout probe for testing.
+	for _, ts := range tenants {
+		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeout)
+	}
+
+	var cachedRegionProvider *regions.CachedDatabaseRegions
+	cachedRegionProvider, err = regions.NewCachedDatabaseRegions(ctx, tenants[0].DB(), tenants[0].LeaseManager().(*lease.Manager))
+	require.NoError(t, err)
+	var downRegionName []byte
+	for i := 0; i < cachedRegionProvider.GetRegionEnumTypeDesc().NumEnumMembers(); i++ {
+		if cachedRegionProvider.GetRegionEnumTypeDesc().GetMemberLogicalRepresentation(i) == expectedRegions[1] {
+			downRegionName = cachedRegionProvider.GetRegionEnumTypeDesc().GetMemberPhysicalRepresentation(i)
+			break
+		}
+	}
+	// Probe the liveness of the region, but timeout the query
+	// intentionally to make it seem dead.
+	keyToSlow.Lock()
+	sqlInstancePrefix := tenants[0].Codec().IndexPrefix(keys.SQLInstancesTableID, uint32(systemschema.SQLInstancesTable().GetPrimaryIndexID()))
+	keyToSlow.prefix = encoding.EncodeBytesAscending(sqlInstancePrefix, downRegionName)
+	keyToSlow.Unlock()
+	blockProbeQuery.Store(true)
+	// Attempt to start new nodes this should fail, for a bit.
+	targetServer := testCluster.Servers[0]
+	newTenantArgs := base.TestTenantArgs{
+		Settings: makeSettings(),
+		TenantID: id,
+		Locality: targetServer.Locality(),
+	}
+	// We won't be able to scan expectedRegions[1] here, which will cause a slow
+	// start because we will retry creating the instance after a first attempt.
+	_, tenantDB := serverutils.StartTenant(t, targetServer, newTenantArgs)
+	require.NoError(t, err)
+	tdbRunner := sqlutils.MakeSQLRunner(tenantDB)
+	tdbRunner.CheckQueryResults(t, "SELECT crdb_region FROM system.region_liveness",
+		[][]string{{"us-west"}})
+	require.NoError(t, err)
 }
