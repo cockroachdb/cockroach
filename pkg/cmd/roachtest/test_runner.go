@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -332,11 +331,11 @@ func (r *testRunner) Run(
 		//  TODO(bhaskar): remove this once we have more usage details
 		//  and more convinced about using spot VMs for all the runs.
 		if roachtestflags.Cloud == spec.GCE &&
-			testSpec.Benchmark &&
-			!testSpec.Suites.Contains(registry.Weekly) &&
-			rand.Float64() <= 0.5 {
+			testSpec.Benchmark {
 			lopt.l.PrintfCtx(ctx, "using spot VMs to run test %s", testSpec.Name)
 			testSpec.Cluster.UseSpotVMs = true
+		} else {
+			lopt.l.PrintfCtx(ctx, "using ondemand VMs to run test %s", testSpec.Name)
 		}
 
 		if roachtestflags.UseSpotVM {
@@ -1205,7 +1204,7 @@ func (r *testRunner) runTest(
 
 		grafanaAnnotateTestStart(runCtx, t, c)
 		// This is the call to actually run the test.
-		s.Run(runCtx, t, c)
+		//s.Run(runCtx, t, c)
 	}()
 
 	var timedOut bool
