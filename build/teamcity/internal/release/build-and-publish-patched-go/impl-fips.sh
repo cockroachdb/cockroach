@@ -4,8 +4,8 @@ set -xeuo pipefail
 
 # TODO: We may want to fork this repo and keep it up to date.
 GO_FIPS_REPO=https://github.com/golang-fips/go
-GO_FIPS_COMMIT=go1.21-fips-release
-GO_VERSION=1.21.9
+GO_FIPS_COMMIT=47f280d5e727f35a8e57020e563d6bae04d8db1e
+GO_VERSION=1.21.10
 
 # Install build dependencies
 yum install git golang golang-bin openssl openssl-devel -y

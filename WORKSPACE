@@ -165,14 +165,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.21.9.darwin-amd64.tar.gz", "aa45879676414b1f26794bc1ec2dff33b20336af5b55d41e1e11a5d999add995"),
-        "darwin_arm64": ("go1.21.9.darwin-arm64.tar.gz", "ef1c6645844d1e6064f40d4fa244919ea6dd4e3e3942953b8be940e50be1636a"),
-        "linux_amd64": ("go1.21.9.linux-amd64.tar.gz", "9612c5592539e3299c4e88d3680fd296650e0807cbf24a80f003ed1f1ea97217"),
-        "linux_arm64": ("go1.21.9.linux-arm64.tar.gz", "b2e2b74631687db495c291ee723467351c28342feb38b41652ac941c082b91c7"),
-        "windows_amd64": ("go1.21.9.windows-amd64.tar.gz", "741f14171a4a7c874fc86b93da7f52ffc990c0aca1648150292e43f7ab1c0404"),
+        "darwin_amd64": ("go1.21.10.darwin-amd64.tar.gz", "75ff1781e4455678c318e7801a1e61a4093944737f1cc7006fcbb99721f8a486"),
+        "darwin_arm64": ("go1.21.10.darwin-arm64.tar.gz", "ba976f20f7b12ff0a9dc0500133b97f35ba85b228d561a004f1230109d96fc28"),
+        "linux_amd64": ("go1.21.10.linux-amd64.tar.gz", "0851877302ecfc1dbf102f8d68a4ba0b3d6febf73f40d81119cd2a140e4c9c8f"),
+        "linux_arm64": ("go1.21.10.linux-arm64.tar.gz", "0a0f4cda82ae129fd54bf81f4dd7527f25e2828389967ecde2ea7b72c370858c"),
+        "windows_amd64": ("go1.21.10.windows-amd64.tar.gz", "39bf28f29ba40108115e2264e67d1dedb1ca0bea27dd43d190544feef45de122"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240422-202930/{}"],
-    version = "1.21.9",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240507-211029/{}"],
+    version = "1.21.10",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -626,8 +626,8 @@ go_download_sdk(
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
     sdks = {
-        "linux_amd64": ("go1.21.9fips.linux-amd64.tar.gz", "01b437734e71cda9be21fafa3279a1a9f5409da39c5e3b7a8b93c12d230a9606"),
+        "linux_amd64": ("go1.21.10fips.linux-amd64.tar.gz", "ee3b6a19518687dac6d779b78ed24f998a9e9b75ef76db3dc4e61c415f337777"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240422-202930/{}"],
-    version = "1.21.9fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240507-211029/{}"],
+    version = "1.21.10fips",
 )
