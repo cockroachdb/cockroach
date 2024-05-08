@@ -524,12 +524,20 @@ func makeKVFeedMonitoringCfg(
 // to name its output files in lexicographically monotonic fashion.
 func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err error) {
 	var initialHighWater hlc.Timestamp
+	isInitialScan := false
 	spans = make([]roachpb.Span, 0, len(ca.spec.Watches))
 	for _, watch := range ca.spec.Watches {
-		if initialHighWater.IsEmpty() || watch.InitialResolved.Less(initialHighWater) {
+		spans = append(spans, watch.Span)
+		if watch.InitialResolved.IsEmpty() {
+			// Keep initialHighWater as empty if there are any zero InitialResolved
+			// timestamp to indicate that initial scan is required.
+			initialHighWater = hlc.Timestamp{}
+			isInitialScan = true
+		} else if !isInitialScan && (initialHighWater.IsEmpty() || watch.InitialResolved.Less(initialHighWater)) {
+			// If there are no empty InitialResolved timestamps, initial scan is not
+			// required. Set initialHighWater as the minimum of all InitialResolved.
 			initialHighWater = watch.InitialResolved
 		}
-		spans = append(spans, watch.Span)
 	}
 
 	ca.frontier, err = makeSchemaChangeFrontier(initialHighWater, spans...)
