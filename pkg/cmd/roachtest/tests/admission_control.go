@@ -42,4 +42,5 @@ func registerAdmission(r registry.Registry) {
 	registerDatabaseDrop(r)
 	registerIntentResolutionOverload(r)
 	registerElasticIO(r)
+	registerDiskBandwidthOverload(r)
 }
