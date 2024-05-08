@@ -18,22 +18,21 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -138,6 +137,7 @@ func buildStatementBundle(
 	ctx context.Context,
 	explainFlags explain.Flags,
 	db *kv.DB,
+	p *planner,
 	ie *InternalExecutor,
 	stmtRawSQL string,
 	plan *planTop,
@@ -151,7 +151,7 @@ func buildStatementBundle(
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
-	b, err := makeStmtBundleBuilder(explainFlags, db, ie, stmtRawSQL, plan, trace, placeholders, sv)
+	b, err := makeStmtBundleBuilder(explainFlags, db, p, ie, stmtRawSQL, plan, trace, placeholders, sv)
 	if err != nil {
 		return diagnosticsBundle{collectionErr: err}
 	}
@@ -209,6 +209,7 @@ type stmtBundleBuilder struct {
 	flags explain.Flags
 
 	db *kv.DB
+	p  *planner
 	ie *InternalExecutor
 
 	stmt         string
@@ -226,6 +227,7 @@ type stmtBundleBuilder struct {
 func makeStmtBundleBuilder(
 	flags explain.Flags,
 	db *kv.DB,
+	p *planner,
 	ie *InternalExecutor,
 	stmtRawSQL string,
 	plan *planTop,
@@ -234,7 +236,7 @@ func makeStmtBundleBuilder(
 	sv *settings.Values,
 ) (stmtBundleBuilder, error) {
 	b := stmtBundleBuilder{
-		flags: flags, db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders, sv: sv,
+		flags: flags, db: db, p: p, ie: ie, plan: plan, trace: trace, placeholders: placeholders, sv: sv,
 	}
 	err := b.buildPrettyStatement(stmtRawSQL)
 	if err != nil {
@@ -535,7 +537,7 @@ func (b *stmtBundleBuilder) printError(errString string, buf *bytes.Buffer) {
 }
 
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
-	c := makeStmtEnvCollector(ctx, b.ie)
+	c := makeStmtEnvCollector(ctx, b.p, b.ie)
 
 	var buf bytes.Buffer
 	if err := c.PrintVersion(&buf); err != nil {
@@ -543,8 +545,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	fmt.Fprintf(&buf, "\n")
 
-	// Show the values of session variables that can impact planning decisions.
-	if err := c.PrintSessionSettings(&buf, b.sv); err != nil {
+	// Show the values of session variables that have values different from the
+	// cluster defaults.
+	if err := c.PrintSessionSettings(&buf, b.sv, false /* all */); err != nil {
 		b.printError(fmt.Sprintf("-- error getting session settings: %v", err), &buf)
 	}
 
@@ -702,11 +705,12 @@ func (b *stmtBundleBuilder) finalize() (*bytes.Buffer, error) {
 // schema, table statistics.
 type stmtEnvCollector struct {
 	ctx context.Context
+	p   *planner
 	ie  *InternalExecutor
 }
 
-func makeStmtEnvCollector(ctx context.Context, ie *InternalExecutor) stmtEnvCollector {
-	return stmtEnvCollector{ctx: ctx, ie: ie}
+func makeStmtEnvCollector(ctx context.Context, p *planner, ie *InternalExecutor) stmtEnvCollector {
+	return stmtEnvCollector{ctx: ctx, p: p, ie: ie}
 }
 
 // query is a helper to run a query that returns a single string value.
@@ -800,153 +804,109 @@ func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
 	return err
 }
 
-// PrintSessionSettings appends information about session settings that can
-// impact planning decisions.
-func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values) error {
-	// Cluster setting encoded default value to session setting value conversion
-	// functions.
-	boolToOnOff := func(boolStr string) string {
-		switch boolStr {
-		case "true":
-			return "on"
-		case "false":
-			return "off"
+// makeSingleLine replaces all control characters with a single space. This is
+// needed so that session variables and cluster settings would fit on a single
+// line (possibly commented out).
+func makeSingleLine(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
 		}
-		return boolStr
-	}
+		return r
+	}, s)
+}
 
-	datestyleConv := func(enumVal string) string {
-		n, err := strconv.ParseInt(enumVal, 10, 32)
-		if err != nil || n < 0 || n >= int64(len(dateStyleEnumMap)) {
-			return enumVal
+// sessionVarNeedsQuotes contains all writable session variables that have
+// values that need single quotes around them in SET statements.
+var sessionVarNeedsQuotes = map[string]struct{}{
+	"datestyle":                                   {},
+	"distsql_workmem":                             {},
+	"index_join_streamer_batch_size":              {},
+	"join_reader_index_join_strategy_batch_size":  {},
+	"join_reader_no_ordering_strategy_batch_size": {},
+	"join_reader_ordering_strategy_batch_size":    {},
+	"lc_messages":                                 {},
+	"lc_monetary":                                 {},
+	"lc_numeric":                                  {},
+	"lc_time":                                     {},
+	"password_encryption":                         {},
+	"prepared_statements_cache_size":              {},
+	"timezone":                                    {},
+}
+
+// PrintSessionSettings appends information about all session variables that
+// differ from their cluster defaults. Variables that don't have a default value
+// are ignored.
+//
+// If all is true, then all variables (except for read-only) are included.
+func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values, all bool) error {
+	for _, varName := range varNames {
+		gen := varGen[varName]
+		if gen.Set == nil && gen.RuntimeSet == nil && gen.SetWithPlanner == nil {
+			// Skip all read-only variables.
+			continue
 		}
-		return dateStyleEnumMap[n]
-	}
-
-	intervalstyleConv := func(enumVal string) string {
-		n, err := strconv.ParseInt(enumVal, 10, 32)
-		if err != nil || n < 0 || n >= int64(len(duration.IntervalStyle_name)) {
-			return enumVal
-		}
-		return strings.ToLower(duration.IntervalStyle(n).String())
-	}
-
-	distsqlConv := func(enumVal string) string {
-		n, err := strconv.ParseInt(enumVal, 10, 32)
-		if err != nil {
-			return enumVal
-		}
-		return sessiondatapb.DistSQLExecMode(n).String()
-	}
-
-	vectorizeConv := func(enumVal string) string {
-		n, err := strconv.ParseInt(enumVal, 10, 32)
-		if err != nil {
-			return enumVal
-		}
-		return sessiondatapb.VectorizeExecMode(n).String()
-	}
-
-	timeoutConv := func(timeoutStr string) string {
-		// Currently, all supported timeouts have 0 default value, so we'll
-		// assert that in tests.
-		if timeoutStr != "0s" {
-			if buildutil.CrdbTestBuild {
-				panic(errors.AssertionFailedf("unexpected default value for a timeout setting %s", timeoutStr))
-			}
-			return timeoutStr
-		}
-		return "0"
-	}
-
-	// TODO(rytaft): Keeping this list up to date is a challenge. Consider just
-	// printing all session settings.
-	relevantSettings := []struct {
-		sessionSetting string
-		clusterSetting settings.NonMaskedSetting
-		convFunc       func(string) string
-	}{
-		{sessionSetting: "allow_prepare_as_opt_plan"},
-		{sessionSetting: "cost_scans_with_default_col_size", clusterSetting: costScansWithDefaultColSize, convFunc: boolToOnOff},
-		{sessionSetting: "datestyle", clusterSetting: dateStyle, convFunc: datestyleConv},
-		{sessionSetting: "default_int_size", clusterSetting: defaultIntSize},
-		{sessionSetting: "default_transaction_priority"},
-		{sessionSetting: "default_transaction_quality_of_service"},
-		{sessionSetting: "default_transaction_read_only"},
-		{sessionSetting: "default_transaction_use_follower_reads"},
-		{sessionSetting: "direct_columnar_scans_enabled", clusterSetting: colfetcher.DirectScansEnabled, convFunc: boolToOnOff},
-		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
-		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
-		{sessionSetting: "enable_implicit_select_for_update", clusterSetting: implicitSelectForUpdateClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "enable_implicit_transaction_for_batch_statements"},
-		{sessionSetting: "enable_insert_fast_path", clusterSetting: insertFastPathClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "enable_multiple_modifications_of_table"},
-		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "expect_and_ignore_not_visible_columns_in_copy"},
-		{sessionSetting: "idle_in_transaction_session_timeout", clusterSetting: clusterIdleInTransactionSessionTimeout, convFunc: timeoutConv},
-		{sessionSetting: "idle_session_timeout", clusterSetting: clusterIdleInSessionTimeout, convFunc: timeoutConv},
-		{sessionSetting: "intervalstyle", clusterSetting: intervalStyle, convFunc: intervalstyleConv},
-		{sessionSetting: "large_full_scan_rows", clusterSetting: largeFullScanRows},
-		{sessionSetting: "locality_optimized_partitioned_index_scan", clusterSetting: localityOptimizedSearchMode, convFunc: boolToOnOff},
-		{sessionSetting: "lock_timeout", clusterSetting: clusterLockTimeout, convFunc: timeoutConv},
-		{sessionSetting: "null_ordered_last"},
-		{sessionSetting: "on_update_rehome_row_enabled", clusterSetting: onUpdateRehomeRowEnabledClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "opt_split_scan_limit"},
-		{sessionSetting: "optimizer_use_forecasts", convFunc: boolToOnOff},
-		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "optimizer_use_not_visible_indexes"},
-		{sessionSetting: "pg_trgm.similarity_threshold"},
-		{sessionSetting: "prefer_lookup_joins_for_fks", clusterSetting: preferLookupJoinsForFKs, convFunc: boolToOnOff},
-		{sessionSetting: "propagate_input_ordering", clusterSetting: propagateInputOrdering, convFunc: boolToOnOff},
-		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
-		{sessionSetting: "sql_safe_updates"},
-		{sessionSetting: "statement_timeout", clusterSetting: clusterStatementTimeout, convFunc: timeoutConv},
-		{sessionSetting: "testing_optimizer_cost_perturbation"},
-		{sessionSetting: "testing_optimizer_disable_rule_probability"},
-		{sessionSetting: "testing_optimizer_random_seed"},
-		{sessionSetting: "timezone"},
-		{sessionSetting: "transaction_timeout"},
-		{sessionSetting: "unbounded_parallel_scans"},
-		{sessionSetting: "unconstrained_non_covering_index_scan_enabled"},
-		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
-	}
-
-	for _, s := range relevantSettings {
-		value, err := c.query(fmt.Sprintf("SHOW %s", s.sessionSetting))
+		value, err := gen.Get(&c.p.extendedEvalCtx, c.p.Txn())
 		if err != nil {
 			return err
 		}
-		// Get the default value for the cluster setting.
-		var def string
-		if s.clusterSetting == nil {
-			if ok, v, _ := getSessionVar(s.sessionSetting, true); ok {
-				if v.GlobalDefault != nil {
-					def = v.GlobalDefault(sv)
-				}
-			}
-		} else {
-			def = s.clusterSetting.EncodedDefault()
-			if buildutil.CrdbTestBuild {
-				// In test builds we might randomize some setting defaults, so
-				// we need to override them to make the tests deterministic.
-				switch s.sessionSetting {
-				case "direct_columnar_scans_enabled":
-					def = "false"
-				}
+		value = makeSingleLine(value)
+		var defaultValue string
+		if gen.GlobalDefault != nil {
+			defaultValue = makeSingleLine(gen.GlobalDefault(sv))
+		} else if !all {
+			// Ignore variables without defaults (unless all are requested).
+			continue
+		}
+		skip := value == defaultValue
+		if buildutil.CrdbTestBuild {
+			// In test builds we might randomize some setting defaults, so
+			// we need to ignore them to make the tests deterministic.
+			switch varName {
+			case "direct_columnar_scans_enabled":
+				skip = true
 			}
 		}
-		if s.convFunc != nil {
-			// If necessary, convert the encoded cluster setting to a session setting
-			// value (e.g.  "true"->"on"), depending on the setting.
-			def = s.convFunc(def)
+		var commentOut bool
+		switch varName {
+		case "application_name", "database":
+			// These show up in the logic tests, but it's unclear whether we
+			// want to apply them when recreating the bundle, so we'll comment
+			// them out.
+			commentOut = true
+		case "idle_in_session_timeout", "idle_in_transaction_session_timeout",
+			"idle_session_timeout", "lock_timeout", "statement_timeout", "transaction_timeout":
+			// Defaults for timeout settings are of the duration type (i.e.
+			// "0s"), so we'll parse it to extract the number of milliseconds
+			// (which is what the session variable uses).
+			d, err := time.ParseDuration(defaultValue)
+			if err != nil {
+				return err
+			}
+			defaultValue = strconv.Itoa(int(d.Milliseconds()))
+			if value == defaultValue {
+				// We also need to do an additional check to see whether the
+				// variable actually uses the default, and we'll skip recording
+				// it if so.
+				skip = true
+			}
 		}
-
-		if value == def {
-			fmt.Fprintf(w, "-- %s has the default value: %s\n", s.sessionSetting, value)
-		} else {
-			fmt.Fprintf(w, "SET %s = %s;  -- default value: %s\n", s.sessionSetting, value, def)
+		if skip && !all {
+			continue
 		}
+		formatStr := `SET %s = %s;  -- default value: %s`
+		if _, ok := sessionVarNeedsQuotes[varName]; ok {
+			formatStr = `SET %s = '%s';  -- default value: %s`
+		}
+		if commentOut {
+			formatStr = "-- " + formatStr
+		}
+		if value == "" {
+			// Need a special case for empty strings to make the SET statement
+			// parsable.
+			value = "''"
+		}
+		fmt.Fprintf(w, formatStr+"\n", varName, value, defaultValue)
 	}
 	return nil
 }
@@ -959,19 +919,41 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer) error {
 		"stmtEnvCollector",
 		nil, /* txn */
 		sessiondata.NoSessionDataOverride,
-		"SELECT variable, value, description FROM [ SHOW ALL CLUSTER SETTINGS ]",
+		`SELECT variable, value, default_value FROM crdb_internal.cluster_settings
+                    WHERE value != default_value`,
 	)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "-- Cluster settings:\n")
+	fmt.Fprintf(w, "-- Non-default cluster settings:\n")
 	for _, r := range rows {
 		// The datums should always be DString, but we should be defensive.
 		variable, ok1 := r[0].(*tree.DString)
 		value, ok2 := r[1].(*tree.DString)
-		description, ok3 := r[2].(*tree.DString)
+		def, ok3 := r[2].(*tree.DString)
 		if ok1 && ok2 && ok3 {
-			fmt.Fprintf(w, "--   %s = %s  (%s)\n", *variable, *value, *description)
+			var skip bool
+			// Ignore some settings that might differ from their default values
+			// but aren't useful in stmt bundles.
+			switch *variable {
+			case "cluster.secret", "diagnostics.reporting.enabled", "version":
+				skip = true
+			}
+			if buildutil.CrdbTestBuild {
+				// In test builds we might randomize some setting defaults, so
+				// we need to ignore them to make the tests deterministic.
+				switch *variable {
+				case "sql.distsql.direct_columnar_scans.enabled":
+					skip = true
+				}
+			}
+			if skip {
+				continue
+			}
+			fmt.Fprintf(
+				w, "--   %s = %s  (default value: %s)\n",
+				*variable, makeSingleLine(string(*value)), makeSingleLine(string(*def)),
+			)
 		}
 	}
 	return nil
