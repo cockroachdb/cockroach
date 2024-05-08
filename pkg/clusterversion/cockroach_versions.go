@@ -257,6 +257,17 @@ const (
 	// the system tenant to ensure it is a superset of secondary tenants.
 	V24_1_AddSpanCounts
 
+	// V24_1 is CockroachDB v24.1. It's used for all v24.1.x patch releases.
+	V24_1
+
+	// V24_2Start_DoNotUseForVersionChecks demarcates the start of cluster versions
+	// stepped through during the process of upgrading from 24.1 to 24.2.
+	//
+	// NB: As of 24.2 we now support the expectation that test clusters should be
+	// safe to upgrade from one week to the next. This means that we should use
+	// new migrations over V24_2Start. Teams can still use IsActive(V24_2) placeholder.
+	V24_2Start_DoNotUseForVersionChecks
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -303,19 +314,22 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1Start: {Major: 23, Minor: 2, Internal: 2},
 
 	V24_1_DropPayloadAndProgressFromSystemJobsTable: {Major: 23, Minor: 2, Internal: 4},
+	V24_1_MigrateOldStylePTSRecords:                 {Major: 23, Minor: 2, Internal: 6},
+	V24_1_SessionBasedLeasingDualWrite:              {Major: 23, Minor: 2, Internal: 8},
+	V24_1_SessionBasedLeasingDrain:                  {Major: 23, Minor: 2, Internal: 10},
+	V24_1_SessionBasedLeasingOnly:                   {Major: 23, Minor: 2, Internal: 12},
+	V24_1_SessionBasedLeasingUpgradeDescriptor:      {Major: 23, Minor: 2, Internal: 14},
+	V24_1_PebbleFormatSyntheticPrefixSuffix:         {Major: 23, Minor: 2, Internal: 16},
+	V24_1_SystemDatabaseSurvivability:               {Major: 23, Minor: 2, Internal: 18},
+	V24_1_GossipMaximumIOOverload:                   {Major: 23, Minor: 2, Internal: 20},
+	V24_1_EstimatedMVCCStatsInSplit:                 {Major: 23, Minor: 2, Internal: 22},
+	V24_1_ReplicatedLockPipelining:                  {Major: 23, Minor: 2, Internal: 24},
+	V24_1_AddSpanCounts:                             {Major: 23, Minor: 2, Internal: 26},
 
-	V24_1_MigrateOldStylePTSRecords: {Major: 23, Minor: 2, Internal: 6},
+	V24_1: {Major: 24, Minor: 1, Internal: 0},
 
-	V24_1_SessionBasedLeasingDualWrite:         {Major: 23, Minor: 2, Internal: 8},
-	V24_1_SessionBasedLeasingDrain:             {Major: 23, Minor: 2, Internal: 10},
-	V24_1_SessionBasedLeasingOnly:              {Major: 23, Minor: 2, Internal: 12},
-	V24_1_SessionBasedLeasingUpgradeDescriptor: {Major: 23, Minor: 2, Internal: 14},
-	V24_1_PebbleFormatSyntheticPrefixSuffix:    {Major: 23, Minor: 2, Internal: 16},
-	V24_1_SystemDatabaseSurvivability:          {Major: 23, Minor: 2, Internal: 18},
-	V24_1_GossipMaximumIOOverload:              {Major: 23, Minor: 2, Internal: 20},
-	V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 22},
-	V24_1_ReplicatedLockPipelining:             {Major: 23, Minor: 2, Internal: 24},
-	V24_1_AddSpanCounts:                        {Major: 23, Minor: 2, Internal: 26},
+	// v24.2 versions. Internal versions must be even.
+	V24_2Start_DoNotUseForVersionChecks: {Major: 24, Minor: 1, Internal: 2},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
@@ -336,13 +350,13 @@ const MinSupported Key = V23_2
 // also provided as a constant for convenience.
 const PreviousRelease Key = V23_2
 
-// V24_1 is a placeholder that will eventually be replaced by the actual 24.1
+// V24_2 is a placeholder that will eventually be replaced by the actual 24.2
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 24.1 and has completed all associated migrations; most
+// a cluster is running 24.2 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 24.1.
-const V24_1 = Latest
+// only need to check that the cluster has upgraded to 24.2.
+const V24_2 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
