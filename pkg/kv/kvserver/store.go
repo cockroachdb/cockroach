@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
@@ -361,6 +362,7 @@ func newRaftConfig(
 	appliedIndex kvpb.RaftIndex,
 	storeCfg StoreConfig,
 	logger raft.Logger,
+	storeLiveness raft.StoreLiveness,
 ) *raft.Config {
 	return &raft.Config{
 		ID:                          id,
@@ -376,6 +378,7 @@ func newRaftConfig(
 		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
 		Storage:                     strg,
 		Logger:                      logger,
+		StoreLiveness:               storeLiveness,
 
 		// StepDownOnRemoval requires 23.2. Otherwise, in a mixed-version cluster, a
 		// 23.2 leader may step down when it demotes itself to learner, but a
@@ -1133,6 +1136,7 @@ type StoreConfig struct {
 	Gossip               *gossip.Gossip
 	DB                   *kv.DB
 	NodeLiveness         *liveness.NodeLiveness
+	StoreLiveness        storeliveness.Fabric
 	StorePool            *storepool.StorePool
 	Transport            *RaftTransport
 	NodeDialer           *nodedialer.Dialer

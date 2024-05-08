@@ -8,22 +8,25 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package raft
+package storeliveness
 
-import "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
-// StoreLivenessEpoch is an epoch in the Store Liveness fabric, referencing an
-// uninterrupted period of support from one store to another.
-type StoreLivenessEpoch int64
+// Epoch is an epoch in the Store Liveness fabric, referencing an uninterrupted
+// period of support from one store to another.
+type Epoch int64
 
-// StoreLivenessExpiration is a timestamp indicating the extent of support from
-// one store to another in the Store Liveness fabric within a given epoch. This
-// expiration may be extended through the provision of additional support.
-type StoreLivenessExpiration hlc.Timestamp
+// Expiration is a timestamp indicating the extent of support from one store to
+// another in the Store Liveness fabric within a given epoch. This expiration
+// may be extended through the provision of additional support.
+type Expiration hlc.Timestamp
 
-// StoreLiveness is a representation of the Store Liveness fabric. It provides
+// Fabric is a representation of the Store Liveness fabric. It provides
 // information about uninterrupted periods of "support" between stores.
-type StoreLiveness interface {
+type Fabric interface {
 	// SupportFor returns the epoch of the current uninterrupted period of Store
 	// Liveness support for the specified replica's remote store (S_remote) from
 	// the local replica's store (S_local), and a boolean indicating whether
@@ -39,7 +42,7 @@ type StoreLiveness interface {
 	// If S_local cannot map the replica ID to a store ID, false will be returned.
 	// It is therefore important to ensure that the replica ID to store ID mapping
 	// is not lost during periods of support.
-	SupportFor(id uint64) (StoreLivenessEpoch, bool)
+	SupportFor(id roachpb.StoreID) (Epoch, bool)
 
 	// SupportFrom returns the epoch of the current uninterrupted period of Store
 	// Liveness support from the specified replica's remote store (S_remote) for
@@ -55,14 +58,5 @@ type StoreLiveness interface {
 	// However, S_remote will never be unaware of support it is providing.
 	//
 	// If S_local cannot map the replica ID to a store ID, false will be returned.
-	SupportFrom(id uint64) (StoreLivenessEpoch, StoreLivenessExpiration, bool)
-}
-
-func leadSupportUntil(r *raft) StoreLivenessExpiration {
-	// TODO(arul): use r.leadSupport and r.storeLiveness to compute this.
-	return StoreLivenessExpiration{}
-}
-
-func leadSupported(r *raft) bool {
-	return leadSupportUntil(r) != StoreLivenessExpiration{}
+	SupportFrom(id roachpb.StoreID) (Epoch, Expiration, bool)
 }
