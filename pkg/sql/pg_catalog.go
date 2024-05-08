@@ -2905,7 +2905,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 			valueDatum := tree.NewDString(value)
 			var bootDatum tree.Datum = tree.DNull
 			var resetDatum tree.Datum = tree.DNull
-			if gen.Set == nil && gen.RuntimeSet == nil {
+			if gen.Set == nil && gen.RuntimeSet == nil && gen.SetWithPlanner == nil {
 				// RESET/SET will leave the variable unchanged. Announce the
 				// current value as boot/reset value.
 				bootDatum = valueDatum
