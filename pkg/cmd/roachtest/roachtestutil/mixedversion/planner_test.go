@@ -36,7 +36,7 @@ var (
 			Stdout: io.Discard,
 			Stderr: io.Discard,
 		}
-		l, err := cfg.NewLogger("/dev/null" /* path */)
+		l, err := cfg.NewLogger("" /* path */)
 		if err != nil {
 			panic(err)
 		}
