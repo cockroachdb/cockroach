@@ -328,19 +328,19 @@ func (r *testRunner) Run(
 		// Don't spin up more workers than necessary.
 		parallelism = n * count
 	}
-	for _, testSpec := range tests {
+	for i := range tests {
 		//  TODO(bhaskar): remove this once we have more usage details
 		//  and more convinced about using spot VMs for all the runs.
 		if roachtestflags.Cloud == spec.GCE &&
-			testSpec.Benchmark &&
-			!testSpec.Suites.Contains(registry.Weekly) &&
+			tests[i].Benchmark &&
+			!tests[i].Suites.Contains(registry.Weekly) &&
 			rand.Float64() <= 0.5 {
-			lopt.l.PrintfCtx(ctx, "using spot VMs to run test %s", testSpec.Name)
-			testSpec.Cluster.UseSpotVMs = true
+			lopt.l.PrintfCtx(ctx, "using spot VMs to run test %s", tests[i].Name)
+			tests[i].Cluster.UseSpotVMs = true
 		}
 
 		if roachtestflags.UseSpotVM {
-			testSpec.Cluster.UseSpotVMs = true
+			tests[i].Cluster.UseSpotVMs = true
 		}
 	}
 	r.status.running = make(map[*testImpl]struct{})
