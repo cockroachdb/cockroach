@@ -18,22 +18,22 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -138,6 +138,7 @@ func buildStatementBundle(
 	ctx context.Context,
 	explainFlags explain.Flags,
 	db *kv.DB,
+	p *planner,
 	ie *InternalExecutor,
 	stmtRawSQL string,
 	plan *planTop,
@@ -151,7 +152,7 @@ func buildStatementBundle(
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
-	b, err := makeStmtBundleBuilder(explainFlags, db, ie, stmtRawSQL, plan, trace, placeholders, sv)
+	b, err := makeStmtBundleBuilder(explainFlags, db, p, ie, stmtRawSQL, plan, trace, placeholders, sv)
 	if err != nil {
 		return diagnosticsBundle{collectionErr: err}
 	}
@@ -209,6 +210,7 @@ type stmtBundleBuilder struct {
 	flags explain.Flags
 
 	db *kv.DB
+	p  *planner
 	ie *InternalExecutor
 
 	stmt         string
@@ -226,6 +228,7 @@ type stmtBundleBuilder struct {
 func makeStmtBundleBuilder(
 	flags explain.Flags,
 	db *kv.DB,
+	p *planner,
 	ie *InternalExecutor,
 	stmtRawSQL string,
 	plan *planTop,
@@ -234,7 +237,7 @@ func makeStmtBundleBuilder(
 	sv *settings.Values,
 ) (stmtBundleBuilder, error) {
 	b := stmtBundleBuilder{
-		flags: flags, db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders, sv: sv,
+		flags: flags, db: db, p: p, ie: ie, plan: plan, trace: trace, placeholders: placeholders, sv: sv,
 	}
 	err := b.buildPrettyStatement(stmtRawSQL)
 	if err != nil {
@@ -535,7 +538,7 @@ func (b *stmtBundleBuilder) printError(errString string, buf *bytes.Buffer) {
 }
 
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
-	c := makeStmtEnvCollector(ctx, b.ie)
+	c := makeStmtEnvCollector(ctx, b.p, b.ie)
 
 	var buf bytes.Buffer
 	if err := c.PrintVersion(&buf); err != nil {
@@ -543,14 +546,15 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	fmt.Fprintf(&buf, "\n")
 
-	// Show the values of session variables that can impact planning decisions.
-	if err := c.PrintSessionSettings(&buf, b.sv); err != nil {
+	// Show the values of session variables that have values different from the
+	// cluster defaults.
+	if err := c.PrintSessionSettings(&buf, b.sv, false /* all */); err != nil {
 		b.printError(fmt.Sprintf("-- error getting session settings: %v", err), &buf)
 	}
 
 	fmt.Fprintf(&buf, "\n")
 
-	if err := c.PrintClusterSettings(&buf); err != nil {
+	if err := c.PrintClusterSettings(&buf, false /* all */); err != nil {
 		b.printError(fmt.Sprintf("-- error getting cluster settings: %v", err), &buf)
 	}
 
@@ -702,11 +706,12 @@ func (b *stmtBundleBuilder) finalize() (*bytes.Buffer, error) {
 // schema, table statistics.
 type stmtEnvCollector struct {
 	ctx context.Context
+	p   *planner
 	ie  *InternalExecutor
 }
 
-func makeStmtEnvCollector(ctx context.Context, ie *InternalExecutor) stmtEnvCollector {
-	return stmtEnvCollector{ctx: ctx, ie: ie}
+func makeStmtEnvCollector(ctx context.Context, p *planner, ie *InternalExecutor) stmtEnvCollector {
+	return stmtEnvCollector{ctx: ctx, p: p, ie: ie}
 }
 
 // query is a helper to run a query that returns a single string value.
@@ -800,178 +805,181 @@ func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
 	return err
 }
 
-// PrintSessionSettings appends information about session settings that can
-// impact planning decisions.
-func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values) error {
-	// Cluster setting encoded default value to session setting value conversion
-	// functions.
-	boolToOnOff := func(boolStr string) string {
-		switch boolStr {
-		case "true":
-			return "on"
-		case "false":
-			return "off"
+// makeSingleLine replaces all control characters with a single space. This is
+// needed so that session variables and cluster settings would fit on a single
+// line.
+func makeSingleLine(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
 		}
-		return boolStr
-	}
+		return r
+	}, s)
+}
 
-	datestyleConv := func(enumVal string) string {
-		n, err := strconv.ParseInt(enumVal, 10, 32)
-		if err != nil || n < 0 || n >= int64(len(dateStyleEnumMap)) {
-			return enumVal
-		}
-		return dateStyleEnumMap[n]
-	}
+// binarySVForBundle is a Values container that can be used to access "binary
+// defaults" of session variables.
+var binarySVForBundle *settings.Values
 
-	intervalstyleConv := func(enumVal string) string {
-		n, err := strconv.ParseInt(enumVal, 10, 32)
-		if err != nil || n < 0 || n >= int64(len(duration.IntervalStyle_name)) {
-			return enumVal
-		}
-		return strings.ToLower(duration.IntervalStyle(n).String())
-	}
+func init() {
+	st := cluster.MakeTestingClusterSettings()
+	binarySVForBundle = &st.SV
+}
 
-	distsqlConv := func(enumVal string) string {
-		n, err := strconv.ParseInt(enumVal, 10, 32)
-		if err != nil {
-			return enumVal
-		}
-		return sessiondatapb.DistSQLExecMode(n).String()
-	}
-
-	vectorizeConv := func(enumVal string) string {
-		n, err := strconv.ParseInt(enumVal, 10, 32)
-		if err != nil {
-			return enumVal
-		}
-		return sessiondatapb.VectorizeExecMode(n).String()
-	}
-
-	timeoutConv := func(timeoutStr string) string {
-		// Currently, all supported timeouts have 0 default value, so we'll
-		// assert that in tests.
-		if timeoutStr != "0s" {
-			if buildutil.CrdbTestBuild {
-				panic(errors.AssertionFailedf("unexpected default value for a timeout setting %s", timeoutStr))
-			}
-			return timeoutStr
-		}
-		return "0"
-	}
-
-	// TODO(rytaft): Keeping this list up to date is a challenge. Consider just
-	// printing all session settings.
-	relevantSettings := []struct {
-		sessionSetting string
-		clusterSetting settings.NonMaskedSetting
-		convFunc       func(string) string
-	}{
-		{sessionSetting: "allow_prepare_as_opt_plan"},
-		{sessionSetting: "cost_scans_with_default_col_size", clusterSetting: costScansWithDefaultColSize, convFunc: boolToOnOff},
-		{sessionSetting: "datestyle", clusterSetting: dateStyle, convFunc: datestyleConv},
-		{sessionSetting: "default_int_size", clusterSetting: defaultIntSize},
-		{sessionSetting: "default_transaction_priority"},
-		{sessionSetting: "default_transaction_quality_of_service"},
-		{sessionSetting: "default_transaction_read_only"},
-		{sessionSetting: "default_transaction_use_follower_reads"},
-		{sessionSetting: "direct_columnar_scans_enabled", clusterSetting: colfetcher.DirectScansEnabled, convFunc: boolToOnOff},
-		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
-		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
-		{sessionSetting: "enable_implicit_select_for_update", clusterSetting: implicitSelectForUpdateClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "enable_implicit_transaction_for_batch_statements"},
-		{sessionSetting: "enable_insert_fast_path", clusterSetting: insertFastPathClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "enable_multiple_modifications_of_table"},
-		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "expect_and_ignore_not_visible_columns_in_copy"},
-		{sessionSetting: "idle_in_transaction_session_timeout", clusterSetting: clusterIdleInTransactionSessionTimeout, convFunc: timeoutConv},
-		{sessionSetting: "idle_session_timeout", clusterSetting: clusterIdleInSessionTimeout, convFunc: timeoutConv},
-		{sessionSetting: "intervalstyle", clusterSetting: intervalStyle, convFunc: intervalstyleConv},
-		{sessionSetting: "large_full_scan_rows", clusterSetting: largeFullScanRows},
-		{sessionSetting: "locality_optimized_partitioned_index_scan", clusterSetting: localityOptimizedSearchMode, convFunc: boolToOnOff},
-		{sessionSetting: "lock_timeout", clusterSetting: clusterLockTimeout, convFunc: timeoutConv},
-		{sessionSetting: "null_ordered_last"},
-		{sessionSetting: "on_update_rehome_row_enabled", clusterSetting: onUpdateRehomeRowEnabledClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "opt_split_scan_limit"},
-		{sessionSetting: "optimizer_use_forecasts", convFunc: boolToOnOff},
-		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "optimizer_use_not_visible_indexes"},
-		{sessionSetting: "pg_trgm.similarity_threshold"},
-		{sessionSetting: "prefer_lookup_joins_for_fks", clusterSetting: preferLookupJoinsForFKs, convFunc: boolToOnOff},
-		{sessionSetting: "propagate_input_ordering", clusterSetting: propagateInputOrdering, convFunc: boolToOnOff},
-		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
-		{sessionSetting: "sql_safe_updates"},
-		{sessionSetting: "statement_timeout", clusterSetting: clusterStatementTimeout, convFunc: timeoutConv},
-		{sessionSetting: "testing_optimizer_cost_perturbation"},
-		{sessionSetting: "testing_optimizer_disable_rule_probability"},
-		{sessionSetting: "testing_optimizer_random_seed"},
-		{sessionSetting: "timezone"},
-		{sessionSetting: "transaction_timeout"},
-		{sessionSetting: "unbounded_parallel_scans"},
-		{sessionSetting: "unconstrained_non_covering_index_scan_enabled"},
-		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
-	}
-
-	for _, s := range relevantSettings {
-		value, err := c.query(fmt.Sprintf("SHOW %s", s.sessionSetting))
+// PrintSessionSettings appends information about all session variables that
+// differ from their defaults.
+//
+// If all is true, then all variables are included.
+func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values, all bool) error {
+	// When thinking about a "default" value for a session variable, there might
+	// be two options:
+	// - the "binary" default - this is the value that the variable gets on a
+	//   new session on a fresh cluster
+	// - the "cluster" default - this is the value that the variable gets on a
+	//   new session on this cluster (which might have some modified cluster
+	//   settings that provide defaults).
+	// Using the given Values provides us access to the latter, and we use the
+	// global singleton container for the former.
+	binarySV, clusterSV := binarySVForBundle, sv
+	for _, varName := range varNames {
+		gen := varGen[varName]
+		value, err := gen.Get(&c.p.extendedEvalCtx, c.p.Txn())
 		if err != nil {
 			return err
 		}
-		// Get the default value for the cluster setting.
-		var def string
-		if s.clusterSetting == nil {
-			if ok, v, _ := getSessionVar(s.sessionSetting, true); ok {
-				if v.GlobalDefault != nil {
-					def = v.GlobalDefault(sv)
-				}
-			}
-		} else {
-			def = s.clusterSetting.EncodedDefault()
+		value = makeSingleLine(value)
+		if gen.Set == nil && gen.RuntimeSet == nil && gen.SetWithPlanner == nil {
+			// Read-only variable.
 			if buildutil.CrdbTestBuild {
-				// In test builds we might randomize some setting defaults, so
-				// we need to override them to make the tests deterministic.
-				switch s.sessionSetting {
-				case "direct_columnar_scans_enabled":
-					def = "false"
+				// Skip all read-only variables in tests.
+				continue
+			}
+			if _, skip := skipReadOnlySessionVar[varName]; skip {
+				// Skip it since its value is unlikely to be useful.
+				continue
+			}
+			fmt.Fprintf(w, "-- read-only %s = %s\n", varName, value)
+			continue
+		}
+		maybeAdjustTimeout := func(value string) (string, error) {
+			switch varName {
+			case "idle_in_session_timeout", "idle_in_transaction_session_timeout",
+				"idle_session_timeout", "lock_timeout", "statement_timeout", "transaction_timeout":
+				// Defaults for timeout settings are of the duration type (i.e.
+				// "0s"), so we'll parse it to extract the number of
+				// milliseconds (which is what the session variable uses).
+				d, err := time.ParseDuration(value)
+				if err != nil {
+					return "", err
 				}
+				return strconv.Itoa(int(d.Milliseconds())), nil
+			default:
+				return value, nil
 			}
 		}
-		if s.convFunc != nil {
-			// If necessary, convert the encoded cluster setting to a session setting
-			// value (e.g.  "true"->"on"), depending on the setting.
-			def = s.convFunc(def)
+		// All writable variables must have GlobalDefault set.
+		binaryDefault, err := maybeAdjustTimeout(makeSingleLine(gen.GlobalDefault(binarySV)))
+		if err != nil {
+			return err
 		}
-
-		if value == def {
-			fmt.Fprintf(w, "-- %s has the default value: %s\n", s.sessionSetting, value)
-		} else {
-			fmt.Fprintf(w, "SET %s = %s;  -- default value: %s\n", s.sessionSetting, value, def)
+		clusterDefault, err := maybeAdjustTimeout(makeSingleLine(gen.GlobalDefault(clusterSV)))
+		if err != nil {
+			return err
 		}
+		// We'll skip this variable only if its value matches both of the
+		// defaults.
+		skip := value == binaryDefault && value == clusterDefault
+		if buildutil.CrdbTestBuild {
+			// In test builds we might randomize some setting defaults, so
+			// we need to ignore them to make the tests deterministic.
+			switch varName {
+			case "direct_columnar_scans_enabled":
+				// This variable's default is randomized in test builds.
+				skip = true
+			}
+		}
+		// Use the "binary default" as the value that we will set to.
+		defaultValue := binaryDefault
+		if skip && !all {
+			continue
+		}
+		formatStr := `SET %s = %s;  -- default value: %s`
+		if _, ok := sessionVarNeedsQuotes[varName]; ok {
+			formatStr = `SET %s = '%s';  -- default value: %s`
+		}
+		if value == "" {
+			// Need a special case for empty strings to make the SET statement
+			// parsable.
+			value = "''"
+		}
+		if varName == "database" {
+			// Special case the 'database' session variable - since env.sql is
+			// executed _before_ schema.sql when recreating the bundle, the
+			// target database might not exist yet.
+			fmt.Fprintf(w, "-- SET database = '%s';\n", value)
+			continue
+		}
+		fmt.Fprintf(w, formatStr+"\n", varName, value, defaultValue)
 	}
 	return nil
 }
 
-func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer) error {
+// PrintClusterSettings appends information about all cluster settings that
+// differ from their binary defaults.
+//
+// If all is true, then all settings are included.
+func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer, all bool) error {
 	// TODO(michae2): We should also query system.database_role_settings.
 
+	var suffix string
+	if !all {
+		suffix = " WHERE value != default_value"
+	}
 	rows, err := c.ie.QueryBufferedEx(
 		c.ctx,
 		"stmtEnvCollector",
 		nil, /* txn */
 		sessiondata.NoSessionDataOverride,
-		"SELECT variable, value, description FROM [ SHOW ALL CLUSTER SETTINGS ]",
+		fmt.Sprintf(`SELECT variable, value, default_value FROM crdb_internal.cluster_settings%s`, suffix),
 	)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "-- Cluster settings:\n")
 	for _, r := range rows {
 		// The datums should always be DString, but we should be defensive.
-		variable, ok1 := r[0].(*tree.DString)
+		setting, ok1 := r[0].(*tree.DString)
 		value, ok2 := r[1].(*tree.DString)
-		description, ok3 := r[2].(*tree.DString)
+		def, ok3 := r[2].(*tree.DString)
 		if ok1 && ok2 && ok3 {
-			fmt.Fprintf(w, "--   %s = %s  (%s)\n", *variable, *value, *description)
+			var skip bool
+			// Ignore some settings that might differ from their default values
+			// but aren't useful in stmt bundles.
+			switch *setting {
+			case "cluster.secret", "diagnostics.reporting.enabled", "version":
+				skip = true
+			}
+			if buildutil.CrdbTestBuild {
+				switch *setting {
+				case "sql.distsql.direct_columnar_scans.enabled":
+					// This setting's default is randomized in test builds.
+					skip = true
+				case "bulkio.import.constraint_validation.unsafe.enabled",
+					"kv.raft_log.synchronization.unsafe.disabled":
+					// These settings are marked as "unsafe", so skip them in
+					// the tests.
+					skip = true
+				}
+			}
+			if skip {
+				continue
+			}
+			formatStr := `SET CLUSTER SETTING %s = %s;  -- default value: %s`
+			if _, ok := clusterSettingNeedsQuotes[string(*setting)]; ok {
+				formatStr = `SET CLUSTER SETTING %s = '%s';  -- default value: %s`
+			}
+			fmt.Fprintf(
+				w, formatStr+"\n", *setting, makeSingleLine(string(*value)), makeSingleLine(string(*def)),
+			)
 		}
 	}
 	return nil
@@ -1147,4 +1155,366 @@ func (c *stmtEnvCollector) PrintTableStats(
 	stats = strings.Replace(stats, "'", "''", -1)
 	fmt.Fprintf(w, "ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.FQString(), stats)
 	return nil
+}
+
+// skipReadOnlySessionVar contains all read-only session variables that are
+// explicitly excluded from env.sql of the bundle (they were deemed unlikely to
+// be useful in investigations).
+var skipReadOnlySessionVar = map[string]struct{}{
+	"crdb_version":          {}, // version is included separately
+	"integer_datetimes":     {},
+	"lc_collate":            {},
+	"lc_ctype":              {},
+	"max_connections":       {},
+	"max_identifier_length": {},
+	"max_index_keys":        {},
+	"server_encoding":       {},
+	"server_version":        {},
+	"server_version_num":    {},
+	"session_authorization": {},
+	"session_id":            {},
+	"session_user":          {},
+	"system_identity":       {},
+	"tracing":               {},
+	"virtual_cluster_name":  {},
+}
+
+// sessionVarNeedsQuotes contains all writable session variables that have
+// values that need single quotes around them in SET statements.
+var sessionVarNeedsQuotes = map[string]struct{}{
+	"application_name":                            {},
+	"datestyle":                                   {},
+	"distsql_workmem":                             {},
+	"index_join_streamer_batch_size":              {},
+	"join_reader_index_join_strategy_batch_size":  {},
+	"join_reader_no_ordering_strategy_batch_size": {},
+	"join_reader_ordering_strategy_batch_size":    {},
+	"lc_messages":                                 {},
+	"lc_monetary":                                 {},
+	"lc_numeric":                                  {},
+	"lc_time":                                     {},
+	"password_encryption":                         {},
+	"prepared_statements_cache_size":              {},
+	"timezone":                                    {},
+}
+
+// clusterSettingNeedsQuotes contains all cluster settings that have values that
+// need single quotes around them in SET CLUSTER SETTING statements.
+var clusterSettingNeedsQuotes = map[string]struct{}{
+	"admission.elastic_cpu.scheduler_latency_target":                   {},
+	"admission.epoch_lifo.epoch_closing_delta_duration":                {},
+	"admission.epoch_lifo.epoch_duration":                              {},
+	"admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo":     {},
+	"admission.replication_control.range_sequencer_gc_threshold":       {},
+	"backup.restore.online_worker_count":                               {},
+	"backup.restore_span.online_target_size":                           {},
+	"backup.restore_span.target_size":                                  {},
+	"bulkio.backup.checkpoint_interval":                                {},
+	"bulkio.backup.file_size":                                          {},
+	"bulkio.backup.merge_file_buffer_size":                             {},
+	"bulkio.backup.read_retry_delay":                                   {},
+	"bulkio.backup.read_timeout":                                       {},
+	"bulkio.backup.read_with_priority_after":                           {},
+	"bulkio.import.constraint_validation.unsafe.enabled":               {},
+	"bulkio.import.replan_flow_frequency":                              {},
+	"bulkio.import.retry_duration":                                     {},
+	"bulkio.index_backfill.checkpoint_interval":                        {},
+	"bulkio.ingest.flush_delay":                                        {},
+	"physical_replication.consumer.cutover_signal_poll_interval":       {},
+	"physical_replication.consumer.ingest_range_keys_as_writes":        {},
+	"physical_replication.consumer.kv_buffer_size":                     {},
+	"physical_replication.consumer.minimum_flush_interval":             {},
+	"physical_replication.consumer.range_key_buffer_size":              {},
+	"changefeed.aggregator.heartbeat":                                  {},
+	"changefeed.cdcevent.trace_kv.log_frequency":                       {},
+	"changefeed.cpu.per_event_consumer_worker_allocation":              {},
+	"changefeed.cpu.sink_encoding_allocation":                          {},
+	"changefeed.experimental_poll_interval":                            {},
+	"changefeed.frontier_checkpoint_frequency":                         {},
+	"changefeed.frontier_checkpoint_max_bytes":                         {},
+	"changefeed.frontier_highwater_lag_checkpoint_threshold":           {},
+	"changefeed.auto_idle.timeout":                                     {},
+	"changefeed.memory.per_changefeed_limit":                           {},
+	"changefeed.min_highwater_advance":                                 {},
+	"changefeed.node_throttle_config":                                  {},
+	"changefeed.protect_timestamp.max_age":                             {},
+	"changefeed.protect_timestamp_interval":                            {},
+	"changefeed.schema_feed.read_with_priority_after":                  {},
+	"changefeed.slow_span_log_threshold":                               {},
+	"changefeed.telemetry.continuous_logging.interval":                 {},
+	"cloudstorage.azure.read.node_burst_limit":                         {},
+	"cloudstorage.azure.read.node_rate_limit":                          {},
+	"cloudstorage.azure.write.node_burst_limit":                        {},
+	"cloudstorage.azure.write.node_rate_limit":                         {},
+	"cloudstorage.gs.chunking.per_chunk_retry.timeout":                 {},
+	"cloudstorage.gs.read.node_burst_limit":                            {},
+	"cloudstorage.gs.read.node_rate_limit":                             {},
+	"cloudstorage.gs.write.node_burst_limit":                           {},
+	"cloudstorage.gs.write.node_rate_limit":                            {},
+	"cloudstorage.http.custom_ca":                                      {},
+	"cloudstorage.http.read.node_burst_limit":                          {},
+	"cloudstorage.http.read.node_rate_limit":                           {},
+	"cloudstorage.http.write.node_burst_limit":                         {},
+	"cloudstorage.http.write.node_rate_limit":                          {},
+	"cloudstorage.nodelocal.read.node_burst_limit":                     {},
+	"cloudstorage.nodelocal.read.node_rate_limit":                      {},
+	"cloudstorage.nodelocal.write.node_burst_limit":                    {},
+	"cloudstorage.nodelocal.write.node_rate_limit":                     {},
+	"cloudstorage.nullsink.read.node_burst_limit":                      {},
+	"cloudstorage.nullsink.read.node_rate_limit":                       {},
+	"cloudstorage.nullsink.write.node_burst_limit":                     {},
+	"cloudstorage.nullsink.write.node_rate_limit":                      {},
+	"cloudstorage.s3.read.node_burst_limit":                            {},
+	"cloudstorage.s3.read.node_rate_limit":                             {},
+	"cloudstorage.s3.write.node_burst_limit":                           {},
+	"cloudstorage.s3.write.node_rate_limit":                            {},
+	"cloudstorage.timeout":                                             {},
+	"cloudstorage.userfile.read.node_burst_limit":                      {},
+	"cloudstorage.userfile.read.node_rate_limit":                       {},
+	"cloudstorage.userfile.write.node_burst_limit":                     {},
+	"cloudstorage.userfile.write.node_rate_limit":                      {},
+	"cloudstorage.write_chunk.size":                                    {},
+	"cluster.label":                                                    {},
+	"cluster.organization":                                             {},
+	"cluster.preserve_downgrade_option":                                {},
+	"diagnostics.forced_sql_stat_reset.interval":                       {},
+	"diagnostics.reporting.interval":                                   {},
+	"enterprise.license":                                               {},
+	"external.graphite.endpoint":                                       {},
+	"external.graphite.interval":                                       {},
+	"jobs.debug.pausepoints":                                           {},
+	"jobs.execution_errors.max_entry_size":                             {},
+	"jobs.metrics.interval.poll":                                       {},
+	"jobs.registry.interval.adopt":                                     {},
+	"jobs.registry.interval.cancel":                                    {},
+	"jobs.registry.interval.gc":                                        {},
+	"jobs.registry.retry.initial_delay":                                {},
+	"jobs.registry.retry.max_delay":                                    {},
+	"jobs.retention_time":                                              {},
+	"jobs.scheduler.pace":                                              {},
+	"jobs.scheduler.schedule_execution.timeout":                        {},
+	"keyvisualizer.sample_interval":                                    {},
+	"kv.allocator.load_based_rebalancing":                              {},
+	"kv.allocator.load_based_rebalancing_interval":                     {},
+	"kv.allocator.min_io_overload_lease_shed_interval":                 {},
+	"kv.allocator.min_lease_transfer_interval":                         {},
+	"kv.bulk_ingest.batch_size":                                        {},
+	"kv.bulk_ingest.index_buffer_size":                                 {},
+	"kv.bulk_ingest.max_index_buffer_size":                             {},
+	"kv.bulk_ingest.max_pk_buffer_size":                                {},
+	"kv.bulk_ingest.pk_buffer_size":                                    {},
+	"kv.bulk_ingest.stream_external_ssts.suffix_cache_size":            {},
+	"kv.bulk_io_write.max_rate":                                        {},
+	"kv.bulk_io_write.small_write_size":                                {},
+	"kv.bulk_sst.max_allowed_overage":                                  {},
+	"kv.bulk_sst.sync_size":                                            {},
+	"kv.bulk_sst.target_size":                                          {},
+	"kv.closed_timestamp.lead_for_global_reads_override":               {},
+	"kv.closed_timestamp.propagation_slack":                            {},
+	"kv.closed_timestamp.side_transport_interval":                      {},
+	"kv.closed_timestamp.target_duration":                              {},
+	"kv.concurrency.long_latch_hold_duration":                          {},
+	"kv.dist_sender.circuit_breaker.cancellation.write_grace_period":   {},
+	"kv.dist_sender.circuit_breaker.probe.interval":                    {},
+	"kv.dist_sender.circuit_breaker.probe.threshold":                   {},
+	"kv.dist_sender.circuit_breaker.probe.timeout":                     {},
+	"kv.dist_sender.circuit_breakers.mode":                             {},
+	"kv.gc.lock_age_threshold":                                         {},
+	"kv.gc.txn_cleanup_threshold":                                      {},
+	"kv.lease_transfer_read_summary.global_budget":                     {},
+	"kv.lease_transfer_read_summary.local_budget":                      {},
+	"kv.lock_table.deadlock_detection_or_liveness_push_delay":          {},
+	"kv.migration.migrate_application.timeout":                         {},
+	"kv.mvcc_gc.queue_high_priority_interval":                          {},
+	"kv.mvcc_gc.queue_interval":                                        {},
+	"kv.prober.planner.scan_meta2.timeout":                             {},
+	"kv.prober.quarantine.write.interval":                              {},
+	"kv.prober.read.interval":                                          {},
+	"kv.prober.read.timeout":                                           {},
+	"kv.prober.write.interval":                                         {},
+	"kv.prober.write.timeout":                                          {},
+	"kv.protectedts.poll_interval":                                     {},
+	"kv.protectedts.reconciliation.interval":                           {},
+	"kv.query_resolved_timestamp.intent_cleanup_age":                   {},
+	"kv.queue.process.guaranteed_time_budget":                          {},
+	"kv.raft.command.max_size":                                         {},
+	"kv.raft.command.target_batch_size":                                {},
+	"kv.raft_log.synchronization.unsafe.disabled":                      {},
+	"kv.range.backpressure_byte_tolerance":                             {},
+	"kv.range_merge.queue_interval":                                    {},
+	"kv.range_split.by_load_merge_delay":                               {},
+	"kv.range_split.load_cpu_threshold":                                {},
+	"kv.rangefeed.closed_timestamp_refresh_interval":                   {},
+	"kv.rangefeed.closed_timestamp_smear_interval":                     {},
+	"kv.rangefeed.range_stuck_threshold":                               {},
+	"kv.replica_circuit_breaker.slow_replication_threshold":            {},
+	"kv.replication_reports.interval":                                  {},
+	"kv.snapshot.ingest_as_write_threshold":                            {},
+	"kv.snapshot_rebalance.max_rate":                                   {},
+	"kv.snapshot_sender.batch_size":                                    {},
+	"kv.snapshot_sst.sync_size":                                        {},
+	"kv.split.slow_split_tracing_threshold":                            {},
+	"kv.trace.slow_request_stacks.threshold":                           {},
+	"kv.trace.snapshot.enable_threshold":                               {},
+	"kvadmission.elastic_cpu.duration_per_export_request":              {},
+	"kvadmission.elastic_cpu.duration_per_low_pri_read":                {},
+	"kvadmission.elastic_cpu.duration_per_rangefeed_scan_unit":         {},
+	"kvadmission.flow_control.dispatch.max_bytes":                      {},
+	"kvadmission.flow_controller.elastic_tokens_per_stream":            {},
+	"kvadmission.flow_controller.regular_tokens_per_stream":            {},
+	"kvadmission.flow_token.dispatch_interval":                         {},
+	"kvadmission.flow_token.drop_interval":                             {},
+	"kvadmission.raft_transport.connected_store_expiration":            {},
+	"kvadmission.store.provisioned_bandwidth":                          {},
+	"physical_replication.consumer.dump_frontier_entries_frequency":    {},
+	"physical_replication.consumer.node_lag_replanning_threshold":      {},
+	"physical_replication.consumer.timestamp_granularity":              {},
+	"physical_replication.producer.timestamp_granularity":              {},
+	"restore.frontier_checkpoint_max_bytes":                            {},
+	"rocksdb.ingest_backpressure.max_delay":                            {},
+	"rocksdb.min_wal_sync_interval":                                    {},
+	"scheduler_latency.sample_duration":                                {},
+	"scheduler_latency.sample_period":                                  {},
+	"schemachanger.backfiller.buffer_size":                             {},
+	"schemachanger.backfiller.max_buffer_size":                         {},
+	"schemachanger.job.max_retry_backoff":                              {},
+	"security.ocsp.timeout":                                            {},
+	"server.active_query.total_dump_size_limit":                        {},
+	"server.clock.persist_upper_bound_interval":                        {},
+	"server.cockroach_cloud.max_client_connections_per_gateway_reason": {},
+	"server.consistency_check.interval":                                {},
+	"server.consistency_check.max_rate":                                {},
+	"server.controller.mux_virtual_cluster_wait.timeout":               {},
+	"server.cpu_profile.duration":                                      {},
+	"server.cpu_profile.interval":                                      {},
+	"server.cpu_profile.total_dump_size_limit":                         {},
+	"server.debug.default_vmodule":                                     {},
+	"server.eventlog.ttl":                                              {},
+	"server.failed_reservation.timeout":                                {},
+	"server.goroutine_dump.total_dump_size_limit":                      {},
+	"server.host_based_authentication.configuration":                   {},
+	"server.hot_ranges_request.node.timeout":                           {},
+	"server.http.base_path":                                            {},
+	"server.identity_map.configuration":                                {},
+	"server.instance_id.reclaim_interval":                              {},
+	"server.jemalloc.total_dump_size_limit":                            {},
+	"server.jwt_authentication.audience":                               {},
+	"server.jwt_authentication.claim":                                  {},
+	"server.jwt_authentication.issuers":                                {},
+	"server.jwt_authentication.jwks":                                   {},
+	"server.log_gc.period":                                             {},
+	"server.mem_monitoring.total_dump_size_limit":                      {},
+	"server.mem_profile.total_dump_size_limit":                         {},
+	"server.mem_stats.total_dump_size_limit":                           {},
+	"server.oidc_authentication.button_text":                           {},
+	"server.oidc_authentication.claim_json_key":                        {},
+	"server.oidc_authentication.client_id":                             {},
+	"server.oidc_authentication.client_secret":                         {},
+	"server.oidc_authentication.principal_regex":                       {},
+	"server.oidc_authentication.provider_url":                          {},
+	"server.oidc_authentication.redirect_url":                          {},
+	"server.rangelog.ttl":                                              {},
+	"server.shutdown.connections.timeout":                              {},
+	"server.shutdown.initial_wait":                                     {},
+	"server.shutdown.jobs.timeout":                                     {},
+	"server.shutdown.lease_transfer_iteration.timeout":                 {},
+	"server.shutdown.transactions.timeout":                             {},
+	"server.span_stats.node.timeout":                                   {},
+	"server.sql_tcp_keep_alive.interval":                               {},
+	"server.sqlliveness.gc_interval":                                   {},
+	"server.sqlliveness.heartbeat":                                     {},
+	"server.sqlliveness.ttl":                                           {},
+	"server.telemetry.hot_ranges_stats.interval":                       {},
+	"server.telemetry.hot_ranges_stats.logging_delay":                  {},
+	"server.time_after_store_suspect":                                  {},
+	"server.time_until_store_dead":                                     {},
+	"server.user_login.password_encryption":                            {},
+	"server.user_login.timeout":                                        {},
+	"server.web_session.purge.ttl":                                     {},
+	"server.web_session.timeout":                                       {},
+	"spanconfig.kvsubscriber.metrics_poller_interval":                  {},
+	"spanconfig.reconciliation_job.check_interval":                     {},
+	"spanconfig.reconciliation_job.checkpoint_interval":                {},
+	"spanconfig.store.fallback_config_override":                        {},
+	"sql.catalog.descriptor_lease_duration":                            {},
+	"sql.catalog.descriptor_lease_renewal_fraction":                    {},
+	"sql.conn.max_read_buffer_message_size":                            {},
+	"sql.contention.event_store.capacity":                              {},
+	"sql.contention.event_store.duration_threshold":                    {},
+	"sql.contention.event_store.resolution_interval":                   {},
+	"sql.contention.txn_id_cache.max_size":                             {},
+	"sql.crdb_internal.table_row_statistics.as_of_time":                {},
+	"sql.create_virtual_cluster.default_template":                      {},
+	"sql.defaults.datestyle":                                           {},
+	"sql.defaults.experimental_computed_column_rewrites":               {},
+	"sql.defaults.idle_in_session_timeout":                             {},
+	"sql.defaults.idle_in_transaction_session_timeout":                 {},
+	"sql.defaults.lock_timeout":                                        {},
+	"sql.defaults.primary_region":                                      {},
+	"sql.defaults.results_buffer.size":                                 {},
+	"sql.defaults.statement_timeout":                                   {},
+	"sql.distsql.flow_stream.timeout":                                  {},
+	"sql.distsql.index_join_streamer.batch_size":                       {},
+	"sql.distsql.join_reader_index_join_strategy.batch_size":           {},
+	"sql.distsql.join_reader_no_ordering_strategy.batch_size":          {},
+	"sql.distsql.join_reader_ordering_strategy.batch_size":             {},
+	"sql.distsql.temp_storage.workmem":                                 {},
+	"sql.gc_job.idle_wait_duration":                                    {},
+	"sql.gc_job.wait_for_gc.interval":                                  {},
+	"sql.guardrails.max_row_size_err":                                  {},
+	"sql.guardrails.max_row_size_log":                                  {},
+	"sql.history_retention_job.poll_interval":                          {},
+	"sql.index_recommendation.drop_unused_duration":                    {},
+	"sql.insights.anomaly_detection.latency_threshold":                 {},
+	"sql.insights.anomaly_detection.memory_limit":                      {},
+	"sql.insights.latency_threshold":                                   {},
+	"sql.internal_executor.session_overrides":                          {},
+	"sql.log.slow_query.latency_threshold":                             {},
+	"sql.log.user_audit":                                               {},
+	"sql.metrics.discarded_stats_log.interval":                         {},
+	"sql.metrics.statement_details.plan_collection.period":             {},
+	"sql.metrics.statement_details.threshold":                          {},
+	"sql.mutations.mutation_batch_byte_size":                           {},
+	"sql.region_liveness.probe.timeout":                                {},
+	"sql.schema.force_declarative_statements":                          {},
+	"sql.schema.telemetry.recurrence":                                  {},
+	"sql.session_transfer.max_session_size":                            {},
+	"sql.stats.aggregation.interval":                                   {},
+	"sql.stats.cleanup.recurrence":                                     {},
+	"sql.stats.flush.interval":                                         {},
+	"sql.stats.flush.minimum_interval":                                 {},
+	"sql.stats.garbage_collection_interval":                            {},
+	"sql.stats.limit_table_size_check.interval":                        {},
+	"sql.stats.max_timestamp_age":                                      {},
+	"sql.stats.non_default_columns.min_retention_period":               {},
+	"sql.stmt_diagnostics.bundle_chunk_size":                           {},
+	"sql.stmt_diagnostics.in_flight_trace_collector.poll_interval":     {},
+	"sql.stmt_diagnostics.poll_interval":                               {},
+	"sql.telemetry.capture_index_usage_stats.check_enabled_interval":   {},
+	"sql.telemetry.capture_index_usage_stats.interval":                 {},
+	"sql.telemetry.capture_index_usage_stats.logging_delay":            {},
+	"sql.temp_object_cleaner.cleanup_interval":                         {},
+	"sql.temp_object_cleaner.wait_interval":                            {},
+	"sql.trace.stmt.enable_threshold":                                  {},
+	"sql.trace.txn.enable_threshold":                                   {},
+	"sqladmission.elastic_cpu.duration_per_low_pri_read_response":      {},
+	"storage.max_sync_duration":                                        {},
+	"storage.wal_failover.unhealthy_op_threshold":                      {},
+	"physical_replication.consumer.heartbeat_frequency":                {},
+	"physical_replication.consumer.job_checkpoint_frequency":           {},
+	"physical_replication.producer.min_checkpoint_frequency":           {},
+	"physical_replication.consumer.replan_flow_frequency":              {},
+	"physical_replication.producer.stream_liveness_track_frequency":    {},
+	"tenant_cost_control.token_request_period":                         {},
+	"tenant_cost_model.cross_region_network_cost":                      {},
+	"tenant_cost_control.cpu_usage_allowance":                          {},
+	"tenant_global_metrics_exporter_interval":                          {},
+	"tenant_cost_control.instance_inactivity.timeout":                  {},
+	"timeseries.storage.resolution_10s.ttl":                            {},
+	"timeseries.storage.resolution_30m.ttl":                            {},
+	"trace.opentelemetry.collector":                                    {},
+	"trace.snapshot.rate":                                              {},
+	"trace.span.force_verbose_regexp":                                  {},
+	"trace.zipkin.collector":                                           {},
+	"ui.display_timezone":                                              {},
 }

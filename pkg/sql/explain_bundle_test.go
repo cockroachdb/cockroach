@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -728,5 +729,53 @@ SELECT a || $1 FROM t WHERE k = ($2 - $10);
 		require.NoError(t, err)
 		require.Equal(t, tc.stmtNoPlaceholders, s)
 		require.Equal(t, tc.numPlaceholders, p)
+	}
+}
+
+// TestExplainBundleEnv is a sanity check that all SET and SET CLUSTER SETTING
+// statements in the env.sql file of the bundle are valid.
+func TestExplainBundleEnv(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
+	internalPlanner, cleanup := NewInternalPlanner(
+		"test",
+		kv.NewTxn(ctx, db, srv.NodeID()),
+		username.NodeUserName(),
+		&MemoryMetrics{},
+		&execCfg,
+		sd,
+	)
+	defer cleanup()
+	p := internalPlanner.(*planner)
+	c := makeStmtEnvCollector(ctx, p, s.InternalExecutor().(*InternalExecutor))
+
+	var sb strings.Builder
+	require.NoError(t, c.PrintSessionSettings(&sb, &s.ClusterSettings().SV, true /* all */))
+	vars := strings.Split(sb.String(), "\n")
+	for _, line := range vars {
+		_, err := sqlDB.ExecContext(ctx, line)
+		if err != nil {
+			words := strings.Split(line, " ")
+			t.Fatalf("%v: probably need to add %q into 'sessionVarNeedsQuotes' map", err, words[1])
+		}
+	}
+
+	sb.Reset()
+	require.NoError(t, c.PrintClusterSettings(&sb, true /* all */))
+	vars = strings.Split(sb.String(), "\n")
+	for _, line := range vars {
+		_, err := sqlDB.ExecContext(ctx, line)
+		if err != nil {
+			words := strings.Split(line, " ")
+			t.Fatalf("%v: probably need to add %q into 'clusterSettingNeedsQuotes' map", err, words[3])
+		}
 	}
 }
