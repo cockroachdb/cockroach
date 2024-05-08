@@ -969,16 +969,8 @@ DISTINCT(id), status, created, payload.value AS payload, progress.value AS progr
 created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
 FROM
 system.jobs AS j
-LEFT JOIN (
-		SELECT job_id, value FROM system.job_info
-		WHERE info_key = 'legacy_progress'
-		ORDER BY written DESC
-) AS progress ON j.id = progress.job_id
-INNER JOIN (
-		SELECT job_id, value FROM system.job_info
-		WHERE info_key = 'legacy_payload'
-		ORDER BY written DESC
-) AS payload ON j.id = payload.job_id
+LEFT JOIN system.job_info AS progress ON j.id = progress.job_id AND progress.info_key = 'legacy_progress'
+INNER JOIN system.job_info AS payload ON j.id = payload.job_id AND payload.info_key = 'legacy_payload'
 `
 	systemJobsIDPredicate     = ` WHERE id = $1`
 	systemJobsTypePredicate   = ` WHERE job_type = $1`
