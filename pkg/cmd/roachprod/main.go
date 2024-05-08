@@ -76,7 +76,14 @@ destroy the cluster.
 // rperrors.Unclassified.
 func wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
-		err := f(cmd, args)
+		var err error
+		isSecure, err = isSecureCluster(cmd)
+		if err != nil {
+			cmd.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		err = f(cmd, args)
 		if err != nil {
 			roachprodError, ok := rperrors.AsError(err)
 			if !ok {
@@ -486,7 +493,7 @@ These resources will automatically be destroyed when the cluster is destroyed.
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		return roachprod.CreateLoadBalancer(context.Background(), config.Logger,
-			args[0], !insecure, virtualClusterName, sqlInstance,
+			args[0], isSecure, virtualClusterName, sqlInstance,
 		)
 	}),
 }
@@ -535,7 +542,7 @@ cluster setting will be set to its value.
 		clusterSettingsOpts := []install.ClusterSettingOption{
 			install.TagOption(tag),
 			install.PGUrlCertsDirOption(pgurlCertsDir),
-			install.SecureOption(!insecure),
+			install.SecureOption(isSecure),
 			install.UseTreeDistOption(useTreeDist),
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
@@ -614,7 +621,7 @@ environment variables to the cockroach process.
 		clusterSettingsOpts := []install.ClusterSettingOption{
 			install.TagOption(tag),
 			install.PGUrlCertsDirOption(pgurlCertsDir),
-			install.SecureOption(!insecure),
+			install.SecureOption(isSecure),
 			install.UseTreeDistOption(useTreeDist),
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
@@ -666,7 +673,7 @@ non-terminating signal (e.g. SIGHUP), unless you also configure --max-wait.
 			SQLInstance:        sqlInstance,
 		}
 		clusterName := args[0]
-		return roachprod.StopServiceForVirtualCluster(context.Background(), config.Logger, clusterName, !insecure, stopOpts)
+		return roachprod.StopServiceForVirtualCluster(context.Background(), config.Logger, clusterName, isSecure, stopOpts)
 	}),
 }
 
@@ -843,7 +850,7 @@ var runCmd = &cobra.Command{
 	Args: cobra.MinimumNArgs(1),
 	Run: wrap(func(_ *cobra.Command, args []string) error {
 		return roachprod.Run(context.Background(), config.Logger, args[0], extraSSHOptions, tag,
-			!insecure, os.Stdout, os.Stderr, args[1:], install.RunOptions{FailOption: install.FailSlow})
+			isSecure, os.Stdout, os.Stderr, args[1:], install.RunOptions{FailOption: install.FailSlow})
 	}),
 }
 
@@ -1012,7 +1019,7 @@ var sqlCmd = &cobra.Command{
 			return errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
 		}
 
-		return roachprod.SQL(context.Background(), config.Logger, args[0], !insecure, virtualClusterName, sqlInstance, auth, args[1:])
+		return roachprod.SQL(context.Background(), config.Logger, args[0], isSecure, virtualClusterName, sqlInstance, auth, args[1:])
 	}),
 }
 
@@ -1046,7 +1053,7 @@ Defaults to root if not passed. Available auth-modes are:
 
 		urls, err := roachprod.PgURL(context.Background(), config.Logger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
 			External:           external,
-			Secure:             !insecure,
+			Secure:             isSecure,
 			VirtualClusterName: virtualClusterName,
 			SQLInstance:        sqlInstance,
 			Auth:               auth,
@@ -1094,7 +1101,7 @@ var adminurlCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		urls, err := roachprod.AdminURL(
-			context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance, adminurlPath, adminurlIPs, urlOpen, !insecure,
+			context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance, adminurlPath, adminurlIPs, urlOpen, isSecure,
 		)
 		if err != nil {
 			return err
@@ -1265,7 +1272,7 @@ roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --
 			return errors.Newf("Too many arguments for --time-range, expected 1 or 2, got: %d", len(grafanaTimeRange))
 		}
 
-		return roachprod.AddGrafanaAnnotation(context.Background(), args[0] /* host */, !insecure, req)
+		return roachprod.AddGrafanaAnnotation(context.Background(), args[0] /* host */, isSecure, req)
 	}),
 }
 
@@ -1275,7 +1282,7 @@ var jaegerStartCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		return roachprod.StartJaeger(context.Background(), config.Logger, args[0],
-			virtualClusterName, !insecure, jaegerConfigNodes)
+			virtualClusterName, isSecure, jaegerConfigNodes)
 	}),
 }
 
@@ -1672,6 +1679,29 @@ var sshKeysRemoveCmd = &cobra.Command{
 			return nil
 		}
 	}),
+}
+
+func isSecureCluster(cmd *cobra.Command) (bool, error) {
+	hasSecureFlag := cmd.Flags().Changed("secure")
+	hasInsecureFlag := cmd.Flags().Changed("insecure")
+
+	switch {
+	case hasSecureFlag && hasInsecureFlag:
+		// Disallow passing both flags, even if they are consistent.
+		return false, fmt.Errorf("cannot pass both --secure and --insecure flags")
+
+	case hasSecureFlag:
+		desc := "Clusters are secure by default"
+		if !secure {
+			desc = "Use the --insecure flag to create insecure clusters"
+		}
+
+		fmt.Printf("WARNING: --secure flag is deprecated. %s.\n", desc)
+		return secure, nil
+
+	default:
+		return !insecure, nil
+	}
 }
 
 var _ = func() struct{} {
