@@ -19,14 +19,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/stretchr/testify/require"
 )
 
 // This test causes LSM overload induced by saturating disk bandwidth limits.
@@ -34,24 +33,34 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "admission-control/disk-bandwidth",
 		Owner:            registry.OwnerAdmissionControl,
+		Timeout:          time.Hour,
+		CompatibleClouds: registry.OnlyGCE,
 		Benchmark:        true,
-		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.ManualOnly,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(4), spec.VolumeSize(256)),
+		Cluster:          r.MakeClusterSpec(3, spec.CPU(32)),
+		RequiresLicense:  true,
 		Leases:           registry.MetamorphicLeases,
-		Timeout:          12 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().NodeCount < 4 {
-				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)
+			if c.IsLocal() {
+				t.Skip("not meant to run locally")
 			}
+			if c.Spec().NodeCount != 3 {
+				t.Fatalf("expected 3 nodes, found %d", c.Spec().NodeCount)
+			}
+			crdbNodes := 1
+			promNode := c.Spec().NodeCount
+			regularNode, elasticNode := c.Spec().NodeCount, c.Spec().NodeCount-1
 
-			crdbNodes := c.Spec().NodeCount - 1
-			workloadNode := crdbNodes + 1
-			for i := 1; i <= crdbNodes; i++ {
-				startOpts := option.NewStartOpts(option.NoBackupSchedule)
-				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--attrs=n%d", i))
-				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
-			}
+			promCfg := &prometheus.Config{}
+			promCfg.WithPrometheusNode(c.Node(promNode).InstallNodes()[0]).
+				WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
+				WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
+				WithGrafanaDashboard("https://go.crdb.dev/p/index-admission-control-grafana")
+			require.NoError(t, c.StartGrafana(ctx, t.L(), promCfg))
+
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, crdbNodes))
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(regularNode))
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(elasticNode))
 
 			// TODO(aaditya): This function shares a lot of logic with roachtestutil.DiskStaller. Consider merging the two.
 			setBandwidthLimit := func(nodes option.NodeListOption, rw string, bw int, max bool) error {
@@ -87,74 +96,59 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				))
 			}
 
-			setBandwidthLimit(c.Range(1, crdbNodes), "wbps", 1<<27 /* 128MiB */, false)
-			setBandwidthLimit(c.Range(1, crdbNodes), "rbps", 1<<27 /* 128MiB */, false)
+			if err := setBandwidthLimit(c.Range(1, crdbNodes), "wbps", 128<<20 /* 128MiB */, false); err != nil {
+				t.Fatal(err)
+			}
+			if err := setBandwidthLimit(c.Range(1, crdbNodes), "rbps", 128<<20 /* 128MiB */, false); err != nil {
+				t.Fatal(err)
+			}
 
 			db := c.Conn(ctx, t.L(), crdbNodes)
 			defer db.Close()
 
-			t.Status(fmt.Sprintf("configuring cluster settings (<%s)", 30*time.Second))
-			{
-				// Defensive, since admission control is enabled by default.
-				setAdmissionControl(ctx, t, c, true)
+			{ // Activate disk bandwidth controls.
+				db := c.Conn(ctx, t.L(), crdbNodes)
+				defer db.Close()
 
-				// Increase rebalance rate.
 				if _, err := db.ExecContext(
-					ctx, "SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '512MiB'"); err != nil {
-					t.Fatalf("failed to set kv.snapshot_rebalance.max_rate: %v", err)
+					ctx, "SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '128MiB'"); err != nil {
+					t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
 				}
 			}
 
-			t.Status(fmt.Sprintf("setting up prometheus/grafana (<%s)", 2*time.Minute))
-			{
-				promCfg := &prometheus.Config{}
-				promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0])
-				promCfg.WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
-				promCfg.WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
-				promCfg.ScrapeConfigs = append(promCfg.ScrapeConfigs, prometheus.MakeWorkloadScrapeConfig("workload",
-					"/", makeWorkloadScrapeNodes(c.Node(workloadNode).InstallNodes()[0], []workloadInstance{
-						{nodes: c.Node(workloadNode)},
-					})))
-				promCfg.WithGrafanaDashboardJSON(grafana.SnapshotAdmissionControlGrafanaJSON)
-				_, cleanupFunc := setupPrometheusForRoachtest(ctx, t, c, promCfg, nil)
-				defer cleanupFunc()
-			}
-
-			// Initialize the kv database,
-			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", time.Hour))
-			c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
-				"./cockroach workload init kv --drop --insert-count=40000000 "+
-					"--max-block-bytes=4096 --min-block-bytes=4096 {pgurl:1}")
-
+			duration := 30 * time.Minute
 			t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
-					fmt.Sprintf("./cockroach workload run kv --tolerate-errors --splits=1000 --histograms=%s/stats.json --read-percent=50 --max-rate=600 --max-block-bytes=4096 --min-block-bytes=4096 --concurrency=256 {pgurl:1}",
-						t.PerfArtifactsDir()))
+				// Regular traffic: consumes 40-50% of the disk bandwidth (note
+				// the low concurrency=2, since regular traffic does not cause
+				// any disk bandwidth controls to be activated -- so we've
+				// explicitly set it up to leave significant unused bandwidth).
+				dur := " --duration=" + duration.String()
+				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
+				cmd := "./workload run kv --init --histograms=perf/stats.json --concurrency=2 " +
+					"--splits=1000 --read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 " +
+					"--background-qos=false --tolerate-errors" + dur + url
+				c.Run(ctx, option.WithNodes(c.Node(regularNode)), cmd)
 				return nil
 			})
 
-			// Wait for data.
-			t.Status(fmt.Sprintf("waiting for data build up (<%s)", time.Hour*1))
-			time.Sleep(time.Hour * 1)
+			m.Go(func(ctx context.Context) error {
+				// Then add elastic traffic with a high concurrency=1024 (this
+				// is more than enough to blow past the provisioned limit if
+				// there was no disk bandwidth control). The throughput of
+				// regular traffic stays stable.
+				time.Sleep(5 * time.Minute)
 
-			// Kill node 3.
-			t.Status(fmt.Sprintf("killing node 3... (<%s)", time.Minute))
-			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
+				dur := " --duration=" + duration.String()
+				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
+				cmd := "./workload run kv --init --histograms=perf/stats.json --concurrency=1024 " +
+					"--splits=1000 --read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 " +
+					"--background-qos=true --tolerate-errors" + dur + url
+				c.Run(ctx, option.WithNodes(c.Node(elasticNode)), cmd)
+				return nil
+			})
 
-			// Wait for raft log truncation.
-			t.Status(fmt.Sprintf("waiting for raft log truncation (<%s)", time.Hour*2))
-			time.Sleep(time.Hour * 2)
-
-			// Start node 3.
-			t.Status(fmt.Sprintf("starting node 3... (<%s)", time.Minute))
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
-
-			// TODO(aaditya)
-			// 	1. We need to assert on sublevel count and sql latency while the ingest is taking place
-
-			t.Status(fmt.Sprintf("waiting for workload/snapshot transfers to finish %s", time.Minute))
 			m.Wait()
 		},
 	})
