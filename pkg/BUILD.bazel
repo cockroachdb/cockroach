@@ -1103,6 +1103,8 @@ GO_TARGETS = [
     "//pkg/cmd/generate-staticcheck:generate-staticcheck_lib",
     "//pkg/cmd/geoviz:geoviz",
     "//pkg/cmd/geoviz:geoviz_lib",
+    "//pkg/cmd/github-action-poller:github-action-poller",
+    "//pkg/cmd/github-action-poller:github-action-poller_lib",
     "//pkg/cmd/github-post:github-post",
     "//pkg/cmd/github-post:github-post_lib",
     "//pkg/cmd/github-pull-request-make:github-pull-request-make",
