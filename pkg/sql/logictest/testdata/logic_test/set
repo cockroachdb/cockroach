@@ -912,3 +912,7 @@ SHOW application_name
 ·
 
 subtest end
+
+# Regression test for incorrectly marking this variable as boolean.
+statement ok
+SET copy_num_retries_per_batch = 5;
