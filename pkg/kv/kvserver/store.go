@@ -305,7 +305,7 @@ var exportRequestsLimit = settings.RegisterIntSetting(
 // step down on demotion or removal. Following an upgrade, clusters may have
 // replicas with mixed settings, because it's only changed when initializing
 // replicas. Varying it makes sure we handle this state.
-var raftStepDownOnRemoval = metamorphic.ConstantWithMetamorphicTestBool("raft-step-down-on-removal", true)
+var raftStepDownOnRemoval = metamorphic.ConstantWithTestBool("raft-step-down-on-removal", true)
 
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {

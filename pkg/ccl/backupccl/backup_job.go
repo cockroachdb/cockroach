@@ -88,7 +88,7 @@ var BackupCheckpointInterval = settings.RegisterDurationSetting(
 	"the minimum time between writing progress checkpoints during a backup",
 	time.Minute)
 
-var forceReadBackupManifest = metamorphic.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
+var forceReadBackupManifest = metamorphic.ConstantWithTestBool("backup-read-manifest", false)
 
 var useBulkOracle = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,

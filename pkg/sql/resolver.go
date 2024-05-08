@@ -856,7 +856,7 @@ func (l *internalLookupCtx) GetSchemaName(
 	return schemaName, found, nil
 }
 
-var metamorphicDefaultUseIndexLookupForDescriptorsInDatabase = metamorphic.ConstantWithMetamorphicTestBool(
+var metamorphicDefaultUseIndexLookupForDescriptorsInDatabase = metamorphic.ConstantWithTestBool(
 	`use-index-lookup-for-descriptors-in-database`, true,
 )
 

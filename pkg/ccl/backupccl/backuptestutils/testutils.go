@@ -44,7 +44,7 @@ const (
 // smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
 // bugs in time-bound iterators. We disable this in race builds, which can
 // be too slow.
-var smallEngineBlocks = !util.RaceEnabled && metamorphic.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
+var smallEngineBlocks = !util.RaceEnabled && metamorphic.ConstantWithTestBool("small-engine-blocks", false)
 
 // InitManualReplication calls tc.ToggleReplicateQueues(false).
 //
