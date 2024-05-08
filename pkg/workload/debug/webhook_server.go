@@ -37,7 +37,7 @@ var webhookServerCmd = &cobra.Command{
 }
 
 const (
-	port = 9707
+	WebhookServerPort = 9707
 )
 
 func webhookServer(cmd *cobra.Command, args []string) error {
@@ -124,11 +124,11 @@ func webhookServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("starting server on port %d", port)
+	log.Printf("starting server on port %d", WebhookServerPort)
 	return (&http.Server{
 		TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}},
 		Handler:   mux,
-		Addr:      fmt.Sprintf(":%d", port),
+		Addr:      fmt.Sprintf(":%d", WebhookServerPort),
 	}).ListenAndServeTLS("", "")
 }
 
