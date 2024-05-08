@@ -134,6 +134,11 @@ type ClusterSpec struct {
 		VolumeThroughput int
 		Zones            string
 	}
+
+	// Azure-specific arguments. These values apply only on clusters instantiated on Azure.
+	Azure struct {
+		Locations string
+	}
 }
 
 // MakeClusterSpec makes a ClusterSpec.
@@ -425,6 +430,10 @@ func (s *ClusterSpec) RoachprodOpts(
 	case GCE:
 		if s.GCE.Zones != "" {
 			zonesStr = s.GCE.Zones
+		}
+	case Azure:
+		if s.Azure.Locations != "" {
+			zonesStr = s.Azure.Locations
 		}
 	}
 	var zones []string

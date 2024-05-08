@@ -266,3 +266,14 @@ func AWSZones(zones string) Option {
 		spec.AWS.Zones = zones
 	}
 }
+
+// AzureLocations is a node option which requests Geo-distributed nodes; only
+// applies when the test runs on Azure.
+//
+// Note that this overrides the --locations flag and is useful for tests that
+// require running on specific zones.
+func AzureLocations(locations string) Option {
+	return func(spec *ClusterSpec) {
+		spec.Azure.Locations = locations
+	}
+}
