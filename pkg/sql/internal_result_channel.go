@@ -50,7 +50,7 @@ type ieResultWriter interface {
 	finish()
 }
 
-var asyncIEResultChannelBufferSize = metamorphic.ConstantWithMetamorphicTestRange(
+var asyncIEResultChannelBufferSize = metamorphic.ConstantWithTestRange(
 	"async-IE-result-channel-buffer-size",
 	32, /* defaultValue */
 	1,  /* min */

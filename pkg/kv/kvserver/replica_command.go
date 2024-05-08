@@ -66,7 +66,7 @@ var EnableEstimatedMVCCStatsInSplit = settings.RegisterBoolSetting(
 	"kv.split.estimated_mvcc_stats.enabled",
 	"if enabled, MVCC stats will be computed estimated (as opposed to "+
 		"computed accurately) during splits",
-	metamorphic.ConstantWithMetamorphicTestBool("kv.split.estimated_mvcc_stats.enabled", true))
+	metamorphic.ConstantWithTestBool("kv.split.estimated_mvcc_stats.enabled", true))
 
 // EnableMVCCStatsRecomputationInSplit controls whether the MVCC stats for a
 // range are re-computed at the beginning of the split (in AdminSplit). Doing so
@@ -79,7 +79,7 @@ var EnableMVCCStatsRecomputationInSplit = settings.RegisterBoolSetting(
 	"kv.split.mvcc_stats_recomputation.enabled",
 	"if enabled, MVCC stats will be recomputed at the beginning of a split "+
 		"to prevent stats estimates from drifting",
-	metamorphic.ConstantWithMetamorphicTestBool("kv.split.mvcc_stats_recomputation.enabled", true))
+	metamorphic.ConstantWithTestBool("kv.split.mvcc_stats_recomputation.enabled", true))
 
 // mergeApplicationTimeout is the timeout when waiting for a merge command to be
 // applied on all range replicas. There doesn't appear to be any strong reason

@@ -268,7 +268,7 @@ func (s SpanReusePercentOpt) apply(opt *tracerOptions) {
 // explicitly configured with a reuse probability. Tests vary this away from the
 // default of 100% in order to make the use-after-Finish detection reliable (see
 // panicOnUseAfterFinish).
-var spanReusePercent = metamorphic.ConstantWithMetamorphicTestRange(
+var spanReusePercent = metamorphic.ConstantWithTestRange(
 	"span-reuse-rate",
 	100, /* defaultValue - always reuse spans. This turns to 0 if reuseSpans is not set. */
 	0,   /* metamorphic min */

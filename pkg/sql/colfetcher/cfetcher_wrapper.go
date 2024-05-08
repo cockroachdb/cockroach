@@ -44,7 +44,7 @@ var DirectScansEnabled = settings.RegisterBoolSetting(
 	directScansEnabledDefault,
 )
 
-var directScansEnabledDefault = metamorphic.ConstantWithMetamorphicTestBool(
+var directScansEnabledDefault = metamorphic.ConstantWithTestBool(
 	"direct-scans-enabled",
 	false,
 )

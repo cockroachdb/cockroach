@@ -91,14 +91,14 @@ var (
 		settings.ApplicationLevel,
 		"bulkio.backup.presplit_request_spans.enabled",
 		"split the spans that will be requests before requesting them",
-		metamorphic.ConstantWithMetamorphicTestBool("backup-presplit-spans", true),
+		metamorphic.ConstantWithTestBool("backup-presplit-spans", true),
 	)
 
 	sendExportRequestWithVerboseTracing = settings.RegisterBoolSetting(
 		settings.ApplicationLevel,
 		"bulkio.backup.export_request_verbose_tracing",
 		"send each export request with a verbose tracing span",
-		metamorphic.ConstantWithMetamorphicTestBool("export_request_verbose_tracing", false),
+		metamorphic.ConstantWithTestBool("export_request_verbose_tracing", false),
 		settings.WithName("bulkio.backup.verbose_tracing.enabled"),
 	)
 

@@ -689,7 +689,7 @@ func MemberOfWithAdminOption(
 	return memberships, nil
 }
 
-var defaultSingleQueryForRoleMembershipCache = metamorphic.ConstantWithMetamorphicTestBool(
+var defaultSingleQueryForRoleMembershipCache = metamorphic.ConstantWithTestBool(
 	"resolve-membership-single-scan-enabled",
 	true, /* defaultValue */
 )

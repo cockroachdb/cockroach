@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	defaultSmallFileBuffer = metamorphic.ConstantWithMetamorphicTestRange(
+	defaultSmallFileBuffer = metamorphic.ConstantWithTestRange(
 		"backup-merge-file-buffer-size",
 		128<<20, /* defaultValue */
 		1<<20,   /* metamorphic min */

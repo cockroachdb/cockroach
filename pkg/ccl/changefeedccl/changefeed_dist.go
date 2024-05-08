@@ -351,7 +351,7 @@ var RangeDistributionStrategy = settings.RegisterEnumSetting(
 	"configures how work is distributed among nodes for a given changefeed. "+
 		"for the most balanced distribution, use `balanced_simple`. changing this setting "+
 		"will not override locality restrictions",
-	metamorphic.ConstantWithMetamorphicTestChoice("default_range_distribution_strategy",
+	metamorphic.ConstantWithTestChoice("default_range_distribution_strategy",
 		"default", "balanced_simple").(string),
 	map[int64]string{
 		int64(defaultDistribution):        "default",

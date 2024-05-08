@@ -106,7 +106,7 @@ const maxConcurrentRestoreWorkers = 32
 // file.
 const minWorkerMemReservation = 15 << 20
 
-var defaultNumWorkers = metamorphic.ConstantWithMetamorphicTestRange(
+var defaultNumWorkers = metamorphic.ConstantWithTestRange(
 	"restore-worker-concurrency",
 	func() int {
 		// On low-CPU instances, a default value may still allow concurrent restore

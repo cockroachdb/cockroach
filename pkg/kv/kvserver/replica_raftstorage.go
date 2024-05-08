@@ -48,7 +48,7 @@ var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 	"kv.snapshot.ingest_as_write_threshold",
 	"size below which a range snapshot ingestion will be performed as a normal write",
 	func() int64 {
-		return int64(metamorphic.ConstantWithMetamorphicTestChoice(
+		return int64(metamorphic.ConstantWithTestChoice(
 			"kv.snapshot.ingest_as_write_threshold",
 			100<<10, /* default value is 100KiB */
 			1<<30,   /* 1GiB causes everything to be a normal write */

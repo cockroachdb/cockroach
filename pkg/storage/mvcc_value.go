@@ -151,7 +151,7 @@ func EncodeMVCCValueForExport(mvccValue MVCCValue, b []byte) ([]byte, bool, erro
 // When running a metamorphic build, disable the simple MVCC value encoding to
 // prevent code from assuming that the MVCCValue encoding is identical to the
 // roachpb.Value encoding.
-var disableSimpleValueEncoding = metamorphic.ConstantWithMetamorphicTestBool(
+var disableSimpleValueEncoding = metamorphic.ConstantWithTestBool(
 	"mvcc-value-disable-simple-encoding", false)
 
 // DisableMetamorphicSimpleValueEncoding disables the disableSimpleValueEncoding

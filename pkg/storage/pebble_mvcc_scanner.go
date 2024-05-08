@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/pebble"
 )
 
-var maxItersBeforeSeek = metamorphic.ConstantWithMetamorphicTestRange(
+var maxItersBeforeSeek = metamorphic.ConstantWithTestRange(
 	"mvcc-max-iters-before-seek",
 	10, /* defaultValue */
 	0,  /* min */

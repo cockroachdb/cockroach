@@ -40,7 +40,7 @@ var Mode = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_control.mode",
 	"determines the 'mode' of flow control we use for replication traffic in KV, if enabled",
-	metamorphic.ConstantWithMetamorphicTestChoice(
+	metamorphic.ConstantWithTestChoice(
 		"kv.snapshot.ingest_as_write_threshold",
 		modeDict[ApplyToElastic], /* default value */
 		modeDict[ApplyToAll],     /* other value */

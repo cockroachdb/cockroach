@@ -515,7 +515,7 @@ const defaultLockTableItersBeforeSeek = 5
 // shared locks on a single user key before seeking past them. This is used to
 // avoid iterating over all shared locks on a key when not necessary, given the
 // filtering criteria.
-var lockTableItersBeforeSeek = metamorphic.ConstantWithMetamorphicTestRange(
+var lockTableItersBeforeSeek = metamorphic.ConstantWithTestRange(
 	"lock-table-iters-before-seek",
 	defaultLockTableItersBeforeSeek, /* defaultValue */
 	0,                               /* min */
