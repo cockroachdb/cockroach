@@ -2671,11 +2671,11 @@ func (r *restoreResumer) dropDescriptors(
 		// configuration for every table that we are going to drop with a small GC TTL.
 		//
 		// NB: We can't set GC TTLs for non-system tenants currently.
-		if codec.ForSystemTenant() {
+		if codec.ForSystemTenant() && tableToDrop.IsPhysicalTable() {
 			if err := setGCTTLForDroppingTable(
 				ctx, txn, descsCol, tableToDrop,
 			); err != nil {
-				return errors.Wrapf(err, "setting low GC TTL for table %q", tableToDrop.GetName())
+				log.Warningf(ctx, "setting low GC TTL for table %q failed: %s", tableToDrop.GetName(), err.Error())
 			}
 		}
 
