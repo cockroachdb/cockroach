@@ -54,18 +54,18 @@ import (
 )
 
 var (
-	clearRangeUsingIter = metamorphic.ConstantWithMetamorphicTestBool(
+	clearRangeUsingIter = metamorphic.ConstantWithTestBool(
 		"mvcc-histories-clear-range-using-iterator", false)
-	cmdDeleteRangeTombstoneKnownStats = metamorphic.ConstantWithMetamorphicTestBool(
+	cmdDeleteRangeTombstoneKnownStats = metamorphic.ConstantWithTestBool(
 		"mvcc-histories-deleterange-tombstome-known-stats", false)
-	mvccHistoriesReader = metamorphic.ConstantWithMetamorphicTestChoice("mvcc-histories-reader",
+	mvccHistoriesReader = metamorphic.ConstantWithTestChoice("mvcc-histories-reader",
 		"engine", "readonly", "batch", "snapshot", "efos").(string)
-	mvccHistoriesUseBatch   = metamorphic.ConstantWithMetamorphicTestBool("mvcc-histories-use-batch", false)
-	mvccHistoriesPeekBounds = metamorphic.ConstantWithMetamorphicTestChoice("mvcc-histories-peek-bounds",
+	mvccHistoriesUseBatch   = metamorphic.ConstantWithTestBool("mvcc-histories-use-batch", false)
+	mvccHistoriesPeekBounds = metamorphic.ConstantWithTestChoice("mvcc-histories-peek-bounds",
 		"none", "left", "right", "both").(string)
-	sstIterVerify           = metamorphic.ConstantWithMetamorphicTestBool("mvcc-histories-sst-iter-verify", false)
-	metamorphicIteratorSeed = metamorphic.ConstantWithMetamorphicTestRange("mvcc-metamorphic-iterator-seed", 0, 0, 100000) // 0 = disabled
-	separateEngineBlocks    = metamorphic.ConstantWithMetamorphicTestBool("mvcc-histories-separate-engine-blocks", false)
+	sstIterVerify           = metamorphic.ConstantWithTestBool("mvcc-histories-sst-iter-verify", false)
+	metamorphicIteratorSeed = metamorphic.ConstantWithTestRange("mvcc-metamorphic-iterator-seed", 0, 0, 100000) // 0 = disabled
+	separateEngineBlocks    = metamorphic.ConstantWithTestBool("mvcc-histories-separate-engine-blocks", false)
 )
 
 // TestMVCCHistories verifies that sequences of MVCC reads and writes

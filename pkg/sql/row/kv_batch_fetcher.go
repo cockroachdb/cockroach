@@ -53,7 +53,7 @@ func getKVBatchSize(forceProductionKVBatchSize bool) rowinfra.KeyLimit {
 	return defaultKVBatchSize
 }
 
-var defaultKVBatchSize = rowinfra.KeyLimit(metamorphic.ConstantWithMetamorphicTestValue(
+var defaultKVBatchSize = rowinfra.KeyLimit(metamorphic.ConstantWithTestValue(
 	"kv-batch-size",
 	int(rowinfra.ProductionKVBatchSize), /* defaultValue */
 	1,                                   /* metamorphicValue */

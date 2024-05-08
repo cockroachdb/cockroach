@@ -24,7 +24,7 @@ var useFastGzip = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"changefeed.fast_gzip.enabled",
 	"use fast gzip implementation",
-	metamorphic.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithTestBool(
 		"changefeed.fast_gzip.enabled", true,
 	),
 	settings.WithPublic)

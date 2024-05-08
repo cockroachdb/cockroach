@@ -92,7 +92,7 @@ var AddSSTableRewriteConcurrency = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.bulk_io_write.sst_rewrite_concurrency.per_call",
 	"concurrency to use when rewriting sstable timestamps by block, or 0 to use a loop",
-	int64(metamorphic.ConstantWithMetamorphicTestRange("addsst-rewrite-concurrency", 4, 0, 16)),
+	int64(metamorphic.ConstantWithTestRange("addsst-rewrite-concurrency", 4, 0, 16)),
 	settings.NonNegativeInt,
 )
 
@@ -134,7 +134,7 @@ var addSSTableCapacityRemainingLimit = settings.RegisterFloatSetting(
 // old status quo was regular seeks.
 const prefixSeekCollisionCheckRatio = 10
 
-var forceRewrite = metamorphic.ConstantWithMetamorphicTestBool("addsst-rewrite-forced", false)
+var forceRewrite = metamorphic.ConstantWithTestBool("addsst-rewrite-forced", false)
 
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
 // on AddSSTableRequest.

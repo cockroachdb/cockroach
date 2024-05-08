@@ -152,7 +152,7 @@ func ShouldStartDefaultTestTenant(
 	// Note: we ask the metamorphic framework for a "disable" value, instead
 	// of an "enable" value, because it probabilistically returns its default value
 	// more often than not and that is what we want.
-	enabled := !metamorphic.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
+	enabled := !metamorphic.ConstantWithTestBoolWithoutLogging("disable-test-tenant", false)
 	if enabled && t != nil {
 		t.Log(defaultTestTenantMessage(shared))
 	}

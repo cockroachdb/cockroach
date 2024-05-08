@@ -165,7 +165,7 @@ var WebhookV2Enabled = settings.RegisterBoolSetting(
 	"if enabled, this setting enables a new implementation of the webhook sink"+
 		" that allows for a much higher throughput",
 	// TODO: delete the original webhook sink code
-	metamorphic.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink.enabled", true),
+	metamorphic.ConstantWithTestBool("changefeed.new_webhook_sink.enabled", true),
 	settings.WithName("changefeed.new_webhook_sink.enabled"),
 )
 
@@ -177,7 +177,7 @@ var PubsubV2Enabled = settings.RegisterBoolSetting(
 	"if enabled, this setting enables a new implementation of the pubsub sink"+
 		" that allows for a higher throughput",
 	// TODO: delete the original pubsub sink code
-	metamorphic.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink.enabled", true),
+	metamorphic.ConstantWithTestBool("changefeed.new_pubsub_sink.enabled", true),
 	settings.WithName("changefeed.new_pubsub_sink.enabled"),
 )
 
