@@ -29,7 +29,7 @@ func CheckDependencies(
 	for _, dep := range spec.Dependencies {
 		switch dep {
 		case registry.OperationRequiresNodes:
-			if len(c.Nodes()) == 0 {
+			if len(c.All()) == 0 {
 				return false, nil
 			}
 		case registry.OperationRequiresPopulatedDatabase:
