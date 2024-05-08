@@ -39,6 +39,7 @@ import (
 )
 
 const (
+	defaultSubscription = "e2e-infra"
 	// ProviderName is "azure".
 	ProviderName = "azure"
 	remoteUser   = "ubuntu"
@@ -1496,7 +1497,7 @@ func (p *Provider) createUltraDisk(
 }
 
 // getSubscription returns env.AZURE_SUBSCRIPTION_ID if it exists
-// or the first subscription when listing all available via an API call.
+// or the ID of the defaultSubscription.
 // The value is memoized in the Provider instance.
 func (p *Provider) getSubscription(ctx context.Context) (string, error) {
 	subscriptionId := func() string {
@@ -1511,7 +1512,7 @@ func (p *Provider) getSubscription(ctx context.Context) (string, error) {
 
 	subscriptionId = os.Getenv("AZURE_SUBSCRIPTION_ID")
 
-	// Fallback to retrieving the first subscription
+	// Fallback to retrieving the defaultSubscription.
 	if subscriptionId == "" {
 		authorizer, err := p.getAuthorizer()
 		if err != nil {
@@ -1520,16 +1521,28 @@ func (p *Provider) getSubscription(ctx context.Context) (string, error) {
 		sc := subscriptions.NewClient()
 		sc.Authorizer = authorizer
 
-		page, err := sc.List(ctx)
-		if err == nil {
-			if len(page.Values()) == 0 {
-				err = errors.New("did not find Azure subscription")
+		it, err := sc.ListComplete(ctx)
+		if err != nil {
+			return "", errors.Wrapf(err, "error listing Azure subscriptions")
+		}
+
+		// Iterate through all subscriptions to find the defaultSubscription.
+		// We have to do this as Azure requires the ID not just the name.
+		for it.NotDone() {
+			s := it.Value().SubscriptionID
+			name := it.Value().DisplayName
+			if s != nil && name != nil {
+				if *name == defaultSubscription {
+					subscriptionId = *s
+					break
+				}
+			}
+			if err = it.NextWithContext(ctx); err != nil {
 				return "", err
 			}
-			s := page.Values()[0].SubscriptionID
-			if s != nil {
-				subscriptionId = *s
-			}
+		}
+		if subscriptionId == "" {
+			return "", errors.Newf("Could not find default subscription: %s", defaultSubscription)
 		}
 	}
 
