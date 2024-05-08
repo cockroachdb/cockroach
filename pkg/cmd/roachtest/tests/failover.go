@@ -208,10 +208,13 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	rng, _ := randutil.NewTestRand()
 
-	// Create cluster, and set up failers for all failure modes.
+	// Create cluster, and set up failures for all failure modes.
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
+
+	// DistSender circuit breakers are useful for these chaos tests. Turn them on.
+	settings.ClusterSettings["kv.dist_sender.circuit_breakers.mode"] = "all ranges"
 
 	m := c.NewMonitor(ctx, c.Range(1, 9))
 
