@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
@@ -1310,7 +1311,7 @@ var _ = ((*logicTest)(nil)).newTestServerCluster
 // upgradeBinaryPath is given by the config's CockroachGoUpgradeVersion, or
 // is the locally built version if CockroachGoUpgradeVersion was not specified.
 func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath string) {
-	logsDir, err := os.MkdirTemp("", "cockroach-logs*")
+	logsDir, err := os.MkdirTemp(datapathutils.DebuggableTempDir(), "cockroach-logs*")
 	if err != nil {
 		t.Fatal(err)
 	}
