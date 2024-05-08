@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package release_23_1
+package release_24_1
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -17,20 +17,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 )
 
-func init() {
-	// When setting object parent ids, we need to add the function to schema, a
-	// function name is needed for this.
-	registerDepRule(
-		"function name should be set before parent ids",
-		scgraph.Precedence,
-		"function-name", "function-parent",
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.Type((*scpb.FunctionName)(nil)),
-				to.Type((*scpb.SchemaChild)(nil)),
-				JoinOnDescID(from, to, "function-id"),
-				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
-			}
-		},
-	)
+var registry = NewRegistry()
+
+func registerDepRule(
+	ruleName scgraph.RuleName,
+	kind scgraph.DepEdgeKind,
+	fromEl, toEl string,
+	def func(from, to NodeVars) rel.Clauses,
+) {
+	registry.RegisterDepRule(ruleName,
+		kind,
+		fromEl, toEl,
+		def)
+}
+
+func registerDepRuleForDrop(
+	ruleName scgraph.RuleName,
+	kind scgraph.DepEdgeKind,
+	from, to string,
+	fromStatus, toStatus scpb.Status,
+	fn func(from, to NodeVars) rel.Clauses,
+) {
+	RegisterDepRuleForDrop(registry,
+		ruleName,
+		kind,
+		from, to,
+		fromStatus, toStatus,
+		fn)
+}
+
+// GetRegistry returns the registry for this cockroach release.
+func GetRegistry() *Registry {
+	return registry
 }

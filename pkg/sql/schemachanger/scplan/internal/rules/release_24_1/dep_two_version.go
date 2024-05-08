@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package release_23_1
+package release_24_1
 
 import (
 	"fmt"
@@ -60,16 +60,24 @@ func init() {
 		t opgen.Transition,
 		prePrevStatuses []scpb.Status,
 	) rel.Clauses {
+		descriptorData := MkNodeVars("descriptor-data")
+		var descID rel.Var = "descID"
 		clauses := rel.Clauses{
 			from.Type(el),
 			to.Type(el),
-			from.El.AttrEqVar(screl.DescID, "_"),
+			from.El.AttrEqVar(screl.DescID, descID),
 			from.El.AttrEqVar(rel.Self, to.El),
 			from.Target.AttrEqVar(rel.Self, to.Target),
 			from.Target.AttrEq(screl.TargetStatus, targetStatus.Status()),
 			from.Node.AttrEq(screl.CurrentStatus, t.From()),
 			to.Node.AttrEq(screl.CurrentStatus, t.To()),
 			descriptorIsNotBeingDropped(from.El),
+			// Make sure to join a data element to confirm that data exists.
+			descriptorData.Type((*scpb.TableData)(nil)),
+			descriptorData.JoinTargetNode(),
+			descriptorData.CurrentStatus(scpb.Status_PUBLIC),
+			descriptorData.DescIDEq(descID),
+			descriptorDataIsNotBeingAdded(descID),
 		}
 		if len(prePrevStatuses) > 0 {
 			clauses = append(clauses,
@@ -90,7 +98,7 @@ func init() {
 			))
 			registerDepRule(
 				ruleName,
-				scgraph.PreviousStagePrecedence,
+				scgraph.PreviousTransactionPrecedence,
 				"prev", "next",
 				func(from, to NodeVars) rel.Clauses {
 					return clausesForTwoVersionEdge(
