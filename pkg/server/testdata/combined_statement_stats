@@ -1,0 +1,136 @@
+query sort=PCT_RUNTIME limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY ((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
+                         (statistics -> 'statistics' ->> 'cnt')::FLOAT) DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=SERVICE_LAT limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=CPU_TIME limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::FLOAT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=EXECUTION_COUNT limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' ->> 'cnt')::INT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=P99_STMTS_ONLY limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::FLOAT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=CONTENTION_TIME limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=LATENCY_INFO_P50 limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'latencyInfo' ->> 'p50')::FLOAT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=LATENCY_INFO_P90 limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'latencyInfo' ->> 'p90')::FLOAT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=LATENCY_INFO_MIN limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'latencyInfo' ->> 'min')::FLOAT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=LATENCY_INFO_MAX limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'latencyInfo' ->> 'max')::FLOAT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=ROWS_PROCESSED limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY ((statistics -> 'statistics' -> 'rowsRead' ->> 'mean')::FLOAT + 
+												 (statistics -> 'statistics' -> 'rowsWritten' ->> 'mean')::FLOAT) DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=MAX_MEMORY limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'execution_statistics' -> 'maxMemUsage' ->> 'mean')::FLOAT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=NETWORK limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'execution_statistics' -> 'networkBytes' ->> 'mean')::FLOAT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=RETRIES limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' ->> 'maxRetries')::INT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=LAST_EXEC limit=100 internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' ->> 'lastExecAt') DESC LIMIT $1
+--ARGS--
+[20000]
