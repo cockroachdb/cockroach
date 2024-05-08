@@ -13,4 +13,6 @@
 **/*.toolbox/**/MC.cfg
 **/*.pdf
 **/*.old
+**/*.out
+**/states
 **/*~
