@@ -236,7 +236,7 @@ func sendAddRemoteSSTWorker(
 			// key to split on. Note that it only is safe with
 			// https://github.com/cockroachdb/cockroach/pull/114464
 			log.Infof(ctx, "flushing %s batch of %d SSTs at end of restore span entry %s", sz(batchSize), len(toAdd), entry.Span)
-			rewrittenFlushKey, ok, err := kr.RewriteKey(entry.Span.EndKey, 0)
+			rewrittenFlushKey, ok, err := kr.RewriteKey(entry.Span.EndKey.Clone(), 0)
 			if !ok || err != nil {
 				return errors.Newf("flush key %s could not be rewritten", entry.Span.EndKey)
 			}
@@ -503,11 +503,18 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 		return nil
 	}
 
+	kr, err := MakeKeyRewriterFromRekeys(execConfig.Codec, mainRestoreData.getRekeys(), mainRestoreData.getTenantRekeys(),
+		false /* restoreTenantFromStream */)
+	if err != nil {
+		return errors.Wrap(err, "creating key rewriter from rekeys")
+	}
 	downloadSpans := mainRestoreData.getSpans()
-	if !preRestoreData.isEmpty() {
-		// Order the pre restore data first so they are downloaded first.
-		downloadSpans = preRestoreData.getSpans()
-		downloadSpans = append(downloadSpans, mainRestoreData.getSpans()...)
+	for i := range downloadSpans {
+		var err error
+		downloadSpans[i], err = rewriteSpan(kr, downloadSpans[i].Clone(), execinfrapb.ElidePrefix_None)
+		if err != nil {
+			return err
+		}
 	}
 
 	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
