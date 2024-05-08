@@ -638,6 +638,10 @@ type backupSpecs struct {
 	// TODO(msbutler): if another fixture requires a different backup option,
 	// create a new backupOpts struct.
 	nonRevisionHistory bool
+
+	// customFixtureDir is used when an engineer is naughty and doesn't create the
+	// backup fixture in the correct fixture path.
+	customFixtureDir string
 }
 
 func (bs backupSpecs) CloudIsCompatible(cloud string) error {
@@ -670,6 +674,9 @@ func (bs backupSpecs) storagePrefix() string {
 func (bs backupSpecs) backupCollection() string {
 	// N.B. AWS buckets are _regional_ whereas GCS buckets are _multi-regional_. Thus, in order to avoid egress (cost),
 	// we use us-east-2 for AWS, which is the default region for all roachprod clusters. (See roachprod/vm/aws/aws.go)
+	if bs.customFixtureDir != "" {
+		return bs.customFixtureDir
+	}
 	properties := ""
 	if bs.nonRevisionHistory {
 		properties = "/rev-history=false"
@@ -718,6 +725,9 @@ func makeBackupSpecs(override backupSpecs, specs backupSpecs) backupSpecs {
 
 	if override.workload != nil {
 		specs.workload = override.workload
+	}
+	if override.customFixtureDir != "" {
+		specs.customFixtureDir = override.customFixtureDir
 	}
 	return specs
 }
@@ -820,6 +830,7 @@ type tpccRestoreOptions struct {
 	warehouses     int
 	workers        int
 	maxOps         int
+	maxRate        int
 	waitFraction   float64
 	queryTraceFile string
 	seed           uint64
@@ -850,6 +861,7 @@ func (tpcc tpccRestore) run(
 		MaybeFlag(tpcc.opts.workers > 0, "workers", tpcc.opts.workers).
 		MaybeFlag(tpcc.opts.waitFraction != 1, "wait", tpcc.opts.waitFraction).
 		MaybeFlag(tpcc.opts.maxOps != 0, "max-ops", tpcc.opts.maxOps).
+		MaybeFlag(tpcc.opts.maxRate != 0, "max-rate", tpcc.opts.maxRate).
 		MaybeFlag(tpcc.opts.seed != 0, "seed", tpcc.opts.seed).
 		MaybeFlag(tpcc.opts.fakeTime != 0, "fake-time", tpcc.opts.fakeTime).
 		MaybeFlag(tpcc.opts.queryTraceFile != "", "query-trace-file", tpcc.opts.queryTraceFile).
@@ -867,14 +879,12 @@ func (tpcc tpccRestore) String() string {
 	switch tpcc.opts.warehouses {
 	case 10:
 		builder.WriteString("150MB")
-	case 500:
-		builder.WriteString("8GB")
-	case 7000:
-		builder.WriteString("115GB")
-	case 25000:
-		builder.WriteString("400GB")
+	case 5000:
+		builder.WriteString("350GB")
+	case 150000:
+		builder.WriteString("8TB")
 	default:
-		panic("tpcc warehouse count not recognized")
+		panic(fmt.Sprintf("tpcc warehouse %d count not recognized", tpcc.opts.warehouses))
 	}
 	return builder.String()
 }
@@ -895,7 +905,7 @@ type restoreSpecs struct {
 	suites  registry.SuiteSet
 
 	// restoreUptoIncremental specifies the number of incremental backups in the
-	// chain to restore up to.
+	// chain to restore up to. If set to 0, no AOST is used.
 	restoreUptoIncremental int
 
 	// namePrefix appears in the name of the roachtest, i.e. `restore/{prefix}/{config}`.
@@ -957,14 +967,7 @@ type restoreDriver struct {
 	aost string
 }
 
-func validateRestoreSpecs(t test.Test, sp restoreSpecs) {
-	if sp.restoreUptoIncremental == 0 {
-		t.Fatalf("invalid restoreSpecs; unspecified restoreUptoIncremental field")
-	}
-}
-
 func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreDriver {
-	validateRestoreSpecs(t, sp)
 	return restoreDriver{
 		t:  t,
 		c:  c,
@@ -994,6 +997,10 @@ func (rd *restoreDriver) prepareCluster(ctx context.Context) {
 
 // getAOST gets the AOST to use in the restore cmd.
 func (rd *restoreDriver) getAOST(ctx context.Context) {
+	if rd.sp.restoreUptoIncremental == 0 {
+		rd.aost = ""
+		return
+	}
 	var aost string
 	conn := rd.c.Conn(ctx, rd.t.L(), 1)
 	defer conn.Close()
@@ -1003,8 +1010,12 @@ func (rd *restoreDriver) getAOST(ctx context.Context) {
 }
 
 func (rd *restoreDriver) restoreCmd(target, opts string) string {
-	query := fmt.Sprintf(`RESTORE %s FROM %s IN %s AS OF SYSTEM TIME '%s' %s`,
-		target, rd.sp.backup.fullBackupDir, rd.sp.backup.backupCollection(), rd.aost, opts)
+	var aostSubCmd string
+	if rd.aost != "" {
+		aostSubCmd = fmt.Sprintf("AS OF SYSTEM TIME '%s'", rd.aost)
+	}
+	query := fmt.Sprintf(`RESTORE %s FROM %s IN %s %s %s`,
+		target, rd.sp.backup.fullBackupDir, rd.sp.backup.backupCollection(), aostSubCmd, opts)
 	rd.t.L().Printf("Running restore cmd: %s", query)
 	return query
 }
