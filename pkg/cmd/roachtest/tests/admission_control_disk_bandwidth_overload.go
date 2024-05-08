@@ -13,12 +13,16 @@ package tests
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -48,6 +52,43 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--attrs=n%d", i))
 				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 			}
+
+			// TODO(aaditya): This function shares a lot of logic with roachtestutil.DiskStaller. Consider merging the two.
+			setBandwidthLimit := func(nodes option.NodeListOption, rw string, bw int, max bool) error {
+				res, err := c.RunWithDetailsSingleNode(context.TODO(), t.L(), option.WithNodes(nodes[:1]), "lsblk | grep /mnt/data1 | awk '{print $2}'")
+				if err != nil {
+					t.Fatalf("error when determining block device: %s", err)
+				}
+				parts := strings.Split(strings.TrimSpace(res.Stdout), ":")
+				if len(parts) != 2 {
+					t.Fatalf("unexpected output from lsblk: %s", res.Stdout)
+				}
+				major, err := strconv.Atoi(parts[0])
+				if err != nil {
+					t.Fatalf("error when determining block device: %s", err)
+				}
+				minor, err := strconv.Atoi(parts[1])
+				if err != nil {
+					t.Fatalf("error when determining block device: %s", err)
+				}
+
+				cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", roachtestutil.SystemInterfaceSystemdUnitName()+".service", "io.max")
+				bytesPerSecondStr := "max"
+				if !max {
+					bytesPerSecondStr = fmt.Sprintf("%d", bw)
+				}
+				return c.RunE(ctx, option.WithNodes(nodes), "sudo", "/bin/bash", "-c", fmt.Sprintf(
+					`'echo %d:%d %s=%s > %s'`,
+					major,
+					minor,
+					rw,
+					bytesPerSecondStr,
+					cockroachIOController,
+				))
+			}
+
+			setBandwidthLimit(c.Range(1, crdbNodes), "wbps", 1<<27 /* 128MiB */, false)
+			setBandwidthLimit(c.Range(1, crdbNodes), "rbps", 1<<27 /* 128MiB */, false)
 
 			db := c.Conn(ctx, t.L(), crdbNodes)
 			defer db.Close()
