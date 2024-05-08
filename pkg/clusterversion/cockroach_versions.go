@@ -257,6 +257,13 @@ const (
 	// the system tenant to ensure it is a superset of secondary tenants.
 	V24_1_AddSpanCounts
 
+	// V24_1 is CockroachDB v24.1. It's used for all v24.1.x patch releases.
+	V24_1
+
+	// V24_2Start demarcates the start of cluster versions stepped through during
+	// the process of upgrading from 24.1 to 24.2.
+	V24_2Start
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -317,6 +324,11 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1_ReplicatedLockPipelining:             {Major: 23, Minor: 2, Internal: 24},
 	V24_1_AddSpanCounts:                        {Major: 23, Minor: 2, Internal: 26},
 
+	V24_1: {Major: 24, Minor: 1, Internal: 0},
+
+	// v24.2 versions. Internal versions must be even.
+	V24_2Start: {Major: 24, Minor: 1, Internal: 2},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -334,15 +346,15 @@ const MinSupported Key = V23_2
 //
 // Note: this is always the last element of SupportedPreviousReleases(); it is
 // also provided as a constant for convenience.
-const PreviousRelease Key = V23_2
+const PreviousRelease Key = V24_1
 
-// V24_1 is a placeholder that will eventually be replaced by the actual 24.1
+// V24_2 is a placeholder that will eventually be replaced by the actual 24.2
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 24.1 and has completed all associated migrations; most
+// a cluster is running 24.2 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 24.1.
-const V24_1 = Latest
+// only need to check that the cluster has upgraded to 24.2.
+const V24_2 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only

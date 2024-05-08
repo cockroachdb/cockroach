@@ -23,16 +23,16 @@ CREATE SEQUENCE cache_test PER NODE CACHE 10
 statement error pq: at or near "per": syntax error
 ALTER SEQUENCE cache_test PER NODE CACHE 10
 
-# Upgrade one node to 24.1
+# Upgrade one node to 24.2
 
 upgrade 0
 
-# Verify that node index 0 is now running 24.1 binary.
+# Verify that node index 0 is now running 24.2 binary.
 
 query T nodeidx=0
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-24.1
+24.2
 
 statement error pgcode 0A000 node-level cache not supported before V24.1
 CREATE SEQUENCE cache_test PER NODE CACHE 10
@@ -53,18 +53,15 @@ SET CLUSTER SETTING version = crdb_internal.node_executable_version();
 query T nodeidx=1
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-24.1
+24.2
 
 query T nodeidx=2
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-24.1
+24.2
 
-# Since clusterversion.V24_1 is currently a placeholder and points to the latest Key,
-# this query will fail once latest or V24_1 is updated. Will have to change this query
-# to match that new internal version.
 query B retry
-SELECT crdb_internal.is_at_least_version('23.2-18')
+SELECT crdb_internal.is_at_least_version('24.1-02')
 ----
 true
 
