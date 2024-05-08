@@ -22,11 +22,13 @@ import (
 
 var showExternalConnectionsColumns = colinfo.ResultColumns{
 	{Name: "connection_name", Typ: types.String},
+	{Name: "connection_uri", Typ: types.String},
 	{Name: "connection_type", Typ: types.String},
 }
 
 const (
 	extConnNameIdx = iota
+	extConnURIIdx
 	extConnTypeIdx
 )
 
@@ -60,6 +62,7 @@ func (p *planner) ShowExternalConnection(
 			for _, conn := range connections {
 				row := tree.Datums{
 					extConnNameIdx: tree.NewDString(conn.ConnectionName()),
+					extConnURIIdx:  tree.NewDString(conn.RedactedConnectionURI()),
 					extConnTypeIdx: tree.NewDString(conn.ConnectionType().String()),
 				}
 				if _, err := v.rows.AddRow(ctx, row); err != nil {

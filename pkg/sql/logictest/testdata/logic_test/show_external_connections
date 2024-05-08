@@ -1,26 +1,30 @@
+# Here are tests for basic output of SHOW EXTERNAL CONNECTIONS
+# and various privileges scenarios. Tests for URI redaction for cloud providers
+# are located at pkg/ccl/cloudccl/externalconn/testdata
+
 statement ok
 CREATE EXTERNAL CONNECTION foo_conn AS 'nodelocal://1/foo';
 CREATE EXTERNAL CONNECTION bar_conn AS 'nodelocal://1/bar';
 
-query TT colnames,rowsort
+query TTT colnames,rowsort
 SHOW EXTERNAL CONNECTIONS
 ----
-connection_name connection_type
-bar_conn        STORAGE
-foo_conn        STORAGE
+connection_name connection_uri    connection_type
+bar_conn        nodelocal://1/bar STORAGE
+foo_conn        nodelocal://1/foo STORAGE
 
-query TT colnames,rowsort
+query TTT colnames,rowsort
 SHOW EXTERNAL CONNECTION foo_conn
 ----
-connection_name connection_type
-foo_conn        STORAGE
+connection_name connection_uri  connection_type
+foo_conn        nodelocal://1/foo STORAGE
 
 user testuser
 
-query TT colnames,rowsort
+query TTT colnames,rowsort
 SHOW EXTERNAL CONNECTIONS
 ----
-connection_name connection_type
+connection_name connection_uri  connection_type
 
 statement error pq: must have USAGE privilege or be owner of the External Connection "foo_conn"
 SHOW EXTERNAL CONNECTION foo_conn
@@ -32,17 +36,17 @@ GRANT USAGE ON EXTERNAL CONNECTION foo_conn TO testuser;
 
 user testuser
 
-query TT colnames,rowsort
+query TTT colnames,rowsort
 SHOW EXTERNAL CONNECTIONS
 ----
-connection_name connection_type
-foo_conn        STORAGE
+connection_name connection_uri  connection_type
+foo_conn        nodelocal://1/foo STORAGE
 
-query TT colnames,rowsort
+query TTT colnames,rowsort
 SHOW EXTERNAL CONNECTION foo_conn
 ----
-connection_name connection_type
-foo_conn        STORAGE
+connection_name connection_uri  connection_type
+foo_conn        nodelocal://1/foo STORAGE
 
 statement error pq: must have USAGE privilege or be owner of the External Connection "bar_conn"
 SHOW EXTERNAL CONNECTION bar_conn
@@ -58,9 +62,9 @@ user testuser
 statement ok
 CREATE EXTERNAL CONNECTION baz_conn AS 'nodelocal://1/baz';
 
-query TT colnames,rowsort
+query TTT colnames,rowsort
 SHOW EXTERNAL CONNECTIONS
 ----
-connection_name connection_type
-foo_conn        STORAGE
-baz_conn        STORAGE
+connection_name connection_uri    connection_type
+foo_conn        nodelocal://1/foo STORAGE
+baz_conn        nodelocal://1/baz STORAGE
