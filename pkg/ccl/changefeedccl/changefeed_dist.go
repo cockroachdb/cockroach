@@ -37,12 +37,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -351,7 +351,7 @@ var RangeDistributionStrategy = settings.RegisterEnumSetting(
 	"configures how work is distributed among nodes for a given changefeed. "+
 		"for the most balanced distribution, use `balanced_simple`. changing this setting "+
 		"will not override locality restrictions",
-	util.ConstantWithMetamorphicTestChoice("default_range_distribution_strategy",
+	metamorphic.ConstantWithMetamorphicTestChoice("default_range_distribution_strategy",
 		"default", "balanced_simple").(string),
 	map[int64]string{
 		int64(defaultDistribution):        "default",

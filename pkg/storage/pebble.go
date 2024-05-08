@@ -36,12 +36,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -68,7 +68,7 @@ var ValueBlocksEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel, // used for temp storage in virtual cluster servers
 	"storage.value_blocks.enabled",
 	"set to true to enable writing of value blocks in sstables",
-	util.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithMetamorphicTestBool(
 		"storage.value_blocks.enabled", true),
 	settings.WithPublic)
 
@@ -82,7 +82,7 @@ var UseEFOS = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.experimental.eventually_file_only_snapshots.enabled",
 	"set to false to disable eventually-file-only-snapshots (kv.snapshot_receiver.excise.enabled must also be false)",
-	util.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithMetamorphicTestBool(
 		"storage.experimental.eventually_file_only_snapshots.enabled", true), /* defaultValue */
 	settings.WithPublic)
 
@@ -96,7 +96,7 @@ var UseExciseForSnapshots = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.snapshot_receiver.excise.enabled",
 	"set to false to disable excises in place of range deletions for KV snapshots",
-	util.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithMetamorphicTestBool(
 		"kv.snapshot_receiver.excise.enabled", true), /* defaultValue */
 	settings.WithPublic,
 )
@@ -111,7 +111,7 @@ var IngestSplitEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.ingest_split.enabled",
 	"set to false to disable ingest-time splitting that lowers write-amplification",
-	util.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithMetamorphicTestBool(
 		"storage.ingest_split.enabled", true), /* defaultValue */
 	settings.WithPublic,
 )
@@ -129,7 +129,7 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	settings.ApplicationLevel, // used to init temp storage in virtual cluster servers
 	"storage.ingest_as_flushable.enabled",
 	"set to true to enable lazy ingestion of sstables",
-	util.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithMetamorphicTestBool(
 		"storage.ingest_as_flushable.enabled", true))
 
 const (

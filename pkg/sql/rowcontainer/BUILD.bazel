@@ -34,6 +34,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/metamorphic",
         "//pkg/util/mon",
         "//pkg/util/ring",
         "//pkg/util/sort",

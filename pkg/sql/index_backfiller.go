@@ -195,7 +195,7 @@ func (ib *IndexBackfillPlanner) plan(
 		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(
 			ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
 		)
-		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
+		// TODO(ajwerner): Adopt metamorphic.ConstantWithMetamorphicTestRange for the
 		// batch size. Also plumb in a testing knob.
 		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
 		const writeAtRequestTimestamp = true
