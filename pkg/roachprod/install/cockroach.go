@@ -622,12 +622,10 @@ func (c *SyncedCluster) NodeURL(
 	} else {
 		v.Add("sslmode", "disable")
 	}
-	// Add the virtual cluster name option explicitly for shared-process
-	// tenants or for the system tenant. This is to make sure we connect
-	// to the system tenant in case we have previously changed the
-	// default virtual cluster.
-	if (serviceMode == ServiceModeShared && virtualClusterName != "") ||
-		virtualClusterName == SystemInterfaceName {
+
+	// Add the cluster connection parameter explicitly for
+	// shared-process virtual clusters when a cluster name was passed.
+	if serviceMode == ServiceModeShared && virtualClusterName != "" {
 		v.Add("options", fmt.Sprintf("-ccluster=%s", virtualClusterName))
 	}
 	u.RawQuery = v.Encode()
