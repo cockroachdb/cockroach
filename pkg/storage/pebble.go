@@ -70,7 +70,7 @@ var UseEFOS = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.experimental.eventually_file_only_snapshots.enabled",
 	"set to false to disable eventually-file-only-snapshots (kv.snapshot_receiver.excise.enabled must also be false)",
-	metamorphic.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithTestBool(
 		"storage.experimental.eventually_file_only_snapshots.enabled", true), /* defaultValue */
 	settings.WithPublic)
 
@@ -84,7 +84,7 @@ var UseExciseForSnapshots = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.snapshot_receiver.excise.enabled",
 	"set to false to disable excises in place of range deletions for KV snapshots",
-	metamorphic.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithTestBool(
 		"kv.snapshot_receiver.excise.enabled", true), /* defaultValue */
 	settings.WithPublic,
 )
@@ -99,7 +99,7 @@ var IngestSplitEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.ingest_split.enabled",
 	"set to false to disable ingest-time splitting that lowers write-amplification",
-	metamorphic.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithTestBool(
 		"storage.ingest_split.enabled", true), /* defaultValue */
 	settings.WithPublic,
 )
@@ -117,7 +117,7 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	settings.ApplicationLevel, // used to init temp storage in virtual cluster servers
 	"storage.ingest_as_flushable.enabled",
 	"set to true to enable lazy ingestion of sstables",
-	metamorphic.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithTestBool(
 		"storage.ingest_as_flushable.enabled", true))
 
 const (

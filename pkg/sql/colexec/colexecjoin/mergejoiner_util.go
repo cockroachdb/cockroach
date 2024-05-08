@@ -47,7 +47,7 @@ type circularGroupsBuffer struct {
 
 // groupsBufferInitialSize determines the size used in initial allocations of
 // the slices of the circularGroupsBuffer.
-var groupsBufferInitialSize = metamorphic.ConstantWithMetamorphicTestRange(
+var groupsBufferInitialSize = metamorphic.ConstantWithTestRange(
 	"merge-joiner-groups-buffer",
 	8,  /* defaultValue */
 	1,  /* min */

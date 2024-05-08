@@ -62,7 +62,7 @@ const CopyBatchRowSizeDefault = 100
 const CopyBatchRowSizeVectorDefault = 32 << 10
 
 // When this many rows are in the copy buffer, they are inserted.
-var CopyBatchRowSize = metamorphic.ConstantWithMetamorphicTestRange("copy-batch-size", CopyBatchRowSizeDefault, 1, 50_000)
+var CopyBatchRowSize = metamorphic.ConstantWithTestRange("copy-batch-size", CopyBatchRowSizeDefault, 1, 50_000)
 
 // SetCopyFromBatchSize exports overriding copy batch size for test code.
 func SetCopyFromBatchSize(i int) int {

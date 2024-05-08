@@ -94,7 +94,7 @@ var WriteMetadataSST = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
-	metamorphic.ConstantWithMetamorphicTestBool("write-metadata-sst", false),
+	metamorphic.ConstantWithTestBool("write-metadata-sst", false),
 )
 
 // WriteMetadataWithExternalSSTsEnabled controls if we write a `BACKUP_METADATA`
@@ -105,7 +105,7 @@ var WriteMetadataWithExternalSSTsEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"backup.write_metadata_with_external_ssts.enabled",
 	"write BACKUP metadata along with supporting SST files",
-	metamorphic.ConstantWithMetamorphicTestBool("backup.write_metadata_with_external_ssts.enabled", true),
+	metamorphic.ConstantWithTestBool("backup.write_metadata_with_external_ssts.enabled", true),
 )
 
 // IsGZipped detects whether the given bytes represent GZipped data. This check

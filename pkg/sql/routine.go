@@ -494,7 +494,7 @@ func (g *routineGenerator) Close(ctx context.Context) {
 	*g = routineGenerator{}
 }
 
-var tailCallOptimizationEnabled = metamorphic.ConstantWithMetamorphicTestBool(
+var tailCallOptimizationEnabled = metamorphic.ConstantWithTestBool(
 	"tail-call-optimization-enabled",
 	true,
 )

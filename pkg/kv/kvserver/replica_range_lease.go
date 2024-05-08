@@ -91,7 +91,7 @@ var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	// builds because TestClusters are usually so slow that they're unable
 	// to maintain leases/leadership/liveness.
 	!syncutil.DeadlockEnabled &&
-		metamorphic.ConstantWithMetamorphicTestBool("kv.expiration_leases_only.enabled", false),
+		metamorphic.ConstantWithTestBool("kv.expiration_leases_only.enabled", false),
 )
 
 // ExpirationLeasesMaxReplicasPerNode converts from expiration back to epoch

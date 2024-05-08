@@ -45,7 +45,7 @@ import (
 // smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
 // bugs in time-bound iterators. We disable this under race, due to the slowdown.
 var smallEngineBlocks = !util.RaceEnabled &&
-	metamorphic.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
+	metamorphic.ConstantWithTestBool("small-engine-blocks", false)
 
 func init() {
 	randutil.SeedForTests()

@@ -31,7 +31,7 @@ import (
 
 // smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
 // bugs in time-bound iterators.
-var smallEngineBlocks = metamorphic.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
+var smallEngineBlocks = metamorphic.ConstantWithTestBool("small-engine-blocks", false)
 
 // TODO(erikgrinaker): This should be migrated to a data-driven test harness for
 // end-to-end rangefeed testing, with more exhaustive test cases. See:

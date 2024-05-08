@@ -1115,7 +1115,7 @@ func splitTrigger(
 // the split trigger. In practice, the splitQueue wants to scan the left hand
 // side because the split key computation ensures that we do not create large
 // LHS ranges. However, to improve test coverage, we use a metamorphic value.
-var splitScansRightForStatsFirst = metamorphic.ConstantWithMetamorphicTestBool(
+var splitScansRightForStatsFirst = metamorphic.ConstantWithTestBool(
 	"split-scans-right-for-stats-first", false)
 
 // makeScanStatsFn constructs a splitStatsScanFn for the provided post-split

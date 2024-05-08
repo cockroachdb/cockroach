@@ -67,7 +67,7 @@ const (
 
 // default configuration for parsing JSON.
 var parseJSONDefaultConfig = func() (cfg parseConfig) {
-	cfg.impl = metamorphic.ConstantWithMetamorphicTestChoice(
+	cfg.impl = metamorphic.ConstantWithTestChoice(
 		"parse-json-impl", useFastJSONParser, useStdGoJSON,
 	).(parseJSONImplType)
 	return cfg

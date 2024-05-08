@@ -178,7 +178,7 @@ func randomizeHashAggregatorMaxBuffered() {
 	if maxHashAggregatorMaxBuffered > coldata.MaxBatchSize {
 		maxHashAggregatorMaxBuffered = coldata.MaxBatchSize
 	}
-	hashAggregatorMaxBuffered = metamorphic.ConstantWithMetamorphicTestRange(
+	hashAggregatorMaxBuffered = metamorphic.ConstantWithTestRange(
 		"hash-aggregator-max-buffered",
 		coldata.MaxBatchSize,
 		coldata.BatchSize(),

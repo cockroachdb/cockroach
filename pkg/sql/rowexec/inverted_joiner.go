@@ -42,7 +42,7 @@ import (
 // higher scan throughput of larger batches and the cost of spilling the
 // scanned rows to disk. The spilling cost will probably be dominated by
 // the de-duping cost, since it incurs a read.
-var invertedJoinerBatchSize = metamorphic.ConstantWithMetamorphicTestValue(
+var invertedJoinerBatchSize = metamorphic.ConstantWithTestValue(
 	"inverted-joiner-batch-size",
 	100, /* defaultValue */
 	1,   /* metamorphicValue */

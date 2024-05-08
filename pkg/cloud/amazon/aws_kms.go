@@ -62,7 +62,7 @@ var reuseKMSSession = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"cloudstorage.aws.reuse_kms_session.enabled",
 	"persist the last opened AWS KMS session and reuse it when opening a new session with the same arguments",
-	metamorphic.ConstantWithMetamorphicTestBool("aws-reuse-kms", true),
+	metamorphic.ConstantWithTestBool("aws-reuse-kms", true),
 )
 
 var kmsClientCache struct {

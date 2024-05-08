@@ -600,7 +600,7 @@ var (
 	// the entire user keyspace during cluster bootstrapping. This should not
 	// semantically affect the test data written above it, but will activate MVCC
 	// range tombstone code paths in the storage layer for testing.
-	globalMVCCRangeTombstone = metamorphic.ConstantWithMetamorphicTestBool(
+	globalMVCCRangeTombstone = metamorphic.ConstantWithTestBool(
 		"logictest-global-mvcc-range-tombstone", false)
 
 	// useMVCCRangeTombstonesForPointDeletes will use point-sized MVCC range
@@ -609,7 +609,7 @@ var (
 	// code paths in the storage/KV layer, for testing. This may result in
 	// incorrect MVCC stats for RangeKey* fields in rare cases, due to point
 	// writes not holding appropriate latches for range key stats update.
-	useMVCCRangeTombstonesForPointDeletes = metamorphic.ConstantWithMetamorphicTestBool(
+	useMVCCRangeTombstonesForPointDeletes = metamorphic.ConstantWithTestBool(
 		"logictest-use-mvcc-range-tombstones-for-point-deletes", false)
 
 	// BackupRestoreProbability is the environment variable for `3node-backup` config.
