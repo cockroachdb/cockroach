@@ -236,7 +236,7 @@ func sendAddRemoteSSTWorker(
 			// key to split on. Note that it only is safe with
 			// https://github.com/cockroachdb/cockroach/pull/114464
 			log.Infof(ctx, "flushing %s batch of %d SSTs at end of restore span entry %s", sz(batchSize), len(toAdd), entry.Span)
-			rewrittenFlushKey, ok, err := kr.RewriteKey(entry.Span.EndKey, 0)
+			rewrittenFlushKey, ok, err := kr.RewriteKey(entry.Span.EndKey.Clone(), 0)
 			if !ok || err != nil {
 				return errors.Newf("flush key %s could not be rewritten", entry.Span.EndKey)
 			}
@@ -508,11 +508,10 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 	if err != nil {
 		return errors.Wrap(err, "creating key rewriter from rekeys")
 	}
-
 	downloadSpans := mainRestoreData.getSpans()
 	for i := range downloadSpans {
 		var err error
-		downloadSpans[i], err = rewriteSpan(kr, downloadSpans[i], execinfrapb.ElidePrefix_None)
+		downloadSpans[i], err = rewriteSpan(kr, downloadSpans[i].Clone(), execinfrapb.ElidePrefix_None)
 		if err != nil {
 			return err
 		}
