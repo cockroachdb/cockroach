@@ -2313,7 +2313,7 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	`copy_num_retries_per_batch`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`copy_num_retries_per_batch`),
+		GetStringVal: makeIntGetStringValFn(`copy_num_retries_per_batch`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			b, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
