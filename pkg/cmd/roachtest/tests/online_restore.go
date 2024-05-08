@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -80,17 +81,31 @@ func registerOnlineRestorePerf(r registry.Registry) {
 			skip:                   "fails because of #118283",
 		},
 		{
-			// 8TB tpce Online Restore
-			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000,
-				ebsThroughput: 1000 /* MB/s */, workloadNode: true}),
+			// 350 GB tpcc Online Restore
+			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
 			backup: makeRestoringBackupSpecs(backupSpecs{
 				nonRevisionHistory: true,
-				version:            fixtureFromMasterVersion,
-				workload:           tpceRestore{customers: 500000}}),
-			timeout:                5 * time.Hour,
+				cloud:              spec.GCE,
+				version:            "24.1",
+				workload:           tpccRestore{tpccRestoreOptions{warehouses: 5000, waitFraction: 0, workers: 100, maxRate: 300}},
+				customFixtureDir:   `'gs://cockroach-fixtures-us-east1/backups/tpc-c/v24.1/db/warehouses=5k?AUTH=implicit'`}),
+			timeout:                1 * time.Hour,
 			suites:                 registry.Suites(registry.Nightly),
-			restoreUptoIncremental: 1,
-			skip:                   "used for ad hoc experiments",
+			restoreUptoIncremental: 0,
+		},
+		{
+			// 8.5TB tpcc Online Restore
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 1500, workloadNode: true}),
+			backup: makeRestoringBackupSpecs(backupSpecs{
+				nonRevisionHistory: true,
+				cloud:              spec.GCE,
+				version:            "24.1",
+				workload:           tpccRestore{tpccRestoreOptions{warehouses: 150000, waitFraction: 0, workers: 100, maxRate: 1000}},
+				customFixtureDir:   `'gs://cockroach-fixtures-us-east1/backups/tpc-c/v24.1/db/warehouses=150k?AUTH=implicit'`}),
+			timeout:                3 * time.Hour,
+			suites:                 registry.Suites(registry.Nightly),
+			restoreUptoIncremental: 0,
+			skip: "link phase is really slow, which will cause the test to time out",
 		},
 	} {
 		for _, runOnline := range []bool{true, false} {

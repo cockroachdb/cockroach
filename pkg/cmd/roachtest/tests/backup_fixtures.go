@@ -356,7 +356,7 @@ func registerBackupFixtures(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
 			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
 				backupSpecs: backupSpecs{
-					workload:           tpccRestore{opts: tpccRestoreOptions{warehouses: 500}},
+					workload:           tpccRestore{opts: tpccRestoreOptions{warehouses: 5000}},
 					nonRevisionHistory: true,
 				},
 			}),
