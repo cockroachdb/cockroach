@@ -83,7 +83,7 @@ var SecondaryTenantsAllZoneConfigsEnabled = settings.RegisterBoolSetting(
 // to be set up to be multi-region.
 var MultiRegionSystemDatabaseEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
-	"sql.multiregion.preview_multiregion_system_database.enabled",
+	"sql.multiregion.system_database_multiregion.enabled",
 	"enable option to set up system database as multi-region",
 	false,
 )
