@@ -69,6 +69,12 @@ type initialValuesFactoryFn = func(opts InitialValuesOpts) (
 
 var initialValuesFactoryByKey = map[clusterversion.Key]initialValuesFactoryFn{
 	clusterversion.Latest: buildLatestInitialValues,
+	clusterversion.V24_1: hardCodedInitialValues{
+		system:        v24_1_system_keys,
+		systemHash:    v24_1_system_sha256,
+		nonSystem:     v24_1_tenant_keys,
+		nonSystemHash: v24_1_tenant_sha256,
+	}.build,
 	clusterversion.V23_2: hardCodedInitialValues{
 		system:        v23_2_system_keys,
 		systemHash:    v23_2_system_sha256,
@@ -162,3 +168,15 @@ var v23_2_tenant_keys string
 
 //go:embed data/23_2_tenant.sha256
 var v23_2_tenant_sha256 string
+
+//go:embed data/24_1_system.keys
+var v24_1_system_keys string
+
+//go:embed data/24_1_system.sha256
+var v24_1_system_sha256 string
+
+//go:embed data/24_1_tenant.keys
+var v24_1_tenant_keys string
+
+//go:embed data/24_1_tenant.sha256
+var v24_1_tenant_sha256 string

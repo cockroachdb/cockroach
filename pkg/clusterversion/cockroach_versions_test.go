@@ -206,7 +206,7 @@ func TestStringForPersistence(t *testing.T) {
 		{
 			v:            roachpb.Version{Major: 24, Minor: 1, Internal: 10},
 			minSupported: roachpb.Version{Major: 24, Minor: 1},
-			expected:     "24.1-upgrading-step-010",
+			expected:     "24.1-upgrading-to-24.2-step-010",
 		},
 	}
 
