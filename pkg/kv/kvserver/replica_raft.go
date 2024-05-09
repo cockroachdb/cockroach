@@ -1004,13 +1004,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// r.mu.lastIndexNotDurable, r.mu.lastTermNotDurable and r.mu.raftLogSize
 			// were updated in applySnapshot, but we also want to make sure we reflect
 			// these changes in the local variables we're tracking here.
-			r.mu.RLock()
-			state = logstore.RaftState{
-				LastIndex: r.mu.lastIndexNotDurable,
-				LastTerm:  r.mu.lastTermNotDurable,
-				ByteSize:  r.mu.raftLogSize,
-			}
-			r.mu.RUnlock()
+			state = r.createRaftState()
 
 			// We refresh pending commands after applying a snapshot because this
 			// replica may have been temporarily partitioned from the Raft group and
@@ -1177,6 +1171,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// get blocked.
 	r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 	return stats, nil
+}
+
+func (r *Replica) createRaftState() logstore.RaftState {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return logstore.RaftState{
+		LastIndex: r.mu.lastIndexNotDurable,
+		LastTerm:  r.mu.lastTermNotDurable,
+		ByteSize:  r.mu.raftLogSize,
+	}
 }
 
 func (r *Replica) maybeRefreshProposals(ctx context.Context, refreshReason refreshRaftReason) {
