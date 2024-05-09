@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -174,6 +175,8 @@ type Meta struct {
 type Table struct {
 	// Name is the unqualified table name, pre-escaped for use directly in SQL.
 	Name string
+	// ObjectPrefix is an optional database and schema prefix.
+	ObjectPrefix *tree.ObjectNamePrefix
 	// Schema is the SQL formatted schema for this table, with the `CREATE TABLE
 	// <name>` prefix omitted.
 	Schema string
@@ -188,6 +191,16 @@ type Table struct {
 	// Stats is the pre-calculated set of statistics on this table. They can be
 	// injected using `ALTER TABLE <name> INJECT STATISTICS ...`.
 	Stats []JSONStatistic
+}
+
+// GetResolvedName gets a resolved name with the prefix applied, if one
+// exists.
+func (t Table) GetResolvedName() tree.TableName {
+	if t.ObjectPrefix == nil {
+		return tree.MakeUnqualifiedTableName(tree.Name(t.Name))
+	}
+	return tree.MakeTableNameFromPrefix(*t.ObjectPrefix,
+		tree.Name(t.Name))
 }
 
 // BatchedTuples is a generic generator of tuples (SQL rows, PKs to split at,

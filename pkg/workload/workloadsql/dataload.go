@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -63,7 +62,8 @@ func (l InsertsDataLoader) InitialDataLoad(
 	}
 
 	for _, table := range tables {
-		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s %s`, tree.NameString(table.Name), table.Schema)
+		tableName := table.GetResolvedName()
+		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s %s`, tableName.String(), table.Schema)
 		if _, err := db.ExecContext(ctx, createStmt); err != nil {
 			return 0, errors.WithDetailf(errors.Wrapf(err, "could not create table: %q", table.Name),
 				"SQL: %s", createStmt)
@@ -97,6 +97,7 @@ func (l InsertsDataLoader) InitialDataLoad(
 				endIdx = table.InitialRows.NumBatches
 			}
 			table := table // copy for safe reference in Go routine
+			tableName := table.GetResolvedName()
 			g.Go(func() error {
 				var insertStmtBuf bytes.Buffer
 				var params []interface{}
@@ -105,11 +106,11 @@ func (l InsertsDataLoader) InitialDataLoad(
 					if len(params) > 0 {
 						insertStmt := insertStmtBuf.String()
 						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
-							return errors.Wrapf(err, "failed insert into %s", table.Name)
+							return errors.Wrapf(err, "failed insert into %s", tableName.String())
 						}
 					}
 					insertStmtBuf.Reset()
-					fmt.Fprintf(&insertStmtBuf, `INSERT INTO %s VALUES `, tree.NameString(table.Name))
+					fmt.Fprintf(&insertStmtBuf, `INSERT INTO %s VALUES `, tableName.String())
 					params = params[:0]
 					numRows = 0
 					return nil
