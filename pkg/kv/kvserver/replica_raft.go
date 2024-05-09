@@ -1821,9 +1821,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		RangeStartKey: startKey, // usually nil
 	}
 	if !r.sendRaftMessageRequest(ctx, req) {
-		r.mu.Lock()
-		r.mu.droppedMessages++
-		r.mu.Unlock()
+		r.droppedMessages.Add(1)
 		r.addUnreachableRemoteReplica(toReplica.ReplicaID)
 	}
 }
