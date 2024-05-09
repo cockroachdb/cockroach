@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -105,6 +106,7 @@ type statementStatsRunner struct {
 	txnSourceTable  string
 	ie              *sql.InternalExecutor
 	testingKnobs    *sqlstats.TestingKnobs
+	settings        *cluster.Settings
 }
 
 func getCombinedStatementStats(
@@ -117,7 +119,7 @@ func getCombinedStatementStats(
 ) (*serverpb.StatementsResponse, error) {
 	var err error
 	showInternal := SQLStatsShowInternal.Get(&settings.SV)
-	whereClause, orderAndLimit, args := getCombinedStatementsQueryClausesAndArgs(
+	whereClause, orderClause, limitClause, args := getCombinedStatementsQueryClausesAndArgs(
 		req, testingKnobs, showInternal, settings)
 
 	// Check if the activity tables contains all the data required for the selected period from the request.
@@ -157,6 +159,7 @@ func getCombinedStatementStats(
 		txnSourceTable:  txnSourceTable,
 		ie:              ie,
 		testingKnobs:    testingKnobs,
+		settings:        settings,
 	}
 
 	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
@@ -167,7 +170,8 @@ func getCombinedStatementStats(
 			ctx,
 			whereClause,
 			args,
-			orderAndLimit,
+			orderClause,
+			limitClause,
 		)
 		if err != nil {
 			return nil, srverrors.ServerError(ctx, err)
@@ -187,7 +191,8 @@ func getCombinedStatementStats(
 			ctx,
 			whereClause,
 			args,
-			orderAndLimit,
+			orderClause,
+			limitClause,
 			settings,
 		)
 	}
@@ -209,6 +214,82 @@ func getCombinedStatementStats(
 	}
 
 	return response, nil
+}
+
+// ErrMaxResultsSize is an error indicates that returned result exceeds the max allowed
+// number of rows.
+var errMaxResultsSize = errors.New("max results size exceeded")
+
+// validateSizeOfResult checks if number of results of query with provided conditions
+// exceeds the max limit defined in `sql.stats.response.max` cluster setting.
+func validateSizeOfResult(
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	settings *cluster.Settings,
+	tableName string,
+	whereClause string,
+	aostClause string,
+	limit string,
+	args []interface{},
+	queryFormat string,
+) error {
+	opName := `console-combined-stmts-size-check`
+	maxResultsLimit := SQLStatsResponseMax.Get(&settings.SV)
+	countQueryFormat := makeCountQueryFormat(queryFormat)
+
+	iter, err := getIterator(
+		ctx,
+		ie,
+		countQueryFormat,
+		tableName,
+		opName,
+		whereClause,
+		args,
+		aostClause,
+		"",
+		limit,
+	)
+	if err != nil {
+		return srverrors.ServerError(ctx, err)
+	}
+	defer func() {
+		err = closeIterator(iter, err)
+	}()
+	if !iter.HasResults() {
+		return errors.Newf("%s: no results received for %s table", opName, tableName)
+	}
+	ok, err := iter.Next(ctx)
+	if err != nil {
+		return srverrors.ServerError(ctx, err)
+	}
+	if !ok {
+		return errors.Newf("%s: no results received for %s table", opName, tableName)
+	}
+	var row tree.Datums
+	if row = iter.Cur(); row == nil {
+		return errors.Newf("%s: unexpected null row on %s table", opName, tableName)
+	}
+	if row.Len() != 1 {
+		return errors.Newf("%s: expected %d columns on collectCombinedTransactions, received %d", opName, 1, row.Len())
+	}
+	count := int64(*row[0].(*tree.DInt))
+	if count > maxResultsLimit {
+		return errors.Wrapf(errMaxResultsSize, "%s: expected query result (%d rows) exceeds the limit of %d rows. "+
+			"\nMax results limit can be changed by sql.stats.response.max cluster setting.", opName, count, maxResultsLimit)
+	}
+	return nil
+}
+
+// reSelectClause is a regEx that select only first SELECT...FROM clause in a string. It handles multiline
+// and possible white spaces at the beginning of the string.
+var reSelectClause = regexp.MustCompile(`(?s)^\s?SELECT((.*?SELECT.*?FROM.*?)*|.*?)FROM `)
+
+// var reSelectClause = regexp.MustCompile(`(?s)^\s?SELECT(.*?)FROM `)
+
+// makeCountQueryFormat replaces top level SELECT part of query (that contains column names)
+// to SELECT COUNT(1)... query that counts number of rows that returns original query.
+func makeCountQueryFormat(query string) string {
+	return reSelectClause.ReplaceAllString(query, "SELECT COUNT (1) FROM ")
 }
 
 func activityTablesHaveFullData(
@@ -574,11 +655,8 @@ func getTxnColumnFromSortOption(sort serverpb.StatsSortOptions) string {
 func buildWhereClauseForStmtsByTxn(
 	req *serverpb.CombinedStatementsStatsRequest,
 	transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
-	testingKnobs *sqlstats.TestingKnobs,
 ) (whereClause string, args []interface{}) {
 	var buffer strings.Builder
-	buffer.WriteString(testingKnobs.GetAOSTClause())
-
 	buffer.WriteString(" WHERE true")
 
 	// Add start and end filters from request.
@@ -617,7 +695,7 @@ func getCombinedStatementsQueryClausesAndArgs(
 	testingKnobs *sqlstats.TestingKnobs,
 	showInternal bool,
 	settings *cluster.Settings,
-) (whereClause string, orderAndLimitClause string, args []interface{}) {
+) (whereClause, orderClause, limitClause string, args []interface{}) {
 	var buffer strings.Builder
 	buffer.WriteString(testingKnobs.GetAOSTClause())
 
@@ -661,16 +739,18 @@ func getCombinedStatementsQueryClausesAndArgs(
 		col = getTxnColumnFromSortOption(req.FetchMode.Sort)
 	}
 
-	orderAndLimitClause = fmt.Sprintf(` ORDER BY %s LIMIT $%d`, col, len(args))
+	orderClause = fmt.Sprintf(` ORDER BY %s`, col)
+	limitClause = fmt.Sprintf(` LIMIT $%d`, len(args))
 
-	return buffer.String(), orderAndLimitClause, args
+	return buffer.String(), orderClause, limitClause, args
 }
 
 func (r *statementStatsRunner) collectCombinedStatements(
 	ctx context.Context,
 	whereClause string,
 	args []interface{},
-	orderAndLimit string,
+	orderClause string,
+	limitClause string,
 	settings *cluster.Settings,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 	aostClause := r.testingKnobs.GetAOSTClause()
@@ -687,21 +767,23 @@ SELECT
     (SELECT string_agg(elem::text, ',') 
     FROM json_array_elements_text(metadata->'db') AS elem) AS databases,
     statistics
-FROM (SELECT fingerprint_id,
-             app_name,
-             max(aggregated_ts)                           AS aggregated_ts,
-             merge_stats_metadata(metadata)               AS metadata,
-             merge_statement_stats(statistics)            AS statistics
+FROM (SELECT 
+					fingerprint_id,
+					app_name,
+					max(aggregated_ts)                           AS aggregated_ts,
+					merge_stats_metadata(metadata)               AS metadata,
+					merge_statement_stats(statistics)            AS statistics
       FROM %s %s
       GROUP BY
           fingerprint_id,
-          app_name) %s
+          app_name) %s %s
 %s`
 	metadataAggFn := mergeAggStmtMetadataColumnLatest
 	if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
 		// Use the older, less performant metadata aggregation function for versions below 24.1.
 		metadataAggFn = mergeAggStmtMetadata_V23_2
 	}
+
 	activityQuery := strings.Join([]string{`
 SELECT 
     fingerprint_id,
@@ -714,15 +796,16 @@ SELECT
     (SELECT string_agg(elem::text, ',') 
     FROM json_array_elements_text(metadata->'db') AS elem) AS databases,
     statistics
-FROM (SELECT fingerprint_id,
-             app_name,
-             max(aggregated_ts)                                     AS aggregated_ts,
-             `, metadataAggFn, ` AS metadata,
-             merge_statement_stats(statistics)                      AS statistics
-      FROM %s %s
-      GROUP BY
-          fingerprint_id,
-          app_name) %s
+FROM (
+		SELECT fingerprint_id,
+				app_name,
+				max(aggregated_ts)                                     AS aggregated_ts,
+				`, metadataAggFn, ` AS metadata,
+				merge_statement_stats(statistics)                      AS statistics
+		FROM %s %s
+		GROUP BY
+				fingerprint_id,
+				app_name) %s %s
 %s`}, "")
 
 	var it isql.Rows
@@ -733,6 +816,10 @@ FROM (SELECT fingerprint_id,
 
 	switch r.stmtSourceTable {
 	case CrdbInternalStmtStatsCached:
+		err = validateSizeOfResult(ctx, r.ie, r.settings, CrdbInternalStmtStatsCached, whereClause, aostClause, limitClause, args, activityQuery)
+		if err != nil {
+			return nil, err
+		}
 		it, err = getIterator(
 			ctx,
 			r.ie,
@@ -743,8 +830,14 @@ FROM (SELECT fingerprint_id,
 			whereClause,
 			args,
 			aostClause,
-			orderAndLimit)
+			orderClause,
+			limitClause,
+		)
 	case CrdbInternalStmtStatsPersisted, CrdbInternalStmtStatsCombined:
+		err = validateSizeOfResult(ctx, r.ie, r.settings, r.stmtSourceTable, whereClause, aostClause, limitClause, args, queryFormat)
+		if err != nil {
+			return nil, err
+		}
 		it, err = getIterator(
 			ctx,
 			r.ie,
@@ -754,7 +847,9 @@ FROM (SELECT fingerprint_id,
 			whereClause,
 			args,
 			aostClause,
-			orderAndLimit)
+			orderClause,
+			limitClause,
+		)
 	default:
 		return nil, errors.Newf("combined statements: unknown source table: %s", r.stmtSourceTable)
 
@@ -835,7 +930,8 @@ func getIterator(
 	whereClause string,
 	args []interface{},
 	aostClause string,
-	orderAndLimit string,
+	orderClause string,
+	limitClause string,
 ) (isql.Rows, error) {
 
 	query := fmt.Sprintf(
@@ -843,7 +939,9 @@ func getIterator(
 		table,
 		whereClause,
 		aostClause,
-		orderAndLimit)
+		orderClause,
+		limitClause,
+	)
 	opName := fmt.Sprintf(`console-combined-stmts-%s`, queryInfo)
 
 	it, err := ie.QueryIteratorEx(ctx, opName, nil,
@@ -856,26 +954,27 @@ func getIterator(
 }
 
 func (r *statementStatsRunner) collectCombinedTransactions(
-	ctx context.Context, whereClause string, args []interface{}, orderAndLimit string,
+	ctx context.Context, whereClause string, args []interface{}, orderClause, limitClause string,
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
 	aostClause := r.testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 5
 	const queryFormat = `
 SELECT *
-FROM (SELECT app_name,
-             max(aggregated_ts)                   AS aggregated_ts,
-             fingerprint_id,
-             max(metadata),
-             merge_transaction_stats(statistics)  AS statistics
+FROM (SELECT 
+					app_name,
+					max(aggregated_ts)                   AS aggregated_ts,
+					fingerprint_id,
+					max(metadata),
+					merge_transaction_stats(statistics)  AS statistics
       FROM %s %s
-      GROUP BY
-          app_name,
-          fingerprint_id) %s
-%s`
+      GROUP BY app_name, fingerprint_id) %s %s %s`
+
+	err := validateSizeOfResult(ctx, r.ie, r.settings, r.txnSourceTable, whereClause, aostClause, limitClause, args, queryFormat)
+	if err != nil {
+		return nil, err
+	}
 
 	var it isql.Rows
-	var err error
-
 	it, err = getIterator(
 		ctx,
 		r.ie,
@@ -885,7 +984,9 @@ FROM (SELECT app_name,
 		whereClause,
 		args,
 		aostClause,
-		orderAndLimit)
+		orderClause,
+		limitClause,
+	)
 
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
@@ -954,37 +1055,67 @@ func (r *statementStatsRunner) collectStmtsForTxns(
 	transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 
-	whereClause, args := buildWhereClauseForStmtsByTxn(req, transactions, r.testingKnobs)
+	whereClause, args := buildWhereClauseForStmtsByTxn(req, transactions)
+	r.testingKnobs.GetAOSTClause()
 
 	const queryFormat = `
+SELECT * FROM (
 SELECT fingerprint_id,
        transaction_fingerprint_id,
        merge_stats_metadata(metadata)    AS metadata,
        merge_statement_stats(statistics) AS statistics,
        app_name
 FROM %s %s
-GROUP BY
-    fingerprint_id,
-    transaction_fingerprint_id,
-    app_name
-`
+		GROUP BY fingerprint_id, transaction_fingerprint_id, app_name %s) %s %s`
 
 	const expectedNumDatums = 5
 	var it isql.Rows
 	var err error
 
 	if r.stmtSourceTable == CrdbInternalStmtStatsCombined {
-		query := fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, whereClause)
-
-		it, err = r.ie.QueryIteratorEx(ctx, "console-combined-stmts-with-memory-for-txn", nil,
-			sessiondata.NodeUserSessionDataOverride, query, args...)
+		err = validateSizeOfResult(
+			ctx,
+			r.ie,
+			r.settings,
+			CrdbInternalStmtStatsCombined,
+			whereClause,
+			"",
+			"",
+			args,
+			queryFormat,
+		)
+		if err != nil {
+			return nil, err
+		}
+		it, err = getIterator(
+			ctx,
+			r.ie,
+			queryFormat,
+			CrdbInternalStmtStatsCombined,
+			"console-combined-stmts-with-memory-for-txn",
+			whereClause,
+			args,
+			r.testingKnobs.GetAOSTClause(),
+			"",
+			"",
+		)
 	} else {
-		query := fmt.Sprintf(
+		err = validateSizeOfResult(ctx, r.ie, r.settings, CrdbInternalStmtStatsPersisted, whereClause, r.testingKnobs.GetAOSTClause(), "", args, queryFormat)
+		if err != nil {
+			return nil, err
+		}
+		it, err = getIterator(
+			ctx,
+			r.ie,
 			queryFormat,
 			CrdbInternalStmtStatsPersisted,
-			whereClause)
-		it, err = r.ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-for-txn", nil,
-			sessiondata.NodeUserSessionDataOverride, query, args...)
+			"console-combined-stmts-persisted-for-txn",
+			whereClause,
+			args,
+			r.testingKnobs.GetAOSTClause(),
+			"",
+			"",
+		)
 	}
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
