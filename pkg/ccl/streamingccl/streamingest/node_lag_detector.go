@@ -24,12 +24,12 @@ var ErrNodeLagging = errors.New("node frontier too far behind other nodes")
 // more than maxAllowable lag behind any other destination node. This function
 // assumes that all nodes have finished their initial scan (i.e. have a nonzero hwm).
 func checkLaggingNodes(
-	ctx context.Context, executionDetails []frontierExecutionDetails, maxAllowableLag time.Duration,
+	ctx context.Context, nodeStats ingestStatsByNode, maxAllowableLag time.Duration,
 ) error {
 	if maxAllowableLag == 0 {
 		return nil
 	}
-	laggingNode, minLagDifference := computeMinLagDifference(executionDetails)
+	laggingNode, minLagDifference := computeMinLagDifference(nodeStats)
 	log.VEventf(ctx, 2, "computed min lag diff: %d lagging node, difference %.2f", laggingNode, minLagDifference.Minutes())
 	if maxAllowableLag < minLagDifference {
 		return errors.Wrapf(ErrNodeLagging, "node %d is %.2f minutes behind the next node. Try replanning", laggingNode, minLagDifference.Minutes())
@@ -38,35 +38,34 @@ func checkLaggingNodes(
 }
 
 func computeMinLagDifference(
-	executionDetails []frontierExecutionDetails,
+	ingestProcsStats ingestStatsByNode,
 ) (base.SQLInstanceID, time.Duration) {
-	oldestHWM := hlc.MaxTimestamp.GoTime()
-	var laggingNode base.SQLInstanceID
-	destNodeFrontier := make(map[base.SQLInstanceID]time.Time)
-	for _, detail := range executionDetails {
-		frontier := detail.frontierTS.GoTime()
-		if _, ok := destNodeFrontier[detail.destInstanceID]; !ok {
-			destNodeFrontier[detail.destInstanceID] = frontier
-		} else if destNodeFrontier[detail.destInstanceID].After(frontier) {
-			destNodeFrontier[detail.destInstanceID] = frontier
-		}
-		if oldestHWM.After(frontier) {
-			oldestHWM = frontier
-			laggingNode = detail.destInstanceID
-		}
-	}
-	if len(destNodeFrontier) < 2 {
-		// If there are fewer than 2 nodes in the frontier, we can't compare relative lag.
+	if len(ingestProcsStats) < 2 {
+		// If there are fewer than 2 nodes with updates, we can't compare relative lag.
 		return base.SQLInstanceID(0), 0
 	}
 
+	// Find the global Low Water mark
+	globalLowWaterMark := hlc.MaxTimestamp
+	var laggingNode base.SQLInstanceID
+	for node, stats := range ingestProcsStats {
+		stats.Lock()
+		defer stats.Unlock()
+		if globalLowWaterMark.After(stats.LowWaterMark) {
+			globalLowWaterMark = stats.LowWaterMark
+			laggingNode = node
+		}
+	}
+
+	// Find the minimum difference between the global low water mark and the 2nd most behind node.
 	minlagDifference := hlc.MaxTimestamp.GoTime().Sub(hlc.MinTimestamp.GoTime())
-	for id, frontier := range destNodeFrontier {
+	globalLowWaterMarkGoTime := globalLowWaterMark.GoTime()
+	for id, stats := range ingestProcsStats {
 		if id == laggingNode {
 			continue
 		}
 
-		if diff := frontier.Sub(oldestHWM); diff < minlagDifference {
+		if diff := stats.LowWaterMark.GoTime().Sub(globalLowWaterMarkGoTime); diff < minlagDifference {
 			minlagDifference = diff
 		}
 	}
