@@ -1869,11 +1869,11 @@ func (r *Replica) lookupLatestDescriptors(
 // as unreachable on the next tick.
 func (r *Replica) addUnreachableRemoteReplica(remoteReplica roachpb.ReplicaID) {
 	r.unreachablesMu.Lock()
+	defer r.unreachablesMu.Unlock()
 	if r.unreachablesMu.remotes == nil {
 		r.unreachablesMu.remotes = make(map[roachpb.ReplicaID]struct{})
 	}
 	r.unreachablesMu.remotes[remoteReplica] = struct{}{}
-	r.unreachablesMu.Unlock()
 }
 
 // sendRaftMessageRequest sends a raft message, returning false if the message
