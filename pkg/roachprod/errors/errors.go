@@ -33,6 +33,7 @@ const (
 	unclassifiedExitCode = 1
 
 	sshProblemCause = "ssh_problem"
+	aptProblemCause = "apt_problem"
 )
 
 const (
@@ -104,6 +105,11 @@ func NewSSHError(err error) TransientError {
 	return TransientFailure(err, sshProblemCause)
 }
 
+// AptError returns a transient error for apt-related issues.
+func AptError(err error) TransientError {
+	return TransientFailure(err, aptProblemCause)
+}
+
 func IsSSHError(err error) bool {
 	var transientErr TransientError
 	if errors.As(err, &transientErr) {
@@ -148,6 +154,9 @@ func ClassifyCmdError(err error) Error {
 	if exitCode, ok := GetExitCode(err); ok {
 		if exitCode == 255 {
 			return NewSSHError(err)
+		}
+		if exitCode == 100 {
+			return AptError(err)
 		}
 		return Cmd{err}
 	}
