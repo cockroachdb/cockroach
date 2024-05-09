@@ -55,7 +55,16 @@ import (
 	"github.com/petermattis/goid"
 )
 
+const (
+	// maxRetryCount is the maximum number of time a test will be rerun if the same failed with message that
+	// contains one of retriableErrors
+	// A maxRetryCount of n means the same test will be run n+1 time (1 run + n retries)
+	maxRetryCount = 1
+)
+
 var (
+	retriableErrors = []string{"VMs preempted during the test run"}
+
 	errTestsFailed = fmt.Errorf("some tests failed")
 
 	// reference error used by main.go at the end of a run of tests
@@ -597,7 +606,8 @@ func (r *testRunner) runWorker(
 			qp.Release(alloc)
 		}
 	}()
-
+	testToRun := testToRunRes{noWork: true}
+	retryCount := 0
 	// Loop until there's no more work in the pool, we get interrupted, or an
 	// error occurs.
 	for {
@@ -622,7 +632,13 @@ func (r *testRunner) runWorker(
 
 		wStatus.SetTest(nil /* test */, testToRunRes{})
 
-		testToRun := testToRunRes{noWork: true}
+		if retryCount == 0 {
+			// a new test
+			testToRun = testToRunRes{noWork: true}
+		} else {
+			l.Printf("Retrying test %s with count %d", testToRun.spec.Name, retryCount)
+		}
+
 		if c != nil {
 			// Try to reuse cluster.
 			testToRun = work.selectTestForCluster(ctx, c.spec, r.cr)
@@ -892,6 +908,12 @@ func (r *testRunner) runWorker(
 					c = nil
 				}
 			}
+			if shouldRetry(t, retryCount) {
+				retryCount++
+				// retry on a cluster with ondemand VM to avoid preemption failure
+				testToRun.spec.Cluster.UseSpotVMs = false
+				continue
+			}
 		} else {
 			// Upon success fetch the perf artifacts from the remote hosts.
 			if t.spec.Benchmark {
@@ -904,7 +926,23 @@ func (r *testRunner) runWorker(
 				c = nil
 			}
 		}
+		retryCount = 0
 	}
+}
+
+// shouldRetry identifies whether the specific failed test should be retried on not
+// The criterias are:
+//  1. the test failure message contains a failure in retriableErrors
+//  2. the same test failed more than the maxRetryCount
+func shouldRetry(t *testImpl, retryCount int) bool {
+	if retryCount < maxRetryCount {
+		for _, retriableError := range retriableErrors {
+			if strings.Contains(t.failureMsg(), retriableError) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // getArtifacts retrieves artifacts (like perf or go cover) produced by a
