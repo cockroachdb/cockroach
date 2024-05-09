@@ -1305,10 +1305,7 @@ func (r *Replica) tick(
 		return false, nil
 	}
 
-	r.unreachablesMu.Lock()
-	remotes := r.unreachablesMu.remotes
-	r.unreachablesMu.remotes = nil
-	r.unreachablesMu.Unlock()
+	remotes := r.getAndClearUnreachables()
 	for remoteReplica := range remotes {
 		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
 	}
@@ -1380,6 +1377,14 @@ func (r *Replica) tick(
 		r.refreshProposalsLocked(ctx, refreshAtDelta, reasonTicks)
 	}
 	return true, nil
+}
+
+func (r *Replica) getAndClearUnreachables() map[roachpb.ReplicaID]struct{} {
+	r.unreachablesMu.Lock()
+	defer r.unreachablesMu.Unlock()
+	remotes := r.unreachablesMu.remotes
+	r.unreachablesMu.remotes = nil
+	return remotes
 }
 
 func (r *Replica) hasRaftReadyRLocked() bool {
