@@ -804,15 +804,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var softState *raft.SoftState
 	var outboundMsgs []raftpb.Message
 	var msgStorageAppend, msgStorageApply raftpb.Message
-	r.mu.Lock()
-	state := logstore.RaftState{ // used for append below
-		LastIndex: r.mu.lastIndexNotDurable,
-		LastTerm:  r.mu.lastTermNotDurable,
-		ByteSize:  r.mu.raftLogSize,
-	}
-	leaderID := r.mu.leaderID
-	lastLeaderID := leaderID
-	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
+	var state logstore.RaftState
+	var leaderID, lastLeaderID roachpb.ReplicaID
+	var pausedFollowers map[roachpb.ReplicaID]struct{}
+	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		state = r.createRaftStateLocked()
+		leaderID = r.mu.leaderID
+		lastLeaderID = leaderID
+		pausedFollowers = r.mu.pausedFollowers
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
 		numFlushed, err := r.mu.proposalBuf.FlushLockedWithRaftGroup(ctx, raftGroup)
@@ -838,6 +837,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			asyncRd := makeAsyncReady(syncRd)
 			softState = asyncRd.SoftState
 			outboundMsgs, msgStorageAppend, msgStorageApply = splitLocalStorageMsgs(asyncRd.Messages)
+			r.mu.applyingEntries = hasMsg(msgStorageApply)
 		}
 		// We unquiesce if we have a Ready (= there's work to do). We also have
 		// to unquiesce if we just flushed some proposals but there isn't a
@@ -854,9 +854,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		unquiesceAndWakeLeader := hasReady || numFlushed > 0 || len(r.mu.proposals) > 0
 		return unquiesceAndWakeLeader, nil
 	})
-	r.mu.applyingEntries = hasMsg(msgStorageApply)
-	pausedFollowers := r.mu.pausedFollowers
-	r.mu.Unlock()
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
 		return stats, nil
@@ -1176,6 +1173,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 func (r *Replica) createRaftState() logstore.RaftState {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.createRaftStateLocked()
+}
+
+func (r *Replica) createRaftStateLocked() logstore.RaftState {
 	return logstore.RaftState{
 		LastIndex: r.mu.lastIndexNotDurable,
 		LastTerm:  r.mu.lastTermNotDurable,
