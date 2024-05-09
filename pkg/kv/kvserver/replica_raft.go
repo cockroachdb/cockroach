@@ -1069,21 +1069,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
-	// Update protected state - last index, last term, raft log size, and raft
-	// leader ID.
-	r.mu.Lock()
-	// TODO(pavelkalinnikov): put logstore.RaftState to r.mu directly.
-	r.mu.lastIndexNotDurable = state.LastIndex
-	r.mu.lastTermNotDurable = state.LastTerm
-	r.mu.raftLogSize = state.ByteSize
-	var becameLeader bool
-	if r.mu.leaderID != leaderID {
-		r.mu.leaderID = leaderID
-		// Clear the remote proposal set. Would have been nil already if not
-		// previously the leader.
-		becameLeader = r.mu.leaderID == r.replicaID
-	}
-	r.mu.Unlock()
+	becameLeader := r.updateProtectedState(state, leaderID)
 
 	// When becoming the leader, proactively add the replica to the replicate
 	// queue. We might have been handed leadership by a remote node which wanted
@@ -1201,6 +1187,26 @@ func (r *Replica) maybeRefreshProposals(ctx context.Context, refreshReason refre
 		defer r.mu.Unlock()
 		r.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, refreshReason)
 	}
+}
+
+// updateProtectedState updates the last index, last term, raft log size, and raft
+// leader ID. This returns true if the current replica became the leader.
+// TODO(pavelkalinnikov): put logstore.RaftState to r.mu directly.
+func (r *Replica) updateProtectedState(state logstore.RaftState, leaderID roachpb.ReplicaID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Clear the remote proposal set. Would have been nil already if not
+	// previously the leader.
+	r.mu.lastIndexNotDurable = state.LastIndex
+	r.mu.lastTermNotDurable = state.LastTerm
+	r.mu.raftLogSize = state.ByteSize
+	// This replica was already the leader.
+	if r.mu.leaderID == leaderID {
+		return false
+	}
+	r.mu.leaderID = leaderID
+	return leaderID == r.replicaID
 }
 
 // asyncReady encapsulates the messages that are ready to be sent to other peers
