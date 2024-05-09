@@ -22,6 +22,8 @@ import (
 	"time"
 
 	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -48,13 +50,25 @@ type tpcc struct {
 	idleConns        int
 	txnRetries       bool
 
+	// txnPreambleFile queries that will be executed before each operation.
+	txnPreambleFile       string
+	txnPreambleStatements statements.Statements
+	// txnPreambleTime metric for tracking duration for any queries that
+	// we execute.
+	txnPreambleTime *histogram.NamedHistogram
+
 	// Used in non-uniform random data generation. cLoad is the value of C at load
 	// time. cCustomerID is the value of C for the customer id generator. cItemID
 	// is the value of C for the item id generator. See 2.1.6.
 	cLoad, cCustomerID, cItemID int
 
-	mix                    string
-	waitFraction           float64
+	mix          string
+	waitFraction float64
+
+	// onTxnStartFns call back function to execute queries at the start of
+	// a txn.
+	onTxnStartFns []func(ctx context.Context, tx pgx.Tx) error
+
 	workers                int
 	fks                    bool
 	separateColumnFamilies bool
@@ -228,6 +242,7 @@ var tpccMeta = workload.Meta{
 			`deprecated-fk-indexes`:    {RuntimeOnly: true},
 			`query-trace-file`:         {RuntimeOnly: true},
 			`fake-time`:                {RuntimeOnly: true},
+			"txn-preamble-file":        {RuntimeOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
@@ -265,6 +280,8 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.replicateStaticColumns, `replicate-static-columns`, false, "Create duplicate indexes for all static columns in district, items and warehouse tables, such that each zone or rack has them locally.")
 		g.flags.BoolVar(&g.localWarehouses, `local-warehouses`, false, `Force transactions to use a local warehouse in all cases (in violation of the TPC-C specification)`)
 		g.flags.StringVar(&g.queryTraceFile, `query-trace-file`, ``, `File to write the query traces to. Defaults to no output`)
+		// Support executing a query file before each transaction.
+		g.flags.StringVar(&g.txnPreambleFile, "txn-preamble-file", "", "queries that will be injected before each txn")
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
@@ -809,6 +826,33 @@ func (w *tpcc) Ops(
 	cfg.MaxConnsPerPool = w.connFlags.Concurrency
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
 
+	// If queries were specified before each operation, then lets
+	// execute those.
+	if w.txnPreambleFile != "" {
+		file, err := os.ReadFile(w.txnPreambleFile)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+		txnPreambleStatements, err := parser.Parse(string(file))
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+		w.txnPreambleStatements = txnPreambleStatements
+
+		w.txnPreambleTime = reg.GetHandle().Get("txnPream&ble")
+		w.onTxnStartFns = append(w.onTxnStartFns, func(ctx context.Context, tx pgx.Tx) error {
+			// Next execute any statements at the start of the txn.
+			startTime := timeutil.Now()
+			for _, stmt := range w.txnPreambleStatements {
+				if _, err := tx.Exec(ctx, stmt.AST.String()); err != nil {
+					return err
+				}
+			}
+			w.txnPreambleTime.Record(timeutil.Since(startTime))
+			return nil
+		})
+	}
+
 	// Set up the query tracer.
 	var tracer *fileLoggerQueryTracer
 	if w.queryTraceFile != `` {
@@ -967,17 +1011,32 @@ func (w *tpcc) Ops(
 // success, the transaction is committed.
 func (w *tpcc) executeTx(ctx context.Context, conn crdbpgx.Conn, fn func(pgx.Tx) error) error {
 	txOpts := pgx.TxOptions{}
+	txnFuncWithPreamble := func(tx pgx.Tx) (err error) {
+		defer func() {
+			if err != nil && !w.txnRetries {
+				_ = tx.Rollback(ctx)
+			}
+		}()
+		if w.onTxnStartFns != nil {
+			for _, onTxnStart := range w.onTxnStartFns {
+				if err = onTxnStart(ctx, tx); err != nil {
+					return err
+				}
+			}
+		}
+		return fn(tx)
+	}
+
 	if w.txnRetries {
-		return crdbpgx.ExecuteTx(ctx, conn, txOpts, fn)
+		return crdbpgx.ExecuteTx(ctx, conn, txOpts, txnFuncWithPreamble)
 	}
 
 	tx, err := conn.BeginTx(ctx, txOpts)
 	if err != nil {
 		return err
 	}
-	err = fn(tx)
+	err = txnFuncWithPreamble(tx)
 	if err != nil {
-		_ = tx.Rollback(ctx)
 		return err
 	}
 	return tx.Commit(ctx)
