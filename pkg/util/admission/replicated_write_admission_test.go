@@ -91,7 +91,9 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 					admissionpb.ElasticWorkClass: newTestReplicatedWriteGranter(t, admissionpb.ElasticWorkClass, &buf),
 				}
 				registry := metric.NewRegistry()
-				metrics := makeWorkQueueMetrics("", registry)
+				regMetrics := makeWorkQueueMetrics("regular", registry)
+				elasticMetrics := makeWorkQueueMetrics("elastic", registry)
+				workQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{regMetrics, elasticMetrics}
 				opts := makeWorkQueueOptions(KVWork)
 				opts.usesTokens = true
 				opts.timeSource = timeutil.NewManualTime(tzero)
@@ -121,7 +123,7 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 						tg[admissionpb.RegularWorkClass],
 						tg[admissionpb.ElasticWorkClass],
 					},
-					st, metrics, opts, knobs, &noopOnLogEntryAdmitted{}, metric.NewCounter(metric.Metadata{}), &mockCoordMu,
+					st, workQueueMetrics, opts, knobs, &noopOnLogEntryAdmitted{}, metric.NewCounter(metric.Metadata{}), &mockCoordMu,
 				).(*StoreWorkQueue)
 				tg[admissionpb.RegularWorkClass].r = storeWorkQueue.getRequesters()[admissionpb.RegularWorkClass]
 				tg[admissionpb.ElasticWorkClass].r = storeWorkQueue.getRequesters()[admissionpb.ElasticWorkClass]

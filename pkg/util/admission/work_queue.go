@@ -2190,7 +2190,7 @@ func makeStoreWorkQueue(
 	storeID roachpb.StoreID,
 	granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
 	settings *cluster.Settings,
-	metrics *WorkQueueMetrics,
+	metrics [admissionpb.NumWorkClasses]*WorkQueueMetrics,
 	opts workQueueOptions,
 	knobs *TestingKnobs,
 	onLogEntryAdmitted OnLogEntryAdmitted,
@@ -2223,7 +2223,7 @@ func makeStoreWorkQueue(
 		} else if i == int(admissionpb.ElasticWorkClass) {
 			queueKind = "kv-elastic-store-queue"
 		}
-		initWorkQueue(&q.q[i], ambientCtx, KVWork, queueKind, granters[i], settings, metrics, opts, knobs)
+		initWorkQueue(&q.q[i], ambientCtx, KVWork, queueKind, granters[i], settings, metrics[i], opts, knobs)
 		q.q[i].onAdmittedReplicatedWork = q
 	}
 	// Arbitrary initial value. This will be replaced before any meaningful
