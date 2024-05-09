@@ -572,7 +572,12 @@ func injectStatistics(qualifiedTableName string, table *workload.Table, sqlDB *g
 // database name and table.
 func makeQualifiedTableName(dbName string, table *workload.Table) string {
 	if dbName == "" {
-		return fmt.Sprintf(`"%s"`, table.Name)
+		name := table.GetResolvedName()
+		if name.ObjectNamePrefix.ExplicitCatalog ||
+			name.ObjectNamePrefix.ExplicitSchema {
+			return name.FQString()
+		}
+		return fmt.Sprintf(`"%s"`, name.ObjectName)
 	}
 	return fmt.Sprintf(`"%s"."%s"`, dbName, table.Name)
 }
