@@ -39,11 +39,11 @@ const (
 	metamorphicBoolProbability  = 0.5
 )
 
-// ConstantWithMetamorphicTestValue should be used to initialize "magic
-// constants" that should be varied during test scenarios to check for bugs at
-// boundary conditions. When metamorphicBuild is true, the test value will be
-// used with metamorphicValueProbability probability. In all other cases, the
-// production ("default") value will be used.
+// ConstantWithTestValue should be used to initialize "magic constants" that
+// should be varied during test scenarios to check for bugs at boundary
+// conditions. When metamorphicBuild is true, the test value will be used with
+// metamorphicValueProbability probability. In all other cases, the production
+// ("default") value will be used.
 // The constant must be a "metamorphic variable": changing it cannot affect the
 // output of any SQL DMLs. It can only affect the way in which the data is
 // retrieved or processed, because otherwise the main test corpus would fail if
@@ -60,13 +60,13 @@ const (
 //
 // you should write:
 //
-// var batchSize = metamorphic.ConstantWithMetamorphicTestValue("batch-size", 64, 1)
+// var batchSize = metamorphic.ConstantWithTestValue("batch-size", 64, 1)
 //
 // This will often give your code a batch size of 1 in the crdb_test build
 // configuration, increasing the amount of exercise the edge conditions get.
 //
 // The given name is used for logging.
-func ConstantWithMetamorphicTestValue(name string, defaultValue, metamorphicValue int) int {
+func ConstantWithTestValue(name string, defaultValue, metamorphicValue int) int {
 	if metamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
@@ -115,12 +115,12 @@ func init() {
 	}
 }
 
-// ConstantWithMetamorphicTestRange is like ConstantWithMetamorphicTestValue
-// except instead of returning a single metamorphic test value, it returns a
-// random test value in the semi-open range [min, max).
+// ConstantWithTestRange is like ConstantWithTestValue except instead of
+// returning a single metamorphic test value, it returns a random test value in
+// the semi-open range [min, max).
 //
 // The given name is used for logging.
-func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) int {
+func ConstantWithTestRange(name string, defaultValue, min, max int) int {
 	if metamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
@@ -136,15 +136,15 @@ func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) i
 	return defaultValue
 }
 
-// ConstantWithMetamorphicTestBool is like ConstantWithMetamorphicTestValue except
-// it returns the non-default value half of the time (if running a metamorphic build).
+// ConstantWithTestBool is like ConstantWithTestValue except it returns the
+// non-default value half of the time (if running a metamorphic build).
 //
 // The given name is used for logging.
-func ConstantWithMetamorphicTestBool(name string, defaultValue bool) bool {
-	return constantWithMetamorphicTestBoolInternal(name, defaultValue, true /* doLog */)
+func ConstantWithTestBool(name string, defaultValue bool) bool {
+	return constantWithTestBoolInternal(name, defaultValue, true /* doLog */)
 }
 
-func constantWithMetamorphicTestBoolInternal(name string, defaultValue bool, doLog bool) bool {
+func constantWithTestBoolInternal(name string, defaultValue bool, doLog bool) bool {
 	if metamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
@@ -159,20 +159,20 @@ func constantWithMetamorphicTestBoolInternal(name string, defaultValue bool, doL
 	return defaultValue
 }
 
-// ConstantWithMetamorphicTestBoolWithoutLogging is like ConstantWithMetamorphicTestBool
-// except it does not log the value. This is necessary to work around this issue:
+// ConstantWithTestBoolWithoutLogging is like ConstantWithTestBool except it
+// does not log the value. This is necessary to work around this issue:
 // https://github.com/cockroachdb/cockroach/issues/106667
 // TODO(test-eng): Remove this variant when the issue above is addressed.
-func ConstantWithMetamorphicTestBoolWithoutLogging(name string, defaultValue bool) bool {
-	return constantWithMetamorphicTestBoolInternal(name, defaultValue, false /* doLog */)
+func ConstantWithTestBoolWithoutLogging(name string, defaultValue bool) bool {
+	return constantWithTestBoolInternal(name, defaultValue, false /* doLog */)
 }
 
-// ConstantWithMetamorphicTestChoice is like ConstantWithMetamorphicTestValue except
-// it returns a random choice (equally weighted) of the given values. The default
-// value is included in the random choice.
+// ConstantWithTestChoice is like ConstantWithTestValue except it returns a
+// random choice (equally weighted) of the given values. The default value is
+// included in the random choice.
 //
 // The given name is used for logging.
-func ConstantWithMetamorphicTestChoice(
+func ConstantWithTestChoice(
 	name string, defaultValue interface{}, otherValues ...interface{},
 ) interface{} {
 	if metamorphicBuild {

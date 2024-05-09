@@ -94,7 +94,7 @@ var (
 
 	// smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
 	// bugs in time-bound iterators.
-	smallEngineBlocks = metamorphic.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
+	smallEngineBlocks = metamorphic.ConstantWithTestBool("small-engine-blocks", false)
 )
 
 const lockAgeThreshold = 2 * time.Hour
