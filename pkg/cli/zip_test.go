@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -861,8 +860,8 @@ func TestToHex(t *testing.T) {
 	// fields is not always precise as there can be spaces in the fields but the
 	// hex fields are always in the end of the row and they don't contain spaces.
 	hexFiles := map[string][]hexField{
-		"debug/system.descriptor.txt": {
-			{idx: 1, msg: &descpb.Descriptor{}},
+		"debug/system.scheduled_jobs.txt": {
+			{idx: -3, msg: &jobspb.ScheduleDetails{}},
 		},
 	}
 
