@@ -1134,8 +1134,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// the fact that we'll refuse to process messages intended for a higher
 	// replica ID ensures that our replica ID could not have changed.
 
-	r.mu.Lock()
-	err = r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
+	err = r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
 		if stats.apply.numConfChangeEntries > 0 {
@@ -1159,10 +1158,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if raftGroup.HasReady() {
 			r.store.enqueueRaftUpdateCheck(r.RangeID)
 		}
+		r.mu.applyingEntries = false
 		return true, nil
 	})
-	r.mu.applyingEntries = false
-	r.mu.Unlock()
 	if err != nil {
 		return stats, errors.Wrap(err, "during advance")
 	}
