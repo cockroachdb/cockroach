@@ -744,15 +744,6 @@ var noSnap IncomingSnapshot
 func (r *Replica) handleRaftReady(
 	ctx context.Context, inSnap IncomingSnapshot,
 ) (handleRaftReadyStats, error) {
-
-	// Don't process anything if this fn returns false.
-	if fn := r.store.cfg.TestingKnobs.DisableProcessRaft; fn != nil && fn(r.store.StoreID()) {
-		return handleRaftReadyStats{
-			tBegin: timeutil.Now(),
-			tEnd:   timeutil.Now(),
-		}, nil
-	}
-
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
@@ -779,6 +770,14 @@ func (r *Replica) detachRaftEntriesMonitorRaftMuLocked() {
 func (r *Replica) handleRaftReadyRaftMuLocked(
 	ctx context.Context, inSnap IncomingSnapshot,
 ) (stats handleRaftReadyStats, _ error) {
+	// Don't process anything if this fn returns false.
+	if fn := r.store.cfg.TestingKnobs.DisableProcessRaft; fn != nil && fn(r.store.StoreID()) {
+		return handleRaftReadyStats{
+			tBegin: timeutil.Now(),
+			tEnd:   timeutil.Now(),
+		}, nil
+	}
+
 	// handleRaftReadyRaftMuLocked is not prepared to handle context cancellation,
 	// so assert that it's given a non-cancellable context.
 	if ctx.Done() != nil {
