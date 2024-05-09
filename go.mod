@@ -87,6 +87,7 @@ require (
 )
 
 require (
+	cloud.google.com/go/secretmanager v1.10.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.3.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.9.0
