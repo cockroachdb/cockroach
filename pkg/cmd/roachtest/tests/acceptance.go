@@ -29,6 +29,7 @@ func registerAcceptance(r registry.Registry) {
 		encryptionSupport registry.EncryptionSupport
 		defaultLeases     bool
 	}{
+		registry.OwnerReleaseEng: {},
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
 			{name: "event-log", fn: runEventLog},
