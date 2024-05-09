@@ -59,6 +59,8 @@ import (
 // reading the set of targets from a file for e.g., or hoisting files from a
 // sandbox by searching through the file system directly).
 func TestRecorderDriven(t *testing.T) {
+
+	fmt.Printf("%s\n")
 	rewriting := false
 	if f := flag.Lookup("rewrite"); f != nil && f.Value.String() == "true" {
 		rewriting = true
