@@ -349,13 +349,32 @@ type sinkURL struct {
 	q url.Values
 }
 
+func findExistingKey(m url.Values, keys ...string) string {
+	for _, key := range keys {
+		if _, ok := m[key]; ok {
+			return key
+		}
+	}
+	return ""
+}
+
 func (u *sinkURL) consumeParam(p string) string {
 	if u.q == nil {
 		u.q = u.Query()
 	}
+
+	p = findExistingKey(u.q, p, strings.ToUpper(p), strings.ToLower(p))
 	v := u.q.Get(p)
 	u.q.Del(p)
 	return v
+}
+
+func (u *sinkURL) contains(p string) bool {
+	if u.q == nil {
+		u.q = u.Query()
+	}
+
+	return findExistingKey(u.q, p, strings.ToLower(p), strings.ToUpper(p)) != ""
 }
 
 func (u *sinkURL) addParam(p string, value string) {
