@@ -2335,6 +2335,8 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 			if hasLargeScan {
 				// We don't execute the statement if:
 				// - plan contains a full table or full index scan.
+				//   TODO(#123783): this currently doesn't apply to full scans
+				//   of virtual tables.
 				// - the session setting disallows full table/index scans.
 				// - the scan is considered large.
 				// - the query is not an internal query.

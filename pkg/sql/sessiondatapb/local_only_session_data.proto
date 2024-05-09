@@ -516,6 +516,10 @@ message LocalOnlySessionData {
   // that the optimizer should use virtual computed columns to prove partial
   // index implication.
   bool optimizer_prove_implication_with_virtual_computed_columns = 130;
+  // OptimizerApplyFullScanPenaltyToVirtualTables, when true, indicates that the
+  // huge cost should be assigned to plans that have full scans of virtual
+  // tables when DisallowFullTableScans is set.
+  bool optimizer_apply_full_scan_penalty_to_virtual_tables = 131;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
