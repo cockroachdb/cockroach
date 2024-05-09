@@ -137,25 +137,6 @@ func UnderStressWithIssue(t SkippableTest, githubIssueID int, args ...interface{
 	}
 }
 
-// UnderStressRace skips this test during stressrace runs, which are tests run
-// under stress with the -race flag.
-func UnderStressRace(t SkippableTest, args ...interface{}) {
-	t.Helper()
-	if Stress() && util.RaceEnabled {
-		maybeSkip(t, "disabled under stressrace", args...)
-	}
-}
-
-// UnderStressRaceWithIssue skips this test during stressrace runs, which are
-// tests run under stress with the -race flag, logging the given issue ID as the
-// reason.
-func UnderStressRaceWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
-	t.Helper()
-	if Stress() && util.RaceEnabled {
-		maybeSkip(t, withIssue("disabled under stressrace", githubIssueID), args...)
-	}
-}
-
 // UnderMetamorphic skips this test during metamorphic runs, which are tests
 // run with the metamorphic build tag.
 func UnderMetamorphic(t SkippableTest, args ...interface{}) {

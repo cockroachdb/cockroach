@@ -87,7 +87,7 @@ func TestTenantStreamingFailback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	skip.UnderStressRace(t, "test takes ~5 minutes under stressrace")
+	skip.UnderRace(t, "test takes ~5 minutes under race")
 
 	serverA, aDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,

@@ -74,7 +74,7 @@ func TestSQLStatsFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	fakeTime := stubTime{
 		aggInterval: time.Hour,

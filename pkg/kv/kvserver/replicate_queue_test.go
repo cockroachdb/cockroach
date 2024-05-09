@@ -1586,7 +1586,7 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 
 	// The zone config change leads to snapshot timeouts under stress race which
 	// make the test take 300+s.
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 	serverArgs := make(map[int]base.TestServerArgs)
