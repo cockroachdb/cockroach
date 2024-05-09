@@ -1588,9 +1588,11 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	switch msg.Type {
 	case raftpb.MsgHeartbeat:
 		r.store.coalescedMu.Lock()
+		defer r.store.coalescedMu.Unlock()
 		hbMap = r.store.coalescedMu.heartbeats
 	case raftpb.MsgHeartbeatResp:
 		r.store.coalescedMu.Lock()
+		defer r.store.coalescedMu.Unlock()
 		hbMap = r.store.coalescedMu.heartbeatResponses
 	default:
 		return false
@@ -1613,7 +1615,6 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		NodeID:  toReplica.NodeID,
 	}
 	hbMap[toStore] = append(hbMap[toStore], beat)
-	r.store.coalescedMu.Unlock()
 	return true
 }
 
