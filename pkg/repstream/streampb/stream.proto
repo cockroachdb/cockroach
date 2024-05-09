@@ -99,9 +99,8 @@ message StreamPartitionSpec {
   // ExecutionConfig describes various knobs to control execution behavior
   // of the stream.  If unspecified, reasonable defaults will be set.
   message ExecutionConfig {
-    // Controls the number of concurrent scan requests issued during initial scan.
-    int32 initial_scan_parallelism = 1;
-
+    reserved 1;
+    
     // Controls how often checkpoint records are published.
     google.protobuf.Duration min_checkpoint_frequency = 2
        [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
