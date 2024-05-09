@@ -379,7 +379,7 @@
 /pkg/ccl/jwtauthccl/         @cockroachdb/cloud-identity
 #!/pkg/ccl/kvccl/              @cockroachdb/kv-noreview
 /pkg/ccl/kvccl/kvtenantccl/  @cockroachdb/server-prs
-#!/pkg/ccl/upgradeccl/       @cockroachdb/release-eng
+#!/pkg/ccl/upgradeccl/       @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
 #!/pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
 #!/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
 /pkg/ccl/multiregionccl/     @cockroachdb/sql-foundations
@@ -515,7 +515,7 @@
 /pkg/keysbase/               @cockroachdb/kv-prs
 # Don't ping KV on updates to reserved descriptor IDs and such.
 #!/pkg/keys/constants.go       @cockroachdb/kv-prs-noreview
-/pkg/upgrade/                @cockroachdb/release-eng
+/pkg/upgrade/                @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
 /pkg/keyvisualizer/          @cockroachdb/obs-prs
 /pkg/multitenant/            @cockroachdb/server-prs
 /pkg/release/                @cockroachdb/dev-inf
