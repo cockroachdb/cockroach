@@ -63,6 +63,7 @@ build/teamcity-roachtest-invoke.sh \
   --cloud="${CLOUD}" \
   --count="${COUNT-1}" \
   --auto-kill-threshold="${AUTO_KILL_THRESHOLD:-0.05}" \
+  --clear-cluster-cache="${CLEAR_CLUSTER_CACHE:-true}" \
   --parallelism="${PARALLELISM}" \
   --cpu-quota="${CPUQUOTA}" \
   --cluster-id="${TC_BUILD_ID}" \
