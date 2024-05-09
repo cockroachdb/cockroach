@@ -770,7 +770,7 @@ func (sc *SchemaChanger) checkForMVCCCompliantAddIndexMutations(
 //
 // If the txn that queued the schema changer did not commit, this will be a
 // no-op, as we'll fail to find the job for our mutation in the jobs registry.
-func (sc *SchemaChanger) exec(ctx context.Context) error {
+func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
 	sc.metrics.RunningSchemaChanges.Inc(1)
 	defer sc.metrics.RunningSchemaChanges.Dec(1)
 
@@ -920,7 +920,18 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	if sc.mutationID == descpb.InvalidMutationID {
 		// Nothing more to do.
 		isCreateTableAs := tableDesc.Adding() && tableDesc.IsAs()
-		return waitToUpdateLeases(isCreateTableAs /* refreshStats */)
+		// If we are converting a system database table to MR, we should force
+		// a stats refresh so that the stats also have the correct type. There is
+		// a potential race condition between waiting for leases and deleting the
+		// statistics using optimizeDatabase, where between those two point statistics
+		// with the wrong type could show up. To minimize any transient condition,
+		// lets force a refresh of stats here.
+		isSystemDatabaseTransformation := tableDesc.GetParentID() == keys.SystemDatabaseID &&
+			(strings.HasPrefix(sc.job.Payload().Description,
+				fmt.Sprintf(systemTableLocalityChangeJobName, tableDesc.GetName(), "regional by row")) ||
+				strings.HasPrefix(sc.job.Payload().Description,
+					fmt.Sprintf(systemTableLocalityChangeJobName, tableDesc.GetName(), "global")))
+		return waitToUpdateLeases(isCreateTableAs || isSystemDatabaseTransformation /* refreshStats */)
 	}
 
 	if err := sc.initJobRunningStatus(ctx); err != nil {
@@ -941,7 +952,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	}
 
 	defer func() {
-		if err := waitToUpdateLeases(err == nil /* refreshStats */); err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
+		if err := waitToUpdateLeases(retErr == nil /* refreshStats */); err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
 			// We only expect ErrDescriptorNotFound to be returned. This happens
 			// when the table descriptor was deleted. We can ignore this error.
 
