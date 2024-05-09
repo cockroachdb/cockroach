@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package release_23_1
+package release_24_1
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -30,7 +30,7 @@ func init() {
 
 	registerDepRule(
 		"descriptor dropped in transaction before removal",
-		scgraph.PreviousStagePrecedence,
+		scgraph.PreviousTransactionPrecedence,
 		"dropped", "absent",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{

@@ -169,7 +169,7 @@ avoid large changes on `master` which might cause merge conflicts for backports.
 
 **What**: This change advances the current release series version.
 
-**When**: Any time after M.1.
+**When**: Any time after M.1 and after a RC build of the previous version is public.
 
 **Checklist**:
 
@@ -180,6 +180,18 @@ avoid large changes on `master` which might cause merge conflicts for backports.
 - [ ] Update `pkg/build/version.txt` to the new version (e.g. `v24.2.0-alpha.00000000`)
 
 - [ ] Add mixed version logictest config for the replaced version (`local-mixed-24.1`)
+
+- [ ] Update the scplan rules in `pkg/sql/schemachanger/internal/rules`:
+  - copy the contents of `current` into a new release directory for the previous version
+    (e.g. `release_24_1`)
+  - rename the package name in all files, and update `current/helpers.go`
+  - update `rulesForReleases` in `scplan/plan.go`
+  - rewrite the test outputs: `./dev test pkg/sql/schemachanger/scplan/internal/rules/... --rewrite`
+  - rewrite `TestDeclarativeRules` output: `./dev test pkg/cli -f DeclarativeRules --rewrite`
+
+- [ ] Create new roachtest fixtures for the previous version (see
+  `pkg/cmd/roachtest/fixtures/README.md`). Note that the version used must have
+  the final version minted (typically the `rc.1` version or later).
 
 - [ ] Create new SQL bootstrap data. This is necessary because we want code on
   `master` to be able to bootstrap clusters at the previous version, but we will
@@ -199,7 +211,7 @@ avoid large changes on `master` which might cause merge conflicts for backports.
   _bazel/bin/pkg/cmd/release/release_/release update-releases-file
   ```
 
-**Example PR:** [#112271](https://github.com/cockroachdb/cockroach/pull/112271)
+**Example PR:** [#112271](https://github.com/cockroachdb/cockroach/pull/112271) [#123650](https://github.com/cockroachdb/cockroach/pull/123650)
 
 ### M.3: Finalize gates and bootstrap data for released version
 

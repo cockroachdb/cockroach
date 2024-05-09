@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package release_23_1
+package release_24_1
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -29,7 +29,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),
-				to.TypeFilter(rulesVersionKey, isConstraintDependent),
+				to.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithoutIndexName)),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},
@@ -42,7 +42,7 @@ func init() {
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isConstraintDependent),
+				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithoutIndexName)),
 				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
@@ -61,8 +61,39 @@ func init() {
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isConstraintDependent),
+				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithoutIndexName)),
 				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, Not(isSubjectTo2VersionInvariant)),
+				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
+			}
+		},
+	)
+
+	// Constraint name should be cleared right before the constraint is no
+	// longer visible.
+	registerDepRuleForDrop(
+		"Constraint should be hidden before name",
+		scgraph.Precedence,
+		"constraint-name", "constraint",
+		scpb.Status_ABSENT, scpb.Status_ABSENT,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.ConstraintWithoutIndexName)(nil)),
+				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint),
+				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
+			}
+		},
+	)
+	// Constraint should be validated before the constraint name is attempted
+	// to be cleaned.
+	registerDepRuleForDrop(
+		"Constraint should be hidden before name",
+		scgraph.Precedence,
+		"constraint", "constraint-name",
+		scpb.Status_VALIDATED, scpb.Status_ABSENT,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint),
+				to.Type((*scpb.ConstraintWithoutIndexName)(nil)),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},

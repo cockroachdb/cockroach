@@ -298,6 +298,23 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 	})
 	defer ts.Stopper().Stop(ctx)
 
+	tenant, err := ts.TenantController().StartTenant(ctx, base.TestTenantArgs{
+		TenantID: roachpb.MustMakeTenantID(10),
+		TestingKnobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			UpgradeManager: &upgradebase.TestingKnobs{
+				RegistryOverride: registryOverrideHook,
+			},
+		},
+		Settings: settingsForUpgrade(),
+	})
+	require.NoError(t, err)
+	defer tenant.AppStopper().Stop(ctx)
+
 	runTestForDB := func(t *testing.T, sqlDB *gosql.DB) {
 		upgradeErr := make(chan error, 1)
 		go func() {
@@ -343,21 +360,6 @@ FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_payload')`, jobID)
 		runTestForDB(t, systemSQLDB)
 	})
 	t.Run("tenant", func(t *testing.T) {
-		tenant, err := ts.TenantController().StartTenant(ctx, base.TestTenantArgs{
-			TenantID: roachpb.MustMakeTenantID(10),
-			TestingKnobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          clusterversion.MinSupported.Version(),
-					DisableAutomaticVersionUpgrade: make(chan struct{}),
-				},
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-				UpgradeManager: &upgradebase.TestingKnobs{
-					RegistryOverride: registryOverrideHook,
-				},
-			},
-			Settings: settingsForUpgrade(),
-		})
-		require.NoError(t, err)
 		tenantSQLDB := tenant.SQLConn(t)
 		runTestForDB(t, tenantSQLDB)
 	})

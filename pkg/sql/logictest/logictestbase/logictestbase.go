@@ -491,11 +491,29 @@ var LogicTestConfigs = []TestClusterConfig{
 		DeclarativeCorpusCollection: true,
 	},
 	{
+		// This config runs tests using 24.1 cluster version, simulating a node that
+		// is operating in a mixed-version cluster.
+		Name:                        "local-mixed-24.1",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		BootstrapVersion:            clusterversion.V24_1,
+		DisableUpgrade:              true,
+		DeclarativeCorpusCollection: true,
+	},
+	{
 		// This config runs a cluster with 3 nodes, with a separate process per
 		// node. The nodes initially start on v23.2.
 		Name:                     "cockroach-go-testserver-23.2",
 		UseCockroachGoTestserver: true,
 		BootstrapVersion:         clusterversion.V23_2,
+		NumNodes:                 3,
+	},
+	{
+		// This config runs a cluster with 3 nodes, with a separate process per
+		// node. The nodes initially start on v24.1.
+		Name:                     "cockroach-go-testserver-24.1",
+		UseCockroachGoTestserver: true,
+		BootstrapVersion:         clusterversion.V24_1,
 		NumNodes:                 3,
 	},
 }
