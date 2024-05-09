@@ -609,7 +609,7 @@ func TestStreamDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "disabled under stress and race")
+	skip.UnderRace(t, "disabled under race")
 
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,

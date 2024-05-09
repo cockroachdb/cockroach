@@ -29,7 +29,7 @@ import (
 // new cluster.
 func TestSQLStatsTTLChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
