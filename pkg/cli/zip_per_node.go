@@ -11,10 +11,12 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // makePerNodeZipRequests defines the zipRequests (API requests) that are to be
@@ -344,6 +347,11 @@ func (zc *debugZipContext) collectPerNodeData(
 				}
 				return err
 			})
+
+		if zipCtx.redact {
+			stacksDataWithLabels = redactStackTrace(stacksDataWithLabels)
+		}
+
 		if err := zc.z.createRawOrError(s, prefix+"/stacks_with_labels.txt", stacksDataWithLabels, requestErr); err != nil {
 			return err
 		}
@@ -529,4 +537,11 @@ func guessNodeURL(workingURL string, hostport string) clisqlclient.Conn {
 	}
 	u.Host = hostport
 	return sqlConnCtx.MakeSQLConn(os.Stdout, stderr, u.String())
+}
+
+func redactStackTrace(stacksDataWithLabels []byte) []byte {
+	str := bytes.NewBuffer(stacksDataWithLabels).String()
+	re := regexp.MustCompile("raddr=[^:]+:[0-9]{5},")
+	data := re.ReplaceAllString(str, fmt.Sprintf("raddr=%s,", redact.RedactedMarker()))
+	return []byte(data)
 }
