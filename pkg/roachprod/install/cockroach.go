@@ -623,9 +623,25 @@ func (c *SyncedCluster) NodeURL(
 		v.Add("sslmode", "disable")
 	}
 
-	// Add the cluster connection parameter explicitly for
-	// shared-process virtual clusters when a cluster name was passed.
-	if serviceMode == ServiceModeShared && virtualClusterName != "" {
+	// The rules for when to include the `cluster` connection parameter
+	// are a little nuanced:
+	//
+	// Firstly, we only want to pass an explicit `cluster` name if the
+	// user provided one.
+	if virtualClusterName != "" &&
+		// If this is a shared service, we should always be passing the
+		// cluster connection parameter.
+		((serviceMode == ServiceModeShared) ||
+			// However, if this is an external process, this means that the
+			// service is either the system tenant, or a virtual cluster
+			// serviced by an external process. We only want to specify the
+			// `cluster` parameter in the former case, as SQL server
+			// processes don't support cluster selection. The main use-case
+			// for specifying the cluster parameter in this case would be in
+			// a shared-process deployment model where the default tenant is
+			// switched, and we want to connect to the system tenant
+			// directly.
+			(serviceMode == ServiceModeExternal && virtualClusterName == SystemInterfaceName)) {
 		v.Add("options", fmt.Sprintf("-ccluster=%s", virtualClusterName))
 	}
 	u.RawQuery = v.Encode()
