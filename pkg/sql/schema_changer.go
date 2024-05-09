@@ -920,7 +920,18 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	if sc.mutationID == descpb.InvalidMutationID {
 		// Nothing more to do.
 		isCreateTableAs := tableDesc.Adding() && tableDesc.IsAs()
-		return waitToUpdateLeases(isCreateTableAs /* refreshStats */)
+		// If we are converting a system database table to MR, we should force
+		// a stats refresh so that the stats also have the correct type. There is
+		// a potential race condition between waiting for leases and deleting the
+		// statistics using optimizeDatabase, where between those two point statistics
+		// with the wrong type could show up. To minimize any transient condition,
+		// lets force a refresh of stats here.
+		isSystemDatabaseTransformation := tableDesc.GetParentID() == keys.SystemDatabaseID &&
+			(strings.HasPrefix(sc.job.Payload().Description,
+				fmt.Sprintf(systemTableLocalityChangeJobName, tableDesc.GetName(), "regional by row")) ||
+				strings.HasPrefix(sc.job.Payload().Description,
+					fmt.Sprintf(systemTableLocalityChangeJobName, tableDesc.GetName(), "global")))
+		return waitToUpdateLeases(isCreateTableAs || isSystemDatabaseTransformation /* refreshStats */)
 	}
 
 	if err := sc.initJobRunningStatus(ctx); err != nil {
