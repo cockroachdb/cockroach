@@ -1758,10 +1758,13 @@ func (r *Replica) sendLocalRaftMsg(msg raftpb.Message, willDeliverLocal bool) {
 	if msg.To != uint64(r.ReplicaID()) {
 		panic("incorrect message target")
 	}
-	r.localMsgs.Lock()
-	wasEmpty := len(r.localMsgs.active) == 0
-	r.localMsgs.active = append(r.localMsgs.active, msg)
-	r.localMsgs.Unlock()
+	wasEmpty := func() bool {
+		r.localMsgs.Lock()
+		defer r.localMsgs.Unlock()
+		wasEmpty := len(r.localMsgs.active) == 0
+		r.localMsgs.active = append(r.localMsgs.active, msg)
+		return wasEmpty
+	}()
 	// If this is the first local message and the caller will not deliver local
 	// messages itself, schedule a Raft update check to inform Raft processing
 	// about the new local message. Everyone else can rely on the call that added
@@ -1778,14 +1781,17 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 ) {
 	r.raftMu.AssertHeld()
 	r.mu.AssertHeld()
-	r.localMsgs.Lock()
-	localMsgs := r.localMsgs.active
-	r.localMsgs.active, r.localMsgs.recycled = r.localMsgs.recycled, r.localMsgs.active[:0]
-	// Don't recycle large slices.
-	if cap(r.localMsgs.recycled) > 16 {
-		r.localMsgs.recycled = nil
-	}
-	r.localMsgs.Unlock()
+	localMsgs := func() []raftpb.Message {
+		r.localMsgs.Lock()
+		defer r.localMsgs.Unlock()
+		localMsgs := r.localMsgs.active
+		r.localMsgs.active, r.localMsgs.recycled = r.localMsgs.recycled, r.localMsgs.active[:0]
+		// Don't recycle large slices.
+		if cap(r.localMsgs.recycled) > 16 {
+			r.localMsgs.recycled = nil
+		}
+		return localMsgs
+	}()
 
 	// If we are in a test build, shuffle the local messages before delivering
 	// them. These are not required to be in order, so ensure that re-ordering is
