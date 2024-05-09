@@ -546,6 +546,8 @@ func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
 		return sortRetriesDesc
 	case serverpb.StatsSortOptions_LAST_EXEC:
 		return sortLastExecDesc
+	case serverpb.StatsSortOptions_PCT_RUNTIME:
+		return sortPCTRuntimeDesc
 	default:
 		return sortSvcLatDesc
 	}

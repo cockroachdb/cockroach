@@ -815,7 +815,10 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get system CPU usage: %v", err)
 	}
-	cpuUsage := cpuUsageStats[0]
+	var cpuUsage cpu.TimesStat
+	if len(cpuUsageStats) > 0 {
+		cpuUsage = cpuUsageStats[0]
+	}
 	numHostCPUs, err := cpu.Counts(true /* logical */)
 	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get system CPU details: %v", err)
