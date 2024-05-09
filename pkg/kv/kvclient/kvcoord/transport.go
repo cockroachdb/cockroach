@@ -240,6 +240,9 @@ func (gt *grpcTransport) sendBatch(
 				"trying to ingest remote spans but there is no recording span set up")
 		}
 		span.ImportRemoteRecording(reply.CollectedSpans)
+		// The field is cleared by the sender because if the spans are re-imported
+		// by accident, duplicate spans may occur.
+		reply.CollectedSpans = nil
 	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "ba: %s RPC error", ba.String())
@@ -376,6 +379,9 @@ func (s *senderTransport) SendNext(
 			panic("trying to ingest remote spans but there is no recording span set up")
 		}
 		span.ImportRemoteRecording(br.CollectedSpans)
+		// The field is cleared by the sender because if the spans are re-imported
+		// by accident, duplicate spans may occur.
+		br.CollectedSpans = nil
 	}
 
 	return br, nil
