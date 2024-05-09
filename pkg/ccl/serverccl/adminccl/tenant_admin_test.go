@@ -32,7 +32,7 @@ func TestTenantAdminAPI(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// The liveness session might expire before the stress race can finish.
-	skip.UnderStressRace(t, "expensive tests")
+	skip.UnderRace(t, "expensive tests")
 
 	ctx := context.Background()
 

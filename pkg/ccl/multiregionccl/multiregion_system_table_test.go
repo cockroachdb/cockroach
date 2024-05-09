@@ -41,7 +41,7 @@ func TestMrSystemDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "runs too slow")
+	skip.UnderRace(t, "runs too slow")
 
 	ctx := context.Background()
 

@@ -2613,9 +2613,9 @@ func TestLeaderAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Timing-sensitive test, disable under deadlock and stressrace.
+	// Timing-sensitive test, disable under deadlock and race.
 	skip.UnderDeadlock(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // time out early
 	defer cancel()
@@ -4133,9 +4133,8 @@ func TestLBSplitUnsafeKeys(t *testing.T) {
 	ctx := context.Background()
 	const indexID = 1
 
-	// The test is expensive and prone to timing out under race.
+	// The test is expensive and prone to timing out under race or deadlock.
 	skip.UnderRace(t)
-	skip.UnderStressRace(t)
 	skip.UnderDeadlock(t)
 
 	makeTestKey := func(tableID uint32, suffix []byte) roachpb.Key {
