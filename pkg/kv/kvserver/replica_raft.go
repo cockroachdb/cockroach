@@ -2508,12 +2508,12 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 	// left-hand neighbor has no pending merges to apply. And that RHS replica
 	// could not have been further split or merged, as it never processes another
 	// command after the merge commits.
-	endKey := r.Desc().EndKey
-	if endKey == nil {
+	if !r.IsInitialized() {
 		// The existing replica is unitialized, in which case we've already
 		// installed a placeholder for snapshot's keyspace. No merge lock needed.
 		return nil, func() {}
 	}
+	endKey := r.Desc().EndKey
 	unlocks := []func(){}
 	for endKey.Less(inSnap.Desc.EndKey) {
 		sRepl := r.store.LookupReplica(endKey)
