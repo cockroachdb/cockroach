@@ -403,7 +403,7 @@ import (
 //    Skips this entire logic test using skip.IgnoreLint(). Should be near top
 //    of test file. Note that this is different from `skipif`.
 //
-//  - skip under <deadlock/race/stress/stressrace/metamorphic/duress> [ISSUE] [args...]
+//  - skip under <deadlock/race/stress/metamorphic/duress> [ISSUE] [args...]
 //    Skips this entire logic test using skip.UnderDeadlock(), skip.UnderRace(),
 //    etc. Should be near top of test file. Note that this is different from
 //    `skipif`.
@@ -3109,12 +3109,6 @@ func (t *logicTest) processSubtest(
 						skip.UnderStress(t.t(), args...)
 					} else {
 						skip.UnderStressWithIssue(t.t(), githubIssueID, args...)
-					}
-				case "stressrace":
-					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
-						skip.UnderStressRace(t.t(), args...)
-					} else {
-						skip.UnderStressRaceWithIssue(t.t(), githubIssueID, args...)
 					}
 				case "metamorphic":
 					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {

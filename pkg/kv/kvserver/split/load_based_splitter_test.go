@@ -766,7 +766,7 @@ func makeMultiRequestConfigs(
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderShort(t, "takes 20s")
-	skip.UnderStressRace(t, "takes 20s")
+	skip.UnderRace(t, "takes 20s")
 
 	parseGeneratorType := func(dist string) int {
 		switch dist {

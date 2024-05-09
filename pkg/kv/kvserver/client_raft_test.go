@@ -5958,9 +5958,9 @@ func TestRaftCampaignPreVoteCheckQuorum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Timing-sensitive, so skip under deadlock detector and stressrace.
+	// Timing-sensitive, so skip under deadlock detector and race.
 	skip.UnderDeadlock(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 
@@ -6037,9 +6037,9 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Timing-sensitive, so skip under deadlock detector and stressrace.
+	// Timing-sensitive, so skip under deadlock detector and race.
 	skip.UnderDeadlock(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 
@@ -6134,9 +6134,9 @@ func TestRaftPreVote(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Timing-sensitive, so skip it under deadlock detector and stressrace.
+	// Timing-sensitive, so skip it under deadlock detector and race.
 	skip.UnderDeadlock(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	testutils.RunTrueAndFalse(t, "partial", func(t *testing.T, partial bool) {
 		testutils.RunTrueAndFalse(t, "quiesce", func(t *testing.T, quiesce bool) {
@@ -6377,9 +6377,9 @@ func TestRaftCheckQuorum(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// This test is timing-sensitive, so skip it under deadlock detector and
-	// stressrace.
+	// race.
 	skip.UnderDeadlock(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	testutils.RunTrueAndFalse(t, "symmetric", func(t *testing.T, symmetric bool) {
 		testutils.RunTrueAndFalse(t, "quiesce", func(t *testing.T, quiesce bool) {
@@ -6646,9 +6646,9 @@ func TestRaftUnquiesceLeaderNoProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Timing-sensitive, so skip under deadlock detector and stressrace.
+	// Timing-sensitive, so skip under deadlock detector and race.
 	skip.UnderDeadlock(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -6766,9 +6766,9 @@ func TestRaftPreVoteUnquiesceDeadLeader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Timing-sensitive, so skip under deadlock detector and stressrace.
+	// Timing-sensitive, so skip under deadlock detector and race.
 	skip.UnderDeadlock(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()

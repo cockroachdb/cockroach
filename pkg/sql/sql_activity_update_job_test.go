@@ -240,7 +240,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.WithIssue(t, 120626)
-	skip.UnderStressRace(t, "test is too slow to run under race")
+	skip.UnderRace(t, "test is too slow to run under race")
 
 	stubTime := timeutil.Now().Truncate(time.Hour)
 	sqlStatsKnobs := sqlstats.CreateTestingKnobs()

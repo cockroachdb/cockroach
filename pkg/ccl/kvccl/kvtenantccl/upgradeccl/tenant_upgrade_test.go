@@ -52,7 +52,7 @@ type autoUpgradeClusterSetting struct {
 // where the tenant auto upgrade should kick in.
 func testTenantAutoUpgrade(t *testing.T, clusterSetting *autoUpgradeClusterSetting) {
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	v0 := clusterversion.MinSupported
 	ctx := context.Background()
@@ -221,7 +221,7 @@ func TestTenantAutoUpgradeWithPreserveDowngradeOptionClusterSetting(t *testing.T
 func TestTenantUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 	ctx := context.Background()
 
 	v1 := clusterversion.MinSupported.Version()

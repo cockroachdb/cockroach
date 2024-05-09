@@ -41,9 +41,8 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// This test takes seconds because of replication vagaries.
 	skip.UnderShort(t)
-	// Under stressrace, replication changes seem to hit 1m deadline errors and
+	// Under race, replication changes seem to hit 1m deadline errors and
 	// don't make progress.
-	skip.UnderStressRace(t)
 	skip.UnderRace(t, "takes >1min under race")
 	// Similarly, skip the test under deadlock builds.
 	skip.UnderDeadlock(t, "takes >1min under deadlock")

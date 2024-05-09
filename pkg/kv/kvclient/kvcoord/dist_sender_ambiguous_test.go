@@ -275,7 +275,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	// This test depends on an intricate sequencing of events that can take
 	// several seconds, and requires maintaining expected leases.
 	skip.UnderShort(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	succeedsSoonDuration := testutils.DefaultSucceedsSoonDuration
 	if util.RaceEnabled {

@@ -35,8 +35,8 @@ func TestShowTraceReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t) // too slow
-	skip.UnderDeadlock(t)   // too slow
+	skip.UnderRace(t)     // too slow
+	skip.UnderDeadlock(t) // too slow
 
 	const numNodes = 4
 
