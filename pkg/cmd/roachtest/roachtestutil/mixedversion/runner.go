@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -98,6 +99,10 @@ type (
 		background *backgroundRunner
 		monitor    *crdbMonitor
 
+		// ranUserHooks keeps track of whether the runner has run any
+		// user-provided hooks so far.
+		ranUserHooks *atomic.Bool
+
 		connCache struct {
 			mu    syncutil.Mutex
 			cache []*gosql.DB
@@ -119,16 +124,19 @@ func newTestRunner(
 	crdbNodes option.NodeListOption,
 	randomSeed int64,
 ) *testRunner {
+	var ranUserHooks atomic.Bool
+
 	return &testRunner{
-		ctx:        ctx,
-		cancel:     cancel,
-		plan:       plan,
-		logger:     l,
-		cluster:    c,
-		crdbNodes:  crdbNodes,
-		background: newBackgroundRunner(ctx, l),
-		monitor:    newCRDBMonitor(ctx, c, crdbNodes),
-		seed:       randomSeed,
+		ctx:          ctx,
+		cancel:       cancel,
+		plan:         plan,
+		logger:       l,
+		cluster:      c,
+		crdbNodes:    crdbNodes,
+		background:   newBackgroundRunner(ctx, l),
+		monitor:      newCRDBMonitor(ctx, c, crdbNodes),
+		ranUserHooks: &ranUserHooks,
+		seed:         randomSeed,
 	}
 }
 
@@ -137,6 +145,14 @@ func newTestRunner(
 func (tr *testRunner) run() (retErr error) {
 	stepsErr := make(chan error)
 	defer func() { tr.teardown(stepsErr, retErr != nil) }()
+	defer func() {
+		// If the test failed an we haven't run any user hooks up to this
+		// point, redirect the failure to Test Eng, as this indicates a
+		// setup problem that should be investigated separately.
+		if retErr != nil && !tr.ranUserHooks.Load() {
+			retErr = registry.ErrorWithOwner(registry.OwnerTestEng, retErr)
+		}
+	}()
 
 	go func() {
 		defer close(stepsErr)
@@ -223,6 +239,10 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 		if stopChan := ss.impl.Background(); stopChan != nil {
 			tr.startBackgroundStep(ss, stepLogger, stopChan)
 			return nil
+		}
+
+		if _, isUserHook := ss.impl.(runHookStep); isUserHook {
+			tr.ranUserHooks.Store(true)
 		}
 
 		return tr.runSingleStep(ctx, ss, stepLogger)
@@ -542,6 +562,10 @@ func (cm *crdbMonitor) ExpectDeaths(n int) {
 }
 
 func (cm *crdbMonitor) Stop() error {
+	if cm.monitor == nil { // test-only
+		return nil
+	}
+
 	return cm.monitor.WaitE()
 }
 
@@ -687,6 +711,10 @@ func (tw *tableWriter) String() string {
 }
 
 func renameFailedLogger(l *logger.Logger) error {
+	if l.File == nil { // test-only
+		return nil
+	}
+
 	currentFileName := l.File.Name()
 	newLogName := path.Join(
 		filepath.Dir(currentFileName),
