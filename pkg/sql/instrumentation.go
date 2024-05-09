@@ -628,6 +628,12 @@ func (ih *instrumentationHelper) Finish(
 		// _before_ inserting the bundle to prevent rare test flakes (#106284).
 		ih.stmtDiagnosticsRecorder.MaybeRemoveRequest(ih.diagRequestID, ih.diagRequest, execLatency)
 		if ih.stmtDiagnosticsRecorder.IsConditionSatisfied(ih.diagRequest, execLatency) {
+			if ih.diagRequest.IsRedacted() {
+				// RedactValues might already be set if REDACT flag was used
+				// explicitly. We also need to set RedactValues when this bundle
+				// is being collected for the request that asked for redaction.
+				ih.explainFlags.RedactValues = true
+			}
 			placeholders := p.extendedEvalCtx.Placeholders
 			ob := ih.emitExplainAnalyzePlanToOutputBuilder(ctx, ih.explainFlags, phaseTimes, queryLevelStats)
 			warnings = ob.GetWarnings()
