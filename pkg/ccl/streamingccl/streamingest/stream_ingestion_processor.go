@@ -281,6 +281,8 @@ type streamIngestionProcessor struct {
 	// backupDataProcessors' trace recording.
 	agg      *bulkutil.TracingAggregator
 	aggTimer timeutil.Timer
+
+	recentStats ingestProcStats
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -502,9 +504,16 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 	}
 
 	select {
-	case progressUpdate, ok := <-sip.checkpointCh:
+	case latestResolvedSpans, ok := <-sip.checkpointCh:
 		if ok {
-			progressBytes, err := protoutil.Marshal(progressUpdate)
+			sip.recentStats.Lock()
+			defer sip.recentStats.Unlock()
+			processorProgressUpdate := streampb.IngestionProcessorProgress{
+				SQLInstanceID: int32(sip.flowCtx.NodeID.SQLInstanceID()),
+				ResolvedSpans: latestResolvedSpans,
+				LowWater:      sip.recentStats.LowWaterMark,
+			}
+			progressBytes, err := protoutil.Marshal(&processorProgressUpdate)
 			if err != nil {
 				sip.MoveToDrainingAndLogError(err)
 				return nil, sip.DrainHelper()
@@ -941,7 +950,11 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}
 	}
+	sip.recentStats.Lock()
+	defer sip.recentStats.Unlock()
+	sip.recentStats.LowWaterMark = sip.frontier.Frontier()
 
+	// TODO (msbutler): delete these metrics. they are meaningless.
 	sip.metrics.EarliestDataCheckpointSpan.Update(lowestTimestamp.GoTime().UnixNano())
 	sip.metrics.LatestDataCheckpointSpan.Update(highestTimestamp.GoTime().UnixNano())
 	sip.metrics.ResolvedEvents.Inc(1)
