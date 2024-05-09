@@ -181,7 +181,7 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 		},
 		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
 	)
-	require.Contains(t, err.Error(), "VIEWACTIVITYREDACTED privilege cannot request statement bundle")
+	require.Contains(t, err.Error(), "users with VIEWACTIVITYREDACTED privilege can only request redacted statement bundles")
 }
 
 func TestStatementDiagnosticsCompleted(t *testing.T) {

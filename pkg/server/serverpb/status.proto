@@ -1842,6 +1842,8 @@ message StatementDiagnosticsReport {
     [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
   google.protobuf.Timestamp expires_at = 7
     [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  // TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, and
+  // redacted fields?
 }
 
 message CreateStatementDiagnosticsReportRequest {
@@ -1900,6 +1902,8 @@ message CreateStatementDiagnosticsReportRequest {
   // AntiPlanGist, when set, indicates that any plan not matching PlanGist will
   // do.
   bool anti_plan_gist = 6;
+  // Redacted, when set, indicates that the redacted bundle is requested.
+  bool redacted = 7;
 }
 
 message CreateStatementDiagnosticsReportResponse {

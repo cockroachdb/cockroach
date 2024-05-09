@@ -124,6 +124,14 @@ var upgrades = []upgradebase.Upgrade{
 
 	newFirstUpgrade(clusterversion.V24_2Start.Version()),
 
+	upgrade.NewTenantUpgrade(
+		"add the redacted column to system.statement_diagnostics_requests table",
+		clusterversion.V24_2_StmtDiagRedacted.Version(),
+		upgrade.NoPrecondition,
+		stmtDiagRedactedMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

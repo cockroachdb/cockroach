@@ -2574,6 +2574,9 @@ var builtinOidsArray = []string{
 	2606: `crdb_internal.protect_mvcc_history(timestamp: decimal, expiration_window: interval, description: string) -> int`,
 	2607: `crdb_internal.extend_mvcc_history_protection(job_id: int) -> void`,
 	2608: `crdb_internal.force_panic(msg: string, mode: string) -> int`,
+	2609: `crdb_internal.request_statement_bundle(stmtFingerprint: string, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval, redacted: bool) -> bool`,
+	2610: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval, redacted: bool) -> bool`,
+	2611: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, antiPlanGist: bool, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval, redacted: bool) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

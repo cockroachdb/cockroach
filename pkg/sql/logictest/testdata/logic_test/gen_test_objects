@@ -198,26 +198,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-protected_ts_meta      "num_records"            bigint
-protected_ts_meta      num_spans                 bigint
-protected_ts_meta      rowid                     bigint
-protected_ts_meta      "singleton*"              boolean
-protected_ts_meta      "t'o tal_b,yt😫es"         bigint
-protected_ts_meta      "version"                bigint
-"ran gelog"            "eventType"               text
-"ran gelog"            info                      text
-"ran gelog"            "otherRangeID"            bigint
-"ran gelog"            "rangêID"                 bigint
-"ran gelog"            rowid                     bigint
-"ran gelog"            "s͏toreID"                bigint
-"ran gelog"            "timestamp"               timestamp without time zone
-"ran gelog"            "uniqueID"                bigint
-"replicati̾on_stats"  "over_replicated_ranGes"  bigint
-"replicati̾on_stats"  repor̤t_id                bigint
-"replicati̾on_stats"  rowid                     bigint
-"replicati̾on_stats"  "subzone_id%p"            bigint
-"replicati̾on_stats"  total_ranges              bigint
-"replicati̾on_stats"  unavailable_ranges        bigint
+protected_ts_meta      "num_records"           bigint
+protected_ts_meta      num_spans                bigint
+protected_ts_meta      rowid                    bigint
+protected_ts_meta      "singleton*"             boolean
+protected_ts_meta      "t'o tal_b,yt😫es"        bigint
+protected_ts_meta      "version"               bigint
+"ran gelog"            "%rangeID"               bigint
+"ran gelog"            "eventType"              text
+"ran gelog"            i̅nfo                    text
+"ran gelog"            "otherRangeID"           bigint
+"ran gelog"            rowid                    bigint
+"ran gelog"            "storeID"                bigint
+"ran gelog"            "timestamp"              timestamp without time zone
+"ran gelog"            "unique%qID"             bigint
+"replicati̾on_stats"  over_replic̣ated_ranges  bigint
+"replicati̾on_stats"  report_id                bigint
+"replicati̾on_stats"  rowid                    bigint
+"replicati̾on_stats"  "s%pubzone_id"           bigint
+"replicati̾on_stats"  total_ranges             bigint
+"replicati̾on_stats"  unavailable_ranges       bigint
 
 subtest templates/different_templates_in_each_db
 

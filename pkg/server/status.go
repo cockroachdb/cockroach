@@ -543,6 +543,7 @@ type StmtDiagnosticsRequester interface {
 	//   and the bundle is not generated for them.
 	// - expiresAfter, if non-zero, indicates for how long the request should
 	//   stay active.
+	// - redacted, if true, indicates that the redacted bundle is requested.
 	InsertRequest(
 		ctx context.Context,
 		stmtFingerprint string,
@@ -551,6 +552,7 @@ type StmtDiagnosticsRequester interface {
 		samplingProbability float64,
 		minExecutionLatency time.Duration,
 		expiresAfter time.Duration,
+		redacted bool,
 	) error
 	// CancelRequest updates an entry in system.statement_diagnostics_requests
 	// for tracing a query with the given fingerprint to be expired (thus,
