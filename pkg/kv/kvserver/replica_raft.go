@@ -2511,18 +2511,20 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 		// installed a placeholder for snapshot's keyspace. No merge lock needed.
 		return nil, func() {}
 	}
+	unlocks := []func(){}
 	for endKey.Less(inSnap.Desc.EndKey) {
 		sRepl := r.store.LookupReplica(endKey)
 		if sRepl == nil || !endKey.Equal(sRepl.Desc().StartKey) {
 			log.Fatalf(ctx, "snapshot widens existing replica, but no replica exists for subsumed key %s", endKey)
 		}
-		sRepl.raftMu.Lock()
 		subsumedRepls = append(subsumedRepls, sRepl)
+		sRepl.raftMu.Lock()
+		unlocks = append(unlocks, func() { sRepl.raftMu.Unlock() }) // nolint:deferunlockcheck
 		endKey = sRepl.Desc().EndKey
 	}
 	return subsumedRepls, func() {
-		for _, sr := range subsumedRepls {
-			sr.raftMu.Unlock()
+		for _, unlock := range unlocks {
+			unlock()
 		}
 	}
 }
