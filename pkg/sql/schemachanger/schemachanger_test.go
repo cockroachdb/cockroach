@@ -853,7 +853,7 @@ func isPQErrWithCode(err error, codes ...pgcode.Code) bool {
 func TestCompareLegacyAndDeclarative(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t, "too slow under stress race")
+	skip.UnderRace(t, "too slow under stress race")
 
 	ss := &staticSQLStmtLineProvider{
 		stmts: []string{

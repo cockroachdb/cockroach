@@ -52,7 +52,7 @@ import (
 )
 
 func TestStorage(t *testing.T) {
-	skip.UnderStressRace(t, "very large test which is slow under stressrace")
+	skip.UnderRace(t, "very large test which is slow under race")
 	for _, withDeprecatedSpans := range []bool{true, false} {
 		for _, withMetaTable := range []bool{true, false} {
 			for _, test := range testCases {

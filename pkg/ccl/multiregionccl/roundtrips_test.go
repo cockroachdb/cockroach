@@ -35,7 +35,7 @@ import (
 func TestEnsureLocalReadsOnGlobalTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t, "https://github.com/cockroachdb/cockroach/issues/102798#issuecomment-1543852311")
+	skip.UnderRace(t, "https://github.com/cockroachdb/cockroach/issues/102798#issuecomment-1543852311")
 
 	// ensureOnlyLocalReads looks at a trace to ensure that reads were served
 	// locally. It returns true if the read was served as a follower read.

@@ -58,7 +58,7 @@ import (
 func TestTelemetryLoggingDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Some queries may be retried under stress.
-	skip.UnderStressRace(t, "results inconsistent under stress")
+	skip.UnderRace(t, "results inconsistent under stress")
 
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)

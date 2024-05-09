@@ -55,7 +55,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	defer s.SetupSingleFileLogging()()
 
 	// The liveness session might expire before the stress race can finish.
-	skip.UnderStressRace(t, "expensive tests")
+	skip.UnderRace(t, "expensive tests")
 
 	ctx := context.Background()
 

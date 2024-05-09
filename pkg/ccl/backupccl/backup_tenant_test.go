@@ -208,7 +208,7 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "test is too heavy to run under stress")
+	skip.UnderRace(t, "test is too heavy to run under stress")
 
 	tc, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /*numServers*/, base.TestingKnobs{},

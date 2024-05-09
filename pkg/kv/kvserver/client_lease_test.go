@@ -961,7 +961,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	skip.UnderShort(t)
 	// The test has 5 nodes. Its possible in stress-race for nodes to be starved
 	// out heartbeating their liveness.
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	stickyRegistry := fs.NewStickyRegistry()
 	ctx := context.Background()

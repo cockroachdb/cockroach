@@ -113,7 +113,7 @@ func TestListSessionsPrivileges(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Skip under stress race as the sleep query might finish before the stress race can finish.
-	skip.UnderStressRace(t, "list sessions privileges")
+	skip.UnderRace(t, "list sessions privileges")
 
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
@@ -322,7 +322,7 @@ func TestListClosedSessions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// The active sessions might close before the stress race can finish.
-	skip.UnderStressRace(t, "active sessions")
+	skip.UnderRace(t, "active sessions")
 
 	ctx := context.Background()
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})

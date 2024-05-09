@@ -226,7 +226,7 @@ func TestSpanToQueryBoundsCompositeKeys(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	testCases := []struct {
 		desc string

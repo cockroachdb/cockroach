@@ -199,7 +199,7 @@ func TestStatusAPITransactions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "test is very slow under deadlock")
-	skip.UnderStressRace(t, "test is too slow to run under stressrace")
+	skip.UnderRace(t, "test is too slow to run under race")
 
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	ctx := context.Background()
@@ -679,7 +679,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	if skip.Duress() {
 		additionalTimeout = additionalTimeoutUnderDuress
 	}
-	skip.UnderStressRace(t, "test is too slow to run under stressrace")
+	skip.UnderRace(t, "test is too slow to run under race")
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
@@ -852,7 +852,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Resource-intensive test, times out under stress.
-	skip.UnderStressRace(t, "expensive tests")
+	skip.UnderRace(t, "expensive tests")
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
@@ -1025,7 +1025,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// The liveness session might expire before the stress race can finish.
-	skip.UnderStressRace(t, "expensive tests")
+	skip.UnderRace(t, "expensive tests")
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
