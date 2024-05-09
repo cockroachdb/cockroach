@@ -349,20 +349,42 @@ type sinkURL struct {
 	q url.Values
 }
 
+func (u *sinkURL) makeParamValues() url.Values {
+	rawValues := u.Query()
+	q := make(url.Values)
+	for k, v := range rawValues {
+		q[strings.ToLower(k)] = v
+	}
+	return q
+}
+
+// consumeParam returns the value of the parameter p from the underlying URL,
+// and deletes the parameter from the URL. The parameter name is consumed in a
+// case-insensitive manner.
 func (u *sinkURL) consumeParam(p string) string {
 	if u.q == nil {
-		u.q = u.Query()
+		u.q = u.makeParamValues()
 	}
+	p = strings.ToLower(p)
 	v := u.q.Get(p)
 	u.q.Del(p)
 	return v
 }
 
+// contains checks if the URL has the specified parameter. The parameter name is
+// checked in a case insensitive manner.
+func (u *sinkURL) contains(p string) bool {
+	if u.q == nil {
+		u.q = u.makeParamValues()
+	}
+	return u.q.Get(strings.ToLower(p)) != ""
+}
+
 func (u *sinkURL) addParam(p string, value string) {
 	if u.q == nil {
-		u.q = u.Query()
+		u.q = u.makeParamValues()
 	}
-	u.q.Add(p, value)
+	u.q.Add(strings.ToLower(p), value)
 }
 
 func (u *sinkURL) consumeBool(param string, dest *bool) (wasSet bool, err error) {
@@ -391,7 +413,13 @@ func (u *sinkURL) decodeBase64(param string, dest *[]byte) error {
 }
 
 func (u *sinkURL) remainingQueryParams() (res []string) {
-	for p := range u.q {
+	if u.q == nil {
+		u.q = u.makeParamValues()
+	}
+	for p := range u.Query() {
+		if !u.contains(strings.ToLower(p)) {
+			continue
+		}
 		res = append(res, p)
 	}
 	return

@@ -63,7 +63,7 @@ type kmsURIParams struct {
 // resolveKMSURIParams parses the `kmsURI` for all the supported KMS parameters.
 func resolveKMSURIParams(kmsURI *url.URL) (kmsURIParams, error) {
 	kmsConsumeURL := cloud.ConsumeURL{URL: kmsURI}
-	auth, err := azureAuthMethod(kmsURI, &kmsConsumeURL)
+	auth, err := azureAuthMethod(&kmsConsumeURL)
 	if err != nil {
 		return kmsURIParams{}, err
 	}

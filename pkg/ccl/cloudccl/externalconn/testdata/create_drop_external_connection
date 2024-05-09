@@ -133,6 +133,15 @@ exec-sql
 DROP EXTERNAL CONNECTION "foo-s3";
 ----
 
+# Create an external connection with params in a mix of upper and lower case.
+exec-sql
+CREATE EXTERNAL CONNECTION "foo-s3" AS 's3://foo/bar?auth=implicit&AWS_access_key_id=123&AWS_secret_access_key=456&ASSUME_ROLE=ronaldo,rashford,bruno';
+----
+
+exec-sql
+DROP EXTERNAL CONNECTION "foo-s3"
+----
+
 inspect-system-table
 ----
 
@@ -161,6 +170,15 @@ pq: failed to construct External Connection details: invalid changefeed sink URI
 inspect-system-table
 ----
 foo-kafka STORAGE {"provider": "kafka", "simpleUri": {"uri": "kafka://broker.address.com:9092?topic_prefix=bar_&tls_enabled=true&ca_cert=Zm9vCg==&sasl_enabled=true&sasl_user={sasl user}&sasl_password={url-encoded password}&sasl_mechanism=SCRAM-SHA-256"}} root 1
+
+exec-sql
+DROP EXTERNAL CONNECTION "foo-kafka"
+----
+
+# Create an external connection with params in a mix of upper and lower case.
+exec-sql
+CREATE EXTERNAL CONNECTION "foo-kafka" AS 'kafka://broker.address.com:9092?TOPIC_PREFIX=bar_&tls_enabled=true&CA_CERT=Zm9vCg==&SASL_enabled=true&SASL_user={sasl user}&SASL_password={url-encoded password}&SASL_mechanism=SCRAM-SHA-256'
+----
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-kafka"
@@ -283,6 +301,15 @@ exec-sql
 DROP EXTERNAL CONNECTION "baz-azure";
 ----
 
+# Create an external connection with params in a mix of upper and lower case.
+exec-sql
+CREATE EXTERNAL CONNECTION "foo-azure" AS 'azure-storage://bucket/path?AZURE_account_name=foo&AZURE_account_key=Zm9vCg==&AZURE_environment=AzureUSGovernmentCloud'
+----
+
+exec-sql
+DROP EXTERNAL CONNECTION "foo-azure"
+----
+
 enable-check-external-storage
 ----
 
@@ -310,6 +337,15 @@ foo-kms KMS {"provider": "azure_kms", "simpleUri": {"uri": "azure-kms:///cmk/id?
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-kms";
+----
+
+# Create an external connection with params in a mix of upper and lower case.
+exec-sql
+CREATE EXTERNAL CONNECTION "foo-kms" AS 'gcp-kms:///cmk?auth=specified&BEARER_token=c29tZXRoaW5nCg==';
+----
+
+exec-sql
+DROP EXTERNAL CONNECTION "foo-kms"
 ----
 
 inspect-system-table
