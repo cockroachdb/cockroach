@@ -53,8 +53,13 @@ type tpcc struct {
 	// is the value of C for the item id generator. See 2.1.6.
 	cLoad, cCustomerID, cItemID int
 
-	mix                    string
-	waitFraction           float64
+	mix          string
+	waitFraction float64
+
+	// onTxnStart call back function to execute queries at the start of
+	// a txn.
+	onTxnStart func(ctx context.Context, tx pgx.Tx) error
+
 	workers                int
 	fks                    bool
 	separateColumnFamilies bool
@@ -967,17 +972,31 @@ func (w *tpcc) Ops(
 // success, the transaction is committed.
 func (w *tpcc) executeTx(ctx context.Context, conn crdbpgx.Conn, fn func(pgx.Tx) error) error {
 	txOpts := pgx.TxOptions{}
+	txnFuncWithPreamble := func(tx pgx.Tx) (err error) {
+		defer func() {
+			if err != nil && !w.txnRetries {
+				_ = tx.Rollback(ctx)
+			}
+		}()
+		if w.onTxnStart != nil {
+			err = w.onTxnStart(ctx, tx)
+			if err != nil {
+				return err
+			}
+		}
+		return fn(tx)
+	}
+
 	if w.txnRetries {
-		return crdbpgx.ExecuteTx(ctx, conn, txOpts, fn)
+		return crdbpgx.ExecuteTx(ctx, conn, txOpts, txnFuncWithPreamble)
 	}
 
 	tx, err := conn.BeginTx(ctx, txOpts)
 	if err != nil {
 		return err
 	}
-	err = fn(tx)
+	err = txnFuncWithPreamble(tx)
 	if err != nil {
-		_ = tx.Rollback(ctx)
 		return err
 	}
 	return tx.Commit(ctx)
