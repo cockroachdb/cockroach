@@ -33,10 +33,10 @@ type executorConfig struct {
 	cluster           string
 	binaries          string
 	compareBinaries   string
+	packageManifest   string
 	excludeList       []string
 	ignorePackageList []string
 	outputDir         string
-	libDir            string
 	remoteDir         string
 	timeout           string
 	shellCommand      string
@@ -139,7 +139,6 @@ func defaultExecutorConfig() executorConfig {
 	return executorConfig{
 		binaries:     "bin/test_binaries.tar.gz",
 		outputDir:    "artifacts/roachprod-microbench",
-		libDir:       "bin/lib",
 		remoteDir:    "/mnt/data1/microbench",
 		timeout:      "10m",
 		shellCommand: "COCKROACH_RANDOM_SEED=1",
@@ -170,12 +169,6 @@ func (e *executor) prepareCluster() (int, error) {
 
 	// Clear old artifacts, copy and extract new artifacts on to the cluster.
 	if e.copyBinaries {
-		if fi, cmdErr := os.Stat(e.libDir); cmdErr == nil && fi.IsDir() {
-			if putErr := roachprod.Put(context.Background(), e.log, e.cluster, e.libDir, "lib", true); putErr != nil {
-				return numNodes, putErr
-			}
-		}
-
 		for binIndex, bin := range e.binariesList {
 			// Specify the binaries' tarball remote location.
 			remoteBinSrc := fmt.Sprintf("%d_%s", binIndex, filepath.Base(bin))
@@ -190,7 +183,7 @@ func (e *executor) prepareCluster() (int, error) {
 				return numNodes, rpErr
 			}
 			extractFlags := "-xf"
-			if filepath.Ext(bin) == ".gz" {
+			if isCompressedTar(bin) {
 				extractFlags = "-xzf"
 			}
 			if rpErr := roachprodRun(e.cluster, e.log, []string{"tar", extractFlags, remoteBinSrc, "-C", remoteBinDest}); rpErr != nil {
@@ -202,6 +195,13 @@ func (e *executor) prepareCluster() (int, error) {
 		}
 	}
 	return numNodes, nil
+}
+
+// isCompressedTar returns true if the filename is a compressed tarball.
+// For example, "binaries.tar.gz" or "binaries.tar.xz".
+func isCompressedTar(filename string) bool {
+	match, _ := regexp.MatchString(`\.tar\.[^.]*$`, filename)
+	return match
 }
 
 // listBenchmarks distributes a listing command to test package binaries across

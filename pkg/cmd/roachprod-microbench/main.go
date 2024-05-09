@@ -84,8 +84,8 @@ func makeRunCommand() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&config.binaries, "binaries", config.binaries, "portable test binaries archive built with dev test-binaries")
 	cmd.Flags().StringVar(&config.compareBinaries, "compare-binaries", "", "run additional binaries from this archive and compare the results")
+	cmd.Flags().StringVar(&config.packageManifest, "package-manifest", "", "read package list from manifest file instead of archive")
 	cmd.Flags().StringVar(&config.outputDir, "output-dir", config.outputDir, "output directory for run log and microbenchmark results")
-	cmd.Flags().StringVar(&config.libDir, "lib-dir", config.libDir, "location of libraries required by test binaries")
 	cmd.Flags().StringVar(&config.remoteDir, "remote-dir", config.remoteDir, "working directory on the target cluster")
 	cmd.Flags().StringVar(&config.timeout, "timeout", config.timeout, "timeout for each benchmark e.g. 10m")
 	cmd.Flags().StringVar(&config.shellCommand, "shell", config.shellCommand, "additional shell command to run on node before benchmark execution")
