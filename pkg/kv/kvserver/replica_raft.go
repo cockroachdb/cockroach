@@ -1141,11 +1141,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if r.store.TestingKnobs().EnableUnconditionalRefreshesInRaftReady {
 		refreshReason = reasonNewLeaderOrConfigChange
 	}
-	if refreshReason != noReason {
-		r.mu.Lock()
-		r.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, refreshReason)
-		r.mu.Unlock()
-	}
+	r.maybeRefreshProposals(ctx, refreshReason)
 
 	// NB: if we just processed a command which removed this replica from the
 	// raft group we will early return before this point. This, combined with
@@ -1197,6 +1193,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// get blocked.
 	r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 	return stats, nil
+}
+
+func (r *Replica) maybeRefreshProposals(ctx context.Context, refreshReason refreshRaftReason) {
+	if refreshReason != noReason {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, refreshReason)
+	}
 }
 
 // asyncReady encapsulates the messages that are ready to be sent to other peers
