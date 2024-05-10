@@ -275,6 +275,7 @@ go_library(
         "//pkg/util/uuid",
         "//pkg/util/version",
         "//pkg/workload",
+        "//pkg/workload/debug",
         "//pkg/workload/histogram",
         "//pkg/workload/querybench",
         "//pkg/workload/tpcc",

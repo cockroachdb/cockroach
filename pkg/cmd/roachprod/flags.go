@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/maps"
@@ -50,7 +51,7 @@ var (
 	listPattern           string
 	isSecure              bool   // Set based on the values passed to --secure and --insecure
 	secure                = true // DEPRECATED
-	insecure              = false
+	insecure              = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", false)
 	virtualClusterName    string
 	sqlInstance           int
 	extraSSHOptions       = ""
