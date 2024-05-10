@@ -99,6 +99,12 @@ func StubTableStats(
 // framework.
 type createStatsNode struct {
 	tree.CreateStats
+
+	// p is the "outer planner" from planning the CREATE STATISTICS
+	// statement. When we startExec the createStatsNode, it creates a job which
+	// has a second planner (the JobExecContext). When the job resumes, it does
+	// its work using a retrying internal transaction for which we create a third
+	// "inner planner".
 	p *planner
 
 	// runAsJob is true by default, and causes the code below to be executed,
@@ -638,39 +644,53 @@ var _ jobs.Resumer = &createStatsResumer{}
 
 // Resume is part of the jobs.Resumer interface.
 func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) error {
-	p := execCtx.(JobExecContext)
+	// jobsPlanner is a second planner distinct from the "outer planner" in the
+	// createStatsNode. It comes from the jobs system and does not have an
+	// associated txn.
+	jobsPlanner := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.CreateStatsDetails)
 	if details.Name == jobspb.AutoStatsName {
 		// We want to make sure that an automatic CREATE STATISTICS job only runs if
 		// there are no other CREATE STATISTICS jobs running, automatic or manual.
-		if err := checkRunningJobs(ctx, r.job, p); err != nil {
+		if err := checkRunningJobs(ctx, r.job, jobsPlanner); err != nil {
 			return err
 		}
 	}
 
 	r.tableID = details.Table.ID
-	evalCtx := p.ExtendedEvalContext()
+	evalCtx := jobsPlanner.ExtendedEvalContext()
 
-	dsp := p.DistSQLPlanner()
-	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		// Set the transaction on the EvalContext to this txn. This allows for
-		// use of the txn during processor setup during the execution of the flow.
-		evalCtx.Txn = txn.KV()
-
+	if err := jobsPlanner.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// We create a third "inner planner" associated with this txn in order to
+		// have (a) use of the txn during type checking of any virtual computed
+		// column expressions, and (b) use of the txn during processor setup during
+		// the execution of the flow.
+		innerPlanner, cleanup := NewInternalPlanner(
+			"create-stats-resume-job",
+			txn.KV(),
+			jobsPlanner.User(),
+			&MemoryMetrics{},
+			jobsPlanner.ExecCfg(),
+			jobsPlanner.SessionData(),
+		)
+		defer cleanup()
+		innerP := innerPlanner.(*planner)
+		innerEvalCtx := innerP.ExtendedEvalContext()
 		if details.AsOf != nil {
-			p.ExtendedEvalContext().AsOfSystemTime = &eval.AsOfSystemTime{Timestamp: *details.AsOf}
-			p.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
+			innerP.ExtendedEvalContext().AsOfSystemTime = &eval.AsOfSystemTime{Timestamp: *details.AsOf}
+			innerP.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
 			if err := txn.KV().SetFixedTimestamp(ctx, *details.AsOf); err != nil {
 				return err
 			}
 		}
 
-		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, txn.KV(), FullDistribution)
+		dsp := innerP.DistSQLPlanner()
+		planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx, innerP, txn.KV(), FullDistribution)
 		// CREATE STATS flow doesn't produce any rows and only emits the
 		// metadata, so we can use a nil rowContainerHelper.
 		resultWriter := NewRowResultWriter(nil /* rowContainer */)
 		if err := dsp.planAndRunCreateStats(
-			ctx, evalCtx, planCtx, p.SemaCtx(), txn.KV(), r.job, resultWriter,
+			ctx, innerEvalCtx, planCtx, innerP.SemaCtx(), txn.KV(), r.job, resultWriter,
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
 			if grpcutil.IsContextCanceled(err) {
