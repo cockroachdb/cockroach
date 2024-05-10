@@ -295,6 +295,12 @@ var (
 		Usage: `The port on which to serve the HTTP interface`,
 	})
 
+	DogstatsdAddr string = ""
+	_                    = registerRunOpsFlag(&DogstatsdAddr, FlagInfo{
+		Name:  "dogstatsd-addr",
+		Usage: `The address to which to connect to dogstatsd, to send Datadog events.`,
+	})
+
 	PreferLocalSSD bool = true
 	_                   = registerRunFlag(&PreferLocalSSD, FlagInfo{
 		Name:  "local-ssd",
