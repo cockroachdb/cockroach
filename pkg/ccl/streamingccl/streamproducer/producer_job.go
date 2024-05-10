@@ -53,11 +53,16 @@ func makeProducerJobRecord(
 	expirationWindow time.Duration,
 	user username.SQLUsername,
 	ptsID uuid.UUID,
+	assumeSucceeded bool,
 ) jobs.Record {
 	tenantID := tenantInfo.ID
 	tenantName := tenantInfo.Name
 	currentTime := timeutil.Now()
 	expiration := currentTime.Add(expirationWindow)
+	status := jobspb.StreamReplicationProgress_NOT_FINISHED
+	if assumeSucceeded {
+		status = jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY
+	}
 	return jobs.Record{
 		JobID:       registry.MakeJobID(),
 		Description: fmt.Sprintf("History Retention for Physical Replication of %s", tenantName),
@@ -69,7 +74,8 @@ func makeProducerJobRecord(
 			ExpirationWindow:           expirationWindow,
 		},
 		Progress: jobspb.StreamReplicationProgress{
-			Expiration: expiration,
+			Expiration:            expiration,
+			StreamIngestionStatus: status,
 		},
 	}
 }
