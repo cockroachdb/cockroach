@@ -56,6 +56,11 @@ func (ex *connExecutor) execPrepare(
 		}
 	}
 
+	// Check if we need to auto-commit the transaction due to DDL.
+	if ev, payload := ex.maybeAutoCommitBeforeDDL(ctx, parseCmd.AST); ev != nil {
+		return ev, payload
+	}
+
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "prepare stmt")
 	defer sp.Finish()
 
