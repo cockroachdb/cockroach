@@ -143,8 +143,10 @@ func Test_getToken(t *testing.T) {
 		require.Empty(t, token)
 	})
 	t.Run("invalid credentials", func(t *testing.T) {
-		os.Setenv(ServiceAccountJson, "{}")
-		os.Setenv(ServiceAccountAudience, "dummy_audience")
+		err := os.Setenv(ServiceAccountJson, "{}")
+		require.Nil(t, err)
+		err = os.Setenv(ServiceAccountAudience, "dummy_audience")
+		require.Nil(t, err)
 		c.newTokenSource = func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (oauth2.TokenSource, error) {
 			return nil, fmt.Errorf("invalid")
 		}
@@ -154,8 +156,10 @@ func Test_getToken(t *testing.T) {
 		require.Equal(t, "error creating GCS oauth token source from specified credential: invalid", err.Error())
 	})
 	t.Run("invalid token", func(t *testing.T) {
-		os.Setenv(ServiceAccountJson, "{}")
-		os.Setenv(ServiceAccountAudience, "dummy_audience")
+		err := os.Setenv(ServiceAccountJson, "{}")
+		require.Nil(t, err)
+		err = os.Setenv(ServiceAccountAudience, "dummy_audience")
+		require.Nil(t, err)
 		c.newTokenSource = func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (oauth2.TokenSource, error) {
 			return &mockToken{token: "", err: fmt.Errorf("failed")}, nil
 		}
@@ -165,8 +169,10 @@ func Test_getToken(t *testing.T) {
 		require.Equal(t, "error getting identity token: failed", err.Error())
 	})
 	t.Run("success", func(t *testing.T) {
-		os.Setenv(ServiceAccountJson, "{}")
-		os.Setenv(ServiceAccountAudience, "dummy_audience")
+		err := os.Setenv(ServiceAccountJson, "{}")
+		require.Nil(t, err)
+		err = os.Setenv(ServiceAccountAudience, "dummy_audience")
+		require.Nil(t, err)
 		c.newTokenSource = func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (oauth2.TokenSource, error) {
 			return &mockToken{token: "token"}, nil
 		}
