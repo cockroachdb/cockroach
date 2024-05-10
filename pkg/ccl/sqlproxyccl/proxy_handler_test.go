@@ -1205,12 +1205,16 @@ func TestProxyHandler_handle(t *testing.T) {
 	defer stopper.Stop(ctx)
 	proxy, _ := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{})
 
-	p1, p2 := net.Pipe()
-	require.NoError(t, p1.Close())
-
 	// Check that handle does not return any error if the incoming connection
 	// has no data packets.
-	require.Nil(t, proxy.handler.handle(ctx, p2))
+	p1, p2 := net.Pipe()
+	require.NoError(t, p1.Close())
+	require.Nil(t, proxy.handler.handle(ctx, p2, false /* requireProxyProtocol */))
+
+	p1, p2 = net.Pipe()
+	require.NoError(t, p1.Close())
+	p2 = proxyproto.NewConn(p2)
+	require.Nil(t, proxy.handler.handle(ctx, p2, true /* requireProxyProtocol */))
 }
 
 func TestDenylistUpdate(t *testing.T) {
