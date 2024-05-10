@@ -1057,13 +1057,25 @@ var (
 	}
 	metaRangeSnapshotRecoveryRcvdBytes = metric.Metadata{
 		Name:        "range.snapshots.recovery.rcvd-bytes",
-		Help:        "Number of recovery snapshot bytes received",
+		Help:        "Number of raft recovery snapshot bytes received",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapshotRecoverySentBytes = metric.Metadata{
 		Name:        "range.snapshots.recovery.sent-bytes",
-		Help:        "Number of recovery snapshot bytes sent",
+		Help:        "Number of raft recovery snapshot bytes sent",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRangeSnapshotUpreplicationRcvdBytes = metric.Metadata{
+		Name:        "range.snapshots.upreplication.rcvd-bytes",
+		Help:        "Number of upreplication snapshot bytes received",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRangeSnapshotUpreplicationSentBytes = metric.Metadata{
+		Name:        "range.snapshots.upreplication.sent-bytes",
+		Help:        "Number of upreplication snapshot bytes sent",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -1301,6 +1313,16 @@ timeout, and have a high chance of being dropped.`,
 The number of Raft commands that leaseholders re-proposed with a modified LAI.
 Such re-proposals happen for commands that are committed to Raft out of intended
 order, and hence can not be applied as is.`,
+		Measurement: "Commands",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftCommandsPending = metric.Metadata{
+		Name: "raft.commands.pending",
+		Help: `Number of Raft commands proposed and pending.
+
+The number of Raft commands that the leaseholders are tracking as in-flight.
+These commands will be periodically reproposed until they are applied or until
+they fail, either unequivocally or ambiguously.`,
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -2374,6 +2396,13 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaStorageWALFailoverWriteAndSyncLatency = metric.Metadata{
+		Name: "storage.wal.failover.write_and_sync.latency",
+		Help: "The observed latency for writing and syncing to the write ahead log. Only populated " +
+			"when WAL failover is configured",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaReplicaReadBatchDroppedLatchesBeforeEval = metric.Metadata{
 		Name:        "kv.replica_read_batch_evaluate.dropped_latches_before_eval",
 		Help:        `Number of times read-only batches dropped latches before evaluation.`,
@@ -2620,6 +2649,7 @@ type StoreMetrics struct {
 	WALFailoverSwitchCount            *metric.Gauge
 	WALFailoverPrimaryDuration        *metric.Gauge
 	WALFailoverSecondaryDuration      *metric.Gauge
+	WALFailoverWriteAndSyncLatency    *metric.ManualWindowHistogram
 
 	RdbCheckpoints *metric.Gauge
 
@@ -2652,6 +2682,8 @@ type StoreMetrics struct {
 	RangeSnapshotUnknownSentBytes                *metric.Counter
 	RangeSnapshotRecoveryRcvdBytes               *metric.Counter
 	RangeSnapshotRecoverySentBytes               *metric.Counter
+	RangeSnapshotUpreplicationRcvdBytes          *metric.Counter
+	RangeSnapshotUpreplicationSentBytes          *metric.Counter
 	RangeSnapshotRebalancingRcvdBytes            *metric.Counter
 	RangeSnapshotRebalancingSentBytes            *metric.Counter
 	RangeSnapshotRecvFailed                      *metric.Counter
@@ -2688,6 +2720,7 @@ type StoreMetrics struct {
 	RaftCommandsProposed       *metric.Counter
 	RaftCommandsReproposed     *metric.Counter
 	RaftCommandsReproposedLAI  *metric.Counter
+	RaftCommandsPending        *metric.Gauge
 	RaftCommandsApplied        *metric.Counter
 	RaftLogCommitLatency       metric.IHistogram
 	RaftCommandCommitLatency   metric.IHistogram
@@ -3330,6 +3363,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		WALFailoverSwitchCount:       metric.NewGauge(metaStorageWALFailoverSwitchCount),
 		WALFailoverPrimaryDuration:   metric.NewGauge(metaStorageWALFailoverPrimaryDuration),
 		WALFailoverSecondaryDuration: metric.NewGauge(metaStorageWALFailoverSecondaryDuration),
+		WALFailoverWriteAndSyncLatency: metric.NewManualWindowHistogram(
+			metaStorageWALFailoverWriteAndSyncLatency,
+			pebble.FsyncLatencyBuckets,
+			false, /* withRotate */
+		),
 
 		// Ingestion metrics
 		IngestCount: metric.NewGauge(metaIngestCount),
@@ -3355,6 +3393,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotUnknownSentBytes:                metric.NewCounter(metaRangeSnapshotUnknownSentBytes),
 		RangeSnapshotRecoveryRcvdBytes:               metric.NewCounter(metaRangeSnapshotRecoveryRcvdBytes),
 		RangeSnapshotRecoverySentBytes:               metric.NewCounter(metaRangeSnapshotRecoverySentBytes),
+		RangeSnapshotUpreplicationRcvdBytes:          metric.NewCounter(metaRangeSnapshotUpreplicationRcvdBytes),
+		RangeSnapshotUpreplicationSentBytes:          metric.NewCounter(metaRangeSnapshotUpreplicationSentBytes),
 		RangeSnapshotRebalancingRcvdBytes:            metric.NewCounter(metaRangeSnapshotRebalancingRcvdBytes),
 		RangeSnapshotRebalancingSentBytes:            metric.NewCounter(metaRangeSnapshotRebalancingSentBytes),
 		RangeSnapshotRecvFailed:                      metric.NewCounter(metaRangeSnapshotRecvFailed),
@@ -3396,6 +3436,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftCommandsProposed:      metric.NewCounter(metaRaftCommandsProposed),
 		RaftCommandsReproposed:    metric.NewCounter(metaRaftCommandsReproposed),
 		RaftCommandsReproposedLAI: metric.NewCounter(metaRaftCommandsReproposedLAI),
+		RaftCommandsPending:       metric.NewGauge(metaRaftCommandsPending),
 		RaftCommandsApplied:       metric.NewCounter(metaRaftCommandsApplied),
 		RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
@@ -3940,8 +3981,9 @@ func (sm *StoreMetrics) getCounterForRangeLogEventType(
 }
 
 type pebbleCategoryIterMetrics struct {
-	IterBlockBytes        *metric.Gauge
-	IterBlockBytesInCache *metric.Gauge
+	IterBlockBytes          *metric.Gauge
+	IterBlockBytesInCache   *metric.Gauge
+	IterBlockReadLatencySum *metric.Gauge
 }
 
 func makePebbleCategorizedIterMetrics(category sstable.Category) *pebbleCategoryIterMetrics {
@@ -3957,9 +3999,16 @@ func makePebbleCategorizedIterMetrics(category sstable.Category) *pebbleCategory
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaBlockReadLatencySum := metric.Metadata{
+		Name:        fmt.Sprintf("storage.iterator.category-%s.block-load.latency-sum", category),
+		Help:        "Cumulative latency for loading bytes not in the block cache, by storage sstable iterators",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	return &pebbleCategoryIterMetrics{
-		IterBlockBytes:        metric.NewGauge(metaBlockBytes),
-		IterBlockBytesInCache: metric.NewGauge(metaBlockBytesInCache),
+		IterBlockBytes:          metric.NewGauge(metaBlockBytes),
+		IterBlockBytesInCache:   metric.NewGauge(metaBlockBytesInCache),
+		IterBlockReadLatencySum: metric.NewGauge(metaBlockReadLatencySum),
 	}
 }
 
@@ -3969,6 +4018,7 @@ func (m *pebbleCategoryIterMetrics) MetricStruct() {}
 func (m *pebbleCategoryIterMetrics) update(stats sstable.CategoryStats) {
 	m.IterBlockBytes.Update(int64(stats.BlockBytes))
 	m.IterBlockBytesInCache.Update(int64(stats.BlockBytesInCache))
+	m.IterBlockReadLatencySum.Update(int64(stats.BlockReadDuration))
 }
 
 type pebbleCategoryIterMetricsContainer struct {

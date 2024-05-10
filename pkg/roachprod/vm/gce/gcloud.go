@@ -41,8 +41,8 @@ import (
 const (
 	defaultProject = "cockroach-ephemeral"
 	ProviderName   = "gce"
-	DefaultImage   = "ubuntu-2204-jammy-v20230727"
-	ARM64Image     = "ubuntu-2204-jammy-arm64-v20230727"
+	DefaultImage   = "ubuntu-2204-jammy-v20240319"
+	ARM64Image     = "ubuntu-2204-jammy-arm64-v20240319"
 	// TODO(DarrylWong): Upgrade FIPS to Ubuntu 22 when it is available.
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
@@ -153,7 +153,7 @@ func (jsonVM *jsonVM) toVM(
 
 	// Check "lifetime" label.
 	var lifetime time.Duration
-	if lifetimeStr, ok := jsonVM.Labels["lifetime"]; ok {
+	if lifetimeStr, ok := jsonVM.Labels[vm.TagLifetime]; ok {
 		if lifetime, err = time.ParseDuration(lifetimeStr); err != nil {
 			vmErrors = append(vmErrors, vm.ErrNoExpiration)
 		}
@@ -359,7 +359,6 @@ func (p *Provider) GetPreemptedSpotVMs(
 		l.Printf("Error building gcloud cli command: %v\n", err)
 		return nil, err
 	}
-	l.Printf("gcloud cli for preemption : " + strings.Join(append([]string{"gcloud"}, args...), " "))
 	var logEntries []LogEntry
 	if err := runJSONCommand(args, &logEntries); err != nil {
 		l.Printf("Error running gcloud cli command: %v\n", err)
@@ -388,7 +387,6 @@ func (p *Provider) GetHostErrorVMs(
 		l.Printf("Error building gcloud cli command: %v\n", err)
 		return nil, err
 	}
-	l.Printf("gcloud cli for host error : " + strings.Join(append([]string{"gcloud"}, args...), " "))
 	var logEntries []LogEntry
 	if err := runJSONCommand(args, &logEntries); err != nil {
 		l.Printf("Error running gcloud cli command: %v\n", err)
@@ -1246,8 +1244,11 @@ func (p *Provider) computeInstanceArgs(
 		for i := 0; i < providerOpts.SSDCount; i++ {
 			args = append(args, "--local-ssd", "interface=NVME")
 		}
+		// Add `discard` for Local SSDs on NVMe, as is advised in:
+		// https://cloud.google.com/compute/docs/disks/add-local-ssd
+		extraMountOpts = "discard"
 		if opts.SSDOpts.NoExt4Barrier {
-			extraMountOpts = "nobarrier"
+			extraMountOpts = fmt.Sprintf("%s,nobarrier", extraMountOpts)
 		}
 	} else {
 		pdProps := []string{
@@ -2302,7 +2303,7 @@ func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 // Extend TODO(peter): document
 func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
 	return p.AddLabels(l, vms, map[string]string{
-		"lifetime": lifetime.String(),
+		vm.TagLifetime: lifetime.String(),
 	})
 }
 

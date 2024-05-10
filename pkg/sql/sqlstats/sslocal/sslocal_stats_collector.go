@@ -12,11 +12,15 @@ package sslocal
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
+	"github.com/cockroachdb/redact"
 )
 
 // StatsCollector is used to collect statistics for transactions and
@@ -24,12 +28,23 @@ import (
 type StatsCollector struct {
 	sqlstats.ApplicationStats
 
+	// Allows StatsCollector to send statement and transaction stats to the insights system.
+	insightsWriter insights.Writer
+
 	// phaseTimes tracks session-level phase times.
 	phaseTimes *sessionphase.Times
 
 	// previousPhaseTimes tracks the session-level phase times for the previous
 	// query. This enables the `SHOW LAST QUERY STATISTICS` observer statement.
 	previousPhaseTimes *sessionphase.Times
+
+	// sendInsights is true if we should send statement and transaction stats to
+	// the insights system for the current transaction. This value is reset for
+	// every new transaction.
+	// It is important that if we send statement insights, we also send transaction
+	// insights, as the transaction insight event will free the memory used by
+	// statement insights.
+	sendInsights bool
 
 	flushTarget sqlstats.ApplicationStats
 	st          *cluster.Settings
@@ -42,11 +57,13 @@ var _ sqlstats.ApplicationStats = &StatsCollector{}
 func NewStatsCollector(
 	st *cluster.Settings,
 	appStats sqlstats.ApplicationStats,
+	insights insights.Writer,
 	phaseTime *sessionphase.Times,
 	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
 	return &StatsCollector{
 		ApplicationStats: appStats,
+		insightsWriter:   insights,
 		phaseTimes:       phaseTime.Clone(),
 		st:               st,
 		knobs:            knobs,
@@ -78,6 +95,7 @@ func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *se
 // StartTransaction sets up the StatsCollector for a new transaction.
 // The current application stats are reset for the new transaction.
 func (s *StatsCollector) StartTransaction() {
+	s.sendInsights = s.shouldObserveInsights()
 	s.flushTarget = s.ApplicationStats
 	s.ApplicationStats = s.flushTarget.NewApplicationStatsWithInheritedOptions()
 }
@@ -149,4 +167,132 @@ func (s *StatsCollector) UpgradeImplicitTxn(ctx context.Context) error {
 		})
 
 	return err
+}
+
+func getInsightStatus(statementError error) insights.Statement_Status {
+	if statementError == nil {
+		return insights.Statement_Completed
+	}
+
+	return insights.Statement_Failed
+}
+
+func (s *StatsCollector) shouldObserveInsights() bool {
+	return sqlstats.StmtStatsEnable.Get(&s.st.SV) && sqlstats.TxnStatsEnable.Get(&s.st.SV)
+}
+
+// ObserveStatement sends the recorded statement stats to the insights system
+// for further processing.
+func (s *StatsCollector) ObserveStatement(
+	stmtFingerprintID appstatspb.StmtFingerprintID, value sqlstats.RecordedStmtStats,
+) {
+	if !s.sendInsights {
+		return
+	}
+
+	var autoRetryReason string
+	if value.AutoRetryReason != nil {
+		autoRetryReason = value.AutoRetryReason.Error()
+	}
+
+	var contention *time.Duration
+	var cpuSQLNanos int64
+	if value.ExecStats != nil {
+		contention = &value.ExecStats.ContentionTime
+		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
+	}
+
+	var errorCode string
+	var errorMsg redact.RedactableString
+	if value.StatementError != nil {
+		errorCode = pgerror.GetPGCode(value.StatementError).String()
+		errorMsg = redact.Sprint(value.StatementError)
+	}
+
+	insight := insights.Statement{
+		ID:                   value.StatementID,
+		FingerprintID:        stmtFingerprintID,
+		LatencyInSeconds:     value.ServiceLatencySec,
+		Query:                value.Query,
+		Status:               getInsightStatus(value.StatementError),
+		StartTime:            value.StartTime,
+		EndTime:              value.EndTime,
+		FullScan:             value.FullScan,
+		PlanGist:             value.PlanGist,
+		Retries:              int64(value.AutoRetryCount),
+		AutoRetryReason:      autoRetryReason,
+		RowsRead:             value.RowsRead,
+		RowsWritten:          value.RowsWritten,
+		Nodes:                value.Nodes,
+		Contention:           contention,
+		IndexRecommendations: value.IndexRecommendations,
+		Database:             value.Database,
+		CPUSQLNanos:          cpuSQLNanos,
+		ErrorCode:            errorCode,
+		ErrorMsg:             errorMsg,
+	}
+	if s.knobs != nil && s.knobs.InsightsWriterStmtInterceptor != nil {
+		s.knobs.InsightsWriterStmtInterceptor(value.SessionID, &insight)
+	} else {
+		s.insightsWriter.ObserveStatement(value.SessionID, &insight)
+	}
+}
+
+// ObserveTransaction sends the recorded transaction stats to the insights system
+// for further processing.
+func (s *StatsCollector) ObserveTransaction(
+	ctx context.Context,
+	txnFingerprintID appstatspb.TransactionFingerprintID,
+	value sqlstats.RecordedTxnStats,
+) {
+	if !s.sendInsights {
+		return
+	}
+
+	var retryReason string
+	if value.AutoRetryReason != nil {
+		retryReason = value.AutoRetryReason.Error()
+	}
+
+	var cpuSQLNanos int64
+	if value.ExecStats.CPUTime.Nanoseconds() >= 0 {
+		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
+	}
+
+	var errorCode string
+	var errorMsg redact.RedactableString
+	if value.TxnErr != nil {
+		errorCode = pgerror.GetPGCode(value.TxnErr).String()
+		errorMsg = redact.Sprint(value.TxnErr)
+	}
+
+	status := insights.Transaction_Failed
+	if value.Committed {
+		status = insights.Transaction_Completed
+	}
+
+	insight := insights.Transaction{
+		ID:              value.TransactionID,
+		FingerprintID:   txnFingerprintID,
+		UserPriority:    value.Priority.String(),
+		ImplicitTxn:     value.ImplicitTxn,
+		Contention:      &value.ExecStats.ContentionTime,
+		StartTime:       value.StartTime,
+		EndTime:         value.EndTime,
+		User:            value.SessionData.User().Normalized(),
+		ApplicationName: value.SessionData.ApplicationName,
+		RowsRead:        value.RowsRead,
+		RowsWritten:     value.RowsWritten,
+		RetryCount:      value.RetryCount,
+		AutoRetryReason: retryReason,
+		CPUSQLNanos:     cpuSQLNanos,
+		LastErrorCode:   errorCode,
+		LastErrorMsg:    errorMsg,
+		Status:          status,
+	}
+	if s.knobs != nil && s.knobs.InsightsWriterTxnInterceptor != nil {
+		s.knobs.InsightsWriterTxnInterceptor(ctx, value.SessionID, &insight)
+	} else {
+		s.insightsWriter.ObserveTransaction(value.SessionID, &insight)
+	}
 }

@@ -101,6 +101,13 @@ var quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	5*time.Second,
 )
 
+var ingestSplitEvent = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"physical_replication.consumer.ingest_split_event.enabled",
+	"whether to ingest split events",
+	false,
+)
+
 var streamIngestionResultTypes = []*types.T{
 	types.Bytes, // jobspb.ResolvedSpans
 }
@@ -437,16 +444,14 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
 		}
 
-		previousReplicatedTimestamp := frontierForSpans(sip.frontier, partitionSpec.Spans...)
-
 		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-				streamingKnobs.BeforeClientSubscribe(addr, string(token), previousReplicatedTimestamp)
+				streamingKnobs.BeforeClientSubscribe(addr, string(token), sip.frontier)
 			}
 		}
 
 		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), int32(sip.flowCtx.NodeID.SQLInstanceID()), token,
-			sip.spec.InitialScanTimestamp, previousReplicatedTimestamp)
+			sip.spec.InitialScanTimestamp, sip.frontier)
 
 		if err != nil {
 			sip.MoveToDrainingAndLogError(errors.Wrapf(err, "consuming partition %v", redactedAddr))
@@ -702,7 +707,7 @@ func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
 
 	if event.Type() == streamingccl.KVEvent {
 		sip.metrics.AdmitLatency.RecordValue(
-			timeutil.Since(event.GetKV().Value.Timestamp.GoTime()).Nanoseconds())
+			timeutil.Since(event.GetKVs()[0].Value.Timestamp.GoTime()).Nanoseconds())
 	}
 
 	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
@@ -715,7 +720,7 @@ func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
 
 	switch event.Type() {
 	case streamingccl.KVEvent:
-		if err := sip.bufferKV(event.GetKV()); err != nil {
+		if err := sip.bufferKVs(event.GetKVs()); err != nil {
 			return err
 		}
 	case streamingccl.SSTableEvent:
@@ -744,6 +749,10 @@ func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
 			return err
 		}
 		return nil
+	case streamingccl.SplitEvent:
+		if err := sip.handleSplitEvent(event.GetSplitEvent()); err != nil {
+			return err
+		}
 	default:
 		return errors.Newf("unknown streaming event type %v", event.Type())
 	}
@@ -783,13 +792,13 @@ func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error
 				return err
 			}
 
-			return sip.bufferKV(&roachpb.KeyValue{
+			return sip.bufferKVs([]roachpb.KeyValue{{
 				Key: keyVal.Key.Key,
 				Value: roachpb.Value{
 					RawBytes:  mvccValue.RawBytes,
 					Timestamp: keyVal.Key.Timestamp,
 				},
-			})
+			}})
 		}, func(rangeKeyVal storage.MVCCRangeKeyValue) error {
 			return sip.bufferRangeKeyVal(rangeKeyVal)
 		})
@@ -841,36 +850,56 @@ func (sip *streamIngestionProcessor) bufferRangeKeyVal(
 	return nil
 }
 
-func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
-	// TODO: In addition to flushing when receiving a checkpoint event, we
-	// should also flush when we've buffered sufficient KVs. A buffering adder
-	// would save us here.
-	if kv == nil {
-		return errors.New("kv event expected to have kv")
+func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
+	ctx, sp := tracing.ChildSpan(sip.Ctx(), "replicated-split")
+	defer sp.Finish()
+	if !ingestSplitEvent.Get(&sip.EvalCtx.Settings.SV) {
+		return nil
 	}
-
-	var err error
-	var ok bool
-	kv.Key, ok, err = sip.rekey(kv.Key)
+	kvDB := sip.FlowCtx.Cfg.DB.KV()
+	rekey, ok, err := sip.rekey(*key)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return nil
 	}
+	log.Infof(ctx, "replicating split at %s", roachpb.Key(rekey).String())
+	expiration := kvDB.Clock().Now().AddDuration(time.Hour)
+	return kvDB.AdminSplit(ctx, rekey, expiration)
+}
 
-	if sip.rewriteToDiffKey {
-		kv.Value.ClearChecksum()
-		kv.Value.InitChecksum(kv.Key)
+func (sip *streamIngestionProcessor) bufferKVs(kvs []roachpb.KeyValue) error {
+	// TODO: In addition to flushing when receiving a checkpoint event, we
+	// should also flush when we've buffered sufficient KVs. A buffering adder
+	// would save us here.
+	if kvs == nil {
+		return errors.New("kv event expected to have kv")
 	}
+	for _, kv := range kvs {
+		var err error
+		var ok bool
+		kv.Key, ok, err = sip.rekey(kv.Key)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
 
-	sip.buffer.addKV(storage.MVCCKeyValue{
-		Key: storage.MVCCKey{
-			Key:       kv.Key,
-			Timestamp: kv.Value.Timestamp,
-		},
-		Value: kv.Value.RawBytes,
-	})
+		if sip.rewriteToDiffKey {
+			kv.Value.ClearChecksum()
+			kv.Value.InitChecksum(kv.Key)
+		}
+
+		sip.buffer.addKV(storage.MVCCKeyValue{
+			Key: storage.MVCCKey{
+				Key:       kv.Key,
+				Timestamp: kv.Value.Timestamp,
+			},
+			Value: kv.Value.RawBytes,
+		})
+	}
 	return nil
 }
 
@@ -897,7 +926,7 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 		// same resolved timestamp -- even if they were individually resolved to
 		// _slightly_ different/newer timestamps -- to allow them to merge into
 		// fewer and larger spans in the frontier.
-		if d > 0 {
+		if d > 0 && resolvedSpan.Timestamp.After(sip.spec.InitialScanTimestamp) {
 			resolvedSpan.Timestamp.Logical = 0
 			resolvedSpan.Timestamp.WallTime -= resolvedSpan.Timestamp.WallTime % int64(d)
 		}
@@ -1212,9 +1241,11 @@ func (sip *streamIngestionProcessor) flush() error {
 	bufferToFlush := sip.buffer
 	sip.buffer = getBuffer()
 
-	checkpoint := &jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
+	checkpoint := &jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0, sip.frontier.Len())}
 	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
-		checkpoint.ResolvedSpans = append(checkpoint.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		if !ts.IsEmpty() {
+			checkpoint.ResolvedSpans = append(checkpoint.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		}
 		return span.ContinueMatch
 	})
 

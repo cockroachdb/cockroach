@@ -26,6 +26,7 @@ import (
 	"math/bits"
 	"net"
 	"regexp/syntax"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -2091,7 +2092,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDFloat(tree.DFloat(evalCtx.RNG.Float64())), nil
+				return tree.NewDFloat(tree.DFloat(evalCtx.GetRNG().Float64())), nil
 			},
 			Info: "Returns a random floating-point number between 0 (inclusive) and 1 (exclusive). " +
 				"Note that the value contains at most 53 bits of randomness.",
@@ -2109,7 +2110,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				if seed < -1.0 || seed > 1.0 {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "setseed parameter %f is out of allowed range [-1,1]", seed)
 				}
-				evalCtx.RNG.Seed(int64(math.Float64bits(float64(seed))))
+				evalCtx.GetRNG().Seed(int64(math.Float64bits(float64(seed))))
 				return tree.DVoidDatum, nil
 			},
 			Info: "Sets the seed for subsequent random() calls in this session (value between -1.0 and 1.0, inclusive). " +
@@ -5688,6 +5689,50 @@ SELECT
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Volatile,
 		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "msg", Typ: types.String}, {Name: "mode", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// The user must have REPAIRCLUSTER to use this builtin.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				msg := string(s)
+				mode, ok := tree.AsDString(args[1])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[1])
+				}
+				switch string(mode) {
+				case "internalAssertion":
+					err := errors.AssertionFailedf("%s", msg)
+					// Panic instead of returning the error. The vectorized panic-catcher
+					// will catch the panic and convert it into an internal error.
+					colexecerror.InternalError(err)
+				case "indexOutOfRange":
+					msg += string(msg[math.MaxInt])
+				case "divideByZero":
+					var foo []int
+					msg += strconv.Itoa(len(msg) / len(foo))
+				case "contextCanceled":
+					panic(context.Canceled)
+				default:
+					return nil, errors.Newf(
+						"expected mode to be one of: internalAssertion, indexOutOfRange, divideByZero, contextCanceled",
+					)
+				}
+				// This code is unreachable.
+				panic(msg)
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Volatile,
+		},
 	),
 
 	"crdb_internal.force_log_fatal": makeBuiltin(
@@ -6930,6 +6975,7 @@ Parameters:` + randgencfg.ConfigDoc,
 				storeID := int32(tree.MustBeDInt(args[1]))
 				startKey := []byte(tree.MustBeDBytes(args[2]))
 				endKey := []byte(tree.MustBeDBytes(args[3]))
+				log.Infof(ctx, "crdb_internal.compact_engine_span called for nodeID=%d, storeID=%d, range[startKey=%s, endKey=%s]", nodeID, storeID, startKey, endKey)
 				if err := evalCtx.CompactEngineSpan(
 					ctx, nodeID, storeID, startKey, endKey); err != nil {
 					return nil, err

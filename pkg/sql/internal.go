@@ -873,6 +873,27 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	// Add any new overrides above the MultiOverride.
 }
 
+var ieMultiOverride = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"sql.internal_executor.session_overrides",
+	"comma-separated list of 'variable=value' pairs that change the corresponding "+
+		"session variables used by the InternalExecutor (performed on a best-effort basis)",
+	"",
+	settings.WithValidateString(func(_ *settings.Values, val string) error {
+		if val == "" {
+			return nil
+		}
+		overrides := strings.Split(val, ",")
+		for _, override := range overrides {
+			parts := strings.Split(override, "=")
+			if len(parts) != 2 {
+				return errors.Newf("invalid override format: expected 'variable=value', found %q", override)
+			}
+		}
+		return nil
+	}),
+)
+
 func (ie *InternalExecutor) maybeNodeSessionDataOverride(
 	opName string,
 ) sessiondata.InternalExecutorOverride {
@@ -1033,6 +1054,16 @@ func (ie *InternalExecutor) execInternal(
 		sd = ie.sessionDataStack.Top().Clone()
 	} else {
 		sd = NewInternalSessionData(context.Background(), ie.s.cfg.Settings, "" /* opName */)
+	}
+	if globalOverride := ieMultiOverride.Get(&ie.s.cfg.Settings.SV); globalOverride != "" {
+		globalOverride = strings.TrimSpace(globalOverride)
+		// Prepend the "global" setting overrides to ensure that caller's
+		// overrides take precedence.
+		if localOverride := sessionDataOverride.MultiOverride; localOverride != "" {
+			sessionDataOverride.MultiOverride = globalOverride + "," + localOverride
+		} else {
+			sessionDataOverride.MultiOverride = globalOverride
+		}
 	}
 
 	applyInternalExecutorSessionExceptions(sd)

@@ -734,6 +734,10 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 	h.evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization = true
 	h.evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = true
 	h.evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity = true
+	h.evalCtx.SessionData().TrigramSimilarityThreshold = 0.3
+	h.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
+	h.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
+	h.evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
 
 	// Set up the test catalog.
 	h.testCat = testcat.New()
@@ -1582,6 +1586,36 @@ func BenchmarkSlowQueries(b *testing.B) {
 						h.runSimple(b, query, Explore)
 					}
 				})
+			}
+		})
+	}
+}
+
+// BenchmarkSysbenchDistinctRange measures the time to optimize the
+// distinct-range query from sysbench oltp_read_only (and oltp_read_write).
+func BenchmarkSysbenchDistinctRange(b *testing.B) {
+	const schema = `
+  CREATE TABLE public.sbtest (
+    id INT8 NOT NULL,
+    k INT8 NOT NULL DEFAULT 0:::INT8,
+    c CHAR(120) NOT NULL DEFAULT '':::STRING,
+    pad CHAR(60) NOT NULL DEFAULT '':::STRING,
+    CONSTRAINT sbtest_pkey PRIMARY KEY (id ASC),
+    INDEX k_idx (k ASC)
+  );
+  `
+	benchQueries := []benchQuery{
+		{
+			name:  "sysbench-distinct-range",
+			query: "SELECT DISTINCT c FROM sbtest WHERE id BETWEEN 1 AND 16 ORDER BY c",
+			args:  []interface{}{},
+		},
+	}
+	for _, query := range benchQueries {
+		b.Run(query.name, func(b *testing.B) {
+			h := newHarness(b, query, []string{schema})
+			for i := 0; i < b.N; i++ {
+				h.runSimple(b, query, Explore)
 			}
 		})
 	}

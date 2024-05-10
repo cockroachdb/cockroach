@@ -29,9 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
 )
@@ -260,7 +260,7 @@ type zigzagJoiner struct {
 // be fetched at a time. Increasing this will improve performance for when
 // matched rows are grouped together, but increasing this too much will result
 // in fetching too many rows and therefore skipping less rows.
-var zigzagJoinerBatchSize = rowinfra.RowLimit(util.ConstantWithMetamorphicTestValue(
+var zigzagJoinerBatchSize = rowinfra.RowLimit(metamorphic.ConstantWithTestValue(
 	"zig-zag-joiner-batch-size",
 	5, /* defaultValue */
 	1, /* metamorphicValue */
@@ -573,12 +573,14 @@ func (z *zigzagJoiner) matchBase(curRow rowenc.EncDatumRow, side int) (bool, err
 
 	prevEqDatums := z.extractEqDatums(z.baseRow, z.prevSide())
 	curEqDatums := z.extractEqDatums(curRow, side)
-
-	eqColTypes := z.infos[side].eqColTypes
+	prevEqColTypes := z.infos[z.prevSide()].eqColTypes
+	curEqColTypes := z.infos[side].eqColTypes
 	ordering := z.infos[side].eqColOrdering
 
 	// Compare the equality columns of the baseRow to that of the curRow.
-	cmp, err := prevEqDatums.Compare(eqColTypes, &z.infos[side].alloc, ordering, z.FlowCtx.EvalCtx, curEqDatums)
+	cmp, err := prevEqDatums.CompareEx(
+		prevEqColTypes, &z.infos[side].alloc, ordering, z.FlowCtx.EvalCtx, curEqDatums, curEqColTypes,
+	)
 	if err != nil {
 		return false, err
 	}
@@ -718,9 +720,13 @@ func (z *zigzagJoiner) nextRow(ctx context.Context) (rowenc.EncDatumRow, error) 
 
 			prevEqCols := z.extractEqDatums(prevNext, prevSide)
 			currentEqCols := z.extractEqDatums(curNext, z.side)
-			eqColTypes := curInfo.eqColTypes
+			prevEqColTypes := z.infos[prevSide].eqColTypes
+			curEqColTypes := z.infos[z.side].eqColTypes
 			ordering := curInfo.eqColOrdering
-			cmp, err := prevEqCols.Compare(eqColTypes, &z.infos[z.side].alloc, ordering, z.FlowCtx.EvalCtx, currentEqCols)
+			cmp, err := prevEqCols.CompareEx(
+				prevEqColTypes, &z.infos[z.side].alloc, ordering,
+				z.FlowCtx.EvalCtx, currentEqCols, curEqColTypes,
+			)
 			if err != nil {
 				return nil, err
 			}

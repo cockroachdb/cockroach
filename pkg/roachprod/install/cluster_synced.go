@@ -444,7 +444,7 @@ func (c *SyncedCluster) Stop(
 		}
 		return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
 	} else {
-		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, []string{
+		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, DefaultAuthMode, []string{
 			"-e", fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName),
 		})
 		if err != nil || res[0].Err != nil {
@@ -563,7 +563,7 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 			}
 		} else {
 			rmCmds := []string{
-				`sudo find /mnt/data* -maxdepth 1 -type f -not -name .roachprod-initialized -exec rm -f {} \;`,
+				fmt.Sprintf(`sudo find /mnt/data* -maxdepth 1 -type f -not -name %s -exec rm -f {} \;`, vm.InitializedFile),
 				`sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data}`,
 				`sudo rm -fr logs* data*`,
 			}
@@ -1365,7 +1365,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			res := &RunResultDetails{Node: node}
 			var err error
-			cmd := "test -e /mnt/data1/.roachprod-initialized"
+			cmd := fmt.Sprintf("test -e %s", vm.DisksInitializedFile)
 			opts := defaultCmdOpts("wait-init")
 			for j := 0; j < 600; j++ {
 				res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
@@ -2652,6 +2652,37 @@ func (c *SyncedCluster) pghosts(
 	}
 
 	return m, nil
+}
+
+// resolveLoadBalancerURL resolves the load balancer postgres URL for the given
+// virtual cluster and SQL instance. Returns an empty string if a load balancer
+// is not found.
+func (c *SyncedCluster) loadBalancerURL(
+	ctx context.Context,
+	l *logger.Logger,
+	virtualClusterName string,
+	sqlInstance int,
+	auth PGAuthMode,
+) (string, error) {
+	services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL)
+	if err != nil {
+		return "", err
+	}
+	port := config.DefaultSQLPort
+	serviceMode := ServiceModeExternal
+	for _, service := range services {
+		if service.VirtualClusterName == virtualClusterName && service.Instance == sqlInstance {
+			serviceMode = service.ServiceMode
+			port = service.Port
+			break
+		}
+	}
+	address, err := c.FindLoadBalancer(l, port)
+	if err != nil {
+		return "", err
+	}
+	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, serviceMode, auth)
+	return loadBalancerURL, nil
 }
 
 // SSH creates an interactive shell connecting the caller to the first

@@ -366,14 +366,15 @@ func TestTenantAuthRequest(t *testing.T) {
 		}
 	}
 
-	makeTimeseriesQueryReq := func(tenantID roachpb.TenantID) *tspb.TimeSeriesQueryRequest {
-		return &tspb.TimeSeriesQueryRequest{
-			Queries: []tspb.Query{
-				{
-					TenantID: tenantID,
-				},
-			},
+	tenantTwo := roachpb.MustMakeTenantID(2)
+	makeTimeseriesQueryReq := func(tenantID *roachpb.TenantID) *tspb.TimeSeriesQueryRequest {
+		req := &tspb.TimeSeriesQueryRequest{
+			Queries: []tspb.Query{{}},
 		}
+		if tenantID != nil {
+			req.Queries[0].TenantID = *tenantID
+		}
+		return req
 	}
 
 	const noError = ""
@@ -895,15 +896,19 @@ func TestTenantAuthRequest(t *testing.T) {
 		},
 		"/cockroach.ts.tspb.TimeSeries/Query": {
 			{
-				req:    makeTimeseriesQueryReq(tenID),
+				req:    makeTimeseriesQueryReq(&tenID),
 				expErr: noError,
 			},
 			{
-				req:    makeTimeseriesQueryReq(roachpb.TenantID{}),
-				expErr: `tsdb query with unspecified tenant not permitted`,
+				req:    makeTimeseriesQueryReq(nil),
+				expErr: noError,
 			},
 			{
-				req:    makeTimeseriesQueryReq(roachpb.MustMakeTenantID(2)),
+				req:    makeTimeseriesQueryReq(&roachpb.TenantID{}),
+				expErr: noError,
+			},
+			{
+				req:    makeTimeseriesQueryReq(&tenantTwo),
 				expErr: `tsdb query with invalid tenant not permitted`,
 			},
 		},
@@ -976,14 +981,14 @@ func TestSpecialTenantID(t *testing.T) {
 func TestTenantAuthCapabilityChecks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	makeTimeseriesQueryReq := func(tenantID roachpb.TenantID) *tspb.TimeSeriesQueryRequest {
-		return &tspb.TimeSeriesQueryRequest{
-			Queries: []tspb.Query{
-				{
-					TenantID: tenantID,
-				},
-			},
+	makeTimeseriesQueryReq := func(tenantID *roachpb.TenantID) *tspb.TimeSeriesQueryRequest {
+		req := &tspb.TimeSeriesQueryRequest{
+			Queries: []tspb.Query{{}},
 		}
+		if tenantID != nil {
+			req.Queries[0].TenantID = *tenantID
+		}
+		return req
 	}
 
 	tenID := roachpb.MustMakeTenantID(10)
@@ -1014,18 +1019,34 @@ func TestTenantAuthCapabilityChecks(t *testing.T) {
 		},
 		"/cockroach.ts.tspb.TimeSeries/Query": {
 			{
-				req: makeTimeseriesQueryReq(tenID),
+				req: makeTimeseriesQueryReq(&tenID),
 				configureAuthorizer: func(authorizer *mockAuthorizer) {
 					authorizer.hasTSDBQueryCapability = true
 				},
 				expErr: "",
 			},
 			{
-				req: makeTimeseriesQueryReq(tenID),
+				req: makeTimeseriesQueryReq(&tenID),
 				configureAuthorizer: func(authorizer *mockAuthorizer) {
 					authorizer.hasTSDBQueryCapability = false
 				},
 				expErr: "tenant does not have capability",
+			},
+			{
+				req: makeTimeseriesQueryReq(nil),
+				configureAuthorizer: func(authorizer *mockAuthorizer) {
+					authorizer.hasTSDBQueryCapability = false
+					authorizer.hasTSDBAllCapability = true
+				},
+				expErr: "tenant does not have capability",
+			},
+			{
+				req: makeTimeseriesQueryReq(nil),
+				configureAuthorizer: func(authorizer *mockAuthorizer) {
+					authorizer.hasTSDBQueryCapability = true
+					authorizer.hasTSDBAllCapability = true
+				},
+				expErr: "",
 			},
 		},
 	} {
@@ -1053,6 +1074,16 @@ type mockAuthorizer struct {
 	hasTSDBQueryCapability             bool
 	hasNodelocalStorageCapability      bool
 	hasExemptFromRateLimiterCapability bool
+	hasTSDBAllCapability               bool
+}
+
+func (m mockAuthorizer) HasTSDBAllMetricsCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	if m.hasTSDBAllCapability {
+		return nil
+	}
+	return errors.New("tenant does not have capability")
 }
 
 func (m mockAuthorizer) HasProcessDebugCapability(

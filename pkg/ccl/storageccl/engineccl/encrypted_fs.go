@@ -251,13 +251,8 @@ func (e *encryptionStatsHandler) GetEncryptionStatus() ([]byte, error) {
 	if e.storeKM.activeKey != nil {
 		s.ActiveStoreKey = e.storeKM.activeKey.Info
 	}
-	k, err := e.dataKM.ActiveKey(context.TODO())
-	if err != nil {
-		return nil, err
-	}
-	if k != nil {
-		s.ActiveDataKey = k.Info
-	}
+	ki := e.dataKM.ActiveKeyInfoForStats()
+	s.ActiveDataKey = ki
 	return protoutil.Marshal(&s)
 }
 
@@ -267,12 +262,9 @@ func (e *encryptionStatsHandler) GetDataKeysRegistry() ([]byte, error) {
 }
 
 func (e *encryptionStatsHandler) GetActiveDataKeyID() (string, error) {
-	k, err := e.dataKM.ActiveKey(context.TODO())
-	if err != nil {
-		return "", err
-	}
-	if k != nil {
-		return k.Info.KeyId, nil
+	ki := e.dataKM.ActiveKeyInfoForStats()
+	if ki != nil {
+		return ki.KeyId, nil
 	}
 	return "plain", nil
 }
@@ -348,7 +340,7 @@ func newEncryptedEnv(
 	}
 
 	if !readOnly {
-		key, err := storeKeyManager.ActiveKey(context.TODO())
+		key, err := storeKeyManager.ActiveKeyForWriter(context.TODO())
 		if err != nil {
 			return nil, err
 		}

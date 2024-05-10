@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -974,24 +973,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	// dispatchToExecutionEngine.
 	shouldLogToExecAndAudit = false
 
-	if tree.CanModifySchema(ast) &&
-		(!ex.planner.EvalContext().TxnIsSingleStmt || !ex.implicitTxn()) &&
-		ex.extraTxnState.firstStmtExecuted &&
-		ex.sessionData().AutoCommitBeforeDDL &&
-		ex.executorType != executorTypeInternal {
-		if err := ex.planner.SendClientNotice(
-			ctx,
-			pgnotice.Newf("auto-committing transaction before processing DDL due to autocommit_before_ddl setting"),
-		); err != nil {
-			return nil, nil, err
-		}
-		retEv, retPayload = ex.handleAutoCommit(ctx, ast)
-		if _, committed := retEv.(eventTxnFinishCommitted); committed && retPayload == nil {
-			// Use eventTxnCommittedDueToDDL so that the current statement gets
-			// executed again when the state machine advances.
-			retEv = eventTxnCommittedDueToDDL{}
-		}
-		return
+	// Check if we need to auto-commit the transaction due to DDL.
+	if ev, payload := ex.maybeAutoCommitBeforeDDL(ctx, ast); ev != nil {
+		return ev, payload, nil
 	}
 
 	// For regular statements (the ones that get to this point), we
@@ -1964,7 +1948,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			}
 		}
 	}
-	distributePlan := getPlanDistribution(
+	distributePlan, distSQLProhibitedErr := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
 		distSQLMode, planner.curPlan.main, &planner.distSQLVisitor,
 	)
@@ -2018,7 +2002,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err = ex.execWithDistSQLEngine(
-		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic,
+		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic, distSQLProhibitedErr,
 	)
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
 		// For pausable portals, we log the stats when closing the portal, so we need
@@ -2330,28 +2314,6 @@ var txnSchemaChangeErr = pgerror.Newf(
 	"to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting",
 )
 
-// maybeUpgradeToSerializable checks if the statement is a schema change, and
-// upgrades the transaction to serializable isolation if it is. If the
-// transaction contains multiple statements, and an upgrade was attempted, an
-// error is returned.
-func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Statement) error {
-	p := &ex.planner
-	if tree.CanModifySchema(stmt.AST) {
-		if ex.state.mu.txn.IsoLevel().ToleratesWriteSkew() {
-			if !ex.extraTxnState.firstStmtExecuted {
-				if err := ex.state.setIsolationLevel(isolation.Serializable); err != nil {
-					return err
-				}
-				ex.extraTxnState.upgradedToSerializable = true
-				p.BufferClientNotice(ctx, pgnotice.Newf("setting transaction isolation level to SERIALIZABLE due to schema change"))
-			} else {
-				return txnSchemaChangeErr
-			}
-		}
-	}
-	return nil
-}
-
 // makeExecPlan creates an execution plan and populates planner.curPlan using
 // the cost-based optimizer. This is used to create the plan when executing a
 // query in the "simple" pgwire protocol.
@@ -2373,6 +2335,8 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 			if hasLargeScan {
 				// We don't execute the statement if:
 				// - plan contains a full table or full index scan.
+				//   TODO(#123783): this currently doesn't apply to full scans
+				//   of virtual tables.
 				// - the session setting disallows full table/index scans.
 				// - the scan is considered large.
 				// - the query is not an internal query.
@@ -2440,6 +2404,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	res RestrictedCommandResult,
 	distribute DistributionType,
 	progressAtomic *uint64,
+	distSQLProhibitedErr error,
 ) (topLevelQueryStats, error) {
 	defer planner.curPlan.savePlanInfo()
 	recv := MakeDistSQLReceiver(
@@ -2464,6 +2429,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		evalCtx := planner.ExtendedEvalContext()
 		planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 		planCtx.setUpForMainQuery(ctx, planner, recv)
+		planCtx.distSQLProhibitedErr = distSQLProhibitedErr
 
 		var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
 		if len(planner.curPlan.subqueryPlans) != 0 ||
@@ -3298,7 +3264,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.rowsWrittenLogged = false
 	ex.extraTxnState.rowsReadLogged = false
 	if txnExecStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); txnExecStatsSampleRate > 0 {
-		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
+		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.internal.Float64()
 	}
 
 	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
@@ -3414,6 +3380,8 @@ func (ex *connExecutor) recordTransactionFinish(
 			ex.extraTxnState.telemetrySkippedTxns,
 		)
 	}
+
+	ex.statsCollector.ObserveTransaction(ctx, transactionFingerprintID, recordedTxnStats)
 
 	return ex.statsCollector.RecordTransaction(
 		ctx,

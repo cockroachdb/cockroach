@@ -2164,9 +2164,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-language.html`,
 				h.UserOid(username.AdminRoleName()), // lanowner
 				isPl,                                // lanispl
 				isTrusted,                           // lanpltrusted
-				tree.WrapAsZeroOid(types.Oid),       // lanplcallfoid
-				tree.WrapAsZeroOid(types.Oid),       // laninline
-				tree.WrapAsZeroOid(types.Oid),       // lanvalidator
+				tree.NewDOid(tree.UnknownOidValue),  // lanplcallfoid
+				tree.NewDOid(tree.UnknownOidValue),  // laninline
+				tree.NewDOid(tree.UnknownOidValue),  // lanvalidator
 				tree.DNull,                          // lanacl
 			); err != nil {
 				return err
@@ -3018,7 +3018,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 			valueDatum := tree.NewDString(value)
 			var bootDatum tree.Datum = tree.DNull
 			var resetDatum tree.Datum = tree.DNull
-			if gen.Set == nil && gen.RuntimeSet == nil {
+			if gen.Set == nil && gen.RuntimeSet == nil && gen.SetWithPlanner == nil {
 				// RESET/SET will leave the variable unchanged. Announce the
 				// current value as boot/reset value.
 				bootDatum = valueDatum

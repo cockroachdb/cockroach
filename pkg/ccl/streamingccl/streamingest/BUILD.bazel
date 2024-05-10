@@ -44,6 +44,7 @@ go_library(
         "//pkg/repstream",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
+        "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
@@ -114,7 +115,6 @@ go_test(
         "//conditions:default": {"test.Pool": "large"},
     }),
     shard_count = 16,
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
@@ -145,6 +145,7 @@ go_test(
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",

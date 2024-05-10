@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
@@ -324,6 +325,14 @@ func alterTenantRestartReplication(
 		)
 	}
 
+	if tenInfo.DataState != mtinfopb.DataStateReady {
+		return errors.Newf("cannot start replication for tenant %q (%s) in state %s (is replication or a restore already running?)",
+			tenInfo.Name,
+			dstTenantID,
+			tenInfo.DataState,
+		)
+	}
+
 	if alterTenantStmt.Options.ExpirationWindowSet() {
 		return CannotSetExpirationWindowErr
 	}
@@ -458,10 +467,16 @@ func alterTenantJobCutover(
 	alterTenantStmt *tree.AlterTenantReplication,
 	tenInfo *mtinfopb.TenantInfo,
 	cutoverTime hlc.Timestamp,
-) (hlc.Timestamp, error) {
+) (_ hlc.Timestamp, err error) {
 	if alterTenantStmt == nil || alterTenantStmt.Cutover == nil {
 		return hlc.Timestamp{}, errors.AssertionFailedf("unexpected nil ALTER VIRTUAL CLUSTER cutover expression")
 	}
+
+	defer func() {
+		if err == nil {
+			telemetry.Count("physical_replication.cutover")
+		}
+	}()
 
 	tenantName := tenInfo.Name
 	job, err := jobRegistry.LoadJobWithTxn(ctx, tenInfo.PhysicalReplicationConsumerJobID, txn)

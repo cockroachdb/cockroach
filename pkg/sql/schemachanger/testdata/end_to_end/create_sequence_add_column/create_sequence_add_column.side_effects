@@ -82,12 +82,6 @@ upsert descriptor #105
   +    start: "32"
   +  unexposedParentSchemaId: 101
   +  version: "1"
-upsert descriptor #101
-  ...
-         withGrantOption: "2"
-       version: 3
-  -  version: "1"
-  +  version: "2"
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
@@ -306,12 +300,6 @@ upsert descriptor #105
   +  state: ADD
   +  unexposedParentSchemaId: 101
   +  version: "1"
-upsert descriptor #101
-  ...
-         withGrantOption: "2"
-       version: 3
-  -  version: "1"
-  +  version: "2"
 upsert descriptor #104
   ...
      createAsOfTime:

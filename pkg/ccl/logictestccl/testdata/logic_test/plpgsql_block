@@ -676,3 +676,25 @@ NOTICE: Outer quantity here is 50
 NOTICE: Quantity here is 50
 
 subtest end
+
+# Regression test for not popping the continuation after having built the
+# corresponding block (#122873).
+statement ok
+CREATE FUNCTION func_122873() RETURNS INT4 AS $$
+DECLARE
+  decl_24 BOOL := false;
+BEGIN
+  IF decl_24 THEN
+    NULL;
+  ELSIF false THEN
+    DECLARE
+      decl_33 INT2;
+    BEGIN
+      BEGIN
+        RETURN decl_33;
+      END;
+      RETURN decl_33;
+    END;
+  END IF;
+END;
+$$ LANGUAGE PLpgSQL;

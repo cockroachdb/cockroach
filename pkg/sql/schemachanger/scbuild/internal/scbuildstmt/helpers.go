@@ -1593,3 +1593,44 @@ func shouldRestrictAccessToSystemInterface(
 	}
 	return nil
 }
+
+func MaybeCreateOrResolveTemporarySchema(b BuildCtx) ElementResultSet {
+	// Attempt to resolve the existing temporary schema first.
+	schemaName := b.TemporarySchemaName()
+	prefix := tree.ObjectNamePrefix{
+		SchemaName:     tree.Name(schemaName),
+		ExplicitSchema: true,
+	}
+	schemaElts := b.ResolveSchema(prefix, ResolveParams{IsExistenceOptional: true,
+		RequireOwnership:  false,
+		RequiredPrivilege: 0})
+	if schemaElts != nil {
+		return schemaElts
+	}
+	// Temporary schema didn't resolve, so lets create a new one.
+	descID := b.GenerateUniqueDescID()
+	tempSchemaName := &tree.ObjectNamePrefix{
+		SchemaName:     tree.Name(schemaName),
+		ExplicitSchema: true,
+	}
+	// Resolve the current database, which will contain this new temporary schema
+	// in the namespace table.
+	b.ResolveDatabasePrefix(tempSchemaName)
+	dbElts := b.ResolveDatabase(tree.Name(tempSchemaName.Catalog()), ResolveParams{RequiredPrivilege: privilege.CREATE})
+	dbElem := dbElts.FilterDatabase().MustGetOneElement()
+	b.Add(&scpb.Schema{
+		SchemaID:    descID,
+		IsTemporary: true,
+	})
+	b.Add(&scpb.SchemaParent{
+		SchemaID:         descID,
+		ParentDatabaseID: dbElem.DatabaseID,
+	})
+	b.Add(&scpb.Namespace{
+		DatabaseID:   dbElem.DatabaseID,
+		SchemaID:     0,
+		DescriptorID: descID,
+		Name:         schemaName,
+	})
+	return b.QueryByID(descID)
+}

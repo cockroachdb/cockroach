@@ -108,11 +108,13 @@ func registerPop(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             "pop",
-		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(1),
-		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    "pop",
+		Owner:   registry.OwnerSQLFoundations,
+		Cluster: r.MakeClusterSpec(1),
+		Leases:  registry.MetamorphicLeases,
+		// This test requires custom ports but service registration is
+		// currently only supported on GCE.
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Run:              runPop,
 	})

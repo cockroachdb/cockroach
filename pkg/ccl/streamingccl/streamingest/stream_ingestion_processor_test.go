@@ -123,7 +123,7 @@ func (m *mockStreamClient) Subscribe(
 	_ int32,
 	token streamclient.SubscriptionToken,
 	initialScanTime hlc.Timestamp,
-	_ hlc.Timestamp,
+	_ span.Frontier,
 ) (streamclient.Subscription, error) {
 	var events []streamingccl.Event
 	var ok bool
@@ -179,7 +179,7 @@ func (m *errorStreamClient) Subscribe(
 	_ int32,
 	_ streamclient.SubscriptionToken,
 	_ hlc.Timestamp,
-	_ hlc.Timestamp,
+	_ span.Frontier,
 ) (streamclient.Subscription, error) {
 	return nil, errors.New("this client always returns an error")
 }
@@ -224,13 +224,13 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	p2Key := roachpb.Key("key_2")
 	p2Span := roachpb.Span{Key: p2Key, EndKey: p2Key.Next()}
 
-	sampleKV := func() roachpb.KeyValue {
+	sampleKV := func() []roachpb.KeyValue {
 		key, err := keys.RewriteKeyToTenantPrefix(p1Key,
 			keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID)))
 		require.NoError(t, err)
 		v := roachpb.MakeValueFromString("value_1")
 		v.Timestamp = hlc.Timestamp{WallTime: 1}
-		return roachpb.KeyValue{Key: key, Value: v}
+		return []roachpb.KeyValue{{Key: key, Value: v}}
 	}
 	sampleCheckpoint := func(span roachpb.Span, ts int64) []jobspb.ResolvedSpan {
 		return []jobspb.ResolvedSpan{{Span: span, Timestamp: hlc.Timestamp{WallTime: ts}}}
@@ -476,8 +476,15 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 
 		lastClientStart := make(map[string]hlc.Timestamp)
-		streamingTestingKnobs := &sql.StreamingTestingKnobs{BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
-			lastClientStart[token] = clientStartTime
+		streamingTestingKnobs := &sql.StreamingTestingKnobs{BeforeClientSubscribe: func(addr string, token string, clientStartTimes span.Frontier) {
+			sp := p1Span
+			if token == string(p2) {
+				sp = p2Span
+			}
+			clientStartTimes.SpanEntries(sp, func(s roachpb.Span, t hlc.Timestamp) (done span.OpResult) {
+				lastClientStart[token] = t
+				return span.StopMatch
+			})
 		}}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, checkpoint, tenantRekey, mockClient,
@@ -493,8 +500,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			"partition 1 should advance to timestamp 6")
 		require.Contains(t, emittedRows, "key_2{-\\x00} 0.000000005,0",
 			"partition 2 should advance to timestamp 5")
-		require.Equal(t, lastClientStart[string(p1)], hlc.Timestamp{WallTime: 4})
-		require.Equal(t, lastClientStart[string(p2)], hlc.Timestamp{WallTime: 5})
+		require.Equal(t, hlc.Timestamp{WallTime: 4}, lastClientStart[string(p1)])
+		require.Equal(t, hlc.Timestamp{WallTime: 5}, lastClientStart[string(p2)])
 	})
 
 	t.Run("error stream client", func(t *testing.T) {
@@ -921,21 +928,23 @@ func resolvedSpansMinTS(resolvedSpans []jobspb.ResolvedSpan) hlc.Timestamp {
 }
 
 func noteKeyVal(
-	validator *streamClientValidator, keyVal roachpb.KeyValue, spec streamclient.SubscriptionToken,
+	validator *streamClientValidator, keyVals []roachpb.KeyValue, spec streamclient.SubscriptionToken,
 ) {
-	if validator.rekeyer != nil {
-		rekey, _, err := validator.rekeyer.RewriteTenant(keyVal.Key)
+	for _, keyVal := range keyVals {
+		if validator.rekeyer != nil {
+			rekey, _, err := validator.rekeyer.RewriteTenant(keyVal.Key)
+			if err != nil {
+				panic(err.Error())
+			}
+			keyVal.Key = rekey
+			keyVal.Value.ClearChecksum()
+			keyVal.Value.InitChecksum(keyVal.Key)
+		}
+		err := validator.noteRow(string(spec), string(keyVal.Key), string(keyVal.Value.RawBytes),
+			keyVal.Value.Timestamp)
 		if err != nil {
 			panic(err.Error())
 		}
-		keyVal.Key = rekey
-		keyVal.Value.ClearChecksum()
-		keyVal.Value.InitChecksum(keyVal.Key)
-	}
-	err := validator.noteRow(string(spec), string(keyVal.Key), string(keyVal.Value.RawBytes),
-		keyVal.Value.Timestamp)
-	if err != nil {
-		panic(err.Error())
 	}
 }
 
@@ -953,16 +962,16 @@ func validateFnWithValidator(
 		case streamingccl.SSTableEvent:
 			kvs := storageutils.ScanSST(t, event.GetSSTable().Data)
 			for _, keyVal := range kvs.MVCCKeyValues() {
-				noteKeyVal(validator, roachpb.KeyValue{
+				noteKeyVal(validator, []roachpb.KeyValue{{
 					Key: keyVal.Key.Key,
 					Value: roachpb.Value{
 						RawBytes:  keyVal.Value,
 						Timestamp: keyVal.Key.Timestamp,
 					},
-				}, spec)
+				}}, spec)
 			}
 		case streamingccl.KVEvent:
-			noteKeyVal(validator, *event.GetKV(), spec)
+			noteKeyVal(validator, event.GetKVs(), spec)
 		case streamingccl.DeleteRangeEvent:
 			panic(errors.New("unsupported event type"))
 		}

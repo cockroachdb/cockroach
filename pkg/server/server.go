@@ -753,41 +753,41 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		kvAccessorForTenantRecords spanconfig.KVAccessor
 	}
 	spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
-	if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
-		spanConfig.subscriber = spanConfigKnobs.StoreKVSubscriberOverride
-	} else {
-		// We use the span configs infra to control whether rangefeeds are
-		// enabled on a given range. At the moment this only applies to
-		// system tables (on both host and secondary tenants). We need to
-		// consider two things:
-		// - The sql-side reconciliation process runs asynchronously. When
-		//   the config for a given range is requested, we might not yet have
-		//   it, thus falling back to the static config below.
-		// - Various internal subsystems rely on rangefeeds to function.
-		//
-		// Consequently, we configure our static fallback config to actually
-		// allow rangefeeds. As the sql-side reconciliation process kicks
-		// off, it'll install the actual configs that we'll later consult.
-		// For system table ranges we install configs that allow for
-		// rangefeeds. Until then, we simply allow rangefeeds when a more
-		// targeted config is not found.
-		fallbackConf := cfg.DefaultZoneConfig.AsSpanConfig()
-		fallbackConf.RangefeedEnabled = true
-		// We do the same for opting out of strict GC enforcement; it
-		// really only applies to user table ranges
-		fallbackConf.GCPolicy.IgnoreStrictEnforcement = true
+	// We use the span configs infra to control whether rangefeeds are
+	// enabled on a given range. At the moment this only applies to
+	// system tables (on both host and secondary tenants). We need to
+	// consider two things:
+	// - The sql-side reconciliation process runs asynchronously. When
+	//   the config for a given range is requested, we might not yet have
+	//   it, thus falling back to the static config below.
+	// - Various internal subsystems rely on rangefeeds to function.
+	//
+	// Consequently, we configure our static fallback config to actually
+	// allow rangefeeds. As the sql-side reconciliation process kicks
+	// off, it'll install the actual configs that we'll later consult.
+	// For system table ranges we install configs that allow for
+	// rangefeeds. Until then, we simply allow rangefeeds when a more
+	// targeted config is not found.
+	fallbackConf := cfg.DefaultZoneConfig.AsSpanConfig()
+	fallbackConf.RangefeedEnabled = true
+	// We do the same for opting out of strict GC enforcement; it
+	// really only applies to user table ranges
+	fallbackConf.GCPolicy.IgnoreStrictEnforcement = true
 
-		spanConfig.subscriber = spanconfigkvsubscriber.New(
-			clock,
-			rangeFeedFactory,
-			keys.SpanConfigurationsTableID,
-			4<<20, /* 4 MB */
-			fallbackConf,
-			cfg.Settings,
-			spanconfigstore.NewBoundsReader(tenantCapabilitiesWatcher),
-			spanConfigKnobs,
-			nodeRegistry,
-		)
+	spanConfig.subscriber = spanconfigkvsubscriber.New(
+		clock,
+		rangeFeedFactory,
+		keys.SpanConfigurationsTableID,
+		4<<20, /* 4 MB */
+		fallbackConf,
+		cfg.Settings,
+		spanconfigstore.NewBoundsReader(tenantCapabilitiesWatcher),
+		spanConfigKnobs,
+		nodeRegistry,
+	)
+
+	if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
+		spanConfig.subscriber = spanConfigKnobs.StoreKVSubscriberOverride(spanConfig.subscriber)
 	}
 
 	scKVAccessor := spanconfigkvaccessor.New(
@@ -1961,7 +1961,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// wholly initialized stores (it reads the StoreIdentKeys). It also needs
 	// to come before the call into SetPebbleMetricsProvider, which internally
 	// uses the disk stats map we're initializing.
-	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines, s.cfg.DiskMonitorManager); err != nil {
+	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines, (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
 	s.stopper.AddCloser(stop.CloserFn(func() { s.node.diskStatsMap.closeDiskMonitors() }))
@@ -2245,17 +2245,17 @@ func (s *topLevelServer) runIdempontentSQLForInitType(
 	}
 
 	initAttempt := func() error {
-		const defaulVirtuallusterName = "main"
+		const defaulVirtualClusterName = "main"
 		switch typ {
 		case serverpb.InitType_VIRTUALIZED:
 			ie := s.sqlServer.execCfg.InternalDB.Executor()
 			_, err := ie.Exec(ctx, "init-create-app-tenant", nil, /* txn */
-				"CREATE VIRTUAL CLUSTER IF NOT EXISTS $1", defaulVirtuallusterName)
+				"CREATE VIRTUAL CLUSTER IF NOT EXISTS $1", defaulVirtualClusterName)
 			if err != nil {
 				return err
 			}
 			_, err = ie.Exec(ctx, "init-default-app-tenant", nil, /* txn */
-				"ALTER VIRTUAL CLUSTER $1 START SERVICE SHARED", defaulVirtuallusterName)
+				"ALTER VIRTUAL CLUSTER $1 START SERVICE SHARED", defaulVirtualClusterName)
 			if err != nil {
 				return err
 			}
@@ -2263,7 +2263,12 @@ func (s *topLevelServer) runIdempontentSQLForInitType(
 		case serverpb.InitType_VIRTUALIZED_EMPTY:
 			ie := s.sqlServer.execCfg.InternalDB.Executor()
 			_, err := ie.Exec(ctx, "init-default-target-cluster-setting", nil, /* txn */
-				"SET CLUSTER SETTING server.controller.default_target_cluster = $1", defaulVirtuallusterName)
+				"SET CLUSTER SETTING server.controller.default_target_cluster = $1", defaulVirtualClusterName)
+			if err != nil {
+				return err
+			}
+			_, err = ie.Exec(ctx, "init-rangefeed-enabled-cluster-setting", nil, /* txn */
+				"SET CLUSTER SETTING kv.rangefeed.enabled = true")
 			if err != nil {
 				return err
 			}

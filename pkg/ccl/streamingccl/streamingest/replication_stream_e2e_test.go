@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -45,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -260,8 +262,8 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	lastClientStart := make(map[string]hlc.Timestamp)
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
-			lastClientStart[token] = clientStartTime
+		BeforeClientSubscribe: func(addr string, token string, clientStartTimes span.Frontier) {
+			lastClientStart[token] = clientStartTimes.Frontier()
 		},
 	}
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
@@ -370,6 +372,7 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 
 	testCancelIngestion := func(t *testing.T, cancelAfterPaused bool) {
+		telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 		c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 		defer cleanup()
 		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
@@ -417,6 +420,9 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 		c.DestSysSQL.CheckQueryResults(t,
 			fmt.Sprintf("SELECT count(*) FROM system.tenants WHERE id = %s", args.DestTenantID),
 			[][]string{{"0"}})
+
+		counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+		require.GreaterOrEqual(t, counts["physical_replication.canceled"], int32(1))
 	}
 
 	t.Run("cancel-ingestion-after-paused", func(t *testing.T) {
@@ -562,7 +568,39 @@ INSERT INTO d.t_for_import (i) VALUES (1);
 	cutoverTime := c.SrcSysServer.Clock().Now()
 	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
 	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
+}
 
+func TestReplicateManualSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, replicationtestutils.DefaultTenantStreamingClustersArgs)
+	defer cleanup()
+	c.DestSysSQL.Exec(t, "SET CLUSTER SETTING physical_replication.consumer.ingest_split_event.enabled = true")
+
+	c.SrcTenantSQL.Exec(t, "CREATE TABLE foo AS SELECT generate_series(1, 100)")
+	var fooTableID int
+	c.SrcTenantSQL.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'foo'").Scan(&fooTableID)
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	c.WaitUntilReplicatedTime(c.SrcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
+
+	c.SrcTenantSQL.Exec(t, "ALTER TABLE foo SPLIT AT VALUES (50)")
+	expectedSplitKey := fmt.Sprintf("Table/%d/1/50", fooTableID)
+	splitKeyQuery := fmt.Sprintf("SELECT count(*) FROM crdb_internal.ranges WHERE start_pretty ~ '%s'", expectedSplitKey)
+
+	testutils.SucceedsSoon(t, func() error {
+		var splitKeyPresent int
+		c.DestSysSQL.QueryRow(t, splitKeyQuery).Scan(&splitKeyPresent)
+		if splitKeyPresent == 0 {
+			return errors.Newf("split key not present")
+		}
+		return nil
+	})
 }
 
 func TestTenantStreamingDeleteRange(t *testing.T) {
@@ -639,7 +677,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 		clientAddresses := make(map[string]struct{})
 		var addressesMu syncutil.Mutex
 		args.TestingKnobs = &sql.StreamingTestingKnobs{
-			BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
+			BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
 				addressesMu.Lock()
 				defer addressesMu.Unlock()
 				clientAddresses[addr] = struct{}{}
@@ -650,6 +688,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 			args.SrcTenantID = roachpb.SystemTenantID
 			args.SrcTenantName = "system"
 		}
+		telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 		c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 		defer cleanup()
 
@@ -682,6 +721,8 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 
 		cutoverTime := c.DestSysServer.Clock().Now()
 		c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
+		counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+		require.GreaterOrEqual(t, counts["physical_replication.cutover"], int32(1))
 		c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 
 		// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
@@ -699,7 +740,7 @@ func TestSpecsPersistedOnlyAfterInitialPlan(t *testing.T) {
 	var replanCandidateCount int
 	replannedThreeTimes := make(chan struct{})
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		AfterReplicationFlowPlan: func(ingestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+		AfterReplicationFlowPlan: func(ingestionSpecs map[base.SQLInstanceID][]execinfrapb.StreamIngestionDataSpec,
 			frontierSpec *execinfrapb.StreamIngestionFrontierSpec) {
 			replanCandidateCount++
 			if replanCandidateCount > 2 {
@@ -747,7 +788,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 	clientAddresses := make(map[string]struct{})
 	var addressesMu syncutil.Mutex
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
+		BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
 			addressesMu.Lock()
 			defer addressesMu.Unlock()
 			clientAddresses[addr] = struct{}{}
@@ -817,6 +858,7 @@ func TestStreamingReplanOnLag(t *testing.T) {
 	skip.WithIssue(t, 120688)
 
 	skip.UnderDuressWithIssue(t, 115850, "time to scatter ranges takes too long under duress")
+	skip.UnderMetamorphic(t, "time to scatter ranges takes too long under non-default settings")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
@@ -831,7 +873,7 @@ func TestStreamingReplanOnLag(t *testing.T) {
 	clientAddresses := make(map[string]struct{})
 	var addressesMu syncutil.Mutex
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
+		BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
 			addressesMu.Lock()
 			defer addressesMu.Unlock()
 			clientAddresses[addr] = struct{}{}

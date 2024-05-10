@@ -1,0 +1,62 @@
+exec-ddl
+CREATE TABLE abcd (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  INDEX a_idx(a) STORING (b),
+  INDEX c_idx(c) STORING (d)
+)
+----
+
+opt set=optimizer_use_improved_zigzag_join_costing=false
+SELECT count(*) FROM abcd WHERE a = 0 AND b = 1 AND c = 2
+----
+scalar-group-by
+ ├── columns: count:8!null
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 21.00913
+ ├── key: ()
+ ├── fd: ()-->(8)
+ ├── inner-join (zigzag abcd@a_idx abcd@c_idx)
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── eq columns: [5] = [5]
+ │    ├── left fixed columns: [1] = [0]
+ │    ├── right fixed columns: [3] = [2]
+ │    ├── stats: [rows=0.901, distinct(1)=0.901, null(1)=0, distinct(2)=0.901, null(2)=0, distinct(3)=0.901, null(3)=0, distinct(1-3)=0.901, null(1-3)=0]
+ │    ├── cost: 20.97012
+ │    ├── fd: ()-->(1-3)
+ │    └── filters
+ │         ├── a:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
+ │         ├── b:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │         └── c:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+ └── aggregations
+      └── count-rows [as=count_rows:8]
+
+# With optimizer_use_improved_zigzag_join_costing enabled, we should
+# see extra cost for seeking and distribution.
+opt set=optimizer_use_improved_zigzag_join_costing=true
+SELECT count(*) FROM abcd WHERE a = 0 AND b = 1 AND c = 2
+----
+scalar-group-by
+ ├── columns: count:8!null
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 29.00913
+ ├── key: ()
+ ├── fd: ()-->(8)
+ ├── inner-join (zigzag abcd@a_idx abcd@c_idx)
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── eq columns: [5] = [5]
+ │    ├── left fixed columns: [1] = [0]
+ │    ├── right fixed columns: [3] = [2]
+ │    ├── stats: [rows=0.901, distinct(1)=0.901, null(1)=0, distinct(2)=0.901, null(2)=0, distinct(3)=0.901, null(3)=0, distinct(1-3)=0.901, null(1-3)=0]
+ │    ├── cost: 28.97012
+ │    ├── fd: ()-->(1-3)
+ │    └── filters
+ │         ├── a:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
+ │         ├── b:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │         └── c:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+ └── aggregations
+      └── count-rows [as=count_rows:8]

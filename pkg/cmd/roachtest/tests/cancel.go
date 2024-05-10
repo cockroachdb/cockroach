@@ -105,11 +105,11 @@ func registerCancel(r registry.Registry) {
 					timeoutCh := time.After(10 * time.Second)
 					pollingStartTime := timeutil.Now()
 					for {
-						// Sleep for some random duration up to 1000ms. This
+						// Sleep for some random duration up to 500ms. This
 						// allows us to sometimes find the query when it's in
 						// the planning stage while in most cases it's in the
 						// execution stage already.
-						toSleep := time.Duration(rng.Intn(1001)) * time.Millisecond
+						toSleep := time.Duration(rng.Intn(501)) * time.Millisecond
 						t.Status(fmt.Sprintf("sleeping for %s", toSleep))
 						time.Sleep(toSleep)
 						rows, err := conn.Query(`SELECT query_id, query FROM [SHOW CLUSTER QUERIES] WHERE query NOT LIKE '%SHOW CLUSTER QUERIES%'`)

@@ -1593,13 +1593,13 @@ vectorized: true
 ·
 • index join
 │ columns: (a, b, c, s)
-│ estimated row count: 3
+│ estimated row count: 1
 │ table: t2@t2_pkey
 │ key columns: a
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 3 (3.1% of the table; stats collected <hidden> ago)
+      estimated row count: 1 (1.2% of the table; stats collected <hidden> ago)
       table: t2@bc
       spans: /2/!NULL-/2/2 /2/3-/3
 

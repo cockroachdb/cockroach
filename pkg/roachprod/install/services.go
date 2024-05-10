@@ -82,6 +82,9 @@ type ServiceDescriptors []ServiceDesc
 // ServicePredicate is a predicate function definition for filtering services.
 type ServicePredicate func(ServiceDesc) bool
 
+// FindOpenPortsFunc is a function signature for finding open ports on a node.
+type FindOpenPortsFunc func(ctx context.Context, l *logger.Logger, node Node, startPort, count int) ([]int, error)
+
 // localClusterPortCache is a workaround for local clusters to prevent multiple
 // nodes from using the same port when searching for open ports.
 var localClusterPortCache struct {
@@ -503,4 +506,20 @@ func (c *SyncedCluster) TargetDNSName(node Node) string {
 	}
 	// Targets always end with a period as per SRV record convention.
 	return fmt.Sprintf("%s.%s", cVM.PublicDNS, postfix)
+}
+
+// FindLoadBalancer returns the first load balancer address that matches the
+// given port. If no load balancer is found, an error is returned.
+func (c *SyncedCluster) FindLoadBalancer(l *logger.Logger, port int) (*vm.ServiceAddress, error) {
+	addresses, err := c.ListLoadBalancers(l)
+	if err != nil {
+		return nil, err
+	}
+	// Find the load balancer with the matching port.
+	for _, a := range addresses {
+		if a.Port == port {
+			return &a, nil
+		}
+	}
+	return nil, errors.Newf("no load balancer found for port %d", port)
 }

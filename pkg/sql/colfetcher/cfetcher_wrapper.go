@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -44,7 +44,7 @@ var DirectScansEnabled = settings.RegisterBoolSetting(
 	directScansEnabledDefault,
 )
 
-var directScansEnabledDefault = util.ConstantWithMetamorphicTestBool(
+var directScansEnabledDefault = metamorphic.ConstantWithTestBool(
 	"direct-scans-enabled",
 	false,
 )
@@ -296,8 +296,8 @@ func deserializeColumnarBatchesFromArrow(
 		ctx,
 		// This allocator is not connected to the memory accounting system since
 		// the accounting for these batches will be done by the SQL client, so
-		// we pass nil here.
-		nil, /* unlimitedAcc */
+		// we pass a standalone unlimited account here.
+		mon.NewStandaloneUnlimitedAccount(), /* unlimitedAcc */
 		// It'll be the responsibility of the SQL client to update the
 		// datum-backed vectors with the eval context, so we use the factory
 		// with no eval context.

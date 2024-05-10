@@ -395,7 +395,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 			// Verify statistics last updated.
 			{
 
-				showStatisticsForTableQuery := fmt.Sprintf("SELECT max(created) AS created FROM [SHOW STATISTICS FOR TABLE %s.%s]", escDBName, tblName)
+				showStatisticsForTableQuery := fmt.Sprintf("SELECT max(created) AS stats_last_created_at FROM [SHOW STATISTICS FOR TABLE %s.%s]", escDBName, tblName)
 
 				row := db.QueryRow(showStatisticsForTableQuery)
 				var createdTs time.Time

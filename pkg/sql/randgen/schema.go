@@ -297,7 +297,7 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 		if colTypes[j] == types.RegType {
 			// RandDatum is naive to the constraint that a RegType < len(types.OidToType),
 			// at least before linking and user defined types are added.
-			d = tree.NewDOid(oid.Oid(rng.Intn(len(types.OidToType))))
+			d = tree.NewDOidWithType(oid.Oid(rng.Intn(len(types.OidToType))), types.RegType)
 		}
 		if d == nil {
 			d = RandDatum(rng, colTypes[j], nullable[j])
@@ -405,66 +405,6 @@ func PopulateTableWithRandData(
 		}
 	}
 	return numRowsInserted, nil
-}
-
-// GenerateRandInterestingTable takes a gosql.DB connection and creates
-// a table with all the types in randInterestingDatums and rows of the
-// interesting datums.
-func GenerateRandInterestingTable(db *gosql.DB, dbName, tableName string) error {
-	var (
-		randTypes []*types.T
-		colNames  []string
-	)
-	numRows := 0
-	for _, v := range randInterestingDatums {
-		colTyp := v[0].ResolvedType()
-		randTypes = append(randTypes, colTyp)
-		colNames = append(colNames, colTyp.Name())
-		if len(v) > numRows {
-			numRows = len(v)
-		}
-	}
-
-	var columns strings.Builder
-	comma := ""
-	for i, typ := range randTypes {
-		columns.WriteString(comma)
-		columns.WriteString(colNames[i])
-		columns.WriteString(" ")
-		columns.WriteString(typ.SQLString())
-		comma = ", "
-	}
-
-	createStatement := fmt.Sprintf("CREATE TABLE %s.%s (%s)", tree.NameString(dbName), tree.NameString(tableName), columns.String())
-	if _, err := db.Exec(createStatement); err != nil {
-		return err
-	}
-
-	row := make([]string, len(randTypes))
-	for i := 0; i < numRows; i++ {
-		for j, typ := range randTypes {
-			datums := randInterestingDatums[typ.Family()]
-			var d tree.Datum
-			if i < len(datums) {
-				d = datums[i]
-			} else {
-				d = tree.DNull
-			}
-			row[j] = tree.AsStringWithFlags(d, tree.FmtParsable)
-		}
-		var builder strings.Builder
-		comma := ""
-		for _, d := range row {
-			builder.WriteString(comma)
-			builder.WriteString(d)
-			comma = ", "
-		}
-		insertStmt := fmt.Sprintf("INSERT INTO %s.%s VALUES (%s)", tree.NameString(dbName), tree.NameString(tableName), builder.String())
-		if _, err := db.Exec(insertStmt); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // randColumnTableDef produces a random ColumnTableDef for a non-computed

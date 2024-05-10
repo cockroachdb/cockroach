@@ -780,9 +780,19 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	stats := scan.Relational().Statistics()
 	rowCount := stats.RowCount
 	if isUnfiltered && c.evalCtx != nil && c.evalCtx.SessionData().DisallowFullTableScans {
-		isLarge := !stats.Available || rowCount > c.evalCtx.SessionData().LargeFullScanRows
-		if isLarge {
-			return hugeCost
+		if !scan.IsVirtualTable(c.mem.Metadata()) || c.evalCtx.SessionData().OptimizerApplyFullScanPenaltyToVirtualTables {
+			// Don't apply the huge cost to full scans of virtual tables since
+			// we don't reject them anyway. In other words, we would only
+			// penalize plans with full scans of virtual tables, which might
+			// force us to choose a plan that is actually worse but doesn't get
+			// the huge cost since it doesn't contain a full scan (e.g. we could
+			// do a virtual table lookup join instead).
+			// TODO(#123783): once we start rejecting plans with full scans of
+			// virtual tables, we should apply the cost penalty here.
+			isLarge := !stats.Available || rowCount > c.evalCtx.SessionData().LargeFullScanRows
+			if isLarge {
+				return hugeCost
+			}
 		}
 	}
 
@@ -1329,6 +1339,19 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	// the number of index columns does not have an outsized effect on the cost of
 	// the zigzag join. See issue #68556.
 	cost += c.largeCardinalityCostPenalty(join.Relational().Cardinality, rowCount)
+
+	if c.evalCtx != nil && c.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting {
+		// Add one randIOCostFactor of additional seek cost so the cost is at least as
+		// much as a scan if rowCount is less than one.
+		cost += randIOCostFactor
+
+		// TODO(rytaft): We don't capture distribution info in zigzag joins, so pass
+		// an empty distribution. We need to add some distribution cost to prevent the
+		// coster from always preferring zigzag joins over scans. If we ever want to
+		// make zigzag joins a priority again, we should store a real distribution
+		// value on the zigzag join, similar to scans.
+		cost += c.distributionCost(physical.Distribution{})
+	}
 
 	return cost
 }

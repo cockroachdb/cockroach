@@ -40,7 +40,6 @@ go_test(
         "chunked_event_queue_test.go",
     ],
     embed = [":kvevent"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/jobs/jobspb",
         "//pkg/keys",

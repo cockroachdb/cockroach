@@ -106,6 +106,7 @@ const (
 	OptLaggingRangesThreshold             = `lagging_ranges_threshold`
 	OptLaggingRangesPollingInterval       = `lagging_ranges_polling_interval`
 	OptIgnoreDisableChangefeedReplication = `ignore_disable_changefeed_replication`
+	OptEncodeJSONValueNullAsObject        = `encode_json_value_null_as_object`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -368,6 +369,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptLaggingRangesThreshold:             durationOption,
 	OptLaggingRangesPollingInterval:       durationOption,
 	OptIgnoreDisableChangefeedReplication: flagOption,
+	OptEncodeJSONValueNullAsObject:        flagOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -381,7 +383,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptUnordered, OptCustomKeyColumn,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
 	OptExecutionLocality, OptLaggingRangesThreshold, OptLaggingRangesPollingInterval,
-	OptIgnoreDisableChangefeedReplication,
+	OptIgnoreDisableChangefeedReplication, OptEncodeJSONValueNullAsObject,
 )
 
 // SQLValidOptions is options exclusive to SQL sink
@@ -766,18 +768,19 @@ func (s StatementOptions) GetCanHandle() CanHandle {
 // EncodingOptions describe how events are encoded when
 // sent to the sink.
 type EncodingOptions struct {
-	Format            FormatType
-	VirtualColumns    VirtualColumnVisibility
-	Envelope          EnvelopeType
-	KeyInValue        bool
-	TopicInValue      bool
-	UpdatedTimestamps bool
-	MVCCTimestamps    bool
-	Diff              bool
-	AvroSchemaPrefix  string
-	SchemaRegistryURI string
-	Compression       string
-	CustomKeyColumn   string
+	Format                      FormatType
+	VirtualColumns              VirtualColumnVisibility
+	Envelope                    EnvelopeType
+	KeyInValue                  bool
+	TopicInValue                bool
+	UpdatedTimestamps           bool
+	MVCCTimestamps              bool
+	Diff                        bool
+	EncodeJSONValueNullAsObject bool
+	AvroSchemaPrefix            string
+	SchemaRegistryURI           string
+	Compression                 string
+	CustomKeyColumn             string
 }
 
 // GetEncodingOptions populates and validates an EncodingOptions.
@@ -819,6 +822,7 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	_, o.UpdatedTimestamps = s.m[OptUpdatedTimestamps]
 	_, o.MVCCTimestamps = s.m[OptMVCCTimestamps]
 	_, o.Diff = s.m[OptDiff]
+	_, o.EncodeJSONValueNullAsObject = s.m[OptEncodeJSONValueNullAsObject]
 
 	o.SchemaRegistryURI = s.m[OptConfluentSchemaRegistry]
 	o.AvroSchemaPrefix = s.m[OptAvroSchemaPrefix]
@@ -835,6 +839,9 @@ func (e EncodingOptions) Validate() error {
 		return errors.Errorf(`%s=%s is not supported with %s=%s`,
 			OptEnvelope, OptEnvelopeRow, OptFormat, OptFormatAvro,
 		)
+	}
+	if e.Format != OptFormatJSON && e.EncodeJSONValueNullAsObject {
+		return errors.Errorf(`%s is only usable with %s=%s`, OptEncodeJSONValueNullAsObject, OptFormat, OptFormatJSON)
 	}
 	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
 		requiresWrap := []struct {

@@ -167,7 +167,7 @@ func TestCloudStorageSink(t *testing.T) {
 		// NB: compression added in single-node subtest.
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
-	e, err := makeJSONEncoder(jsonEncoderOptions{EncodingOptions: opts})
+	e, err := makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts})
 	require.NoError(t, err)
 
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)

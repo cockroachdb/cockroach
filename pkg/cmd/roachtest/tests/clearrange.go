@@ -52,7 +52,7 @@ func registerClearRange(r registry.Registry) {
 		// to <3:30h but it varies.
 		Timeout:           5*time.Hour + 120*time.Minute,
 		Cluster:           r.MakeClusterSpec(10, spec.CPU(16), spec.SetFileSystem(spec.Zfs)),
-		CompatibleClouds:  registry.AllExceptAWS,
+		CompatibleClouds:  registry.OnlyGCE,
 		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,

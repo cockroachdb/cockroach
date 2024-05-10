@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -55,6 +56,7 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srv.SystemLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
+	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 	t.Run("destination cannot be system tenant", func(t *testing.T) {
 		sysSQL.ExpectErr(t, `pq: the destination tenant "system" \(0\) cannot be the system tenant`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1", srcPgURL.String())
@@ -75,6 +77,9 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 			fmt.Sprintf(`CREATE EXTERNAL CONNECTION "replication-source-addr" AS "%s"`,
 				badPgURL.String()))
 	})
+	counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+	require.Equal(t, int32(0), counts["physical_replication.started"])
+
 }
 
 func TestTenantStreamingFailback(t *testing.T) {
@@ -82,7 +87,7 @@ func TestTenantStreamingFailback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	skip.UnderStressRace(t, "test takes ~5 minutes under stressrace")
+	skip.UnderRace(t, "test takes ~5 minutes under race")
 
 	serverA, aDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
@@ -295,10 +300,10 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	canContinue := make(chan struct{})
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 
-	replicationSpecs := make(map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, 0)
+	replicationSpecs := make(map[base.SQLInstanceID][]execinfrapb.StreamIngestionDataSpec, 0)
 	frontier := &execinfrapb.StreamIngestionFrontierSpec{}
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		AfterReplicationFlowPlan: func(ingestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+		AfterReplicationFlowPlan: func(ingestionSpecs map[base.SQLInstanceID][]execinfrapb.StreamIngestionDataSpec,
 			frontierSpec *execinfrapb.StreamIngestionFrontierSpec) {
 			replicationSpecs = ingestionSpecs
 			frontier = frontierSpec
@@ -334,9 +339,11 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	startTime := replicationJobDetails.ReplicationStartTime
 	require.NotEmpty(t, startTime)
 
-	for _, r := range replicationSpecs {
-		require.Equal(t, startTime, r.InitialScanTimestamp)
-		require.Empty(t, r.PreviousReplicatedTimestamp)
+	for _, spec := range replicationSpecs {
+		for _, r := range spec {
+			require.Equal(t, startTime, r.InitialScanTimestamp)
+			require.Empty(t, r.PreviousReplicatedTimestamp)
+		}
 	}
 	require.Empty(t, frontier.ReplicatedTimeAtStart)
 
@@ -364,13 +371,15 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	// Assert that the previous highwater mark is greater than the replication
 	// start time.
 	var previousReplicatedTimestamp hlc.Timestamp
-	for _, r := range replicationSpecs {
-		require.Equal(t, startTime, r.InitialScanTimestamp)
-		require.True(t, r.InitialScanTimestamp.Less(r.PreviousReplicatedTimestamp))
-		if previousReplicatedTimestamp.IsEmpty() {
-			previousReplicatedTimestamp = r.PreviousReplicatedTimestamp
-		} else {
-			require.Equal(t, r.PreviousReplicatedTimestamp, previousReplicatedTimestamp)
+	for _, spec := range replicationSpecs {
+		for _, r := range spec {
+			require.Equal(t, startTime, r.InitialScanTimestamp)
+			require.True(t, r.InitialScanTimestamp.Less(r.PreviousReplicatedTimestamp))
+			if previousReplicatedTimestamp.IsEmpty() {
+				previousReplicatedTimestamp = r.PreviousReplicatedTimestamp
+			} else {
+				require.Equal(t, r.PreviousReplicatedTimestamp, previousReplicatedTimestamp)
+			}
 		}
 	}
 	require.Equal(t, frontier.ReplicatedTimeAtStart, previousReplicatedTimestamp)
@@ -549,6 +558,7 @@ func TestCutoverCheckpointing(t *testing.T) {
 		},
 	}
 
+	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 	ctx := context.Background()
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
@@ -558,6 +568,11 @@ func TestCutoverCheckpointing(t *testing.T) {
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobIDInt))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, replicationJobID)
+
+	// Assert that our counters have been incremented.
+	counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+	require.GreaterOrEqual(t, counts["physical_replication.started"], int32(1))
+
 	c.WaitUntilStartTimeReached(replicationJobID)
 
 	c.SrcTenantSQL.Exec(t, `CREATE TABLE foo(id) AS SELECT generate_series(1, 10)`)

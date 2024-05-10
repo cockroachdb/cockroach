@@ -861,7 +861,10 @@ type PlanningCtx struct {
 
 	// isLocal is set to true if we're planning this query on a single node.
 	isLocal bool
-	planner *planner
+	// distSQLProhibitedErr, if set, indicates why the plan couldn't be
+	// distributed.
+	distSQLProhibitedErr error
+	planner              *planner
 
 	stmtType tree.StatementReturnType
 	// planDepth is set to the current depth of the planNode tree. It's used to
@@ -1321,16 +1324,7 @@ func (dsp *DistSQLPlanner) checkInstanceHealthAndVersionSystem(
 func (dsp *DistSQLPlanner) PartitionSpans(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
 ) ([]SpanPartition, error) {
-	partitions, _, err := dsp.partitionSpansEx(ctx, planCtx, spans, false /* disallowMergeToExistingParition */)
-	return partitions, err
-}
-
-// ParitionSpansWithoutMerging is the same as PartitionSpans but does not merge
-// an input span into any existing partitioned span.
-func (dsp *DistSQLPlanner) PartitionSpansWithoutMerging(
-	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
-) ([]SpanPartition, error) {
-	partitions, _, err := dsp.partitionSpansEx(ctx, planCtx, spans, true /* disallowMergeToExistingParition */)
+	partitions, _, err := dsp.partitionSpansEx(ctx, planCtx, spans)
 	return partitions, err
 }
 
@@ -1338,10 +1332,7 @@ func (dsp *DistSQLPlanner) PartitionSpansWithoutMerging(
 // boolean indicating whether the misplanned ranges metadata should not be
 // generated.
 func (dsp *DistSQLPlanner) partitionSpansEx(
-	ctx context.Context,
-	planCtx *PlanningCtx,
-	spans roachpb.Spans,
-	disallowMergeToExistingParition bool,
+	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
 ) (_ []SpanPartition, ignoreMisplannedRanges bool, _ error) {
 	if len(spans) == 0 {
 		return nil, false, errors.AssertionFailedf("no spans")
@@ -1355,9 +1346,9 @@ func (dsp *DistSQLPlanner) partitionSpansEx(
 			true /* ignoreMisplannedRanges */, nil
 	}
 	if dsp.useGossipPlanning(ctx, planCtx) {
-		return dsp.deprecatedPartitionSpansSystem(ctx, planCtx, spans, disallowMergeToExistingParition)
+		return dsp.deprecatedPartitionSpansSystem(ctx, planCtx, spans)
 	}
-	return dsp.partitionSpans(ctx, planCtx, spans, disallowMergeToExistingParition)
+	return dsp.partitionSpans(ctx, planCtx, spans)
 }
 
 // partitionSpan takes a single span and splits it up according to the owning
@@ -1382,7 +1373,6 @@ func (dsp *DistSQLPlanner) partitionSpan(
 	nodeMap map[base.SQLInstanceID]int,
 	getSQLInstanceIDForKVNodeID func(roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason),
 	ignoreMisplannedRanges *bool,
-	disallowMergeToExistingParition bool,
 ) (_ []SpanPartition, lastPartitionIdx int, _ error) {
 	it := planCtx.spanIter
 	// rSpan is the span we are currently partitioning.
@@ -1460,7 +1450,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 				partitionedSpan.String(), sqlInstanceID, reason.String())
 		}
 
-		if lastSQLInstanceID == sqlInstanceID && !disallowMergeToExistingParition {
+		if lastSQLInstanceID == sqlInstanceID {
 			// Two consecutive ranges on the same node, merge the spans.
 			partition.Spans[len(partition.Spans)-1].EndKey = endKey.AsRawKey()
 		} else {
@@ -1482,10 +1472,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 // deprecatedPartitionSpansSystem finds node owners for ranges touching the given spans
 // for a system tenant.
 func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
-	ctx context.Context,
-	planCtx *PlanningCtx,
-	spans roachpb.Spans,
-	disallowMergeToExistingParition bool,
+	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
 ) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
 	nodeMap := make(map[base.SQLInstanceID]int)
 	resolver := func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
@@ -1494,7 +1481,7 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 	for _, span := range spans {
 		var err error
 		partitions, _, err = dsp.partitionSpan(
-			ctx, planCtx, span, partitions, nodeMap, resolver, &ignoreMisplannedRanges, disallowMergeToExistingParition,
+			ctx, planCtx, span, partitions, nodeMap, resolver, &ignoreMisplannedRanges,
 		)
 		if err != nil {
 			return nil, false, err
@@ -1510,10 +1497,7 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 // available SQL instances if the locality info is available on at least some of
 // the instances, and it falls back to naive round-robin assignment if not.
 func (dsp *DistSQLPlanner) partitionSpans(
-	ctx context.Context,
-	planCtx *PlanningCtx,
-	spans roachpb.Spans,
-	disallowMergeToExistingParition bool,
+	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
 ) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
 	resolver, err := dsp.makeInstanceResolver(ctx, planCtx)
 	if err != nil {
@@ -1538,7 +1522,7 @@ func (dsp *DistSQLPlanner) partitionSpans(
 			lastKey = safeKey
 		}
 		partitions, lastPartitionIdx, err = dsp.partitionSpan(
-			ctx, planCtx, span, partitions, nodeMap, resolver, &ignoreMisplannedRanges, disallowMergeToExistingParition,
+			ctx, planCtx, span, partitions, nodeMap, resolver, &ignoreMisplannedRanges,
 		)
 		if err != nil {
 			return nil, false, err
@@ -2127,7 +2111,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		// still read too eagerly in the soft limit case. To prevent this we'll
 		// need a new mechanism on the execution side to modulate table reads.
 		// TODO(yuzefovich): add that mechanism.
-		spanPartitions, ignoreMisplannedRanges, err = dsp.partitionSpansEx(ctx, planCtx, info.spans, false)
+		spanPartitions, ignoreMisplannedRanges, err = dsp.partitionSpansEx(ctx, planCtx, info.spans)
 		if err != nil {
 			return err
 		}

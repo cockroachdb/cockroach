@@ -4682,7 +4682,7 @@ func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
 func TestPartialPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t, "times out with 5 nodes")
+	skip.UnderRace(t, "times out with 5 nodes")
 	ctx := context.Background()
 
 	testCases := []struct {

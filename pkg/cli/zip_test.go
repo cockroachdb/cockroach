@@ -147,6 +147,7 @@ ORDER BY name ASC`)
 // This tests the operation of zip over secure clusters.
 func TestZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "test too slow under race")
 
@@ -175,9 +176,42 @@ func TestZip(t *testing.T) {
 	})
 }
 
+// This tests the operation of redacted zip over secure clusters.
+func TestZipRedacted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	skip.UnderRace(t, "test too slow under race")
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.Cleanup()
+
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --redact " + os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Strip any non-deterministic messages.
+	out = eraseNonDeterministicZipOutput(out)
+
+	// We use datadriven simply to read the golden output file; we don't actually
+	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "testzip_redacted"), func(t *testing.T, td *datadriven.TestData) string {
+		return out
+	})
+}
+
 // This tests the operation of zip using --include-goroutine-stacks.
 func TestZipIncludeGoroutineStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	skip.UnderRace(t, "test too slow under race")
 
 	tests := []struct {
@@ -234,6 +268,7 @@ func TestZipIncludeGoroutineStacks(t *testing.T) {
 // This tests the operation of zip using --include-range-info.
 func TestZipIncludeRangeInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "test too slow under race")
 
@@ -267,6 +302,7 @@ func TestZipIncludeRangeInfo(t *testing.T) {
 // This tests the operation of zip using --include-range-info=false.
 func TestZipExcludeRangeInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "test too slow under race")
 
@@ -301,6 +337,7 @@ func TestZipExcludeRangeInfo(t *testing.T) {
 // This tests the operation of zip running concurrently.
 func TestConcurrentZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We want a low timeout so that the test doesn't take forever;
 	// however low timeouts make race runs flaky with false positives.
@@ -355,6 +392,7 @@ func TestConcurrentZip(t *testing.T) {
 
 func TestZipSpecialNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
@@ -400,6 +438,7 @@ create table defaultdb."../system"(x int);
 // need the SSL certs dir to run a CLI test securely.
 func TestUnavailableZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t)
 	// Race builds make the servers so slow that they report spurious
@@ -545,15 +584,12 @@ func baseZipOutput(nodeId int) []string {
 		fmt.Sprintf("[node %d] using SQL connection URL", nodeId),
 		fmt.Sprintf("[node %d] retrieving SQL data", nodeId),
 		fmt.Sprintf("[node %d] requesting stacks... received response...", nodeId),
-		fmt.Sprintf("[node %d] requesting stacks with labels... received response...",
-			nodeId),
-		fmt.Sprintf("[node %d] requesting heap file list... received response...", nodeId),
-		fmt.Sprintf("[node %d] requesting goroutine dump list... received response...",
-			nodeId),
-		fmt.Sprintf("[node %d] requesting log files list... received response...",
-			nodeId),
-		fmt.Sprintf("[node %d] requesting ranges... received response...",
-			nodeId),
+		fmt.Sprintf("[node %d] requesting stacks with labels... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting heap profile list... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting goroutine dump list... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting cpu profile list... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting log files list... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting ranges... received response...", nodeId),
 	}
 	return output
 }
@@ -581,6 +617,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `[node ?] ? heap profiles found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ goroutine dumps found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? goroutine dumps found`)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ cpu profiles found$`)
+	out = re.ReplaceAllString(out, `[node ?] ? cpu profiles found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ log files found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? log files found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving (memprof|memstats|memmonitoring).*$` + "\n")
@@ -602,6 +640,7 @@ func eraseNonDeterministicZipOutput(out string) string {
 // need the SSL certs dir to run a CLI test securely.
 func TestPartialZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We want a low timeout so that the test doesn't take forever;
 	// however low timeouts make race runs flaky with false positives.
@@ -929,7 +968,7 @@ func TestZipJobTrace(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 	blockCh := make(chan struct{})
-	jobs.RegisterConstructor(jobspb.TypeImport,
+	defer jobs.TestingRegisterConstructor(jobspb.TypeImport,
 		func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
@@ -937,7 +976,7 @@ func TestZipJobTrace(t *testing.T) {
 					return nil
 				},
 			}
-		}, jobs.UsesTenantCostControl)
+		}, jobs.UsesTenantCostControl)()
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()

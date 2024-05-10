@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -58,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -84,7 +82,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sentryutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1094,7 +1091,6 @@ func (s *Server) newConnExecutor(
 		// it here so that an early call to close() doesn't panic.
 		ctxHolder:                 ctxHolder{connCtx: ctx, goroutineID: goid.Get()},
 		phaseTimes:                sessionphase.NewTimes(),
-		rng:                       rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
@@ -1104,6 +1100,7 @@ func (s *Server) newConnExecutor(
 		txnFingerprintIDCache:     NewTxnFingerprintIDCache(ctx, s.cfg.Settings, &txnFingerprintIDCacheAcc),
 		txnFingerprintIDAcc:       &txnFingerprintIDCacheAcc,
 	}
+	ex.rng.internal = rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
 
@@ -1141,10 +1138,12 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
+
 	ex.applicationStats = applicationStats
 	ex.statsCollector = sslocal.NewStatsCollector(
 		s.cfg.Settings,
 		applicationStats,
+		ex.server.insights.Writer(ex.sessionData().Internal),
 		ex.phaseTimes,
 		s.cfg.SQLStatsTestingKnobs,
 	)
@@ -1176,7 +1175,7 @@ func (s *Server) newConnExecutor(
 		mode:   ex.sessionData().NewSchemaChangerMode,
 		memAcc: ex.sessionMon.MakeBoundAccount(),
 	}
-	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
+	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng.internal, ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
 	ex.mu.ActiveQueries = make(map[clusterunique.ID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
@@ -1683,9 +1682,16 @@ type connExecutor struct {
 	// statement.
 	phaseTimes *sessionphase.Times
 
-	// rng is used to generate random numbers. An example usage is to determine
-	// whether to sample execution stats.
-	rng *rand.Rand
+	// rng contains random number generators for this session.
+	rng struct {
+		// internal is used for internal operations like determining the query
+		// cancel key and whether sampling execution stats should be performed.
+		internal *rand.Rand
+		// external is used to power random() builtin. It is important to store
+		// this field by value so that the same RNG is reused throughout the
+		// whole session.
+		external eval.RNGFactory
+	}
 
 	// mu contains of all elements of the struct that can be changed
 	// after initialization, and may be accessed from another thread.
@@ -3169,7 +3175,10 @@ func (ex *connExecutor) execCopyIn(
 			// execInsertPlan
 			func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
 				defer p.curPlan.close(ctx)
-				_, err := ex.execWithDistSQLEngine(ctx, p, tree.RowsAffected, res, LocalDistribution, nil /* progressAtomic */)
+				_, err := ex.execWithDistSQLEngine(
+					ctx, p, tree.RowsAffected, res, LocalDistribution,
+					nil /* progressAtomic */, nil, /* distSQLProhibitedErr */
+				)
 				return err
 			},
 		)
@@ -3733,6 +3742,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			RangeStatsFetcher:              p.execCfg.RangeStatsFetcher,
 			JobsProfiler:                   p,
 			ULIDEntropy:                    ulid.Monotonic(crypto_rand.Reader, 0),
+			RNGFactory:                     &ex.rng.external,
 		},
 		Tracing:              &ex.sessionTracing,
 		MemMetrics:           &ex.memMetrics,
@@ -3744,8 +3754,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
 	}
-	rng, _ := randutil.NewPseudoRand()
-	evalCtx.RNG = rng
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }
 
@@ -4062,17 +4070,6 @@ func (ex *connExecutor) maybeSetSQLLivenessSession() error {
 	return nil
 }
 
-func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
-	ctx context.Context, descID descpb.ID,
-) error {
-	if err := ex.planner.waitForDescriptorSchemaChanges(
-		ctx, descID, *ex.extraTxnState.schemaChangerState,
-	); err != nil {
-		return err
-	}
-	return ex.resetTransactionOnSchemaChangeRetry(ctx)
-}
-
 // initStatementResult initializes res according to a query.
 //
 // cols represents the columns of the result rows. Should be nil if
@@ -4352,41 +4349,6 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 			ex.planner.execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
 		}
 	}
-}
-
-// runPreCommitStages is part of the new schema changer infrastructure to
-// mutate descriptors prior to committing a SQL transaction.
-func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
-	scs := ex.extraTxnState.schemaChangerState
-	if len(scs.state.Targets) == 0 {
-		return nil
-	}
-	deps := newSchemaChangerTxnRunDependencies(
-		ctx,
-		ex.planner.SessionData(),
-		ex.planner.User(),
-		ex.server.cfg,
-		ex.planner.InternalSQLTxn(),
-		ex.extraTxnState.descCollection,
-		ex.planner.EvalContext(),
-		ex.planner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		scs.jobID,
-		scs.stmts,
-	)
-	ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
-	after, jobID, err := scrun.RunPreCommitPhase(
-		ctx, ex.server.cfg.DeclarativeSchemaChangerTestingKnobs, deps, scs.state,
-	)
-	if err != nil {
-		return err
-	}
-	scs.state = after
-	scs.jobID = jobID
-	if jobID != jobspb.InvalidJobID {
-		ex.extraTxnState.jobs.addCreatedJobID(jobID)
-		log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
-	}
-	return nil
 }
 
 func (ex *connExecutor) getDescIDGenerator() eval.DescIDGenerator {

@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -278,7 +278,7 @@ func (f *RangeFeed) Close() {
 // will be reset.
 const resetThreshold = 30 * time.Second
 
-var useMuxRangeFeed = util.ConstantWithMetamorphicTestBool("use-mux-rangefeed", true)
+var useMuxRangeFeed = metamorphic.ConstantWithTestBool("use-mux-rangefeed", true)
 
 // run will run the RangeFeed until the context is canceled or if the client
 // indicates that an initial scan error is non-recoverable.
@@ -320,6 +320,9 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier) {
 	}
 	if f.withDiff {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithDiff())
+	}
+	if f.onMetadata != nil {
+		rangefeedOpts = append(rangefeedOpts, kvcoord.WithMetadata())
 	}
 
 	for i := 0; r.Next(); i++ {
@@ -416,6 +419,11 @@ func (f *RangeFeed) processEvents(
 						"received unexpected rangefeed DeleteRange event with no OnDeleteRange handler: %s", ev)
 				}
 				f.onDeleteRange(ctx, ev.DeleteRange)
+			case ev.Metadata != nil:
+				if f.onMetadata == nil {
+					return errors.AssertionFailedf("received unexpected metadata event with no OnMetadata handler")
+				}
+				f.onMetadata(ctx, ev.Metadata)
 			case ev.Error != nil:
 				// Intentionally do nothing, we'll get an error returned from the
 				// call to RangeFeed.

@@ -61,13 +61,17 @@ const retryCount = 20
 
 // Smither is a sqlsmith generator.
 type Smither struct {
-	rnd     *rand.Rand
-	db      *gosql.DB
-	lock    syncutil.RWMutex
-	dbName  string
-	schemas []*schemaRef
-	tables  []*tableRef
-	columns map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
+	rnd *rand.Rand
+	db  *gosql.DB
+	// TODO(yuzefovich): clarify which objects this lock is protecting.
+	lock      syncutil.RWMutex
+	dbName    string
+	schemas   []*schemaRef
+	tables    []*tableRef
+	sequences []*sequenceRef
+	columns   map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
+	// Note: consider using getAllIndexesForTable helper if you need to iterate
+	// over all indexes for a particular table.
 	indexes map[tree.TableName]map[tree.Name]*tree.CreateIndex
 	// Only one of nameCounts and nameGens will be used. nameCounts is used when
 	// simpleNames is true.
@@ -103,6 +107,7 @@ type Smither struct {
 	ignoreFNs                     []*regexp.Regexp
 	complexity                    float64
 	scalarComplexity              float64
+	simpleScalarTypes             bool
 	unlikelyConstantPredicate     bool
 	favorCommonData               bool
 	unlikelyRandomNulls           bool
@@ -115,7 +120,10 @@ type Smither struct {
 	disableDivision               bool
 	disableDecimals               bool
 	disableOIDs                   bool
-	disableUDFs                   bool
+	// disableUDFCreation indicates whether we're not allowed to create UDFs.
+	// It follows that if we haven't created any UDFs, we have no UDFs to invoke
+	// too.
+	disableUDFCreation bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -203,10 +211,17 @@ func (s *Smither) Generate() string {
 			continue
 		}
 		i = 0
-		p, err := prettyCfg.Pretty(stmt)
+
+		printCfg := prettyCfg
+		fl := tree.FmtParsable
+		if s.postgres {
+			printCfg.FmtFlags = tree.FmtPGCatalog
+			fl = tree.FmtPGCatalog
+		}
+		p, err := printCfg.Pretty(stmt)
 		if err != nil {
 			// Use simple printing if pretty-printing fails.
-			p = tree.AsStringWithFlags(stmt, tree.FmtParsable)
+			p = tree.AsStringWithFlags(stmt, fl)
 		}
 		return p
 	}
@@ -390,6 +405,11 @@ var DisableWith = simpleOption("disable WITH", func(s *Smither) {
 	s.disableWith = true
 })
 
+// EnableWith causes the Smither to probabilistically emit WITH clauses.
+var EnableWith = simpleOption("enable WITH", func(s *Smither) {
+	s.disableWith = false
+})
+
 // DisableNondeterministicFns causes the Smither to disable nondeterministic functions.
 var DisableNondeterministicFns = simpleOption("disable nondeterministic funcs", func(s *Smither) {
 	s.disableNondeterministicFns = true
@@ -403,6 +423,11 @@ func DisableCRDBFns() SmitherOption {
 // SimpleDatums causes the Smither to emit simpler constant datums.
 var SimpleDatums = simpleOption("simple datums", func(s *Smither) {
 	s.simpleDatums = true
+})
+
+// SimpleScalarTypes causes the Smither to use simpler scalar types (e.g. avoid Geometry).
+var SimpleScalarTypes = simpleOption("simple scalar types", func(s *Smither) {
+	s.simpleScalarTypes = true
 })
 
 // SimpleNames specifies that complex name generation should be disabled.
@@ -450,6 +475,11 @@ var DisableNondeterministicLimits = simpleOption("disable non-deterministic LIMI
 	s.disableNondeterministicLimits = true
 })
 
+// EnableLimits causes the Smither to probabilistically emit LIMIT clauses.
+var EnableLimits = simpleOption("enable LIMIT", func(s *Smither) {
+	s.disableLimits = false
+})
+
 // AvoidConsts causes the Smither to prefer column references over generating
 // constants.
 var AvoidConsts = simpleOption("avoid consts", func(s *Smither) {
@@ -469,6 +499,11 @@ var DisableAggregateFuncs = simpleOption("disable aggregate funcs", func(s *Smit
 // OutputSort adds a top-level ORDER BY on all columns.
 var OutputSort = simpleOption("output sort", func(s *Smither) {
 	s.outputSort = true
+})
+
+// MaybeSortOutput probabilistically adds ORDER by clause.
+var MaybeSortOutput = simpleOption("maybe output sort", func(s *Smither) {
+	s.outputSort = s.coin()
 })
 
 // UnlikelyConstantPredicate causes the Smither to make generation of constant
@@ -534,13 +569,6 @@ var DisableInsertSelect = simpleOption("disable insert select", func(s *Smither)
 	s.disableInsertSelect = true
 })
 
-// DisableDivision disables generation of the division operator (/) and the
-// floor division operator (//).
-// TODO(mgartner): Remove this once #86790 is addressed.
-var DisableDivision = simpleOption("disable division", func(s *Smither) {
-	s.disableDivision = true
-})
-
 // DisableDecimals disables use of decimal type columns in the query.
 var DisableDecimals = simpleOption("disable decimals", func(s *Smither) {
 	s.disableDecimals = true
@@ -553,7 +581,7 @@ var DisableOIDs = simpleOption("disable OIDs", func(s *Smither) {
 
 // DisableUDFs causes the Smither to disable user-defined functions.
 var DisableUDFs = simpleOption("disable udfs", func(s *Smither) {
-	s.disableUDFs = true
+	s.disableUDFCreation = true
 })
 
 // CompareMode causes the Smither to generate statements that have

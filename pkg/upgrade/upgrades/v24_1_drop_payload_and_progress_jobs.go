@@ -45,5 +45,5 @@ func hidePayloadProgressFromSystemJobs(
 		return err
 	}
 
-	return bumpSystemDatabaseSchemaVersion(ctx, cv, deps)
+	return nil
 }

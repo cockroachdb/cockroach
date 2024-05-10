@@ -123,16 +123,20 @@ null_ordered_last                                          off
 on_update_rehome_row_enabled                               on
 opt_split_scan_limit                                       2048
 optimizer_always_use_histograms                            on
+optimizer_apply_full_scan_penalty_to_virtual_tables        off
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
+optimizer_prove_implication_with_virtual_computed_columns  on
 optimizer_use_forecasts                                    on
 optimizer_use_histograms                                   on
 optimizer_use_improved_computed_column_filters_derivation  on
 optimizer_use_improved_disjunction_stats                   on
 optimizer_use_improved_distinct_on_limit_hint_costing      on
 optimizer_use_improved_join_elimination                    on
+optimizer_use_improved_multi_column_selectivity_estimate   on
 optimizer_use_improved_split_disjunction_for_joins         on
 optimizer_use_improved_trigram_similarity_selectivity      on
+optimizer_use_improved_zigzag_join_costing                 on
 optimizer_use_limit_ordering_for_streaming_group_by        on
 optimizer_use_lock_op_for_serializable                     off
 optimizer_use_multicol_stats                               on
@@ -566,7 +570,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix WITH DETAILS]
 ----
 start_key     end_key       replicas  lease_holder
-…/<IndexMin>  <after:/Max>  {1}       1
+…/<IndexMin>  …/<IndexMax>  {1}       1
 
 query TTTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0

@@ -34,9 +34,9 @@ func TestLeaseRenewer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// stressrace and deadlock make the test too slow, resulting in an inability
+	// race and deadlock make the test too slow, resulting in an inability
 	// to maintain leases and Raft leadership.
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 	skip.UnderDeadlock(t)
 
 	// We test with kv.expiration_leases_only.enabled both enabled and disabled,

@@ -39,6 +39,7 @@ import (
 )
 
 const (
+	defaultSubscription = "e2e-infra"
 	// ProviderName is "azure".
 	ProviderName = "azure"
 	remoteUser   = "ubuntu"
@@ -199,12 +200,74 @@ func getAzureDefaultLabelMap(opts vm.CreateOpts) map[string]string {
 }
 
 func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
-	l.Printf("adding labels to Azure VMs not yet supported")
-	return nil
+	return p.editLabels(l, vms, labels, false /*removeLabels*/)
 }
 
 func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) error {
-	l.Printf("removing labels from Azure VMs not yet supported")
+	labelsMap := make(map[string]string, len(labels))
+	for _, label := range labels {
+		labelsMap[label] = ""
+	}
+	return p.editLabels(l, vms, labelsMap, true /*removeLabels*/)
+}
+
+func (p *Provider) editLabels(
+	l *logger.Logger, vms vm.List, labels map[string]string, removeLabels bool,
+) error {
+	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
+	defer cancel()
+
+	sub, err := p.getSubscription(ctx)
+	if err != nil {
+		return err
+	}
+	client := compute.NewVirtualMachinesClient(sub)
+	if client.Authorizer, err = p.getAuthorizer(); err != nil {
+		return err
+	}
+
+	futures := make([]compute.VirtualMachinesUpdateFuture, len(vms))
+	for idx, m := range vms {
+		vmParts, err := parseAzureID(m.ProviderID)
+		if err != nil {
+			return err
+		}
+		// N.B. VirtualMachineUpdate below overwrites _all_ VM tags. Hence, we must copy all unmodified tags.
+		tags := make(map[string]*string)
+		// Copy all known VM tags.
+		for k, v := range m.Labels {
+			tags[k] = to.StringPtr(v)
+		}
+
+		if removeLabels {
+			// Remove the matching VM tags.
+			for k := range labels {
+				delete(tags, k)
+			}
+		} else {
+			// Add the new VM tags.
+			for k, v := range labels {
+				tags[k] = to.StringPtr(v)
+			}
+		}
+
+		update := compute.VirtualMachineUpdate{
+			Tags: tags,
+		}
+		futures[idx], err = client.Update(ctx, vmParts.resourceGroup, vmParts.resourceName, update)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, future := range futures {
+		if err := future.WaitForCompletionRef(ctx, client.Client); err != nil {
+			return err
+		}
+		if _, err := future.Result(client); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -406,50 +469,9 @@ func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
 
 // Extend implements the vm.Provider interface.
 func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
-	defer cancel()
-
-	sub, err := p.getSubscription(ctx)
-	if err != nil {
-		return err
-	}
-	client := compute.NewVirtualMachinesClient(sub)
-	if client.Authorizer, err = p.getAuthorizer(); err != nil {
-		return err
-	}
-
-	futures := make([]compute.VirtualMachinesUpdateFuture, len(vms))
-	for idx, m := range vms {
-		vmParts, err := parseAzureID(m.ProviderID)
-		if err != nil {
-			return err
-		}
-		// N.B. VirtualMachineUpdate below overwrites _all_ VM tags. Hence, we must copy all unmodified tags.
-		tags := make(map[string]*string)
-		// Copy all known VM tags.
-		for k, v := range m.Labels {
-			tags[k] = to.StringPtr(v)
-		}
-		// Overwrite Lifetime tag.
-		tags[vm.TagLifetime] = to.StringPtr(lifetime.String())
-		update := compute.VirtualMachineUpdate{
-			Tags: tags,
-		}
-		futures[idx], err = client.Update(ctx, vmParts.resourceGroup, vmParts.resourceName, update)
-		if err != nil {
-			return err
-		}
-	}
-
-	for _, future := range futures {
-		if err := future.WaitForCompletionRef(ctx, client.Client); err != nil {
-			return err
-		}
-		if _, err := future.Result(client); err != nil {
-			return err
-		}
-	}
-	return nil
+	return p.AddLabels(l, vms, map[string]string{
+		vm.TagLifetime: lifetime.String(),
+	})
 }
 
 // FindActiveAccount implements vm.Provider.
@@ -664,7 +686,10 @@ func (p *Provider) createVM(
 	opts vm.CreateOpts,
 	providerOpts ProviderOpts,
 ) (machine compute.VirtualMachine, err error) {
-	startupArgs := azureStartupArgs{RemoteUser: remoteUser}
+	startupArgs := azureStartupArgs{
+		RemoteUser:           remoteUser,
+		DisksInitializedFile: vm.DisksInitializedFile,
+	}
 	if !opts.SSDOpts.UseLocalSSD {
 		// We define lun42 explicitly in the data disk request below.
 		lun := 42
@@ -1472,7 +1497,7 @@ func (p *Provider) createUltraDisk(
 }
 
 // getSubscription returns env.AZURE_SUBSCRIPTION_ID if it exists
-// or the first subscription when listing all available via an API call.
+// or the ID of the defaultSubscription.
 // The value is memoized in the Provider instance.
 func (p *Provider) getSubscription(ctx context.Context) (string, error) {
 	subscriptionId := func() string {
@@ -1487,7 +1512,7 @@ func (p *Provider) getSubscription(ctx context.Context) (string, error) {
 
 	subscriptionId = os.Getenv("AZURE_SUBSCRIPTION_ID")
 
-	// Fallback to retrieving the first subscription
+	// Fallback to retrieving the defaultSubscription.
 	if subscriptionId == "" {
 		authorizer, err := p.getAuthorizer()
 		if err != nil {
@@ -1496,16 +1521,28 @@ func (p *Provider) getSubscription(ctx context.Context) (string, error) {
 		sc := subscriptions.NewClient()
 		sc.Authorizer = authorizer
 
-		page, err := sc.List(ctx)
-		if err == nil {
-			if len(page.Values()) == 0 {
-				err = errors.New("did not find Azure subscription")
+		it, err := sc.ListComplete(ctx)
+		if err != nil {
+			return "", errors.Wrapf(err, "error listing Azure subscriptions")
+		}
+
+		// Iterate through all subscriptions to find the defaultSubscription.
+		// We have to do this as Azure requires the ID not just the name.
+		for it.NotDone() {
+			s := it.Value().SubscriptionID
+			name := it.Value().DisplayName
+			if s != nil && name != nil {
+				if *name == defaultSubscription {
+					subscriptionId = *s
+					break
+				}
+			}
+			if err = it.NextWithContext(ctx); err != nil {
 				return "", err
 			}
-			s := page.Values()[0].SubscriptionID
-			if s != nil {
-				subscriptionId = *s
-			}
+		}
+		if subscriptionId == "" {
+			return "", errors.Newf("Could not find default subscription: %s", defaultSubscription)
 		}
 	}
 

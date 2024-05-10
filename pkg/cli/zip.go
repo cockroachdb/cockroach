@@ -94,7 +94,8 @@ func (zc *debugZipContext) runZipRequest(ctx context.Context, zr *zipReporter, r
 func (zc *debugZipContext) forAllNodes(
 	ctx context.Context,
 	nodesList *serverpb.NodesListResponse,
-	fn func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodeStatus *statuspb.NodeStatus) error,
+	redactedNodesList *serverpb.NodesListResponse,
+	fn func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodeStatus *statuspb.NodeStatus, redactedNodeDetails serverpb.NodeDetails) error,
 ) error {
 	if nodesList == nil {
 		// Nothing to do, return
@@ -104,7 +105,7 @@ func (zc *debugZipContext) forAllNodes(
 		// Sequential case. Simplify.
 		for _, nodeDetails := range nodesList.Nodes {
 			var nodeStatus *statuspb.NodeStatus
-			if err := fn(ctx, nodeDetails, nodeStatus); err != nil {
+			if err := fn(ctx, nodeDetails, nodeStatus, zc.getRedactedNodeDetails(redactedNodesList, nodeDetails.NodeID)); err != nil {
 				return err
 			}
 		}
@@ -128,7 +129,7 @@ func (zc *debugZipContext) forAllNodes(
 			}
 			defer zc.sem.Release(1)
 
-			nodeErrs <- fn(ctx, nodeDetails, nodeStatus)
+			nodeErrs <- fn(ctx, nodeDetails, nodeStatus, zc.getRedactedNodeDetails(redactedNodesList, nodeDetails.NodeID))
 		}(nodeDetails, nodeStatus)
 	}
 	wg.Wait()
@@ -139,6 +140,27 @@ func (zc *debugZipContext) forAllNodes(
 		err = errors.CombineErrors(err, <-nodeErrs)
 	}
 	return err
+}
+
+// getRedactedNodeDetails finds out matching redacted node details using node Id.
+// When we have a redacted nodelist response and unredacted nodelist response,
+// there is no guarantee that the objects in the list are going to be in the same
+// order by node Id. Hence, we are explicitly extracting the required object by node
+// id.
+func (zc *debugZipContext) getRedactedNodeDetails(
+	redactedNodesList *serverpb.NodesListResponse, nodeId int32,
+) serverpb.NodeDetails {
+	if redactedNodesList == nil {
+		return serverpb.NodeDetails{}
+	}
+
+	for i := range redactedNodesList.Nodes {
+		if redactedNodesList.Nodes[i].NodeID == nodeId {
+			return redactedNodesList.Nodes[i]
+		}
+	}
+
+	return serverpb.NodeDetails{}
 }
 
 type nodeLivenesses = map[roachpb.NodeID]livenesspb.NodeLivenessStatus
@@ -290,7 +312,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			// For a SQL only server, the nodeList will be a list of SQL nodes
 			// and livenessByNodeID is null. For a KV server, the nodeList will
 			// be a list of KV nodes along with the corresponding node liveness data.
-			nodesList, livenessByNodeID, err := zc.collectClusterData(ctx)
+			nodesList, redactedNodesList, livenessByNodeID, err := zc.collectClusterData(ctx)
 			if err != nil {
 				return err
 			}
@@ -301,8 +323,8 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			}
 
 			// Collect the per-node data.
-			if err := zc.forAllNodes(ctx, nodesList, func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodesStatus *statuspb.NodeStatus) error {
-				return zc.collectPerNodeData(ctx, nodeDetails, nodesStatus, livenessByNodeID)
+			if err := zc.forAllNodes(ctx, nodesList, redactedNodesList, func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodesStatus *statuspb.NodeStatus, redactedNodeDetails serverpb.NodeDetails) error {
+				return zc.collectPerNodeData(ctx, nodeDetails, nodesStatus, livenessByNodeID, redactedNodeDetails)
 			}); err != nil {
 				return err
 			}

@@ -19,7 +19,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -365,6 +364,9 @@ func (bo replicateBulkOps) sourceRunCmd(tenantName string, nodes option.NodeList
 func (bo replicateBulkOps) runDriver(
 	workloadCtx context.Context, c cluster.Cluster, t test.Test, setup *c2cSetup,
 ) error {
+	if c.Cloud() != spec.GCE && !c.IsLocal() {
+		t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
+	}
 	runBackupMVCCRangeTombstones(workloadCtx, t, c, mvccRangeTombstoneConfig{
 		skipBackupRestore: true,
 		skipClusterSetup:  true,
@@ -469,6 +471,8 @@ type replicationDriver struct {
 	c       cluster.Cluster
 	metrics *c2cMetrics
 	rng     *rand.Rand
+
+	shutdownNode int
 }
 
 func makeReplicationDriver(t test.Test, c cluster.Cluster, rs replicationSpec) *replicationDriver {
@@ -828,10 +832,20 @@ func (rd *replicationDriver) backupAfterFingerprintMismatch(
 		rd.t.L().Printf("skip taking backups of tenants on local roachtest run")
 		return nil
 	}
-	prefix := "gs"
-	if rd.c.Cloud() == spec.AWS {
-		prefix = "s3"
+	if rd.c.Cloud() == spec.Azure {
+		rd.t.L().Printf("skip taking backups of tenants on azure, bucket not configured yet")
+		return nil
 	}
+	cloudPrefixes := map[string]string{
+		spec.GCE:   "gs",
+		spec.AWS:   "s3",
+		spec.Azure: "azure",
+	}
+	if _, ok := cloudPrefixes[rd.c.Cloud()]; !ok {
+		return errors.Errorf("backupAfterFingerprintMismatch: unsupported cloud")
+	}
+	prefix := cloudPrefixes[rd.c.Cloud()]
+
 	collection := fmt.Sprintf("%s://%s/c2c-fingerprint-mismatch/%s/%s/%s?AUTH=implicit", prefix, testutils.BackupTestingBucketLongTTL(), rd.rs.name, rd.c.Name(), tenantName)
 	fullBackupQuery := fmt.Sprintf("BACKUP INTO '%s' AS OF SYSTEM TIME '%s' with revision_history", collection, startTime.AsOfSystemTime())
 	_, err := conn.ExecContext(ctx, fullBackupQuery)
@@ -853,23 +867,31 @@ func (rd *replicationDriver) backupAfterFingerprintMismatch(
 // Note: this isn't a strict requirement of all physical replication streams,
 // rather we check this here because we expect a distributed physical
 // replication stream in a healthy pair of multinode clusters.
-func (rd *replicationDriver) checkParticipatingNodes(ingestionJobId int) {
+func (rd *replicationDriver) checkParticipatingNodes(ctx context.Context, ingestionJobId int) {
 	if rd.rs.skipNodeDistributionCheck {
 		return
 	}
-	progress := getJobProgress(rd.t, rd.setup.dst.sysSQL, jobspb.JobID(ingestionJobId)).GetStreamIngest()
-	require.Greater(rd.t, len(progress.StreamAddresses), 1, "only 1 src node participating")
 
-	var destNodeCount int
 	destNodes := make(map[int]struct{})
-	for _, dstNode := range progress.PartitionProgress {
-		dstNodeID := int(dstNode.DestSQLInstanceID)
-		if _, ok := destNodes[dstNodeID]; !ok {
-			destNodes[dstNodeID] = struct{}{}
-			destNodeCount++
+	for _, src := range rd.setup.src.nodes {
+		if rd.shutdownNode == src {
+			continue
 		}
+		srcTenantSQL := sqlutils.MakeSQLRunner(rd.c.Conn(ctx, rd.t.L(), src))
+		var dstNode int
+		rows := srcTenantSQL.Query(rd.t, `select distinct consumer_id from crdb_internal.cluster_replication_node_streams`)
+		var streams int
+		for rows.Next() {
+			require.NoError(rd.t, rows.Scan(&dstNode))
+			rd.t.L().Printf("stream on %d to %d", src, dstNode)
+			streams++
+			destNodes[dstNode] = struct{}{}
+		}
+		rd.t.L().Printf("%d streams on %d", streams, src)
+		require.NoError(rd.t, rows.Err())
 	}
-	require.Greater(rd.t, destNodeCount, 1, "only 1 dst node participating")
+
+	require.Greater(rd.t, len(destNodes), 1, "only 1 dst node participating")
 }
 
 func (rd *replicationDriver) main(ctx context.Context) {
@@ -959,7 +981,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 		return
 	}
 
-	rd.checkParticipatingNodes(ingestionJobID)
+	rd.checkParticipatingNodes(ctx, ingestionJobID)
 
 	retainedTime := rd.getReplicationRetainedTime()
 	var cutoverTime time.Time
@@ -1333,10 +1355,9 @@ type replShutdownDriver struct {
 	phase c2cPhase
 
 	// the fields below are gathered after the replication stream has started
-	srcJobID     jobspb.JobID
-	dstJobID     jobspb.JobID
-	shutdownNode int
-	watcherNode  int
+	srcJobID    jobspb.JobID
+	dstJobID    jobspb.JobID
+	watcherNode int
 }
 
 func makeReplShutdownDriver(
@@ -1476,23 +1497,6 @@ func sleepBeforeResiliencyEvent(rd *replicationDriver, phase c2cPhase) {
 	randomSleep := time.Duration(baseSleep+rd.rng.Intn(2)) * time.Second
 	rd.t.L().Printf("Take a %s power nap", randomSleep)
 	time.Sleep(randomSleep)
-}
-
-// getSrcDestNodePairs return list of src-dest node pairs that are directly connected to each
-// other for the replication stream.
-func getSrcDestNodePairs(rd *replicationDriver, progress *jobspb.StreamIngestionProgress) [][]int {
-	nodePairs := make([][]int, 0)
-	for srcID, progress := range progress.PartitionProgress {
-		srcNode, err := strconv.Atoi(srcID)
-		require.NoError(rd.t, err)
-
-		// The destination cluster indexes nodes starting at 1,
-		// but we need to record the roachprod node.
-		dstNode := int(progress.DestSQLInstanceID) + rd.rs.srcNodes
-		rd.t.L().Printf("Node Pair: Src %d; Dst %d ", srcNode, dstNode)
-		nodePairs = append(nodePairs, []int{srcNode, dstNode})
-	}
-	return nodePairs
 }
 
 func registerClusterReplicationResilience(r registry.Registry) {
@@ -1669,13 +1673,16 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		// TODO(msbutler): disconnect nodes during a random phase
 		require.NoError(t, waitForTargetPhase(ctx, rd, dstJobID, phaseSteadyState))
 		sleepBeforeResiliencyEvent(rd, phaseSteadyState)
-		ingestionProgress := getJobProgress(t, rd.setup.dst.sysSQL, dstJobID).GetStreamIngest()
 
-		srcDestConnections := getSrcDestNodePairs(rd, ingestionProgress)
-		randomNodePair := srcDestConnections[rd.rng.Intn(len(srcDestConnections))]
+		srcNode := rd.setup.src.nodes.RandNode()[0]
+		srcTenantSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), srcNode))
+
+		var dstNode int
+		srcTenantSQL.QueryRow(t, `select consumer_id from crdb_internal.cluster_replication_node_streams order by random() limit 1`).Scan(&dstNode)
+
 		disconnectDuration := sp.additionalDuration
-		rd.t.L().Printf("Disconnecting Src %d, Dest %d for %.2f minutes", randomNodePair[0],
-			randomNodePair[1], disconnectDuration.Minutes())
+		rd.t.L().Printf("Disconnecting Src %d, Dest %d for %.2f minutes", srcNode,
+			dstNode, disconnectDuration.Minutes())
 
 		// Normally, the blackholeFailer is accessed through the failer interface,
 		// at least in the failover tests. Because this test shouldn't use all the
@@ -1683,13 +1690,10 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		// blakholeFailer struct directly. In other words, in this test, we
 		// shouldn't treat the blackholeFailer as an abstracted api.
 		blackholeFailer := &blackholeFailer{t: rd.t, c: rd.c, input: true, output: true}
-		blackholeFailer.FailPartial(ctx, randomNodePair[0], []int{randomNodePair[1]})
+		blackholeFailer.FailPartial(ctx, srcNode, []int{dstNode})
 
 		time.Sleep(disconnectDuration)
-		ingestionProgressUpdate := getJobProgress(t, rd.setup.dst.sysSQL, dstJobID).GetStreamIngest()
-
 		// Calling this will log the latest topology.
-		getSrcDestNodePairs(rd, ingestionProgressUpdate)
 		blackholeFailer.Cleanup(ctx)
 		rd.t.L().Printf("Nodes reconnected. C2C Job should eventually complete")
 	})

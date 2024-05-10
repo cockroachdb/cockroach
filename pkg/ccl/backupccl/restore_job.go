@@ -410,7 +410,7 @@ func restore(
 		// Only update the job progress on the main data bundle. This should account
 		// for the bulk of the data to restore. Other data (e.g. zone configs in
 		// cluster restores) may be restored first.
-		progressLogger := jobs.NewChunkProgressLogger(job, numImportSpans, job.FractionCompleted(), progressTracker.updateJobCallback)
+		progressLogger := jobs.NewChunkProgressLoggerForJob(job, numImportSpans, job.FractionCompleted(), progressTracker.updateJobCallback)
 
 		jobProgressLoop := func(ctx context.Context) error {
 			ctx, progressSpan := tracing.ChildSpan(ctx, "progress-loop")
@@ -543,6 +543,9 @@ func restore(
 // can't be restored because the necessary tables are missing are omitted; if
 // skip_missing_foreign_keys was set, we should have aborted the RESTORE and
 // returned an error prior to this.
+//
+// The caller is responsible for shrinking `mem` by the returned size once it's
+// done with the returned manifests (unless an error is returned).
 // TODO(anzoteh96): this method returns two things: backup manifests
 // and the descriptors of the relevant manifests. Ideally, this should
 // be broken down into two methods.
@@ -553,12 +556,23 @@ func loadBackupSQLDescs(
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) ([]backuppb.BackupManifest, backuppb.BackupManifest, []catalog.Descriptor, int64, error) {
+) (
+	_ []backuppb.BackupManifest,
+	_ backuppb.BackupManifest,
+	_ []catalog.Descriptor,
+	memSize int64,
+	retErr error,
+) {
 	backupManifests, sz, err := backupinfo.LoadBackupManifestsAtTime(ctx, mem, details.URIs,
 		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption, kmsEnv, details.EndTime)
 	if err != nil {
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
+	defer func() {
+		if retErr != nil {
+			mem.Shrink(ctx, sz)
+		}
+	}()
 
 	layerToBackupManifestFileIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, p.ExecCfg().DistSQLSrv.ExternalStorage,
 		backupManifests, encryption, kmsEnv)
@@ -592,7 +606,6 @@ func loadBackupSQLDescs(
 	}
 	activeVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
 	if err := maybeUpgradeDescriptors(activeVersion, sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
-		mem.Shrink(ctx, sz)
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
 
@@ -751,7 +764,8 @@ func spansForAllRestoreTableIndexes(
 	tables []catalog.TableDescriptor,
 	revs []backuppb.BackupManifest_DescriptorRevision,
 	schemaOnly bool,
-) []roachpb.Span {
+	forOnlineRestore bool,
+) ([]roachpb.Span, error) {
 
 	skipTableData := func(table catalog.TableDescriptor) bool {
 		// The only table data restored during a schemaOnly restore are from system tables,
@@ -815,7 +829,22 @@ func spansForAllRestoreTableIndexes(
 		})
 		return false
 	})
-	return spans
+
+	if forOnlineRestore {
+		spans, _ = roachpb.MergeSpans(&spans)
+		tableIDMap := make(map[uint32]struct{}, len(spans))
+		for _, sp := range spans {
+			_, tableID, err := codec.DecodeTablePrefix(sp.Key)
+			if err != nil {
+				return nil, err
+			}
+			if _, exists := tableIDMap[tableID]; exists {
+				return nil, errors.Newf("restore target contains two distinct spans with table id %d. Online restore cannot handle this as it may make an empty file span", tableID)
+			}
+			tableIDMap[tableID] = struct{}{}
+		}
+	}
+	return spans, nil
 }
 
 func shouldPreRestore(table *tabledesc.Mutable) bool {
@@ -985,13 +1014,22 @@ func createImportingDescriptors(
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
-	preRestoreSpans := spansForAllRestoreTableIndexes(backupCodec, preRestoreTables, nil, details.SchemaOnly)
-	postRestoreSpans := spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, details.SchemaOnly)
+	preRestoreSpans, err := spansForAllRestoreTableIndexes(backupCodec, preRestoreTables, nil, details.SchemaOnly, details.ExperimentalOnline)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	postRestoreSpans, err := spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, details.SchemaOnly, details.ExperimentalOnline)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	var verifySpans []roachpb.Span
 	if details.VerifyData {
 		// verifySpans contains the spans that should be read and checksum'd during a
 		// verify_backup_table_data RESTORE
-		verifySpans = spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, false)
+		verifySpans, err = spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, false, details.ExperimentalOnline)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	}
 
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
@@ -1709,9 +1747,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return r.doDownloadFiles(ctx, p)
 	}
 
-	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
-	defer mem.Close(ctx)
-
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_load_descriptors_from_backup"); err != nil {
 		return err
 	}
@@ -1722,7 +1757,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		p.ExecCfg().InternalDB,
 		p.User(),
 	)
-	backupManifests, latestBackupManifest, sqlDescs, memSize, err := loadBackupSQLDescs(
+	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
+	defer mem.Close(ctx)
+	// Note that we ignore memSize because the memory account is closed in a
+	// defer anyway.
+	backupManifests, latestBackupManifest, sqlDescs, _, err := loadBackupSQLDescs(
 		ctx, &mem, p, details, details.Encryption, &kmsEnv,
 	)
 	if err != nil {
@@ -1731,9 +1770,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err := r.validateJobIsResumable(ctx, p.ExecCfg(), backupManifests); err != nil {
 		return err
 	}
-	defer func() {
-		mem.Shrink(ctx, memSize)
-	}()
 	backupCodec, err := backupinfo.MakeBackupCodec(backupManifests)
 	if err != nil {
 		return err
@@ -2696,11 +2732,12 @@ func (r *restoreResumer) dropDescriptors(
 		canSetGCTTL := codec.ForSystemTenant() ||
 			(sqlclustersettings.SecondaryTenantZoneConfigsEnabled.Get(&r.execCfg.Settings.SV) &&
 				sqlclustersettings.SecondaryTenantsAllZoneConfigsEnabled.Get(&r.execCfg.Settings.SV))
+		canSetGCTTL = canSetGCTTL && tableToDrop.IsPhysicalTable()
 		if canSetGCTTL {
 			if err := setGCTTLForDroppingTable(
 				ctx, txn, descsCol, tableToDrop,
 			); err != nil {
-				return errors.Wrapf(err, "setting low GC TTL for table %q", tableToDrop.GetName())
+				log.Warningf(ctx, "setting low GC TTL for table %q failed: %s", tableToDrop.GetName(), err.Error())
 			}
 		} else {
 			log.Infof(ctx, "cannot lower GC TTL for table %q", tableToDrop.GetName())

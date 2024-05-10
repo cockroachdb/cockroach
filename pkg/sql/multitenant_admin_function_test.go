@@ -487,7 +487,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: "operation is disabled within a virtual cluster",
 			},
 			queryClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     bcap(tenantcapabilities.CanAdminSplit, false),
+			setupCapability:     bcap(tenantcapabilities.CanAdminSplit, true),
 			queryCapability:     bcap(tenantcapabilities.CanAdminSplit, true),
 		},
 		{
@@ -555,7 +555,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{"\xf0\x8a", "/Table/104/2"}, {"\xf0\x8a", "/Table/104/2/1"}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92\xf0\x8a\x89", "/Tenant/10/Table/104/2/1"}},
+				result: [][]string{{"\xf0\x8a", "/Table/104/2"}, {"\xf0\x8a", "/Table/104/2/1"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: `does not have capability "can_admin_unsplit"`,
@@ -591,7 +591,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: "operation is disabled within a virtual cluster",
 			},
 			queryClusterSetting: sql.SecondaryTenantScatterEnabled,
-			setupCapability:     bcap(tenantcapabilities.CanAdminScatter, false),
+			setupCapability:     bcap(tenantcapabilities.CanAdminScatter, true),
 			queryCapability:     bcap(tenantcapabilities.CanAdminScatter, true),
 		},
 	}
@@ -611,7 +611,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 					message := fmt.Sprintf("tenant=%s", tenant)
 					for _, setup := range setups {
 						_, err := db.ExecContext(ctx, setup)
-						require.NoErrorf(t, err, setup, "%s setup=%s", message, setup)
+						require.NoErrorf(t, err, "%s setup=%s", message, setup)
 					}
 					tExp.validate(
 						t,

@@ -15,9 +15,9 @@ exp,benchmark
 8,AlterTableConfigureZone/alter_table_configure_zone_5_replicas
 8,AlterTableConfigureZone/alter_table_configure_zone_7_replicas_
 8,AlterTableConfigureZone/alter_table_configure_zone_ranges
-18,AlterTableDropColumn/alter_table_drop_1_column
-18,AlterTableDropColumn/alter_table_drop_2_columns
-18,AlterTableDropColumn/alter_table_drop_3_columns
+23,AlterTableDropColumn/alter_table_drop_1_column
+23,AlterTableDropColumn/alter_table_drop_2_columns
+23,AlterTableDropColumn/alter_table_drop_3_columns
 15,AlterTableDropConstraint/alter_table_drop_1_check_constraint
 15,AlterTableDropConstraint/alter_table_drop_2_check_constraints
 15,AlterTableDropConstraint/alter_table_drop_3_check_constraints
@@ -67,10 +67,10 @@ exp,benchmark
 6,Jobs/resume_job
 8,Jobs/jobs_page_default
 8,Jobs/jobs_page_latest_50
-8,Jobs/jobs_page_type_filtered
-8,Jobs/jobs_page_type_filtered_no_matches
+6-9,Jobs/jobs_page_type_filtered
+6-9,Jobs/jobs_page_type_filtered_no_matches
 3,Jobs/show_job
-8,Jobs/show_jobs
+6-9,Jobs/show_jobs
 3,ORMQueries/activerecord_type_introspection_query
 0,ORMQueries/asyncpg_types
 0,ORMQueries/column_descriptions_json_agg

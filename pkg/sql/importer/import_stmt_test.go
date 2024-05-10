@@ -4539,7 +4539,7 @@ func TestImportDefaultNextVal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer setImportReaderParallelism(1)()
-	skip.UnderStressRace(t, "test hits a timeout before a successful run")
+	skip.UnderRace(t, "test hits a timeout before a successful run")
 
 	const nodes = 3
 	numFiles := 1
@@ -5224,7 +5224,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 	done := make(chan struct{})
 	defer close(done)
 
-	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+	defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return fakeResumer{
 			OnResume: func(ctx context.Context) error {
 				<-done
@@ -5235,7 +5235,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 				return nil
 			},
 		}
-	}, jobs.UsesTenantCostControl)
+	}, jobs.UsesTenantCostControl)()
 
 	startLeasedJob := func(t *testing.T, record jobs.Record) *jobs.StartableJob {
 		job, err := jobs.TestingCreateAndStartJob(
@@ -5322,7 +5322,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "test is flaky under deadlock")
-	skip.UnderStressRace(t, "test is flaky under stressrace")
+	skip.UnderRace(t, "test is flaky under race")
 
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
@@ -5420,7 +5420,7 @@ func TestImportMysql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	const (
 		nodes = 3

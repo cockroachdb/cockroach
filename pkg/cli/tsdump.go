@@ -575,6 +575,8 @@ func (o *jsonWriter) Emit(data *tspb.TimeSeriesData) error {
 			storeNodeKey += "_id"
 		}
 		out.Metric[storeNodeKey] = data.Source
+		// `instance` is used in dashboards to split data by node.
+		out.Metric["instance"] = data.Source
 		name = sl[2]
 	}
 

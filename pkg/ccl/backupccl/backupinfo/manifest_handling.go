@@ -44,13 +44,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -94,7 +94,7 @@ var WriteMetadataSST = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
-	false,
+	metamorphic.ConstantWithTestBool("write-metadata-sst", false),
 )
 
 // WriteMetadataWithExternalSSTsEnabled controls if we write a `BACKUP_METADATA`
@@ -105,7 +105,7 @@ var WriteMetadataWithExternalSSTsEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"backup.write_metadata_with_external_ssts.enabled",
 	"write BACKUP metadata along with supporting SST files",
-	util.ConstantWithMetamorphicTestBool("backup.write_metadata_with_external_ssts.enabled", true),
+	metamorphic.ConstantWithTestBool("backup.write_metadata_with_external_ssts.enabled", true),
 )
 
 // IsGZipped detects whether the given bytes represent GZipped data. This check
@@ -421,64 +421,52 @@ func readManifest(
 
 func readBackupPartitionDescriptor(
 	ctx context.Context,
-	mem *mon.BoundAccount,
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) (backuppb.BackupPartitionDescriptor, int64, error) {
+) (backuppb.BackupPartitionDescriptor, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.readBackupPartitionDescriptor")
 	defer sp.Finish()
 
 	r, _, err := exportStore.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
-		return backuppb.BackupPartitionDescriptor{}, 0, err
+		return backuppb.BackupPartitionDescriptor{}, err
 	}
 	defer r.Close(ctx)
-	descBytes, err := mon.ReadAll(ctx, r, mem)
+	descBytes, err := ioctx.ReadAll(ctx, r)
 	if err != nil {
-		return backuppb.BackupPartitionDescriptor{}, 0, err
+		return backuppb.BackupPartitionDescriptor{}, err
 	}
-	defer func() {
-		mem.Shrink(ctx, int64(cap(descBytes)))
-	}()
+
+	memAcc := mon.NewStandaloneUnlimitedAccount()
 
 	if encryption != nil {
 		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
-			return backuppb.BackupPartitionDescriptor{}, 0, err
+			return backuppb.BackupPartitionDescriptor{}, err
 		}
-		plaintextData, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
+		plaintextData, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, memAcc)
 		if err != nil {
-			return backuppb.BackupPartitionDescriptor{}, 0, err
+			return backuppb.BackupPartitionDescriptor{}, err
 		}
-		mem.Shrink(ctx, int64(cap(descBytes)))
 		descBytes = plaintextData
 	}
 
 	if IsGZipped(descBytes) {
-		decompressedData, err := DecompressData(ctx, mem, descBytes)
+		decompressedData, err := DecompressData(ctx, memAcc, descBytes)
 		if err != nil {
-			return backuppb.BackupPartitionDescriptor{}, 0, errors.Wrap(
+			return backuppb.BackupPartitionDescriptor{}, errors.Wrap(
 				err, "decompressing backup partition descriptor")
 		}
-		mem.Shrink(ctx, int64(cap(descBytes)))
 		descBytes = decompressedData
-	}
-
-	memSize := int64(len(descBytes))
-
-	if err := mem.Grow(ctx, memSize); err != nil {
-		return backuppb.BackupPartitionDescriptor{}, 0, err
 	}
 
 	var backupManifest backuppb.BackupPartitionDescriptor
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
-		mem.Shrink(ctx, memSize)
-		return backuppb.BackupPartitionDescriptor{}, 0, err
+		return backuppb.BackupPartitionDescriptor{}, err
 	}
-
-	return backupManifest, memSize, err
+	return backupManifest, err
 }
 
 // readTableStatistics reads and unmarshals a StatsTable from filename in
@@ -507,7 +495,7 @@ func readTableStatistics(
 		if err != nil {
 			return nil, err
 		}
-		statsBytes, err = storageccl.DecryptFile(ctx, statsBytes, encryptionKey, nil /* mm */)
+		statsBytes, err = storageccl.DecryptFile(ctx, statsBytes, encryptionKey, mon.NewStandaloneUnlimitedAccount())
 		if err != nil {
 			return nil, err
 		}
@@ -867,8 +855,9 @@ func GetLocalityInfo(
 			// tempdir), implying that it is possible for files that the manifest
 			// claims are stored in two different localities, are actually stored in
 			// the same place.
-			if desc, _, err := readBackupPartitionDescriptor(ctx, nil /*mem*/, store, filename,
-				encryption, kmsEnv); err == nil {
+			if desc, err := readBackupPartitionDescriptor(
+				ctx, store, filename, encryption, kmsEnv,
+			); err == nil {
 				if desc.BackupID != mainBackupManifest.ID {
 					return info, errors.Errorf(
 						"expected backup part to have backup ID %s, found %s",

@@ -55,10 +55,45 @@ func (s *Smither) pickAnyType(typ *types.T) *types.T {
 	return typ
 }
 
+var simpleScalarTypes = func() (typs []*types.T) {
+	for _, t := range types.Scalar {
+		switch t {
+		case types.Box2D, types.Geography, types.Geometry, types.INet, types.PGLSN,
+			types.RefCursor, types.TSQuery, types.TSVector:
+			// Skip fancy types.
+		default:
+			typs = append(typs, t)
+		}
+	}
+	return typs
+}()
+
+func isSimpleSeedType(typ *types.T) bool {
+	switch typ.Family() {
+	case types.BoolFamily, types.IntFamily, types.DecimalFamily, types.FloatFamily, types.StringFamily,
+		types.BytesFamily, types.DateFamily, types.TimestampFamily, types.IntervalFamily, types.TimeFamily, types.TimeTZFamily:
+		return true
+	case types.ArrayFamily:
+		return isSimpleSeedType(typ.ArrayContents())
+	case types.TupleFamily:
+		for _, t := range typ.TupleContents() {
+			if !isSimpleSeedType(t) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Smither) randScalarType() *types.T {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	scalarTypes := types.Scalar
+	if s.simpleScalarTypes {
+		scalarTypes = simpleScalarTypes
+	}
 	if s.types != nil {
 		scalarTypes = s.types.scalarTypes
 	}
@@ -80,6 +115,9 @@ func (s *Smither) randScalarType() *types.T {
 func (s *Smither) isScalarType(t *types.T) bool {
 	s.lock.AssertRHeld()
 	scalarTypes := types.Scalar
+	if s.simpleScalarTypes {
+		scalarTypes = simpleScalarTypes
+	}
 	if s.types != nil {
 		scalarTypes = s.types.scalarTypes
 	}
@@ -110,6 +148,9 @@ func (s *Smither) randType() *types.T {
 			// which compare CRDB behavior to Postgres.
 			continue
 		}
+		if s.simpleScalarTypes && !isSimpleSeedType(typ) {
+			continue
+		}
 		break
 	}
 	return typ
@@ -127,7 +168,8 @@ func (s *Smither) makeDesiredTypes() []*types.T {
 }
 
 type typeInfo struct {
-	udts        map[tree.TypeName]*types.T
+	udts        []*types.T
+	udtNames    []tree.TypeName
 	seedTypes   []*types.T
 	scalarTypes []*types.T
 }
@@ -137,11 +179,12 @@ func (s *Smither) ResolveType(
 	_ context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
 	key := tree.MakeSchemaQualifiedTypeName(name.Schema(), name.Object())
-	res, ok := s.types.udts[key]
-	if !ok {
-		return nil, errors.Newf("type name %s not found by smither", name.Object())
+	for i, typeName := range s.types.udtNames {
+		if typeName == key {
+			return s.types.udts[i], nil
+		}
 	}
-	return res, nil
+	return nil, errors.Newf("type name %s not found by smither", name.Object())
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.

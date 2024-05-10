@@ -21,20 +21,8 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+## StatementPhase stage 1 of 1 with 9 MutationType ops
 upsert descriptor #104
-  ...
-         oid: 20
-         width: 64
-  -  - id: 2
-  -    name: j
-  -    nullable: true
-  -    type:
-  -      family: IntFamily
-  -      oid: 20
-  -      width: 64
-     - defaultExpr: 32:::INT8
-       id: 3
   ...
          oid: 20
          width: 64
@@ -51,12 +39,6 @@ upsert descriptor #104
      createAsOfTime:
        wallTime: "1640995200000000000"
   ...
-       columnNames:
-       - i
-  -    - j
-  +    - crdb_internal_column_2_name_placeholder
-       - k
-       name: primary
      formatVersion: 3
      id: 104
   -  indexes:
@@ -83,17 +65,6 @@ upsert descriptor #104
   +  indexes: []
      modificationTime: {}
   +  mutations:
-  +  - column:
-  +      id: 2
-  +      name: crdb_internal_column_2_name_placeholder
-  +      nullable: true
-  +      type:
-  +        family: IntFamily
-  +        oid: 20
-  +        width: 64
-  +    direction: DROP
-  +    mutationId: 1
-  +    state: WRITE_ONLY
   +  - direction: DROP
   +    index:
   +      createdAtNanos: "1640995200000000000"
@@ -172,7 +143,7 @@ upsert descriptor #104
   +    mutationId: 1
   +    state: DELETE_ONLY
   +  - column:
-  +      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  +      computeExpr: j + 1:::INT8
   +      id: 4
   +      inaccessible: true
   +      name: crdb_internal_column_4_name_placeholder
@@ -194,13 +165,6 @@ upsert descriptor #104
   +  nextIndexId: 5
      nextMutationId: 1
      parentId: 100
-  ...
-       - 3
-       storeColumnNames:
-  -    - j
-  +    - crdb_internal_column_2_name_placeholder
-       - k
-       unique: true
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -235,7 +199,7 @@ upsert descriptor #104
        wallTime: "1640995200000000000"
   ...
        - i
-       - crdb_internal_column_2_name_placeholder
+       - j
   -    - k
   +    - crdb_internal_column_3_name_placeholder
        name: primary
@@ -285,7 +249,7 @@ upsert descriptor #104
      nextColumnId: 5
   ...
        storeColumnNames:
-       - crdb_internal_column_2_name_placeholder
+       - j
   -    - k
   +    - crdb_internal_column_3_name_placeholder
        unique: true
@@ -300,18 +264,11 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 15 MutationType ops
+## PreCommitPhase stage 2 of 2 with 13 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
          width: 64
-  -  - id: 2
-  -    name: j
-  -    nullable: true
-  -    type:
-  -      family: IntFamily
-  -      oid: 20
-  -      width: 64
   -  - defaultExpr: 32:::INT8
   -    id: 3
   -    name: k
@@ -341,7 +298,6 @@ upsert descriptor #104
   +    nameMapping:
   +      columns:
   +        "1": i
-  +        "2": crdb_internal_column_2_name_placeholder
   +        "4": crdb_internal_column_4_name_placeholder
   +        "4294967294": tableoid
   +        "4294967295": crdb_internal_mvcc_timestamp
@@ -368,11 +324,9 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-       columnNames:
        - i
-  -    - j
+       - j
   -    - k
-  +    - crdb_internal_column_2_name_placeholder
   +    - crdb_internal_column_3_name_placeholder
        name: primary
      formatVersion: 3
@@ -401,17 +355,6 @@ upsert descriptor #104
   +  indexes: []
      modificationTime: {}
   +  mutations:
-  +  - column:
-  +      id: 2
-  +      name: crdb_internal_column_2_name_placeholder
-  +      nullable: true
-  +      type:
-  +        family: IntFamily
-  +        oid: 20
-  +        width: 64
-  +    direction: DROP
-  +    mutationId: 1
-  +    state: WRITE_ONLY
   +  - direction: DROP
   +    index:
   +      createdAtNanos: "1640995200000000000"
@@ -497,7 +440,7 @@ upsert descriptor #104
   +    mutationId: 1
   +    state: WRITE_ONLY
   +  - column:
-  +      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  +      computeExpr: j + 1:::INT8
   +      id: 4
   +      inaccessible: true
   +      name: crdb_internal_column_4_name_placeholder
@@ -520,11 +463,9 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
-       - 3
        storeColumnNames:
-  -    - j
+       - j
   -    - k
-  +    - crdb_internal_column_2_name_placeholder
   +    - crdb_internal_column_3_name_placeholder
        unique: true
        version: 4
@@ -636,7 +577,7 @@ begin transaction #9
 validate forward indexes [3] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 16 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 11 MutationType ops
 upsert descriptor #104
   ...
            statementTag: ALTER TABLE
@@ -644,13 +585,6 @@ upsert descriptor #104
   -    revertible: true
        targetRanks: <redacted>
        targets: <redacted>
-  ...
-       direction: DROP
-       mutationId: 1
-  -    state: WRITE_ONLY
-  +    state: DELETE_ONLY
-     - direction: DROP
-       index:
   ...
          keySuffixColumnIds:
          - 1
@@ -661,29 +595,12 @@ upsert descriptor #104
          version: 3
        mutationId: 1
   -    state: WRITE_ONLY
-  -  - direction: ADD
-  -    index:
-  -      constraintId: 2
-  -      createdExplicitly: true
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 3
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 1
-  -      keyColumnNames:
-  -      - i
-  -      name: crdb_internal_index_3_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnNames: []
-  -      unique: true
-  -      version: 4
-  -    mutationId: 1
-  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       mutationId: 1
+       state: WRITE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 3
@@ -707,89 +624,57 @@ upsert descriptor #104
   -      useDeletePreservingEncoding: true
   -      version: 4
   -    mutationId: 1
-       state: DELETE_ONLY
+  -    state: DELETE_ONLY
      - column:
+         defaultExpr: 32:::INT8
   ...
        direction: DROP
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - column:
-         computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+         computeExpr: j + 1:::INT8
   ...
        direction: DROP
        mutationId: 1
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
-  +  - direction: DROP
-  +    index:
-  +      constraintId: 1
-  +      createdAtNanos: "1640995200000000000"
-  +      encodingType: 1
-  +      foreignKey: {}
-  +      geoConfig: {}
-  +      id: 1
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      keyColumnIds:
-  +      - 1
-  +      keyColumnNames:
-  +      - i
-  +      name: crdb_internal_index_1_name_placeholder
-  +      partitioning: {}
-  +      sharded: {}
-  +      storeColumnIds:
-  +      - 2
-  +      - 3
-  +      storeColumnNames:
-  +      - crdb_internal_column_2_name_placeholder
-  +      - crdb_internal_column_3_name_placeholder
-  +      unique: true
-  +      version: 4
-  +    mutationId: 1
-       state: WRITE_ONLY
      name: t
-  ...
-     parentId: 100
-     primaryIndex:
-  -    constraintId: 1
-  -    createdAtNanos: "1640995200000000000"
-  +    constraintId: 2
-  +    createdExplicitly: true
-       encodingType: 1
-       foreignKey: {}
-       geoConfig: {}
-  -    id: 1
-  +    id: 3
-       interleave: {}
-       keyColumnDirections:
-  ...
-       partitioning: {}
-       sharded: {}
-  -    storeColumnIds:
-  -    - 2
-  -    - 3
-  -    storeColumnNames:
-  -    - crdb_internal_column_2_name_placeholder
-  -    - crdb_internal_column_3_name_placeholder
-  +    storeColumnNames: []
-       unique: true
-       version: 4
+     nextColumnId: 5
   ...
        time: {}
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 8 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 4 with 10 MutationType ops
 upsert descriptor #104
   ...
-       mutationId: 1
-       state: DELETE_ONLY
+         oid: 20
+         width: 64
+  -  - id: 2
+  -    name: j
+  -    nullable: true
+  -    type:
+  -      family: IntFamily
+  -      oid: 20
+  -      width: 64
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
+       columnNames:
+       - i
+  -    - j
+  +    - crdb_internal_column_2_name_placeholder
+       - crdb_internal_column_3_name_placeholder
+       name: primary
+  ...
+     modificationTime: {}
+     mutations:
   -  - direction: DROP
   -    index:
   -      createdAtNanos: "1640995200000000000"
@@ -812,15 +697,67 @@ upsert descriptor #104
   -      partitioning: {}
   -      sharded: {}
   -      version: 3
-  -    mutationId: 1
-  -    state: DELETE_ONLY
-     - column:
-         defaultExpr: 32:::INT8
-  ...
+  +  - column:
+  +      defaultExpr: 32:::INT8
+  +      id: 3
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      onUpdateExpr: 42:::INT8
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: DROP
        mutationId: 1
        state: DELETE_ONLY
+  -  - direction: ADD
+  +  - direction: DROP
+       index:
+  -      constraintId: 2
+  -      createdExplicitly: true
+  +      constraintId: 1
+  +      createdAtNanos: "1640995200000000000"
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 3
+  +      id: 1
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keyColumnNames:
+         - i
+  -      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_1_name_placeholder
+         partitioning: {}
+         sharded: {}
+  -      storeColumnNames: []
+  +      storeColumnIds:
+  +      - 2
+  +      - 3
+  +      storeColumnNames:
+  +      - crdb_internal_column_2_name_placeholder
+  +      - crdb_internal_column_3_name_placeholder
+         unique: true
+         version: 4
+  ...
+       state: WRITE_ONLY
+     - column:
+  -      defaultExpr: 32:::INT8
+  -      id: 3
+  -      name: crdb_internal_column_3_name_placeholder
+  +      id: 2
+  +      name: crdb_internal_column_2_name_placeholder
+         nullable: true
+  -      onUpdateExpr: 42:::INT8
+         type:
+           family: IntFamily
+  ...
+       direction: DROP
+       mutationId: 1
+  -    state: DELETE_ONLY
   -  - column:
-  -      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  -      computeExpr: j + 1:::INT8
   -      id: 4
   -      inaccessible: true
   -      name: crdb_internal_column_4_name_placeholder
@@ -833,10 +770,55 @@ upsert descriptor #104
   -    direction: DROP
   -    mutationId: 1
   -    state: DELETE_ONLY
-     - direction: DROP
-       index:
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 5
+  ...
+     parentId: 100
+     primaryIndex:
+  -    constraintId: 1
+  -    createdAtNanos: "1640995200000000000"
+  +    constraintId: 2
+  +    createdExplicitly: true
+       encodingType: 1
+       foreignKey: {}
+       geoConfig: {}
+  -    id: 1
+  +    id: 3
+       interleave: {}
+       keyColumnDirections:
+  ...
+       partitioning: {}
+       sharded: {}
+  -    storeColumnIds:
+  -    - 2
+  -    - 3
+  -    storeColumnNames:
+  -    - j
+  -    - crdb_internal_column_3_name_placeholder
+  +    storeColumnNames: []
+       unique: true
+       version: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 4 with 5 MutationType ops pending"
+commit transaction #11
+begin transaction #12
+## PostCommitNonRevertiblePhase stage 3 of 4 with 7 MutationType ops
+upsert descriptor #104
   ...
          version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - column:
+         id: 2
+  ...
+       direction: DROP
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
@@ -845,13 +827,13 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
+  -  version: "8"
+  +  version: "9"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 8 MutationType ops pending"
-commit transaction #11
-begin transaction #12
-## PostCommitNonRevertiblePhase stage 3 of 3 with 10 MutationType ops
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 4 of 4 with 8 MutationType ops pending"
+commit transaction #12
+begin transaction #13
+## PostCommitNonRevertiblePhase stage 4 of 4 with 10 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -864,7 +846,6 @@ upsert descriptor #104
   -    nameMapping:
   -      columns:
   -        "1": i
-  -        "2": crdb_internal_column_2_name_placeholder
   -        "4": crdb_internal_column_4_name_placeholder
   -        "4294967294": tableoid
   -        "4294967295": crdb_internal_mvcc_timestamp
@@ -902,17 +883,6 @@ upsert descriptor #104
      indexes: []
      modificationTime: {}
   -  mutations:
-  -  - column:
-  -      id: 2
-  -      name: crdb_internal_column_2_name_placeholder
-  -      nullable: true
-  -      type:
-  -        family: IntFamily
-  -        oid: 20
-  -        width: 64
-  -    direction: DROP
-  -    mutationId: 1
-  -    state: DELETE_ONLY
   -  - column:
   -      defaultExpr: 32:::INT8
   -      id: 3
@@ -954,14 +924,25 @@ upsert descriptor #104
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
+  -  - column:
+  -      id: 2
+  -      name: crdb_internal_column_2_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: DELETE_ONLY
   +  mutations: []
      name: t
      nextColumnId: 5
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "8"
-  +  version: "9"
+  -  version: "9"
+  +  version: "10"
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE"
   descriptor IDs: [104]
@@ -971,6 +952,6 @@ updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #12
+commit transaction #13
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

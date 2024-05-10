@@ -1,0 +1,130 @@
+setup
+CREATE TABLE p (id INT PRIMARY KEY, b BOOL) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL);
+----
+
+setup
+CREATE TABLE c (id INT PRIMARY KEY, p_id INT NOT NULL REFERENCES p(id) ON DELETE CASCADE, INDEX (p_id));
+----
+
+select-bounds pkType=INT
+0
+100
+----
+
+check-query builder=select table=p overrides=
+----
+SELECT id
+FROM defaultdb.public.p@"p_pkey"
+AS OF SYSTEM TIME INTERVAL ''0 seconds''
+WHERE ((crdb_internal_expiration) <= ''2024-01-01 00:00:00'')
+AND (
+  (id >= 0)
+)
+AND (
+  (id <= 100)
+)
+ORDER BY id ASC
+LIMIT 500
+
+check-plan builder=select table=p overrides=
+----
+• filter
+│ filter: crdb_internal_expiration <= '2024-01-01 00:00:00+00'
+│
+└── • scan
+      missing stats
+      table: p@p_pkey
+      spans: [/0 - /100]
+
+delete-ids
+1,10,50,1000
+----
+
+check-query builder=delete table=p overrides=
+----
+DELETE FROM defaultdb.public.p@"p_pkey"
+WHERE ((crdb_internal_expiration) <= ''2024-01-01 00:00:00'')
+AND (id) IN ((1), (10), (50), (1000))
+
+# Regression test for #118129 where due to usage of the Go default value for
+# reorder_joins_limit session variable we had a FULL SCAN in the cascade.
+check-plan builder=delete table=p overrides=
+----
+• root
+│
+├── • delete
+│   │ from: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • filter
+│           │ filter: crdb_internal_expiration <= '2024-01-01 00:00:00+00'
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: p@p_pkey
+│                 spans: [/1 - /1] [/10 - /10] [/50 - /50] [/1000 - /1000]
+│
+└── • fk-cascade
+    │ fk: c_p_id_fkey
+    │
+    └── • delete
+        │ from: c
+        │
+        └── • lookup join
+            │ table: c@c_p_id_idx
+            │ equality: (id) = (p_id)
+            │
+            └── • distinct
+                │ estimated row count: 10
+                │ distinct on: id
+                │
+                └── • scan buffer
+                      estimated row count: 100
+                      label: buffer 1000000
+
+check-plan builder=delete table=p overrides=ReorderJoinsLimit=0
+----
+• root
+│
+├── • delete
+│   │ from: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • filter
+│           │ filter: crdb_internal_expiration <= '2024-01-01 00:00:00+00'
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: p@p_pkey
+│                 spans: [/1 - /1] [/10 - /10] [/50 - /50] [/1000 - /1000]
+│
+└── • fk-cascade
+    │ fk: c_p_id_fkey
+    │
+    └── • delete
+        │ from: c
+        │
+        └── • merge join
+            │ equality: (p_id) = (id)
+            │ right cols are key
+            │
+            ├── • scan
+            │     missing stats
+            │     table: c@c_p_id_idx
+            │     spans: FULL SCAN
+            │
+            └── • sort
+                │ estimated row count: 10
+                │ order: +id
+                │
+                └── • distinct
+                    │ estimated row count: 10
+                    │ distinct on: id
+                    │
+                    └── • scan buffer
+                          estimated row count: 100
+                          label: buffer 1000000

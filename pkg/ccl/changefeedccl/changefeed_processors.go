@@ -137,7 +137,7 @@ var aggregatorEmitsShutdownCheckpoint = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"changefeed.shutdown_checkpoint.enabled",
 	"upon shutdown aggregator attempts to emit an up-to-date checkpoint",
-	true,
+	false,
 )
 
 type drainWatcher <-chan struct{}
@@ -1170,7 +1170,7 @@ func newChangeFrontierProcessor(
 	}
 
 	if cf.encoder, err = getEncoder(
-		encodingOpts, AllTargets(spec.Feed), spec.Feed.Select != "",
+		ctx, encodingOpts, AllTargets(spec.Feed), spec.Feed.Select != "",
 		makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMertics,
 	); err != nil {
 		return nil, err

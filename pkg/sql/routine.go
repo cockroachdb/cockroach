@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -55,6 +55,12 @@ func (d *callNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("expected NULL, got %T", res)
 		}
 		return nil
+	}
+	if d.proc.Typ.Family() != types.TupleFamily {
+		return errors.AssertionFailedf("expected VOID or RECORD type for procedures, got %s", d.proc.Typ.SQLStringForError())
+	}
+	if res == tree.DNull {
+		return pgerror.New(pgcode.Internal, "procedure returned null record")
 	}
 	tuple, ok := tree.AsDTuple(res)
 	if !ok {
@@ -488,7 +494,7 @@ func (g *routineGenerator) Close(ctx context.Context) {
 	*g = routineGenerator{}
 }
 
-var tailCallOptimizationEnabled = util.ConstantWithMetamorphicTestBool(
+var tailCallOptimizationEnabled = metamorphic.ConstantWithTestBool(
 	"tail-call-optimization-enabled",
 	true,
 )

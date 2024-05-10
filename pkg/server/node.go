@@ -1045,6 +1045,12 @@ func (n *Node) computeMetricsPeriodically(
 			if err := newMetrics.LogWriter.FsyncLatency.Write(&storeToMetrics[store].WALFsyncLatency); err != nil {
 				return err
 			}
+			if newMetrics.WAL.Failover.FailoverWriteAndSyncLatency != nil {
+				if err := newMetrics.WAL.Failover.FailoverWriteAndSyncLatency.Write(
+					&storeToMetrics[store].WALFailoverWriteAndSyncLatency); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	})
@@ -1065,36 +1071,32 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // diskStatsMap encapsulates all the logic for populating DiskStats for
 // admission.StoreMetrics.
 type diskStatsMap struct {
-	provisionedRate   map[roachpb.StoreID]base.ProvisionedRateSpec
-	diskPathToStoreID map[string]roachpb.StoreID
-	diskMonitors      map[string]disk.Monitor
+	provisionedRate map[roachpb.StoreID]base.ProvisionedRateSpec
+	diskMonitors    map[roachpb.StoreID]kvserver.DiskStatsMonitor
 }
 
 func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
 	clusterProvisionedBandwidth int64,
-	diskStatsFunc func(map[string]disk.Monitor) (map[string]status.DiskStats, error),
 ) (stats map[roachpb.StoreID]admission.DiskStats, err error) {
 	if dsm.empty() {
 		return stats, nil
 	}
-	diskStats, err := diskStatsFunc(dsm.diskMonitors)
-	if err != nil {
-		return stats, err
-	}
-	stats = make(map[roachpb.StoreID]admission.DiskStats)
-	for id, spec := range dsm.provisionedRate {
-		s := admission.DiskStats{ProvisionedBandwidth: clusterProvisionedBandwidth}
-		if spec.ProvisionedBandwidth > 0 {
-			s.ProvisionedBandwidth = spec.ProvisionedBandwidth
+	stats = make(map[roachpb.StoreID]admission.DiskStats, len(dsm.diskMonitors))
+	for id, monitor := range dsm.diskMonitors {
+		cumulativeStats, err := monitor.CumulativeStats()
+		if err != nil {
+			return map[roachpb.StoreID]admission.DiskStats{}, err
 		}
-		stats[id] = s
-	}
-	for path, diskStat := range diskStats {
-		if id, ok := dsm.diskPathToStoreID[path]; ok {
-			s := stats[id]
-			s.BytesRead = uint64(diskStat.ReadBytes)
-			s.BytesWritten = uint64(diskStat.WriteBytes)
-			stats[id] = s
+
+		provisionedBandwidth := clusterProvisionedBandwidth
+		spec, ok := dsm.provisionedRate[id]
+		if ok && spec.ProvisionedBandwidth > 0 {
+			provisionedBandwidth = spec.ProvisionedBandwidth
+		}
+		stats[id] = admission.DiskStats{
+			ProvisionedBandwidth: provisionedBandwidth,
+			BytesRead:            uint64(cumulativeStats.BytesRead()),
+			BytesWritten:         uint64(cumulativeStats.BytesWritten()),
 		}
 	}
 	return stats, nil
@@ -1104,13 +1106,17 @@ func (dsm *diskStatsMap) empty() bool {
 	return len(dsm.provisionedRate) == 0
 }
 
+// monitorManagerInterface abstracts disk.MonitorManager for testing purposes.
+type monitorManagerInterface interface {
+	Monitor(string) (kvserver.DiskStatsMonitor, error)
+}
+
 func (dsm *diskStatsMap) initDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine, diskManager *disk.MonitorManager,
+	specs []base.StoreSpec, engines []storage.Engine, diskManager monitorManagerInterface,
 ) error {
 	*dsm = diskStatsMap{
-		provisionedRate:   make(map[roachpb.StoreID]base.ProvisionedRateSpec),
-		diskPathToStoreID: make(map[string]roachpb.StoreID),
-		diskMonitors:      make(map[string]disk.Monitor),
+		provisionedRate: make(map[roachpb.StoreID]base.ProvisionedRateSpec),
+		diskMonitors:    make(map[roachpb.StoreID]kvserver.DiskStatsMonitor),
 	}
 	for i := range engines {
 		if specs[i].Path == "" || specs[i].InMemory {
@@ -1125,8 +1131,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 			return err
 		}
 		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
-		dsm.diskPathToStoreID[specs[i].Path] = id.StoreID
-		dsm.diskMonitors[specs[i].Path] = *monitor
+		dsm.diskMonitors[id.StoreID] = monitor
 	}
 	return nil
 }
@@ -1137,13 +1142,20 @@ func (dsm *diskStatsMap) closeDiskMonitors() {
 	}
 }
 
+type diskMonitorManager disk.MonitorManager
+
+// Monitor wraps disk.MonitorManager to satisfy monitorManagerInterface.
+func (mm *diskMonitorManager) Monitor(path string) (kvserver.DiskStatsMonitor, error) {
+	return (*disk.MonitorManager)(mm).Monitor(path)
+}
+
 func (n *Node) registerEnginesForDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine, diskManager *disk.MonitorManager,
+	specs []base.StoreSpec, engines []storage.Engine, diskManager *diskMonitorManager,
 ) error {
 	if err := n.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {
 		return err
 	}
-	if err := n.stores.RegisterDiskMonitors(diskManager, n.diskStatsMap.diskPathToStoreID); err != nil {
+	if err := n.stores.RegisterDiskMonitors(n.diskStatsMap.diskMonitors); err != nil {
 		return err
 	}
 	return nil
@@ -1153,8 +1165,7 @@ func (n *Node) registerEnginesForDiskStatsMap(
 func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
 		&n.storeCfg.Settings.SV)
-	storeIDToDiskStats, err := n.diskStatsMap.tryPopulateAdmissionDiskStats(
-		clusterProvisionedBandwidth, status.GetMonitorCounters)
+	storeIDToDiskStats, err := n.diskStatsMap.tryPopulateAdmissionDiskStats(clusterProvisionedBandwidth)
 	if err != nil {
 		log.Warningf(context.Background(), "%v",
 			errors.Wrapf(err, "unable to populate disk stats"))
@@ -1373,14 +1384,13 @@ func checkNoUnknownRequest(reqs []kvpb.RequestUnion) *kvpb.UnsupportedRequestErr
 
 func (n *Node) batchInternal(
 	ctx context.Context, tenID roachpb.TenantID, args *kvpb.BatchRequest,
-) (*kvpb.BatchResponse, error) {
+) (br *kvpb.BatchResponse, _ error) {
 	if detail := checkNoUnknownRequest(args.Requests); detail != nil {
-		var br kvpb.BatchResponse
+		br = &kvpb.BatchResponse{}
 		br.Error = kvpb.NewError(detail)
-		return &br, nil
+		return br, nil
 	}
 
-	var br *kvpb.BatchResponse
 	var reqSp spanForRequest
 	ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
 	// NB: wrapped to delay br evaluation to its value when returning.
@@ -1529,7 +1539,6 @@ func (n *Node) maybeProxyRequest(
 	}
 
 	log.VEventf(ctx, 2, "proxy request for %v after local error %v", ba, pErr)
-	// TODO(baptist): Correctly set up the span / tracing.
 	br, pErr := n.proxySender.Send(ctx, ba)
 	if pErr == nil {
 		log.VEvent(ctx, 2, "proxy request completed")

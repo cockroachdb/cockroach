@@ -44,7 +44,7 @@ const (
 func (c *FileCipherStreamCreator) CreateNew(
 	ctx context.Context,
 ) (*enginepbccl.EncryptionSettings, FileStream, error) {
-	key, err := c.keyManager.ActiveKey(ctx)
+	key, err := c.keyManager.ActiveKeyForWriter(ctx)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -60,7 +60,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -68,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -88,7 +88,7 @@ var BackupCheckpointInterval = settings.RegisterDurationSetting(
 	"the minimum time between writing progress checkpoints during a backup",
 	time.Minute)
 
-var forceReadBackupManifest = util.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
+var forceReadBackupManifest = metamorphic.ConstantWithTestBool("backup-read-manifest", false)
 
 var useBulkOracle = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -112,6 +112,15 @@ func countRows(raw kvpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
 		}
 	}
 	return res
+}
+
+// filterSpans returns the spans that represent the set difference
+// (includes - excludes).
+func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Span {
+	var cov roachpb.SpanGroup
+	cov.Add(includes...)
+	cov.Sub(excludes...)
+	return cov.Slice()
 }
 
 // backup exports a snapshot of every kv entry into ranged sstables.
@@ -191,8 +200,8 @@ func backup(
 	}
 
 	// Subtract out any completed spans.
-	spans := roachpb.SubtractSpans(backupManifest.Spans, completedSpans)
-	introducedSpans := roachpb.SubtractSpans(backupManifest.IntroducedSpans, completedIntroducedSpans)
+	spans := filterSpans(backupManifest.Spans, completedSpans)
+	introducedSpans := filterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans)
 
 	pkIDs := make(map[uint64]bool)
 	for i := range backupManifest.Descriptors {
@@ -250,7 +259,7 @@ func backup(
 		numTotalSpans += len(spec.IntroducedSpans) + len(spec.Spans)
 	}
 
-	progressLogger := jobs.NewChunkProgressLogger(job, numTotalSpans, job.FractionCompleted(), jobs.ProgressUpdateOnly)
+	progressLogger := jobs.NewChunkProgressLoggerForJob(job, numTotalSpans, job.FractionCompleted(), jobs.ProgressUpdateOnly)
 
 	requestFinishedCh := make(chan struct{}, numTotalSpans) // enough buffer to never block
 	var jobProgressLoop func(ctx context.Context) error
@@ -799,13 +808,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
-
 	var memSize int64
-	defer func() {
-		if memSize != 0 {
-			mem.Shrink(ctx, memSize)
-		}
-	}()
 
 	if backupManifest == nil || forceReadBackupManifest {
 		backupManifest, memSize, err = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore,
@@ -1154,8 +1157,10 @@ func forEachPublicIndexTableSpan(
 	})
 }
 
-// spansForAllTableIndexes returns the overlappings spans for every index and
-// table passed in.
+// spansForAllTableIndexes returns non-overlapping spans for every index and
+// table passed in. They would normally overlap if any of them are interleaved.
+// Overlapping index spans are merged so as to optimize the size/number of the
+// spans we BACKUP and lay protected ts records for.
 func spansForAllTableIndexes(
 	execCfg *sql.ExecutorConfig,
 	tables []catalog.TableDescriptor,
@@ -1198,12 +1203,17 @@ func spansForAllTableIndexes(
 		return false
 	})
 
+	// Attempt to merge any contiguous spans generated from the tables and revs.
+	// No need to check if the spans are distinct, since some of the merged
+	// indexes may overlap between different revisions of the same descriptor.
+	mergedSpans, _ := roachpb.MergeSpans(&spans)
+
 	knobs := execCfg.BackupRestoreTestingKnobs
 	if knobs != nil && knobs.CaptureResolvedTableDescSpans != nil {
-		knobs.CaptureResolvedTableDescSpans(spans)
+		knobs.CaptureResolvedTableDescSpans(mergedSpans)
 	}
 
-	return spans, nil
+	return mergedSpans, nil
 }
 
 func getScheduledBackupExecutionArgsFromSchedule(
@@ -1611,11 +1621,11 @@ func createBackupManifest(
 	spans = append(spans, tenantSpans...)
 	tenants = append(tenants, tenantInfos...)
 
-	tableIndexSpans, err := spansForAllTableIndexes(execCfg, tables, revs)
+	tableSpans, err := spansForAllTableIndexes(execCfg, tables, revs)
 	if err != nil {
 		return backuppb.BackupManifest{}, err
 	}
-	spans = append(spans, tableIndexSpans...)
+	spans = append(spans, tableSpans...)
 
 	if len(prevBackups) > 0 {
 		tablesInPrev := make(map[descpb.ID]struct{})
@@ -1649,7 +1659,7 @@ func createBackupManifest(
 			}
 		}
 
-		newSpans = roachpb.SubtractSpans(spans, prevBackups[len(prevBackups)-1].Spans)
+		newSpans = filterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
 	}
 
 	// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion

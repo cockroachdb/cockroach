@@ -72,6 +72,7 @@ func WithBuilderDependenciesFromTestServer(
 		scbuild.AuthorizationAccessor
 		scbuild.AstFormatter
 		scbuild.FeatureChecker
+		scbuild.TemporarySchemaProvider
 	})
 
 	refProviderFactory, refCleanup := sql.NewReferenceProviderFactoryForTest(
@@ -100,6 +101,7 @@ func WithBuilderDependenciesFromTestServer(
 		sql.NewSchemaChangerBuildEventLogger(planner.InternalSQLTxn(), &execCfg),
 		refProviderFactory,
 		descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB()),
+		planner,
 	))
 }
 
@@ -184,6 +186,9 @@ func ProtoDiff(a, b protoutil.Message, args DiffArgs, rewrites ...func(interface
 func MakePlan(
 	t *testing.T, state scpb.CurrentState, phase scop.Phase, memAcc *mon.BoundAccount,
 ) scplan.Plan {
+	if memAcc == nil {
+		memAcc = mon.NewStandaloneUnlimitedAccount()
+	}
 	plan, err := scplan.MakePlan(context.Background(), state, scplan.Params{
 		Ctx:                        context.Background(),
 		ActiveVersion:              clusterversion.TestingClusterVersion,

@@ -14,44 +14,131 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func Test_runSingleStep(t *testing.T) {
-	tr := testTestRunner()
+func successStep() *singleStep {
+	return newTestStep(func() error { return nil })
+}
 
-	// steps that run without errors do not return errors
-	successStep := newTestStep(func() error {
-		return nil
-	})
-	err := tr.runSingleStep(ctx, successStep, nilLogger)
-	require.NoError(t, err)
+func errorStep() *singleStep {
+	return newTestStep(func() error { return fmt.Errorf("oops") })
+}
 
-	// steps that return an error have that error surfaced
-	errorStep := newTestStep(func() error {
-		return fmt.Errorf("oops")
-	})
-	err = tr.runSingleStep(ctx, errorStep, nilLogger)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "oops")
-
-	// steps that panic cause an error to be returned
-	panicStep := newTestStep(func() error {
+func panicStep() *singleStep {
+	return newTestStep(func() error {
 		var ids []int
 		if ids[0] > 42 {
 			return nil
 		}
 		return fmt.Errorf("unreachable")
 	})
+}
+
+func Test_runSingleStep(t *testing.T) {
+	tr := testTestRunner()
+
+	// steps that run without errors do not return errors
+	err := tr.runSingleStep(ctx, successStep(), nilLogger)
+	require.NoError(t, err)
+
+	// steps that return an error have that error surfaced
+	err = tr.runSingleStep(ctx, errorStep(), nilLogger)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "oops")
+
+	// steps that panic cause an error to be returned
 	err = nil
 	require.NotPanics(t, func() {
-		err = tr.runSingleStep(ctx, panicStep, nilLogger)
+		err = tr.runSingleStep(ctx, panicStep(), nilLogger)
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "panic (stack trace above): runtime error: index out of range [0] with length 0")
+}
+
+// Test_run verifies that the test runner's `run` function is able to
+// appropriately change ownership to Test Eng when no user provided
+// functions have run at the time the failure happened.
+func Test_run(t *testing.T) {
+	var numHooks int
+	hookStep := func(retErr error) *singleStep {
+		numHooks++
+
+		step := runHookStep{
+			hook: versionUpgradeHook{
+				name: fmt.Sprintf("hook %d", numHooks),
+				fn: func(_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper) error {
+					return retErr
+				},
+			},
+		}
+
+		return &singleStep{impl: step}
+	}
+
+	successfulHook := func() *singleStep { return hookStep(nil) }
+	buggyHook := func() *singleStep { return hookStep(errors.New("oops")) }
+
+	testCases := []struct {
+		name                  string
+		steps                 []testStep
+		expectOwnershipChange bool
+	}{
+		{
+			name:                  "error in user-provided step",
+			steps:                 []testStep{successStep(), buggyHook(), errorStep()},
+			expectOwnershipChange: false,
+		},
+		{
+			name:                  "error in test step after user-hook ran",
+			steps:                 []testStep{successStep(), successfulHook(), errorStep()},
+			expectOwnershipChange: false,
+		},
+		{
+			name:                  "error in test step before user-hook ran",
+			steps:                 []testStep{successStep(), errorStep(), buggyHook()},
+			expectOwnershipChange: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := testTestRunner()
+			// Set an artificially large `startClusterID` to stop the test
+			// runner from attempting to perform post-initialization tasks
+			// that wouldn't work in this limited test environment.
+			runner.plan = &TestPlan{initSteps: tc.steps, startClusterID: 9999}
+
+			runnerCh := make(chan error)
+			defer close(runnerCh)
+			runner.monitor = &crdbMonitor{errCh: runnerCh}
+
+			runErr := runner.run()
+			require.Error(t, runErr)
+
+			var ref registry.ErrorWithOwnership
+			ownershipChanged := errors.As(runErr, &ref)
+			if tc.expectOwnershipChange {
+				require.True(
+					t, ownershipChanged,
+					"failures before user functions ran SHOULD overwrite ownership: %v",
+					runErr,
+				)
+			} else {
+				require.False(
+					t, ownershipChanged,
+					"failures in user functions should NOT overwrite ownership: %v",
+					runErr,
+				)
+			}
+		})
+	}
 }
 
 func testAddAnnotation() error {
@@ -60,6 +147,7 @@ func testAddAnnotation() error {
 
 func testTestRunner() *testRunner {
 	runnerCtx, cancel := context.WithCancel(ctx)
+	var ranUserHooks atomic.Bool
 	return &testRunner{
 		ctx:            runnerCtx,
 		cancel:         cancel,
@@ -67,6 +155,7 @@ func testTestRunner() *testRunner {
 		crdbNodes:      nodes,
 		background:     newBackgroundRunner(runnerCtx, nilLogger),
 		seed:           seed,
+		ranUserHooks:   &ranUserHooks,
 		_addAnnotation: testAddAnnotation,
 	}
 }

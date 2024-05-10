@@ -58,7 +58,7 @@ type comment struct {
 // can just fetch comments from collection cache instead of firing extra query.
 // An alternative approach would be to leverage a virtual table which internally
 // uses the collection.
-func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc *tableComments) {
+func selectComment(ctx context.Context, p *planner, tableID descpb.ID) (tc *tableComments) {
 	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d ORDER BY type, sub_id", tableID)
 
 	txn := p.Txn()

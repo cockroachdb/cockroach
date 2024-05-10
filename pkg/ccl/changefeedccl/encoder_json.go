@@ -28,8 +28,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
+
+const (
+	// jsonNullAsObjectKey is the key used in null-as-object mode to represent a JSON null value.
+	jsonNullAsObjectKey = `__crdb_json_null__`
+)
+
+var jsonNullAsObjectJSONNullObj json.JSON
+
+func init() {
+	j, err := json.MakeJSON(map[string]any{
+		jsonNullAsObjectKey: json.FromBool(true),
+	})
+	if err != nil {
+		panic(err)
+	}
+	jsonNullAsObjectJSONNullObj = j
+}
 
 // jsonEncoder encodes changefeed entries as JSON. Keys are the primary key
 // columns in a JSON array. Values are a JSON object mapping every column name
@@ -75,7 +93,7 @@ type jsonEncoderOptions struct {
 	encodeForQuery bool
 }
 
-func makeJSONEncoder(opts jsonEncoderOptions) (*jsonEncoder, error) {
+func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder, error) {
 	versionCache := cache.NewUnorderedCache(cdcevent.DefaultCacheConfig)
 	e := &jsonEncoder{
 		envelopeType:       opts.Envelope,
@@ -100,7 +118,7 @@ func makeJSONEncoder(opts jsonEncoderOptions) (*jsonEncoder, error) {
 				splitPrevRowVersion: isPrev && opts.encodeForQuery && opts.Envelope != changefeedbase.OptEnvelopeBare,
 			}
 			return getCachedOrCreate(key, versionCache, func() interface{} {
-				return &versionEncoder{}
+				return &versionEncoder{encodeJSONValueNullAsObject: opts.EncodeJSONValueNullAsObject}
 			}).(*versionEncoder)
 		},
 	}
@@ -117,11 +135,11 @@ func makeJSONEncoder(opts jsonEncoderOptions) (*jsonEncoder, error) {
 	}
 
 	if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
-		if err := e.initWrappedEnvelope(); err != nil {
+		if err := e.initWrappedEnvelope(ctx); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := e.initRawEnvelope(); err != nil {
+		if err := e.initRawEnvelope(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -131,11 +149,12 @@ func makeJSONEncoder(opts jsonEncoderOptions) (*jsonEncoder, error) {
 
 // versionEncoder memoizes version specific encoding state.
 type versionEncoder struct {
-	valueBuilder *json.FixedKeysObjectBuilder
+	encodeJSONValueNullAsObject bool
+	valueBuilder                *json.FixedKeysObjectBuilder
 }
 
 // EncodeKey implements the Encoder interface.
-func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) (enc []byte, err error) {
+func (e *jsonEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) (enc []byte, err error) {
 	var keys cdcevent.Iterator
 	if e.customKeyColumn == "" {
 		keys = row.ForEachKeyColumn()
@@ -145,7 +164,7 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) (enc []byte
 			return nil, err
 		}
 	}
-	j, err := e.versionEncoder(row.EventDescriptor, false).encodeKeyRaw(keys)
+	j, err := e.versionEncoder(row.EventDescriptor, false).encodeKeyRaw(ctx, keys)
 	if err != nil {
 		return nil, err
 	}
@@ -154,10 +173,12 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) (enc []byte
 	return e.buf.Bytes(), nil
 }
 
-func (e *versionEncoder) encodeKeyRaw(it cdcevent.Iterator) (json.JSON, error) {
+func (e *versionEncoder) encodeKeyRaw(
+	ctx context.Context, it cdcevent.Iterator,
+) (json.JSON, error) {
 	kb := json.NewArrayBuilder(1)
 	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+		j, err := e.datumToJSON(ctx, d)
 		if err != nil {
 			return err
 		}
@@ -171,9 +192,9 @@ func (e *versionEncoder) encodeKeyRaw(it cdcevent.Iterator) (json.JSON, error) {
 }
 
 func (e *versionEncoder) encodeKeyInValue(
-	updated cdcevent.Row, b *json.FixedKeysObjectBuilder,
+	ctx context.Context, updated cdcevent.Row, b *json.FixedKeysObjectBuilder,
 ) error {
-	keyEntries, err := e.encodeKeyRaw(updated.ForEachKeyColumn())
+	keyEntries, err := e.encodeKeyRaw(ctx, updated.ForEachKeyColumn())
 	if err != nil {
 		return err
 	}
@@ -181,7 +202,7 @@ func (e *versionEncoder) encodeKeyInValue(
 }
 
 func (e *versionEncoder) rowAsGoNative(
-	row cdcevent.Row, emitDeletedRowAsNull bool, meta json.JSON,
+	ctx context.Context, row cdcevent.Row, emitDeletedRowAsNull bool, meta json.JSON,
 ) (json.JSON, error) {
 	if !row.HasValues() || (emitDeletedRowAsNull && row.IsDeleted()) {
 		if meta != nil {
@@ -209,7 +230,7 @@ func (e *versionEncoder) rowAsGoNative(
 	}
 
 	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+		j, err := e.datumToJSON(ctx, d)
 		if err != nil {
 			return err
 		}
@@ -227,7 +248,52 @@ func (e *versionEncoder) rowAsGoNative(
 	return e.valueBuilder.Build()
 }
 
-func (e *jsonEncoder) initRawEnvelope() error {
+var jsonNullObjectCollisionLogLim = log.Every(10 * time.Second)
+
+func (e *versionEncoder) datumToJSON(ctx context.Context, d tree.Datum) (json.JSON, error) {
+	j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+	if err != nil {
+		return nil, err
+	}
+
+	if e.encodeJSONValueNullAsObject {
+		if j.Type() == json.NullJSONType && d != tree.DNull {
+			j = jsonNullAsObjectJSONNullObj
+		} else {
+			collides, err := jsonCollidesWithNullObject(j)
+			if err != nil {
+				return nil, err
+			}
+			if collides && jsonNullObjectCollisionLogLim.ShouldLog() {
+				log.Warningf(ctx, "JSON value collides with reserved null object: %q", j.String())
+			}
+		}
+	}
+	return j, nil
+}
+
+// jsonCollidesWithNullObject returns true if the given JSON object collides with the null object sentinel: `{"__crdb_json_null__": true}`.
+func jsonCollidesWithNullObject(j json.JSON) (bool, error) {
+	if j.Type() != json.ObjectJSONType {
+		return false, nil
+	}
+	if j.Len() != 1 {
+		return false, nil
+	}
+	val, err := j.FetchValKey(jsonNullAsObjectKey)
+	if err != nil {
+		return false, err
+	}
+	if val == nil {
+		return false, nil
+	}
+	if v, ok := val.AsBool(); ok && v {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (e *jsonEncoder) initRawEnvelope(ctx context.Context) error {
 	// Determine if we need to add crdb meta.
 	var metaKeys []string
 	if e.updatedField {
@@ -257,7 +323,7 @@ func (e *jsonEncoder) initRawEnvelope() error {
 	e.envelopeEncoder = func(evCtx eventContext, updated, _ cdcevent.Row) (_ json.JSON, err error) {
 		ve := e.versionEncoder(updated.EventDescriptor, false)
 		if len(metaKeys) == 0 {
-			return ve.rowAsGoNative(updated, emitDeletedRowAsNull, nil)
+			return ve.rowAsGoNative(ctx, updated, emitDeletedRowAsNull, nil)
 		}
 
 		if e.updatedField {
@@ -273,7 +339,7 @@ func (e *jsonEncoder) initRawEnvelope() error {
 		}
 
 		if e.keyInValue {
-			if err := ve.encodeKeyInValue(updated, metaBuilder); err != nil {
+			if err := ve.encodeKeyInValue(ctx, updated, metaBuilder); err != nil {
 				return nil, err
 			}
 		}
@@ -288,12 +354,12 @@ func (e *jsonEncoder) initRawEnvelope() error {
 		if err != nil {
 			return nil, err
 		}
-		return ve.rowAsGoNative(updated, emitDeletedRowAsNull, meta)
+		return ve.rowAsGoNative(ctx, updated, emitDeletedRowAsNull, meta)
 	}
 	return nil
 }
 
-func (e *jsonEncoder) initWrappedEnvelope() error {
+func (e *jsonEncoder) initWrappedEnvelope(ctx context.Context) error {
 	keys := []string{"after"}
 	if e.beforeField {
 		keys = append(keys, "before")
@@ -318,7 +384,7 @@ func (e *jsonEncoder) initWrappedEnvelope() error {
 	const emitDeletedRowAsNull = true
 	e.envelopeEncoder = func(evCtx eventContext, updated, prev cdcevent.Row) (json.JSON, error) {
 		ve := e.versionEncoder(updated.EventDescriptor, false)
-		after, err := ve.rowAsGoNative(updated, emitDeletedRowAsNull, nil)
+		after, err := ve.rowAsGoNative(ctx, updated, emitDeletedRowAsNull, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -329,7 +395,7 @@ func (e *jsonEncoder) initWrappedEnvelope() error {
 		if e.beforeField {
 			var before json.JSON
 			if prev.IsInitialized() && !prev.IsDeleted() {
-				before, err = e.versionEncoder(prev.EventDescriptor, true).rowAsGoNative(prev, emitDeletedRowAsNull, nil)
+				before, err = e.versionEncoder(prev.EventDescriptor, true).rowAsGoNative(ctx, prev, emitDeletedRowAsNull, nil)
 				if err != nil {
 					return nil, err
 				}
@@ -343,7 +409,7 @@ func (e *jsonEncoder) initWrappedEnvelope() error {
 		}
 
 		if e.keyInValue {
-			if err := ve.encodeKeyInValue(updated, b); err != nil {
+			if err := ve.encodeKeyInValue(ctx, updated, b); err != nil {
 				return nil, err
 			}
 		}
@@ -414,7 +480,9 @@ var placeholderCtx = eventContext{topic: "topic"}
 
 // EncodeAsJSONChangefeedWithFlags implements the crdb_internal.to_json_as_changefeed_with_flags
 // builtin.
-func EncodeAsJSONChangefeedWithFlags(r cdcevent.Row, flags ...string) ([]byte, error) {
+func EncodeAsJSONChangefeedWithFlags(
+	ctx context.Context, r cdcevent.Row, flags ...string,
+) ([]byte, error) {
 	optsMap := make(map[string]string, len(flags))
 	for _, f := range flags {
 		split := strings.SplitN(f, "=", 2)
@@ -432,7 +500,7 @@ func EncodeAsJSONChangefeedWithFlags(r cdcevent.Row, flags ...string) ([]byte, e
 	// If this function ends up needing to be optimized, cache or pool these.
 	// Nontrivial to do as an encoder generally isn't safe to call on different
 	// rows in parallel.
-	e, err := makeJSONEncoder(jsonEncoderOptions{EncodingOptions: opts})
+	e, err := makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts})
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +519,7 @@ func init() {
 			for i, d := range args[1:] {
 				flags[i] = string(tree.MustBeDString(d))
 			}
-			o, err := EncodeAsJSONChangefeedWithFlags(row, flags...)
+			o, err := EncodeAsJSONChangefeedWithFlags(ctx, row, flags...)
 			if err != nil {
 				return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, ``)
 			}
@@ -465,7 +533,7 @@ func init() {
 	}
 
 	utilccl.RegisterCCLBuiltin("crdb_internal.to_json_as_changefeed_with_flags",
-		`Encodes a tuple the way a changefeed would output it if it were inserted as a row or emitted by a changefeed expression, and returns the raw bytes. 
+		`Encodes a tuple the way a changefeed would output it if it were inserted as a row or emitted by a changefeed expression, and returns the raw bytes.
 		Flags such as 'diff' modify the encoding as though specified in the WITH portion of a changefeed.`,
 		overload)
 }

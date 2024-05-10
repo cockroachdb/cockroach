@@ -45,7 +45,6 @@ go_test(
         "//conditions:default": {"test.Pool": "large"},
     }),
     shard_count = 16,
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
@@ -101,6 +100,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util",
         "//pkg/util/ctxgroup",
+        "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/quotapool",

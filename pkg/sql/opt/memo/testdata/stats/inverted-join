@@ -29,7 +29,7 @@ project
       ├── stats: [rows=9801]
       ├── key: (1,5)
       ├── fd: (1)-->(2), (5)-->(6)
-      ├── inner-join (inverted rtable@geom_index)
+      ├── inner-join (inverted rtable@geom_index,inverted)
       │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:10(int!null)
       │    ├── inverted-expr
       │    │    └── st_intersects(ltable.geom:2, rtable.geom:11) [type=bool]
@@ -61,7 +61,7 @@ project
       ├── stats: [rows=9801]
       ├── key: (1,5)
       ├── fd: (1)-->(2), (5)-->(6)
-      ├── inner-join (inverted rtable@geom_index)
+      ├── inner-join (inverted rtable@geom_index,inverted)
       │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:10(int!null)
       │    ├── inverted-expr
       │    │    └── st_intersects(ltable.geom:2, rtable.geom:11) [type=bool]
@@ -136,7 +136,7 @@ project
       ├── immutable
       ├── stats: [rows=100]
       ├── fd: (1)-->(2)
-      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      ├── inner-join (inverted json_arr1@j_idx,inverted [as=t1])
       │    ├── columns: t2.j:9(jsonb) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 @> t2.j:9 [type=bool]
@@ -165,7 +165,7 @@ inner-join (lookup json_arr1 [as=t1])
  ├── stats: [rows=3.666667]
  ├── key: (1,8)
  ├── fd: (1)-->(2,3), (8)-->(9,10)
- ├── inner-join (inverted json_arr1@a_idx [as=t1])
+ ├── inner-join (inverted json_arr1@a_idx,inverted [as=t1])
  │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
  │    ├── inverted-expr
  │    │    └── (t1.a:15 @> t2.a:10) AND (t1.a:15 @> ARRAY['foo']) [type=bool]
@@ -200,7 +200,7 @@ project
       ├── immutable
       ├── stats: [rows=33.33333]
       ├── fd: (8)-->(9,10)
-      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      ├── inner-join (inverted json_arr1@j_idx,inverted [as=t1])
       │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 @> t2.j:9 [type=bool]
@@ -235,7 +235,7 @@ project
       ├── immutable
       ├── stats: [rows=3333.333]
       ├── fd: (1)-->(2)
-      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      ├── inner-join (inverted json_arr1@j_idx,inverted [as=t1])
       │    ├── columns: t2.j:9(jsonb) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 <@ t2.j:9 [type=bool]
@@ -261,7 +261,7 @@ inner-join (lookup json_arr1 [as=t1])
  ├── stats: [rows=370.3704]
  ├── key: (1,8)
  ├── fd: (1)-->(2,3), (8)-->(9,10)
- ├── inner-join (inverted json_arr1@a_idx [as=t1])
+ ├── inner-join (inverted json_arr1@a_idx,inverted [as=t1])
  │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
  │    ├── inverted-expr
  │    │    └── (t1.a:15 <@ t2.a:10) AND (t1.a:15 <@ ARRAY['foo']) [type=bool]
@@ -296,7 +296,7 @@ project
       ├── immutable
       ├── stats: [rows=370.3704]
       ├── fd: (8)-->(9,10)
-      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      ├── inner-join (inverted json_arr1@j_idx,inverted [as=t1])
       │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 <@ t2.j:9 [type=bool]
@@ -370,7 +370,7 @@ project
       ├── immutable
       ├── stats: [rows=3]
       ├── fd: (1)-->(2,3)
-      ├── inner-join (inverted json_multi_col@sj_idx [as=t1])
+      ├── inner-join (inverted json_multi_col@sj_idx,inverted [as=t1])
       │    ├── columns: t2.j:9(jsonb) t1.k:14(int!null) s:16(string!null)
       │    ├── prefix key columns: [13] = [16]
       │    ├── inverted-expr
@@ -421,7 +421,7 @@ project
       ├── immutable
       ├── stats: [rows=0.3]
       ├── fd: ()-->(4), (1)-->(2,3)
-      ├── inner-join (inverted json_multi_col@sij_idx [as=t1])
+      ├── inner-join (inverted json_multi_col@sij_idx,inverted [as=t1])
       │    ├── columns: t2.j:10(jsonb) t1.k:16(int!null) s:18(string!null) i:19(int!null)
       │    ├── prefix key columns: [14 15] = [18 19]
       │    ├── inverted-expr
@@ -480,7 +480,7 @@ project
       ├── stats: [rows=10, distinct(4)=10, null(4)=0, distinct(10)=10, null(10)=0]
       ├── key: (1)
       ├── fd: (1)-->(2,4), (10)-->(11), (4)==(10), (10)==(4)
-      ├── inner-join (inverted json_multi_col@ij_idx [as=t1])
+      ├── inner-join (inverted json_multi_col@ij_idx,inverted [as=t1])
       │    ├── columns: t2.k:10(int!null) t2.j:11(jsonb) t1.k:15(int!null) i:18(int!null)
       │    ├── prefix key columns: [10] = [18]
       │    ├── inverted-expr

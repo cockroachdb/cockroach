@@ -631,3 +631,188 @@ SELECT * FROM temp;
 
 statement ok
 DROP PROCEDURE p(INOUT int);
+
+subtest nested_call
+
+# It's ok for a SQL routine to call a PLpgSQL routine that calls an SP with OUT
+# parameters.
+
+statement ok
+CREATE PROCEDURE p_inner_o(OUT param INTEGER) AS $$ SELECT 1; $$ LANGUAGE SQL;
+CREATE PROCEDURE p_inner_io(INOUT param INTEGER) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+skipif config local-mixed-23.2
+statement ok
+CREATE PROCEDURE p_nested() AS $$
+  DECLARE
+    a INT;
+  BEGIN
+    CALL p_inner_o(a);
+    RAISE NOTICE 'a: %', a;
+    CALL p_inner_io(a);
+    RAISE NOTICE 'a: %', a;
+  END
+$$ LANGUAGE PLpgSQL;
+
+skipif config local-mixed-23.2
+statement ok
+CREATE FUNCTION f() RETURNS VOID AS $$ CALL p_nested(); $$ LANGUAGE SQL;
+
+skipif config local-mixed-23.2
+query T noticetrace
+SELECT f();
+----
+NOTICE: a: 1
+NOTICE: a: 1
+
+skipif config local-mixed-23.2
+statement ok
+DROP FUNCTION f;
+
+statement ok
+DROP PROCEDURE IF EXISTS p;
+
+skipif config local-mixed-23.2
+statement ok
+CREATE PROCEDURE p() AS $$ CALL p_nested(); $$ LANGUAGE SQL;
+
+skipif config local-mixed-23.2
+query T noticetrace
+CALL p();
+----
+NOTICE: a: 1
+NOTICE: a: 1
+
+skipif config local-mixed-23.2
+statement ok
+DROP PROCEDURE p;
+
+skipif config local-mixed-23.2
+statement ok
+DROP PROCEDURE p_nested;
+
+statement ok
+DROP PROCEDURE p_inner_o;
+DROP PROCEDURE p_inner_io;
+
+# Regression test for dropping the side effects from a variable assignment when
+# the variable is never used.
+subtest regression_122318
+
+statement ok
+CREATE SEQUENCE s1;
+
+statement ok
+DROP PROCEDURE IF EXISTS p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+<<outer>>
+DECLARE
+   x INT = 0;
+BEGIN
+   LOOP
+       x = x + 1;
+       <<inner>>
+       DECLARE
+           y INT = x + 1;
+           b INT;
+       BEGIN
+           RAISE NOTICE 'x=% y=%', x, y;
+           b := nextval('s1');
+       END inner;
+       EXIT WHEN x > 3;
+   END LOOP;
+END outer;
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: x=1 y=2
+NOTICE: x=2 y=3
+NOTICE: x=3 y=4
+NOTICE: x=4 y=5
+
+query I
+SELECT nextval('s1');
+----
+5
+
+statement ok
+DROP PROCEDURE IF EXISTS p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+<<outer>>
+DECLARE
+   x INT = 0;
+BEGIN
+   LOOP
+       x = x + 1;
+       <<inner>>
+       DECLARE
+           y INT = x + 1;
+           b INT;
+       BEGIN
+           RAISE NOTICE 'x=% y=%', x, y;
+           SELECT nextval('s1') INTO b;
+       END inner;
+       EXIT WHEN x > 3;
+   END LOOP;
+END outer;
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: x=1 y=2
+NOTICE: x=2 y=3
+NOTICE: x=3 y=4
+NOTICE: x=4 y=5
+
+query I
+SELECT nextval('s1');
+----
+10
+
+statement ok
+DROP PROCEDURE IF EXISTS p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+<<outer>>
+DECLARE
+   x INT = 0;
+   curs REFCURSOR := 'foo';
+BEGIN
+   OPEN curs FOR SELECT 1;
+   LOOP
+       x = x + 1;
+       <<inner>>
+       DECLARE
+           y INT = x + 1;
+           b INT;
+       BEGIN
+           RAISE NOTICE 'x=% y=%', x, y;
+           FETCH curs INTO b;
+       END inner;
+       EXIT WHEN x > 3;
+   END LOOP;
+END outer;
+$$;
+
+statement ok
+BEGIN;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: x=1 y=2
+NOTICE: x=2 y=3
+NOTICE: x=3 y=4
+NOTICE: x=4 y=5
+
+# The cursor should already be exhausted.
+query I
+FETCH foo;
+----
+
+statement ok
+ROLLBACK;
+
+subtest end

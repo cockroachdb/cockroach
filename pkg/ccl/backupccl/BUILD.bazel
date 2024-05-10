@@ -127,7 +127,6 @@ go_library(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/bulk",
@@ -141,6 +140,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logutil",
+        "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/pprofutil",
@@ -208,7 +208,6 @@ go_test(
         "//conditions:default": {"test.Pool": "large"},
     }),
     shard_count = 48,
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/blobs",

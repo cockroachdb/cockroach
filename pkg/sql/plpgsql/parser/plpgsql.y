@@ -2,10 +2,14 @@
 package parser
 
 import (
+  "strings"
+
+  "github.com/cockroachdb/cockroach/pkg/build"
   "github.com/cockroachdb/cockroach/pkg/sql/parser"
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+  "github.com/cockroachdb/cockroach/pkg/sql/types"
   "github.com/cockroachdb/errors"
   "github.com/cockroachdb/redact"
 )
@@ -555,11 +559,26 @@ decl_datatype:
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    typ, err := plpgsqllex.(*lexer).GetTypeFromValidSQLSyntax(sqlStr)
+    // This is an inlined version of GetTypeFromValidSQLSyntax which doesn't
+    // return an assertion failure.
+    castExpr, err := plpgsqllex.(*lexer).ParseExpr("1::" + sqlStr)
     if err != nil {
+      return setErr(plpgsqllex, errors.New("unable to parse type of variable declaration"))
+    }
+    switch t := castExpr.(type) {
+    case *tree.CollateExpr:
+      $$.val = types.MakeCollatedString(types.String, t.Locale)
+    case *tree.CastExpr:
+      $$.val = t.Type
+    default:
+      err := errors.New("unable to parse type of variable declaration")
+      if strings.Contains(sqlStr, "%") {
+        err = errors.WithIssueLink(errors.WithHint(err,
+          "you may have attempted to use %TYPE or %ROWTYPE syntax, which is unsupported.",
+        ), errors.IssueLink{IssueURL: build.MakeIssueURL(114676)})
+      }
       return setErr(plpgsqllex, err)
     }
-    $$.val = typ
   }
 ;
 

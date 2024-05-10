@@ -32,9 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -68,6 +70,10 @@ const (
 	// prefix.
 	// TODO(casper): ensure this should be consistent across the usage of APIs
 	TenantID = "TENANT_ID"
+	// TenantSpanStart and TenantSpanEnd are bool params to extend checkpoints to
+	// the tenant span start or end key.
+	TenantSpanStart = "TENANT_START"
+	TenantSpanEnd   = "TENANT_END"
 	// IngestionDatabaseID is the ID used in the generated table descriptor.
 	IngestionDatabaseID = 50 /* defaultDB */
 	// IngestionTablePrefix is the prefix of the table name used in the generated
@@ -117,6 +123,8 @@ type randomStreamConfig struct {
 	sstProbability      float64
 
 	tenantID roachpb.TenantID
+	// startTenant and endTenant extend checkpoint spans to the tenant span.
+	startTenant, endTenant bool
 }
 
 func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
@@ -181,10 +189,26 @@ func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 		}
 		c.tenantID = roachpb.MustMakeTenantID(uint64(id))
 	}
+
+	if s := streamURL.Query().Get(TenantSpanStart); s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return c, err
+		}
+		c.startTenant = b
+	}
+	if s := streamURL.Query().Get(TenantSpanEnd); s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return c, err
+		}
+		c.endTenant = b
+	}
+
 	return c, nil
 }
 
-func (c randomStreamConfig) URL(table int) string {
+func (c randomStreamConfig) URL(table int, startsTenant, finishesTenant bool) string {
 	u := &url.URL{
 		Scheme: RandomGenScheme,
 		Host:   strconv.Itoa(table),
@@ -196,6 +220,8 @@ func (c randomStreamConfig) URL(table int) string {
 	q.Add(NumPartitions, strconv.Itoa(c.numPartitions))
 	q.Add(DupProbability, fmt.Sprintf("%f", c.dupProbability))
 	q.Add(SSTProbability, fmt.Sprintf("%f", c.sstProbability))
+	q.Add(TenantSpanStart, strconv.FormatBool(startsTenant))
+	q.Add(TenantSpanEnd, strconv.FormatBool(finishesTenant))
 	q.Add(TenantID, strconv.Itoa(int(c.tenantID.ToUint64())))
 	u.RawQuery = q.Encode()
 	return u.String()
@@ -237,10 +263,17 @@ func newRandomEventGenerator(
 func (r *randomEventGenerator) generateNewEvent() streamingccl.Event {
 	var event streamingccl.Event
 	if r.numEventsSinceLastResolved == r.config.eventsPerCheckpoint {
+		sp := r.tableDesc.TableSpan(r.codec)
+		if r.config.startTenant {
+			sp.Key = keys.MakeTenantSpan(r.config.tenantID).Key
+		}
+		if r.config.endTenant {
+			sp.EndKey = keys.MakeTenantSpan(r.config.tenantID).EndKey
+		}
 		// Emit a CheckpointEvent.
 		resolvedTime := timeutil.Now()
 		hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
-		resolvedSpan := jobspb.ResolvedSpan{Span: r.tableDesc.TableSpan(r.codec), Timestamp: hlcResolvedTime}
+		resolvedSpan := jobspb.ResolvedSpan{Span: sp, Timestamp: hlcResolvedTime}
 		event = streamingccl.MakeCheckpointEvent([]jobspb.ResolvedSpan{resolvedSpan})
 		r.numEventsSinceLastResolved = 0
 	} else {
@@ -248,7 +281,7 @@ func (r *randomEventGenerator) generateNewEvent() streamingccl.Event {
 		if len(r.systemKVs) > 0 {
 			systemKV := r.systemKVs[0]
 			systemKV.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			event = streamingccl.MakeKVEvent(systemKV)
+			event = streamingccl.MakeKVEvent([]roachpb.KeyValue{systemKV})
 			r.systemKVs = r.systemKVs[1:]
 			return event
 		}
@@ -263,7 +296,7 @@ func (r *randomEventGenerator) generateNewEvent() streamingccl.Event {
 			}
 			event = streamingccl.MakeSSTableEvent(r.sstMaker(keyVals))
 		} else {
-			event = streamingccl.MakeKVEvent(makeRandomKey(r.rng, r.config, r.codec, r.tableDesc))
+			event = streamingccl.MakeKVEvent([]roachpb.KeyValue{makeRandomKey(r.rng, r.config, r.codec, r.tableDesc)})
 		}
 		r.numEventsSinceLastResolved++
 	}
@@ -319,7 +352,7 @@ func (m *RandomStreamClient) getNextTableID() int {
 }
 
 func (m *RandomStreamClient) tableDescForID(tableID int) (*tabledesc.Mutable, error) {
-	partitionURI := m.config.URL(tableID)
+	partitionURI := m.config.URL(tableID, false, false)
 	partitionURL, err := url.Parse(partitionURI)
 	if err != nil {
 		return nil, err
@@ -359,6 +392,7 @@ func (m *RandomStreamClient) Plan(ctx context.Context, _ streampb.StreamID) (Top
 		Partitions:     make([]PartitionInfo, 0, m.config.numPartitions),
 		SourceTenantID: m.config.tenantID,
 	}
+	tenantSpan := keys.MakeTenantSpan(m.config.tenantID)
 	log.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
 
 	// Allocate table IDs and return one per partition address in the topology.
@@ -370,7 +404,7 @@ func (m *RandomStreamClient) Plan(ctx context.Context, _ streampb.StreamID) (Top
 			return Topology{}, err
 		}
 
-		partitionURI := m.config.URL(tableID)
+		partitionURI := m.config.URL(tableID, i == 0, i == m.config.numPartitions-1)
 		log.Infof(ctx, "planning random stream partition %d for tenant %d: %q", i, m.config.tenantID, partitionURI)
 
 		topology.Partitions = append(topology.Partitions,
@@ -381,6 +415,8 @@ func (m *RandomStreamClient) Plan(ctx context.Context, _ streampb.StreamID) (Top
 				Spans:             []roachpb.Span{tableDesc.TableSpan(srcCodec)},
 			})
 	}
+	topology.Partitions[0].Spans[0].Key = tenantSpan.Key
+	topology.Partitions[m.config.numPartitions-1].Spans[0].EndKey = tenantSpan.EndKey
 
 	return topology, nil
 }
@@ -470,7 +506,7 @@ func (m *RandomStreamClient) Subscribe(
 	_ int32,
 	spec SubscriptionToken,
 	initialScanTime hlc.Timestamp,
-	_ hlc.Timestamp,
+	_ span.Frontier,
 ) (Subscription, error) {
 	partitionURL, err := url.Parse(string(spec))
 	if err != nil {
@@ -639,17 +675,15 @@ func duplicateEvent(event streamingccl.Event) streamingccl.Event {
 		copy(resolvedSpans, event.GetResolvedSpans())
 		dup = streamingccl.MakeCheckpointEvent(resolvedSpans)
 	case streamingccl.KVEvent:
-		eventKV := event.GetKV()
-		rawBytes := make([]byte, len(eventKV.Value.RawBytes))
-		copy(rawBytes, eventKV.Value.RawBytes)
-		keyVal := roachpb.KeyValue{
-			Key: event.GetKV().Key.Clone(),
-			Value: roachpb.Value{
-				RawBytes:  rawBytes,
-				Timestamp: eventKV.Value.Timestamp,
-			},
+		kvs := event.GetKVs()
+		res := make([]roachpb.KeyValue, len(kvs))
+		var a bufalloc.ByteAllocator
+		for i := range kvs {
+			res[i].Key = kvs[i].Key.Clone()
+			res[i].Value.Timestamp = kvs[i].Value.Timestamp
+			a, res[i].Value.RawBytes = a.Copy(kvs[i].Value.RawBytes, 0)
 		}
-		dup = streamingccl.MakeKVEvent(keyVal)
+		dup = streamingccl.MakeKVEvent(res)
 	case streamingccl.SSTableEvent:
 		sst := event.GetSSTable()
 		dataCopy := make([]byte, len(sst.Data))

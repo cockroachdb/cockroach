@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -47,7 +48,9 @@ var (
 	listJSON              bool
 	listMine              bool
 	listPattern           string
-	secure                = false
+	isSecure              bool   // Set based on the values passed to --secure and --insecure
+	secure                = true // DEPRECATED
+	insecure              = false
 	virtualClusterName    string
 	sqlInstance           int
 	extraSSHOptions       = ""
@@ -95,7 +98,19 @@ var (
 		"user-cert":     install.AuthUserCert,
 	}
 
+	defaultAuthMode = func() string {
+		for modeStr, mode := range pgAuthModes {
+			if mode == install.DefaultAuthMode {
+				return modeStr
+			}
+		}
+
+		panic(fmt.Errorf("could not find string for default auth mode"))
+	}()
+
 	sshKeyUser string
+
+	fluentBitConfig fluentbit.Config
 )
 
 func initFlags() {
@@ -183,8 +198,12 @@ func initFlags() {
 		"external", false, "return pgurls for external connections")
 	pgurlCmd.Flags().StringVar(&pgurlCertsDir,
 		"certs-dir", install.CockroachNodeCertsDir, "cert dir to use for secure connections")
-	pgurlCmd.Flags().StringVar(&authMode,
-		"auth-mode", "root", fmt.Sprintf("form of authentication to use, valid auth-modes: %v", maps.Keys(pgAuthModes)))
+
+	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd} {
+		cmd.Flags().StringVar(&authMode,
+			"auth-mode", defaultAuthMode, fmt.Sprintf("form of authentication to use, valid auth-modes: %v", maps.Keys(pgAuthModes)))
+	}
+
 	pprofCmd.Flags().DurationVar(&pprofOpts.Duration,
 		"duration", 30*time.Second, "Duration of profile to capture")
 	pprofCmd.Flags().BoolVar(&pprofOpts.Heap,
@@ -283,6 +302,18 @@ func initFlags() {
 	grafanaDumpCmd.Flags().StringVar(&grafanaDumpDir, "dump-dir", "",
 		"the absolute path to dump prometheus data to (use the contained 'prometheus-docker-run.sh' to visualize")
 
+	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogSite, "datadog-site", "us5.datadoghq.com",
+		"Datadog site to send telemetry data to")
+
+	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogAPIKey, "datadog-api-key", "",
+		"Datadog API key")
+
+	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogService, "datadog-service", "cockroachdb",
+		"Datadog service name for emitted logs")
+
+	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogTeam, "datadog-team", "",
+		"Datadog team to tag emitted logs")
+
 	sshKeysAddCmd.Flags().StringVar(&sshKeyUser, "user", config.OSUser.Username,
 		"the user to be associated with the new key",
 	)
@@ -361,6 +392,9 @@ func initFlags() {
 			"limit the number of files that can be created by the cockroach process")
 		cmd.Flags().IntVar(&startOpts.SQLPort,
 			"sql-port", startOpts.SQLPort, "port on which to listen for SQL clients")
+		cmd.Flags().BoolVar(&startOpts.EnableFluentSink,
+			"enable-fluent-sink", startOpts.EnableFluentSink,
+			"whether to enable the fluent-servers attribute in the CockroachDB logging configuration")
 	}
 
 	for _, cmd := range []*cobra.Command{
@@ -381,8 +415,12 @@ func initFlags() {
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
 	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, loadBalanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd, jaegerStartCmd, grafanaAnnotationCmd} {
+		// TODO(renato): remove --secure once the default of secure
+		// clusters has existed in roachprod long enough.
 		cmd.Flags().BoolVar(&secure,
-			"secure", false, "use a secure cluster")
+			"secure", secure, "use a secure cluster (DEPRECATED: clusters are secure by default; use --insecure to create insecure clusters.)")
+		cmd.Flags().BoolVar(&insecure,
+			"insecure", insecure, "use an insecure cluster")
 	}
 	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd, stopInstanceCmd, loadBalanceCmd, jaegerStartCmd} {
 		cmd.Flags().StringVar(&virtualClusterName,

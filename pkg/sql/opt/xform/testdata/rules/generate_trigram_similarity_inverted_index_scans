@@ -10,6 +10,8 @@ CREATE TABLE trgm (
 )
 ----
 
+# A single trigram similarity filter can constrain an inverted index. This test
+# projects just the PK column.
 opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT k FROM trgm WHERE s % 'foo'
 ----
@@ -30,7 +32,7 @@ project
       │         ├── columns: k:1!null
       │         ├── grouping columns: k:1!null
       │         ├── key: (1)
-      │         └── scan trgm@s_idx
+      │         └── scan trgm@s_idx,inverted
       │              ├── columns: k:1!null
       │              └── constraint: /7
       │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
@@ -39,6 +41,8 @@ project
       └── filters
            └── s:4 % 'foo' [outer=(4), stable]
 
+# A single trigram similarity filter can constrain an inverted index. This test
+# projects all columns.
 opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE s % 'foo'
 ----
@@ -55,7 +59,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
@@ -64,6 +68,7 @@ select
  └── filters
       └── s:4 % 'foo' [outer=(4), stable]
 
+# When the threshold is set to 1, only one trigram needs to be scanned.
 # TODO(#122225): The distinct-on expression is not necessary because a single
 # value is scanned, so the primary key is already unique in the scan.
 opt expect=GenerateTrigramSimilarityInvertedIndexScans set=(pg_trgm.similarity_threshold=1)
@@ -82,12 +87,13 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7: [/'\x12666f6f0001' - /'\x12666f6f0001']
  └── filters
       └── s:4 % 'foo' [outer=(4), stable]
 
+# The RHS of the triage similarity filter can be a non-STRING type.
 opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE s % 'foo'::NAME
 ----
@@ -104,7 +110,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
@@ -113,6 +119,7 @@ select
  └── filters
       └── s:4 % 'foo' [outer=(4), stable]
 
+# The filter can be commuted to constrain the index.
 opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE 'foo' % s
 ----
@@ -129,7 +136,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
@@ -138,6 +145,8 @@ select
  └── filters
       └── 'foo' % s:4 [outer=(4), stable]
 
+# Conjunctions are naively supported by scanning just the trigrams from one of
+# the conjucts.
 opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE s % 'foo' AND s % 'bar'
 ----
@@ -154,7 +163,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7
  │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
@@ -164,6 +173,8 @@ select
       ├── s:4 % 'foo' [outer=(4), stable]
       └── s:4 % 'bar' [outer=(4), stable]
 
+# A trigram similarity filter with a longer constant string can constrain an
+# inverted index.
 opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE s % 'foobar'
 ----
@@ -180,7 +191,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@s_idx
+ │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /7
  │                   ├── [/'\x126172200001' - /'\x126172200001']
@@ -191,6 +202,8 @@ select
  └── filters
       └── s:4 % 'foobar' [outer=(4), stable]
 
+# A multi-column inverted index can be constrained by a trigram similarity
+# filter. Optional filters constrain the first column.
 opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE j = 10 AND s % 'foo'
 ----
@@ -207,7 +220,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@i_j_s_idx
+ │         └── scan trgm@i_j_s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /2/3/8
  │                   ├── [/1/10/'\x1220666f0001' - /1/10/'\x1220666f0001']
@@ -222,6 +235,8 @@ select
  └── filters
       └── s:4 % 'foo' [outer=(4), stable]
 
+# A multi-column inverted index can be constrained by a trigram similarity
+# filter. The second column is constrained by an IN expression.
 opt expect=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE j IN (10, 20) AND s % 'foo'
 ----
@@ -238,7 +253,7 @@ select
  │         ├── columns: k:1!null
  │         ├── grouping columns: k:1!null
  │         ├── key: (1)
- │         └── scan trgm@i_j_s_idx
+ │         └── scan trgm@i_j_s_idx,inverted
  │              ├── columns: k:1!null
  │              └── constraint: /2/3/8
  │                   ├── [/1/10/'\x1220666f0001' - /1/10/'\x1220666f0001']
@@ -262,6 +277,7 @@ select
  └── filters
       └── s:4 % 'foo' [outer=(4), stable]
 
+# The RHS cannot be NULL.
 opt expect-not=GenerateTrigramSimilarityInvertedIndexScans disable=(FoldNullBinaryRight) format=show-scalars
 SELECT * FROM trgm WHERE s % NULL::STRING
 ----
@@ -286,6 +302,7 @@ select
            ├── variable: s:4
            └── null
 
+# Do not explore this rule if the threshold is 0.
 opt expect-not=GenerateTrigramSimilarityInvertedIndexScans set=(pg_trgm.similarity_threshold=0)
 SELECT * FROM trgm WHERE s % 'foo'
 ----
@@ -303,6 +320,7 @@ select
  └── filters
       └── s:4 % 'foo' [outer=(4), stable]
 
+# The RHS cannot be the empty string.
 opt expect-not=GenerateTrigramSimilarityInvertedIndexScans
 SELECT * FROM trgm WHERE s % ''
 ----
@@ -320,6 +338,7 @@ select
  └── filters
       └── s:4 % '' [outer=(4), stable]
 
+# The corresponding session setting must be enabled.
 opt expect-not=GenerateTrigramSimilarityInvertedIndexScans set=(optimizer_use_trigram_similarity_optimization=off) format=hide-all
 SELECT k FROM trgm WHERE s % 'foo'
 ----
@@ -334,7 +353,7 @@ project
       │         │         ├── ["\x12 fo\x00\x01", "\x12 fo\x00\x01"]
       │         │         ├── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
       │         │         └── ["\x12oo \x00\x01", "\x12oo \x00\x01"]
-      │         └── scan trgm@s_idx
+      │         └── scan trgm@s_idx,inverted
       │              └── inverted constraint: /7/1
       │                   └── spans
       │                        ├── ["\x12  f\x00\x01", "\x12  f\x00\x01"]

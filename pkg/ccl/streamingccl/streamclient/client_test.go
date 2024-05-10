@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -86,7 +86,7 @@ func (sc testStreamClient) Subscribe(
 	_ int32,
 	_ SubscriptionToken,
 	_ hlc.Timestamp,
-	_ hlc.Timestamp,
+	_ span.Frontier,
 ) (Subscription, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
@@ -102,7 +102,7 @@ func (sc testStreamClient) Subscribe(
 	}
 
 	events := make(chan streamingccl.Event, 2)
-	events <- streamingccl.MakeKVEvent(sampleKV)
+	events <- streamingccl.MakeKVEvent([]roachpb.KeyValue{sampleKV})
 	events <- streamingccl.MakeCheckpointEvent([]jobspb.ResolvedSpan{sampleResolvedSpan})
 	close(events)
 
@@ -260,10 +260,8 @@ func ExampleClient() {
 	}
 	id := prs.StreamID
 
-	var ingested struct {
-		ts hlc.Timestamp
-		syncutil.Mutex
-	}
+	frontier, _ := span.MakeFrontier(roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax})
+	ingested := span.MakeConcurrentFrontier(frontier)
 
 	done := make(chan struct{})
 
@@ -275,11 +273,9 @@ func ExampleClient() {
 			case <-done:
 				return nil
 			case <-ticker.C:
-				ingested.Lock()
-				ts := ingested.ts
-				ingested.Unlock()
+				ingested.Frontier()
 
-				if _, err := client.Heartbeat(ctx, id, ts); err != nil {
+				if _, err := client.Heartbeat(ctx, id, frontier.Frontier()); err != nil {
 					return err
 				}
 			}
@@ -288,9 +284,6 @@ func ExampleClient() {
 
 	grp.GoCtx(func(ctx context.Context) error {
 		defer close(done)
-		ingested.Lock()
-		ts := ingested.ts
-		ingested.Unlock()
 
 		topology, err := client.Plan(ctx, id)
 		if err != nil {
@@ -299,7 +292,7 @@ func ExampleClient() {
 
 		for _, partition := range topology.Partitions {
 			// TODO(dt): use Subscribe helper and partition.SrcAddr
-			sub, err := client.Subscribe(ctx, id, 0, partition.SubscriptionToken, hlc.Timestamp{}, ts)
+			sub, err := client.Subscribe(ctx, id, 0, partition.SubscriptionToken, hlc.Timestamp{}, ingested)
 			if err != nil {
 				panic(err)
 			}
@@ -310,8 +303,10 @@ func ExampleClient() {
 			for event := range sub.Events() {
 				switch event.Type() {
 				case streamingccl.KVEvent:
-					kv := event.GetKV()
-					fmt.Printf("kv: %s->%s@%d\n", kv.Key.String(), string(kv.Value.RawBytes), kv.Value.Timestamp.WallTime)
+					kvs := event.GetKVs()
+					for _, kv := range kvs {
+						fmt.Printf("kv: %s->%s@%d\n", kv.Key.String(), string(kv.Value.RawBytes), kv.Value.Timestamp.WallTime)
+					}
 				case streamingccl.SSTableEvent:
 					sst := event.GetSSTable()
 					fmt.Printf("sst: %s->%s@%d\n", sst.Span.String(), string(sst.Data), sst.WriteTS.WallTime)
@@ -319,15 +314,13 @@ func ExampleClient() {
 					delRange := event.GetDeleteRange()
 					fmt.Printf("delRange: %s@%d\n", delRange.Span.String(), delRange.Timestamp.WallTime)
 				case streamingccl.CheckpointEvent:
-					ingested.Lock()
 					minTS := hlc.MaxTimestamp
 					for _, rs := range event.GetResolvedSpans() {
 						if rs.Timestamp.Less(minTS) {
 							minTS = rs.Timestamp
 						}
 					}
-					ingested.ts.Forward(minTS)
-					ingested.Unlock()
+					_, _ = ingested.Forward(roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}, minTS)
 					fmt.Printf("resolved %d\n", minTS.WallTime)
 				default:
 					panic(fmt.Sprintf("unexpected event type %v", event.Type()))

@@ -30,12 +30,12 @@ func TestMergeSubscriptionsRun(t *testing.T) {
 	ctx := context.Background()
 	events := func(partition string) []streamingccl.Event {
 		return []streamingccl.Event{
-			streamingccl.MakeKVEvent(roachpb.KeyValue{
+			streamingccl.MakeKVEvent([]roachpb.KeyValue{{
 				Key: []byte(partition + "_key1"),
-			}),
-			streamingccl.MakeKVEvent(roachpb.KeyValue{
+			}}),
+			streamingccl.MakeKVEvent([]roachpb.KeyValue{{
 				Key: []byte(partition + "_key2"),
-			}),
+			}}),
 		}
 	}
 	mockClient := &mockStreamClient{
@@ -53,9 +53,9 @@ func TestMergeSubscriptionsRun(t *testing.T) {
 	}
 
 	t.Run("returns without close when all all events are consumed", func(t *testing.T) {
-		sub1, err := mockClient.Subscribe(ctx, 0, 0, streamclient.SubscriptionToken("partition1"), hlc.Timestamp{}, hlc.Timestamp{})
+		sub1, err := mockClient.Subscribe(ctx, 0, 0, streamclient.SubscriptionToken("partition1"), hlc.Timestamp{}, nil)
 		require.NoError(t, err)
-		sub2, err := mockClient.Subscribe(ctx, 0, 0, streamclient.SubscriptionToken("partition2"), hlc.Timestamp{}, hlc.Timestamp{})
+		sub2, err := mockClient.Subscribe(ctx, 0, 0, streamclient.SubscriptionToken("partition2"), hlc.Timestamp{}, nil)
 		require.NoError(t, err)
 
 		merged := mergeSubscriptions(ctx, map[string]streamclient.Subscription{
@@ -67,7 +67,7 @@ func TestMergeSubscriptionsRun(t *testing.T) {
 		events := []string{}
 		g.Go(func() error {
 			for ev := range merged.Events() {
-				events = append(events, string(ev.GetKV().Key))
+				events = append(events, string(ev.GetKVs()[0].Key))
 			}
 			return nil
 		})
@@ -78,9 +78,9 @@ func TestMergeSubscriptionsRun(t *testing.T) {
 		require.Equal(t, sortedExpectedKeys, events)
 	})
 	t.Run("returns after close when there is no reader", func(t *testing.T) {
-		sub1, err := mockClient.Subscribe(ctx, 0, 0, streamclient.SubscriptionToken("partition1"), hlc.Timestamp{}, hlc.Timestamp{})
+		sub1, err := mockClient.Subscribe(ctx, 0, 0, streamclient.SubscriptionToken("partition1"), hlc.Timestamp{}, nil)
 		require.NoError(t, err)
-		sub2, err := mockClient.Subscribe(ctx, 0, 0, streamclient.SubscriptionToken("partition2"), hlc.Timestamp{}, hlc.Timestamp{})
+		sub2, err := mockClient.Subscribe(ctx, 0, 0, streamclient.SubscriptionToken("partition2"), hlc.Timestamp{}, nil)
 		require.NoError(t, err)
 
 		merged := mergeSubscriptions(ctx, map[string]streamclient.Subscription{

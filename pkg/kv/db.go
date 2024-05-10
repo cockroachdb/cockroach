@@ -823,6 +823,20 @@ func (db *DB) LinkExternalSSTable(
 	b.linkExternalSSTable(span, file)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
+		if m := (*kvpb.RangeKeyMismatchError)(nil); errors.As(err, &m) {
+			r, err := m.MismatchedRange()
+			if err != nil {
+				return err
+			}
+			// TODO(dt): iterate over all of all of m.Ranges, not just first, but
+			// ensure we cover all of `span` when we do.
+			lhs := roachpb.Span{Key: span.Key, EndKey: r.Desc.EndKey.AsRawKey()}
+			rhs := roachpb.Span{Key: lhs.EndKey, EndKey: span.EndKey}
+			if err := db.LinkExternalSSTable(ctx, lhs, file, batchTimestamp); err != nil {
+				return err
+			}
+			return db.LinkExternalSSTable(ctx, rhs, file, batchTimestamp)
+		}
 		return err
 	}
 	if l := len(b.response.Responses); l != 1 {

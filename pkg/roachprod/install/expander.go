@@ -17,13 +17,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 )
 
 var parameterRe = regexp.MustCompile(`{[^{}]*}`)
-var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
-var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+)?}`)
+var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+|:(?i)lb)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
+var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+|:(?i)lb)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)}`)
 var storeDirRe = regexp.MustCompile(`{store-dir(:[0-9]+)?}`)
@@ -116,8 +117,8 @@ func (e *expander) maybeExpandMap(
 // instance is provided, the first instance is assumed.
 func extractVirtualClusterInfo(matches []string) (string, int, error) {
 	// Defaults if the passed in group match is empty.
-	virtualClusterName := SystemInterfaceName
-	sqlInstance := 0
+	var virtualClusterName string
+	var sqlInstance int
 
 	// Extract the cluster name and instance matches.
 	trim := func(s string) string {
@@ -157,14 +158,20 @@ func (e *expander) maybeExpandPgURL(
 	if err != nil {
 		return "", false, err
 	}
-	if e.pgURLs[virtualClusterName] == nil {
-		e.pgURLs[virtualClusterName], err = c.pgurls(ctx, l, allNodes(len(c.VMs)), virtualClusterName, sqlInstance)
-		if err != nil {
-			return "", false, err
+	switch strings.ToLower(m[1]) {
+	case ":lb":
+		url, err := c.loadBalancerURL(ctx, l, virtualClusterName, sqlInstance, DefaultAuthMode)
+		return url, url != "", err
+	default:
+		if e.pgURLs[virtualClusterName] == nil {
+			e.pgURLs[virtualClusterName], err = c.pgurls(ctx, l, allNodes(len(c.VMs)), virtualClusterName, sqlInstance)
+			if err != nil {
+				return "", false, err
+			}
 		}
+		s, err = e.maybeExpandMap(c, e.pgURLs[virtualClusterName], m[1])
+		return s, err == nil, err
 	}
-	s, err = e.maybeExpandMap(c, e.pgURLs[virtualClusterName], m[1])
-	return s, err == nil, err
 }
 
 // maybeExpandPgHost is an expanderFunc for {pghost:<nodeSpec>}
@@ -175,17 +182,40 @@ func (e *expander) maybeExpandPgHost(
 	if m == nil {
 		return s, false, nil
 	}
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:])
+	if err != nil {
+		return "", false, err
+	}
 
-	if e.pgHosts == nil {
-		var err error
-		e.pgHosts, err = c.pghosts(ctx, l, allNodes(len(c.VMs)))
+	switch strings.ToLower(m[1]) {
+	case ":lb":
+		services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL, ServiceInstancePredicate(sqlInstance))
 		if err != nil {
 			return "", false, err
 		}
+		port := config.DefaultSQLPort
+		for _, svc := range services {
+			if svc.VirtualClusterName == virtualClusterName && svc.Instance == sqlInstance {
+				port = svc.Port
+				break
+			}
+		}
+		addr, err := c.FindLoadBalancer(l, port)
+		if err != nil {
+			return "", false, err
+		}
+		return addr.IP, true, nil
+	default:
+		if e.pgHosts == nil {
+			var err error
+			e.pgHosts, err = c.pghosts(ctx, l, allNodes(len(c.VMs)))
+			if err != nil {
+				return "", false, err
+			}
+		}
+		s, err := e.maybeExpandMap(c, e.pgHosts, m[1])
+		return s, err == nil, err
 	}
-
-	s, err := e.maybeExpandMap(c, e.pgHosts, m[1])
-	return s, err == nil, err
 }
 
 // maybeExpandPgURL is an expanderFunc for {pgport:<nodeSpec>}

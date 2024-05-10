@@ -163,6 +163,7 @@ type Memo struct {
 	intervalStyle                              duration.IntervalStyle
 	propagateInputOrdering                     bool
 	disallowFullTableScans                     bool
+	applyFullScanPenaltyToVirtualTables        bool
 	largeFullScanRows                          float64
 	txnRowsReadErr                             int64
 	nullOrderedLast                            bool
@@ -194,6 +195,9 @@ type Memo struct {
 	useImprovedTrigramSimilaritySelectivity    bool
 	trigramSimilarityThreshold                 float64
 	splitScanLimit                             int32
+	useImprovedZigzagJoinCosting               bool
+	useImprovedMultiColumnSelectivityEstimate  bool
+	proveImplicationWithVirtualComputedCols    bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -243,6 +247,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		intervalStyle:                              evalCtx.SessionData().GetIntervalStyle(),
 		propagateInputOrdering:                     evalCtx.SessionData().PropagateInputOrdering,
 		disallowFullTableScans:                     evalCtx.SessionData().DisallowFullTableScans,
+		applyFullScanPenaltyToVirtualTables:        evalCtx.SessionData().OptimizerApplyFullScanPenaltyToVirtualTables,
 		largeFullScanRows:                          evalCtx.SessionData().LargeFullScanRows,
 		txnRowsReadErr:                             evalCtx.SessionData().TxnRowsReadErr,
 		nullOrderedLast:                            evalCtx.SessionData().NullOrderedLast,
@@ -274,6 +279,9 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useImprovedTrigramSimilaritySelectivity:    evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity,
 		trigramSimilarityThreshold:                 evalCtx.SessionData().TrigramSimilarityThreshold,
 		splitScanLimit:                             evalCtx.SessionData().OptSplitScanLimit,
+		useImprovedZigzagJoinCosting:               evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting,
+		useImprovedMultiColumnSelectivityEstimate:  evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate,
+		proveImplicationWithVirtualComputedCols:    evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -401,6 +409,7 @@ func (m *Memo) IsStale(
 		m.intervalStyle != evalCtx.SessionData().GetIntervalStyle() ||
 		m.propagateInputOrdering != evalCtx.SessionData().PropagateInputOrdering ||
 		m.disallowFullTableScans != evalCtx.SessionData().DisallowFullTableScans ||
+		m.applyFullScanPenaltyToVirtualTables != evalCtx.SessionData().OptimizerApplyFullScanPenaltyToVirtualTables ||
 		m.largeFullScanRows != evalCtx.SessionData().LargeFullScanRows ||
 		m.txnRowsReadErr != evalCtx.SessionData().TxnRowsReadErr ||
 		m.nullOrderedLast != evalCtx.SessionData().NullOrderedLast ||
@@ -432,6 +441,9 @@ func (m *Memo) IsStale(
 		m.useImprovedTrigramSimilaritySelectivity != evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity ||
 		m.trigramSimilarityThreshold != evalCtx.SessionData().TrigramSimilarityThreshold ||
 		m.splitScanLimit != evalCtx.SessionData().OptSplitScanLimit ||
+		m.useImprovedZigzagJoinCosting != evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting ||
+		m.useImprovedMultiColumnSelectivityEstimate != evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate ||
+		m.proveImplicationWithVirtualComputedCols != evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}

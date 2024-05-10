@@ -26,6 +26,7 @@ func init() {
 				emit(func(this *scpb.Sequence) *scop.CreateSequenceDescriptor {
 					return &scop.CreateSequenceDescriptor{
 						SequenceID: this.SequenceID,
+						Temporary:  this.IsTemporary,
 					}
 				}),
 			),

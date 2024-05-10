@@ -146,6 +146,7 @@ ALL_TESTS = [
     "//pkg/cmd/reduce/reduce/reducesql:reducesql_test",
     "//pkg/cmd/reduce/reduce:reduce_test",
     "//pkg/cmd/release:release_test",
+    "//pkg/cmd/roachprod-microbench/cluster:cluster_test",
     "//pkg/cmd/roachprod-microbench:roachprod-microbench_test",
     "//pkg/cmd/roachtest/clusterstats:clusterstats_test",
     "//pkg/cmd/roachtest/option:option_test",
@@ -155,7 +156,6 @@ ALL_TESTS = [
     "//pkg/cmd/roachtest/roachtestutil:roachtestutil_test",
     "//pkg/cmd/roachtest/tests:tests_test",
     "//pkg/cmd/roachtest:roachtest_test",
-    "//pkg/cmd/teamcity-trigger:teamcity-trigger_test",
     "//pkg/col/coldata:coldata_disallowed_imports_test",
     "//pkg/col/coldata:coldata_test",
     "//pkg/col/coldataext:coldataext_test",
@@ -294,6 +294,7 @@ ALL_TESTS = [
     "//pkg/roachprod/config:config_test",
     "//pkg/roachprod/install:install_test",
     "//pkg/roachprod/prometheus:prometheus_test",
+    "//pkg/roachprod/promhelperclient:promhelperclient_test",
     "//pkg/roachprod/ssh:ssh_test",
     "//pkg/roachprod/vm/gce:gce_test",
     "//pkg/roachprod/vm/local:local_test",
@@ -554,8 +555,8 @@ ALL_TESTS = [
     "//pkg/sql/schemachanger/scpb:scpb_test",
     "//pkg/sql/schemachanger/scplan/internal/opgen:opgen_test",
     "//pkg/sql/schemachanger/scplan/internal/rules/current:current_test",
-    "//pkg/sql/schemachanger/scplan/internal/rules/release_23_1:release_23_1_test",
     "//pkg/sql/schemachanger/scplan/internal/rules/release_23_2:release_23_2_test",
+    "//pkg/sql/schemachanger/scplan/internal/rules/release_24_1:release_24_1_test",
     "//pkg/sql/schemachanger/scplan/internal/scgraph:scgraph_test",
     "//pkg/sql/schemachanger/scplan:scplan_test",
     "//pkg/sql/schemachanger/screl:screl_test",
@@ -637,6 +638,7 @@ ALL_TESTS = [
     "//pkg/testutils/listenerutil:listenerutil_test",
     "//pkg/testutils/release:release_test",
     "//pkg/testutils/serverutils:serverutils_test",
+    "//pkg/testutils/skip:skip_disallowed_imports_test",
     "//pkg/testutils/sqlutils:sqlutils_test",
     "//pkg/testutils/testcluster:testcluster_test",
     "//pkg/testutils/zerofields:zerofields_test",
@@ -695,6 +697,7 @@ ALL_TESTS = [
     "//pkg/util/log/logmetrics:logmetrics_test",
     "//pkg/util/log/testshout:testshout_test",
     "//pkg/util/log:log_test",
+    "//pkg/util/metamorphic:metamorphic_test",
     "//pkg/util/metric/aggmetric:aggmetric_test",
     "//pkg/util/metric:metric_test",
     "//pkg/util/mon:mon_test",
@@ -1102,6 +1105,8 @@ GO_TARGETS = [
     "//pkg/cmd/generate-staticcheck:generate-staticcheck_lib",
     "//pkg/cmd/geoviz:geoviz",
     "//pkg/cmd/geoviz:geoviz_lib",
+    "//pkg/cmd/github-action-poller:github-action-poller",
+    "//pkg/cmd/github-action-poller:github-action-poller_lib",
     "//pkg/cmd/github-post:github-post",
     "//pkg/cmd/github-post:github-post_lib",
     "//pkg/cmd/github-pull-request-make:github-pull-request-make",
@@ -1141,6 +1146,7 @@ GO_TARGETS = [
     "//pkg/cmd/returncheck:returncheck",
     "//pkg/cmd/returncheck:returncheck_lib",
     "//pkg/cmd/roachprod-microbench/cluster:cluster",
+    "//pkg/cmd/roachprod-microbench/cluster:cluster_test",
     "//pkg/cmd/roachprod-microbench/google:google",
     "//pkg/cmd/roachprod-microbench/model:model",
     "//pkg/cmd/roachprod-microbench:roachprod-microbench",
@@ -1193,9 +1199,6 @@ GO_TARGETS = [
     "//pkg/cmd/smithtest:smithtest_lib",
     "//pkg/cmd/sql-bootstrap-data:sql-bootstrap-data",
     "//pkg/cmd/sql-bootstrap-data:sql-bootstrap-data_lib",
-    "//pkg/cmd/teamcity-trigger:teamcity-trigger",
-    "//pkg/cmd/teamcity-trigger:teamcity-trigger_lib",
-    "//pkg/cmd/teamcity-trigger:teamcity-trigger_test",
     "//pkg/cmd/testfilter:testfilter",
     "//pkg/cmd/testfilter:testfilter_lib",
     "//pkg/cmd/uptodate:uptodate",
@@ -1220,9 +1223,7 @@ GO_TARGETS = [
     "//pkg/col/colserde:colserde",
     "//pkg/col/colserde:colserde_test",
     "//pkg/col/typeconv:typeconv",
-    "//pkg/compose/compare/compare:compare",
     "//pkg/compose/compare/compare:compare_test",
-    "//pkg/compose:compose",
     "//pkg/compose:compose_test",
     "//pkg/config/zonepb:zonepb",
     "//pkg/config/zonepb:zonepb_test",
@@ -1557,12 +1558,15 @@ GO_TARGETS = [
     "//pkg/roachprod/config:config",
     "//pkg/roachprod/config:config_test",
     "//pkg/roachprod/errors:errors",
+    "//pkg/roachprod/fluentbit:fluentbit",
     "//pkg/roachprod/install:install",
     "//pkg/roachprod/install:install_test",
     "//pkg/roachprod/lock:lock",
     "//pkg/roachprod/logger:logger",
     "//pkg/roachprod/prometheus:prometheus",
     "//pkg/roachprod/prometheus:prometheus_test",
+    "//pkg/roachprod/promhelperclient:promhelperclient",
+    "//pkg/roachprod/promhelperclient:promhelperclient_test",
     "//pkg/roachprod/ssh:ssh",
     "//pkg/roachprod/ssh:ssh_test",
     "//pkg/roachprod/ui:ui",
@@ -1571,6 +1575,7 @@ GO_TARGETS = [
     "//pkg/roachprod/vm/aws:aws",
     "//pkg/roachprod/vm/azure:azure",
     "//pkg/roachprod/vm/flagstub:flagstub",
+    "//pkg/roachprod/vm/gce/testutils:testutils",
     "//pkg/roachprod/vm/gce:gce",
     "//pkg/roachprod/vm/gce:gce_test",
     "//pkg/roachprod/vm/local:local",
@@ -2079,20 +2084,23 @@ GO_TARGETS = [
     "//pkg/sql/schemachanger/scexec:scexec",
     "//pkg/sql/schemachanger/scexec:scexec_test",
     "//pkg/sql/schemachanger/scjob:scjob",
-    "//pkg/sql/schemachanger/scop:gen-visitors",
+    "//pkg/sql/schemachanger/scop/generate-visitors:generate-visitors",
+    "//pkg/sql/schemachanger/scop/generate-visitors:generate-visitors_lib",
     "//pkg/sql/schemachanger/scop:scop",
-    "//pkg/sql/schemachanger/scpb:element-generator",
-    "//pkg/sql/schemachanger/scpb:element-uml-generator",
+    "//pkg/sql/schemachanger/scpb/element-generator:element-generator",
+    "//pkg/sql/schemachanger/scpb/element-generator:element-generator_lib",
+    "//pkg/sql/schemachanger/scpb/element-uml-generator:element-uml-generator",
+    "//pkg/sql/schemachanger/scpb/element-uml-generator:element-uml-generator_lib",
     "//pkg/sql/schemachanger/scpb:scpb",
     "//pkg/sql/schemachanger/scpb:scpb_test",
     "//pkg/sql/schemachanger/scplan/internal/opgen:opgen",
     "//pkg/sql/schemachanger/scplan/internal/opgen:opgen_test",
     "//pkg/sql/schemachanger/scplan/internal/rules/current:current",
     "//pkg/sql/schemachanger/scplan/internal/rules/current:current_test",
-    "//pkg/sql/schemachanger/scplan/internal/rules/release_23_1:release_23_1",
-    "//pkg/sql/schemachanger/scplan/internal/rules/release_23_1:release_23_1_test",
     "//pkg/sql/schemachanger/scplan/internal/rules/release_23_2:release_23_2",
     "//pkg/sql/schemachanger/scplan/internal/rules/release_23_2:release_23_2_test",
+    "//pkg/sql/schemachanger/scplan/internal/rules/release_24_1:release_24_1",
+    "//pkg/sql/schemachanger/scplan/internal/rules/release_24_1:release_24_1_test",
     "//pkg/sql/schemachanger/scplan/internal/rules:rules",
     "//pkg/sql/schemachanger/scplan/internal/scgraph:scgraph",
     "//pkg/sql/schemachanger/scplan/internal/scgraph:scgraph_test",
@@ -2454,6 +2462,9 @@ GO_TARGETS = [
     "//pkg/util/log:log",
     "//pkg/util/log:log_test",
     "//pkg/util/memzipper:memzipper",
+    "//pkg/util/metamorphic/metamorphicutil:metamorphicutil",
+    "//pkg/util/metamorphic:metamorphic",
+    "//pkg/util/metamorphic:metamorphic_test",
     "//pkg/util/metric/aggmetric:aggmetric",
     "//pkg/util/metric/aggmetric:aggmetric_test",
     "//pkg/util/metric/tick:tick",
@@ -2622,70 +2633,10 @@ GO_TARGETS = [
     "//pkg/workload:workload_test",
 ]
 
-# These suites run only the tests with the appropriate "size" (excepting those
-# tagged "flaky" or "integration") [1]. Note that tests have a default timeout
-# depending on the size [2].
-
-# [1] https://docs.bazel.build/versions/master/be/general.html#test_suite
-# [2] https://docs.bazel.build/versions/master/be/common-definitions.html#common-attributes-tests
-
 test_suite(
     name = "all_tests",
     tags = [
         "-integration",
-    ],
-    tests = ALL_TESTS,
-)
-
-test_suite(
-    name = "ccl_tests",
-    tags = [
-        "-integration",
-        "ccl_test",
-    ],
-    tests = ALL_TESTS,
-)
-
-test_suite(
-    name = "small_non_ccl_tests",
-    tags = [
-        "-ccl_test",
-        "-flaky",
-        "-integration",
-        "small",
-    ],
-    tests = ALL_TESTS,
-)
-
-test_suite(
-    name = "medium_non_ccl_tests",
-    tags = [
-        "-ccl_test",
-        "-flaky",
-        "-integration",
-        "medium",
-    ],
-    tests = ALL_TESTS,
-)
-
-test_suite(
-    name = "large_non_ccl_tests",
-    tags = [
-        "-ccl_test",
-        "-flaky",
-        "-integration",
-        "large",
-    ],
-    tests = ALL_TESTS,
-)
-
-test_suite(
-    name = "enormous_non_ccl_tests",
-    tags = [
-        "-ccl_test",
-        "-flaky",
-        "-integration",
-        "enormous",
     ],
     tests = ALL_TESTS,
 )

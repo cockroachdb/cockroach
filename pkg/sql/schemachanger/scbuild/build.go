@@ -71,13 +71,13 @@ func Build(
 
 	// localMemAcc tracks memory allocations for local objects.
 	var localMemAcc *mon.BoundAccount
-	defer func() {
-		localMemAcc.Clear(ctx)
-	}()
 	if monitor := memAcc.Monitor(); monitor != nil {
 		acc := monitor.MakeBoundAccount()
 		localMemAcc = &acc
+	} else {
+		localMemAcc = mon.NewStandaloneUnlimitedAccount()
 	}
+	defer localMemAcc.Clear(ctx)
 	bs := newBuilderState(ctx, dependencies, incumbent, localMemAcc)
 	els := newEventLogState(dependencies, incumbent, n)
 
@@ -89,12 +89,13 @@ func Build(
 		return scpb.CurrentState{}, stubLogSchemaChangerEventsFn, err
 	}
 	b := buildCtx{
-		Context:              ctx,
-		Dependencies:         dependencies,
-		BuilderState:         bs,
-		EventLogState:        els,
-		TreeAnnotator:        an,
-		SchemaFeatureChecker: dependencies.FeatureChecker(),
+		Context:                 ctx,
+		Dependencies:            dependencies,
+		BuilderState:            bs,
+		EventLogState:           els,
+		TreeAnnotator:           an,
+		SchemaFeatureChecker:    dependencies.FeatureChecker(),
+		TemporarySchemaProvider: dependencies.TemporarySchemaProvider(),
 	}
 	scbuildstmt.Process(b, an.GetStatement())
 
@@ -420,6 +421,7 @@ type buildCtx struct {
 	scbuildstmt.EventLogState
 	scbuildstmt.TreeAnnotator
 	scbuildstmt.SchemaFeatureChecker
+	TemporarySchemaProvider
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}

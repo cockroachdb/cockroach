@@ -18,7 +18,7 @@ Note that this version must exist in the
    use a gceworker).
 
 ```
-./dev build cockroach roachprod workload roachtest
+./dev build cockroach short //c-deps:libgeos roachprod workload roachtest
 ## Clear out roachprod remnants, if any
 ./bin/roachprod destroy local
 ```

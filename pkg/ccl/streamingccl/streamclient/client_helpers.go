@@ -18,7 +18,7 @@ import (
 )
 
 func subscribeInternal(
-	ctx context.Context, feed pgx.Rows, eventsChan chan streamingccl.Event, closeChan chan struct{},
+	ctx context.Context, feed pgx.Rows, eventCh chan streamingccl.Event, closeCh chan struct{},
 ) error {
 	// Get the next event from the cursor.
 	var bufferedEvent *streampb.StreamEvent
@@ -51,8 +51,8 @@ func subscribeInternal(
 			return err
 		}
 		select {
-		case eventsChan <- event:
-		case <-closeChan:
+		case eventCh <- event:
+		case <-closeCh:
 			// Exit quietly to not cause other subscriptions in the same
 			// ctxgroup.Group to exit.
 			return nil
@@ -81,20 +81,24 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 			event = streamingccl.MakeSSTableEvent(streamEvent.Batch.Ssts[0])
 			streamEvent.Batch.Ssts = streamEvent.Batch.Ssts[1:]
 		case len(streamEvent.Batch.KeyValues) > 0:
-			event = streamingccl.MakeKVEvent(streamEvent.Batch.KeyValues[0])
-			streamEvent.Batch.KeyValues = streamEvent.Batch.KeyValues[1:]
+			event = streamingccl.MakeKVEvent(streamEvent.Batch.KeyValues)
+			streamEvent.Batch.KeyValues = nil
 		case len(streamEvent.Batch.DelRanges) > 0:
 			event = streamingccl.MakeDeleteRangeEvent(streamEvent.Batch.DelRanges[0])
 			streamEvent.Batch.DelRanges = streamEvent.Batch.DelRanges[1:]
 		case len(streamEvent.Batch.SpanConfigs) > 0:
 			event = streamingccl.MakeSpanConfigEvent(streamEvent.Batch.SpanConfigs[0])
 			streamEvent.Batch.SpanConfigs = streamEvent.Batch.SpanConfigs[1:]
+		case len(streamEvent.Batch.SplitPoints) > 0:
+			event = streamingccl.MakeSplitEvent(streamEvent.Batch.SplitPoints[0])
+			streamEvent.Batch.SplitPoints = streamEvent.Batch.SplitPoints[1:]
 		}
 
 		if len(streamEvent.Batch.KeyValues) == 0 &&
 			len(streamEvent.Batch.Ssts) == 0 &&
 			len(streamEvent.Batch.DelRanges) == 0 &&
-			len(streamEvent.Batch.SpanConfigs) == 0 {
+			len(streamEvent.Batch.SpanConfigs) == 0 &&
+			len(streamEvent.Batch.SplitPoints) == 0 {
 			streamEvent.Batch = nil
 		}
 	}

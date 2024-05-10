@@ -559,12 +559,14 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 		}
 
 		// Setup a one-stage plan with one proc per input spec.
-		corePlacement := make([]physicalplan.ProcessorCorePlacement, len(streamIngestionSpecs))
-		i := 0
+		corePlacement := make([]physicalplan.ProcessorCorePlacement, 0, len(streamIngestionSpecs))
 		for instanceID := range streamIngestionSpecs {
-			corePlacement[i].SQLInstanceID = instanceID
-			corePlacement[i].Core.StreamIngestionData = streamIngestionSpecs[instanceID]
-			i++
+			for _, spec := range streamIngestionSpecs[instanceID] {
+				corePlacement = append(corePlacement, physicalplan.ProcessorCorePlacement{
+					SQLInstanceID: instanceID,
+					Core:          execinfrapb.ProcessorCoreUnion{StreamIngestionData: &spec},
+				})
+			}
 		}
 
 		p := planCtx.NewPhysicalPlan()
@@ -762,31 +764,27 @@ func constructStreamIngestionPlanSpecs(
 	sourceTenantID roachpb.TenantID,
 	destinationTenantID roachpb.TenantID,
 ) (
-	map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+	map[base.SQLInstanceID][]execinfrapb.StreamIngestionDataSpec,
 	*execinfrapb.StreamIngestionFrontierSpec,
 	error,
 ) {
+	spanGroup := roachpb.SpanGroup{}
 
-	streamIngestionSpecs := make(map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, len(destSQLInstances))
-	for _, id := range destSQLInstances {
-		spec := &execinfrapb.StreamIngestionDataSpec{
-			StreamID:                    uint64(streamID),
-			JobID:                       int64(jobID),
-			PreviousReplicatedTimestamp: previousReplicatedTimestamp,
-			InitialScanTimestamp:        initialScanTimestamp,
-			Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
-			StreamAddress:               string(streamAddress),
-			PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
-			TenantRekey: execinfrapb.TenantRekey{
-				OldID: sourceTenantID,
-				NewID: destinationTenantID,
-			},
-		}
-		streamIngestionSpecs[id.GetInstanceID()] = spec
+	baseSpec := execinfrapb.StreamIngestionDataSpec{
+		StreamID:                    uint64(streamID),
+		JobID:                       int64(jobID),
+		PreviousReplicatedTimestamp: previousReplicatedTimestamp,
+		InitialScanTimestamp:        initialScanTimestamp,
+		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
+		StreamAddress:               string(streamAddress),
+		PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
+		TenantRekey: execinfrapb.TenantRekey{
+			OldID: sourceTenantID,
+			NewID: destinationTenantID,
+		},
 	}
 
-	trackedSpans := make([]roachpb.Span, 0)
-	subscribingSQLInstances := make(map[string]uint32)
+	streamIngestionSpecs := make(map[base.SQLInstanceID][]execinfrapb.StreamIngestionDataSpec, len(destSQLInstances))
 
 	// Update stream ingestion specs with their matched source node.
 	matcher := makeNodeMatcher(destSQLInstances)
@@ -799,38 +797,37 @@ func constructStreamIngestionPlanSpecs(
 			destID,
 			matcher.destNodeToLocality[destID])
 		partition := candidate.partition
-		subscribingSQLInstances[partition.ID] = uint32(destID)
 
-		partSpec := execinfrapb.StreamIngestionPartitionSpec{
-			PartitionID:       partition.ID,
-			SubscriptionToken: string(partition.SubscriptionToken),
-			Address:           string(partition.SrcAddr),
-			Spans:             partition.Spans,
-			SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
-			DestInstanceID:    destID,
+		spec := baseSpec
+		spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{
+			partition.ID: {
+				PartitionID:       partition.ID,
+				SubscriptionToken: string(partition.SubscriptionToken),
+				Address:           string(partition.SrcAddr),
+				Spans:             partition.Spans,
+				SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
+				DestInstanceID:    destID,
+			},
 		}
-		streamIngestionSpecs[destID].PartitionSpecs[partition.ID] = partSpec
-		trackedSpans = append(trackedSpans, partition.Spans...)
+		streamIngestionSpecs[destID] = append(streamIngestionSpecs[destID], spec)
+		spanGroup.Add(partition.Spans...)
 	}
 
-	// Remove any ingestion processors that haven't been assigned any work.
-	for key, spec := range streamIngestionSpecs {
-		if len(spec.PartitionSpecs) == 0 {
-			delete(streamIngestionSpecs, key)
-		}
+	tenantSpan := keys.MakeTenantSpan(sourceTenantID)
+	if !spanGroup.Encloses(tenantSpan) {
+		return nil, nil, errors.AssertionFailedf("span %s not covered by %s", tenantSpan, spanGroup.Slice())
 	}
 
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
 	// node.
 	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{
-		ReplicatedTimeAtStart:   previousReplicatedTimestamp,
-		TrackedSpans:            trackedSpans,
-		JobID:                   int64(jobID),
-		StreamID:                uint64(streamID),
-		StreamAddresses:         topology.StreamAddresses(),
-		SubscribingSQLInstances: subscribingSQLInstances,
-		Checkpoint:              checkpoint,
-		PartitionSpecs:          repackagePartitionSpecs(streamIngestionSpecs),
+		ReplicatedTimeAtStart: previousReplicatedTimestamp,
+		TrackedSpans:          []roachpb.Span{tenantSpan},
+		JobID:                 int64(jobID),
+		StreamID:              uint64(streamID),
+		StreamAddresses:       topology.StreamAddresses(),
+		Checkpoint:            checkpoint,
+		PartitionSpecs:        repackagePartitionSpecs(streamIngestionSpecs),
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil

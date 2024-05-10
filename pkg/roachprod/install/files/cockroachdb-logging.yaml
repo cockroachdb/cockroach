@@ -1,0 +1,70 @@
+---
+file-defaults:
+  auditable: false
+  buffered-writes: true
+  dir: #{ .LogDir #}
+  exit-on-error: false
+  filter: INFO
+  format: crdb-v2
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+  redact: false
+  redactable: true
+fluent-defaults:
+  filter: INFO
+  format: json-fluent
+  redact: false
+  redactable: true
+  exit-on-error: false
+  auditable: false
+  buffering:
+    max-staleness: 5s
+    flush-trigger-size: 1.0MiB
+    max-buffer-size: 50MiB
+sinks:
+  file-groups:
+    default:
+      channels:
+        INFO: [DEV, OPS]
+        WARNING: all except [DEV, OPS]
+    health:
+      channels: [HEALTH]
+    kv-distribution:
+      channels: [KV_DISTRIBUTION]
+    pebble:
+      channels: [STORAGE]
+    security:
+      channels: [PRIVILEGES, USER_ADMIN]
+      auditable: true
+    sql-audit:
+      channels: [SENSITIVE_ACCESS]
+      auditable: true
+    sql-auth:
+      channels: [SESSIONS]
+      auditable: true
+    sql-exec:
+      channels: [SQL_EXEC]
+    sql-slow:
+      channels: [SQL_PERF]
+    sql-slow-internal-only:
+      channels: [SQL_INTERNAL_PERF]
+    telemetry:
+      channels: [TELEMETRY]
+      max-file-size: 100KiB
+      max-group-size: 1.0MiB
+  fluent-servers:
+    fluent-bit:
+      channels: {INFO: all}
+      net: tcp
+      address: 127.0.0.1:5170
+      filter: INFO
+      redact: false
+  stderr:
+    channels: all
+    filter: NONE
+    redact: false
+    redactable: true
+    exit-on-error: false
+capture-stray-errors:
+  enable: true
+  max-group-size: 100MiB

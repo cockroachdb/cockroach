@@ -82,10 +82,23 @@ type FileRegistry struct {
 
 	// Implementation.
 
-	mu struct {
+	writeMu struct {
 		syncutil.Mutex
-		// entries stores the current state of the file registry.
-		entries map[string]*enginepb.FileEntry
+		mu struct {
+			// Setters must hold both writeMu and writeMu.mu.
+			// Getters: Can hold either writeMu or writeMu.mu.
+			//
+			// writeMu > writeMu.mu, since setters hold the former when acquiring
+			// the latter. Setters should never hold the latter while doing IO. This
+			// would block getters, that are using mu, if the IO got stuck, say due
+			// to a disk stall -- we want getters (which may be doing read IO) to
+			// not get stuck due to setters being stuck, since the read IO may
+			// succeed due to the (page) cache.
+			syncutil.RWMutex
+			// entries stores the current state of the file registry. All values are
+			// non-nil.
+			entries map[string]*enginepb.FileEntry
+		}
 		// registryFile is the opened file for the records-based registry.
 		registryFile vfs.File
 		// registryWriter is a record.Writer for registryFile.
@@ -134,22 +147,26 @@ func checkNoRegistryFile(fs vfs.FS, dbDir string) error {
 // exists, else it is a noop.  Load should be called exactly once if the
 // file registry will be used.
 func (r *FileRegistry) Load(ctx context.Context) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
 	if r.SoftMaxSize == 0 {
 		r.SoftMaxSize = defaultSoftMaxRegistrySize
 	}
 
 	// Initialize private fields needed when the file registry will be used.
-	r.mu.entries = make(map[string]*enginepb.FileEntry)
+	func() {
+		r.writeMu.mu.Lock()
+		defer r.writeMu.mu.Unlock()
+		r.writeMu.mu.entries = make(map[string]*enginepb.FileEntry)
+	}()
 
 	if err := r.loadRegistryFromFile(); err != nil {
 		return err
 	}
 
 	// Find all old registry files, and remove some of them.
-	if r.mu.registryFilename != "" {
-		registryFileNum, err := r.parseRegistryFileName(r.mu.registryFilename)
+	if r.writeMu.registryFilename != "" {
+		registryFileNum, err := r.parseRegistryFileName(r.writeMu.registryFilename)
 		if err != nil {
 			return err
 		}
@@ -182,9 +199,9 @@ func (r *FileRegistry) Load(ctx context.Context) error {
 		sort.Slice(obsoleteFiles, func(i, j int) bool {
 			return obsoleteFiles[i] < obsoleteFiles[j]
 		})
-		r.mu.obsoleteRegistryFiles = make([]string, 0, r.NumOldRegistryFiles+1)
+		r.writeMu.obsoleteRegistryFiles = make([]string, 0, r.NumOldRegistryFiles+1)
 		for _, f := range obsoleteFiles {
-			r.mu.obsoleteRegistryFiles = append(r.mu.obsoleteRegistryFiles, makeRegistryFilename(f))
+			r.writeMu.obsoleteRegistryFiles = append(r.writeMu.obsoleteRegistryFiles, makeRegistryFilename(f))
 		}
 		if err := r.tryRemoveOldRegistryFilesLocked(); err != nil {
 			return err
@@ -208,15 +225,15 @@ func (r *FileRegistry) loadRegistryFromFile() error {
 	if err != nil {
 		return err
 	}
-	r.mu.marker = marker
+	r.writeMu.marker = marker
 	// If the marker does not exist, currentFilename may be the
 	// empty string. That's okay.
-	r.mu.registryFilename = currentFilename
+	r.writeMu.registryFilename = currentFilename
 
 	// Atomic markers may accumulate obsolete files. Remove any obsolete
 	// marker files as long as we're not in read-only mode.
 	if !r.ReadOnly {
-		if err := r.mu.marker.RemoveObsolete(); err != nil {
+		if err := r.writeMu.marker.RemoveObsolete(); err != nil {
 			return err
 		}
 	}
@@ -228,10 +245,10 @@ func (r *FileRegistry) loadRegistryFromFile() error {
 }
 
 func (r *FileRegistry) maybeLoadExistingRegistry() (bool, error) {
-	if r.mu.registryFilename == "" {
+	if r.writeMu.registryFilename == "" {
 		return false, nil
 	}
-	records, err := r.FS.Open(r.FS.PathJoin(r.DBDir, r.mu.registryFilename))
+	records, err := r.FS.Open(r.FS.PathJoin(r.DBDir, r.writeMu.registryFilename))
 	if err != nil {
 		return false, err
 	}
@@ -294,15 +311,18 @@ func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 	// recursively List each directory and walk two lists of sorted
 	// filenames. We should test a store with many files to see how much
 	// the current approach slows node start.
-	filenames := make([]string, 0, len(r.mu.entries))
-	for filename := range r.mu.entries {
+	filenames := make([]string, 0, len(r.writeMu.mu.entries))
+	for filename := range r.writeMu.mu.entries {
 		filenames = append(filenames, filename)
 	}
 	sort.Strings(filenames)
 
 	batch := &enginepb.RegistryUpdateBatch{}
 	for _, filename := range filenames {
-		entry := r.mu.entries[filename]
+		entry, ok := r.writeMu.mu.entries[filename]
+		if !ok {
+			panic("entry disappeared from map")
+		}
 
 		// Some entries may be elided. This is used within
 		// ccl/storageccl/engineccl to elide plaintext file entries.
@@ -332,9 +352,9 @@ func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 // GetFileEntry gets the file entry corresponding to filename, if there is one, else returns nil.
 func (r *FileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
 	filename = r.tryMakeRelativePath(filename)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.mu.entries[filename]
+	r.writeMu.mu.RLock()
+	defer r.writeMu.mu.RUnlock()
+	return r.writeMu.mu.entries[filename]
 }
 
 // SetFileEntry sets filename => entry in the registry map and persists the registry.
@@ -348,8 +368,8 @@ func (r *FileRegistry) SetFileEntry(filename string, entry *enginepb.FileEntry) 
 
 	filename = r.tryMakeRelativePath(filename)
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
 	batch := &enginepb.RegistryUpdateBatch{}
 	batch.PutEntry(filename, entry)
 	return r.processBatchLocked(batch)
@@ -359,9 +379,9 @@ func (r *FileRegistry) SetFileEntry(filename string, entry *enginepb.FileEntry) 
 func (r *FileRegistry) MaybeDeleteEntry(filename string) error {
 	filename = r.tryMakeRelativePath(filename)
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.mu.entries[filename] == nil {
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
+	if _, ok := r.writeMu.mu.entries[filename]; !ok {
 		return nil
 	}
 	batch := &enginepb.RegistryUpdateBatch{}
@@ -377,14 +397,15 @@ func (r *FileRegistry) MaybeCopyEntry(src, dst string) error {
 	src = r.tryMakeRelativePath(src)
 	dst = r.tryMakeRelativePath(dst)
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	srcEntry := r.mu.entries[src]
-	if srcEntry == nil && r.mu.entries[dst] == nil {
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
+	srcEntry, srcFound := r.writeMu.mu.entries[src]
+	_, dstFound := r.writeMu.mu.entries[dst]
+	if !srcFound && !dstFound {
 		return nil
 	}
 	batch := &enginepb.RegistryUpdateBatch{}
-	if srcEntry == nil {
+	if !srcFound {
 		batch.DeleteEntry(dst)
 	} else {
 		batch.PutEntry(dst, srcEntry)
@@ -395,21 +416,7 @@ func (r *FileRegistry) MaybeCopyEntry(src, dst string) error {
 // MaybeLinkEntry copies the entry under src to dst, if src exists. If src does not exist, but dst
 // exists, dst is deleted. Persists the registry if changed.
 func (r *FileRegistry) MaybeLinkEntry(src, dst string) error {
-	src = r.tryMakeRelativePath(src)
-	dst = r.tryMakeRelativePath(dst)
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.mu.entries[src] == nil && r.mu.entries[dst] == nil {
-		return nil
-	}
-	batch := &enginepb.RegistryUpdateBatch{}
-	if r.mu.entries[src] == nil {
-		batch.DeleteEntry(dst)
-	} else {
-		batch.PutEntry(dst, r.mu.entries[src])
-	}
-	return r.processBatchLocked(batch)
+	return r.MaybeCopyEntry(src, dst)
 }
 
 func (r *FileRegistry) tryMakeRelativePath(filename string) string {
@@ -449,7 +456,7 @@ func (r *FileRegistry) processBatchLocked(batch *enginepb.RegistryUpdateBatch) e
 	if batch.Empty() {
 		return nil
 	}
-	if err := r.writeToRegistryFile(batch); err != nil {
+	if err := r.writeToRegistryFileLocked(batch); err != nil {
 		panic(err)
 	}
 	r.applyBatch(batch)
@@ -458,20 +465,22 @@ func (r *FileRegistry) processBatchLocked(batch *enginepb.RegistryUpdateBatch) e
 
 // processBatch processes a batch of updates to the file registry.
 func (r *FileRegistry) applyBatch(batch *enginepb.RegistryUpdateBatch) {
+	r.writeMu.mu.Lock()
+	defer r.writeMu.mu.Unlock()
 	for _, update := range batch.Updates {
 		if update.Entry == nil {
-			delete(r.mu.entries, update.Filename)
+			delete(r.writeMu.mu.entries, update.Filename)
 		} else {
-			if r.mu.entries == nil {
-				r.mu.entries = make(map[string]*enginepb.FileEntry)
+			if r.writeMu.mu.entries == nil {
+				r.writeMu.mu.entries = make(map[string]*enginepb.FileEntry)
 			}
-			r.mu.entries[update.Filename] = update.Entry
+			r.writeMu.mu.entries[update.Filename] = update.Entry
 		}
 	}
 }
 
-func (r *FileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateBatch) error {
-	nilWriter := r.mu.registryWriter == nil
+func (r *FileRegistry) writeToRegistryFileLocked(batch *enginepb.RegistryUpdateBatch) error {
+	nilWriter := r.writeMu.registryWriter == nil
 
 	// Create a new file registry file if one doesn't exist yet, or the current
 	// one is too large.
@@ -484,20 +493,20 @@ func (r *FileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateBatch) 
 	// is to ensure that when reopening a DB, the number of edits that need to
 	// be replayed on top of the snapshot is "sane". Rolling over to a new file
 	// registry after each edit is not relevant to that goal.
-	r.mu.rotationHelper.AddRecord(int64(len(batch.Updates)))
+	r.writeMu.rotationHelper.AddRecord(int64(len(batch.Updates)))
 
 	// If we don't have a file yet, we need to create one. If we do and its size
 	// exceeds the soft max, we may want to rotate. The record.RotationHelper
 	// implements logic to determine when we should rotate.
 	shouldRotate := nilWriter
-	if !shouldRotate && r.mu.registryWriter.Size() > r.SoftMaxSize {
-		shouldRotate = r.mu.rotationHelper.ShouldRotate(int64(len(r.mu.entries)))
+	if !shouldRotate && r.writeMu.registryWriter.Size() > r.SoftMaxSize {
+		shouldRotate = r.writeMu.rotationHelper.ShouldRotate(int64(len(r.writeMu.mu.entries)))
 	}
 
 	if shouldRotate {
 		// If !nilWriter, exceeded the size threshold: create a new file registry
 		// file to hopefully shrink the size of the file.
-		if err := r.createNewRegistryFile(); err != nil {
+		if err := r.createNewRegistryFileLocked(); err != nil {
 			if nilWriter {
 				return errors.Wrap(err, "creating new registry file")
 			} else {
@@ -505,9 +514,9 @@ func (r *FileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateBatch) 
 			}
 		}
 		// Successfully rotated.
-		r.mu.rotationHelper.Rotate(int64(len(r.mu.entries)))
+		r.writeMu.rotationHelper.Rotate(int64(len(r.writeMu.mu.entries)))
 	}
-	w, err := r.mu.registryWriter.Next()
+	w, err := r.writeMu.registryWriter.Next()
 	if err != nil {
 		return err
 	}
@@ -518,20 +527,20 @@ func (r *FileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateBatch) 
 	if _, err := w.Write(b); err != nil {
 		return err
 	}
-	if err := r.mu.registryWriter.Flush(); err != nil {
+	if err := r.writeMu.registryWriter.Flush(); err != nil {
 		return err
 	}
-	return r.mu.registryFile.Sync()
+	return r.writeMu.registryFile.Sync()
 }
 
 func makeRegistryFilename(iter uint64) string {
 	return fmt.Sprintf("%s_%06d", registryFilenameBase, iter)
 }
 
-func (r *FileRegistry) createNewRegistryFile() error {
+func (r *FileRegistry) createNewRegistryFileLocked() error {
 	// Create a new registry file. It won't be active until the marker
 	// is moved to the new filename.
-	filename := makeRegistryFilename(r.mu.marker.NextIter())
+	filename := makeRegistryFilename(r.writeMu.marker.NextIter())
 	filepath := r.FS.PathJoin(r.DBDir, filename)
 	f, err := r.FS.Create(filepath, EncryptionRegistryWriteCategory)
 	if err != nil {
@@ -563,7 +572,7 @@ func (r *FileRegistry) createNewRegistryFile() error {
 
 	// Write a RegistryUpdateBatch containing the current state of the registry.
 	batch := &enginepb.RegistryUpdateBatch{}
-	for filename, entry := range r.mu.entries {
+	for filename, entry := range r.writeMu.mu.entries {
 		batch.PutEntry(filename, entry)
 	}
 	b, err = protoutil.Marshal(batch)
@@ -586,7 +595,7 @@ func (r *FileRegistry) createNewRegistryFile() error {
 
 	// Moving the marker to the new filename atomically switches to the
 	// new file. Move handles syncing the data directory as well.
-	if err := r.mu.marker.Move(filename); err != nil {
+	if err := r.writeMu.marker.Move(filename); err != nil {
 		return errors.Wrap(errFunc(err), "moving marker")
 	}
 
@@ -596,8 +605,8 @@ func (r *FileRegistry) createNewRegistryFile() error {
 		// function, after we update the internal state to point to the
 		// new filename (since we've already successfully installed it).
 		err = r.closeRegistry()
-		if r.mu.registryFilename != "" {
-			r.mu.obsoleteRegistryFiles = append(r.mu.obsoleteRegistryFiles, r.mu.registryFilename)
+		if r.writeMu.registryFilename != "" {
+			r.writeMu.obsoleteRegistryFiles = append(r.writeMu.obsoleteRegistryFiles, r.writeMu.registryFilename)
 			rmErr := r.tryRemoveOldRegistryFilesLocked()
 			if rmErr != nil && !oserror.IsNotExist(rmErr) {
 				err = errors.CombineErrors(err, rmErr)
@@ -605,22 +614,22 @@ func (r *FileRegistry) createNewRegistryFile() error {
 		}
 	}
 
-	r.mu.registryFile = f
-	r.mu.registryWriter = records
-	r.mu.registryFilename = filename
+	r.writeMu.registryFile = f
+	r.writeMu.registryWriter = records
+	r.writeMu.registryFilename = filename
 	return err
 }
 
 // GetRegistrySnapshot constructs an enginepb.FileRegistry representing a
 // snapshot of the file registry state.
 func (r *FileRegistry) GetRegistrySnapshot() *enginepb.FileRegistry {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.writeMu.mu.RLock()
+	defer r.writeMu.mu.RUnlock()
 	rv := &enginepb.FileRegistry{
 		Version: enginepb.RegistryVersion_Records,
-		Files:   make(map[string]*enginepb.FileEntry, len(r.mu.entries)),
+		Files:   make(map[string]*enginepb.FileEntry, len(r.writeMu.mu.entries)),
 	}
-	for filename, entry := range r.mu.entries {
+	for filename, entry := range r.writeMu.mu.entries {
 		ev := &enginepb.FileEntry{}
 		*ev = *entry
 		rv.Files[filename] = ev
@@ -630,12 +639,12 @@ func (r *FileRegistry) GetRegistrySnapshot() *enginepb.FileRegistry {
 
 // List returns a mapping of file in the registry to their enginepb.FileEntry.
 func (r *FileRegistry) List() map[string]*enginepb.FileEntry {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.writeMu.mu.RLock()
+	defer r.writeMu.mu.RUnlock()
 	// Perform a defensive deep-copy of the internal map here, as there may be
 	// modifications to it after it has been returned to the caller.
-	m := make(map[string]*enginepb.FileEntry, len(r.mu.entries))
-	for k, v := range r.mu.entries {
+	m := make(map[string]*enginepb.FileEntry, len(r.writeMu.mu.entries))
+	for k, v := range r.writeMu.mu.entries {
 		m[k] = v
 	}
 	return m
@@ -650,13 +659,13 @@ func (r *FileRegistry) parseRegistryFileName(f string) (uint64, error) {
 }
 
 func (r *FileRegistry) tryRemoveOldRegistryFilesLocked() error {
-	n := len(r.mu.obsoleteRegistryFiles)
+	n := len(r.writeMu.obsoleteRegistryFiles)
 	if n <= r.NumOldRegistryFiles {
 		return nil
 	}
 	m := n - r.NumOldRegistryFiles
-	toDelete := r.mu.obsoleteRegistryFiles[:m]
-	r.mu.obsoleteRegistryFiles = r.mu.obsoleteRegistryFiles[m:]
+	toDelete := r.writeMu.obsoleteRegistryFiles[:m]
+	r.writeMu.obsoleteRegistryFiles = r.writeMu.obsoleteRegistryFiles[m:]
 	var err error
 	for _, f := range toDelete {
 		rmErr := r.FS.Remove(r.FS.PathJoin(r.DBDir, f))
@@ -670,22 +679,22 @@ func (r *FileRegistry) tryRemoveOldRegistryFilesLocked() error {
 // Close closes the record writer and record file used for the registry.
 // It should be called when a Pebble instance is closed.
 func (r *FileRegistry) Close() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
 	err := r.closeRegistry()
-	err = errors.CombineErrors(err, r.mu.marker.Close())
+	err = errors.CombineErrors(err, r.writeMu.marker.Close())
 	return err
 }
 
 func (r *FileRegistry) closeRegistry() error {
 	var err1, err2 error
-	if r.mu.registryWriter != nil {
-		err1 = r.mu.registryWriter.Close()
-		r.mu.registryWriter = nil
+	if r.writeMu.registryWriter != nil {
+		err1 = r.writeMu.registryWriter.Close()
+		r.writeMu.registryWriter = nil
 	}
-	if r.mu.registryFile != nil {
-		err2 = r.mu.registryFile.Close()
-		r.mu.registryFile = nil
+	if r.writeMu.registryFile != nil {
+		err2 = r.writeMu.registryFile.Close()
+		r.writeMu.registryFile = nil
 	}
 	return errors.CombineErrors(err1, err2)
 }

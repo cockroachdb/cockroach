@@ -2886,16 +2886,20 @@ null_ordered_last                                          off                 N
 on_update_rehome_row_enabled                               on                  NULL      NULL        NULL        string
 opt_split_scan_limit                                       2048                NULL      NULL        NULL        string
 optimizer_always_use_histograms                            on                  NULL      NULL        NULL        string
+optimizer_apply_full_scan_penalty_to_virtual_tables        off                 NULL      NULL        NULL        string
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                              on                  NULL      NULL        NULL        string
+optimizer_prove_implication_with_virtual_computed_columns  on                  NULL      NULL        NULL        string
 optimizer_use_forecasts                                    on                  NULL      NULL        NULL        string
 optimizer_use_histograms                                   on                  NULL      NULL        NULL        string
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL      NULL        NULL        string
 optimizer_use_improved_disjunction_stats                   on                  NULL      NULL        NULL        string
 optimizer_use_improved_distinct_on_limit_hint_costing      on                  NULL      NULL        NULL        string
 optimizer_use_improved_join_elimination                    on                  NULL      NULL        NULL        string
+optimizer_use_improved_multi_column_selectivity_estimate   on                  NULL      NULL        NULL        string
 optimizer_use_improved_split_disjunction_for_joins         on                  NULL      NULL        NULL        string
 optimizer_use_improved_trigram_similarity_selectivity      on                  NULL      NULL        NULL        string
+optimizer_use_improved_zigzag_join_costing                 on                  NULL      NULL        NULL        string
 optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL      NULL        NULL        string
 optimizer_use_lock_op_for_serializable                     off                 NULL      NULL        NULL        string
 optimizer_use_multicol_stats                               on                  NULL      NULL        NULL        string
@@ -3067,16 +3071,20 @@ null_ordered_last                                          off                 N
 on_update_rehome_row_enabled                               on                  NULL  user     NULL      on                  on
 opt_split_scan_limit                                       2048                NULL  user     NULL      2048                2048
 optimizer_always_use_histograms                            on                  NULL  user     NULL      on                  on
+optimizer_apply_full_scan_penalty_to_virtual_tables        off                 NULL  user     NULL      off                 off
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                              on                  NULL  user     NULL      on                  on
+optimizer_prove_implication_with_virtual_computed_columns  on                  NULL  user     NULL      on                  on
 optimizer_use_forecasts                                    on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                                   on                  NULL  user     NULL      on                  on
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL  user     NULL      on                  on
 optimizer_use_improved_disjunction_stats                   on                  NULL  user     NULL      on                  on
 optimizer_use_improved_distinct_on_limit_hint_costing      on                  NULL  user     NULL      on                  on
 optimizer_use_improved_join_elimination                    on                  NULL  user     NULL      on                  on
+optimizer_use_improved_multi_column_selectivity_estimate   on                  NULL  user     NULL      on                  on
 optimizer_use_improved_split_disjunction_for_joins         on                  NULL  user     NULL      on                  on
 optimizer_use_improved_trigram_similarity_selectivity      on                  NULL  user     NULL      on                  on
+optimizer_use_improved_zigzag_join_costing                 on                  NULL  user     NULL      on                  on
 optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL  user     NULL      on                  on
 optimizer_use_lock_op_for_serializable                     off                 NULL  user     NULL      off                 off
 optimizer_use_multicol_stats                               on                  NULL  user     NULL      on                  on
@@ -3247,16 +3255,20 @@ on_update_rehome_row_enabled                               NULL    NULL     NULL
 opt_split_scan_limit                                       NULL    NULL     NULL     NULL        NULL
 optimizer                                                  NULL    NULL     NULL     NULL        NULL
 optimizer_always_use_histograms                            NULL    NULL     NULL     NULL        NULL
+optimizer_apply_full_scan_penalty_to_virtual_tables        NULL    NULL     NULL     NULL        NULL
 optimizer_hoist_uncorrelated_equality_subqueries           NULL    NULL     NULL     NULL        NULL
 optimizer_merge_joins_enabled                              NULL    NULL     NULL     NULL        NULL
+optimizer_prove_implication_with_virtual_computed_columns  NULL    NULL     NULL     NULL        NULL
 optimizer_use_forecasts                                    NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                                   NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_computed_column_filters_derivation  NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_disjunction_stats                   NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_distinct_on_limit_hint_costing      NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_join_elimination                    NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_multi_column_selectivity_estimate   NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_split_disjunction_for_joins         NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_trigram_similarity_selectivity      NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_zigzag_join_costing                 NULL    NULL     NULL     NULL        NULL
 optimizer_use_limit_ordering_for_streaming_group_by        NULL    NULL     NULL     NULL        NULL
 optimizer_use_lock_op_for_serializable                     NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                               NULL    NULL     NULL     NULL        NULL

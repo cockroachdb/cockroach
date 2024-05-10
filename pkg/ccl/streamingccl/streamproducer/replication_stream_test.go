@@ -115,7 +115,7 @@ func (d *partitionStreamDecoder) pop() streamingccl.Event {
 	}
 
 	if d.e.Batch != nil {
-		event := streamingccl.MakeKVEvent(d.e.Batch.KeyValues[0])
+		event := streamingccl.MakeKVEvent([]roachpb.KeyValue{d.e.Batch.KeyValues[0]})
 		d.e.Batch.KeyValues = d.e.Batch.KeyValues[1:]
 		if len(d.e.Batch.KeyValues) == 0 {
 			d.e.Batch = nil
@@ -609,7 +609,7 @@ func TestStreamDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "disabled under stress and race")
+	skip.UnderRace(t, "disabled under race")
 
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,

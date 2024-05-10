@@ -505,6 +505,21 @@ message LocalOnlySessionData {
   // optimizer should use an improved selectivitiy estimate for trigram
   // similarity filters.
   bool optimizer_use_improved_trigram_similarity_selectivity = 127;
+  // OptimizerUseImprovedZigzagJoinCosting, when true, indicates that the
+  // optimizer should use improved logic in the cost model for zigzag joins.
+  bool optimizer_use_improved_zigzag_join_costing = 128;
+  // OptimizerUseImprovedMultiColumnSelectivityEstimate, when true, indicates
+  // that the optimizer should use an improved selectivity estimate for
+  // multi-column predicates.
+  bool optimizer_use_improved_multi_column_selectivity_estimate = 129;
+  // OptimizerProveImplicationWithVirtualComputedColumns, when true, indicates
+  // that the optimizer should use virtual computed columns to prove partial
+  // index implication.
+  bool optimizer_prove_implication_with_virtual_computed_columns = 130;
+  // OptimizerApplyFullScanPenaltyToVirtualTables, when true, indicates that the
+  // huge cost should be assigned to plans that have full scans of virtual
+  // tables when DisallowFullTableScans is set.
+  bool optimizer_apply_full_scan_penalty_to_virtual_tables = 131;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

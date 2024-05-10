@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -322,7 +323,7 @@ This counts the number of ranges with an active rangefeed that are performing ca
 // go to the leaseholder first, and instead be sent to the leaseholder through a
 // follower using a proxy request. This setting is only intended for testing to
 // stress proxy behavior.
-var metamorphicRouteToLeaseholderFirst = util.ConstantWithMetamorphicTestBool(
+var metamorphicRouteToLeaseholderFirst = metamorphic.ConstantWithTestBool(
 	"distsender-leaseholder-first",
 	true,
 )
@@ -2047,7 +2048,17 @@ func (ds *DistSender) sendPartialBatch(
 		// and our local replica before attempting the request. If the sync
 		// makes our token invalid, we handle it similarly to a RangeNotFound or
 		// NotLeaseHolderError from a remote server.
-		if ba.ProxyRangeInfo != nil {
+		// NB: The routingTok is usually valid when we get to this line on a
+		// proxy request since we never retry the outer for loop, however there
+		// is an edge case where we invalidate the token once here and then
+		// invalidate it a second time in the statement below and hit a
+		// retriable range loopup error.
+		// TODO(baptist): Consider splitting out the handling in this method for
+		// proxy requests vs non-proxy requests. Currently it is hard to follow
+		// the invariants when this is called. Alternativly move this call to be
+		// done immediately when the routingTok is created as it will always be
+		// valid at that point.
+		if ba.ProxyRangeInfo != nil && routingTok.Valid() {
 			routingTok.SyncTokenAndMaybeUpdateCache(ctx, &ba.ProxyRangeInfo.Lease, &ba.ProxyRangeInfo.Desc)
 		}
 		if !routingTok.Valid() {

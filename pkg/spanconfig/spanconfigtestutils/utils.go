@@ -11,6 +11,7 @@
 package spanconfigtestutils
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
@@ -750,3 +752,82 @@ func ParseProtectionTarget(t testing.TB, input string) *ptpb.Target {
 	}
 	return nil
 }
+
+// configOverride is used to override span configs for specific ranges.
+type configOverride struct {
+	key    roachpb.Key
+	config roachpb.SpanConfig
+}
+
+// WrappedKVSubscriber is a KVSubscriber which wraps another KVSubscriber and
+// overrides specific SpanConfigs. This test struct should be used in
+// StoreKVSubscriberOverride as a more generic and powerful SpanConfig injection
+// alternative to change the behavior for specific ranges instead of using any
+// of DefaultZoneConfigOverride, DefaultSystemZoneConfigOverride,
+// OverrideFallbackConf, ConfReaderInterceptor, UseSystemConfigSpanForQueues,
+// SpanConfigUpdateInterceptor or SetSpanConfigInterceptor. By using this struct
+// as an alternative to the others it mainly avoids any need to depend on
+// rangefeed timing to propagate the config change.
+type WrappedKVSubscriber struct {
+	wrapped spanconfig.KVSubscriber
+	// Overrides are list of tuples of roachpb.Key and spanconfig.
+	overrides []configOverride
+}
+
+// NewWrappedKVSubscriber creates a new WrappedKVSubscriber.
+func NewWrappedKVSubscriber(wrapped spanconfig.KVSubscriber) *WrappedKVSubscriber {
+	return &WrappedKVSubscriber{wrapped: wrapped}
+}
+
+// AddOverride adds a new override to the WrappedKVSubscriber. This should only
+// be used during construction.
+func (w *WrappedKVSubscriber) AddOverride(key roachpb.Key, config roachpb.SpanConfig) {
+	w.overrides = append(w.overrides, configOverride{key: key, config: config})
+}
+
+// GetProtectionTimestamps implements spanconfig.KVSubscriber.
+func (w *WrappedKVSubscriber) GetProtectionTimestamps(
+	ctx context.Context, sp roachpb.Span,
+) ([]hlc.Timestamp, hlc.Timestamp, error) {
+	return w.wrapped.GetProtectionTimestamps(ctx, sp)
+}
+
+// LastUpdated always reports that it has been updated to allow
+// GetSpanConfigForKey to be used immediately.
+func (w *WrappedKVSubscriber) LastUpdated() hlc.Timestamp {
+	return hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+}
+
+// Subscribe implements spanconfig.KVSubscriber.
+func (w *WrappedKVSubscriber) Subscribe(f func(context.Context, roachpb.Span)) {
+	w.wrapped.Subscribe(f)
+}
+
+// ComputeSplitKey implements spanconfig.StoreReader.
+func (w *WrappedKVSubscriber) ComputeSplitKey(
+	ctx context.Context, start roachpb.RKey, end roachpb.RKey,
+) (roachpb.RKey, error) {
+	return w.wrapped.ComputeSplitKey(ctx, start, end)
+}
+
+// GetSpanConfigForKey implements spanconfig.StoreReader.
+func (w *WrappedKVSubscriber) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, roachpb.Span, error) {
+	spanConfig, span, err := w.wrapped.GetSpanConfigForKey(ctx, key)
+	for _, o := range w.overrides {
+		if key.Equal(o.key) {
+			return o.config, span, nil
+		}
+	}
+	return spanConfig, span, err
+}
+
+// NeedsSplit implements spanconfig.StoreReader.
+func (w *WrappedKVSubscriber) NeedsSplit(
+	ctx context.Context, start roachpb.RKey, end roachpb.RKey,
+) (bool, error) {
+	return w.wrapped.NeedsSplit(ctx, start, end)
+}
+
+var _ spanconfig.KVSubscriber = &WrappedKVSubscriber{}

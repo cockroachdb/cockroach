@@ -2769,8 +2769,10 @@ SELECT statistics_name, column_names, row_count, histogram_id IS NOT NULL AS has
 FROM [SHOW STATISTICS FOR TABLE t118537]
 ORDER BY statistics_name, column_names::STRING
 ----
-statistics_name  column_names  row_count  has_histogram
-mutation         {a}           10         true
+statistics_name  column_names                 row_count  has_histogram
+mutation         {a,crdb_internal_a_shard_3}  10         false
+mutation         {a}                          10         true
+mutation         {crdb_internal_a_shard_3}    10         true
 
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = ''
@@ -2814,7 +2816,7 @@ vectorized: true
 • render
 │
 └── • filter
-    │ estimated row count: 1
+    │ estimated row count: 0
     │ filter: n = 1
     │
     └── • scan
@@ -2831,7 +2833,7 @@ vectorized: true
 • render
 │
 └── • filter
-    │ estimated row count: 1
+    │ estimated row count: 0
     │ filter: sqrt(m::FLOAT8)::INT8 = 11
     │
     └── • scan

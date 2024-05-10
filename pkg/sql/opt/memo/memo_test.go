@@ -286,6 +286,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().LargeFullScanRows = 0
 	notStale()
 
+	// Stale OptimizerApplyFullScanPenaltyToVirtualTables.
+	evalCtx.SessionData().OptimizerApplyFullScanPenaltyToVirtualTables = true
+	stale()
+	evalCtx.SessionData().OptimizerApplyFullScanPenaltyToVirtualTables = false
+	notStale()
+
 	// Stale txn rows read error.
 	evalCtx.SessionData().TxnRowsReadErr = 1000
 	stale()
@@ -454,7 +460,7 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = false
 	notStale()
 
-	// Stale optimizer_use_distinct_on_limit_hint_costing.
+	// Stale optimizer_use_improved_trigram_similarity_selectivity.
 	evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity = true
 	stale()
 	evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity = false
@@ -469,6 +475,24 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptSplitScanLimit = 100
 	stale()
 	evalCtx.SessionData().OptSplitScanLimit = 0
+	notStale()
+
+	// Stale optimizer_use_improved_zigzag_join_costing.
+	evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = false
+	notStale()
+
+	// Stale optimizer_use_improved_multi_column_selectivity_estimate.
+	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = false
+	notStale()
+
+	// Stale optimizer_prove_implication_with_virtual_computed_columns.
+	evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
+	stale()
+	evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = false
 	notStale()
 
 	// User no longer has access to view.

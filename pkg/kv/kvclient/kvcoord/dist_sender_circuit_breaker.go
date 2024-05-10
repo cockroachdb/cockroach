@@ -31,12 +31,54 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// DistSenderCircuitBreakersMode controls if and to what level we trip circuit
+// breakers for replicas in the DistSender when they are failed or stalled.
+type DistSenderCircuitBreakersMode int64
+
+const (
+	// DistSenderCircuitBreakersNoRanges indicates we should never trip circuit
+	// breakers.
+	DistSenderCircuitBreakersNoRanges DistSenderCircuitBreakersMode = iota
+	// DistSenderCircuitBreakersLivenessRangeOnly indicates we should only trip
+	// circuit breakers if a replica belonging to node liveness experiences a
+	// failure or stall.
+	//
+	// Typically, a replica belonging to node liveness has a high potential to
+	// disrupt a cluster. All nodes need to write to the liveness range -- either
+	// to heartbeat their liveness record to keep their leases, or to increment
+	// another node's epoch before acquiring theirs. As such, a stalled or failed
+	// replica belonging to the liveness range that these requests get stuck on is
+	// no good -- nothing in the cluster will make progress.
+	//
+	// TODO(arul): currently, this doesn't do what it claims -- it just behaves like
+	// off. We should fix this. See
+	// https://github.com/cockroachdb/cockroach/issues/123117.
+	DistSenderCircuitBreakersLivenessRangeOnly
+	// DistSenderCircuitBreakersAllRanges indicates that we should trip circuit
+	// breakers for any replica that experiences a failure or a stall, regardless
+	// of the range it belongs to.
+	//
+	// Tripping a circuit breaker involves launching a probe to eventually un-trip
+	// the thing. This per-replica probe launches a goroutine. As such, a node
+	// level issue that causes a large number of circuit breakers to be tripped on
+	// a client has the potential of causing a big goroutine spike on the client.
+	// We currently don't have good scalability numbers to measure the impact of
+	// this -- once we do, we can revaluate the default mode we run in if the
+	// numbers look good. Else we may want to make these things more scalable.
+	DistSenderCircuitBreakersAllRanges
+)
+
 var (
-	CircuitBreakerEnabled = settings.RegisterBoolSetting(
+	CircuitBreakersMode = settings.RegisterEnumSetting(
 		settings.ApplicationLevel,
-		"kv.dist_sender.circuit_breaker.enabled",
-		"enable circuit breakers for failing or stalled replicas",
-		true,
+		"kv.dist_sender.circuit_breakers.mode",
+		"set of ranges to trip circuit breakers for failing or stalled replicas",
+		"no ranges",
+		map[int64]string{
+			int64(DistSenderCircuitBreakersNoRanges):          "no ranges",
+			int64(DistSenderCircuitBreakersLivenessRangeOnly): "liveness range only",
+			int64(DistSenderCircuitBreakersAllRanges):         "all ranges",
+		},
 		settings.WithPublic,
 	)
 
@@ -263,7 +305,7 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 		}
 
 		// Don't do anything if circuit breakers have been disabled.
-		if !CircuitBreakerEnabled.Get(&d.settings.SV) {
+		if d.Mode() == DistSenderCircuitBreakersNoRanges {
 			continue
 		}
 
@@ -361,7 +403,7 @@ func (d *DistSenderCircuitBreakers) ForReplica(
 	rangeDesc *roachpb.RangeDescriptor, replDesc *roachpb.ReplicaDescriptor,
 ) *ReplicaCircuitBreaker {
 	// If circuit breakers are disabled, return a nil breaker.
-	if !CircuitBreakerEnabled.Get(&d.settings.SV) {
+	if d.Mode() == DistSenderCircuitBreakersNoRanges {
 		return nil
 	}
 
@@ -379,6 +421,17 @@ func (d *DistSenderCircuitBreakers) ForReplica(
 		d.metrics.CircuitBreaker.Replicas.Inc(1)
 	}
 	return v.(*ReplicaCircuitBreaker)
+}
+
+func (d *DistSenderCircuitBreakers) Mode() DistSenderCircuitBreakersMode {
+	mode := DistSenderCircuitBreakersMode(CircuitBreakersMode.Get(&d.settings.SV))
+	// TODO(arul): Currently, even when configured for just the liveness range, we
+	// treat dist sender circuit breakers as off. See
+	// https://github.com/cockroachdb/cockroach/issues/123117.
+	if mode == DistSenderCircuitBreakersLivenessRangeOnly {
+		return DistSenderCircuitBreakersNoRanges
+	}
+	return mode
 }
 
 // ReplicaCircuitBreaker is a circuit breaker for an individual replica.
@@ -820,7 +873,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 
 		for {
 			// Untrip the breaker and stop probing if circuit breakers are disabled.
-			if !CircuitBreakerEnabled.Get(&r.d.settings.SV) {
+			if r.d.Mode() == DistSenderCircuitBreakersNoRanges {
 				report(nil)
 				return
 			}
