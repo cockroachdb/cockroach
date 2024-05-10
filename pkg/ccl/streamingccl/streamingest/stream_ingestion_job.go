@@ -185,7 +185,7 @@ func startPostCutoverRetentionJob(
 		req := streampb.ReplicationProducerRequest{
 			ReplicationStartTime: cutoverTime,
 		}
-		_, err = streamproducer.StartReplicationProducerJob(ctx, evalCtx, txn, info.Name, req)
+		_, err = streamproducer.StartReplicationProducerJob(ctx, evalCtx, txn, info.Name, req, true)
 		return err
 	})
 }
