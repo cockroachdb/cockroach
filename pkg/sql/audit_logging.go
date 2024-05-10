@@ -122,7 +122,22 @@ func (p *planner) initializeReducedAuditConfig(ctx context.Context) {
 	p.reducedAuditConfig.Initialized = true
 
 	user := p.User()
-	userRoles, err := p.MemberOfWithAdminOption(ctx, user)
+	userRoles, err := func() (map[username.SQLUsername]bool, error) {
+		if p.Txn() != nil {
+			return p.MemberOfWithAdminOption(ctx, user)
+		} else {
+			// If there is no open transaction, then we need to create an internal
+			// one. This is the case for logging BEGIN statements, since the
+			// transaction is not opened until after BEGIN is logged.
+			var userRoles map[username.SQLUsername]bool
+			innerErr := p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+				var err error
+				userRoles, err = MemberOfWithAdminOption(ctx, p.ExecCfg(), txn, user)
+				return err
+			})
+			return userRoles, innerErr
+		}
+	}()
 	if err != nil {
 		log.Errorf(ctx, "initialize reduced audit config: error getting user role memberships: %v", err)
 		return
