@@ -191,6 +191,7 @@ go_test(
         "alter_changefeed_test.go",
         "avro_test.go",
         "changefeed_dist_test.go",
+        "changefeed_processors_test.go",
         "changefeed_test.go",
         "csv_test.go",
         "encoder_json_test.go",
