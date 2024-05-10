@@ -426,9 +426,8 @@ func TestReducedAuditConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Expect the number of entries to be 0.
 	if len(entries) != 0 {
-		t.Fatal(errors.Newf("unexpected entries found"))
+		t.Fatal(errors.Newf("unexpected entries found; expected none found %d", len(entries)))
 	}
 
 	// Open 2nd connection for the test user.
@@ -453,9 +452,37 @@ func TestReducedAuditConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Expect the number of entries to be 1.
 	if len(entries) != 1 {
-		t.Fatal(errors.Newf("unexpected number of entries found (not 1)"))
+		t.Fatal(errors.Newf("unexpected number of entries; expected: %d found: %d", 1, len(entries)))
+	}
+
+	// Open 3rd connection for the test user. Regression test for #123592.
+	testUserDb3 := s.ApplicationLayer().SQLConn(t, serverutils.User(username.TestUser))
+	testRunner3 := sqlutils.MakeSQLRunner(testUserDb3)
+
+	// Run an explicit transaction on the new connection.
+	explicitTxn := []string{`BEGIN`, `SHOW CLUSTER SETTING version`, `COMMIT`}
+	testRunner3.ExecMultiple(t, explicitTxn...)
+
+	log.FlushFiles()
+
+	// Ensure all parts of the explicit transaction appear in our logs without an error.
+	for _, stmt := range explicitTxn {
+		entries, err = log.FetchEntriesFromFiles(
+			0,
+			math.MaxInt64,
+			10000,
+			regexp.MustCompile(stmt),
+			log.WithMarkedSensitiveData,
+		)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(entries) != 1 {
+			t.Fatal(errors.Newf("unexpected number of entries for %s; expected: %d found: %d", stmt, 1, len(entries)))
+		}
 	}
 }
 

@@ -34,10 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -1115,7 +1115,7 @@ func splitTrigger(
 // the split trigger. In practice, the splitQueue wants to scan the left hand
 // side because the split key computation ensures that we do not create large
 // LHS ranges. However, to improve test coverage, we use a metamorphic value.
-var splitScansRightForStatsFirst = util.ConstantWithMetamorphicTestBool(
+var splitScansRightForStatsFirst = metamorphic.ConstantWithTestBool(
 	"split-scans-right-for-stats-first", false)
 
 // makeScanStatsFn constructs a splitStatsScanFn for the provided post-split
@@ -1227,7 +1227,7 @@ func splitTriggerHelper(
 				"from the in-split stats; pre-split: %+v, in-split: %+v",
 				statsInput.PreSplitStats, statsInput.AbsPreSplitBothStored)
 		}
-		log.Infof(ctx, "falling back to accurate stats computation because %v", reason)
+		log.KvDistribution.Infof(ctx, "falling back to accurate stats computation because %v", reason)
 		h, err = makeSplitStatsHelper(statsInput)
 	} else if statsInput.UseEstimatesBecauseExternalBytesArePresent {
 		h, err = makeCrudelyEstimatedSplitStatsHelper(statsInput)

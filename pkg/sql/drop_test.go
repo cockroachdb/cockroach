@@ -1497,3 +1497,38 @@ func TestDropLargeDatabaseWithDeclarativeSchemaChanger(t *testing.T) {
 		},
 		true)
 }
+
+func BenchmarkDropLargeDatabaseWithGenerateTestObjects(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	for _, declarative := range []bool{false, true} {
+		for _, tables := range []int{8, 32, 128, 1024} {
+			b.Run(fmt.Sprintf("declarative=%t/tables=%d", declarative, tables), func(b *testing.B) {
+				ctx := context.Background()
+				s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+				sqlConn, err := sqlDB.Conn(ctx)
+				require.NoError(b, err)
+				defer s.Stopper().Stop(ctx)
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					b.StopTimer()
+					tdb := sqlutils.MakeSQLRunner(sqlConn)
+					tdb.Exec(b, "CREATE DATABASE db")
+					tdb.Exec(b, "USE db")
+					tdb.Exec(b, "SELECT crdb_internal.generate_test_objects('test', $1::int)", tables)
+					tdb.Exec(b, "USE system;")
+					if declarative {
+						tdb.Exec(b, "SET use_declarative_schema_changer=unsafe_always")
+					} else {
+						tdb.Exec(b, "SET use_declarative_schema_changer=off")
+					}
+					b.StartTimer()
+					tdb.Exec(b, "DROP DATABASE db CASCADE;")
+					b.StopTimer()
+					tdb.Exec(b, "SET use_declarative_schema_changer=off")
+				}
+			})
+		}
+	}
+}

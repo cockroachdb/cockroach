@@ -94,9 +94,9 @@ func TestStartupFailureRandomRange(t *testing.T) {
 	// of CI at all, and we also don't want to stress it in nightlies as part of
 	// a big package (where it will take a lot of time that could be spent running
 	// "faster" tests). In this package, it is the only test and so it's fine to
-	// run it under nightly (skipping nightly stressrace because race builds with
-	// many nodes are very resource intensive and tend to collapse).
-	skip.UnderStressRace(t, "6 nodes with replication is too slow for stress race")
+	// run it under nightly (skipping race builds because with many nodes they are
+	// very resource intensive and tend to collapse).
+	skip.UnderRace(t, "6 nodes with replication is too slow for race")
 	if !skip.NightlyStress() {
 		skip.IgnoreLint(t, "test takes 30s to run due to circuit breakers and timeouts")
 	}

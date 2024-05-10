@@ -10,7 +10,11 @@
 
 package clusterversion
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // Key is a unique identifier for a version of CockroachDB.
 type Key int
@@ -253,6 +257,13 @@ const (
 	// the system tenant to ensure it is a superset of secondary tenants.
 	V24_1_AddSpanCounts
 
+	// V24_1 is CockroachDB v24.1. It's used for all v24.1.x patch releases.
+	V24_1
+
+	// V24_2Start demarcates the start of cluster versions stepped through during
+	// the process of upgrading from 24.1 to 24.2.
+	V24_2Start
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -313,6 +324,11 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1_ReplicatedLockPipelining:             {Major: 23, Minor: 2, Internal: 24},
 	V24_1_AddSpanCounts:                        {Major: 23, Minor: 2, Internal: 26},
 
+	V24_1: {Major: 24, Minor: 1, Internal: 0},
+
+	// v24.2 versions. Internal versions must be even.
+	V24_2Start: {Major: 24, Minor: 1, Internal: 2},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -330,15 +346,15 @@ const MinSupported Key = V23_2
 //
 // Note: this is always the last element of SupportedPreviousReleases(); it is
 // also provided as a constant for convenience.
-const PreviousRelease Key = V23_2
+const PreviousRelease Key = V24_1
 
-// V24_1 is a placeholder that will eventually be replaced by the actual 24.1
+// V24_2 is a placeholder that will eventually be replaced by the actual 24.2
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 24.1 and has completed all associated migrations; most
+// a cluster is running 24.2 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 24.1.
-const V24_1 = Latest
+// only need to check that the cluster has upgraded to 24.2.
+const V24_2 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
@@ -425,4 +441,27 @@ func ListBetween(from, to roachpb.Version) []roachpb.Version {
 		}
 	}
 	return cvs
+}
+
+// StringForPersistence returns the string representation of the given
+// version in cases where that version needs to be persisted. This
+// takes backwards compatibility into account, making sure that we use
+// the old version formatting if we need to continue supporting
+// releases that don't understand it.
+//
+// TODO(renato): remove this function once MinSupported is at least 24.1.
+func StringForPersistence(v roachpb.Version) string {
+	return stringForPersistenceWithMinSupported(v, MinSupported.Version())
+}
+
+func stringForPersistenceWithMinSupported(v, minSupported roachpb.Version) string {
+	// newFormattingVersion is the version in which the new version
+	// formatting (#115223) was introduced.
+	newFormattingVersion := roachpb.Version{Major: 24, Minor: 1}
+
+	if minSupported.AtLeast(newFormattingVersion) || v.IsFinal() {
+		return v.String()
+	}
+
+	return fmt.Sprintf("%d.%d-%d", v.Major, v.Minor, v.Internal)
 }

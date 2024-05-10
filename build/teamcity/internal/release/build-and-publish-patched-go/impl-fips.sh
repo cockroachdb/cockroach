@@ -3,8 +3,8 @@
 set -xeuo pipefail
 
 GO_FIPS_REPO=https://github.com/golang-fips/go
-GO_FIPS_COMMIT=556abee0da00b1c2ad965590d7793cd8d741b423
-GO_VERSION=1.22.2
+GO_FIPS_COMMIT=8092b8157908b59e5930a1247b6f41842a25f89e
+GO_VERSION=1.22.3
 
 # Install build dependencies
 yum install git golang golang-bin openssl openssl-devel -y

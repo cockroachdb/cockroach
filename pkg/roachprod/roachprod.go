@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
@@ -48,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/replay"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -55,6 +57,13 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"golang.org/x/sys/unix"
+)
+
+const (
+	// defaultPrometheusHostUrl for prometheus cluster config
+	defaultPrometheusHostUrl = "https://grafana.testeng.crdb.io/promhelpers"
+	// prometheusHostUrlEnv is the environment variable to override defaultPrometheusHostUrl
+	prometheusHostUrlEnv = "COCKROACH_PROM_HOST_URL"
 )
 
 // verifyClusterName ensures that the given name conforms to
@@ -183,6 +192,13 @@ func newCluster(
 	}
 
 	return c, nil
+}
+
+// shouldUseLoadBalancer determines if the node selector section in the cluster
+// name is set to select a load balancer.
+func shouldUseLoadBalancer(name string) bool {
+	parts := strings.Split(name, ":")
+	return len(parts) == 2 && strings.ToLower(parts[1]) == "lb"
 }
 
 // userClusterNameRegexp returns a regexp that matches all clusters owned by the
@@ -441,6 +457,7 @@ func SQL(
 	secure bool,
 	tenantName string,
 	tenantInstance int,
+	authMode install.PGAuthMode,
 	cmdArray []string,
 ) error {
 	c, err := getClusterFromCache(l, clusterName, install.SecureOption(secure))
@@ -448,10 +465,10 @@ func SQL(
 		return err
 	}
 	if len(c.Nodes) == 1 {
-		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, cmdArray)
+		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, authMode, cmdArray)
 	}
 
-	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
+	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, authMode, cmdArray)
 	if err != nil {
 		return err
 	}
@@ -715,8 +732,7 @@ func DefaultStartOpts() install.StartOpts {
 		InitTarget:         1,
 		SQLPort:            0,
 		VirtualClusterName: install.SystemInterfaceName,
-		// TODO(DarrylWong): revert back to 0 once #117125 is addressed.
-		AdminUIPort: config.DefaultAdminUIPort,
+		AdminUIPort:        0,
 	}
 }
 
@@ -732,7 +748,60 @@ func Start(
 	if err != nil {
 		return err
 	}
-	return c.Start(ctx, l, startOpts)
+	if err = c.Start(ctx, l, startOpts); err != nil {
+		return err
+	}
+	updatePrometheusTargets(ctx, l, c)
+	return nil
+}
+
+// UpdateTargets updates prometheus target configurations for a cluster.
+func UpdateTargets(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	clusterSettingsOpts ...install.ClusterSettingOption,
+) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName, clusterSettingsOpts...)
+	if err != nil {
+		return err
+	}
+	updatePrometheusTargets(ctx, l, c)
+	return nil
+}
+
+// updatePrometheusTargets updates the prometheus instance cluster config. Any error is logged and ignored.
+func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.SyncedCluster) {
+	nodeIPPorts := make([]string, len(c.Nodes))
+	var wg sync.WaitGroup
+	for i, node := range c.VMs {
+		if node.Provider == gce.ProviderName {
+			wg.Add(1)
+			go func(index int, v vm.VM) {
+				defer wg.Done()
+				// only gce is supported for prometheus
+				desc, err := c.DiscoverService(ctx, install.Node(index+1), "", install.ServiceTypeUI, 0)
+				if err != nil {
+					l.Errorf("error getting the port for node %d: %v", index+1, err)
+					return
+				}
+				nodeInfo := fmt.Sprintf("%s:%d", v.PublicIP, desc.Port)
+				l.Printf("node information obtained for node index %d: %s", index, nodeInfo)
+				nodeIPPorts[index] = nodeInfo
+			}(i, node)
+		}
+	}
+	wg.Wait()
+	if len(nodeIPPorts) > 0 {
+		if err := promhelperclient.NewPromClient().UpdatePrometheusTargets(ctx,
+			envutil.EnvOrDefaultString(prometheusHostUrlEnv, defaultPrometheusHostUrl),
+			c.Name, false, nodeIPPorts, l); err != nil {
+			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
+		}
+	}
 }
 
 // Monitor monitors the status of cockroach nodes in a cluster.
@@ -779,6 +848,8 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 	if err != nil {
 		return err
 	}
+
+	_ = deleteClusterConfig(clusterName, l)
 	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait, "")
 }
 
@@ -928,6 +999,28 @@ func PgURL(
 	if err != nil {
 		return nil, err
 	}
+
+	if shouldUseLoadBalancer(clusterName) {
+		services, err := c.DiscoverServices(ctx, opts.VirtualClusterName, install.ServiceTypeSQL,
+			install.ServiceInstancePredicate(opts.SQLInstance))
+		if err != nil {
+			return nil, err
+		}
+		port := config.DefaultSQLPort
+		serviceMode := install.ServiceModeExternal
+		if len(services) > 0 {
+			port = services[0].Port
+			serviceMode = services[0].ServiceMode
+		} else {
+			l.Printf("no services found, searching for load balancer on default port %d", port)
+		}
+		addr, err := c.FindLoadBalancer(l, port)
+		if err != nil {
+			return nil, err
+		}
+		return []string{c.NodeURL(addr.IP, port, opts.VirtualClusterName, serviceMode, opts.Auth)}, nil
+	}
+
 	nodes := c.TargetNodes()
 	ips := make([]string, len(nodes))
 
@@ -1328,7 +1421,16 @@ func destroyCluster(cld *cloud.Cloud, l *logger.Logger, clusterName string) erro
 		l.Printf("Destroying cluster %s with %d nodes", clusterName, len(c.VMs))
 	}
 
+	_ = deleteClusterConfig(clusterName, l)
+
 	return cloud.DestroyCluster(l, c)
+}
+
+// deleteClusterConfig deletes the prometheus instance cluster config. Any error is logged and ignored.
+func deleteClusterConfig(clusterName string, l *logger.Logger) error {
+	return promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
+		envutil.EnvOrDefaultString(prometheusHostUrlEnv, defaultPrometheusHostUrl),
+		clusterName, false, l)
 }
 
 func destroyLocalCluster(ctx context.Context, l *logger.Logger, clusterName string) error {
@@ -1482,6 +1584,8 @@ func Create(
 
 	if createVMOpts.SSDOpts.FileSystem == vm.Zfs {
 		for _, provider := range createVMOpts.VMProviders {
+			// TODO(DarrylWong): support zfs on other providers, see: #123775.
+			// Once done, revisit all tests that set zfs to see if they can run on non GCE.
 			if provider != gce.ProviderName {
 				return fmt.Errorf(
 					"creating a node with --filesystem=zfs is currently only supported on gce",
@@ -2087,7 +2191,9 @@ func StartJaeger(
 		if err != nil {
 			return err
 		}
-		_, err = c.ExecSQL(ctx, l, nodes, virtualClusterName, 0, []string{"-e", setupStmt})
+		_, err = c.ExecSQL(
+			ctx, l, nodes, virtualClusterName, 0, install.DefaultAuthMode, []string{"-e", setupStmt},
+		)
 		if err != nil {
 			return err
 		}

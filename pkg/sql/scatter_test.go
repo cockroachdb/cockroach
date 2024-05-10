@@ -33,7 +33,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "uses too many resources for stressrace")
+	skip.UnderRace(t, "uses too many resources for race")
 	skip.UnderShort(t, "takes 25s")
 
 	const numHosts = 3

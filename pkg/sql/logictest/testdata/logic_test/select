@@ -807,7 +807,7 @@ SELECT * FROM t_disallow_scans
 statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
 SELECT * FROM t_disallow_scans@b_idx
 
-# Internal statements should still be allowed with this setting.
+# Full scans of virtual tables are still allowed with this setting (#123783).
 statement ok
 SELECT * FROM pg_class
 

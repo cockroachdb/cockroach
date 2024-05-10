@@ -30,15 +30,15 @@ case $1 in
     if [[ "$*" != *"--restart"* ]]; then
       # implied for long-lived DRT clusters; avoid on init w/ --restart=false.
       shift
-      set -- start "--restart" "$@"
+      set -- start "--enable-fluent-sink" "--restart" "$@"
     fi
     if [[ "$*" != *"--secure"* ]]; then
       shift
-      set -- start "--secure" "$@"
+      set -- start "--enable-fluent-sink" "--secure" "$@"
     fi
     if [[ "$*" != *"--sql-port 26257"* ]]; then
       shift
-      set -- start "--sql-port" "26257" "$@"
+      set -- start "--enable-fluent-sink" "--sql-port" "26257" "$@"
     fi
     ;;
   "sql")
@@ -93,7 +93,7 @@ case $1 in
 
     # Single quotes around the shell expansion cause it to be processed on the
     # remote host instead of the local host.
-    roachprod ssh ${cluster} -- DD_INSTALL_ONLY=true bash -c '"$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"'
+    roachprod ssh ${cluster} -- DD_INSTALL_ONLY=true DD_API_KEY=${dd_api_key} bash -c '"$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"'
 
     roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/datadog.yaml > /dev/null << EOF
 ---
@@ -109,7 +109,37 @@ tags:
 - team:drt
 EOF"
 
-    roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/conf.d/cockroachdb.d/conf.yaml > /dev/null << EOF
+    case $cluster in
+      "workload-chaos")
+        roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/conf.d/openmetrics.d/conf.yaml > /dev/null << EOF
+---
+init_config:
+
+instances:
+  - openmetrics_endpoint: http://localhost:2112/metrics
+    namespace: workload1
+    raw_metric_prefix: workload_
+    metrics:
+    - tpcc_.*
+    - kv_.*
+  - openmetrics_endpoint: http://localhost:2113/metrics
+    namespace: workload2
+    raw_metric_prefix: workload_
+    metrics:
+    - tpcc_.*
+    - kv_.*
+  - openmetrics_endpoint: http://localhost:2114/metrics
+    namespace: workload3
+    raw_metric_prefix: workload_
+    metrics:
+    - tpcc_.*
+    - kv_.*
+EOF"
+        roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
+        ;;
+
+      *)
+        roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/conf.d/cockroachdb.d/conf.yaml > /dev/null << EOF
 ---
 init_config:
 
@@ -118,18 +148,83 @@ instances:
   tls_verify: false
   service: drt-cockroachdb
 EOF"
+        roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
 
-    roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
+        roachprod fluent-bit-start ${cluster} \
+          --datadog-api-key "${dd_api_key}" \
+          --datadog-service drt-cockroachdb \
+          --datadog-team drt
+        ;;
+    esac
+    exit 0
+    ;;
+  "ua-setup")
+    # Make sure both clusters have rangefeeds enabled.
+    $0 sql drt-ua1:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+    $0 sql drt-ua2:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
 
-    roachprod fluent-bit-start ${cluster} \
-      --datadog-api-key "${dd_api_key}" \
-      --datadog-service drt-cockroachdb \
-      --datadog-team drt
+    # Create external connection on each cluster to the other.
+    ua2="$(roachprod ssh drt-ua2:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
+    $0 sql drt-ua1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ua2' AS '${ua2}'" 
+    ua1="$(roachprod ssh drt-ua1:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
+    $0 sql drt-ua2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ua1' AS '${ua1}'" 
+
+    # Setup the main tenant, on ua1 initilly.
+    $0 sql drt-ua1:1 -- -e "CREATE VIRTUAL CLUSTER main"
+    $0 sql drt-ua1:1 -- -e "ALTER VIRTUAL CLUSTER main START SERVICE SHARED"
+    $0 sql drt-ua1:1 --cluster=main -- -e "CREATE USER roachprod WITH PASSWORD 'cockroachdb'"
+    $0 sql drt-ua1:1 --cluster=main -- -e "GRANT admin TO roachprod"
+    
+    # Set the default tenant on both.
+    $0 sql drt-ua1:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+    $0 sql drt-ua2:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+
+    # Setup replication to ua2.
+    $0 sql drt-ua2:1 --cluster=system -- -e "CREATE VIRTUAL CLUSTER main FROM REPLICATION OF main ON 'external://drt-ua1'"
+    exit 0
+    ;;
+  "ua-failover")
+    if [ "$#" -lt 2 ]; then
+      echo "usage: $0 failover {drt-ua1,drt-ua2}"
+      echo
+      echo "fails the ua workload over to the specified ua cluster, setting the other as a standby"
+      exit 1
+    fi
+    shift
+    cluster=$1
+    shift
+    case "${cluster}" in
+      "drt-ua1")
+        standby=drt-ua2
+        pgurls=pgurls.ua1.txt
+        ;;
+      "drt-ua2")
+        standby=drt-ua1
+        pgurls=pgurls.ua2.txt
+        ;;
+      *)
+        echo "unknown cluster: ${cluster}"
+        exit 1
+        ;;
+    esac
+    echo "stopping workload..."
+    $0 ssh workload-ua:1 -- "sudo systemctl stop tpcc"
+    echo "cutting over..."
+    $0 sql $cluster:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main COMPLETE REPLICATION TO LATEST"
+    $0 sql $cluster:1 --cluster=system -- -e "SELECT status FROM [SHOW JOBS WHEN COMPLETE SELECT id FROM system.jobs WHERE job_type = 'REPLICATION STREAM INGESTION'];"
+    echo "cutover complete; restarting workload..."
+
+    $0 sql $cluster:1 --cluster=system -- -e "ALTER TENANT MAIN START SERVICE SHARED"
+    $0 ssh workload-ua:1 -- "ln -sf $pgurls pgurls.txt; sudo systemctl start tpcc"
+    echo "restarted workload; configuing new standby..."
+    $0 sql $standby:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main STOP SERVICE"
+    $0 sql $standby:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main START REPLICATION OF main ON 'external://$cluster'"
+    echo "started replication in other direction."
     exit 0
     ;;
   "create")
     if [ "$#" -lt 2 ]; then
-      echo "usage: drtprod create {drt-main,drt-ua1,drt-ua2}"
+      echo "usage: drtprod create {drt-main,drt-chaos,drt-ua1,drt-ua2}"
       exit 1
     fi
     case "${2}" in
@@ -152,10 +247,13 @@ EOF"
           --gce-managed \
           --gce-zones "us-east1-d,us-east1-b,us-east1-c" \
           --nodes 6 \
-          --gce-machine-type n2-standard-8 \
-          --gce-pd-volume-size 3000 --local-ssd=false \
+          --gce-machine-type n2-standard-16 \
+          --gce-local-ssd-count="4" \
+          --gce-enable-multiple-stores \
+          --local-ssd=true \
           --username drt \
-          --lifetime 8760h
+          --lifetime="8760h" \
+          --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
         $0 dns drt-chaos create
         ;;
@@ -201,8 +299,54 @@ EOF"
           --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
         $0 dns workload-ua create || $0 dns workload-ua
-        # TODO(dt): push the pg-urls for ua2 and ua2 to it.
-        # TODO(dt): push a systemd unit file to it to run tpcc workload.
+        
+        # push cockroach to the worker to run its built-in workloads
+        roachprod stage workload-ua:1 cockroach
+        roachprod stage workload-ua:1 workload
+        
+        # Push certs for both clusters to the worker.
+        roachprod get drt-ua1:1 certs certs.ua1
+        roachprod put workload-ua:1 certs.ua1
+        roachprod get drt-ua2:1 certs certs.ua2
+        roachprod put workload-ua:1 certs.ua2
+        roachprod ssh workload-ua:1 -- "chmod 0600 certs.ua1/* certs.ua2/*"
+        rm -rf certs.ua1 certs.ua2
+        
+        # Setup pgurls for worklooads to use.
+        roachprod ssh workload-ua:1 -- "
+        echo \"$(roachprod pgurl drt-ua1 --secure --cluster=main | sed 's/=certs/=certs.ua1/g' | sed "s/'//g" )\" > pgurls.ua1.txt; 
+        echo \"$(roachprod pgurl drt-ua2 --secure --cluster=main | sed 's/=certs/=certs.ua2/g' | sed "s/'//g" )\" > pgurls.ua2.txt;
+        ln -sf pgurls.ua1.txt pgurls.txt"
+      
+        # Setup the tpcc workload runner as a script invoked by systemd.
+        roachprod ssh workload-ua:1 -- 'cat - > tpcc << EOF 
+#!/usr/bin/env bash
+
+exec ./cockroach workload run tpcc \\
+  --warehouses=150000 \\
+  --max-rate=1200 \\
+  --workers=100 \\
+  --wait=false \\
+  --tolerate-errors \\
+  --display-every 60s \\
+  \$(cat /home/ubuntu/pgurls.txt)
+EOF'
+        roachprod ssh workload-ua:1 -- "chmod +x ./tpcc;
+sudo tee /etc/systemd/system/tpcc.service > /dev/null << EOF
+[Unit]
+Description=tpcc load generator
+
+[Service]
+WorkingDirectory=/home/ubuntu
+User=ubuntu
+ExecStart=/home/ubuntu/tpcc
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+        roachprod ssh workload-ua -- "sudo systemctl daemon-reload; sudo systemctl enable tpcc.service; sudo systemctl start tpcc.service"
         ;;
       *)
         echo

@@ -302,11 +302,17 @@ func (s *eventStream) onDeleteRange(ctx context.Context, delRange *kvpb.RangeFee
 	s.setErr(s.maybeFlushBatch(ctx))
 }
 func (s *eventStream) onMetadata(ctx context.Context, metadata *kvpb.RangeFeedMetadata) {
+	if s.addMu != nil {
+		// Split points can be sent concurrently during the initial scan.
+		s.addMu.Lock()
+		defer s.addMu.Unlock()
+	}
 	log.VInfof(ctx, 2, "received metadata event: %s, fromManualSplit: %t, parent start key %s", metadata.Span, metadata.FromManualSplit, metadata.ParentStartKey)
 	if metadata.FromManualSplit && !metadata.Span.Key.Equal(metadata.ParentStartKey) {
 		// Only send new manual split keys (i.e. a child rangefeed start key that
 		// differs from the parent start key)
 		s.seb.addSplitPoint(metadata.Span.Key)
+		s.setErr(s.maybeFlushBatch(ctx))
 	}
 }
 
@@ -358,6 +364,8 @@ func (s *eventStream) flushBatch(ctx context.Context) error {
 		return nil
 	}
 	s.debug.Flushes.Batches.Add(1)
+	s.debug.Flushes.Bytes.Add(int64(s.seb.size))
+
 	defer s.seb.reset()
 	return s.sendFlush(ctx, &streampb.StreamEvent{Batch: &s.seb.batch})
 }

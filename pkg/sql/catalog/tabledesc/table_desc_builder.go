@@ -423,6 +423,7 @@ func maybeFillInDescriptor(
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
 	set(catalog.StrippedDanglingSelfBackReferences, maybeStripDanglingSelfBackReferences(desc))
 	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(desc))
+	set(catalog.FixedIncorrectForeignKeyOrigins, maybeFixForeignKeySelfReferences(desc))
 	return changes, nil
 }
 
@@ -1196,4 +1197,24 @@ func resolveTableNamesForIDs(
 	}
 
 	return result, nil
+}
+
+// maybeFixForeignKeySelfReferences fixes references that should point to the
+// current descriptor inside OutboundFKs and InboundFKs.
+func maybeFixForeignKeySelfReferences(tableDesc *descpb.TableDescriptor) (wasRepaired bool) {
+	for idx := range tableDesc.OutboundFKs {
+		fk := &tableDesc.OutboundFKs[idx]
+		if fk.OriginTableID != tableDesc.ID {
+			fk.OriginTableID = tableDesc.ID
+			wasRepaired = true
+		}
+	}
+	for idx := range tableDesc.InboundFKs {
+		fk := &tableDesc.InboundFKs[idx]
+		if fk.ReferencedTableID != tableDesc.ID {
+			fk.ReferencedTableID = tableDesc.ID
+			wasRepaired = true
+		}
+	}
+	return wasRepaired
 }

@@ -70,6 +70,7 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metamorphic",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
