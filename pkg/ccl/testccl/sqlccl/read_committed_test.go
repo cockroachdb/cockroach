@@ -40,16 +40,18 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 	ctx := context.Background()
 	params := base.TestServerArgs{}
 
-	var readCommittedWriteCount atomic.Int64
-	var finishedReadCommittedScans sync.WaitGroup
-	finishedReadCommittedScans.Add(1)
-	var finishedExternalTxn sync.WaitGroup
-	finishedExternalTxn.Add(1)
+	var trapReadCommittedWrites atomic.Bool
+	var trappedReadCommittedWritesOnce sync.Once
+	finishedReadCommittedScans := make(chan struct{})
+	finishedExternalTxn := make(chan struct{})
 	var sawWriteTooOldError atomic.Bool
 	var codec keys.SQLCodec
 	var kvTableId uint32
 
 	filterFunc := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+		if !trapReadCommittedWrites.Load() {
+			return nil
+		}
 		if ba.Txn == nil || ba.Txn.IsoLevel != isolation.ReadCommitted {
 			return nil
 		}
@@ -61,13 +63,10 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 				if err != nil || tableID != kvTableId {
 					return nil
 				}
-				// Because of the queries the test executes below, we know that before
-				// the second read committed write begins, the read committed scans
-				// will have finished.
-				if newCount := readCommittedWriteCount.Add(1); newCount == 2 {
-					finishedReadCommittedScans.Done()
-					finishedExternalTxn.Wait()
-				}
+				trappedReadCommittedWritesOnce.Do(func() {
+					close(finishedReadCommittedScans)
+					<-finishedExternalTxn
+				})
 			}
 		}
 
@@ -110,6 +109,9 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 	_, err = tx.Exec(`UPDATE kv SET v = v+10 WHERE k = 'a'`)
 	require.NoError(t, err)
 
+	// Start blocking writes in the read committed transaction.
+	trapReadCommittedWrites.Store(true)
+
 	// Perform a series of reads and writes in the second statement.
 	// Read from "b" and "c" to establish refresh spans.
 	// Write to "b" in the transaction, without issue.
@@ -121,7 +123,7 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 	})
 
 	// Wait for the table to be scanned first.
-	finishedReadCommittedScans.Wait()
+	<-finishedReadCommittedScans
 
 	// Write to "c" outside the transaction to create a write-write conflict.
 	_, err = sqlDB.Exec(`UPDATE kv SET v = v+10 WHERE k = 'c'`)
@@ -129,7 +131,7 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 
 	// Now let the READ COMMITTED write go through. It should encounter a
 	// WriteTooOldError and retry.
-	finishedExternalTxn.Done()
+	close(finishedExternalTxn)
 
 	err = g.Wait()
 	require.NoError(t, err)
