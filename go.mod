@@ -94,6 +94,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.6.1
 	github.com/Azure/go-autorest/autorest/adal v0.9.15
 	github.com/BurntSushi/toml v1.2.1
+	github.com/DataDog/datadog-go v3.2.0+incompatible
 	github.com/IBM/sarama v1.42.1
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
