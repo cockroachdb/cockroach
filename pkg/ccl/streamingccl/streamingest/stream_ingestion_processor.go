@@ -856,7 +856,6 @@ func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 	if !ingestSplitEvent.Get(&sip.EvalCtx.Settings.SV) {
 		return nil
 	}
-
 	kvDB := sip.FlowCtx.Cfg.DB.KV()
 	rekey, ok, err := sip.rekey(*key)
 	if err != nil {
@@ -865,7 +864,7 @@ func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 	if !ok {
 		return nil
 	}
-	log.Infof(ctx, "replicating split at %s", rekey)
+	log.Infof(ctx, "replicating split at %s", roachpb.Key(rekey).String())
 	expiration := kvDB.Clock().Now().AddDuration(time.Hour)
 	return kvDB.AdminSplit(ctx, rekey, expiration)
 }
