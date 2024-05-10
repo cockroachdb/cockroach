@@ -983,7 +983,7 @@ func runCDCInitialScanRollingRestart(
 	case cdcShutdownCheckpoint:
 		const largeSplitCount = 5
 		setupStmts = append(setupStmts,
-			`SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '30m'`,
+			`SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '0'`,
 			`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'true'`,
 			// Split some bigger chunks up to scatter it a bit more.
 			fmt.Sprintf(`ALTER TABLE large SPLIT AT SELECT id FROM large ORDER BY random() LIMIT %d`, largeSplitCount/4),
