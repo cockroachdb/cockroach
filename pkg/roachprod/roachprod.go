@@ -777,8 +777,8 @@ func UpdateTargets(
 func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.SyncedCluster) {
 	nodeIPPorts := make([]string, len(c.Nodes))
 	var wg sync.WaitGroup
-	for i, node := range c.VMs {
-		if node.Provider == gce.ProviderName {
+	for i, node := range c.Nodes {
+		if c.VMs[node-1].Provider == gce.ProviderName {
 			wg.Add(1)
 			go func(index int, v vm.VM) {
 				defer wg.Done()
@@ -791,7 +791,7 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 				nodeInfo := fmt.Sprintf("%s:%d", v.PublicIP, desc.Port)
 				l.Printf("node information obtained for node index %d: %s", index, nodeInfo)
 				nodeIPPorts[index] = nodeInfo
-			}(i, node)
+			}(i, c.VMs[node-1])
 		}
 	}
 	wg.Wait()
