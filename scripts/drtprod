@@ -131,6 +131,7 @@ instances:
   - openmetrics_endpoint: http://localhost:2114/metrics
     namespace: workload3
     raw_metric_prefix: workload_
+    histogram_buckets_as_distributions: true
     metrics:
     - tpcc_.*
     - kv_.*
