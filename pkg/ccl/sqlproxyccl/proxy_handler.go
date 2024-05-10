@@ -321,13 +321,15 @@ func newProxyHandler(
 
 // handle is called by the proxy server to handle a single incoming client
 // connection.
-func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) error {
+func (handler *proxyHandler) handle(
+	ctx context.Context, incomingConn net.Conn, requireProxyProtocol bool,
+) error {
 	connReceivedTime := timeutil.Now()
 
 	// Parse headers before admitting the connection since the connection may
 	// be upgraded to TLS.
 	var endpointID string
-	if handler.RequireProxyProtocol {
+	if requireProxyProtocol {
 		var err error
 		endpointID, err = acl.FindPrivateEndpointID(incomingConn)
 		if err != nil {
