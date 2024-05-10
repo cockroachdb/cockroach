@@ -911,7 +911,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 func runCDCBackfillRollingRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	const rowCount, splitCount = 1000000, 500
 	startOpts := option.DefaultStartOpts()
-	ips, err := c.InternalIP(ctx, t.L(), c.Node(1))
+	ips, err := c.ExternalIP(ctx, t.L(), c.Node(1))
 	sinkURL := fmt.Sprintf("https://%s:9707", ips[0])
 	sink := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	if err != nil {
@@ -1290,7 +1290,7 @@ func registerCDC(r registry.Registry) {
 		Owner:            registry.OwnerCDC,
 		Cluster:          r.MakeClusterSpec(5),
 		RequiresLicense:  true,
-		CompatibleClouds: registry.OnlyLocal,
+		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          time.Minute * 15,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
