@@ -36,6 +36,7 @@ interface SummaryStatProps {
   value?: number;
   format?: (n: number) => string;
   aggregator?: SummaryMetricsAggregator;
+  numberAlert?: boolean;
 }
 
 interface SummaryHeadlineStatProps extends SummaryStatProps {
@@ -109,11 +110,12 @@ export function SummaryValue(
 export function SummaryStat(
   props: SummaryStatProps & { children?: React.ReactNode },
 ) {
+  const classModifier = props.numberAlert ? "number-alert" : "number";
   return (
     <SummaryValue
       title={props.title}
       value={formatNumberForDisplay(props.value, props.format)}
-      classModifier="number"
+      classModifier={classModifier}
     >
       {props.children}
     </SummaryValue>
