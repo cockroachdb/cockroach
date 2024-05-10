@@ -164,9 +164,6 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		opts = append(opts,
 			rangefeed.WithInitialScan(s.onInitialScanDone),
 			rangefeed.WithRowTimestampInInitialScan(true),
-			rangefeed.WithInitialScanParallelismFn(func() int {
-				return int(s.spec.Config.InitialScanParallelism)
-			}),
 		)
 	} else {
 		initialTimestamp = s.spec.PreviousReplicatedTimestamp
@@ -508,12 +505,7 @@ func (s *eventStream) DebugGetProducerStatus() *streampb.DebugProducerStatus {
 const defaultBatchSize = 1 << 20
 
 func setConfigDefaults(cfg *streampb.StreamPartitionSpec_ExecutionConfig) {
-	const defaultInitialScanParallelism = 16
 	const defaultMinCheckpointFrequency = 10 * time.Second
-
-	if cfg.InitialScanParallelism <= 0 {
-		cfg.InitialScanParallelism = defaultInitialScanParallelism
-	}
 
 	if cfg.MinCheckpointFrequency <= 0 {
 		cfg.MinCheckpointFrequency = defaultMinCheckpointFrequency

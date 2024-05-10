@@ -36,7 +36,6 @@ var (
 	uri    = flag.String("uri", "", "sql uri")
 	tenant = flag.String("tenant", "", "tenant name")
 
-	parallelScan       = flag.Int("scans", 16, "parallel scan count")
 	batchSize          = flag.Int("batch-size", 1<<20, "batch size")
 	checkpointInterval = flag.Duration("checkpoint-iterval", 10*time.Second, "checkpoint interval")
 	statsInterval      = flag.Duration("stats-interval", 5*time.Second, "period over which to measure throughput")
@@ -123,7 +122,6 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 	var sps streampb.StreamPartitionSpec
 	sps.Config.MinCheckpointFrequency = *checkpointInterval
 	sps.Config.BatchByteSize = int64(*batchSize)
-	sps.Config.InitialScanParallelism = int32(*parallelScan)
 	sps.Spans = append(sps.Spans, tenantSpan)
 	sps.InitialScanTimestamp = replicationProducerSpec.ReplicationStartTime
 	spsBytes, err := protoutil.Marshal(&sps)
