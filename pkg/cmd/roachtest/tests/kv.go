@@ -509,7 +509,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 		Name:             "kv/gracefuldraining",
 		Owner:            registry.OwnerKV,
 		Cluster:          r.MakeClusterSpec(7),
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
