@@ -138,7 +138,7 @@ var compressionAlgorithm = settings.RegisterEnumSetting(
 	// TODO(jackson): Consider using a metamorphic constant here, but many tests
 	// will need to override it because they depend on a deterministic sstable
 	// size.
-	"snappy",
+	"zstd",
 	map[int64]string{
 		compressionAlgorithmSnappy: "snappy",
 		compressionAlgorithmZstd:   "zstd",
