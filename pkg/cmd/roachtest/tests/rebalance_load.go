@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -332,18 +333,18 @@ func makeStoreCPUFn(
 	}
 	url := adminURLs[0]
 	startTime := timeutil.Now()
-	tsQueries := make([]tsQuery, numNodes)
+	tsQueries := make([]roachtestutil.TsQuery, numNodes)
 	for i := range tsQueries {
-		tsQueries[i] = tsQuery{
-			name:      "cr.node.sys.cpu.combined.percent-normalized",
-			queryType: total,
-			sources:   []string{fmt.Sprintf("%d", i+1)},
+		tsQueries[i] = roachtestutil.TsQuery{
+			Name:      "cr.node.sys.cpu.combined.percent-normalized",
+			QueryType: roachtestutil.Total,
+			Sources:   []string{fmt.Sprintf("%d", i+1)},
 		}
 	}
 
 	return func(ctx context.Context) ([]float64, error) {
 		now := timeutil.Now()
-		resp, err := getMetricsWithSamplePeriod(
+		resp, err := roachtestutil.GetMetricsWithSamplePeriod(
 			ctx, c, t, url, startTime, now, statSamplePeriod, tsQueries)
 		if err != nil {
 			return nil, err

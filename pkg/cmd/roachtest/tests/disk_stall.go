@@ -163,9 +163,9 @@ func runDiskStalledWALFailover(
 	data := mustGetMetrics(ctx, c, t, adminURL,
 		workloadStartAt.Add(time.Minute),
 		timeutil.Now().Add(-time.Minute),
-		[]tsQuery{
-			{name: "cr.node.sql.exec.latency-p99.99", queryType: total, sources: []string{"2"}},
-			{name: "cr.store.storage.wal.failover.secondary.duration", queryType: total, sources: []string{"1"}},
+		[]roachtestutil.TsQuery{
+			{Name: "cr.node.sql.exec.latency-p99.99", QueryType: roachtestutil.Total, Sources: []string{"2"}},
+			{Name: "cr.store.storage.wal.failover.secondary.duration", QueryType: roachtestutil.Total, Sources: []string{"1"}},
 		})
 
 	for _, dp := range data.Results[0].Datapoints {
@@ -309,8 +309,8 @@ func runDiskStalledDetection(
 	}
 
 	stallAt := timeutil.Now()
-	response := mustGetMetrics(ctx, c, t, adminURL, workloadStartAt, stallAt, []tsQuery{
-		{name: "cr.node.sql.query.count", queryType: total},
+	response := mustGetMetrics(ctx, c, t, adminURL, workloadStartAt, stallAt, []roachtestutil.TsQuery{
+		{Name: "cr.node.sql.query.count", QueryType: roachtestutil.Total},
 	})
 	cum := response.Results[0].Datapoints
 	totalQueriesPreStall := cum[len(cum)-1].Value - cum[0].Value
@@ -361,8 +361,8 @@ func runDiskStalledDetection(
 
 	{
 		now := timeutil.Now()
-		response := mustGetMetrics(ctx, c, t, adminURL, workloadStartAt, now, []tsQuery{
-			{name: "cr.node.sql.query.count", queryType: total},
+		response := mustGetMetrics(ctx, c, t, adminURL, workloadStartAt, now, []roachtestutil.TsQuery{
+			{Name: "cr.node.sql.query.count", QueryType: roachtestutil.Total},
 		})
 		cum := response.Results[0].Datapoints
 		totalQueriesPostStall := cum[len(cum)-1].Value - totalQueriesPreStall

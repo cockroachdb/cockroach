@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -125,10 +126,10 @@ func verifyNodeLiveness(
 	if err := retry.WithMaxAttempts(ctx, retry.Options{
 		MaxBackoff: 500 * time.Millisecond,
 	}, 60, func() (err error) {
-		response, err = getMetrics(ctx, c, t, adminURLs[0], now.Add(-runDuration), now, []tsQuery{
+		response, err = getMetrics(ctx, c, t, adminURLs[0], now.Add(-runDuration), now, []roachtestutil.TsQuery{
 			{
-				name:      "cr.node.liveness.heartbeatfailures",
-				queryType: total,
+				Name:      "cr.node.liveness.heartbeatfailures",
+				QueryType: roachtestutil.Total,
 			},
 		})
 		return err

@@ -515,6 +515,19 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 		return nil
 	}
 
+	var midVal, postVal registry.ValidationFunc
+	if roachtestflags.SkipOperationValidations {
+		op.Status("skipping operation validations")
+	} else if val := opSpec.PreValidation; val != nil {
+		op.Status("running pre-operation validations")
+		var err error
+		if midVal, postVal, err = val(ctx, op, c); err != nil {
+			// TODO(bilal): Create a Datadog event for this.
+			op.Fatalf("pre-operation validation failed: %s", err)
+		}
+		op.Status("pre-operation validations passed")
+	}
+
 	var cleanup registry.OperationCleanup
 	func() {
 		ctx, cancel := context.WithTimeout(ctx, opSpec.Timeout)
@@ -527,29 +540,46 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 		return op.mu.failures[0]
 	}
 
-	if cleanup == nil {
+	if midVal != nil {
+		op.Status("running mid-operation validations")
+		if err := midVal(ctx, op, c); err != nil {
+			// TODO(bilal): Create a Datadog event for this.
+			op.Status("mid-operation validation failed: %s", err)
+		}
+		op.Status("mid-operation validations passed")
+	}
+
+	if cleanup != nil {
+		op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", roachtestflags.WaitBeforeCleanup))
+		select {
+		// Don't exit if the context is done due to a Ctrl-C, instead still run the
+		// cleanup code.
+		case <-ctx.Done():
+		case <-time.After(roachtestflags.WaitBeforeCleanup):
+		}
+		op.Status("running cleanup")
+		func() {
+			ctx, cancel := context.WithTimeout(context.Background(), opSpec.Timeout)
+			defer cancel()
+
+			cleanup.Cleanup(ctx, op, c)
+		}()
+
+		if op.Failed() {
+			op.Status("operation cleanup failed")
+			return op.mu.failures[0]
+		}
+	} else {
 		op.Status("operation ran successfully")
-		return nil
 	}
 
-	op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", roachtestflags.WaitBeforeCleanup))
-	select {
-	// Don't exit if the context is done due to a Ctrl-C, instead still run the
-	// cleanup code.
-	case <-ctx.Done():
-	case <-time.After(roachtestflags.WaitBeforeCleanup):
-	}
-	op.Status("running cleanup")
-	func() {
-		ctx, cancel := context.WithTimeout(context.Background(), opSpec.Timeout)
-		defer cancel()
-
-		cleanup.Cleanup(ctx, op, c)
-	}()
-
-	if op.Failed() {
-		op.Status("operation cleanup failed")
-		return op.mu.failures[0]
+	if postVal != nil {
+		op.Status("running post-operation validations")
+		if err := postVal(ctx, op, c); err != nil {
+			// TODO(bilal): Create a Datadog event for this.
+			op.Status("post-operation validation failed: %s", err)
+		}
+		op.Status("post-operation validations passed")
 	}
 
 	return nil

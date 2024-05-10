@@ -68,6 +68,7 @@ func registerDiskStall(r registry.Registry) {
 		Owner:            registry.OwnerStorage,
 		Timeout:          10 * time.Minute,
 		CompatibleClouds: registry.OnlyGCE,
+		PreValidation:    roachtestutil.ValidateQPSRecovers,
 		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
 		Run:              runDiskStall,
 	})
