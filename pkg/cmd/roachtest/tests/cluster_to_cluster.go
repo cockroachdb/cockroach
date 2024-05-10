@@ -1200,10 +1200,10 @@ func registerClusterToCluster(r registry.Registry) {
 			// With the machine type and size we use, this is the smallest disk that
 			// gives us max write BW of 800MB/s.
 			pdSize: 1667,
-			// Write ~150GB data to disk.
+			// Write ~375GB data to disk.
 			workload: replicateImportKV{
 				replicateSplits: true,
-				replicateKV:     replicateKV{readPercent: 0, initRows: 100000000, maxBlockBytes: 1024}},
+				replicateKV:     replicateKV{readPercent: 0, initRows: 200000000, maxBlockBytes: 1024}},
 			timeout:            1 * time.Hour,
 			maxAcceptedLatency: 1 * time.Hour,
 			// Cutover to one second after the import completes.
