@@ -3551,7 +3551,7 @@ func (s *Store) ComputeMetricsPeriodically(
 	if tick%logSSTInfoTicks == 1 /* every 10m */ {
 		// NB: The initial blank line ensures that compaction stats display
 		// will not contain the log prefix.
-		log.Infof(ctx, "\n%s", m.Metrics)
+		log.Storage.Infof(ctx, "\n%s", m.Metrics)
 	}
 	// Periodically emit a store stats structured event to the TELEMETRY channel,
 	// if reporting is enabled. These events are intended to be emitted at low
