@@ -245,4 +245,5 @@ message IngestionProcessorProgress {
   int32 sql_instance_id = 1 [(gogoproto.customname) = "SQLInstanceID"];
   cockroach.sql.jobs.jobspb.ResolvedSpans resolved_spans = 2;
   util.hlc.Timestamp low_water = 3 [(gogoproto.nullable) = false];
+  int32 recent_splits = 4;
 }

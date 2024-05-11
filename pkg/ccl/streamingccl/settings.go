@@ -78,11 +78,27 @@ var ReplanFrequency = settings.RegisterDurationSetting(
 	settings.WithName("physical_replication.consumer.replan_flow_frequency"),
 )
 
-var InterNodeLag = settings.RegisterDurationSetting(
+var LagCheckFreqency = settings.RegisterDurationSetting(
 	settings.SystemOnly,
-	"physical_replication.consumer.node_lag_replanning_threshold",
+	"physical_replication.consumer.lag_checking_frequency",
 	"the maximum difference in lag tolerated across two destination nodes; if 0, disabled",
 	0,
+	settings.NonNegativeDuration,
+)
+
+var InterNodeLagThreshold = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"physical_replication.consumer.node_lag_replanning_threshold",
+	"the minimum lag across two nodes required to consider replanning; if 0, disabled",
+	0,
+	settings.NonNegativeDuration,
+)
+
+var MaxInterNodLag = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"physical_replication.consumer.max_node_lag",
+	"the maximum difference in lag tolerated across two destination nodes; if 0, disabled",
+	15,
 	settings.NonNegativeDuration,
 )
 

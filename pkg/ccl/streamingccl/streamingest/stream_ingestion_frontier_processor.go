@@ -48,6 +48,12 @@ const (
 type ingestProcStats struct {
 	syncutil.Mutex
 	LowWaterMark hlc.Timestamp
+	SplitCount   int32
+}
+
+// Reset should be called after after the caller aquires the lock.
+func (s *ingestProcStats) Reset() {
+	s.SplitCount = 0
 }
 
 type ingestStatsByNode map[base.SQLInstanceID]*ingestProcStats
@@ -315,7 +321,7 @@ func (sf *streamIngestionFrontier) Next() (
 			log.Errorf(sf.Ctx(), "failed to persist frontier entries: %+v", err)
 		}
 
-		if err := sf.maybeCheckForLaggingNodes(); err != nil {
+		if err := sf.maybeShutdownForReplanning(); err != nil {
 			sf.MoveToDrainingAndLogError(err)
 			break
 		}
@@ -412,11 +418,12 @@ func (sf *streamIngestionFrontier) processIngestionProgress(
 	sqlNodeID := base.SQLInstanceID(update.SQLInstanceID)
 	stats, ok := sf.ingestionStats[sqlNodeID]
 	if !ok {
-		sf.ingestionStats[sqlNodeID] = &ingestProcStats{LowWaterMark: update.LowWater}
+		sf.ingestionStats[sqlNodeID] = &ingestProcStats{LowWaterMark: update.LowWater, SplitCount: update.RecentSplits}
 		return nil
 	}
 	stats.Lock()
 	stats.LowWaterMark = update.LowWater
+	stats.SplitCount += update.RecentSplits
 	stats.Unlock()
 	return nil
 }
@@ -547,22 +554,51 @@ func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 	return nil
 }
 
-func (sf *streamIngestionFrontier) maybeCheckForLaggingNodes() error {
+// maybeShutdownForReplanning uses the following replanning policy to shutdown
+// the distSQL flow:
+// 1. Every lag_checking_frequency, check ingestion stats.
+//
+// 2. During the check:
+// - Don't replan if all nodes are relatively caught up to each other. More
+//   explicitly, no node is node_lag_replanning_threshold behind any other node.
+// - Replan if a node is very far behind: a node is max_node_lag behind another
+//   node.
+// - Replan if a node node_lag_replanning_threshold behind and observed many
+//   more manual splits than other nodes (2 standard deviations more).
+// - If a node's relative lag is between node_lag_replanning_threshold and
+//   max_node_lag, don't replan on this check.
+//
+// Notes:
+//  - the flow is only eligible for replanning if the replicated time
+//    has advanced during the flow.
+
+//  - ingestion stats (i.e. splits observed) never reset during the flow because
+//    if a node observes
+//    many more splits than another node over an arbitrarily long flow, it seems
+//    wise to replan even if that node's lag is less than max_node_lag. It
+//    suggests the source topology has significantly changed, and a new physical
+//    plan could better replicate updates.
+// 
+// Guardrails
+// - Expect max_node_lag to be at least 4x lag_checking_frequency. This avoids
+//   replanning on a temporary blip.
+// - Expect node_lag_replanning threshold > lag_checking_frequency. We want to
+//   check more often than the threshold, so we stay reactive to a real lagging
+//   event.
+//
+func (sf *streamIngestionFrontier) maybeShutdownForReplanning() error {
 	ctx := sf.Ctx()
 
-	// We halve the frequency relative to the ReplanFrequency setting (i.e.
-	// check twice as often), because the node lag checker will only restart the
-	// distSQL plan if a node is lagging for 2 checks in a row.
-	checkFreq := streamingccl.ReplanFrequency.Get(&sf.FlowCtx.Cfg.Settings.SV) / 2
-	maxLag := streamingccl.InterNodeLag.Get(&sf.FlowCtx.Cfg.Settings.SV)
-	if checkFreq == 0 || maxLag == 0 || timeutil.Since(sf.lastNodeLagCheck) < checkFreq {
+	checkFreq := streamingccl.LagCheckFreqency.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	lagThreshold := streamingccl.InterNodeLagThreshold.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	if checkFreq == 0 || lagThreshold == 0 || timeutil.Since(sf.lastNodeLagCheck) < checkFreq {
 		log.VEventf(ctx, 2, "skipping lag replanning check: maxLag %d; checkFreq %.2f; last node check %s; time since last check %.2f",
-			maxLag, checkFreq.Minutes(), sf.lastNodeLagCheck, timeutil.Since(sf.lastNodeLagCheck).Minutes())
+			lagThreshold, checkFreq.Minutes(), sf.lastNodeLagCheck, timeutil.Since(sf.lastNodeLagCheck).Minutes())
 		return nil
 	}
 	// Don't check for lagging nodes if the hwm has yet to advance.
 	if sf.replicatedTimeAtStart.Equal(sf.persistedReplicatedTime) {
-		log.VEventf(ctx, 2, "skipping lag replanning check: hwm has yet to advance past %s", sf.replicatedTimeAtStart)
+		log.VEventf(ctx, 2, "skipping lag replanning check: low water mark has yet to advance past %s", sf.replicatedTimeAtStart)
 		return nil
 	}
 	defer func() {
@@ -572,7 +608,7 @@ func (sf *streamIngestionFrontier) maybeCheckForLaggingNodes() error {
 	err := checkLaggingNodes(
 		ctx,
 		sf.ingestionStats,
-		maxLag,
+		lagThreshold,
 	)
 	return sf.handleLaggingNodeError(ctx, err)
 }

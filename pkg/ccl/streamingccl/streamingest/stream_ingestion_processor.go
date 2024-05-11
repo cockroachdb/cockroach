@@ -507,11 +507,16 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 	case latestResolvedSpans, ok := <-sip.checkpointCh:
 		if ok {
 			sip.recentStats.Lock()
-			defer sip.recentStats.Unlock()
+			defer func () {
+				sip.Reset()
+				sip.recentStats.Unlock()
+			}()
+
 			processorProgressUpdate := streampb.IngestionProcessorProgress{
 				SQLInstanceID: int32(sip.flowCtx.NodeID.SQLInstanceID()),
 				ResolvedSpans: latestResolvedSpans,
 				LowWater:      sip.recentStats.LowWaterMark,
+				RecentSplits: sip.recentStats.SplitCount,
 			}
 			progressBytes, err := protoutil.Marshal(&processorProgressUpdate)
 			if err != nil {
@@ -875,6 +880,9 @@ func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 	}
 	log.Infof(ctx, "replicating split at %s", roachpb.Key(rekey).String())
 	expiration := kvDB.Clock().Now().AddDuration(time.Hour)
+	sip.recentStats.Lock()
+	sip.recentStats.SplitCount++
+	sip.recentStats.Unlock()
 	return kvDB.AdminSplit(ctx, rekey, expiration)
 }
 
