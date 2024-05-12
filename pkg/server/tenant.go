@@ -817,19 +817,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	// Start the SQL subsystem.
-	if err := s.sqlServer.preStart(
-		workersCtx,
-		s.stopper,
-		s.sqlServer.cfg.TestingKnobs,
-		orphanedLeasesTimeThresholdNanos,
-	); err != nil {
-		return err
-	}
-
-	// Initialize the external storage builders configuration params now that the
-	// engines have been created. The object can be used to create ExternalStorage
-	// objects hereafter.
+	// Initialize the external storage builders before starting the SQL server
+	// in order to be able to server distributed plans (which we need to do once
+	// the DistSQL server is started).
 	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
 	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
 	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
@@ -846,6 +836,16 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.costController,
 		s.registry,
 	)
+
+	// Start the SQL subsystem.
+	if err := s.sqlServer.preStart(
+		workersCtx,
+		s.stopper,
+		s.sqlServer.cfg.TestingKnobs,
+		orphanedLeasesTimeThresholdNanos,
+	); err != nil {
+		return err
+	}
 
 	// Start the job scheduler now that the SQL Server and
 	// external storage is initialized.

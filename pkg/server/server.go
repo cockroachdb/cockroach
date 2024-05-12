@@ -2055,21 +2055,9 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent(ctx)
 
-	if !s.cfg.DisableSQLServer {
-		// Start the SQL subsystem.
-		if err := s.sqlServer.preStart(
-			workersCtx,
-			s.stopper,
-			s.cfg.TestingKnobs,
-			orphanedLeasesTimeThresholdNanos,
-		); err != nil {
-			return err
-		}
-	}
-
-	// Initialize the external storage builders configuration params now that the
-	// engines have been created. The object can be used to create ExternalStorage
-	// objects hereafter.
+	// Initialize the external storage builders before starting the SQL server
+	// in order to be able to server distributed plans (which we need to do once
+	// the DistSQL server is started).
 	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
 	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
 	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
@@ -2085,6 +2073,18 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		nil, /* TenantExternalIORecorder */
 		s.appRegistry,
 	)
+
+	if !s.cfg.DisableSQLServer {
+		// Start the SQL subsystem.
+		if err := s.sqlServer.preStart(
+			workersCtx,
+			s.stopper,
+			s.cfg.TestingKnobs,
+			orphanedLeasesTimeThresholdNanos,
+		); err != nil {
+			return err
+		}
+	}
 
 	if err := s.runIdempontentSQLForInitType(ctx, state.initType); err != nil {
 		return err
