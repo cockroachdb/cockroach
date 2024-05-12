@@ -52,7 +52,7 @@ import (
 //     follows: progress=(replid@match:<state>:<active>:<paused>,...).
 //     <state> is one of {probe,replicate,snapshot}, <active> is
 //     {active,!inactive}, and <paused> is {paused,!paused}. The latter controls
-//     MsgAppFlowPaused in the raft library, not the CRDB-level follower
+//     MsgAppProbesPaused in the raft library, not the CRDB-level follower
 //     pausing.
 //
 //     B. For the raft transport, we can specify the set of replica IDs we're
@@ -169,12 +169,12 @@ func TestFlowControlReplicaIntegration(t *testing.T) {
 									paused := parts[3] == "paused"
 
 									progress[replID] = tracker.Progress{
-										Match:            uint64(index),
-										State:            state,
-										RecentActive:     active,
-										MsgAppFlowPaused: paused,
-										Inflights:        tracker.NewInflights(1, 0), // avoid NPE
-										IsLearner:        false,
+										Match:              uint64(index),
+										State:              state,
+										RecentActive:       active,
+										MsgAppProbesPaused: paused,
+										Inflights:          tracker.NewInflights(1, 0), // avoid NPE
+										IsLearner:          false,
 									}
 
 								case "descriptor", "paused", "inactive":

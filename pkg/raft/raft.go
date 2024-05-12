@@ -547,24 +547,24 @@ func (r *raft) send(m pb.Message) {
 	}
 }
 
-// sendAppend sends an append RPC with new entries (if any) and the
-// current commit index to the given peer.
-func (r *raft) sendAppend(to uint64) {
-	r.maybeSendAppend(to, true)
-}
-
-// maybeSendAppend sends an append RPC with new entries to the given peer,
-// if necessary. Returns true if a message was sent. The sendIfEmpty
-// argument controls whether messages with no entries will be sent
-// ("empty" messages are useful to convey updated Commit indexes, but
-// are undesirable when we're sending multiple messages in a batch).
+// maybeSendAppend sends an append RPC with log entries (if any) that are not
+// yet known to be replicated in the given peer's log, as well as the current
+// commit index. Usually it sends a MsgApp message, but in some cases (e.g. the
+// log has been compacted) it can send a MsgSnap.
 //
-// TODO(pav-kv): make invocation of maybeSendAppend stateless. The Progress
-// struct contains all the state necessary for deciding whether to send a
-// message.
-func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
+// In some cases, the MsgApp message can have zero entries, and yet be sent.
+// When the follower log is not fully up-to-date, we must send a MsgApp
+// periodically so that eventually the flow is either accepted or rejected. Not
+// doing so can result in replication stall, in cases when a MsgApp is dropped.
+//
+// Returns true if a message was sent, or false otherwise. A message is not sent
+// if the follower log and commit index are up-to-date, the flow is paused (for
+// reasons like in-flight limits), or the message could not be constructed.
+func (r *raft) maybeSendAppend(to uint64) bool {
 	pr := r.trk.Progress[to]
-	if pr.IsPaused() {
+
+	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
+	if !pr.ShouldSendMsgApp(last, commit) {
 		return false
 	}
 
@@ -576,36 +576,26 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 		return r.maybeSendSnapshot(to, pr)
 	}
 
-	var ents []pb.Entry
-	// In a throttled StateReplicate only send empty MsgApp, to ensure progress.
-	// Otherwise, if we had a full Inflights and all inflight messages were in
-	// fact dropped, replication to that follower would stall. Instead, an empty
-	// MsgApp will eventually reach the follower (heartbeats responses prompt the
-	// leader to send an append), allowing it to be acked or rejected, both of
-	// which will clear out Inflights.
-	if pr.State != tracker.StateReplicate || !pr.Inflights.Full() {
-		ents, err = r.raftLog.entries(pr.Next, r.maxMsgSize)
-	}
-	if len(ents) == 0 && !sendIfEmpty {
-		return false
-	}
-	// TODO(pav-kv): move this check up to where err is returned.
-	if err != nil { // send a snapshot if we failed to get the entries
-		return r.maybeSendSnapshot(to, pr)
+	var entries []pb.Entry
+	if pr.CanSendEntries(last) {
+		if entries, err = r.raftLog.entries(pr.Next, r.maxMsgSize); err != nil {
+			// Send a snapshot if we failed to get the entries.
+			return r.maybeSendSnapshot(to, pr)
+		}
 	}
 
-	// Send the actual MsgApp otherwise, and update the progress accordingly.
+	// Send the MsgApp, and update the progress accordingly.
 	r.send(pb.Message{
 		To:      to,
 		Type:    pb.MsgApp,
 		Index:   prevIndex,
 		LogTerm: prevTerm,
-		Entries: ents,
-		Commit:  r.raftLog.committed,
+		Entries: entries,
+		Commit:  commit,
 		Match:   pr.Match,
 	})
-	pr.SentEntries(len(ents), uint64(payloadsSize(ents)))
-	pr.SentCommit(r.raftLog.committed)
+	pr.SentEntries(len(entries), uint64(payloadsSize(entries)))
+	pr.SentCommit(commit)
 	return true
 }
 
@@ -664,7 +654,7 @@ func (r *raft) bcastAppend() {
 		if id == r.id {
 			return
 		}
-		r.sendAppend(id)
+		r.maybeSendAppend(id)
 	})
 }
 
@@ -1416,7 +1406,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				if pr.State == tracker.StateReplicate {
 					pr.BecomeProbe()
 				}
-				r.sendAppend(m.From)
+				r.maybeSendAppend(m.From)
 			}
 		} else {
 			// We want to update our tracking if the response updates our
@@ -1452,21 +1442,13 @@ func stepLeader(r *raft, m pb.Message) error {
 
 				if r.maybeCommit() {
 					r.bcastAppend()
-				} else if r.id != m.From && pr.CanBumpCommit(r.raftLog.committed) {
-					// This node may be missing the latest commit index, so send it.
-					// NB: this is not strictly necessary because the periodic heartbeat
-					// messages deliver commit indices too. However, a message sent now
-					// may arrive earlier than the next heartbeat fires.
-					r.sendAppend(m.From)
 				}
-				// We've updated flow control information above, which may
-				// allow us to send multiple (size-limited) in-flight messages
-				// at once (such as when transitioning from probe to
-				// replicate, or when freeTo() covers multiple messages). If
-				// we have more entries to send, send as many messages as we
-				// can (without sending empty messages for the commit index)
+				// We've updated flow control information above, which may allow us to
+				// send multiple (size-limited) in-flight messages at once (such as when
+				// transitioning from probe to replicate, or when freeTo() covers
+				// multiple messages). Send as many messages as we can.
 				if r.id != m.From {
-					for r.maybeSendAppend(m.From, false /* sendIfEmpty */) {
+					for r.maybeSendAppend(m.From) {
 					}
 				}
 				// Transfer leadership is in progress.
@@ -1478,24 +1460,8 @@ func stepLeader(r *raft, m pb.Message) error {
 		}
 	case pb.MsgHeartbeatResp:
 		pr.RecentActive = true
-		pr.MsgAppFlowPaused = false
-
-		// NB: if the follower is paused (full Inflights), this will still send an
-		// empty append, allowing it to recover from situations in which all the
-		// messages that filled up Inflights in the first place were dropped. Note
-		// also that the outgoing heartbeat already communicated the commit index.
-		//
-		// If the follower is fully caught up but also in StateProbe (as can happen
-		// if ReportUnreachable was called), we also want to send an append (it will
-		// be empty) to allow the follower to transition back to StateReplicate once
-		// it responds.
-		//
-		// Note that StateSnapshot typically satisfies pr.Match < lastIndex, but
-		// `pr.Paused()` is always true for StateSnapshot, so sendAppend is a
-		// no-op.
-		if pr.Match < r.raftLog.lastIndex() || pr.State == tracker.StateProbe {
-			r.sendAppend(m.From)
-		}
+		pr.MsgAppProbesPaused = false
+		r.maybeSendAppend(m.From)
 
 	case pb.MsgSnapStatus:
 		if pr.State != tracker.StateSnapshot {
@@ -1514,7 +1480,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		// If snapshot finish, wait for the MsgAppResp from the remote node before sending
 		// out the next MsgApp.
 		// If snapshot failure, wait for a heartbeat interval before next try
-		pr.MsgAppFlowPaused = true
+		pr.MsgAppProbesPaused = true
 	case pb.MsgUnreachable:
 		// During optimistic replication, if the remote becomes unreachable,
 		// there is huge probability that a MsgApp is lost.
@@ -1551,7 +1517,8 @@ func stepLeader(r *raft, m pb.Message) error {
 			r.sendTimeoutNow(leadTransferee)
 			r.logger.Infof("%x sends MsgTimeoutNow to %x immediately as %x already has up-to-date log", r.id, leadTransferee, leadTransferee)
 		} else {
-			r.sendAppend(leadTransferee)
+			pr.MsgAppProbesPaused = false
+			r.maybeSendAppend(leadTransferee)
 		}
 	}
 	return nil
@@ -1899,21 +1866,14 @@ func (r *raft) switchToConfig(cfg tracker.Config, trk tracker.ProgressMap) pb.Co
 		return cs
 	}
 
-	if r.maybeCommit() {
-		// If the configuration change means that more entries are committed now,
-		// broadcast/append to everyone in the updated config.
-		r.bcastAppend()
-	} else {
-		// Otherwise, still probe the newly added replicas; there's no reason to
-		// let them wait out a heartbeat interval (or the next incoming
-		// proposal).
-		r.trk.Visit(func(id uint64, pr *tracker.Progress) {
-			if id == r.id {
-				return
-			}
-			r.maybeSendAppend(id, false /* sendIfEmpty */)
-		})
-	}
+	r.maybeCommit()
+	// If the configuration change means that more entries are committed now,
+	// broadcast/append to everyone in the updated config.
+	//
+	// Otherwise, still probe the newly added replicas; there's no reason to let
+	// them wait out a heartbeat interval (or the next incoming proposal).
+	r.bcastAppend()
+
 	// If the leadTransferee was removed or demoted, abort the leadership transfer.
 	if _, tOK := r.trk.Config.Voters.IDs()[r.leadTransferee]; !tOK && r.leadTransferee != 0 {
 		r.abortLeaderTransfer()

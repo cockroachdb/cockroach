@@ -30,6 +30,9 @@ import (
 // NB(tbg): Progress is basically a state machine whose transitions are mostly
 // strewn around `*raft.raft`. Additionally, some fields are only used when in a
 // certain State. All of this isn't ideal.
+//
+// TODO(pav-kv): consolidate all flow control state changes here. Much of the
+// transitions in raft.go logically belong here.
 type Progress struct {
 	// Match is the index up to which the follower's log is known to match the
 	// leader's.
@@ -93,13 +96,13 @@ type Progress struct {
 	// This is always true on the leader.
 	RecentActive bool
 
-	// MsgAppFlowPaused is used when the MsgApp flow to a node is throttled. This
+	// MsgAppProbesPaused is used when the MsgApp flow to a node is throttled. This
 	// happens in StateProbe, or StateReplicate with saturated Inflights. In both
 	// cases, we need to continue sending MsgApp once in a while to guarantee
-	// progress, but we only do so when MsgAppFlowPaused is false (it is reset on
+	// progress, but we only do so when MsgAppProbesPaused is false (it is reset on
 	// receiving a heartbeat response), to not overflow the receiver. See
-	// IsPaused().
-	MsgAppFlowPaused bool
+	// IsPaused() and ShouldSendMsgApp().
+	MsgAppProbesPaused bool
 
 	// Inflights is a sliding window for the inflight messages.
 	// Each inflight message contains one or more log entries.
@@ -119,10 +122,10 @@ type Progress struct {
 	IsLearner bool
 }
 
-// ResetState moves the Progress into the specified State, resetting MsgAppFlowPaused,
+// ResetState moves the Progress into the specified State, resetting MsgAppProbesPaused,
 // PendingSnapshot, and Inflights.
 func (pr *Progress) ResetState(state StateType) {
-	pr.MsgAppFlowPaused = false
+	pr.MsgAppProbesPaused = false
 	pr.PendingSnapshot = 0
 	pr.State = state
 	pr.Inflights.reset()
@@ -166,20 +169,19 @@ func (pr *Progress) BecomeSnapshot(snapshoti uint64) {
 //
 // Must be used with StateProbe or StateReplicate.
 func (pr *Progress) SentEntries(entries int, bytes uint64) {
-	switch pr.State {
-	case StateReplicate:
-		if entries > 0 {
-			pr.Next += uint64(entries)
-			pr.Inflights.Add(pr.Next-1, bytes)
-		}
-		// If this message overflows the in-flights tracker, or it was already full,
-		// consider this message being a probe, so that the flow is paused.
-		pr.MsgAppFlowPaused = pr.Inflights.Full()
-	case StateProbe:
-		pr.MsgAppFlowPaused = true
-	default:
-		panic(fmt.Sprintf("sending append in unhandled state %s", pr.State))
+	if pr.State == StateReplicate && entries > 0 {
+		pr.Next += uint64(entries)
+		pr.Inflights.Add(pr.Next-1, bytes)
 	}
+	pr.MsgAppProbesPaused = true
+}
+
+// CanSendEntries returns true if the flow control state allows sending at least
+// one log entry to this follower.
+//
+// Must be used with StateProbe or StateReplicate.
+func (pr *Progress) CanSendEntries(lastIndex uint64) bool {
+	return pr.Next <= lastIndex && (pr.State == StateProbe || !pr.Inflights.Full())
 }
 
 // CanBumpCommit returns true if sending the given commit index can potentially
@@ -206,7 +208,6 @@ func (pr *Progress) MaybeUpdate(n uint64) bool {
 	}
 	pr.Match = n
 	pr.Next = max(pr.Next, n+1) // invariant: Match < Next
-	pr.MsgAppFlowPaused = false
 	return true
 }
 
@@ -247,7 +248,7 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 	pr.Next = max(min(rejected, matchHint+1), pr.Match+1)
 	// Regress the sentCommit since it unlikely has been applied.
 	pr.sentCommit = min(pr.sentCommit, pr.Next-1)
-	pr.MsgAppFlowPaused = false
+	pr.MsgAppProbesPaused = false
 	return true
 }
 
@@ -257,14 +258,70 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 // operation, this is false. A throttled node will be contacted less frequently
 // until it has reached a state in which it's able to accept a steady stream of
 // log entries again.
+//
+// TODO(pav-kv): this method is only used for follower pausing. Find a way to
+// remove it.
 func (pr *Progress) IsPaused() bool {
 	switch pr.State {
 	case StateProbe:
-		return pr.MsgAppFlowPaused
+		return pr.MsgAppProbesPaused
 	case StateReplicate:
-		return pr.MsgAppFlowPaused
+		return pr.MsgAppProbesPaused && pr.Inflights.Full()
 	case StateSnapshot:
 		return true
+	default:
+		panic("unexpected state")
+	}
+}
+
+// ShouldSendMsgApp returns true if the leader should send a MsgApp to the
+// follower represented by this Progress. The given last and commit index of the
+// leader log help determining if there is outstanding workload, and contribute
+// to this decision-making.
+//
+// In StateProbe, a message is sent periodically. The flow is paused after every
+// message, and un-paused on a heartbeat response. This ensures that probes are
+// not too frequent, and eventually the MsgApp is either accepted or rejected.
+//
+// In StateReplicate, generally a message is sent if there are log entries that
+// are not yet in-flight, and the in-flight limits are not exceeded. Otherwise,
+// we don't send a message, or send a "probe" message in a few situations.
+//
+// A probe message (containing no log entries) is sent if the follower's commit
+// index can be updated, or there hasn't been a probe message recently. We must
+// send a message periodically even if all log entries are in-flight, in order
+// to guarantee that eventually the flow is either accepted or rejected.
+//
+// In StateSnapshot, we do not send append messages.
+func (pr *Progress) ShouldSendMsgApp(last, commit uint64) bool {
+	switch pr.State {
+	case StateProbe:
+		return !pr.MsgAppProbesPaused
+
+	case StateReplicate:
+		// If the in-flight limits are not saturated, and there are pending entries
+		// (Next <= lastIndex), send a MsgApp with some entries.
+		if pr.CanSendEntries(last) {
+			return true
+		}
+		// We can't send any entries at this point, but we need to be sending a
+		// MsgApp periodically, to guarantee liveness of the MsgApp flow: the
+		// follower eventually will reply with an ack or reject.
+		//
+		// If the follower's log is outdated, and we haven't recently sent a MsgApp
+		// (according to the MsgAppProbesPaused flag), send one now. This is going
+		// to be an empty "probe" MsgApp.
+		if pr.Match < last && !pr.MsgAppProbesPaused {
+			return true
+		}
+		// Send an empty MsgApp containing the latest commit index if:
+		//	- our commit index exceeds the in-flight commit index, and
+		//	- sending it can commit at least one of the follower's entries
+		//	  (including the ones still in flight to it).
+		return pr.CanBumpCommit(commit)
+
+	case StateSnapshot:
+		return false
 	default:
 		panic("unexpected state")
 	}

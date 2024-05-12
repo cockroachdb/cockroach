@@ -314,7 +314,7 @@ stale log entries:
 	rafthttp package.
 
 	'MsgApp' contains log entries to replicate. A leader calls bcastAppend,
-	which calls sendAppend, which sends soon-to-be-replicated logs in 'MsgApp'
+	which calls maybeSendAppend, which sends soon-to-be-replicated logs in 'MsgApp'
 	type. When 'MsgApp' is passed to candidate's Step method, candidate reverts
 	back to follower, because it indicates that there is a valid leader sending
 	'MsgApp' messages. Candidate and follower respond to this message in
@@ -352,8 +352,8 @@ stale log entries:
 
 	'MsgSnap' requests to install a snapshot message. When a node has just
 	become a leader or the leader receives 'MsgProp' message, it calls
-	'bcastAppend' method, which then calls 'sendAppend' method to each
-	follower. In 'sendAppend', if a leader fails to get term or entries,
+	'bcastAppend' method, which then calls 'maybeSendAppend' method to each
+	follower. In 'maybeSendAppend', if a leader fails to get term or entries,
 	the leader requests snapshot by sending 'MsgSnap' type message.
 
 	'MsgSnapStatus' tells the result of snapshot install message. When a
@@ -375,7 +375,7 @@ stale log entries:
 	'MsgHeartbeatResp' is a response to 'MsgHeartbeat'. When 'MsgHeartbeatResp'
 	is passed to leader's Step method, the leader knows which follower
 	responded. And only when the leader's last committed index is greater than
-	follower's Match index, the leader runs 'sendAppend` method.
+	follower's Match index, the leader runs 'maybeSendAppend` method.
 
 	'MsgUnreachable' tells that request(message) wasn't delivered. When
 	'MsgUnreachable' is passed to leader's Step method, the leader discovers
