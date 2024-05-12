@@ -1546,8 +1546,8 @@ func NewStore(
 
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
-	s.snapshotApplyQueue = multiqueue.NewMultiQueue(int(cfg.SnapshotApplyLimit))
-	s.snapshotSendQueue = multiqueue.NewMultiQueue(int(cfg.SnapshotSendLimit))
+	s.snapshotApplyQueue = multiqueue.NewMultiQueue(uint(cfg.SnapshotApplyLimit))
+	s.snapshotSendQueue = multiqueue.NewMultiQueue(uint(cfg.SnapshotSendLimit))
 
 	s.consistencyLimiter = quotapool.NewRateLimiter(
 		"ConsistencyQueue",
