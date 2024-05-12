@@ -32,6 +32,8 @@ type Inflights struct {
 	count int    // number of inflight messages in the buffer
 	bytes uint64 // number of inflight bytes
 
+	// TODO(pav-kv): do not store the limits here, pass them to methods. For flow
+	// control, we need to support dynamic limits.
 	size     int    // the max number of inflight messages
 	maxBytes uint64 // the max total byte size of inflight messages
 
