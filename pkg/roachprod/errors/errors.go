@@ -97,7 +97,8 @@ func (te TransientError) ExitCode() int {
 // IsTransient allows callers to check if a given error is a roachprod
 // transient error.
 func IsTransient(err error) bool {
-	return errors.Is(err, TransientError{})
+	var ref TransientError
+	return errors.As(err, &ref)
 }
 
 // NewSSHError returns a transient error for SSH-related issues.
