@@ -3175,7 +3175,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 	s := tc.store
 
 	// Checking this now makes sure that if the defaults change this test will also.
-	require.Equal(t, 2, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, uint(2), s.snapshotSendQueue.AvailableLen())
 	require.Equal(t, 0, s.snapshotSendQueue.QueueLen())
 	cleanup1, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSendSnapshotRequest{
 		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
@@ -3187,7 +3187,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 		SenderQueuePriority: 1,
 	}, 1)
 	require.NoError(t, err)
-	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, uint(0), s.snapshotSendQueue.AvailableLen())
 	require.Equal(t, 1, s.snapshotSendQueue.QueueLen())
 
 	// At this point both the first two tasks will be holding reservations and
@@ -3200,7 +3200,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 		QueueOnDelegateLen:  0,
 	}, 1)
 	require.Error(t, err)
-	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, uint(0), s.snapshotSendQueue.AvailableLen())
 	require.Equal(t, 1, s.snapshotSendQueue.QueueLen())
 
 	// Now add a task that will wait indefinitely for another task to finish.
@@ -3240,7 +3240,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 
 	// Wait a little time before calling signaling the first two as complete.
 	time.Sleep(100 * time.Millisecond)
-	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, uint(0), s.snapshotSendQueue.AvailableLen())
 	// One remaining task are queued at this point.
 	require.Equal(t, 2, s.snapshotSendQueue.QueueLen())
 
@@ -3249,7 +3249,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 
 	// Wait until all cleanup run before checking the number of permits.
 	wg.Wait()
-	require.Equal(t, 2, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, uint(2), s.snapshotSendQueue.AvailableLen())
 	require.Equal(t, 0, s.snapshotSendQueue.QueueLen())
 }
 

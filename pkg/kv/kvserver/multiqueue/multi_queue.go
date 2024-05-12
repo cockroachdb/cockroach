@@ -96,19 +96,21 @@ func (h *notifyHeap) tryRemove(task *Task) bool {
 // be run. Once the job is completed, MultiQueue.TaskDone must be called to
 // return the Permit to the queue so that the next Task can be started.
 type MultiQueue struct {
-	mu             syncutil.Mutex
-	remainingRuns  int
-	mapping        map[int]int
-	lastQueueIndex int
-	outstanding    []notifyHeap
+	mu               syncutil.Mutex
+	concurrencyLimit uint
+	remainingRuns    uint
+	mapping          map[int]int
+	lastQueueIndex   int
+	outstanding      []notifyHeap
 }
 
 // NewMultiQueue creates a new queue. The queue is not started, and start needs
 // to be called on it first.
-func NewMultiQueue(maxConcurrency int) *MultiQueue {
+func NewMultiQueue(maxConcurrency uint) *MultiQueue {
 	queue := MultiQueue{
-		remainingRuns: maxConcurrency,
-		mapping:       make(map[int]int),
+		remainingRuns:    maxConcurrency,
+		concurrencyLimit: maxConcurrency,
+		mapping:          make(map[int]int),
 	}
 	queue.lastQueueIndex = -1
 
@@ -141,6 +143,27 @@ func (m *MultiQueue) tryRunNextLocked() {
 			return
 		}
 	}
+}
+
+// UpdateConcurrencyLimit updates the concurrencyLimit and remainingRuns field.
+// We add the delta from new and old concurrencyLimit to remainingRuns and cap
+// remainingRuns as non-negative integer.
+func (m *MultiQueue) UpdateConcurrencyLimit(newLimit uint) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.updateConcurrencyLimitLocked(newLimit)
+}
+
+func (m *MultiQueue) updateConcurrencyLimitLocked(newLimit uint) {
+	diff := int(newLimit) - int(m.concurrencyLimit)
+	runs := int(m.remainingRuns) + diff
+	if runs < 0 {
+		runs = 0
+	}
+	m.remainingRuns = uint(runs)
+	m.concurrencyLimit = newLimit
+	// Attempt to wake the outstanding tasks after concurrency limit adjustment.
+	m.tryRunNextLocked()
 }
 
 // Add returns a Task that must be closed (calling m.Release(..)) to
@@ -228,13 +251,16 @@ func (m *MultiQueue) releaseLocked(permit *Permit) {
 		panic("double release of permit")
 	}
 	permit.valid = false
-	m.remainingRuns++
+	// In case that concurrencyLimit shrank in between task's execution.
+	if m.remainingRuns < m.concurrencyLimit {
+		m.remainingRuns++
+	}
 	m.tryRunNextLocked()
 }
 
 // AvailableLen returns the number of additional tasks that can be added without
 // queueing. This will return 0 if there is anything queued.
-func (m *MultiQueue) AvailableLen() int {
+func (m *MultiQueue) AvailableLen() uint {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.remainingRuns
@@ -243,7 +269,7 @@ func (m *MultiQueue) AvailableLen() int {
 // QueueLen returns the length of the queue if one more task is added. If this
 // returns 0 then a task can be added and run without queueing.
 // NB: The value returned is not a guarantee that queueing will not occur when
-// the request is submitted. multiple calls to QueueLen could race.
+// the request is submitted. Multiple calls to QueueLen could race.
 func (m *MultiQueue) QueueLen() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -259,5 +285,10 @@ func (m *MultiQueue) queueLenLocked() int {
 	for i := 0; i < len(m.outstanding); i++ {
 		count += len(m.outstanding[i])
 	}
-	return count - m.remainingRuns
+	return count
+}
+
+// MaxConcurrency exposes the multi-queue's concurrency limit.
+func (m *MultiQueue) MaxConcurrency() int {
+	return int(m.concurrencyLimit)
 }
