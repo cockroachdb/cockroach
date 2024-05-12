@@ -371,7 +371,6 @@ func listTables(tabTypes string, hasPattern bool, verbose, showSystem bool) (str
 
 	if !(showTables || showIndexes || showViews || showMatViews || showSeq || showForeign) {
 		showTables = true
-		showIndexes = true
 		showViews = true
 		showMatViews = true
 		showSeq = true
