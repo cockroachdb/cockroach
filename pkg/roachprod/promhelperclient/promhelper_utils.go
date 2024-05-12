@@ -23,7 +23,7 @@ import (
 
 var (
 	// promCredFile is where the prom helper credentials are stored
-	promCredFile = os.TempDir() + "promhelpers-secrets"
+	promCredFile = os.TempDir() + "/promhelpers-secrets"
 )
 
 // FetchedFrom indicates where the credentials have been fetched from.

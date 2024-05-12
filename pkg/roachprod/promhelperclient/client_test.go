@@ -48,7 +48,7 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 				Body:       io.NopCloser(strings.NewReader("failed")),
 			}, nil
 		}
-		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, []string{"n1"}, l)
+		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, []string{"n1"}, true, l)
 		require.NotNil(t, err)
 		require.Equal(t, "request failed with status 400 and error failed", err.Error())
 	})
@@ -76,7 +76,7 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 				StatusCode: 200,
 			}, nil
 		}
-		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, []string{"n1", "", "n3"}, l)
+		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, []string{"n1", "", "n3"}, true, l)
 		require.Nil(t, err)
 	})
 }
