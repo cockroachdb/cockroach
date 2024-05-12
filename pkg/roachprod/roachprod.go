@@ -798,7 +798,7 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 	if len(nodeIPPorts) > 0 {
 		if err := promhelperclient.NewPromClient().UpdatePrometheusTargets(ctx,
 			envutil.EnvOrDefaultString(prometheusHostUrlEnv, defaultPrometheusHostUrl),
-			c.Name, false, nodeIPPorts, l); err != nil {
+			c.Name, false, nodeIPPorts, !c.Secure, l); err != nil {
 			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
 		}
 	}
