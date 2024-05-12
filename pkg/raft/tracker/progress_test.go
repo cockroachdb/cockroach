@@ -47,7 +47,7 @@ func TestProgressIsPaused(t *testing.T) {
 		{StateProbe, false, false},
 		{StateProbe, true, true},
 		{StateReplicate, false, false},
-		{StateReplicate, true, true},
+		{StateReplicate, true, false},
 		{StateSnapshot, false, true},
 		{StateSnapshot, true, true},
 	}
@@ -61,8 +61,11 @@ func TestProgressIsPaused(t *testing.T) {
 	}
 }
 
-// TestProgressResume ensures that MaybeUpdate and MaybeDecrTo will reset
-// MsgAppFlowPaused.
+// TestProgressResume ensures that MaybeDecrTo resets MsgAppFlowPaused, and
+// MaybeUpdate does not.
+//
+// TODO(pav-kv): there is little sense in testing these micro-behaviours in the
+// struct. We should test the visible behaviour instead.
 func TestProgressResume(t *testing.T) {
 	p := &Progress{
 		Next:             2,
@@ -72,7 +75,7 @@ func TestProgressResume(t *testing.T) {
 	assert.False(t, p.MsgAppFlowPaused)
 	p.MsgAppFlowPaused = true
 	p.MaybeUpdate(2)
-	assert.False(t, p.MsgAppFlowPaused)
+	assert.True(t, p.MsgAppFlowPaused)
 }
 
 func TestProgressBecomeProbe(t *testing.T) {
