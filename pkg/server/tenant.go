@@ -817,35 +817,35 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	initExternalStorage := func() {
+		ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+		ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
+		s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
+		s.externalStorageBuilder.init(
+			s.cfg.EarlyBootExternalStorageAccessor,
+			s.cfg.ExternalIODirConfig,
+			s.sqlServer.cfg.Settings,
+			s.sqlServer.sqlIDContainer,
+			s.kvNodeDialer,
+			s.sqlServer.cfg.TestingKnobs,
+			false, /* allowLocalFastpath */
+			s.sqlServer.execCfg.InternalDB.
+				CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
+			s.costController,
+			s.registry,
+		)
+	}
+
 	// Start the SQL subsystem.
 	if err := s.sqlServer.preStart(
 		workersCtx,
 		s.stopper,
 		s.sqlServer.cfg.TestingKnobs,
 		orphanedLeasesTimeThresholdNanos,
+		initExternalStorage,
 	); err != nil {
 		return err
 	}
-
-	// Initialize the external storage builders configuration params now that the
-	// engines have been created. The object can be used to create ExternalStorage
-	// objects hereafter.
-	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
-	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
-	s.externalStorageBuilder.init(
-		s.cfg.EarlyBootExternalStorageAccessor,
-		s.cfg.ExternalIODirConfig,
-		s.sqlServer.cfg.Settings,
-		s.sqlServer.sqlIDContainer,
-		s.kvNodeDialer,
-		s.sqlServer.cfg.TestingKnobs,
-		false, /* allowLocalFastpath */
-		s.sqlServer.execCfg.InternalDB.
-			CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
-		s.costController,
-		s.registry,
-	)
 
 	// Start the job scheduler now that the SQL Server and
 	// external storage is initialized.

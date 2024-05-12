@@ -1407,6 +1407,7 @@ func (s *SQLServer) preStart(
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
 	orphanedLeasesTimeThresholdNanos int64,
+	initExternalStorage func(),
 ) error {
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes. The Start method will block
@@ -1563,6 +1564,12 @@ func (s *SQLServer) preStart(
 
 	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
+
+	// Initialize the external storage before starting the SQL server in order
+	// to be able to serve distributed plans (which we need to do once the
+	// DistSQL server is started) and after having set the SQL Instance ID.
+	initExternalStorage()
+
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, stopper)
 
