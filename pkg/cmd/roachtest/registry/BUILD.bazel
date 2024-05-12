@@ -28,6 +28,7 @@ go_library(
 go_test(
     name = "registry_test",
     srcs = [
+        "errors_test.go",
         "filter_test.go",
         "test_spec_test.go",
     ],
@@ -36,7 +37,9 @@ go_test(
     deps = [
         "//pkg/cmd/roachtest/spec",
         "//pkg/internal/team",
+        "//pkg/roachprod/errors",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
