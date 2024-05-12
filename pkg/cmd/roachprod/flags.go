@@ -423,6 +423,10 @@ func initFlags() {
 		cmd.Flags().BoolVar(&insecure,
 			"insecure", insecure, "use an insecure cluster")
 	}
+
+	updateTargetsCmd.Flags().BoolVar(&insecure,
+		"insecure", insecure, "use an insecure cluster")
+
 	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd, stopInstanceCmd, loadBalanceCmd, jaegerStartCmd} {
 		cmd.Flags().StringVar(&virtualClusterName,
 			"cluster", "", "specific virtual cluster to connect to")
