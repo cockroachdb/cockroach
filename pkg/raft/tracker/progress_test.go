@@ -1,3 +1,6 @@
+// This code has been modified from its original form by Cockroach Labs, Inc.
+// All modifications are Copyright 2024 Cockroach Labs, Inc.
+//
 // Copyright 2015 The etcd Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,7 +50,7 @@ func TestProgressIsPaused(t *testing.T) {
 		{StateProbe, false, false},
 		{StateProbe, true, true},
 		{StateReplicate, false, false},
-		{StateReplicate, true, true},
+		{StateReplicate, true, false},
 		{StateSnapshot, false, true},
 		{StateSnapshot, true, true},
 	}
@@ -61,8 +64,11 @@ func TestProgressIsPaused(t *testing.T) {
 	}
 }
 
-// TestProgressResume ensures that MaybeUpdate and MaybeDecrTo will reset
-// MsgAppFlowPaused.
+// TestProgressResume ensures that MaybeDecrTo resets MsgAppFlowPaused, and
+// MaybeUpdate does not.
+//
+// TODO(pav-kv): there is little sense in testing these micro-behaviours in the
+// struct. We should test the visible behaviour instead.
 func TestProgressResume(t *testing.T) {
 	p := &Progress{
 		Next:             2,
@@ -72,7 +78,7 @@ func TestProgressResume(t *testing.T) {
 	assert.False(t, p.MsgAppFlowPaused)
 	p.MsgAppFlowPaused = true
 	p.MaybeUpdate(2)
-	assert.False(t, p.MsgAppFlowPaused)
+	assert.True(t, p.MsgAppFlowPaused)
 }
 
 func TestProgressBecomeProbe(t *testing.T) {
