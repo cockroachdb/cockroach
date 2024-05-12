@@ -10,7 +10,10 @@
 
 package registry
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 type (
 	ErrorWithOwnership struct {
@@ -30,6 +33,14 @@ type (
 
 func (ewo ErrorWithOwnership) Error() string {
 	return fmt.Sprintf("%s [owner=%s]", ewo.Err.Error(), ewo.Owner)
+}
+
+func (ewo ErrorWithOwnership) Is(target error) bool {
+	return errors.Is(ewo.Err, target)
+}
+
+func (ewo ErrorWithOwnership) As(reference interface{}) bool {
+	return errors.As(ewo.Err, reference)
 }
 
 func WithTitleOverride(title string) errorOption {
