@@ -287,7 +287,8 @@ func alterPKInPrimaryIndexAndItsTemp(
 //  3. no inaccessible columns;
 //  4. no nullable columns;
 //  5. no virtual columns (starting from v22.1);
-//  6. add more here
+//  6. No columns that are scheduled to be dropped (target status set to `ABSENT`);
+//  7. add more here
 //
 // Panic if any precondition is found unmet.
 func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
@@ -329,7 +330,7 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 			panic(errors.AssertionFailedf("programming error: resolving column %v does not give a "+
 				"Column element.", col.Column))
 		}
-		if colCurrentStatus == scpb.Status_DROPPED || colCurrentStatus == scpb.Status_ABSENT {
+		if colCurrentStatus == scpb.Status_DROPPED || colCurrentStatus == scpb.Status_ABSENT || colTargetStatus == scpb.ToAbsent {
 			if colTargetStatus == scpb.ToPublic {
 				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q is being added", col.Column))

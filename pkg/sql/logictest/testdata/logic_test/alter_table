@@ -3857,3 +3857,14 @@ statement error pgcode 42703 pq: column "i" does not exist
 ALTER TABLE foo DROP COLUMN i, DROP COLUMN i;
 
 subtest end
+
+subtest alter_primary_key_using_dropped_column
+
+statement ok
+CREATE TABLE foo_bar (i int unique not null, j int);
+
+skipif config local-legacy-schema-changer
+statement error pgcode 55000 pq: column "i" is being dropped
+ALTER TABLE foo_bar DROP COLUMN i, ALTER PRIMARY KEY USING COLUMNS (i);
+
+subtest end
