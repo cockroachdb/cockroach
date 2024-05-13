@@ -141,6 +141,7 @@ export function DateRangeMenu({
         onChange={onChangeStart}
         suffixIcon={<TimeIcon />}
         value={startMoment}
+        className={cx("date-picker")}
       />
       <TimePicker
         allowClear={false}
@@ -148,6 +149,8 @@ export function DateRangeMenu({
         onChange={onChangeStart}
         suffixIcon={<span />}
         value={startMoment}
+        className={cx("time-picker")}
+        showNow={false}
       />
       <div className={cx("divider")} />
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
@@ -160,6 +163,7 @@ export function DateRangeMenu({
         onChange={onChangeEnd}
         suffixIcon={<TimeIcon />}
         value={endMoment}
+        className={cx("date-picker")}
       />
       <TimePicker
         allowClear={false}
@@ -167,6 +171,8 @@ export function DateRangeMenu({
         onChange={onChangeEnd}
         suffixIcon={<span />}
         value={endMoment}
+        className={cx("time-picker")}
+        showNow={false}
       />
       {!isValid && (
         <Alert
@@ -174,6 +180,7 @@ export function DateRangeMenu({
           message={errorMessage}
           type="error"
           showIcon
+          className={cx("alert")}
         />
       )}
       <div className={cx("popup-footer")}>
