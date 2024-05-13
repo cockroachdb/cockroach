@@ -366,11 +366,12 @@ func waitForLeasePreferences(
 	var ret leasePreferencesResult
 	ret.nodes = nodes
 	start := timeutil.Now()
+	maxWaitC := time.After(maxWaitDuration)
 	for {
 		select {
 		case <-ctx.Done():
 			return ret, ctx.Err()
-		case <-time.After(maxWaitDuration):
+		case <-maxWaitC:
 			return ret, errors.Errorf("timed out before lease preferences satisfied")
 		case <-checkTimer.C:
 			checkTimer.Read = true
