@@ -363,8 +363,17 @@ func (r *testRunner) Run(
 		if err := r.stopper.RunAsyncTask(ctx, "worker", func(ctx context.Context) {
 			defer wg.Done()
 
+			name := fmt.Sprintf("w%d", i)
+			formattedPrefix := fmt.Sprintf("[%s] ", name)
+			childLogger, e := l.ChildLogger(name, logger.LogPrefix(formattedPrefix))
+			if e != nil {
+				l.Printf("unable to create logger %s: %s", name, e)
+				return
+			}
+			l = childLogger
+
 			err := r.runWorker(
-				ctx, fmt.Sprintf("w%d", i) /* name */, r.work, qp,
+				ctx, name, r.work, qp,
 				r.stopper.ShouldQuiesce(),
 				clusterFactory,
 				clustersOpt,
