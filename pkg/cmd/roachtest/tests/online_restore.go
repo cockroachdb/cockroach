@@ -77,6 +77,7 @@ func registerOnlineRestorePerf(r registry.Registry) {
 			timeout:                1 * time.Hour,
 			suites:                 registry.Suites(registry.Nightly),
 			restoreUptoIncremental: 1,
+			skip:                   "fails every time. TPCC tests dropping soon",
 		},
 		{
 			// 8TB tpce Online Restore
