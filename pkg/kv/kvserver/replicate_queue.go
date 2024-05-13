@@ -1055,11 +1055,11 @@ func (rq *replicateQueue) PlanOneChange(
 	// TODO(erikgrinaker): We shouldn't overload the replicate queue to also be
 	// responsible for lease maintenance, but it'll do for now. See:
 	// https://github.com/cockroachdb/cockroach/issues/98433
-	leaseStatus, pErr := repl.redirectOnOrAcquireLease(ctx)
+	_, pErr := repl.redirectOnOrAcquireLease(ctx)
 	if pErr != nil {
 		return change, pErr.GoError()
 	}
-	pErr = repl.maybeSwitchLeaseType(ctx, leaseStatus)
+	pErr = repl.maybeSwitchLeaseType(ctx)
 	if pErr != nil {
 		return change, pErr.GoError()
 	}
