@@ -3780,6 +3780,10 @@ func (m *sessionDataMutator) SetOptimizerProveImplicationWithVirtualComputedColu
 	m.data.OptimizerProveImplicationWithVirtualComputedColumns = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseGenericQueryPlans(val bool) {
+	m.data.OptimizerUseGenericQueryPlans = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
