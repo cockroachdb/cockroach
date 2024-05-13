@@ -23,6 +23,21 @@ import (
 )
 
 var parameterRe = regexp.MustCompile(`{[^{}]*}`)
+
+// The following regex expressions may contain up to 3 sections. Since
+// we need to resolve both an IP and port, in most cases, but multiple services
+// could be running on a single node, it may be required to narrow things down
+// by specifying more selectors.
+// 1. Nodes Selector: `(:[-,0-9]+|:(?i)lb)?` This can be either a single node
+// "1", or a node range "1-3", or "LB" can be specified to indicate that a load
+// balancer should be resolved.
+// 2. Tenant Selector: `(:[a-z0-9\-]+)?` This section can optionally specify a
+// tenant name. For example "system" could be specified here.
+// 3. Instance Selector: `(:[0-9]+)?` If the target nodes have more than one
+// external process serving the same tenant, if a tenant was specified in the
+// last section we can specify the ith tenant process instance.
+// Examples:
+// {pgurl:3:tenant1:0} - Get the postgres URL for node 3, tenant1, instance 0.
 var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+|:(?i)lb)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+|:(?i)lb)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
