@@ -58,6 +58,9 @@ define ScanPrivate {
     # InvertedConstraint contains the spans that need to be scanned.
     InvertedConstraint InvertedSpans
 
+    # TODO
+    GenericConstraint FiltersExpr
+
     # HardLimit specifies the maximum number of rows that the scan can return
     # (after applying any constraint), as well as the required scan direction.
     # This is a "hard" limit, meaning that the scan operator must never return

@@ -11,6 +11,7 @@
 package idxconstraint
 
 import (
+	"context"
 	"regexp"
 	"strings"
 
@@ -179,6 +180,17 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 		return true
 	}
 
+	// TODO(mgartner): We don't always want to do this... Only during
+	// execbuilder.
+	if p, ok := val.(*memo.PlaceholderExpr); ok && c.evalCtx.Placeholders != nil {
+		// TODO: Don't use context.Background() here.
+		v, err := eval.Expr(context.Background(), c.evalCtx, p.Value)
+		if err != nil {
+			return false
+		}
+		return c.makeSpansForSingleColumnDatum(offset, op, v, out)
+	}
+
 	if opt.IsConstValueOp(val) {
 		return c.makeSpansForSingleColumnDatum(offset, op, memo.ExtractConstDatum(val), out)
 	}
@@ -196,6 +208,16 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 		c.unconstrained(offset, out)
 		return false
 	}
+
+	// if p, ok := datum.(*tree.Placeholder); ok {
+	// 	// TODO: Don't use context.Background() here.
+	// 	var err error
+	// 	datum, err = eval.Expr(context.Background(), c.evalCtx, p)
+	// 	if err != nil {
+	// 		return false
+	// 	}
+	// }
+
 	if datum == tree.DNull {
 		switch op {
 		case opt.EqOp, opt.LtOp, opt.GtOp, opt.LeOp, opt.GeOp, opt.NeOp:
@@ -1157,6 +1179,62 @@ func (ic *Instance) Init(
 	ic.initialized = true
 }
 
+func (ic *Instance) InitWithMetadata(
+	requiredFilters memo.FiltersExpr,
+	optionalFilters memo.FiltersExpr,
+	columns []opt.OrderingColumn,
+	notNullCols opt.ColSet,
+	computedCols map[opt.ColumnID]opt.ScalarExpr,
+	colsInComputedColsExpressions opt.ColSet,
+	consolidate bool,
+	evalCtx *eval.Context,
+	factory *norm.Factory,
+	md *opt.Metadata,
+	ps partition.PrefixSorter,
+	checkCancellation func(),
+) {
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*ic = Instance{
+		requiredFilters: requiredFilters,
+	}
+	if len(optionalFilters) == 0 {
+		ic.allFilters = requiredFilters
+	} else {
+		// Force allocation of a bigger slice.
+		// TODO(radu): we should keep the required and optional filters separate and
+		// add a helper for iterating through all of them.
+		ic.allFilters = requiredFilters[:len(requiredFilters):len(requiredFilters)]
+		ic.allFilters = append(ic.allFilters, optionalFilters...)
+	}
+	ic.indexConstraintCtx.initWithMetadata(columns, notNullCols, computedCols, colsInComputedColsExpressions, evalCtx, factory, md, checkCancellation)
+	ic.tight = ic.makeSpansForExpr(0 /* offset */, &ic.allFilters, &ic.constraint)
+
+	// Note: If consolidate is true, we only consolidate spans at the
+	// end; consolidating partial results can lead to worse spans, for example:
+	//   a IN (1, 2) AND b = 4
+	//
+	// We want this to be:
+	//   [/1/4 - /1/4]
+	//   [/2/4 - /2/4]
+	//
+	// If we eagerly consolidate the spans for a, we would get loose spans:
+	//   [/1/4 - /2/4]
+	//
+	// We also want to remember the original spans because the filter
+	// simplification code works better with them. For example:
+	//   @1 = 1 AND @2 IN (1, 2)
+	// The filter simplification code is able to simplify both expressions
+	// if we have the spans [/1/1 - /1/1], [/1/2 - /1/2] but not if
+	// we have [/1/1 - /1/2].
+	if consolidate {
+		ic.consolidatedConstraint = ic.constraint
+		ic.consolidatedConstraint.ConsolidateSpans(evalCtx, ps)
+		ic.consolidated = true
+	}
+	ic.initialized = true
+}
+
 // Constraint shallow-copies the constraint created by Init into c. Panics if
 // Init wasn't called, or if a consolidated constraint was not built because
 // consolidate=false was passed as an argument to Init.
@@ -1268,6 +1346,44 @@ func (c *indexConstraintCtx) init(
 	// reused. Field reuse must be explicit.
 	*c = indexConstraintCtx{
 		md:                            factory.Metadata(),
+		columns:                       columns,
+		keyCols:                       keyCols,
+		notNullCols:                   notNullCols,
+		computedCols:                  computedCols,
+		computedColSet:                computedColSet,
+		colsInComputedColsExpressions: colsInComputedColsExpressions,
+		evalCtx:                       evalCtx,
+		factory:                       factory,
+		keyCtx:                        make([]constraint.KeyContext, len(columns)),
+		checkCancellation:             checkCancellation,
+	}
+	for i := range columns {
+		c.keyCtx[i].EvalCtx = evalCtx
+		c.keyCtx[i].Columns.Init(columns[i:])
+	}
+}
+
+func (c *indexConstraintCtx) initWithMetadata(
+	columns []opt.OrderingColumn,
+	notNullCols opt.ColSet,
+	computedCols map[opt.ColumnID]opt.ScalarExpr,
+	colsInComputedColsExpressions opt.ColSet,
+	evalCtx *eval.Context,
+	factory *norm.Factory,
+	md *opt.Metadata,
+	checkCancellation func(),
+) {
+	var keyCols, computedColSet opt.ColSet
+	for _, col := range columns {
+		keyCols.Add(col.ID())
+	}
+	for colID := range computedCols {
+		computedColSet.Add(colID)
+	}
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = indexConstraintCtx{
+		md:                            md,
 		columns:                       columns,
 		keyCols:                       keyCols,
 		notNullCols:                   notNullCols,

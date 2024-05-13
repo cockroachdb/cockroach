@@ -491,6 +491,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			n := tp.Childf("inverted constraint: %s", b.String())
 			ic.Format(n, "spans", f.RedactableValues)
 		}
+		if gc := private.GenericConstraint; gc != nil {
+			n := tp.Childf("generic constraint")
+			f.formatScalar(&gc, n)
+		}
 		if private.HardLimit.IsSet() {
 			tp.Childf("limit: %s", private.HardLimit)
 		}

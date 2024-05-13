@@ -841,7 +841,8 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// If the constraints and pred are nil, then this scan is an unconstrained
 	// scan on a non-partial index. The stats of the scan are the same as the
 	// underlying table stats.
-	if scan.Constraint == nil && scan.InvertedConstraint == nil && pred == nil {
+	if scan.Constraint == nil && scan.InvertedConstraint == nil && pred == nil &&
+		scan.GenericConstraint == nil {
 		sb.finalizeFromCardinality(relProps)
 		return
 	}
@@ -851,13 +852,30 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// index predicate expression must be applied to the underlying table stats.
 	if scan.Constraint == nil && scan.InvertedConstraint == nil {
 		notNullCols := relProps.NotNullCols.Copy()
-		// Add any not-null columns from the predicate constraints.
-		for i := range pred {
-			if c := pred[i].ScalarProps().Constraints; c != nil {
-				notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
+		var filters FiltersExpr
+		if pred != nil {
+			filters = pred
+			// Add any not-null columns from the predicate constraints.
+			for i := range pred {
+				if c := pred[i].ScalarProps().Constraints; c != nil {
+					notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
+				}
 			}
 		}
-		sb.filterRelExpr(pred, scan, notNullCols, relProps, s, MakeTableFuncDep(sb.md, scan.Table))
+		if scan.GenericConstraint != nil {
+			if filters != nil {
+				filters = append(filters, scan.GenericConstraint...)
+			} else {
+				filters = scan.GenericConstraint
+			}
+			// Add any not-null columns from the generic constraint.
+			for i := range scan.GenericConstraint {
+				if c := scan.GenericConstraint[i].ScalarProps().Constraints; c != nil {
+					notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
+				}
+			}
+		}
+		sb.filterRelExpr(filters, scan, notNullCols, relProps, s, MakeTableFuncDep(sb.md, scan.Table))
 		sb.finalizeFromCardinality(relProps)
 		return
 	}
@@ -1012,6 +1030,15 @@ func (sb *statisticsBuilder) constrainScan(
 		constrainedCols.UnionWith(constrainedColsLocal)
 		histCols.UnionWith(histColsLocal)
 	}
+
+	// Calculate distinct counts and histograms for the generic constraint.
+	// if gc := scan.GenericConstraint; gc != nil {
+	// 	genConstrainedCols, genHistCols :=
+	// 		sb.applyFilters(gc, scan, relProps, false /* skipOrTermAccounting */, &unapplied)
+	// 	constrainedCols.UnionWith(genConstrainedCols)
+	// 	constrainedCols = sb.tryReduceCols(constrainedCols, s, MakeTableFuncDep(sb.md, scan.Table))
+	// 	histCols.UnionWith(genHistCols)
+	// }
 
 	// Calculate distinct counts and histograms for the partial index predicate
 	// ------------------------------------------------------------------------

@@ -688,6 +688,11 @@ func TestSchemaChangeComparator_generator_probe_ranges(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/generator_probe_ranges"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_generic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/generic"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_geospatial(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/geospatial"

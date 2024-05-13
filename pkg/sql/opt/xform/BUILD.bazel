@@ -7,6 +7,7 @@ go_library(
         "cycle_funcs.go",
         "explorer.go",
         "general_funcs.go",
+        "generic.go",
         "groupby_funcs.go",
         "index_scan_builder.go",
         "insert_funcs.go",

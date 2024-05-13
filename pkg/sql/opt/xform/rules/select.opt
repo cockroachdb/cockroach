@@ -39,6 +39,14 @@
 =>
 (GenerateConstrainedScans $scanPrivate $filters)
 
+[GenerateGenericScans, Explore]
+(Select
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $filters:*
+)
+=>
+(GenerateGenericScans $scanPrivate $filters)
+
 # GenerateInvertedIndexScans creates alternate expressions for filters that can
 # be serviced by an inverted index.
 [GenerateInvertedIndexScans, Explore]

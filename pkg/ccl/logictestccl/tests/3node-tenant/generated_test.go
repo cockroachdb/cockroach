@@ -872,6 +872,13 @@ func TestTenantLogic_fuzzystrmatch(
 	runLogicTest(t, "fuzzystrmatch")
 }
 
+func TestTenantLogic_generic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "generic")
+}
+
 func TestTenantLogic_geospatial(
 	t *testing.T,
 ) {

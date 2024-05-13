@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -621,6 +622,69 @@ func (b *Builder) scanParams(
 
 	needed, outputMap := b.getColumns(scan.Cols, scan.Table)
 
+	con := scan.Constraint
+	if scan.GenericConstraint != nil {
+
+		// Fill out data structures needed to initialize the idxconstraint library.
+		// Use LaxKeyColumnCount, since all columns <= LaxKeyColumnCount are
+		// guaranteed to be part of each row's key (i.e. not stored in row's value,
+		// which does not take part in an index scan). Note that the OrderingColumn
+		// slice cannot be reused, as Instance.Init can use it in the constraint.
+		md := b.mem.Metadata()
+		tabMeta := md.TableMeta(scan.Table)
+		index := tabMeta.Table.Index(scan.Index)
+		ps := tabMeta.IndexPartitionLocality(index.Ordinal())
+		columns := make([]opt.OrderingColumn, index.LaxKeyColumnCount())
+		var notNullCols opt.ColSet
+		for i := range columns {
+			col := index.Column(i)
+			ordinal := col.Ordinal()
+			nullable := col.IsNullable()
+			colID := scan.Table.ColumnID(ordinal)
+			columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+			if !nullable {
+				notNullCols.Add(colID)
+			}
+		}
+
+		// Generate index constraints.
+		var ic idxconstraint.Instance
+		ic.InitWithMetadata(
+			scan.GenericConstraint, nil, /* optionalFilters */
+			columns, notNullCols, tabMeta.ComputedCols,
+			tabMeta.ColsInComputedColsExpressions,
+			true /* consolidate */, b.evalCtx, b.optimizer.Factory(), md, ps,
+			nil, /* checkCancellation */
+			// c.checkCancellation,
+		)
+		var c constraint.Constraint
+		ic.Constraint(&c)
+		con = &c
+
+		// if con.IsUnconstrained() {
+		// 	resultCols := make(colinfo.ResultColumns, len(needed))
+		// 	for i, col := range needed {
+		// 		colMeta := md.ColumnMeta(col)
+		// 		resultCols[i].Name = colMeta.Alias
+		// 		resultCols[i].Typ = colMeta.Type
+		// 	}
+		// 	node, err := b.factory.ConstructValues(nil, resultCols)
+		// 	if err != nil {
+		// 		return execPlan{}, colOrdMap{}, err
+		// 	}
+		// 	ep := execPlan{root: node}
+		// 	outputCols = b.colOrdsAlloc.Alloc()
+		// 	for i, col := range cols {
+		// 		outputCols.Set(col, i)
+		// 	}
+		//
+		// 	return ep, outputCols, nil
+		//
+		// 	// return b.constructValues(nil, scan.Cols), outputMap, nil
+		// }
+		// // return exec.ScanParams{}, colOrdMap{}, unimplemented.New("generic query plans", "not implemented")
+	}
+
 	// Get the estimated row count from the statistics. When there are no
 	// statistics available, we construct a scan node with
 	// the estimated row count of zero rows.
@@ -683,7 +747,7 @@ func (b *Builder) scanParams(
 			// row: it does nothing in this case except litter EXPLAINs.
 			// There are still cases where the flag doesn't do anything when the spans
 			// cover a single range, but there is nothing we can do about that.
-			if !(maxResults == 1 && scan.Constraint.Spans.Count() == 1) {
+			if !(maxResults == 1 && con.Spans.Count() == 1) {
 				parallelize = true
 			}
 		} else if b.evalCtx != nil {
@@ -707,7 +771,7 @@ func (b *Builder) scanParams(
 
 	return exec.ScanParams{
 		NeededCols:         needed,
-		IndexConstraint:    scan.Constraint,
+		IndexConstraint:    con,
 		InvertedConstraint: scan.InvertedConstraint,
 		HardLimit:          hardLimit,
 		SoftLimit:          softLimit,
