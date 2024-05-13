@@ -483,6 +483,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	timingTag := newSnapshotTimingTag()
 	timingTag.addStopwatch("totalTime")
 	timingTag.addStopwatch("sst")
+	timingTag.addStopwatch("sstFinalize")
+	timingTag.addStopwatch("checksum")
 	timingTag.addStopwatch("recv")
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		sp.SetLazyTag(tagSnapshotTiming, timingTag)
@@ -565,9 +567,11 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				}
 				// Verify value checksum to catch data corruption.
 				if verifyCheckSum {
+					timingTag.start("checksum")
 					if err = ek.Verify(batchReader.Value()); err != nil {
 						return noSnap, errors.Wrap(err, "verifying value checksum")
 					}
+					timingTag.stop("checksum")
 				}
 				switch batchReader.KeyKind() {
 				case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
@@ -679,7 +683,9 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			// we must still construct SSTs with range deletion tombstones to remove
 			// the data.
 			timingTag.start("sst")
+			timingTag.start("sstFinalize")
 			dataSize, err := msstw.Finish(ctx)
+			timingTag.stop("sstFinalize")
 			sstSize := msstw.sstSize
 			if err != nil {
 				return noSnap, errors.Wrapf(err, "finishing sst for raft snapshot")
@@ -748,6 +754,15 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	timingTag := newSnapshotTimingTag()
 	timingTag.addStopwatch("totalTime")
 	timingTag.addStopwatch("iter")
+	timingTag.addStopwatch("iterPoint")
+	timingTag.addStopwatch("iterRange")
+	timingTag.addStopwatch("iterPointShared")
+	timingTag.addStopwatch("iterRangeShared")
+	timingTag.addStopwatch("iterRangeDelShared")
+	timingTag.addStopwatch("iterSharedKeySpans")
+	timingTag.addStopwatch("iterNonSharedUserKeySpans")
+	timingTag.addStopwatch("iterNonSharedKeySpans")
+	timingTag.addStopwatch("sharedSSTVisitor")
 	timingTag.addStopwatch("send")
 	timingTag.addStopwatch("rateLimit")
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
@@ -801,6 +816,63 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	if sharedReplicate || externalReplicate {
 		replicatedFilter = rditer.ReplicatedSpansExcludeUser
 	}
+	iterpoint := func(iter storage.EngineIterator, err error) error {
+		timingTag.start("iterPoint")
+		defer timingTag.stop("iterPoint")
+		for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+			kvs++
+			if b == nil {
+				b = kvSS.newWriteBatch()
+			}
+			key, err := iter.UnsafeEngineKey()
+			if err != nil {
+				return err
+			}
+			v, err := iter.UnsafeValue()
+			if err != nil {
+				return err
+			}
+			if err = b.PutEngineKey(key, v); err != nil {
+				return err
+			}
+			if err = maybeFlushBatch(); err != nil {
+				return err
+			}
+		}
+		stats := iter.Stats().Stats
+		iterStats := stats.String()
+		log.KvDistribution.Infof(
+			ctx,
+			"iterator stats: %s",
+			iterStats,
+		)
+		return nil
+	}
+
+	iterRange := func(iter storage.EngineIterator, err error) error {
+		timingTag.start("iterRange")
+		defer timingTag.stop("iterRange")
+		for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+			bounds, err := iter.EngineRangeBounds()
+			if err != nil {
+				return err
+			}
+			for _, rkv := range iter.EngineRangeKeys() {
+				rangeKVs++
+				if b == nil {
+					b = kvSS.newWriteBatch()
+				}
+				err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
+				if err != nil {
+					return err
+				}
+				if err = maybeFlushBatch(); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
 
 	iterateRKSpansVisitor := func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
 		timingTag.start("iter")
@@ -809,46 +881,15 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		var err error
 		switch keyType {
 		case storage.IterKeyTypePointsOnly:
-			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-				kvs++
-				if b == nil {
-					b = kvSS.newWriteBatch()
-				}
-				key, err := iter.UnsafeEngineKey()
-				if err != nil {
-					return err
-				}
-				v, err := iter.UnsafeValue()
-				if err != nil {
-					return err
-				}
-				if err = b.PutEngineKey(key, v); err != nil {
-					return err
-				}
-				if err = maybeFlushBatch(); err != nil {
-					return err
-				}
+			err = iterpoint(iter, err)
+			if err != nil {
+				return err
 			}
 
 		case storage.IterKeyTypeRangesOnly:
-			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-				bounds, err := iter.EngineRangeBounds()
-				if err != nil {
-					return err
-				}
-				for _, rkv := range iter.EngineRangeKeys() {
-					rangeKVs++
-					if b == nil {
-						b = kvSS.newWriteBatch()
-					}
-					err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
-					if err != nil {
-						return err
-					}
-					if err = maybeFlushBatch(); err != nil {
-						return err
-					}
-				}
+			err = iterRange(iter, err)
+			if err != nil {
+				return err
 			}
 
 		default:
@@ -856,8 +897,10 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 		return err
 	}
+	timingTag.start("iterNonSharedKeySpans")
 	err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
 		replicatedFilter, iterateRKSpansVisitor)
+	timingTag.stop("iterNonSharedKeySpans")
 	if err != nil {
 		return 0, err
 	}
@@ -867,6 +910,8 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		var sharedVisitor func(sst *pebble.SharedSSTMeta) error
 		if sharedReplicate {
 			sharedVisitor = func(sst *pebble.SharedSSTMeta) error {
+				timingTag.start("sharedSSTVisitor")
+				timingTag.stop("sharedSSTVisitor")
 				sharedSSTCount++
 				snap.sharedBackings = append(snap.sharedBackings, sst.Backing)
 				backing, err := sst.Backing.Get()
@@ -913,7 +958,10 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				return nil
 			}
 		}
+		timingTag.start("iterSharedKeySpans")
 		err := rditer.IterateReplicaKeySpansShared(ctx, snap.State.Desc, kvSS.st, kvSS.clusterID, snap.EngineSnap, func(key *pebble.InternalKey, value pebble.LazyValue, _ pebble.IteratorLevel) error {
+			timingTag.start("iterPointShared")
+			defer timingTag.stop("iterPointShared")
 			kvs++
 			if b == nil {
 				b = kvSS.newWriteBatch()
@@ -936,6 +984,8 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 			return maybeFlushBatch()
 		}, func(start, end []byte, seqNum uint64) error {
+			timingTag.start("iterRangeDelShared")
+			defer timingTag.stop("iterRangeDelShared")
 			kvs++
 			if b == nil {
 				b = kvSS.newWriteBatch()
@@ -945,6 +995,8 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 			return maybeFlushBatch()
 		}, func(start, end []byte, keys []rangekey.Key) error {
+			timingTag.start("iterRangeShared")
+			defer timingTag.stop("iterRangeShared")
 			if b == nil {
 				b = kvSS.newWriteBatch()
 			}
@@ -957,10 +1009,13 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 			return maybeFlushBatch()
 		}, sharedVisitor, externalVisitor)
+		timingTag.stop("iterSharedKeySpans")
 		if err != nil && errors.Is(err, pebble.ErrInvalidSkipSharedIteration) {
 			transitionFromSharedToRegularReplicate = true
+			timingTag.start("iterNonSharedUserKeySpans")
 			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
 				rditer.ReplicatedSpansUserOnly, iterateRKSpansVisitor)
+			timingTag.stop("iterNonSharedUserKeySpans")
 		}
 		if err != nil {
 			return 0, err
