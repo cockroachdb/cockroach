@@ -13,6 +13,7 @@ go_library(
         "rawnode.go",
         "status.go",
         "storage.go",
+        "store_liveness.go",
         "types.go",
         "util.go",
     ],
@@ -23,6 +24,7 @@ go_library(
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
+        "//pkg/util/hlc",
     ],
 )
 

@@ -112,6 +112,9 @@ func (st StateType) String() string {
 // Config contains the parameters to start a raft.
 type Config struct {
 	// ID is the identity of the local raft. ID cannot be 0.
+	//
+	// TODO(nvanbenschoten): at some point, it would be nice to port all of these
+	// uint64 types over to roachpb.ReplicaID.
 	ID uint64
 
 	// ElectionTick is the number of Node.Tick invocations that must pass between
@@ -259,6 +262,9 @@ type Config struct {
 	// This behavior will become unconditional in the future. See:
 	// https://github.com/etcd-io/raft/issues/83
 	StepDownOnRemoval bool
+
+	// StoreLiveness is a reference to the StoreLiveness fabric.
+	StoreLiveness StoreLiveness
 }
 
 func (c *Config) validate() error {
@@ -348,6 +354,10 @@ type raft struct {
 	// leadTransferee is id of the leader transfer target when its value is not zero.
 	// Follow the procedure defined in raft thesis 3.10.
 	leadTransferee uint64
+	// leadSupport contains a map of nodes which have supported the leader through
+	// fortification handshakes, and the corresponding Store Liveness epochs that
+	// they have supported the leader in.
+	leadSupport map[uint64]StoreLivenessEpoch
 	// Only one conf change may be pending (in the log, but not yet
 	// applied) at a time. This is enforced via pendingConfIndex, which
 	// is set to a value >= the log index of the latest pending
@@ -388,7 +398,8 @@ type raft struct {
 	tick func()
 	step stepFunc
 
-	logger Logger
+	logger        Logger
+	storeLiveness StoreLiveness
 }
 
 func newRaft(c *Config) *raft {
@@ -417,6 +428,7 @@ func newRaft(c *Config) *raft {
 		disableProposalForwarding:   c.DisableProposalForwarding,
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		stepDownOnRemoval:           c.StepDownOnRemoval,
+		storeLiveness:               c.StoreLiveness,
 	}
 
 	lastID := r.raftLog.lastEntryID()
@@ -1199,7 +1211,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		r.bcastHeartbeat()
 		return nil
 	case pb.MsgCheckQuorum:
-		if !r.trk.QuorumActive() {
+		if !r.trk.QuorumActive() && !leadSupported(r) {
 			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
 			r.becomeFollower(r.Term, None)
 		}
