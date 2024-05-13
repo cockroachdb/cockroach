@@ -13,7 +13,6 @@ import { configure } from "@storybook/react";
 // Import global styles here
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
-import "antd/es/tooltip/style/css";
 import "styl/app.styl";
 import "./styles.css";
 import "src/views/app/containers/layout/layout.styl";

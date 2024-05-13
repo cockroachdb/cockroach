@@ -10,7 +10,6 @@
 
 import React from "react";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import { useSelector } from "react-redux";
 import classNames from "classnames/bind";
 import moment from "moment";

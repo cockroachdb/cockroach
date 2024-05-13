@@ -9,8 +9,6 @@
 // licenses/APL.txt.
 
 import { Checkbox, Select } from "antd";
-import "antd/lib/checkbox/style";
-import "antd/lib/select/style";
 import React from "react";
 import classNames from "classnames";
 
