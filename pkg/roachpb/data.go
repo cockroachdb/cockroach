@@ -1925,7 +1925,6 @@ func (l Lease) Speculative() bool {
 func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
 	l.ProposedTS, newL.ProposedTS = nil, nil
-	l.DeprecatedStartStasis, newL.DeprecatedStartStasis = nil, nil
 	// Ignore sequence numbers, they are simply a reflection of
 	// the equivalency of other fields.
 	l.Sequence, newL.Sequence = 0, 0
