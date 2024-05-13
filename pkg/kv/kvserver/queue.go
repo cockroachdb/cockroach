@@ -1058,7 +1058,7 @@ func (bq *baseQueue) replicaCanBeProcessed(
 	// and renew or acquire if necessary.
 	if bq.needsLease {
 		if acquireLeaseIfNeeded {
-			leaseStatus, pErr := repl.redirectOnOrAcquireLease(ctx)
+			_, pErr := repl.redirectOnOrAcquireLease(ctx)
 			if pErr != nil {
 				switch v := pErr.GetDetail().(type) {
 				case *kvpb.NotLeaseHolderError, *kvpb.RangeNotFoundError:
@@ -1071,7 +1071,7 @@ func (bq *baseQueue) replicaCanBeProcessed(
 
 			// TODO(baptist): Should this be added to replicaInQueue?
 			realRepl, _ := repl.(*Replica)
-			pErr = realRepl.maybeSwitchLeaseType(ctx, leaseStatus)
+			pErr = realRepl.maybeSwitchLeaseType(ctx)
 			if pErr != nil {
 				return nil, pErr.GoError()
 			}

@@ -1610,17 +1610,24 @@ func (r *Replica) shouldRequestLeaseRLocked(
 // maybeSwitchLeaseType will synchronously renew a lease using the appropriate
 // type if it is (or was) owned by this replica and has an incorrect type. This
 // typically happens when changing kv.expiration_leases_only.enabled.
-func (r *Replica) maybeSwitchLeaseType(ctx context.Context, st kvserverpb.LeaseStatus) *kvpb.Error {
-	if !st.OwnedBy(r.store.StoreID()) {
-		return nil
-	}
+func (r *Replica) maybeSwitchLeaseType(ctx context.Context) *kvpb.Error {
+	llHandle := func() *leaseRequestHandle {
+		now := r.store.Clock().NowAsClockTimestamp()
+		// The lease status needs to be checked and requested under the same lock,
+		// to avoid an interleaving lease request changing the lease between the
+		// two.
+		r.mu.Lock()
+		defer r.mu.Unlock()
 
-	var llHandle *leaseRequestHandle
-	r.mu.Lock()
-	if !r.hasCorrectLeaseTypeRLocked(st.Lease) {
-		llHandle = r.requestLeaseLocked(ctx, st, nil /* limiter */)
-	}
-	r.mu.Unlock()
+		st := r.leaseStatusAtRLocked(ctx, now)
+		if !st.OwnedBy(r.store.StoreID()) {
+			return nil
+		}
+		if r.hasCorrectLeaseTypeRLocked(st.Lease) {
+			return nil
+		}
+		return r.requestLeaseLocked(ctx, st, nil /* limiter */)
+	}()
 
 	if llHandle != nil {
 		select {
