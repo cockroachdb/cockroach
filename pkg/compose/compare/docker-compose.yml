@@ -7,6 +7,7 @@ services:
     command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach1
     volumes:
       - "${COCKROACH_PATH}:/cockroach/cockroach"
+      - "${LIBGEOS_DIR_PATH}:/cockroach/lib"
   cockroach2:
     # We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
     # See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
@@ -14,16 +15,19 @@ services:
     command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach2
     volumes:
       - "${COCKROACH_PATH}:/cockroach/cockroach"
+      - "${LIBGEOS_DIR_PATH}:/cockroach/lib"
   test:
     # We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
     # See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
     image: us-east1-docker.pkg.dev/crl-docker-sync/docker-mirror/docker.io/library/ubuntu:xenial-20170214
     environment:
       - COCKROACH_DEV_LICENSE=$COCKROACH_DEV_LICENSE
+      - COCKROACH_RUN_COMPOSE_COMPARE=${COCKROACH_RUN_COMPOSE_COMPARE}
     # compare.test is a binary built by the pkg/compose/prepare.sh in non-bazel builds
-    command: /compare/compare.test -each ${EACH} -test.run ${TESTS} -artifacts ${ARTIFACTS}
+    command: /compare/compare.test -test.v -each ${EACH} -test.run ${TESTS} -artifacts ${ARTIFACTS}
     depends_on:
       - cockroach1
       - cockroach2
     volumes:
       - "${COMPARE_DIR_PATH}:/compare"
+      - "${LIBGEOS_DIR_PATH}:/compare/lib"
