@@ -80,6 +80,10 @@ type fileSSTSink struct {
 	}
 }
 
+// logicalBackupFileSize is the maximum logical size of a backup file that can
+// be extended.
+const logicalBackupFileSize = 64 << 20 // 64MB
+
 func makeFileSSTSink(
 	conf sstSinkConf, dest cloud.ExternalStorage, pacer *admission.Pacer,
 ) *fileSSTSink {
@@ -264,21 +268,27 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 		return nil, err
 	}
 
+	var latestSpanMidRow bool
 	if len(resp.resumeKey) > 0 {
-		span.EndKey, s.midRow = adjustFileEndKey(span.EndKey, maxKey, maxRange)
+		span.EndKey, latestSpanMidRow = adjustFileEndKey(span.EndKey, maxKey, maxRange)
 		// Update the resume key to be the adjusted end key so that start key of the
 		// next file is also clean.
 		resp.resumeKey = span.EndKey
-	} else {
-		s.midRow = false
 	}
+
+	safeSizeBasedFileCut := !s.midRow &&
+		len(s.flushedFiles) > 0 &&
+		s.flushedFiles[len(s.flushedFiles)-1].EntryCounts.DataSize >= logicalBackupFileSize
 
 	// If this span extended the last span added -- that is, picked up where it
 	// ended and has the same time-bounds -- then we can simply extend that span
 	// and add to its entry counts. Otherwise we need to record it separately.
+	// Further, if latest file is sufficiently large, create a new span if it is
+	// safe to do so (the latest file does not end mid key).
 	if l := len(s.flushedFiles) - 1; l >= 0 && s.flushedFiles[l].Span.EndKey.Equal(span.Key) &&
 		s.flushedFiles[l].EndTime.EqOrdering(resp.metadata.EndTime) &&
-		s.flushedFiles[l].StartTime.EqOrdering(resp.metadata.StartTime) {
+		s.flushedFiles[l].StartTime.EqOrdering(resp.metadata.StartTime) &&
+		!safeSizeBasedFileCut {
 		s.flushedFiles[l].Span.EndKey = span.EndKey
 		s.flushedFiles[l].EntryCounts.Add(resp.metadata.EntryCounts)
 		s.flushedFiles[l].ApproximatePhysicalSize += resp.metadata.ApproximatePhysicalSize
@@ -289,6 +299,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 		f.Span.EndKey = span.EndKey
 		s.flushedFiles = append(s.flushedFiles, f)
 	}
+	s.midRow = latestSpanMidRow
 	s.flushedRevStart.Forward(resp.revStart)
 	s.completedSpans += resp.completedSpans
 	s.flushedSize += int64(len(resp.dataSST))
