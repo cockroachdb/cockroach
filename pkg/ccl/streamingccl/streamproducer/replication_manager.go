@@ -38,7 +38,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStream(
 	if err := r.checkLicense(); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
-	return StartReplicationProducerJob(ctx, r.evalCtx, r.txn, tenantName, req)
+	return StartReplicationProducerJob(ctx, r.evalCtx, r.txn, tenantName, req, false)
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.

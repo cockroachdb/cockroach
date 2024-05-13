@@ -93,7 +93,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		ti := &mtinfopb.TenantInfo{
 			SQLInfo: mtinfopb.SQLInfo{ID: 10},
 		}
-		jr := makeProducerJobRecord(registry, ti, time.Millisecond, usr, ptsID)
+		jr := makeProducerJobRecord(registry, ti, time.Millisecond, usr, ptsID, false)
 
 		require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))
 
@@ -121,7 +121,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		ts := hlc.Timestamp{WallTime: ptsTime.UnixNano()}
 		ptsID := uuid.MakeV4()
 		expirationWindow := time.Hour
-		jr := makeProducerJobRecord(registry, ti, expirationWindow, usr, ptsID)
+		jr := makeProducerJobRecord(registry, ti, expirationWindow, usr, ptsID, false)
 
 		require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))
 
