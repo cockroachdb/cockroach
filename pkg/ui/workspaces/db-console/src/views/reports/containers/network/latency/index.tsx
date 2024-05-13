@@ -8,11 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Badge, Divider, Icon, Tooltip } from "antd";
-import "antd/lib/icon/style";
-import "antd/lib/badge/style";
-import "antd/lib/divider/style";
-import "antd/lib/tooltip/style";
+import { Badge, Divider, Tooltip } from "antd";
+import { ExclamationCircleOutlined, StopOutlined } from "@ant-design/icons";
 import classNames from "classnames";
 import map from "lodash/map";
 import { util } from "@cockroachlabs/cluster-ui";
@@ -423,11 +420,11 @@ const getLatencyCell = (
             <Chip
               title={
                 isErrored ? (
-                  <Icon type="stop" />
+                  <StopOutlined />
                 ) : isEstablishing ? (
                   "--"
                 ) : isUnknown ? (
-                  <Icon type="exclamation-circle" />
+                  <ExclamationCircleOutlined />
                 ) : latency > 0 ? (
                   latency.toFixed(2) + "ms"
                 ) : (
