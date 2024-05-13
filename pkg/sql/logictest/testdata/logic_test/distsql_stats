@@ -2877,3 +2877,72 @@ vectorized: true
           estimated row count: 10 (1.0% of the table; stats collected <hidden> ago)
           table: mno@mno_o_idx
           spans: [/11 - /11]
+
+# Regression for not setting the TypeResolver on the SemaContext when dealing
+# with stats on virtual computed columns (#122312).
+statement ok
+CREATE TABLE t122312 (s STRING, g greeting AS (s::greeting) VIRTUAL)
+
+statement ok
+ANALYZE t122312
+
+# Regression for not setting the txn of the schemaResolver when type checking
+# stats on virtual computed columns.
+statement ok
+CREATE TYPE order_status AS ENUM ('pending', 'paid', 'dispatched', 'delivered')
+
+statement ok
+CREATE TABLE orders (
+  "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "customer_id" UUID NOT NULL,
+  "total" DECIMAL NOT NULL,
+  "balance" DECIMAL NOT NULL,
+  "order_ts" TIMESTAMPTZ(0) NOT NULL DEFAULT now(),
+  "dispatch_ts" TIMESTAMPTZ(0),
+  "delivery_ts" TIMESTAMPTZ(0),
+  "status" order_status AS (
+    CASE
+      WHEN "delivery_ts" IS NOT NULL THEN 'delivered'
+      WHEN "dispatch_ts" IS NOT NULL THEN 'dispatched'
+      WHEN "balance" = 0 THEN 'paid'
+      ELSE 'pending'
+    END) VIRTUAL,
+  INDEX ("status")
+)
+
+statement ok
+INSERT INTO orders ("customer_id", "total", "balance", "dispatch_ts", "delivery_ts") VALUES
+  ('bdeb232e-12e9-4a33-9dd5-7bb9b694291a', 100, 100, NULL, NULL),
+  ('0dc59725-d20b-4370-a05d-11db025a0064', 200, 0, NULL, NULL),
+  ('d53d4021-9390-4b3a-9e5a-4bf1ff3e5a4c', 300, 0, now(), NULL),
+  ('d53d4021-9390-4b3a-9e5a-4bf1ff3e5a4c', 400, 0, now(), now())
+
+statement ok
+ANALYZE orders
+
+query TIIIIB colnames
+SELECT column_names, row_count, null_count, distinct_count, avg_size, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE orders]
+ORDER BY column_names::STRING
+----
+column_names   row_count  null_count  distinct_count  avg_size  has_histogram
+{balance}      4          0           2               32        true
+{customer_id}  4          0           3               16        true
+{delivery_ts}  4          3           2               6         true
+{dispatch_ts}  4          2           2               12        true
+{id}           4          0           4               16        true
+{order_ts}     4          0           1               24        true
+{status}       4          0           4               48        true
+{total}        4          0           4               32        true
+
+let $hist_status
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE orders] WHERE column_names = ARRAY['status']
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_status
+----
+upper_bound   range_rows  distinct_range_rows  equal_rows
+'pending'     0           0                    1
+'paid'        0           0                    1
+'dispatched'  0           0                    1
+'delivered'   0           0                    1
