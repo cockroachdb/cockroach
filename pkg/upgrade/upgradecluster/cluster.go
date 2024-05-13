@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc"
 )
@@ -66,23 +67,33 @@ func New(cfg ClusterConfig) *Cluster {
 
 // UntilClusterStable is part of the upgrade.Cluster interface.
 func (c *Cluster) UntilClusterStable(ctx context.Context, fn func() error) error {
-	ns, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
+	live, _, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
 	if err != nil {
 		return err
 	}
+
+	// Allow for several retries in case of transient node unavailability.
+	const maxUnavailableRetries = 10
+	unavailableRetries := 0
 
 	for {
 		if err := fn(); err != nil {
 			return err
 		}
-		curNodes, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
+		curLive, curUnavailable, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
 		if err != nil {
 			return err
 		}
 
-		if ok, diffs := ns.Identical(curNodes); !ok {
-			log.Infof(ctx, "%s, retrying", diffs)
-			ns = curNodes
+		if ok, diffs := live.Identical(curLive); !ok || curUnavailable != nil {
+			log.Infof(ctx, "%s, retrying, unavailable %v", diffs, curUnavailable)
+			live = curLive
+			if curUnavailable != nil {
+				unavailableRetries++
+				if unavailableRetries > maxUnavailableRetries {
+					return errors.Newf("nodes %v required, but unavailable", curUnavailable)
+				}
+			}
 			continue
 		}
 		break
@@ -92,11 +103,14 @@ func (c *Cluster) UntilClusterStable(ctx context.Context, fn func() error) error
 
 // NumNodesOrTenantPods is part of the upgrade.Cluster interface.
 func (c *Cluster) NumNodesOrServers(ctx context.Context) (int, error) {
-	ns, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
+	live, unavailable, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
 	if err != nil {
 		return 0, err
 	}
-	return len(ns), nil
+	if len(unavailable) > 0 {
+		return 0, errors.Newf("unavailable node(s): %v", unavailable)
+	}
+	return len(live), nil
 }
 
 // ForEveryNodeOrTenantPod is part of the upgrade.Cluster interface.
@@ -104,17 +118,17 @@ func (c *Cluster) ForEveryNodeOrServer(
 	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
 ) error {
 
-	ns, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
+	live, _, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
 	if err != nil {
 		return err
 	}
 
 	// We'll want to rate limit outgoing RPCs (limit pulled out of thin air).
 	qp := quotapool.NewIntPool("every-node", 25)
-	log.Infof(ctx, "executing %s on nodes %s", redact.Safe(op), ns)
+	log.Infof(ctx, "executing %s on nodes %s", redact.Safe(op), live)
 	grp := ctxgroup.WithContext(ctx)
 
-	for _, node := range ns {
+	for _, node := range live {
 		id := node.ID // copy out of the loop variable
 		alloc, err := qp.Acquire(ctx, 1)
 		if err != nil {
