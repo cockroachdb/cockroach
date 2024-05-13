@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -247,7 +246,6 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) {
 }
 
 func registerBackupFixtures(r registry.Registry) {
-	rng, _ := randutil.NewPseudoRand()
 	for _, bf := range []backupFixtureSpecs{
 		{
 			// 400GB backup fixture with 48 incremental layers. This is used by
@@ -313,29 +311,6 @@ func registerBackupFixtures(r registry.Registry) {
 			},
 			skip:   "only for fixture generation",
 			suites: registry.Suites(registry.Weekly),
-		},
-		{
-			// 15 GB backup fixture with 48 incremental layers. This is used by
-			// restore/tpce/15GB/aws/nodes=4/cpus=8. Runs weekly to catch any
-			// regressions in the fixture generation code.
-			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true, cpus: 4}),
-			scheduledBackupSpecs: makeBackupFixtureSpecs(
-				scheduledBackupSpecs{
-					incrementalBackupCrontab: "*/2 * * * *",
-					ignoreExistingBackups:    true,
-					backupSpecs: backupSpecs{
-						nonRevisionHistory: rng.Intn(2) == 1,
-						workload:           tpceRestore{customers: 1000},
-						version:            fixtureFromMasterVersion,
-						numBackupsInChain:  4,
-					},
-				}),
-			initWorkloadViaRestore: &restoreSpecs{
-				backup:                 backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
-				restoreUptoIncremental: 48,
-			},
-			timeout: 2 * time.Hour,
-			suites:  registry.Suites(registry.Weekly),
 		},
 		{
 			// 8TB Backup Fixture.
