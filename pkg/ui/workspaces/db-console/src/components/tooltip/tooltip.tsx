@@ -15,7 +15,6 @@ import {
 } from "antd/es/tooltip";
 import cn from "classnames";
 
-import "antd/es/tooltip/style/css";
 import "./tooltip.styl";
 
 export interface TooltipProps {

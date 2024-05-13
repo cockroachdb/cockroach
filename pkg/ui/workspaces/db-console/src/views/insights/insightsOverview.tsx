@@ -14,7 +14,6 @@
 import React, { useState } from "react";
 import Helmet from "react-helmet";
 import { Tabs } from "antd";
-import "antd/lib/tabs/style";
 import { commonStyles, util } from "@cockroachlabs/cluster-ui";
 import { RouteComponentProps } from "react-router-dom";
 

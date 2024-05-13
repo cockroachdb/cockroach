@@ -89,13 +89,13 @@ export class DecommissionedNodeHistory extends React.Component<
       key: "id",
       title: "ID",
       sorter: sortByNodeId,
-      render: (_text, record) => <Text>{`n${record.nodeId}`}</Text>,
+      render: (_text: string, record: DecommissionedNodeStatusRow) => <Text>{`n${record.nodeId}`}</Text>,
     },
     {
       key: "decommissionedOn",
       title: "Decommissioned On",
       sorter: sortByDecommissioningDate,
-      render: (_text, record) => {
+      render: (_text: string, record: DecommissionedNodeStatusRow) => {
         return (
           <Timestamp
             time={record.decommissionedDate}
