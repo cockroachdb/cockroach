@@ -25,21 +25,13 @@
     height: 12px;
   }
 
-  :global(.ant-calendar-picker) {
-    width: 290px;
-    margin-right: 14px;
-    input {
-      padding-left: 34px;
-    }
-  }
-
   :global(.ant-time-picker-icon),
   :global(.ant-calendar-picker-icon) {
     left: 12px;
   }
 
-  :global(.ant-time-picker) {
-    width: 150px;
+  :global(.ant-picker) {
+    margin-right: 14px;
   }
 }
 
