@@ -80,6 +80,7 @@ func StartReplicationProducerJob(
 	txn isql.Txn,
 	tenantName roachpb.TenantName,
 	req streampb.ReplicationProducerRequest,
+	assumeSucceeded bool,
 ) (streampb.ReplicationProducerSpec, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
@@ -125,7 +126,7 @@ func StartReplicationProducerJob(
 	registry := execConfig.JobRegistry
 	ptsID := uuid.MakeV4()
 
-	jr := makeProducerJobRecord(registry, tenantRecord, defaultExpirationWindow, evalCtx.SessionData().User(), ptsID)
+	jr := makeProducerJobRecord(registry, tenantRecord, defaultExpirationWindow, evalCtx.SessionData().User(), ptsID, assumeSucceeded)
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
