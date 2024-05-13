@@ -119,11 +119,19 @@ func enableBtreeFrontier(enabled bool) func() {
 	}
 }
 
+func newBTreeFrontier() Frontier {
+	return &btreeFrontier{}
+}
+
+func newLLBRFrontier() Frontier {
+	return &llrbFrontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
+}
+
 func newFrontier() Frontier {
 	if useBtreeFrontier {
-		return &btreeFrontier{}
+		return newBTreeFrontier()
 	}
-	return &llrbFrontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
+	return newLLBRFrontier()
 }
 
 // MakeFrontier returns a Frontier that tracks the given set of spans.
