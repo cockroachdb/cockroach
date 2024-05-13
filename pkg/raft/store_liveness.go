@@ -24,6 +24,9 @@ type StoreLivenessExpiration hlc.Timestamp
 // StoreLiveness is a representation of the Store Liveness fabric. It provides
 // information about uninterrupted periods of "support" between stores.
 type StoreLiveness interface {
+	// Enabled returns whether Store Liveness is enabled.
+	Enabled() bool
+
 	// SupportFor returns the epoch of the current uninterrupted period of Store
 	// Liveness support for the specified replica's remote store (S_remote) from
 	// the local replica's store (S_local), and a boolean indicating whether

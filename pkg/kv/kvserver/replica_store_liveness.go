@@ -35,6 +35,14 @@ func (r *replicaRLockedStoreLiveness) getStoreID(replicaID uint64) (roachpb.Stor
 	return desc.StoreID, true
 }
 
+// Enabled implements the raft.StoreLiveness interface.
+func (r *replicaRLockedStoreLiveness) Enabled() bool {
+	// TODO(nvanbenschoten): we can hook this up to a version check and cluster
+	// setting.
+	return true
+}
+
+// SupportFor implements the raft.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFor(replicaID uint64) (raft.StoreLivenessEpoch, bool) {
 	storeID, ok := r.getStoreID(replicaID)
 	if !ok {
@@ -47,6 +55,7 @@ func (r *replicaRLockedStoreLiveness) SupportFor(replicaID uint64) (raft.StoreLi
 	return raft.StoreLivenessEpoch(epoch), true
 }
 
+// SupportFrom implements the raft.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFrom(
 	replicaID uint64,
 ) (raft.StoreLivenessEpoch, raft.StoreLivenessExpiration, bool) {
