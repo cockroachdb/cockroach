@@ -46,22 +46,24 @@ const (
 
 	// PlanFlagContainsFullTableScan is set if the statement contains an
 	// unconstrained primary index scan. This could be a full scan of any
-	// cardinality.
+	// cardinality. Full scans of virtual tables are ignored.
 	PlanFlagContainsFullTableScan
 
 	// PlanFlagContainsFullIndexScan is set if the statement contains an
 	// unconstrained non-partial secondary index scan. This could be a full scan
-	// of any cardinality.
+	// of any cardinality. Full scans of virtual tables are ignored.
 	PlanFlagContainsFullIndexScan
 
 	// PlanFlagContainsLargeFullTableScan is set if the statement contains an
 	// unconstrained primary index scan estimated to read more than
-	// large_full_scan_rows (or without available stats).
+	// large_full_scan_rows (or without available stats). Large scans of virtual
+	// tables are ignored.
 	PlanFlagContainsLargeFullTableScan
 
 	// PlanFlagContainsLargeFullIndexScan is set if the statement contains an
 	// unconstrained non-partial secondary index scan estimated to read more than
-	// large_full_scan_rows (or without without available stats).
+	// large_full_scan_rows (or without available stats). Large scans of virtual
+	// tables are ignored.
 	PlanFlagContainsLargeFullIndexScan
 
 	// PlanFlagContainsMutation is set if the whole plan contains any mutations.
