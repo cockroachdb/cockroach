@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -242,15 +243,14 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 	case pubsubSink:
 		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
 	case kafkaSink:
-		kafkaNode := ct.kafkaSinkNode()
-		kafka := kafkaManager{
-			t:             ct.t,
-			c:             ct.cluster,
-			kafkaSinkNode: kafkaNode,
-			mon:           ct.mon,
+		kafka, _ := setupKafka(ct.ctx, ct.t, ct.cluster, ct.kafkaSinkNode())
+		kafka.mon = ct.mon
+
+		if args.topicConsumers {
+			if err := kafka.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
+				ct.t.Fatal(err)
+			}
 		}
-		kafka.install(ct.ctx)
-		kafka.start(ct.ctx, "kafka")
 
 		if args.kafkaChaos {
 			ct.mon.Go(func(ctx context.Context) error {
@@ -513,11 +513,22 @@ type feedArgs struct {
 	sinkType        sinkType
 	targets         []string
 	opts            map[string]string
-	kafkaChaos      bool
 	assumeRole      string
 	tolerateErrors  bool
 	sinkURIOverride string
 	cdcFeatureFlags
+	kafkaFeedArgs
+}
+
+// kafkaFeedArgs are args that are specific to kafkaSink changefeeds.
+type kafkaFeedArgs struct {
+	// If kafkaChaos is true, the Kafka cluster will periodically restart
+	// to simulate unreliability.
+	kafkaChaos bool
+	// If topicConsumers is set to true, topic consumers will be created
+	// for each of the changefeeds targets and any associated validators
+	// will automatically run.
+	topicConsumers bool
 }
 
 // TODO: Maybe move away from feedArgs since its only 3 things
@@ -544,6 +555,9 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 
 	} else {
 		feedOptions["resolved"] = ""
+	}
+	if args.topicConsumers {
+		feedOptions["updated"] = ""
 	}
 
 	for option, value := range args.opts {
@@ -785,7 +799,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err != nil {
 		t.Fatal(errors.Wrap(err, "could not create kafka consumer"))
 	}
-	defer tc.Close()
+	defer tc.close()
 
 	l, err := t.L().ChildLogger(`changefeed`)
 	if err != nil {
@@ -814,9 +828,9 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		defer func() { close(messageBuf) }()
 		v := cdctest.MakeCountValidator(cdctest.NoOpValidator)
 		for {
-			m := tc.Next(ctx)
-			if m == nil {
-				return fmt.Errorf("unexpected end of changefeed")
+			m, err := tc.next(ctx)
+			if err != nil {
+				return err
 			}
 			messageBuf <- m
 			updated, resolved, err := cdctest.ParseJSONValueTimestamps(m.Value)
@@ -1363,7 +1377,10 @@ func registerCDC(r registry.Registry) {
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
 				targets:  allTpccTargets,
-				opts:     map[string]string{"initial_scan": "'no'"},
+				kafkaFeedArgs: kafkaFeedArgs{
+					topicConsumers: true,
+				},
+				opts: map[string]string{"initial_scan": "'no'"},
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 3 * time.Minute,
@@ -1540,10 +1557,13 @@ func registerCDC(r registry.Registry) {
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
-				sinkType:   kafkaSink,
-				targets:    allTpccTargets,
-				kafkaChaos: true,
-				opts:       map[string]string{"initial_scan": "'no'"},
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				kafkaFeedArgs: kafkaFeedArgs{
+					kafkaChaos:     true,
+					topicConsumers: true,
+				},
+				opts: map[string]string{"initial_scan": "'no'"},
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 3 * time.Minute,
@@ -1570,8 +1590,11 @@ func registerCDC(r registry.Registry) {
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m", tolerateErrors: true})
 
 			feed := ct.newChangefeed(feedArgs{
-				sinkType:       kafkaSink,
-				targets:        allTpccTargets,
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				kafkaFeedArgs: kafkaFeedArgs{
+					topicConsumers: true,
+				},
 				opts:           map[string]string{"initial_scan": "'no'"},
 				tolerateErrors: true,
 			})
@@ -1607,7 +1630,13 @@ func registerCDC(r registry.Registry) {
 				t.Fatalf("failed statement %q: %s", alterStmt, err.Error())
 			}
 
-			feed := ct.newChangefeed(feedArgs{sinkType: kafkaSink, targets: allLedgerTargets})
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  allLedgerTargets,
+				kafkaFeedArgs: kafkaFeedArgs{
+					topicConsumers: true,
+				},
+			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 10 * time.Minute,
 				steadyLatency:      time.Minute,
@@ -2998,12 +3027,58 @@ func (k kafkaManager) newConsumer(ctx context.Context, topic string) (*topicCons
 	if err != nil {
 		return nil, err
 	}
-	tc, err := makeTopicConsumer(consumer, topic)
+	tc, err := newTopicConsumer(k.t, consumer, topic)
 	if err != nil {
 		_ = consumer.Close()
 		return nil, err
 	}
+	k.t.L().Printf("topic consumer for %s has partitions: %s", topic, tc.partitions)
 	return tc, nil
+}
+
+func (k kafkaManager) startTopicConsumers(
+	ctx context.Context, targets []string, stopper <-chan struct{},
+) error {
+	for _, target := range targets {
+		// We need to strip off the database and schema name since the topic name
+		// is just the table name.
+		topic := target
+		lastPeriodIndex := strings.LastIndex(target, ".")
+		if lastPeriodIndex != -1 {
+			topic = topic[lastPeriodIndex+1:]
+		}
+		topicConsumer, err := k.newConsumer(ctx, topic)
+		if err != nil {
+			return err
+		}
+		k.t.L().Printf("starting topic consumer for topic: %s", topic)
+		k.mon.Go(func(ctx context.Context) error {
+			everyN := log.Every(30 * time.Second)
+			for {
+				select {
+				case <-stopper:
+					return nil
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
+
+				// The topicConsumer has order validation built-in so this has
+				// the side effect of validating the order of incoming messages.
+				_, err := topicConsumer.next(ctx)
+				if err != nil {
+					k.t.L().Printf("topic consumer for %s encountered error: %s", topic, err)
+					return err
+				}
+				if everyN.ShouldLog() {
+					k.t.L().Printf("topic consumer for %s validated %d rows and %d resolved timestamps",
+						topic, topicConsumer.validator.NumRows, topicConsumer.validator.NumResolved)
+				}
+			}
+		})
+	}
+
+	return nil
 }
 
 type tpccWorkload struct {
@@ -3261,54 +3336,100 @@ func setupKafka(
 }
 
 type topicConsumer struct {
-	sarama.Consumer
-
+	t                  test.Test
+	consumer           sarama.Consumer
 	topic              string
 	partitions         []string
-	partitionConsumers []sarama.PartitionConsumer
+	partitionConsumers map[int32]sarama.PartitionConsumer
+	validator          *cdctest.CountValidator
 }
 
-func makeTopicConsumer(c sarama.Consumer, topic string) (*topicConsumer, error) {
-	t := &topicConsumer{Consumer: c, topic: topic}
-	partitions, err := t.Partitions(t.topic)
+func newTopicConsumer(t test.Test, consumer sarama.Consumer, topic string) (*topicConsumer, error) {
+	partitions, err := consumer.Partitions(topic)
 	if err != nil {
 		return nil, err
 	}
+
+	numPartitions := len(partitions)
+	topicPartitions := make([]string, 0, numPartitions)
+	partitionConsumers := make(map[int32]sarama.PartitionConsumer, numPartitions)
 	for _, partition := range partitions {
-		t.partitions = append(t.partitions, strconv.Itoa(int(partition)))
-		pc, err := t.ConsumePartition(topic, partition, sarama.OffsetOldest)
+		topicPartitions = append(topicPartitions, strconv.Itoa(int(partition)))
+		pc, err := consumer.ConsumePartition(topic, partition, sarama.OffsetOldest)
 		if err != nil {
 			return nil, err
 		}
-		t.partitionConsumers = append(t.partitionConsumers, pc)
+		partitionConsumers[partition] = pc
 	}
-	return t, nil
+
+	return &topicConsumer{
+		t:                  t,
+		topic:              topic,
+		partitions:         topicPartitions,
+		partitionConsumers: partitionConsumers,
+		validator:          cdctest.MakeCountValidator(cdctest.NewOrderValidator(topic)),
+	}, nil
 }
 
-func (c *topicConsumer) tryNextMessage(ctx context.Context) *sarama.ConsumerMessage {
-	for _, pc := range c.partitionConsumers {
+func (c *topicConsumer) tryNextMessage(ctx context.Context) (*sarama.ConsumerMessage, error) {
+	for partition, pc := range c.partitionConsumers {
 		select {
 		case <-ctx.Done():
-			return nil
+			return nil, ctx.Err()
 		case m := <-pc.Messages():
-			return m
+			if m == nil {
+				return m, nil
+			}
+			if err := c.validateMessage(partition, m); err != nil {
+				return nil, err
+			}
+			return m, nil
 		default:
 		}
+	}
+	return nil, nil
+}
+
+func (c *topicConsumer) validateMessage(partition int32, m *sarama.ConsumerMessage) error {
+	updated, resolved, err := cdctest.ParseJSONValueTimestamps(m.Value)
+	if err != nil {
+		return err
+	}
+	partitionStr := strconv.Itoa(int(partition))
+	switch {
+	case len(m.Key) == 0:
+		err := c.validator.NoteResolved(partitionStr, resolved)
+		if err != nil {
+			return err
+		}
+	default:
+		err := c.validator.NoteRow(partitionStr, string(m.Key), string(m.Value), updated)
+		if err != nil {
+			return err
+		}
+	}
+	if failures := c.validator.Failures(); len(failures) > 0 {
+		c.t.Fatalf("topic consumer for %s encountered validator error(s): %s", c.topic, strings.Join(failures, ","))
 	}
 	return nil
 }
 
-func (c *topicConsumer) Next(ctx context.Context) *sarama.ConsumerMessage {
-	m := c.tryNextMessage(ctx)
-	for ; m == nil; m = c.tryNextMessage(ctx) {
+func (c *topicConsumer) next(ctx context.Context) (*sarama.ConsumerMessage, error) {
+	for {
 		if ctx.Err() != nil {
-			return nil
+			return nil, ctx.Err()
+		}
+		m, err := c.tryNextMessage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if m != nil {
+			return m, nil
 		}
 	}
-	return m
 }
 
-func (c *topicConsumer) Close() {
+func (c *topicConsumer) close() {
 	for _, pc := range c.partitionConsumers {
 		pc.AsyncClose()
 		// Drain the messages and errors as required by AsyncClose.
@@ -3317,5 +3438,5 @@ func (c *topicConsumer) Close() {
 		for range pc.Errors() {
 		}
 	}
-	_ = c.Consumer.Close()
+	_ = c.consumer.Close()
 }

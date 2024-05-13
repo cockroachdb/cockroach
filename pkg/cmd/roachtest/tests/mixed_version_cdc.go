@@ -166,7 +166,7 @@ func (cmvt *cdcMixedVersionTester) StartKafka(t test.Test, c cluster.Cluster) (c
 	cmvt.kafka.consumer = consumer
 
 	return func() {
-		cmvt.kafka.consumer.Close()
+		consumer.close()
 		tearDown()
 	}
 }
@@ -258,15 +258,9 @@ func (cmvt *cdcMixedVersionTester) runKafkaConsumer(
 	// context cancellation. We rely on consumer.Next() to check
 	// the context.
 	for {
-		m := cmvt.kafka.consumer.Next(ctx)
-		if m == nil {
-			// this is expected to happen once the test has finished and
-			// Kafka is being shut down. If it happens in the middle of
-			// the test, it will eventually time out, and this message
-			// should allow us to see that the validator finished
-			// earlier than it should have
-			l.Printf("end of changefeed")
-			return nil
+		m, err := cmvt.kafka.consumer.next(ctx)
+		if err != nil {
+			return err
 		}
 
 		// Forward resolved timetsamps to "heartbeat" that the changefeed is running.
