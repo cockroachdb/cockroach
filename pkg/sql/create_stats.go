@@ -658,7 +658,6 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	}
 
 	r.tableID = details.Table.ID
-	evalCtx := jobsPlanner.ExtendedEvalContext()
 
 	if err := jobsPlanner.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// We create a third "inner planner" associated with this txn in order to
@@ -720,6 +719,9 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	}); err != nil {
 		return err
 	}
+
+	evalCtx := jobsPlanner.ExtendedEvalContext()
+
 	// Record this statistics creation in the event log.
 	if !createStatsPostEvents.Get(&evalCtx.Settings.SV) {
 		return nil
