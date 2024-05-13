@@ -52,9 +52,8 @@ type StoreGrantCoordinators struct {
 
 	settings                    *cluster.Settings
 	makeStoreRequesterFunc      makeStoreRequesterFunc
-	kvIOTokensExhaustedDuration *metric.Counter
-	kvIOTokensAvailable         *metric.Gauge
-	kvElasticIOTokensAvailable  *metric.Gauge
+	kvIOTokensExhaustedDuration [admissionpb.NumWorkClasses]*metric.Counter
+	kvIOTokensAvailable         [admissionpb.NumWorkClasses]*metric.Gauge
 	kvIOTokensTaken             *metric.Counter
 	kvIOTokensReturned          *metric.Counter
 	kvIOTokensBypassed          *metric.Counter
@@ -173,12 +172,11 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		startingIOTokens:                unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval(),
 		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
 		availableTokensMetric:           sgc.kvIOTokensAvailable,
-		availableElasticTokensMetric:    sgc.kvElasticIOTokensAvailable,
 		tokensTakenMetric:               sgc.kvIOTokensTaken,
 		tokensReturnedMetric:            sgc.kvIOTokensReturned,
 	}
-	kvg.coordMu.availableIOTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
-	kvg.coordMu.availableElasticIOTokens = kvg.coordMu.availableIOTokens
+	kvg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
+	kvg.coordMu.availableIOTokens[admissionpb.ElasticWorkClass] = kvg.coordMu.availableIOTokens[admissionpb.RegularWorkClass]
 	kvg.coordMu.elasticDiskBWTokensAvailable = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 
 	opts := makeWorkQueueOptions(KVWork)
@@ -482,7 +480,6 @@ func makeStoresGrantCoordinators(
 		kvIOTokensReturned:          metrics.KVIOTokensReturned,
 		kvIOTokensBypassed:          metrics.KVIOTokensBypassed,
 		kvIOTokensAvailable:         metrics.KVIOTokensAvailable,
-		kvElasticIOTokensAvailable:  metrics.KVElasticIOTokensAvailable,
 		l0CompactedBytes:            metrics.L0CompactedBytes,
 		l0TokensProduced:            metrics.L0TokensProduced,
 		workQueueMetrics:            storeWorkQueueMetrics,
@@ -994,8 +991,8 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 			case *slotGranter:
 				s.Printf("%s%s: used: %d, total: %d", curSep, kind, g.usedSlots, g.totalSlots)
 			case *kvStoreTokenGranter:
-				s.Printf(" io-avail: %d(%d), elastic-disk-bw-tokens-avail: %d", g.coordMu.availableIOTokens,
-					g.coordMu.availableElasticIOTokens,
+				s.Printf(" io-avail: %d(%d), elastic-disk-bw-tokens-avail: %d", g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
+					g.coordMu.availableIOTokens[admissionpb.ElasticWorkClass],
 					g.coordMu.elasticDiskBWTokensAvailable)
 			}
 		case SQLStatementLeafStartWork, SQLStatementRootStartWork:
@@ -1027,12 +1024,11 @@ type GrantCoordinatorMetrics struct {
 	KVSlotAdjusterIncrements     *metric.Counter
 	KVSlotAdjusterDecrements     *metric.Counter
 	// TODO(banabrick): Make these metrics per store.
-	KVIOTokensExhaustedDuration *metric.Counter
 	KVIOTokensTaken             *metric.Counter
 	KVIOTokensReturned          *metric.Counter
 	KVIOTokensBypassed          *metric.Counter
-	KVIOTokensAvailable         *metric.Gauge
-	KVElasticIOTokensAvailable  *metric.Gauge
+	KVIOTokensAvailable         [admissionpb.NumWorkClasses]*metric.Gauge
+	KVIOTokensExhaustedDuration [admissionpb.NumWorkClasses]*metric.Counter
 	L0CompactedBytes            *metric.Counter
 	L0TokensProduced            *metric.Counter
 	SQLLeafStartUsedSlots       *metric.Gauge
@@ -1051,16 +1047,19 @@ func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 		KVCPULoadLongPeriodDuration:  metric.NewCounter(kvCPULoadLongPeriodDuration),
 		KVSlotAdjusterIncrements:     metric.NewCounter(kvSlotAdjusterIncrements),
 		KVSlotAdjusterDecrements:     metric.NewCounter(kvSlotAdjusterDecrements),
-		KVIOTokensExhaustedDuration:  metric.NewCounter(kvIOTokensExhaustedDuration),
 		SQLLeafStartUsedSlots:        metric.NewGauge(addName(SQLStatementLeafStartWork.String(), usedSlots)),
 		SQLRootStartUsedSlots:        metric.NewGauge(addName(SQLStatementRootStartWork.String(), usedSlots)),
 		KVIOTokensTaken:              metric.NewCounter(kvIOTokensTaken),
 		KVIOTokensReturned:           metric.NewCounter(kvIOTokensReturned),
 		KVIOTokensBypassed:           metric.NewCounter(kvIOTokensBypassed),
-		KVIOTokensAvailable:          metric.NewGauge(kvIOTokensAvailable),
-		KVElasticIOTokensAvailable:   metric.NewGauge(kvElasticIOTokensAvailable),
 		L0CompactedBytes:             metric.NewCounter(l0CompactedBytes),
 		L0TokensProduced:             metric.NewCounter(l0TokensProduced),
+	}
+	m.KVIOTokensAvailable[admissionpb.RegularWorkClass] = metric.NewGauge(kvIOTokensAvailable)
+	m.KVIOTokensAvailable[admissionpb.ElasticWorkClass] = metric.NewGauge(kvElasticIOTokensAvailable)
+	m.KVIOTokensExhaustedDuration = [admissionpb.NumWorkClasses]*metric.Counter{
+		metric.NewCounter(kvIOTokensExhaustedDuration),
+		metric.NewCounter(kvElasticIOTokensExhaustedDuration),
 	}
 	return m
 }
