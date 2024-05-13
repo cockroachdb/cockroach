@@ -1525,7 +1525,7 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:             "cdc/sink-chaos",
+		Name:             "cdc/kafka-chaos",
 		Owner:            `cdc`,
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
@@ -2864,11 +2864,11 @@ func (k kafkaManager) stop(ctx context.Context) {
 }
 
 func (k kafkaManager) chaosLoop(
-	ctx context.Context, period, downTime time.Duration, stopper chan struct{},
+	ctx context.Context, period, downTime time.Duration, stopper <-chan struct{},
 ) error {
 	t := time.NewTicker(period)
 	defer t.Stop()
-	for {
+	for i := 0; ; i++ {
 		select {
 		case <-stopper:
 			return nil
@@ -2877,6 +2877,7 @@ func (k kafkaManager) chaosLoop(
 		case <-t.C:
 		}
 
+		k.t.L().Printf("kafka chaos loop iteration %d: stopping", i)
 		k.stop(ctx)
 
 		select {
@@ -2887,6 +2888,7 @@ func (k kafkaManager) chaosLoop(
 		case <-time.After(downTime):
 		}
 
+		k.t.L().Printf("kafka chaos loop iteration %d: restarting", i)
 		k.restart(ctx, "kafka")
 	}
 }
