@@ -197,3 +197,26 @@ test           sc102962     root     ALL             true
 
 statement error pgcode 2BP01 pq: cannot drop role/user r102962: grants still exist on test.sc102962
 DROP ROLE r102962
+
+statement ok
+CREATE USER ROACH;
+CREATE SCHEMA ROACHHOUSE;
+CREATE SCHEMA ROACHLAYER;
+CREATE SCHEMA ROACHSTATION;
+BEGIN;
+GRANT ALL ON SCHEMA ROACHHOUSE TO ROACH;
+GRANT ALL ON SCHEMA ROACHLAYER TO ROACH;
+GRANT ALL ON SCHEMA ROACHSTATION TO ROACH;
+COMMIT;
+
+query T
+SELECT description FROM [SHOW JOBS] WHERE description LIKE  '%updating privileges for schema%';
+----
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR roach
+----
+database_name  schema_name   object_name  object_type  grantee  privilege_type  is_grantable
+test           roachhouse    NULL         schema       roach    ALL             false
+test           roachlayer    NULL         schema       roach    ALL             false
+test           roachstation  NULL         schema       roach    ALL             false
