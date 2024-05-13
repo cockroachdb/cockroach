@@ -117,7 +117,7 @@ func TestHelperEveryNode(t *testing.T) {
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
 		})
-		expRe := fmt.Sprintf("n%d required, but unavailable", downedNode)
+		expRe := fmt.Sprintf("nodes n\\{%d\\} required, but unavailable", downedNode)
 		opCount := 0
 		if err := h.UntilClusterStable(ctx, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
@@ -157,9 +157,13 @@ func TestClusterNodes(t *testing.T) {
 
 	t.Run("retrieves-all", func(t *testing.T) {
 		nl := livenesspb.TestCreateNodeVitality(1, 2, 3)
-		ns, err := NodesFromNodeLiveness(ctx, nl)
+		ns, unavailable, err := NodesFromNodeLiveness(ctx, nl)
 		if err != nil {
 			t.Fatal(err)
+		}
+
+		if len(unavailable) > 0 {
+			t.Fatalf("expected no unavailable nodes, found %d", len(unavailable))
 		}
 
 		if got := len(ns); got != numNodes {
@@ -182,7 +186,7 @@ func TestClusterNodes(t *testing.T) {
 		const decommissionedNode = 3
 		nl.Decommissioned(decommissionedNode, false)
 
-		ns, err := NodesFromNodeLiveness(ctx, nl)
+		ns, _, err := NodesFromNodeLiveness(ctx, nl)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -206,10 +210,12 @@ func TestClusterNodes(t *testing.T) {
 		const downedNode = 3
 		nl.DownNode(downedNode)
 
-		_, err := NodesFromNodeLiveness(ctx, nl)
-		expRe := fmt.Sprintf("n%d required, but unavailable", downedNode)
-		if !testutils.IsError(err, expRe) {
-			t.Fatalf("expected error %q, got %q", expRe, err)
+		_, unavailable, err := NodesFromNodeLiveness(ctx, nl)
+		if len(unavailable) != 1 {
+			t.Fatalf("expected 1 unavailable node, found %d", len(unavailable))
+		}
+		if err != nil {
+			t.Fatal(err)
 		}
 	})
 }
