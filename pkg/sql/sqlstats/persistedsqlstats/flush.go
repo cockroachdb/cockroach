@@ -68,8 +68,10 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 		return
 	}
 
+	fingerprintCount := s.SQLStats.GetTotalFingerprintCount()
+	s.cfg.FlushedFingerprintCount.Inc(fingerprintCount)
 	log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
-		s.SQLStats.GetTotalFingerprintCount(), s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(s.lastFlushStarted))
+		fingerprintCount, s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(s.lastFlushStarted))
 	s.lastFlushStarted = now
 
 	aggregatedTs := s.ComputeAggregatedTs()

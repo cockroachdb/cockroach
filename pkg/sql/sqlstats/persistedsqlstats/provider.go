@@ -46,9 +46,11 @@ type Config struct {
 	JobRegistry             *jobs.Registry
 
 	// Metrics.
-	FlushCounter   *metric.Counter
-	FlushDuration  metric.IHistogram
-	FailureCounter *metric.Counter
+	FlushCounter            *metric.Counter
+	FlushDuration           metric.IHistogram
+	FlushDoneSignalsIgnored *metric.Counter
+	FailureCounter          *metric.Counter
+	FlushedFingerprintCount *metric.Counter
 
 	// Testing knobs.
 	Knobs *sqlstats.TestingKnobs
@@ -214,6 +216,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 					if log.V(1) {
 						log.Warning(ctx, "sql-stats-worker: unable to signal flush completion")
 					}
+					s.cfg.FlushDoneSignalsIgnored.Inc(1)
 				}
 			}
 		}
