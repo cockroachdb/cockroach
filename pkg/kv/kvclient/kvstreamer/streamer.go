@@ -1490,6 +1490,13 @@ func (w *workerCoordinator) performRequestAsync(
 
 			// Finally, process the results and add the ResumeSpans to be
 			// processed as well.
+			log.VEventf(ctx, 2,
+				"responses:%d targetBytes:%d {footprint:%v overhead:%v resumeMem:%v gets:%v scans:%v incpGets:%v "+
+					"incpScans:%v startedScans:%v kvs:%v}",
+				len(br.Responses), targetBytes, fp.memoryFootprintBytes, fp.responsesOverhead,
+				fp.resumeReqsMemUsage, fp.numGetResults, fp.numScanResults, fp.numIncompleteGets,
+				fp.numIncompleteScans, fp.numStartedScans, fp.kvPairsRead,
+			)
 			processSingleRangeResponse(ctx, w.s, req, br, fp)
 		}); err != nil {
 		// The new goroutine for the request wasn't spun up, so we have to
@@ -1635,13 +1642,6 @@ func processSingleRangeResults(
 	br *kvpb.BatchResponse,
 	fp singleRangeBatchResponseFootprint,
 ) {
-	log.VEventf(ctx, 2,
-		"responses:%d {footprint:%v overhead:%v resumeMem:%v gets:%v scans:%v incpGets:%v "+
-			"incpScans:%v startedScans:%v kvs:%v}",
-		len(br.Responses), fp.memoryFootprintBytes, fp.responsesOverhead, fp.resumeReqsMemUsage,
-		fp.numGetResults, fp.numScanResults, fp.numIncompleteGets, fp.numIncompleteScans,
-		fp.numStartedScans, fp.kvPairsRead,
-	)
 	// If there are no results, this function has nothing to do.
 	if !fp.hasResults() {
 		log.VEvent(ctx, 2, "no results")
