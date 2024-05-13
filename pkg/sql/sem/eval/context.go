@@ -836,17 +836,21 @@ func arrayOfType(typ *types.T) (*tree.DArray, error) {
 // where type aliases should be ignored.
 func UnwrapDatum(ctx context.Context, evalCtx *Context, d tree.Datum) tree.Datum {
 	d = tree.UnwrapDOidWrapper(d)
-	if p, ok := d.(*tree.Placeholder); ok && evalCtx != nil && evalCtx.HasPlaceholders() {
-		ret, err := Expr(ctx, evalCtx, p)
-		if err != nil {
-			// If we fail to evaluate the placeholder, it's because we don't have
-			// a placeholder available. Just return the placeholder and someone else
-			// will handle this problem.
-			return d
-		}
-		return ret
+	if evalCtx == nil || !evalCtx.HasPlaceholders() {
+		return d
 	}
-	return d
+	p, ok := d.(*tree.Placeholder)
+	if !ok {
+		return d
+	}
+	ret, err := Expr(ctx, evalCtx, p)
+	if err != nil {
+		// If we fail to evaluate the placeholder, it's because we don't have
+		// a placeholder available. Just return the placeholder and someone else
+		// will handle this problem.
+		return d
+	}
+	return ret
 }
 
 // StreamManagerFactory stores methods that return the streaming managers.
