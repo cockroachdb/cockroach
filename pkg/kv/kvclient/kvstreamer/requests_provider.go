@@ -188,6 +188,7 @@ func (r singleRangeBatch) String() string {
 	// We try to limit the size based on the number of requests ourselves, so
 	// this is just a sane upper-bound.
 	maxBytes := 10 << 10 /* 10KiB */
+	numScansInReqs := int64(len(r.reqs)) - r.numGetsInReqs
 	if len(r.reqs) > 10 {
 		// To keep the size of this log message relatively small, if we have
 		// more than 10 requests, then we only include the information about the
@@ -199,17 +200,17 @@ func (r singleRangeBatch) String() string {
 			subIdx = fmt.Sprintf("%v...%v", r.subRequestIdx[:headEndIdx], r.subRequestIdx[tailStartIdx:])
 		}
 		return fmt.Sprintf(
-			"{reqs:%v...%v pos:%v...%v subIdx:%s start:%v gets:%v reserved:%v overhead:%v minTarget:%v}",
+			"{reqs:%v...%v pos:%v...%v subIdx:%s gets:%v scans:%v reserved:%v overhead:%v minTarget:%v}",
 			kvpb.TruncatedRequestsString(r.reqs[:headEndIdx], maxBytes),
 			kvpb.TruncatedRequestsString(r.reqs[tailStartIdx:], maxBytes),
-			r.positions[:headEndIdx], r.positions[tailStartIdx:],
-			subIdx, r.isScanStarted, r.numGetsInReqs, r.reqsReservedBytes, r.overheadAccountedFor, r.minTargetBytes,
+			r.positions[:headEndIdx], r.positions[tailStartIdx:], subIdx, r.numGetsInReqs,
+			numScansInReqs, r.reqsReservedBytes, r.overheadAccountedFor, r.minTargetBytes,
 		)
 	}
 	return fmt.Sprintf(
-		"{reqs:%v pos:%v subIdx:%v start:%v gets:%v reserved:%v overhead:%v minTarget:%v}",
+		"{reqs:%v pos:%v subIdx:%v gets:%v scans:%v reserved:%v overhead:%v minTarget:%v}",
 		kvpb.TruncatedRequestsString(r.reqs, maxBytes), r.positions, r.subRequestIdx,
-		r.isScanStarted, r.numGetsInReqs, r.reqsReservedBytes, r.overheadAccountedFor, r.minTargetBytes,
+		r.numGetsInReqs, numScansInReqs, r.reqsReservedBytes, r.overheadAccountedFor, r.minTargetBytes,
 	)
 }
 
