@@ -387,6 +387,7 @@ type allocatorError struct {
 	existingNonVoterCount int
 	aliveStores           int
 	throttledStores       int
+	fullStores            int
 }
 
 var _ errors.SafeFormatter = &allocatorError{}
@@ -412,17 +413,20 @@ func (ae *allocatorError) SafeFormatError(p errors.Printer) (next error) {
 			ae.existingNonVoterCount)
 	}
 
-	var baseMsg redact.RedactableString
+	var throttledMessage redact.RedactableString
 	if ae.throttledStores != 0 {
-		baseMsg = redact.Sprintf(
-			"0 of %d live stores are able to take a new replica for the range (%d throttled, %s, %s)",
-			ae.aliveStores, ae.throttledStores,
-			existingVoterStr, existingNonVoterStr)
-	} else {
-		baseMsg = redact.Sprintf(
-			"0 of %d live stores are able to take a new replica for the range (%s, %s)",
-			ae.aliveStores, existingVoterStr, existingNonVoterStr)
+		throttledMessage = redact.Sprintf("%d throttled, ", ae.throttledStores)
 	}
+
+	var fullStoreMessage redact.RedactableString
+	if ae.fullStores != 0 {
+		fullStoreMessage = redact.Sprintf("%d full disk, ", ae.fullStores)
+	}
+
+	baseMsg := redact.Sprintf(
+		"0 of %d live stores are able to take a new replica for the range (%s%s%s, %s)",
+		ae.aliveStores, throttledMessage, fullStoreMessage,
+		existingVoterStr, existingNonVoterStr)
 
 	if len(ae.constraints) == 0 && len(ae.voterConstraints) == 0 {
 		p.Print(baseMsg)
@@ -1224,6 +1228,7 @@ func (a *Allocator) AllocateTarget(
 	replicaStatus ReplicaStatus,
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string, error) {
+	options := a.ScorerOptions(ctx)
 	candidateStoreList, aliveStoreCount, throttled := storePool.GetStoreList(storepool.StoreFilterThrottled)
 
 	// If the replica is alive we are upreplicating, and in that case we want to
@@ -1256,7 +1261,7 @@ func (a *Allocator) AllocateTarget(
 		existingVoters,
 		existingNonVoters,
 		decommissioningReplica,
-		a.ScorerOptions(ctx),
+		options,
 		selector,
 		// When allocating a *new* replica, we explicitly disregard nodes with any
 		// existing replicas. This is important for multi-store scenarios as
@@ -1278,6 +1283,16 @@ func (a *Allocator) AllocateTarget(
 			"%d matching stores are currently throttled: %v", len(throttled), throttled,
 		)
 	}
+
+	// Count the number of live stores which have full disks, to be included in
+	// the error detail.
+	aliveFullStoreCount := 0
+	for _, store := range candidateStoreList.Stores {
+		if !options.getDiskOptions().maxCapacityCheck(store) {
+			aliveFullStoreCount++
+		}
+	}
+
 	return roachpb.ReplicationTarget{}, "", &allocatorError{
 		voterConstraints:      conf.VoterConstraints,
 		constraints:           conf.Constraints,
@@ -1285,6 +1300,7 @@ func (a *Allocator) AllocateTarget(
 		existingNonVoterCount: len(existingNonVoters),
 		aliveStores:           aliveStoreCount,
 		throttledStores:       len(throttled),
+		fullStores:            aliveFullStoreCount,
 	}
 }
 
