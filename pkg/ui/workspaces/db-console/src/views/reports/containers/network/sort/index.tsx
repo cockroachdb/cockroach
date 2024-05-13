@@ -9,8 +9,6 @@
 // licenses/APL.txt.
 
 import { Checkbox, Divider } from "antd";
-import "antd/lib/checkbox/style";
-import "antd/lib/divider/style";
 import React from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 

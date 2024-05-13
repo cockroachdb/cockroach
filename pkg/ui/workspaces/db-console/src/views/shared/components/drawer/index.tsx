@@ -10,9 +10,6 @@
 
 import React from "react";
 import { Drawer, Button, Divider } from "antd";
-import "antd/lib/drawer/style";
-import "antd/lib/button/style";
-import "antd/lib/divider/style";
 import { Link } from "react-router-dom";
 import classNames from "classnames/bind";
 
@@ -62,9 +59,8 @@ export const DrawerComponent = ({
     placement="bottom"
     closable={false}
     onClose={onClose}
-    visible={visible}
-    className={cx("drawer--preset-black")}
-    // getContainer={false}
+    open={visible}
+    rootClassName={cx("drawer--preset-black")}
     {...props}
   >
     {children}
