@@ -276,8 +276,8 @@ func TryFilterInvertedIndexBySimilarity(
 			// Create a key for the trigram. The trigram is encoded so that it
 			// can be correctly compared to histogram upper bounds, which are
 			// also encoded. The byte slice is pre-sized to hold the trigram
-			// plus two extra bytes for the prefix and terminator.
-			k := make([]byte, 0, len(trgms[j])+2)
+			// plus three extra bytes for the prefix, escape, and terminator.
+			k := make([]byte, 0, len(trgms[j])+3)
 			k = encoding.EncodeStringAscending(k, trgms[j])
 			key := constraint.MakeKey(tree.NewDEncodedKey(tree.DEncodedKey(k)))
 
@@ -428,7 +428,7 @@ func similarityTrigramsToScan(s string, similarityThreshold float64) []string {
 			i++
 		}
 
-		// If there are still trigrams to remove, remove trigrams as the end of
+		// If there are still trigrams to remove, remove trigrams at the end of
 		// the slice.
 		if toRemove > 0 {
 			trgms = trgms[:len(trgms)-toRemove]
