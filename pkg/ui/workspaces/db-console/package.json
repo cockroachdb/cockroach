@@ -11,6 +11,7 @@
     "test": "DEBUG_PRINT_LIMIT=1000000 jest"
   },
   "dependencies": {
+    "@ant-design/icons": "^5.3.6",
     "@babel/runtime": "7.12.13",
     "@cockroachlabs/cluster-ui": "link:../cluster-ui",
     "@cockroachlabs/crdb-protobuf-client": "link:./src/js",
@@ -26,7 +27,7 @@
     "@types/react-router": "5.1.15",
     "@typescript-eslint/utils": "^5.26.0",
     "analytics-node": "^3.5.0",
-    "antd": "^3.25.2",
+    "antd": "5.6.1",
     "babel-polyfill": "^6.26.0",
     "classnames": "2.3.2",
     "combokeys": "^2.4.6",
@@ -190,6 +191,11 @@
   },
   "optionalDependencies": {
     "timers-browserify": "^2.0.12"
+  },
+  "peerDependencies": {
+    "@redux-saga/types": "1.2.1",
+    "rc-drawer": "~6.2.0",
+    "rc-pagination": "~3.5.0"
   },
   "engines": {
     "node": ">=16"

@@ -403,7 +403,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     },
     {
       key: "logs",
-      title: "",
+      title: <span/>,
       render: (_text: string, record: NodeStatusRow) =>
         record.nodeId && (
           <div className="cell--show-on-hover ">
@@ -427,7 +427,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     // Remove "Nodes Count" column If nodes are not partitioned by regions,
     if (regionsCount === 1) {
       columns = columns.filter(
-        (column: NodeStatusRow) => column.key !== "nodesCount",
+        column => column.key !== "nodesCount",
       );
       dataSource = head(dataSource).children;
     }
