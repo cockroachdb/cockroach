@@ -18,34 +18,29 @@
   // when closing animation happens and Alert panel
   // jumps to the left side.
   margin 0 0 0 auto!important
-  padding-left 48px
   border-radius 3px
   box-shadow 0 0 10px 0 rgba(71, 88, 114, 0.47)
   background-color $colors--white
   border-color $colors--white
-  display: flex;
-  flex-direction column
-  justify-content center
 
   .alert-massage__icon
     font-size 20px
-    left 16px
-    top 15px
-  .ant-alert-close-icon
-    margin unset
-    right 0
-    top 0
-    padding-right 16px
+    align-self baseline
+    margin-top 8px
+    margin-inline-start 4px
+    margin-inline-end 12px
+
   .ant-alert-message
     @extends $text--body-strong
     color $colors--neutral-8
 
-  &__close-text
-    color $colors--neutral-7
-    margin $spacing-smaller 0
-    font-size $font-size--large
-    line-height $spacing-smaller
+  .ant-alert-close-icon
     font-weight $font-weight--extra-bold
+    align-self start
+    margin-top 8px
+    .anticon.anticon-close
+      color $colors--neutral-7
+
 
 .ant-alert-success .alert-massage__icon
   color $colors--primary-green-3

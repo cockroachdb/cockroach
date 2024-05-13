@@ -18,13 +18,13 @@ import {
   FilterDropdown,
   FilterSearchOption,
 } from "@cockroachlabs/cluster-ui";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import isEmpty from "lodash/isEmpty";
 import isArray from "lodash/isArray";
 import isString from "lodash/isString";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
-
-import { cockroach } from "src/js/protos";
+import noop from "lodash/noop";
 
 import styles from "./hotRanges.module.styl";
 
@@ -349,6 +349,7 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
         <FilterSearchOption
           label="Store ID"
           onChanged={setFilterStoreId}
+          onSubmit={noop}
           value={filterStoreId}
         />
         <FilterCheckboxOption
@@ -363,11 +364,13 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
         <FilterSearchOption
           label="Table"
           onChanged={setFilterTableName}
+          onSubmit={noop}
           value={filterTableName}
         />
         <FilterSearchOption
           label="Index"
           onChanged={setFilterIndexName}
+          onSubmit={noop}
           value={filterIndexName}
         />
         <FilterCheckboxOption

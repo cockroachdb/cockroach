@@ -31,7 +31,7 @@ export const Modal: React.FC<ModalProps> = props => {
     <AntModal
       title={title && <Text textType={TextTypes.Heading3}>{title}</Text>}
       className="crl-modal"
-      visible={visible}
+      open={visible}
       closeIcon={
         <div className="crl-modal__close-icon" onClick={onCancel}>
           &times;
