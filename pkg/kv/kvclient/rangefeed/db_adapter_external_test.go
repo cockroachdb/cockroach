@@ -12,6 +12,7 @@ package rangefeed_test
 
 import (
 	"context"
+	"slices"
 	"sync/atomic"
 	"testing"
 
@@ -61,7 +62,7 @@ func TestDBClientScan(t *testing.T) {
 
 	beforeAny := db.Clock().Now()
 
-	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	scratchKey := slices.Clip(append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...))
 	_, _, err := srv.StorageLayer().SplitRange(scratchKey)
 	require.NoError(t, err)
 
