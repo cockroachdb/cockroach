@@ -1079,7 +1079,15 @@ func TestMakePriorityLimits(t *testing.T) {
 	}
 }
 
+func TestLeaseType(t *testing.T) {
+	require.Equal(t, LeaseExpiration, Lease{}.Type())
+	require.Equal(t, LeaseEpoch, Lease{Epoch: 1}.Type())
+	require.Equal(t, LeaseLeader, Lease{Term: 1}.Type())
+	require.Panics(t, func() { Lease{Epoch: 1, Term: 1}.Type() })
+}
+
 func TestLeaseEquivalence(t *testing.T) {
+	// TODO(nvanbenschoten): update this test.
 	r1 := ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
 	r2 := ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
 	ts1 := makeClockTS(1, 1)
@@ -1184,6 +1192,8 @@ func TestLeaseEqual(t *testing.T) {
 		Epoch                 int64
 		Sequence              LeaseSequence
 		AcquisitionType       LeaseAcquisitionType
+		Term                  uint64
+		MinExpiration         hlc.Timestamp
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
 	// error occurs on the following line of code, update the expectedLease
@@ -1237,6 +1247,9 @@ func TestLeaseEqual(t *testing.T) {
 		{ProposedTS: &clockTS},
 		{Epoch: 1},
 		{Sequence: 1},
+		{AcquisitionType: 1},
+		{Term: 1},
+		{MinExpiration: ts},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {

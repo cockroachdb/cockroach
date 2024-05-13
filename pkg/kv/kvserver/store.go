@@ -3164,6 +3164,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		leaseHolderCount               int64
 		leaseExpirationCount           int64
 		leaseEpochCount                int64
+		leaseLeaderCount               int64
 		leaseLivenessCount             int64
 		leaseViolatingPreferencesCount int64
 		leaseLessPreferredCount        int64
@@ -3237,6 +3238,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 				leaseExpirationCount++
 			case roachpb.LeaseEpoch:
 				leaseEpochCount++
+			case roachpb.LeaseLeader:
+				leaseLeaderCount++
 			}
 			if metrics.LivenessLease {
 				leaseLivenessCount++
@@ -3307,6 +3310,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
+	_ = leaseLeaderCount
+	// TODO(nvanbenschoten): s.metrics.LeaseLeaderCount.Update(leaseLeaderCount)
 	s.metrics.LeaseViolatingPreferencesCount.Update(leaseViolatingPreferencesCount)
 	s.metrics.LeaseLessPreferredCount.Update(leaseLessPreferredCount)
 	s.metrics.LeaseLivenessCount.Update(leaseLivenessCount)

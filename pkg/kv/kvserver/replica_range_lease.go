@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -76,14 +77,15 @@ import (
 
 var TransferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kv.transfer_expiration_leases_first.enabled",
+	"kv.lease.transfer_expiration_leases_first.enabled",
 	"controls whether we transfer expiration-based leases that are later upgraded to epoch-based ones",
 	true,
+	settings.WithRetiredName("kv.transfer_expiration_leases_first.enabled"),
 )
 
 var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kv.expiration_leases_only.enabled",
+	"kv.lease.expiration_leases_only.enabled",
 	"only use expiration-based leases never epoch-based ones "+
 		"when there are less than kv.lease.expiration_max_replicas_per_node on the node, "+
 		"(experimental, affects performance)",
@@ -91,7 +93,15 @@ var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	// builds because TestClusters are usually so slow that they're unable
 	// to maintain leases/leadership/liveness.
 	!syncutil.DeadlockEnabled &&
-		util.ConstantWithMetamorphicTestBool("kv.expiration_leases_only.enabled", false),
+		util.ConstantWithMetamorphicTestBool("kv.lease.expiration_leases_only.enabled", false),
+	settings.WithRetiredName("kv.expiration_leases_only.enabled"),
+)
+
+var PreferLeaderLeaseOverEpochBasedLease = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lease.prefer_leader_lease_over_epoch_based_lease.enabled",
+	"controls whether leader leases are preferred over epoch-based leases",
+	false,
 )
 
 // ExpirationLeasesMaxReplicasPerNode converts from expiration back to epoch
@@ -335,10 +345,12 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		ProposedTS: &status.Now,
 	}
 
+	preferLeaderLeases := p.repl.preferLeaderLeaseOverEpochBasedLease()
+	transferExpirationLeases := TransferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV)
+
 	var reqLeaseLiveness livenesspb.Liveness
 	if p.repl.shouldUseExpirationLeaseRLocked() ||
-		(transfer &&
-			TransferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV)) {
+		(transfer && (transferExpirationLeases || preferLeaderLeases)) {
 		// In addition to ranges that should be using expiration-based leases
 		// (typically the meta and liveness ranges), we also use them during lease
 		// transfers for all other ranges. After acquiring these expiration based
@@ -354,6 +366,23 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// record).
 		reqLease.Expiration = &hlc.Timestamp{}
 		*reqLease.Expiration = status.Now.ToTimestamp().Add(int64(p.repl.store.cfg.RangeLeaseDuration), 0)
+	} else if p.repl.preferLeaderLeaseOverEpochBasedLease() {
+		// If we want to acquire a leader lease, make sure that we are the Raft
+		// leader.
+		raftStatus := p.repl.raftBasicStatusRLocked()
+		if raftStatus.RaftState == raft.StateLeader {
+			reqLease.Term = raftStatus.Term
+		} else if extension {
+			reqLease.Expiration = &hlc.Timestamp{}
+			*reqLease.Expiration = status.Now.ToTimestamp().Add(int64(p.repl.store.cfg.RangeLeaseDuration), 0)
+		} else {
+			llHandle.resolve(kvpb.NewError(&kvpb.LeaseRejectedError{
+				Existing:  status.Lease,
+				Requested: reqLease,
+				Message:   fmt.Sprintf("couldn't request lease for %+v: not raft leader", nextLeaseHolder),
+			}))
+			return llHandle
+		}
 	} else {
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
 		l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
@@ -640,7 +669,7 @@ func (p *pendingLeaseRequest) requestLease(
 	// NB:
 	// RequestLease always bypasses the circuit breaker (i.e. will prefer to
 	// get stuck on an unavailable range rather than failing fast; see
-	// `(*RequestLeaseRequest).flags()`). This enables the caller to chose
+	// `(*RequestLeaseRequest).flags()`). This enables the caller to choose
 	// between either behavior for themselves: if they too want to bypass
 	// the circuit breaker, they simply don't check for the circuit breaker
 	// while waiting for their lease handle. If they want to fail-fast, they
@@ -778,6 +807,8 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *kvpb.Error) *leaseRequestH
 //   - the read is served by the old lease holder (which has not processed the
 //     change in lease holdership).
 //   - the client fails to read their own write.
+//
+// Replica.mu must be held at least in read mode.
 func (r *Replica) leaseStatus(
 	ctx context.Context,
 	lease roachpb.Lease,
@@ -799,10 +830,9 @@ func (r *Replica) leaseStatus(
 		RequestTime:               reqTS,
 		MinValidObservedTimestamp: minValidObservedTS,
 	}
-	var expiration hlc.Timestamp
-	if lease.Type() == roachpb.LeaseExpiration {
-		expiration = lease.GetExpiration()
-	} else {
+	if lease.Type() == roachpb.LeaseEpoch {
+		// For epoch-based leases, retrieve the node liveness record associated with
+		// the lease.
 		l, ok := r.store.cfg.NodeLiveness.GetLiveness(lease.Replica.NodeID)
 		status.Liveness = l.Liveness
 		if !ok || status.Liveness.Epoch < lease.Epoch {
@@ -828,8 +858,21 @@ func (r *Replica) leaseStatus(
 			status.State = kvserverpb.LeaseState_EXPIRED
 			return status
 		}
-		expiration = status.Liveness.Expiration.ToTimestamp()
+	} else if lease.Type() == roachpb.LeaseLeader {
+		// For leader leases, retrieve the Raft leader support information
+		// associated with the lease.
+		raftStatus := r.raftStatusRLocked()
+		status.LeaderSupport = kvserverpb.RaftLeaderSupport{
+			Term:             raftStatus.Term,
+			Leader:           raftStatus.RaftState == raft.StateLeader,
+			LeadSupportUntil: hlc.Timestamp(raftStatus.LeadSupportUntil),
+		}
+		if lease.Term != status.LeaderSupport.Term || !status.LeaderSupport.Leader {
+			status.State = kvserverpb.LeaseState_EXPIRED
+			return status
+		}
 	}
+	expiration := status.Expiration()
 	maxOffset := r.store.Clock().MaxOffset()
 	stasis := expiration.Add(-int64(maxOffset), 0)
 	ownedLocally := lease.OwnedBy(r.store.StoreID())
@@ -938,6 +981,11 @@ func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
 	}
 
 	return settingEnabled || r.requiresExpirationLeaseRLocked()
+}
+
+func (r *Replica) preferLeaderLeaseOverEpochBasedLease() bool {
+	// TODO(nvanbenschoten): add cluster version gate.
+	return PreferLeaderLeaseOverEpochBasedLease.Get(&r.ClusterSettings().SV)
 }
 
 // requestLeaseLocked executes a request to obtain or extend a lease

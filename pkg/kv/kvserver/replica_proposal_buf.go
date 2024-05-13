@@ -134,6 +134,8 @@ type rangeLeaderInfo struct {
 	// leader is the Raft group's leader. Equals 0 [roachpb.ReplicaID(raft.None)]
 	// if the leader is not known/set, in which case other fields are unset too.
 	leader roachpb.ReplicaID
+	// leaderTerm is the term in which the leader was elected.
+	leaderTerm uint64
 	// iAmTheLeader is set if the local replica is the leader.
 	iAmTheLeader bool
 	// leaderEligibleForLease is set if the leader is known and its type of
@@ -679,6 +681,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 	}
 	switch {
 	case p.Request.IsSingleRequestLeaseRequest():
+		newLease := p.command.ReplicatedEvalResult.State.Lease
 		// Handle an edge case about lease acquisitions: we don't want to forward
 		// lease acquisitions to another node (which is what happens when we're not
 		// the leader) because:
@@ -716,26 +719,30 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 		// Lease extensions for a currently held lease always go through, to
 		// keep the lease alive until the normal lease transfer mechanism can
 		// colocate it with the leader.
-		li := b.leaderStatusRLocked(ctx, raftGroup)
-		if li.iAmTheLeader {
-			return false
-		}
-		if b.p.ownsValidLease(ctx, b.clock.NowAsClockTimestamp()) {
-			log.VEventf(ctx, 2, "proposing lease extension even though we're not the leader; we hold the current lease")
-			return false
-		}
-
 		reject := false
-		if !li.leaderKnown() && RejectLeaseOnLeaderUnknown.Get(&b.settings.SV) {
-			log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; the leader is unknown")
-			reject = true
-		}
-		// TODO(pav-kv): the testing knob logic below doesn't exactly correspond to
-		// its name. Clean it up, potentially replace by the cluster setting above.
-		if li.leaderEligibleForLease && !b.testing.allowLeaseProposalWhenNotLeader {
-			log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
-				li.leader)
-			reject = true
+		li := b.leaderStatusRLocked(ctx, raftGroup)
+		if newLease.Type() == roachpb.LeaseLeader {
+			reject = !li.iAmTheLeader || li.leaderTerm != newLease.Term
+		} else {
+			if li.iAmTheLeader {
+				return false
+			}
+			if b.p.ownsValidLease(ctx, b.clock.NowAsClockTimestamp()) {
+				log.VEventf(ctx, 2, "proposing lease extension even though we're not the leader; we hold the current lease")
+				return false
+			}
+
+			if !li.leaderKnown() && RejectLeaseOnLeaderUnknown.Get(&b.settings.SV) {
+				log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; the leader is unknown")
+				reject = true
+			}
+			// TODO(pav-kv): the testing knob logic below doesn't exactly correspond to
+			// its name. Clean it up, potentially replace by the cluster setting above.
+			if li.leaderEligibleForLease && !b.testing.allowLeaseProposalWhenNotLeader {
+				log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
+					li.leader)
+				reject = true
+			}
 		}
 		if reject {
 			// NB: li.leader can be None.
@@ -1405,6 +1412,7 @@ func (rp *replicaProposer) leaderStatus(
 	status := raftGroup.BasicStatus()
 	iAmTheLeader := status.RaftState == raft.StateLeader
 	leader := status.Lead
+	leaderTerm := status.Term
 	leaderKnown := leader != raft.None
 	var leaderEligibleForLease bool
 	rangeDesc := r.descRLocked()
@@ -1435,6 +1443,7 @@ func (rp *replicaProposer) leaderStatus(
 	return rangeLeaderInfo{
 		iAmTheLeader:           iAmTheLeader,
 		leader:                 roachpb.ReplicaID(leader),
+		leaderTerm:             leaderTerm,
 		leaderEligibleForLease: leaderEligibleForLease,
 	}
 }

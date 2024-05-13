@@ -67,16 +67,16 @@ func evalNewLease(
 		return newFailedLeaseTrigger(isTransfer), errors.AssertionFailedf("ProposedTS must be set")
 	}
 
-	// Ensure either an Epoch is set or Start < Expiration.
+	// Ensure either an Epoch is set, Term is set, or Start < Expiration.
 	if (lease.Type() == roachpb.LeaseExpiration && lease.GetExpiration().LessEq(lease.Start.ToTimestamp())) ||
-		(lease.Type() == roachpb.LeaseEpoch && lease.Expiration != nil) {
+		(lease.Type() != roachpb.LeaseExpiration && lease.Expiration != nil) {
 		// This amounts to a bug.
 		return newFailedLeaseTrigger(isTransfer),
 			&kvpb.LeaseRejectedError{
 				Existing:  prevLease,
 				Requested: lease,
-				Message: fmt.Sprintf("illegal lease: epoch=%d, interval=[%s, %s)",
-					lease.Epoch, lease.Start, lease.Expiration),
+				Message: fmt.Sprintf("illegal lease: epoch=%d, term=%d, interval=[%s, %s)",
+					lease.Epoch, lease.Term, lease.Start, lease.Expiration),
 			}
 	}
 

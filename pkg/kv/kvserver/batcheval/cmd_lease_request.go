@@ -62,6 +62,7 @@ func RequestLease(
 	// args.PrevLease so that we can detect lease requests that will
 	// inevitably fail early and reject them with a detailed
 	// LeaseRejectedError before going through Raft.
+	// TODO(nvanbenschoten): stop doing this.
 	prevLease, _ := cArgs.EvalCtx.GetLease()
 	rErr := &kvpb.LeaseRejectedError{
 		Existing:  prevLease,
@@ -147,7 +148,12 @@ func RequestLease(
 			// the caller.
 			t := *newLease.Expiration
 			newLease.Expiration = &t
+			// NB: only forwards if prevLease also an expiration-based lease.
 			newLease.Expiration.Forward(prevLease.GetExpiration())
+		} else if newLease.Type() == roachpb.LeaseLeader {
+			// TODO(nvanbenschoten): we should be able to do this for epoch-based
+			// leases as well.
+			newLease.MinExpiration = prevLease.GetExpiration()
 		}
 	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.ToTimestamp().Less(prevLease.GetExpiration()) {
 		rErr.Message = "requested lease overlaps previous lease"

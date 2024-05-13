@@ -311,6 +311,8 @@ func shouldReplicaQuiesce(
 		log.VInfof(ctx, 4, "not quiescing: expiration-based lease")
 		return nil, nil, false
 	}
+	// TODO(nvanbenschoten): we don't want to quiesce leader leases either,
+	// because we should disable heartbeating entirely.
 	if q.hasPendingProposalsRLocked() {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: proposals pending")
