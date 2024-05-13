@@ -62,7 +62,7 @@ type StoreGrantCoordinators struct {
 	l0TokensProduced            *metric.Counter
 
 	// These metrics are shared by WorkQueues across stores.
-	workQueueMetrics *WorkQueueMetrics
+	workQueueMetrics [admissionpb.NumWorkClasses]*WorkQueueMetrics
 
 	gcMap syncutil.IntMap // map[int64(StoreID)]*GrantCoordinator
 	// numStores is used to track the number of stores which have been added
@@ -382,7 +382,7 @@ type makeRequesterFunc func(
 
 type makeStoreRequesterFunc func(
 	_ log.AmbientContext, storeID roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
-	settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
+	settings *cluster.Settings, metrics [admissionpb.NumWorkClasses]*WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
 	onLogEntryAdmitted OnLogEntryAdmitted, ioTokensBypassedMetric *metric.Counter, coordMu *syncutil.Mutex,
 ) storeRequester
 
@@ -460,10 +460,15 @@ func makeStoresGrantCoordinators(
 	// These metrics are shared across all stores and broken down by priority for
 	// the common priorities.
 	// TODO(baptist): Add per-store metrics.
-	storeWorkQueueMetrics :=
+	regularStoreWorkQueueMetrics :=
 		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", KVWork), registry,
-			admissionpb.TTLLowPri, admissionpb.BulkNormalPri,
 			admissionpb.NormalPri, admissionpb.LockingNormalPri)
+	elasticStoreWorkQueueMetrics :=
+		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", admissionpb.ElasticWorkClass), registry,
+			admissionpb.TTLLowPri, admissionpb.BulkNormalPri)
+	storeWorkQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
+		regularStoreWorkQueueMetrics, elasticStoreWorkQueueMetrics,
+	}
 	makeStoreRequester := makeStoreWorkQueue
 	if opts.makeStoreRequesterFunc != nil {
 		makeStoreRequester = opts.makeStoreRequesterFunc
