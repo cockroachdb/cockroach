@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -31,10 +30,10 @@ type Node struct {
 type Nodes []Node
 
 // NodesFromNodeLiveness returns the IDs and epochs for all nodes that are
-// currently part of the cluster (i.e. they haven't been decommissioned away).
-// Migrations have the pre-requisite that all nodes are up and running so that
-// we're able to execute all relevant node-level operations on them. If any of
-// the nodes are found to be unavailable, an error is returned.
+// currently part of the cluster (i.e. they haven't been decommissioned away)
+// and any nodes which are currently unavailable. Migrations have the
+// pre-requisite that all nodes are up and running so that we're able to
+// execute all relevant node-level operations on them.
 //
 // It's important to note that this makes no guarantees about new nodes
 // being added to the cluster. It's entirely possible for that to happen
@@ -43,25 +42,26 @@ type Nodes []Node
 // EveryNode.
 func NodesFromNodeLiveness(
 	ctx context.Context, nl livenesspb.NodeVitalityInterface,
-) (Nodes, error) {
-	var ns []Node
+) (live, unavailable Nodes, _ error) {
 	ls, err := nl.ScanNodeVitalityFromKV(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for id, n := range ls {
 		if n.IsDecommissioned() {
 			continue
 		}
 		if !n.IsLive(livenesspb.Upgrade) {
-			return nil, errors.Newf("n%d required, but unavailable", id)
+			unavailable = append(unavailable, Node{ID: id, Epoch: n.GenLiveness().Epoch})
 		}
 		// TODO(baptist): Stop using Epoch, need to determine an alternative.
-		ns = append(ns, Node{ID: id, Epoch: n.GenLiveness().Epoch})
+		live = append(live, Node{ID: id, Epoch: n.GenLiveness().Epoch})
+
 	}
 	// Tests assume the nodes are sorted, so sort by node id first.
-	sort.Slice(ns, func(i, j int) bool { return ns[i].ID < ns[j].ID })
-	return ns, nil
+	sort.Slice(live, func(i, j int) bool { return live[i].ID < live[j].ID })
+	sort.Slice(unavailable, func(i, j int) bool { return unavailable[i].ID < unavailable[j].ID })
+	return live, unavailable, nil
 }
 
 // Identical returns whether or not two lists of Nodes are identical as sets,
