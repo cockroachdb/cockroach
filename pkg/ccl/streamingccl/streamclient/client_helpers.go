@@ -14,11 +14,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/golang/snappy"
 	"github.com/jackc/pgx/v4"
+	"github.com/pkg/errors"
 )
 
 func subscribeInternal(
-	ctx context.Context, feed pgx.Rows, eventCh chan streamingccl.Event, closeCh chan struct{},
+	ctx context.Context,
+	feed pgx.Rows,
+	eventCh chan streamingccl.Event,
+	closeCh chan struct{},
+	compressed bool,
 ) error {
 	// Get the next event from the cursor.
 	var bufferedEvent *streampb.StreamEvent
@@ -38,7 +44,23 @@ func subscribeInternal(
 			return nil, err
 		}
 		var streamEvent streampb.StreamEvent
+		var decompressionErr error
+
+		if compressed {
+			decompressed, err := snappy.Decode(nil, data)
+			if err != nil {
+				// Maybe it just wasn't compressed by an older source node; proceed to
+				// try to decode it as-is but then if that fails, return this error.
+				decompressionErr = err
+			} else {
+				data = decompressed
+			}
+		}
+
 		if err := protoutil.Unmarshal(data, &streamEvent); err != nil {
+			if decompressionErr != nil {
+				return nil, errors.Wrap(err, "decompression failed")
+			}
 			return nil, err
 		}
 		bufferedEvent = &streamEvent

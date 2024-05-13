@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/golang/snappy"
 )
 
 var activeStreams = struct {
@@ -370,6 +371,9 @@ func (s *eventStream) sendFlush(ctx context.Context, event *streampb.StreamEvent
 	data, err := protoutil.Marshal(event)
 	if err != nil {
 		return err
+	}
+	if s.spec.Compressed {
+		data = snappy.Encode(nil, data)
 	}
 	select {
 	case <-ctx.Done():

@@ -257,7 +257,8 @@ func getFirstDialer(
 }
 
 type options struct {
-	streamID streampb.StreamID
+	streamID   streampb.StreamID
+	compressed bool
 }
 
 func (o *options) appName() string {
@@ -277,6 +278,13 @@ type Option func(*options)
 func WithStreamID(id streampb.StreamID) Option {
 	return func(o *options) {
 		o.streamID = id
+	}
+}
+
+// WithCompression controls requesting a compressed stream from the producer.
+func WithCompression(enabled bool) Option {
+	return func(o *options) {
+		o.compressed = enabled
 	}
 }
 

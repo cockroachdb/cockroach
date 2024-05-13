@@ -177,7 +177,7 @@ func (p *spanConfigStreamSubscription) Subscribe(ctx context.Context) error {
 		rows.Close()
 	}()
 
-	p.err = subscribeInternal(ctx, rows, p.eventsChan, p.closeChan)
+	p.err = subscribeInternal(ctx, rows, p.eventsChan, p.closeChan, false)
 	return p.err
 }
 
