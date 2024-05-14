@@ -26,73 +26,191 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Helper is the struct passed to `stepFunc`s (user-provided or
-// implemented by the framework) that provides helper functions that
-// mixed-version tests can use.
-type Helper struct {
-	Context *Context
+type (
+	// ServiceDescriptor encapsulates the information about where a
+	// service (system tenant or otherwise) is running.
+	ServiceDescriptor struct {
+		// Name is the name of the service ("system" for the system
+		// tenant, or the tenant name otherwise.)
+		Name string
 
-	ctx context.Context
-	// bgCount keeps track of the number of background tasks started
-	// with `helper.Background()`. The counter is used to generate
-	// unique log file names.
-	bgCount    int64
-	runner     *testRunner
-	stepLogger *logger.Logger
+		// Nodes is the set of nodes in the cluster where clients can
+		// connect to that service.
+		Nodes option.NodeListOption
+	}
+
+	// Service implements helper functions on behalf of a specific
+	// service. Internal fields are provided by the testRunner struct,
+	// allowing us to connect to a specific node and check live the test
+	// runner's view of cluster versions, etc.
+	Service struct {
+		*ServiceContext
+
+		ctx             context.Context
+		connFunc        func(int) *gosql.DB
+		stepLogger      *logger.Logger
+		clusterVersions *atomic.Value
+	}
+
+	// Helper is the struct passed to `stepFunc`s (user-provided or
+	// implemented by the framework) that provides helper functions that
+	// mixed-version tests can use.
+	Helper struct {
+		System *Service
+		Tenant *Service
+
+		testContext Context
+
+		ctx context.Context
+		// bgCount keeps track of the number of background tasks started
+		// with `helper.Background()`. The counter is used to generate
+		// unique log file names.
+		bgCount    int64
+		runner     *testRunner
+		stepLogger *logger.Logger
+	}
+)
+
+func (s *Service) Connect(node int) *gosql.DB {
+	return s.connFunc(node)
 }
 
-func (h *Helper) RandomNode(prng *rand.Rand, nodes option.NodeListOption) int {
-	return nodes[prng.Intn(len(nodes))]
+func (s *Service) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
+	node := s.Descriptor.Nodes.SeededRandNode(rng)[0]
+	return node, s.Connect(node)
 }
 
-// RandomDB returns a (nodeID, connection) tuple for a randomly picked
-// cockroach node according to the parameters passed.
-func (h *Helper) RandomDB(prng *rand.Rand, nodes option.NodeListOption) (int, *gosql.DB) {
-	node := h.RandomNode(prng, nodes)
-	return node, h.Connect(node)
+// prepareQuery returns a connection to one of the `nodes` provided
+// and logs the query and gateway node in the step's log file. Called
+// before the query is actually performed.
+func (s *Service) prepareQuery(
+	rng *rand.Rand, nodes option.NodeListOption, query string, args ...any,
+) (*gosql.DB, error) {
+	node := nodes.SeededRandNode(rng)[0]
+	db := s.Connect(node)
+
+	v, err := s.NodeVersion(node)
+	if err != nil {
+		return nil, err
+	}
+	logSQL(
+		s.stepLogger, node, v, s.Descriptor.Name, query, args...,
+	)
+
+	return db, nil
+}
+
+func (s *Service) Query(rng *rand.Rand, query string, args ...interface{}) (*gosql.Rows, error) {
+	db, err := s.prepareQuery(rng, s.Descriptor.Nodes, query, args...)
+	handleInternalError(err)
+	return db.QueryContext(s.ctx, query, args...)
+}
+
+func (s *Service) QueryRow(rng *rand.Rand, query string, args ...interface{}) *gosql.Row {
+	db, err := s.prepareQuery(rng, s.Descriptor.Nodes, query, args...)
+	handleInternalError(err)
+	return db.QueryRowContext(s.ctx, query, args...)
+}
+
+func (s *Service) Exec(rng *rand.Rand, query string, args ...interface{}) error {
+	return s.ExecWithGateway(rng, s.Descriptor.Nodes, query, args...)
+}
+
+func (s *Service) ExecWithGateway(
+	rng *rand.Rand, nodes option.NodeListOption, query string, args ...interface{},
+) error {
+	db, err := s.prepareQuery(rng, nodes, query, args...)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.ExecContext(s.ctx, query, args...)
+	return err
+}
+
+func (s *Service) ClusterVersion(rng *rand.Rand) (roachpb.Version, error) {
+	if s.Finalizing {
+		n, db := s.RandomDB(rng)
+		s.stepLogger.Printf("querying cluster version through node %d", n)
+		cv, err := clusterupgrade.ClusterVersion(s.ctx, db)
+		if err != nil {
+			return roachpb.Version{}, fmt.Errorf("failed to query cluster version: %w", err)
+		}
+
+		return cv, nil
+	}
+
+	return loadAtomicVersions(s.clusterVersions)[0], nil
+}
+
+func (s *Service) ClusterVersionAtLeast(rng *rand.Rand, v string) (bool, error) {
+	minVersion, err := roachpb.ParseVersion(v)
+	if err != nil {
+		return false, err
+	}
+
+	currentVersion, err := s.ClusterVersion(rng)
+	if err != nil {
+		return false, err
+	}
+
+	return currentVersion.AtLeast(minVersion), nil
+}
+
+func (h *Helper) DefaultService() *Service {
+	if h.Tenant != nil {
+		return h.Tenant
+	}
+
+	return h.System
+}
+
+func (h *Helper) Context() *ServiceContext {
+	return h.DefaultService().ServiceContext
+}
+
+func (h *Helper) IsFinalizing() bool {
+	return h.testContext.Finalizing()
+}
+
+func (h *Helper) Connect(node int) *gosql.DB {
+	return h.DefaultService().Connect(node)
+}
+
+func (h *Helper) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
+	return h.DefaultService().RandomDB(rng)
 }
 
 // Query performs `db.QueryContext` on a randomly picked database node. The
 // query and the node picked are logged in the logs of the step that calls this
 // function.
 func (h *Helper) Query(rng *rand.Rand, query string, args ...interface{}) (*gosql.Rows, error) {
-	node, db := h.RandomDB(rng, h.runner.crdbNodes)
-	h.logSQL(node, query, args...)
-	return db.QueryContext(h.ctx, query, args...)
+	return h.DefaultService().Query(rng, query, args...)
 }
 
 // QueryRow performs `db.QueryRowContext` on a randomly picked
 // database node. The query and the node picked are logged in the logs
 // of the step that calls this function.
 func (h *Helper) QueryRow(rng *rand.Rand, query string, args ...interface{}) *gosql.Row {
-	node, db := h.RandomDB(rng, h.runner.crdbNodes)
-	h.logSQL(node, query, args...)
-	return db.QueryRowContext(h.ctx, query, args...)
+	return h.DefaultService().QueryRow(rng, query, args...)
 }
 
 // Exec performs `db.ExecContext` on a randomly picked database node.
 // The query and the node picked are logged in the logs of the step
 // that calls this function.
 func (h *Helper) Exec(rng *rand.Rand, query string, args ...interface{}) error {
-	return h.ExecWithGateway(rng, h.runner.crdbNodes, query, args...)
+	return h.DefaultService().Exec(rng, query, args...)
 }
 
 // ExecWithGateway is like Exec, but allows the caller to specify the
 // set of nodes that should be used as gateway. Especially useful in
 // combination with Context methods, for example:
 //
-//	h.ExecWithGateway(rng, h.Context.NodesInNextVersion(), "SELECT 1")
+//	h.ExecWithGateway(rng, h.Context().NodesInNextVersion(), "SELECT 1")
 func (h *Helper) ExecWithGateway(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...interface{},
 ) error {
-	node, db := h.RandomDB(rng, nodes)
-	h.logSQL(node, query, args...)
-	_, err := db.ExecContext(h.ctx, query, args...)
-	return err
-}
-
-func (h *Helper) Connect(node int) *gosql.DB {
-	return h.runner.conn(node)
+	return h.DefaultService().ExecWithGateway(rng, nodes, query, args...)
 }
 
 // Background allows test authors to create functions that run in the
@@ -154,18 +272,7 @@ func (h *Helper) ExpectDeaths(n int) {
 // change by means other than an upgrade (e.g., a cluster wipe). Use
 // `clusterupgrade.ClusterVersion` in that case.
 func (h *Helper) ClusterVersion(rng *rand.Rand) (roachpb.Version, error) {
-	if h.Context.Finalizing {
-		n, db := h.RandomDB(rng, h.runner.crdbNodes)
-		h.stepLogger.Printf("querying cluster version through node %d", n)
-		cv, err := clusterupgrade.ClusterVersion(h.ctx, db)
-		if err != nil {
-			return roachpb.Version{}, fmt.Errorf("failed to query cluster version: %w", err)
-		}
-
-		return cv, nil
-	}
-
-	return loadAtomicVersions(h.runner.clusterVersions)[0], nil
+	return h.DefaultService().ClusterVersion(rng)
 }
 
 // ClusterVersionAtLeast checks whether the cluster version is at
@@ -173,17 +280,7 @@ func (h *Helper) ClusterVersion(rng *rand.Rand) (roachpb.Version, error) {
 //
 // The warning in (*Helper).ClusterVersion() applies here too.
 func (h *Helper) ClusterVersionAtLeast(rng *rand.Rand, v string) (bool, error) {
-	minVersion, err := roachpb.ParseVersion(v)
-	if err != nil {
-		return false, err
-	}
-
-	currentVersion, err := h.ClusterVersion(rng)
-	if err != nil {
-		return false, err
-	}
-
-	return currentVersion.AtLeast(minVersion), nil
+	return h.DefaultService().ClusterVersionAtLeast(rng, v)
 }
 
 // loggerFor creates a logger instance to be used by background
@@ -203,13 +300,37 @@ func (h *Helper) loggerFor(name string) (*logger.Logger, error) {
 // logSQL standardizes the logging when a SQL statement or query is
 // run using one of the Helper methods. It includes the node used as
 // gateway, along with the version currently running on it, for ease
-// of debugging.
-func (h *Helper) logSQL(node int, stmt string, args ...interface{}) {
-	intro := "running SQL"
-	stmtMsg := fmt.Sprintf("Statement: %s", stmt)
-	nodeMsg := fmt.Sprintf("Node:      %d (%s)", node, h.Context.NodeVersion(node))
-	argsMsg := fmt.Sprintf("Arguments: %v", args)
+// of debugging. If a non-empty `virtualCluster` is passed (UA
+// clusters), that is also logged.
+func logSQL(
+	l *logger.Logger,
+	node int,
+	v *clusterupgrade.Version,
+	virtualCluster string,
+	stmt string,
+	args ...interface{},
+) {
+	var lines []string
+	addLine := func(format string, args ...interface{}) {
+		lines = append(lines, fmt.Sprintf(format, args...))
+	}
 
-	msg := strings.Join([]string{intro, stmtMsg, nodeMsg, argsMsg}, "\n")
-	h.stepLogger.Printf("%s", msg)
+	addLine("running SQL")
+	addLine("Node:      %d (%s)", node, v)
+	addLine("Tenant:    %s", virtualCluster)
+	addLine("Statement: %s", stmt)
+	addLine("Arguments: %v", args)
+
+	l.Printf("%s", strings.Join(lines, "\n"))
+}
+
+// handleInternalError can be used when the caller does not expect any
+// errors from a function call. If the error value provided is not
+// nil, we'll panic with an internal error message.
+func handleInternalError(err error) {
+	if err == nil {
+		return
+	}
+
+	panic(fmt.Errorf("mixedversion internal error: %w", err))
 }

@@ -94,8 +94,8 @@ type (
 		seed      int64
 		logger    *logger.Logger
 
-		binaryVersions  atomic.Value
-		clusterVersions atomic.Value
+		binaryVersions  *atomic.Value
+		clusterVersions *atomic.Value
 
 		background *backgroundRunner
 		monitor    *crdbMonitor
@@ -131,18 +131,22 @@ func newTestRunner(
 	randomSeed int64,
 ) *testRunner {
 	var ranUserHooks atomic.Bool
+	var binaryVersions atomic.Value
+	var clusterVersions atomic.Value
 
 	return &testRunner{
-		ctx:          ctx,
-		cancel:       cancel,
-		plan:         plan,
-		logger:       l,
-		cluster:      c,
-		crdbNodes:    crdbNodes,
-		background:   newBackgroundRunner(ctx, l),
-		monitor:      newCRDBMonitor(ctx, c, crdbNodes),
-		ranUserHooks: &ranUserHooks,
-		seed:         randomSeed,
+		ctx:             ctx,
+		cancel:          cancel,
+		plan:            plan,
+		logger:          l,
+		binaryVersions:  &binaryVersions,
+		clusterVersions: &clusterVersions,
+		cluster:         c,
+		crdbNodes:       crdbNodes,
+		background:      newBackgroundRunner(ctx, l),
+		monitor:         newCRDBMonitor(ctx, c, crdbNodes),
+		ranUserHooks:    &ranUserHooks,
+		seed:            randomSeed,
 	}
 }
 
@@ -342,7 +346,7 @@ func (tr *testRunner) testFailure(err error, l *logger.Logger, testContext *Cont
 		if err := tr.refreshClusterVersions(); err != nil {
 			tr.logger.Printf("failed to fetch cluster versions after failure: %s", err)
 		} else {
-			clusterVersionsAfter = tr.clusterVersions
+			clusterVersionsAfter.Store(tr.clusterVersions.Load())
 		}
 	}
 
@@ -351,7 +355,7 @@ func (tr *testRunner) testFailure(err error, l *logger.Logger, testContext *Cont
 		testContext:           testContext,
 		binaryVersions:        loadAtomicVersions(tr.binaryVersions),
 		clusterVersionsBefore: loadAtomicVersions(clusterVersionsBefore),
-		clusterVersionsAfter:  loadAtomicVersions(clusterVersionsAfter),
+		clusterVersionsAfter:  loadAtomicVersions(&clusterVersionsAfter),
 	}
 
 	// failureErr wraps the original error, adding mixed-version state
@@ -415,9 +419,11 @@ func (tr *testRunner) logStep(prefix string, step *singleStep, l *logger.Logger)
 func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
 	binaryVersions := loadAtomicVersions(tr.binaryVersions)
 	clusterVersions := loadAtomicVersions(tr.clusterVersions)
-	releasedVersions := make([]*clusterupgrade.Version, 0, len(testContext.CockroachNodes))
-	for _, node := range testContext.CockroachNodes {
-		releasedVersions = append(releasedVersions, testContext.NodeVersion(node))
+	releasedVersions := make([]*clusterupgrade.Version, 0, len(testContext.System.Descriptor.Nodes))
+	for _, node := range testContext.System.Descriptor.Nodes {
+		nv, err := testContext.NodeVersion(node)
+		handleInternalError(err)
+		releasedVersions = append(releasedVersions, nv)
 	}
 
 	if binaryVersions == nil || clusterVersions == nil {
@@ -515,11 +521,29 @@ func (tr *testRunner) connCacheInitialized() bool {
 func (tr *testRunner) newHelper(
 	ctx context.Context, l *logger.Logger, testContext Context,
 ) *Helper {
+	newService := func(sc *ServiceContext) *Service {
+		if sc == nil {
+			return nil
+		}
+
+		return &Service{
+			ServiceContext: sc,
+
+			ctx:             ctx,
+			connFunc:        tr.conn,
+			stepLogger:      l,
+			clusterVersions: tr.clusterVersions,
+		}
+	}
+
 	return &Helper{
-		Context:    &testContext,
-		ctx:        ctx,
-		runner:     tr,
-		stepLogger: l,
+		System: newService(testContext.System),
+		Tenant: newService(testContext.Tenant),
+
+		testContext: testContext,
+		ctx:         ctx,
+		runner:      tr,
+		stepLogger:  l,
 	}
 }
 
@@ -671,9 +695,11 @@ func (tfd *testFailureDetails) Format() string {
 
 	tw := newTableWriter(len(tfd.binaryVersions))
 	if tfd.testContext != nil {
-		releasedVersions := make([]*clusterupgrade.Version, 0, len(tfd.testContext.CockroachNodes))
-		for _, node := range tfd.testContext.CockroachNodes {
-			releasedVersions = append(releasedVersions, tfd.testContext.NodeVersion(node))
+		releasedVersions := make([]*clusterupgrade.Version, 0, len(tfd.testContext.System.Descriptor.Nodes))
+		for _, node := range tfd.testContext.System.Descriptor.Nodes {
+			nv, err := tfd.testContext.NodeVersion(node)
+			handleInternalError(err)
+			releasedVersions = append(releasedVersions, nv)
 		}
 		tw.AddRow("released versions", toString(releasedVersions)...)
 	}
@@ -746,8 +772,8 @@ func renameFailedLogger(l *logger.Logger) error {
 	return os.Rename(currentFileName, newLogName)
 }
 
-func loadAtomicVersions(v atomic.Value) []roachpb.Version {
-	if v.Load() == nil {
+func loadAtomicVersions(v *atomic.Value) []roachpb.Version {
+	if v == nil || v.Load() == nil {
 		return nil
 	}
 
