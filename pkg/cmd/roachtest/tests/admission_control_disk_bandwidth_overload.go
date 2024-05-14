@@ -106,15 +106,13 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), crdbNodes)
 			defer db.Close()
 
-			{ // Activate disk bandwidth controls.
-				db := c.Conn(ctx, t.L(), crdbNodes)
-				defer db.Close()
-
-				if _, err := db.ExecContext(
-					ctx, "SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '128MiB'"); err != nil {
-					t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
-				}
-			}
+			//db := c.Conn(ctx, t.L(), crdbNodes)
+			//defer db.Close()
+			//
+			////if _, err := db.ExecContext(
+			////	ctx, "SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '128MiB'"); err != nil {
+			////	t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
+			////}
 
 			duration := 30 * time.Minute
 			t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
