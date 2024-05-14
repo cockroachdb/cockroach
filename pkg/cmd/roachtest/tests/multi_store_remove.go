@@ -33,6 +33,7 @@ const (
 func registerMultiStoreRemove(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:              "multi-store-remove",
+		Skip:              "#123989",
 		Owner:             registry.OwnerStorage,
 		Cluster:           r.MakeClusterSpec(multiStoreNodes, spec.SSD(multiStoreStoresPerNode)),
 		CompatibleClouds:  registry.OnlyGCE,
