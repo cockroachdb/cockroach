@@ -25,7 +25,7 @@ import (
 )
 
 func TestRegionLivenessTableMigration(t *testing.T) {
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, 23, 2)
 
 	defer leaktest.AfterTest(t)()

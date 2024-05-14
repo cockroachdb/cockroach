@@ -534,7 +534,7 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 func TestBackupManifestFileCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t, "multinode cluster setup times out under stressrace, likely due to resource starvation.")
+	skip.UnderRace(t, "multinode cluster setup times out under race, likely due to resource starvation.")
 
 	const numAccounts = 1000
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
@@ -729,7 +729,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "this test is heavyweight and is not expected to reveal any direct bugs under stress race")
+	skip.UnderRace(t, "this test is heavyweight and is not expected to reveal any direct bugs under stress race")
 
 	const numAccounts = 1
 	_, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
@@ -913,7 +913,7 @@ func TestBackupRestoreEmpty(t *testing.T) {
 func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t, "test is too slow to run under race, presumably because of the multiple splits")
+	skip.UnderRace(t, "test is too slow to run under race, presumably because of the multiple splits")
 
 	const numAccounts = 1000
 
@@ -6413,7 +6413,7 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "multinode cluster setup times out under stressrace, likely due to resource starvation.")
+	skip.UnderRace(t, "multinode cluster setup times out under race, likely due to resource starvation.")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -9013,7 +9013,7 @@ func TestBackupWorkerFailure(t *testing.T) {
 
 	skip.WithIssue(t, 113125)
 
-	skip.UnderStressRace(t, "test is too slow to run under race")
+	skip.UnderRace(t, "test is too slow to run under race")
 
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
@@ -9643,7 +9643,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "test is too slow to run under race")
+	skip.UnderRace(t, "test is too slow to run under race")
 
 	ctx := context.Background()
 	localExternalDir, cleanup := testutils.TempDir(t)
@@ -9746,7 +9746,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "test is too slow under stressrace, it fails in the upsert loop")
+	skip.UnderRace(t, "test is too slow under race, it fails in the upsert loop")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -10106,7 +10106,7 @@ func TestBackupRestoreOldIncrementalDefault(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "multinode cluster setup times out under stressrace, likely due to resource starvation.")
+	skip.UnderRace(t, "multinode cluster setup times out under race, likely due to resource starvation.")
 
 	const numAccounts = 1
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
@@ -10216,7 +10216,7 @@ func TestBackupRestoreSeparateExplicitIsDefault(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "multinode cluster setup times out under stressrace, likely due to resource starvation.")
+	skip.UnderRace(t, "multinode cluster setup times out under race, likely due to resource starvation.")
 
 	const numAccounts = 1
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)

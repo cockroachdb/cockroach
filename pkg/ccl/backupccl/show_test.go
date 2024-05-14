@@ -755,7 +755,7 @@ func TestShowBackupCheckFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const numAccounts = 11
-	skip.UnderStressRace(t, "multinode cluster setup times out under stressrace, likely due to resource starvation.")
+	skip.UnderRace(t, "multinode cluster setup times out under race, likely due to resource starvation.")
 
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts,
 		InitManualReplication)

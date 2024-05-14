@@ -40,7 +40,7 @@ import (
 func TestTenantAutoUpgradeRespectsAutoUpgradeEnabledSetting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	v0 := clusterversion.MinSupported
 	ctx := context.Background()
@@ -138,7 +138,7 @@ func TestTenantAutoUpgradeRespectsAutoUpgradeEnabledSetting(t *testing.T) {
 func TestTenantAutoUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	v0 := clusterversion.MinSupported
 	ctx := context.Background()
@@ -253,7 +253,7 @@ func TestTenantAutoUpgrade(t *testing.T) {
 func TestTenantUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 	ctx := context.Background()
 
 	v1 := clusterversion.MinSupported.Version()

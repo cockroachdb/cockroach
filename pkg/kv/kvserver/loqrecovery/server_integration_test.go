@@ -722,7 +722,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 func prepTestCluster(
 	t *testing.T, nodes int,
 ) (*testcluster.TestCluster, fs.StickyRegistry, map[int]loqrecovery.PlanStore) {
-	skip.UnderStressRace(t, "cluster frequently fails to start under stress race")
+	skip.UnderRace(t, "cluster frequently fails to start under stress race")
 
 	reg := fs.NewStickyRegistry()
 
