@@ -26,23 +26,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
-// delegateShowGrants implements SHOW GRANTS which returns grant details for the
-// specified objects and users.
-// Privileges: None.
-//
-//	Notes: postgres does not have a SHOW GRANTS statement.
-//	       mysql only returns the user's privileges.
-func (d *delegator) delegateShowGrants(n *tree.ShowGrants) (tree.Statement, error) {
-	var params []string
-
-	const dbPrivQuery = `
+const (
+	dbPrivQuery = `
 SELECT database_name,
        'database' AS object_type,
        grantee,
        privilege_type,
 			 is_grantable::boolean
   FROM "".crdb_internal.cluster_database_privileges`
-	const schemaPrivQuery = `
+
+	schemaPrivQuery = `
 SELECT table_catalog AS database_name,
        table_schema AS schema_name,
        'schema' AS object_type,
@@ -50,7 +43,8 @@ SELECT table_catalog AS database_name,
        privilege_type,
        is_grantable::boolean
   FROM "".information_schema.schema_privileges`
-	const tablePrivQuery = `
+
+	tablePrivQuery = `
 SELECT tp.table_catalog AS database_name,
        tp.table_schema AS schema_name,
        tp.table_name,
@@ -67,7 +61,8 @@ SELECT tp.table_catalog AS database_name,
   	tp.table_schema = s.sequence_schema AND
   	tp.table_name = s.sequence_name
 	)`
-	const typePrivQuery = `
+
+	typePrivQuery = `
 SELECT type_catalog AS database_name,
        type_schema AS schema_name,
        'type' AS object_type,
@@ -76,7 +71,8 @@ SELECT type_catalog AS database_name,
        privilege_type,
        is_grantable::boolean
 FROM "".information_schema.type_privileges`
-	const systemPrivilegeQuery = `
+
+	systemPrivilegeQuery = `
 SELECT a.username AS grantee,
        privilege AS privilege_type,
        a.privilege
@@ -90,7 +86,8 @@ SELECT a.username AS grantee,
           FROM crdb_internal.kv_system_privileges
           WHERE path LIKE '/global%'
        ) AS a`
-	const externalConnectionPrivilegeQuery = `
+
+	externalConnectionPrivilegeQuery = `
 SELECT *
   FROM (
         SELECT name AS connection_name,
@@ -114,10 +111,11 @@ SELECT *
                  WHERE path ~* '^/externalconn/'
                ) AS a
        )`
+)
 
-	// Query grants data for user-defined functions and procedures. Builtin
-	// functions are not included.
-	routineQuery := fmt.Sprintf(`
+// Query grants data for user-defined functions and procedures. Builtin
+// functions are not included.
+var routineQuery = fmt.Sprintf(`
 WITH fn_grants AS (
   SELECT routine_catalog as database_name,
          routine_schema as schema_name,
@@ -145,235 +143,358 @@ SELECT database_name,
   FROM fn_grants
 `, oidext.CockroachPredefinedOIDMax)
 
+// Contains values used to construct the specific query that we need.
+type showGrantsSpecifics struct {
+	params   []string
+	source   string
+	cond     string
+	nameCols string
+}
+
+// delegateShowGrants implements SHOW GRANTS which returns grant details for the
+// specified objects and users.
+// Privileges: None.
+//
+//	Notes: postgres does not have a SHOW GRANTS statement.
+//	       mysql only returns the user's privileges.
+func (d *delegator) delegateShowGrants(n *tree.ShowGrants) (tree.Statement, error) {
+	var specifics showGrantsSpecifics
+	var err error
+
+	if n.Targets == nil {
+		specifics = d.delegateShowGrantsAll()
+	} else if len(n.Targets.Databases) > 0 {
+		specifics, err = d.delegateShowGrantsDatabase(n)
+	} else if len(n.Targets.Schemas) > 0 {
+		specifics, err = d.delegateShowGrantsSchema(n)
+	} else if len(n.Targets.Types) > 0 {
+		specifics, err = d.delegateShowGrantsType(n)
+	} else if len(n.Targets.Functions) > 0 || len(n.Targets.Procedures) > 0 {
+		specifics, err = d.delegateShowGrantsRoutine(n)
+	} else if n.Targets.System {
+		specifics = d.delegateShowGrantsSystem()
+	} else if len(n.Targets.ExternalConnections) > 0 {
+		specifics = d.delegateShowGrantsExternalConnections()
+	} else {
+		// This includes sequences also
+		specifics, err = d.delegateShowGrantsTable(n)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return d.addWithClause(n, specifics)
+}
+
+func (d *delegator) delegateShowGrantsDatabase(n *tree.ShowGrants) (showGrantsSpecifics, error) {
 	var source bytes.Buffer
 	var cond bytes.Buffer
-	var nameCols string
+	var params []string
 
-	if n.Targets != nil && len(n.Targets.Databases) > 0 {
-		// Get grants of database from information_schema.schema_privileges
-		// if the type of target is database.
-		dbNames := n.Targets.Databases.ToStrings()
+	// Get grants of database from information_schema.schema_privileges
+	// if the type of target is database.
+	dbNames := n.Targets.Databases.ToStrings()
 
-		for _, db := range dbNames {
-			name := cat.SchemaName{
-				CatalogName:     tree.Name(db),
-				SchemaName:      tree.Name(catconstants.PublicSchemaName),
-				ExplicitCatalog: true,
-				ExplicitSchema:  true,
-			}
-			_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &name)
-			if err != nil {
-				return nil, err
-			}
-			params = append(params, lexbase.EscapeSQLString(db))
+	for _, db := range dbNames {
+		name := cat.SchemaName{
+			CatalogName:     tree.Name(db),
+			SchemaName:      tree.Name(catconstants.PublicSchemaName),
+			ExplicitCatalog: true,
+			ExplicitSchema:  true,
 		}
+		_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &name)
+		if err != nil {
+			return showGrantsSpecifics{}, err
+		}
+		params = append(params, lexbase.EscapeSQLString(db))
+	}
 
-		fmt.Fprint(&source, dbPrivQuery)
-		nameCols = "database_name,"
-		if len(params) == 0 {
-			// There are no rows, but we can't simply return emptyNode{} because
-			// the result columns must still be defined.
-			cond.WriteString(`WHERE false`)
-		} else {
-			fmt.Fprintf(&cond, `WHERE database_name IN (%s)`, strings.Join(params, ","))
-		}
-	} else if n.Targets != nil && len(n.Targets.Schemas) > 0 {
-		currDB := d.evalCtx.SessionData().Database
-
-		for _, schema := range n.Targets.Schemas {
-			if schema.SchemaName == tree.Name('*') {
-				allSchemas, err := d.catalog.GetAllSchemaNamesForDB(d.ctx, schema.CatalogName.String())
-				if err != nil {
-					return nil, err
-				}
-
-				for _, sc := range allSchemas {
-					_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &sc)
-					if err != nil {
-						return nil, err
-					}
-					params = append(params, fmt.Sprintf("(%s,%s)", lexbase.EscapeSQLString(sc.Catalog()), lexbase.EscapeSQLString(sc.Schema())))
-				}
-			} else {
-				_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &schema)
-				if err != nil {
-					return nil, err
-				}
-				dbName := currDB
-				if schema.ExplicitCatalog {
-					dbName = schema.Catalog()
-				}
-				params = append(params, fmt.Sprintf("(%s,%s)", lexbase.EscapeSQLString(dbName), lexbase.EscapeSQLString(schema.Schema())))
-			}
-		}
-
-		fmt.Fprint(&source, schemaPrivQuery)
-		nameCols = "database_name, schema_name,"
-
-		if len(params) != 0 {
-			fmt.Fprintf(
-				&cond,
-				`WHERE (database_name, schema_name) IN (%s)`,
-				strings.Join(params, ","),
-			)
-		}
-	} else if n.Targets != nil && len(n.Targets.Types) > 0 {
-		for _, typName := range n.Targets.Types {
-			t, err := d.catalog.ResolveType(d.ctx, typName)
-			if err != nil {
-				return nil, err
-			}
-			if t.UserDefined() {
-				params = append(
-					params,
-					fmt.Sprintf(
-						"(%s, %s, %s)",
-						lexbase.EscapeSQLString(t.TypeMeta.Name.Catalog),
-						lexbase.EscapeSQLString(t.TypeMeta.Name.Schema),
-						lexbase.EscapeSQLString(t.TypeMeta.Name.Name),
-					),
-				)
-			} else {
-				params = append(
-					params,
-					fmt.Sprintf(
-						"(%s, 'pg_catalog', %s)",
-						lexbase.EscapeSQLString(t.TypeMeta.Name.Catalog),
-						lexbase.EscapeSQLString(t.TypeMeta.Name.Name),
-					),
-				)
-			}
-		}
-
-		fmt.Fprint(&source, typePrivQuery)
-		nameCols = "database_name, schema_name, type_name,"
-		if len(params) == 0 {
-			dbNameClause := "true"
-			// If the current database is set, restrict the command to it.
-			if currDB := d.evalCtx.SessionData().Database; currDB != "" {
-				dbNameClause = fmt.Sprintf("database_name = %s", lexbase.EscapeSQLString(currDB))
-			}
-			cond.WriteString(fmt.Sprintf(`WHERE %s`, dbNameClause))
-		} else {
-			fmt.Fprintf(
-				&cond,
-				`WHERE (database_name, schema_name, type_name) IN (%s)`,
-				strings.Join(params, ","),
-			)
-		}
-	} else if n.Targets != nil && (len(n.Targets.Functions) > 0 || len(n.Targets.Procedures) > 0) {
-		fmt.Fprint(&source, routineQuery)
-		nameCols = "database_name, schema_name, routine_id, routine_signature,"
-		fnResolved := intsets.MakeFast()
-		routines := n.Targets.Functions
-		routineType := tree.UDFRoutine
-		if len(n.Targets.Procedures) > 0 {
-			routines = n.Targets.Procedures
-			routineType = tree.ProcedureRoutine
-		}
-		for _, fn := range routines {
-			un := fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
-			fd, err := d.catalog.ResolveFunction(
-				d.ctx, tree.MakeUnresolvedFunctionName(un), &d.evalCtx.SessionData().SearchPath,
-			)
-			if err != nil {
-				return nil, err
-			}
-			ol, err := fd.MatchOverload(
-				d.ctx, d.catalog, &fn, &d.evalCtx.SessionData().SearchPath, routineType,
-				false /* inDropContext */, false, /* tryDefaultExprs */
-			)
-			if err != nil {
-				return nil, err
-			}
-			fnResolved.Add(int(ol.Oid))
-		}
-		params = make([]string, fnResolved.Len())
-		for i, fnID := range fnResolved.Ordered() {
-			params[i] = strconv.Itoa(fnID)
-		}
-		fmt.Fprintf(&cond, `WHERE routine_id IN (%s)`, strings.Join(params, ","))
-	} else if n.Targets != nil && n.Targets.System {
-		fmt.Fprint(&source, systemPrivilegeQuery)
-		cond.WriteString(`WHERE true`)
-	} else if n.Targets != nil && len(n.Targets.ExternalConnections) > 0 {
-		nameCols = "connection_name,"
-
-		fmt.Fprint(&source, externalConnectionPrivilegeQuery)
-		cond.WriteString(`WHERE true`)
-	} else if n.Targets != nil {
-		nameCols = "database_name, schema_name, table_name,"
-		fmt.Fprint(&source, tablePrivQuery)
-		// Get grants of table from information_schema.table_privileges
-		// if the type of target is table.
-		var allTables tree.TableNames
-
-		for _, tableTarget := range n.Targets.Tables.TablePatterns {
-			tableGlob, err := tableTarget.NormalizeTablePattern()
-			if err != nil {
-				return nil, err
-			}
-			// We avoid the cache so that we can observe the grants taking
-			// a lease, like other SHOW commands.
-			tables, _, err := cat.ExpandDataSourceGlob(
-				d.ctx, d.catalog, cat.Flags{AvoidDescriptorCaches: true}, tableGlob,
-			)
-			if err != nil {
-				return nil, err
-			}
-			allTables = append(allTables, tables...)
-		}
-
-		for i := range allTables {
-			params = append(params, fmt.Sprintf("(%s,%s,%s)",
-				lexbase.EscapeSQLString(allTables[i].Catalog()),
-				lexbase.EscapeSQLString(allTables[i].Schema()),
-				lexbase.EscapeSQLString(allTables[i].Table())))
-		}
-
-		if len(params) == 0 {
-			// The glob pattern has expanded to zero matching tables.
-			// There are no rows, but we can't simply return emptyNode{} because
-			// the result columns must still be defined.
-			cond.WriteString(`WHERE false`)
-		} else {
-			fmt.Fprintf(&cond, `WHERE (database_name, schema_name, table_name) IN (%s)`, strings.Join(params, ","))
-		}
+	fmt.Fprint(&source, dbPrivQuery)
+	if len(params) == 0 {
+		// There are no rows, but we can't simply return emptyNode{} because
+		// the result columns must still be defined.
+		cond.WriteString(`WHERE false`)
 	} else {
-		nameCols = "database_name, schema_name, object_name, object_type,"
-		// No target: only look at types, tables and schemas in the current database.
-		source.WriteString(
-			`SELECT database_name, schema_name, table_name AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`,
-		)
-		source.WriteString(tablePrivQuery)
-		source.WriteByte(')')
-		source.WriteString(` UNION ALL ` +
-			`SELECT database_name, schema_name, NULL::STRING AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`)
-		source.WriteString(schemaPrivQuery)
-		source.WriteByte(')')
-		source.WriteString(` UNION ALL ` +
-			`SELECT database_name, NULL::STRING AS schema_name, NULL::STRING AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`)
-		source.WriteString(dbPrivQuery)
-		source.WriteByte(')')
-		source.WriteString(` UNION ALL ` +
-			`SELECT database_name, schema_name, type_name AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`)
-		source.WriteString(typePrivQuery)
-		source.WriteByte(')')
-		source.WriteString(` UNION ALL ` +
-			`SELECT database_name, schema_name, routine_signature AS object_name, object_type , grantee, privilege_type, is_grantable FROM (`)
-		source.WriteString(routineQuery)
-		source.WriteByte(')')
-		source.WriteString(` UNION ALL ` +
-			`SELECT NULL::STRING AS database_name, NULL::STRING AS schema_name, connection_name AS object_name, object_type , grantee, privilege_type, is_grantable FROM (`)
-		source.WriteString(externalConnectionPrivilegeQuery)
-		source.WriteByte(')')
-		// If the current database is set, restrict the command to it.
-		if currDB := d.evalCtx.SessionData().Database; currDB != "" {
-			fmt.Fprintf(&cond, ` WHERE database_name = %s OR object_type = 'external_connection'`, lexbase.EscapeSQLString(currDB))
+		fmt.Fprintf(&cond, `WHERE database_name IN (%s)`, strings.Join(params, ","))
+	}
+
+	return showGrantsSpecifics{
+		source:   source.String(),
+		params:   params,
+		cond:     cond.String(),
+		nameCols: "database_name,",
+	}, nil
+}
+
+func (d *delegator) delegateShowGrantsSchema(n *tree.ShowGrants) (showGrantsSpecifics, error) {
+	var source bytes.Buffer
+	var cond bytes.Buffer
+	var params []string
+
+	currDB := d.evalCtx.SessionData().Database
+
+	for _, schema := range n.Targets.Schemas {
+		if schema.SchemaName == tree.Name('*') {
+			allSchemas, err := d.catalog.GetAllSchemaNamesForDB(d.ctx, schema.CatalogName.String())
+			if err != nil {
+				return showGrantsSpecifics{}, err
+			}
+
+			for _, sc := range allSchemas {
+				_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &sc)
+				if err != nil {
+					return showGrantsSpecifics{}, err
+				}
+				params = append(params, fmt.Sprintf("(%s,%s)", lexbase.EscapeSQLString(sc.Catalog()), lexbase.EscapeSQLString(sc.Schema())))
+			}
 		} else {
-			cond.WriteString(`WHERE true`)
+			_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &schema)
+			if err != nil {
+				return showGrantsSpecifics{}, err
+			}
+			dbName := currDB
+			if schema.ExplicitCatalog {
+				dbName = schema.Catalog()
+			}
+			params = append(params, fmt.Sprintf("(%s,%s)", lexbase.EscapeSQLString(dbName), lexbase.EscapeSQLString(schema.Schema())))
 		}
 	}
+
+	fmt.Fprint(&source, schemaPrivQuery)
+
+	if len(params) != 0 {
+		fmt.Fprintf(
+			&cond,
+			`WHERE (database_name, schema_name) IN (%s)`,
+			strings.Join(params, ","),
+		)
+	}
+
+	return showGrantsSpecifics{
+		source:   source.String(),
+		params:   params,
+		cond:     cond.String(),
+		nameCols: "database_name, schema_name,",
+	}, nil
+}
+
+func (d *delegator) delegateShowGrantsType(n *tree.ShowGrants) (showGrantsSpecifics, error) {
+	var source bytes.Buffer
+	var cond bytes.Buffer
+	var params []string
+
+	for _, typName := range n.Targets.Types {
+		t, err := d.catalog.ResolveType(d.ctx, typName)
+		if err != nil {
+			return showGrantsSpecifics{}, err
+		}
+
+		var schemaName string
+
+		if t.UserDefined() {
+			schemaName = lexbase.EscapeSQLString(t.TypeMeta.Name.Schema)
+		} else {
+			schemaName = "'pg_catalog'"
+		}
+
+		params = append(
+			params,
+			fmt.Sprintf(
+				"(%s, %s, %s)",
+				lexbase.EscapeSQLString(t.TypeMeta.Name.Catalog),
+				schemaName,
+				lexbase.EscapeSQLString(t.TypeMeta.Name.Name),
+			),
+		)
+
+	}
+
+	fmt.Fprint(&source, typePrivQuery)
+	if len(params) == 0 {
+		dbNameClause := "true"
+		// If the current database is set, restrict the command to it.
+		if currDB := d.evalCtx.SessionData().Database; currDB != "" {
+			dbNameClause = fmt.Sprintf("database_name = %s", lexbase.EscapeSQLString(currDB))
+		}
+		cond.WriteString(fmt.Sprintf(`WHERE %s`, dbNameClause))
+	} else {
+		fmt.Fprintf(
+			&cond,
+			`WHERE (database_name, schema_name, type_name) IN (%s)`,
+			strings.Join(params, ","),
+		)
+	}
+
+	return showGrantsSpecifics{
+		source:   source.String(),
+		params:   params,
+		cond:     cond.String(),
+		nameCols: "database_name, schema_name, type_name,",
+	}, nil
+}
+
+func (d *delegator) delegateShowGrantsRoutine(n *tree.ShowGrants) (showGrantsSpecifics, error) {
+	var source bytes.Buffer
+	var cond bytes.Buffer
+
+	fmt.Fprint(&source, routineQuery)
+	fnResolved := intsets.MakeFast()
+	routines := n.Targets.Functions
+	routineType := tree.UDFRoutine
+	if len(n.Targets.Procedures) > 0 {
+		routines = n.Targets.Procedures
+		routineType = tree.ProcedureRoutine
+	}
+	for _, fn := range routines {
+		un := fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
+		fd, err := d.catalog.ResolveFunction(
+			d.ctx, tree.MakeUnresolvedFunctionName(un), &d.evalCtx.SessionData().SearchPath,
+		)
+		if err != nil {
+			return showGrantsSpecifics{}, err
+		}
+		ol, err := fd.MatchOverload(
+			d.ctx, d.catalog, &fn, &d.evalCtx.SessionData().SearchPath, routineType,
+			false /* inDropContext */, false, /* tryDefaultExprs */
+		)
+		if err != nil {
+			return showGrantsSpecifics{}, err
+		}
+		fnResolved.Add(int(ol.Oid))
+	}
+	params := make([]string, fnResolved.Len())
+	for i, fnID := range fnResolved.Ordered() {
+		params[i] = strconv.Itoa(fnID)
+	}
+	fmt.Fprintf(&cond, `WHERE routine_id IN (%s)`, strings.Join(params, ","))
+
+	return showGrantsSpecifics{
+		source:   source.String(),
+		params:   params,
+		cond:     cond.String(),
+		nameCols: "database_name, schema_name, routine_id, routine_signature,",
+	}, nil
+}
+
+func (d *delegator) delegateShowGrantsSystem() showGrantsSpecifics {
+	var source bytes.Buffer
+	fmt.Fprint(&source, systemPrivilegeQuery)
+
+	return showGrantsSpecifics{
+		source: source.String(),
+	}
+}
+
+func (d *delegator) delegateShowGrantsTable(n *tree.ShowGrants) (showGrantsSpecifics, error) {
+	var source bytes.Buffer
+	var cond bytes.Buffer
+	var params []string
+
+	fmt.Fprint(&source, tablePrivQuery)
+	// Get grants of table from information_schema.table_privileges
+	// if the type of target is table.
+	var allTables tree.TableNames
+
+	for _, tableTarget := range n.Targets.Tables.TablePatterns {
+		tableGlob, err := tableTarget.NormalizeTablePattern()
+		if err != nil {
+			return showGrantsSpecifics{}, err
+		}
+		// We avoid the cache so that we can observe the grants taking
+		// a lease, like other SHOW commands.
+		tables, _, err := cat.ExpandDataSourceGlob(
+			d.ctx, d.catalog, cat.Flags{AvoidDescriptorCaches: true}, tableGlob,
+		)
+		if err != nil {
+			return showGrantsSpecifics{}, err
+		}
+		allTables = append(allTables, tables...)
+	}
+
+	for i := range allTables {
+		params = append(params, fmt.Sprintf("(%s,%s,%s)",
+			lexbase.EscapeSQLString(allTables[i].Catalog()),
+			lexbase.EscapeSQLString(allTables[i].Schema()),
+			lexbase.EscapeSQLString(allTables[i].Table())))
+	}
+
+	if len(params) == 0 {
+		// The glob pattern has expanded to zero matching tables.
+		// There are no rows, but we can't simply return emptyNode{} because
+		// the result columns must still be defined.
+		cond.WriteString(`WHERE false`)
+	} else {
+		fmt.Fprintf(&cond, `WHERE (database_name, schema_name, table_name) IN (%s)`, strings.Join(params, ","))
+	}
+
+	return showGrantsSpecifics{
+		source:   source.String(),
+		params:   params,
+		cond:     cond.String(),
+		nameCols: "database_name, schema_name, table_name,",
+	}, nil
+}
+
+func (d *delegator) delegateShowGrantsExternalConnections() showGrantsSpecifics {
+	var source bytes.Buffer
+	fmt.Fprint(&source, externalConnectionPrivilegeQuery)
+
+	return showGrantsSpecifics{
+		source:   source.String(),
+		nameCols: "connection_name,",
+	}
+}
+
+func (d *delegator) delegateShowGrantsAll() showGrantsSpecifics {
+	var source bytes.Buffer
+	var cond bytes.Buffer
+
+	// No target: only look at types, tables and schemas in the current database.
+	source.WriteString(
+		`SELECT database_name, schema_name, table_name AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`,
+	)
+	source.WriteString(tablePrivQuery)
+	source.WriteByte(')')
+	source.WriteString(` UNION ALL ` +
+		`SELECT database_name, schema_name, NULL::STRING AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`)
+	source.WriteString(schemaPrivQuery)
+	source.WriteByte(')')
+	source.WriteString(` UNION ALL ` +
+		`SELECT database_name, NULL::STRING AS schema_name, NULL::STRING AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`)
+	source.WriteString(dbPrivQuery)
+	source.WriteByte(')')
+	source.WriteString(` UNION ALL ` +
+		`SELECT database_name, schema_name, type_name AS object_name, object_type, grantee, privilege_type, is_grantable FROM (`)
+	source.WriteString(typePrivQuery)
+	source.WriteByte(')')
+	source.WriteString(` UNION ALL ` +
+		`SELECT database_name, schema_name, routine_signature AS object_name, object_type , grantee, privilege_type, is_grantable FROM (`)
+	source.WriteString(routineQuery)
+	source.WriteByte(')')
+	source.WriteString(` UNION ALL ` +
+		`SELECT NULL::STRING AS database_name, NULL::STRING AS schema_name, connection_name AS object_name, object_type , grantee, privilege_type, is_grantable FROM (`)
+	source.WriteString(externalConnectionPrivilegeQuery)
+	source.WriteByte(')')
+	// If the current database is set, restrict the command to it.
+	if currDB := d.evalCtx.SessionData().Database; currDB != "" {
+		fmt.Fprintf(&cond, ` WHERE database_name = %s OR object_type = 'external_connection'`, lexbase.EscapeSQLString(currDB))
+	}
+
+	return showGrantsSpecifics{
+		source:   source.String(),
+		cond:     cond.String(),
+		nameCols: "database_name, schema_name, object_name, object_type,",
+	}
+}
+
+func (d *delegator) addWithClause(
+	n *tree.ShowGrants, specifics showGrantsSpecifics,
+) (tree.Statement, error) {
+	params := specifics.params
+	source := specifics.source
+	cond := specifics.cond
+	nameCols := specifics.nameCols
 
 	implicitGranteeIn := "true"
 	if n.Grantees != nil {
@@ -409,7 +530,7 @@ WHERE
 	%s
 ORDER BY
 	%s grantee, privilege_type, is_grantable
-	`, source.String(), cond.String(), nameCols, implicitGranteeIn, nameCols)
+	`, source, cond, nameCols, implicitGranteeIn, nameCols)
 	// Terminate on invalid users.
 	for _, p := range n.Grantees {
 
