@@ -645,6 +645,9 @@ var intervalStyle = settings.RegisterEnumSetting(
 	}(),
 	settings.WithPublic)
 
+// dateStyleEnumMap is not inlined in the RegisterEnumSetting call below because
+// all enum values are stored as lower-case strings, and we want to preserve the
+// upper-case for session variable defaults.
 var dateStyleEnumMap = map[int64]string{
 	0: "ISO, MDY",
 	1: "ISO, DMY",
