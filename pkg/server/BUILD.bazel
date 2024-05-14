@@ -407,6 +407,7 @@ go_test(
         "authentication_test.go",
         "auto_tls_init_test.go",
         "bench_test.go",
+        "combined_statement_stats_test.go",
         "config_test.go",
         "connectivity_test.go",
         "critical_nodes_test.go",
