@@ -125,6 +125,17 @@ func (rn *RawNode) Ready() Ready {
 	return rd
 }
 
+// SendAppends sends log replication messages to a particular node. The messages
+// will be available via next Ready.
+//
+// This method is used when Config.EnableLazyAppends is true.
+func (rn *RawNode) SendAppends(to uint64) {
+	if !rn.raft.enableLazyAppends || to == rn.raft.id {
+		return
+	}
+	rn.raft.maybeSendAppendImpl(to, false /* lazy */)
+}
+
 // readyWithoutAccept returns a Ready. This is a read-only operation, i.e. there
 // is no obligation that the Ready must be handled.
 func (rn *RawNode) readyWithoutAccept() Ready {
