@@ -59,7 +59,7 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
 	args = append(args, additionalBazelArgs...)
-	args = append(args, "--test_arg", "-test.v")
+	args = append(args, "--nocache_test_results", "--test_arg", "-test.v")
 	if short {
 		args = append(args, "--test_arg", "-test.short")
 	}
