@@ -1990,3 +1990,37 @@ statement error column col0_4 is of type tsvector and thus is not indexable
 ALTER TABLE tab_122871 ALTER PRIMARY KEY USING COLUMNS (col0_4);
 
 subtest end
+
+# In #123017 we noticed that ALTER PRIMARY KEY does not work correctly
+# if there are either view or function references to an index due to validation
+# errors in both the legacy and declarative schema changer. Long term we can
+# support this in the declarative schema changer.
+subtest alter_primary_key_block_func_view_ref
+
+statement ok
+CREATE TABLE t_view_func_ref_123017 (
+    a STRING NOT NULL,
+    b INT2,
+    UNIQUE (b ASC)
+);
+CREATE FUNCTION f_123017() RETURNS RECORD LANGUAGE SQL AS $$
+  SELECT NULL FROM t_view_func_ref_123017@t_view_func_ref_123017_b_key
+$$;
+CREATE VIEW t_view_123017 AS (SELECT b FROM t_view_func_ref_123017@t_view_func_ref_123017_b_key);
+
+statement error pq: unimplemented: table \"t_view_func_ref_123017\" has an index \(t_view_func_ref_123017_b_key\) that is still referenced by \"f_123017\"
+ALTER TABLE t_view_func_ref_123017 ALTER PRIMARY KEY USING COLUMNS (a);
+
+statement ok
+DROP FUNCTION f_123017;
+
+statement error pq: unimplemented: table \"t_view_func_ref_123017\" has an index \(t_view_func_ref_123017_b_key\) that is still referenced by \"t_view_123017\"
+ALTER TABLE t_view_func_ref_123017 ALTER PRIMARY KEY USING COLUMNS (a);
+
+statement ok
+DROP VIEW t_view_123017;
+
+statement ok
+ALTER TABLE t_view_func_ref_123017 ALTER PRIMARY KEY USING COLUMNS (a);
+
+subtest end
