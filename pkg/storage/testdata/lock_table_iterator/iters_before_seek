@@ -67,7 +67,7 @@ next: output: k=b str=shared txn=1
 next: output: k=c str=intent txn=1
 next: output: k=c str=exclusive txn=1
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 3, 18), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 3, 18), (rev, 0, 0))
+stats: seeked 3 times (3 internal); stepped 18 times (18 internal)
 
 # txn1, reverse iteration
 iter lower=a match-txn-id=1
@@ -91,7 +91,7 @@ prev: output: k=a str=shared txn=1
 prev: output: k=a str=exclusive txn=1
 prev: output: k=a str=intent txn=1
 prev: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 3, 18)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 3, 20))
+stats: seeked 3 times (0 fwd/3 rev, internal: 0 fwd/3 rev); stepped 18 times (0 fwd/18 rev, internal: 0 fwd/20 rev)
 
 # txn1, prefix iteration
 iter prefix=true match-txn-id=1
@@ -105,7 +105,7 @@ seek-ge k=b: output: k=b str=intent txn=1
 next: output: k=b str=exclusive txn=1
 next: output: k=b str=shared txn=1
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 2, 8), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 8), (rev, 0, 0))
+stats: seeked 2 times (2 internal); stepped 8 times (8 internal)
 
 # txn1, forward iteration with limit
 iter upper=z match-txn-id=1
@@ -119,7 +119,7 @@ seek-ge-with-limit k=a limit=b: output: k=a str=intent txn=1
 next-with-limit limit=b: output: k=a str=exclusive txn=1
 next-with-limit limit=b: output: k=a str=shared txn=1
 next-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 2, 8), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 8), (rev, 0, 0))
+stats: seeked 2 times (2 internal); stepped 8 times (8 internal)
 
 # txn1, reverse iteration with limit
 iter lower=a match-txn-id=1
@@ -137,7 +137,7 @@ prev-with-limit limit=b: output: k=b str=shared txn=1
 prev-with-limit limit=b: output: k=b str=exclusive txn=1
 prev-with-limit limit=b: output: k=b str=intent txn=1
 prev-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 2, 10)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 2, 11))
+stats: seeked 2 times (0 fwd/2 rev, internal: 0 fwd/2 rev); stepped 10 times (0 fwd/10 rev, internal: 0 fwd/11 rev)
 
 
 # txn3, forward iteration
@@ -150,7 +150,7 @@ stats
 seek-ge k=a: output: k=a str=shared txn=3
 next: output: k=b str=shared txn=3
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 3, 22), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 3, 22), (rev, 0, 0))
+stats: seeked 3 times (3 internal); stepped 22 times (22 internal)
 
 # txn3, reverse iteration
 iter lower=a match-txn-id=3
@@ -162,7 +162,7 @@ stats
 seek-lt k=d: output: k=b str=shared txn=3
 prev: output: k=a str=shared txn=3
 prev: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 3, 22)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 3, 24))
+stats: seeked 3 times (0 fwd/3 rev, internal: 0 fwd/3 rev); stepped 22 times (0 fwd/22 rev, internal: 0 fwd/24 rev)
 
 # txn3, prefix iteration
 iter prefix=true match-txn-id=3
@@ -172,7 +172,7 @@ stats
 ----
 seek-ge k=b: output: k=b str=shared txn=3
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 2, 10), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 10), (rev, 0, 0))
+stats: seeked 2 times (2 internal); stepped 10 times (10 internal)
 
 # txn3, forward iteration with limit
 iter upper=z match-txn-id=3
@@ -182,7 +182,7 @@ stats
 ----
 seek-ge-with-limit k=a limit=b: output: k=a str=shared txn=3
 next-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 2, 10), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 10), (rev, 0, 0))
+stats: seeked 2 times (2 internal); stepped 10 times (10 internal)
 
 # txn3, reverse iteration with limit
 iter lower=a match-txn-id=3
@@ -192,7 +192,7 @@ stats
 ----
 seek-lt-with-limit k=d limit=b: output: k=b str=shared txn=3
 prev-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 2, 12)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 2, 13))
+stats: seeked 2 times (0 fwd/2 rev, internal: 0 fwd/2 rev); stepped 12 times (0 fwd/12 rev, internal: 0 fwd/13 rev)
 
 
 # txn8, forward iteration
@@ -205,7 +205,7 @@ stats
 seek-ge k=a: output: k=a str=shared txn=8
 next: output: k=b str=shared txn=8
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 5, 28), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 5, 28), (rev, 0, 0))
+stats: seeked 5 times (5 internal); stepped 28 times (28 internal)
 
 # txn8, reverse iteration
 iter lower=a match-txn-id=8
@@ -217,7 +217,7 @@ stats
 seek-lt k=d: output: k=b str=shared txn=8
 prev: output: k=a str=shared txn=8
 prev: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 5, 28)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 5, 32))
+stats: seeked 5 times (0 fwd/5 rev, internal: 0 fwd/5 rev); stepped 28 times (0 fwd/28 rev, internal: 0 fwd/32 rev)
 
 # txn8, prefix iteration
 iter prefix=true match-txn-id=8
@@ -227,7 +227,7 @@ stats
 ----
 seek-ge k=b: output: k=b str=shared txn=8
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 2, 13), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 13), (rev, 0, 0))
+stats: seeked 2 times (2 internal); stepped 13 times (13 internal)
 
 # txn8, forward iteration with limit
 iter upper=z match-txn-id=8
@@ -237,7 +237,7 @@ stats
 ----
 seek-ge-with-limit k=a limit=b: output: k=a str=shared txn=8
 next-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 3, 13), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 3, 13), (rev, 0, 0))
+stats: seeked 3 times (3 internal); stepped 13 times (13 internal)
 
 # txn8, reverse iteration with limit
 iter lower=a match-txn-id=8
@@ -247,7 +247,7 @@ stats
 ----
 seek-lt-with-limit k=d limit=b: output: k=b str=shared txn=8
 prev-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 3, 15)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 3, 17))
+stats: seeked 3 times (0 fwd/3 rev, internal: 0 fwd/3 rev); stepped 15 times (0 fwd/15 rev, internal: 0 fwd/17 rev)
 
 
 # txn13, forward iteration
@@ -260,7 +260,7 @@ stats
 seek-ge k=a: output: k=a str=shared txn=13
 next: output: k=b str=shared txn=13
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 3, 22), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 3, 22), (rev, 0, 0))
+stats: seeked 3 times (3 internal); stepped 22 times (22 internal)
 
 # txn13, reverse iteration
 iter lower=a match-txn-id=13
@@ -272,7 +272,7 @@ stats
 seek-lt k=d: output: k=b str=shared txn=13
 prev: output: k=a str=shared txn=13
 prev: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 3, 22)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 3, 24))
+stats: seeked 3 times (0 fwd/3 rev, internal: 0 fwd/3 rev); stepped 22 times (0 fwd/22 rev, internal: 0 fwd/24 rev)
 
 # txn13, prefix iteration
 iter prefix=true match-txn-id=13
@@ -282,7 +282,7 @@ stats
 ----
 seek-ge k=b: output: k=b str=shared txn=13
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 1, 10), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 1, 10), (rev, 0, 0))
+stats: seeked 1 times (1 internal); stepped 10 times (10 internal)
 
 # txn13, forward iteration with limit
 iter upper=z match-txn-id=13
@@ -292,7 +292,7 @@ stats
 ----
 seek-ge-with-limit k=a limit=b: output: k=a str=shared txn=13
 next-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 2, 10), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 10), (rev, 0, 0))
+stats: seeked 2 times (2 internal); stepped 10 times (10 internal)
 
 # txn13, reverse iteration with limit
 iter lower=a match-txn-id=13
@@ -302,7 +302,7 @@ stats
 ----
 seek-lt-with-limit k=d limit=b: output: k=b str=shared txn=13
 prev-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 2, 12)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 2, 13))
+stats: seeked 2 times (0 fwd/2 rev, internal: 0 fwd/2 rev); stepped 12 times (0 fwd/12 rev, internal: 0 fwd/13 rev)
 
 
 # txn15, forward iteration
@@ -315,7 +315,7 @@ stats
 seek-ge k=a: output: k=a str=shared txn=15
 next: output: k=b str=shared txn=15
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 3, 18), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 3, 18), (rev, 0, 0))
+stats: seeked 3 times (3 internal); stepped 18 times (18 internal)
 
 # txn15, reverse iteration
 iter lower=a match-txn-id=15
@@ -327,7 +327,7 @@ stats
 seek-lt k=d: output: k=b str=shared txn=15
 prev: output: k=a str=shared txn=15
 prev: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 3, 18)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 3, 20))
+stats: seeked 3 times (0 fwd/3 rev, internal: 0 fwd/3 rev); stepped 18 times (0 fwd/18 rev, internal: 0 fwd/20 rev)
 
 # txn15, prefix iteration
 iter prefix=true match-txn-id=15
@@ -337,7 +337,7 @@ stats
 ----
 seek-ge k=b: output: k=b str=shared txn=15
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 1, 8), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 1, 8), (rev, 0, 0))
+stats: seeked 1 times (1 internal); stepped 8 times (8 internal)
 
 # txn15, forward iteration with limit
 iter upper=z match-txn-id=15
@@ -347,7 +347,7 @@ stats
 ----
 seek-ge-with-limit k=a limit=b: output: k=a str=shared txn=15
 next-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 2, 8), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 8), (rev, 0, 0))
+stats: seeked 2 times (2 internal); stepped 8 times (8 internal)
 
 # txn15, reverse iteration with limit
 iter lower=a match-txn-id=15
@@ -357,7 +357,7 @@ stats
 ----
 seek-lt-with-limit k=d limit=b: output: k=b str=shared txn=15
 prev-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 2, 10)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 2, 11))
+stats: seeked 2 times (0 fwd/2 rev, internal: 0 fwd/2 rev); stepped 10 times (0 fwd/10 rev, internal: 0 fwd/11 rev)
 
 
 # shared min strength, forward iteration
@@ -438,7 +438,7 @@ next: output: k=b str=shared txn=1
 next: output: k=c str=intent txn=1
 next: output: k=c str=exclusive txn=1
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 1, 36), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 1, 36), (rev, 0, 0))
+stats: seeked 1 times (1 internal); stepped 36 times (36 internal)
 
 # shared min strength, reverse iteration
 iter lower=a match-min-str=shared
@@ -518,7 +518,7 @@ prev: output: k=a str=shared txn=15
 prev: output: k=a str=exclusive txn=1
 prev: output: k=a str=intent txn=1
 prev: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 1, 36)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 1, 36))
+stats: seeked 1 times (0 fwd/1 rev, internal: 0 fwd/1 rev); stepped 36 times (0 fwd/36 rev, internal: 0 fwd/36 rev)
 
 # shared min strength, prefix iteration
 iter prefix=true match-min-str=shared
@@ -560,7 +560,7 @@ next: output: k=b str=shared txn=3
 next: output: k=b str=shared txn=2
 next: output: k=b str=shared txn=1
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 1, 17), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 1, 17), (rev, 0, 0))
+stats: seeked 1 times (1 internal); stepped 17 times (17 internal)
 
 # shared min strength, forward iteration with limit
 iter upper=z match-min-str=shared
@@ -602,7 +602,7 @@ next-with-limit limit=b: output: k=a str=shared txn=3
 next-with-limit limit=b: output: k=a str=shared txn=2
 next-with-limit limit=b: output: k=a str=shared txn=1
 next-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 1, 17), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 1, 17), (rev, 0, 0))
+stats: seeked 1 times (1 internal); stepped 17 times (17 internal)
 
 # shared min strength, reverse iteration with limit
 iter lower=a match-min-str=shared
@@ -648,7 +648,7 @@ prev-with-limit limit=b: output: k=b str=shared txn=15
 prev-with-limit limit=b: output: k=b str=exclusive txn=1
 prev-with-limit limit=b: output: k=b str=intent txn=1
 prev-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 1, 19)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 1, 19))
+stats: seeked 1 times (0 fwd/1 rev, internal: 0 fwd/1 rev); stepped 19 times (0 fwd/19 rev, internal: 0 fwd/19 rev)
 
 
 # exclusive min strength, forward iteration
@@ -669,7 +669,7 @@ next: output: k=b str=exclusive txn=1
 next: output: k=c str=intent txn=1
 next: output: k=c str=exclusive txn=1
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 3, 16), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 3, 16), (rev, 0, 0))
+stats: seeked 3 times (3 internal); stepped 16 times (16 internal)
 
 # exclusive min strength, reverse iteration
 iter lower=a match-min-str=exclusive
@@ -689,7 +689,7 @@ prev: output: k=b str=intent txn=1
 prev: output: k=a str=exclusive txn=1
 prev: output: k=a str=intent txn=1
 prev: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 3, 16)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 3, 18))
+stats: seeked 3 times (0 fwd/3 rev, internal: 0 fwd/3 rev); stepped 16 times (0 fwd/16 rev, internal: 0 fwd/18 rev)
 
 # exclusive min strength, prefix iteration
 iter prefix=true match-min-str=exclusive
@@ -701,7 +701,7 @@ stats
 seek-ge k=b: output: k=b str=intent txn=1
 next: output: k=b str=exclusive txn=1
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 1, 7), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 1, 7), (rev, 0, 0))
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
 
 # exclusive min strength, forward iteration with limit
 iter upper=z match-min-str=exclusive
@@ -713,7 +713,7 @@ stats
 seek-ge-with-limit k=a limit=b: output: k=a str=intent txn=1
 next-with-limit limit=b: output: k=a str=exclusive txn=1
 next-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 2, 7), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 0, 0))
+stats: seeked 2 times (2 internal); stepped 7 times (7 internal)
 
 # exclusive min strength, reverse iteration with limit
 iter lower=a match-min-str=exclusive
@@ -729,7 +729,7 @@ prev-with-limit limit=b: output: k=c str=intent txn=1
 prev-with-limit limit=b: output: k=b str=exclusive txn=1
 prev-with-limit limit=b: output: k=b str=intent txn=1
 prev-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 2, 9)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 2, 10))
+stats: seeked 2 times (0 fwd/2 rev, internal: 0 fwd/2 rev); stepped 9 times (0 fwd/9 rev, internal: 0 fwd/10 rev)
 
 
 # intent min strength, forward iteration
@@ -744,7 +744,7 @@ seek-ge k=a: output: k=a str=intent txn=1
 next: output: k=b str=intent txn=1
 next: output: k=c str=intent txn=1
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 3, 16), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 3, 16), (rev, 0, 0))
+stats: seeked 3 times (3 internal); stepped 16 times (16 internal)
 
 # intent min strength, reverse iteration
 iter lower=a match-min-str=intent
@@ -758,7 +758,7 @@ seek-lt k=d: output: k=c str=intent txn=1
 prev: output: k=b str=intent txn=1
 prev: output: k=a str=intent txn=1
 prev: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 3, 16)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 3, 18))
+stats: seeked 3 times (0 fwd/3 rev, internal: 0 fwd/3 rev); stepped 16 times (0 fwd/16 rev, internal: 0 fwd/18 rev)
 
 # intent min strength, prefix iteration
 iter prefix=true match-min-str=intent
@@ -768,7 +768,7 @@ stats
 ----
 seek-ge k=b: output: k=b str=intent txn=1
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 1, 7), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 1, 7), (rev, 0, 0))
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
 
 # intent min strength, forward iteration with limit
 iter upper=z match-min-str=intent
@@ -778,7 +778,7 @@ stats
 ----
 seek-ge-with-limit k=a limit=b: output: k=a str=intent txn=1
 next-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 2, 7), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 0, 0))
+stats: seeked 2 times (2 internal); stepped 7 times (7 internal)
 
 # intent min strength, reverse iteration with limit
 iter lower=a match-min-str=intent
@@ -790,4 +790,4 @@ stats
 seek-lt-with-limit k=d limit=b: output: k=c str=intent txn=1
 prev-with-limit limit=b: output: k=b str=intent txn=1
 prev-with-limit limit=b: output: . (at limit)
-stats: (interface (dir, seek, step): (fwd, 0, 0), (rev, 2, 9)), (internal (dir, seek, step): (fwd, 0, 0), (rev, 2, 10))
+stats: seeked 2 times (0 fwd/2 rev, internal: 0 fwd/2 rev); stepped 9 times (0 fwd/9 rev, internal: 0 fwd/10 rev)
