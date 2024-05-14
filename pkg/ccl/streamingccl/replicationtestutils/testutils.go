@@ -252,13 +252,7 @@ ORDER BY created DESC LIMIT 1`, c.Args.DestTenantName)
 		// Grab the latest producer job on the destination cluster.
 		var status string
 		c.DestSysSQL.QueryRow(c.T, "SELECT status FROM system.jobs WHERE id = $1", retentionJobID).Scan(&status)
-		if jobs.Status(status) == jobs.StatusRunning {
-			return nil
-		}
-		if jobs.Status(status) == jobs.StatusFailed {
-			payload := jobutils.GetJobPayload(c.T, c.DestSysSQL, retentionJobID)
-			require.Contains(c.T, payload.Error, "replication stream")
-			require.Contains(c.T, payload.Error, "timed out")
+		if jobs.Status(status) == jobs.StatusRunning || jobs.Status(status) == jobs.StatusSucceeded {
 			return nil
 		}
 		return errors.Newf("Unexpected status %s", status)
