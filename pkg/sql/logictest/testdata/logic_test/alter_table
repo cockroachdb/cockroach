@@ -3511,7 +3511,12 @@ SET sql_safe_updates = false;
 statement error pgcode 2BP01 pq: cannot drop index "t_108974_f_i_j_idx" because function "f_108974" depends on it
 DROP INDEX t_108974_f@t_108974_f_i_j_idx;
 
-statement error pgcode 2BP01 pq: cannot drop index "t_108974_f_pkey" because function "f_108974" depends on it
+skipif config local-legacy-schema-changer
+statement error pgcode 55000 pq: table \"t_108974_f\" has an index \(t_108974_f_i_j_idx\) that is still referenced by \"f_108974\"
+ALTER TABLE t_108974_f ALTER PRIMARY KEY USING COLUMNS (j);
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 pq: cannot drop index \"t_108974_f_pkey\" because function \"f_108974\" depends on it
 ALTER TABLE t_108974_f ALTER PRIMARY KEY USING COLUMNS (j);
 
 statement error pgcode 2BP01 pq: cannot drop index "t_108974_v_pkey" because view "v_108974" depends on it

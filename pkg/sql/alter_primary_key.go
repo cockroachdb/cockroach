@@ -453,6 +453,22 @@ func (p *planner) AlterPrimaryKey(
 		if idx.GetID() != newPrimaryIndexDesc.ID && shouldRewrite {
 			indexesToRewrite = append(indexesToRewrite, idx)
 		}
+		// If this index is referenced by any other objects, then we wil
+		// block the primary key swap, since we don't have a mechanism to
+		// fix these references yet.
+		for _, tableRef := range tableDesc.GetDependedOnBy() {
+			if tableRef.IndexID == idx.GetID() {
+				refDesc, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Desc(ctx, tableRef.ID)
+				if err != nil {
+					return err
+				}
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"table %q has an index (%s) that is still referenced by %q",
+					tableDesc.GetName(),
+					idx.GetName(),
+					refDesc.GetName())
+			}
+		}
 	}
 
 	// TODO (rohany): this loop will be unused until #45510 is resolved.
