@@ -4803,3 +4803,112 @@ func TestPartialPartition(t *testing.T) {
 			})
 	}
 }
+
+// TestProxyTracing asserts when enabling a partial partition between two
+// nodes, the request is proxied via a third node and that tracing captures
+// the relevant event.
+func TestProxyTracing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	const numServers = 3
+	const numRanges = 3
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+	kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
+	kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+	closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+
+	var p rpc.Partitioner
+	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+		ServerArgsPerNode: func() map[int]base.TestServerArgs {
+			perNode := make(map[int]base.TestServerArgs)
+			for i := 0; i < numServers; i++ {
+				ctk := rpc.ContextTestingKnobs{}
+				// Partition between n1 and n3.
+				p.RegisterTestingKnobs(roachpb.NodeID(i+1), [][2]roachpb.NodeID{{1, 3}}, &ctk)
+				perNode[i] = base.TestServerArgs{
+					Settings: st,
+					Knobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							ContextTestingKnobs: ctk,
+						},
+					},
+				}
+			}
+			return perNode
+		}(),
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Set up the mapping after the nodes have started and we have their
+	// addresses.
+	for i := 0; i < numServers; i++ {
+		g := tc.Servers[i].StorageLayer().GossipI().(*gossip.Gossip)
+		addr := g.GetNodeAddr().String()
+		nodeID := g.NodeID.Get()
+		p.RegisterNodeAddr(addr, nodeID)
+	}
+
+	conn := tc.Conns[0]
+
+	// Create a table and pin the leaseholder replicas to n3. The partition
+	// between n1 and n3 will lead to re-routing via n2, which we expect captured
+	// in the trace.
+	_, err := conn.Exec("CREATE TABLE t (i INT)")
+	require.NoError(t, err)
+	_, err = conn.Exec("ALTER TABLE t CONFIGURE ZONE USING num_replicas=3, lease_preferences='[[+dc=dc3]]', constraints='[]'")
+	require.NoError(t, err)
+	_, err = conn.Exec(
+		fmt.Sprintf("INSERT INTO t(i) select generate_series(1,%d)", numRanges-1))
+	require.NoError(t, err)
+	_, err = conn.Exec("ALTER TABLE t SPLIT AT SELECT i FROM t")
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	leaseCount := func(node int) int {
+		var count int
+		err := conn.QueryRow(fmt.Sprintf(
+			"SELECT count(*) FROM [SHOW RANGES FROM TABLE t WITH DETAILS] WHERE lease_holder = %d", node),
+		).Scan(&count)
+		require.NoError(t, err)
+		return count
+	}
+
+	checkLeaseCount := func(node, expectedLeaseCount int) error {
+		if count := leaseCount(node); count != expectedLeaseCount {
+			require.NoError(t, tc.GetFirstStoreFromServer(t, 0).
+				ForceLeaseQueueProcess())
+			return errors.Errorf("expected %d leases on node %d, found %d",
+				expectedLeaseCount, node, count)
+		}
+		return nil
+	}
+
+	// Wait until the leaseholder for the test table ranges are on n3.
+	testutils.SucceedsSoon(t, func() error {
+		return checkLeaseCount(3, numRanges)
+	})
+
+	p.EnablePartition(true)
+
+	// TODO(kvoli,andrewbaptist): Currently this may return an error on first
+	// attempt with 'pq: partitioned from 127.0.0.1:XXXXX, n3'. Remove the retry
+	// loop below once this is resolved.
+	testutils.SucceedsSoon(t, func() error {
+		_, err = conn.Exec("SET TRACING = on; SELECT FROM t where i = 987654321; SET TRACING = off")
+		return err
+	})
+
+	// Expect the "proxy request complete" message to be in the trace and that it
+	// comes from the proxy node n2.
+	row := conn.QueryRowContext(ctx, "SELECT message, tag, location "+
+		"FROM [SHOW TRACE FOR SESSION] "+
+		"WHERE message LIKE '%proxy request complete%'"+
+		"AND location LIKE '%server/node%'",
+		"AND tag LIKE '%n2%'",
+	)
+	require.NotNil(t, row)
+}
