@@ -29,14 +29,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 )
 
-// This test causes LSM overload induced by saturating disk bandwidth limits.
+// This test sets up 2 workloads – kv0 consisting of "normal" priority writes
+// and kv0 consisting of "background" priority writes. The goal is to show that
+// even with a demanding "background" workload that is able to push the used
+// bandwidth much higher than the provisioned one, the AC bandwidth limiter
+// paces the traffic at the set bandwidth limit.
 func registerDiskBandwidthOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "admission-control/disk-bandwidth",
+		Name:             "admission-control/disk-bandwidth-limiter",
 		Owner:            registry.OwnerAdmissionControl,
 		Timeout:          time.Hour,
 		CompatibleClouds: registry.OnlyGCE,
-		Benchmark:        true,
 		Suites:           registry.ManualOnly,
 		Cluster:          r.MakeClusterSpec(3, spec.CPU(32)),
 		RequiresLicense:  true,
@@ -110,14 +113,16 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			if err := setBandwidthLimit(c.Range(1, crdbNodes), "wbps", 128<<20 /* 128MiB */, false); err != nil {
 				t.Fatal(err)
 			}
-			if err := setBandwidthLimit(c.Range(1, crdbNodes), "rbps", 128<<20 /* 128MiB */, false); err != nil {
-				t.Fatal(err)
-			}
+
+			// TODO(aaditya): Extend this test to also limit reads once we have a
+			// mechanism to pace read traffic in AC>
 
 			db := c.Conn(ctx, t.L(), crdbNodes)
 			defer db.Close()
 
 			if _, err := db.ExecContext(
+				// We intentionally set this to much lower than the provisioned value
+				// above to clearly show that the bandwidth limiter works.
 				ctx, "SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '75MiB'"); err != nil {
 				t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
 			}
