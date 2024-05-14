@@ -232,7 +232,7 @@ func (p *testPlanner) Plan() *TestPlan {
 		scheduleHooks := fromVersion.AtLeast(p.options.minimumSupportedVersion)
 
 		plan := newUpgradePlan(fromVersion, toVersion)
-		p.currentContext.startUpgrade(toVersion)
+		p.currentContext.System.startUpgrade(toVersion)
 		plan.Add(p.initUpgradeSteps())
 		if p.shouldRollback(toVersion) {
 			// previous -> next
@@ -278,13 +278,21 @@ func (p *testPlanner) Plan() *TestPlan {
 }
 
 func (p *testPlanner) longRunningContext() *Context {
-	return newLongRunningContext(
-		p.versions[0], p.versions[len(p.versions)-1], p.crdbNodes, p.currentContext.Stage,
+	var tenantDescriptor *ServiceDescriptor
+	if p.currentContext.Tenant != nil {
+		tenantDescriptor = p.currentContext.Tenant.Descriptor
+	}
+
+	return newContext(
+		p.versions[0], p.versions[len(p.versions)-1],
+		p.currentContext.DefaultService().Stage,
+		p.currentContext.DefaultService().Descriptor.Nodes,
+		tenantDescriptor,
 	)
 }
 
 func (p *testPlanner) clusterSetupSteps() []testStep {
-	p.currentContext.Stage = ClusterSetupStage
+	p.currentContext.SetStage(ClusterSetupStage)
 	initialVersion := p.versions[0]
 
 	var steps []testStep
@@ -303,9 +311,10 @@ func (p *testPlanner) clusterSetupSteps() []testStep {
 			settings: p.clusterSettings(),
 		}),
 		p.newSingleStep(waitForStableClusterVersionStep{
-			nodes:          p.crdbNodes,
-			timeout:        p.options.upgradeTimeout,
-			desiredVersion: versionToClusterVersion(initialVersion),
+			nodes:              p.crdbNodes,
+			timeout:            p.options.upgradeTimeout,
+			desiredVersion:     versionToClusterVersion(initialVersion),
+			virtualClusterName: install.SystemInterfaceName,
 		}),
 	)
 }
@@ -313,7 +322,7 @@ func (p *testPlanner) clusterSetupSteps() []testStep {
 // startupSteps returns the list of steps that should be executed once
 // the test (as defined by user-provided functions) is ready to start.
 func (p *testPlanner) startupSteps() []testStep {
-	p.currentContext.Stage = OnStartupStage
+	p.currentContext.System.Stage = OnStartupStage
 	return p.hooks.StartupSteps(p.longRunningContext(), p.prng, p.isLocal)
 }
 
@@ -331,8 +340,10 @@ func (p *testPlanner) testStartSteps() []testStep {
 // executed before we start changing binaries on nodes in the process
 // of upgrading/downgrading.
 func (p *testPlanner) initUpgradeSteps() []testStep {
-	p.currentContext.Stage = InitUpgradeStage
-	return []testStep{p.newSingleStep(preserveDowngradeOptionStep{})}
+	p.currentContext.System.Stage = InitUpgradeStage
+	return []testStep{p.newSingleStep(preserveDowngradeOptionStep{
+		virtualClusterName: install.SystemInterfaceName,
+	})}
 }
 
 // afterUpgradeSteps are the steps to be run once the nodes have been
@@ -342,8 +353,8 @@ func (p *testPlanner) initUpgradeSteps() []testStep {
 func (p *testPlanner) afterUpgradeSteps(
 	fromVersion, toVersion *clusterupgrade.Version, scheduleHooks bool,
 ) []testStep {
-	p.currentContext.Finalizing = false
-	p.currentContext.Stage = AfterUpgradeFinalizedStage
+	p.currentContext.System.Finalizing = false
+	p.currentContext.System.Stage = AfterUpgradeFinalizedStage
 	if scheduleHooks {
 		return p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng, p.isLocal)
 	}
@@ -356,7 +367,7 @@ func (p *testPlanner) afterUpgradeSteps(
 func (p *testPlanner) upgradeSteps(
 	stage UpgradeStage, from, to *clusterupgrade.Version, scheduleHooks bool,
 ) []testStep {
-	p.currentContext.Stage = stage
+	p.currentContext.System.Stage = stage
 	msg := fmt.Sprintf("upgrade nodes %v from %q to %q", p.crdbNodes, from.String(), to.String())
 	return p.changeVersionSteps(from, to, msg, scheduleHooks)
 }
@@ -364,7 +375,7 @@ func (p *testPlanner) upgradeSteps(
 func (p *testPlanner) downgradeSteps(
 	from, to *clusterupgrade.Version, scheduleHooks bool,
 ) []testStep {
-	p.currentContext.Stage = RollbackUpgradeStage
+	p.currentContext.System.Stage = RollbackUpgradeStage
 	msg := fmt.Sprintf("downgrade nodes %v from %q to %q", p.crdbNodes, from.String(), to.String())
 	return p.changeVersionSteps(from, to, msg, scheduleHooks)
 }
@@ -400,7 +411,9 @@ func (p *testPlanner) changeVersionSteps(
 		steps = append(steps, p.newSingleStep(
 			restartWithNewBinaryStep{version: to, node: node, rt: p.rt, settings: p.clusterSettings()},
 		))
-		p.currentContext.changeVersion(node, to)
+		err := p.currentContext.System.changeVersion(node, to)
+		handleInternalError(err)
+
 		if scheduleHooks {
 			steps = append(steps, p.hooks.MixedVersionSteps(p.currentContext, p.prng, p.isLocal)...)
 		} else if j == waitIndex {
@@ -424,8 +437,8 @@ func (p *testPlanner) changeVersionSteps(
 func (p *testPlanner) finalizeUpgradeSteps(
 	fromVersion, toVersion *clusterupgrade.Version, scheduleHooks bool,
 ) []testStep {
-	p.currentContext.Finalizing = true
-	p.currentContext.Stage = RunningUpgradeMigrationsStage
+	p.currentContext.System.Finalizing = true
+	p.currentContext.System.Stage = RunningUpgradeMigrationsStage
 	runMigrations := p.newSingleStep(allowUpgradeStep{})
 	var mixedVersionStepsDuringMigrations []testStep
 	if scheduleHooks {
@@ -434,9 +447,10 @@ func (p *testPlanner) finalizeUpgradeSteps(
 
 	waitForMigrations := p.newSingleStep(
 		waitForStableClusterVersionStep{
-			nodes:          p.crdbNodes,
-			timeout:        p.options.upgradeTimeout,
-			desiredVersion: versionToClusterVersion(toVersion),
+			nodes:              p.crdbNodes,
+			timeout:            p.options.upgradeTimeout,
+			desiredVersion:     versionToClusterVersion(toVersion),
+			virtualClusterName: install.SystemInterfaceName,
 		},
 	)
 
@@ -973,10 +987,10 @@ func (plan *TestPlan) prettyPrintStep(
 		var debugInfo string
 		if debug {
 			var finalizingStr string
-			if ss.context.Finalizing {
+			if ss.context.Finalizing() {
 				finalizingStr = ",finalizing"
 			}
-			debugInfo = fmt.Sprintf(" [stage=%s%s]", ss.context.Stage, finalizingStr)
+			debugInfo = fmt.Sprintf(" [stage=%s%s]", ss.context.System.Stage, finalizingStr)
 		}
 
 		out.WriteString(fmt.Sprintf(

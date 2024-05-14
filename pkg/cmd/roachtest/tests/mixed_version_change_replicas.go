@@ -54,7 +54,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		if err := h.Exec(r, `CREATE TABLE test (id INT PRIMARY KEY)`); err != nil {
 			return err
 		}
-		_, db := h.RandomDB(r, c.All())
+		_, db := h.RandomDB(r)
 		if err := WaitFor3XReplication(ctx, t, l, db); err != nil {
 			return err
 		}

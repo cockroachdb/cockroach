@@ -54,6 +54,7 @@ go_test(
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
         "//pkg/roachpb",
+        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/testutils/datapathutils",

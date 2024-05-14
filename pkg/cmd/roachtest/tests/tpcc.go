@@ -421,7 +421,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, crdbNodes)
 
 	importTPCC := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-		randomNode := c.Node(h.RandomNode(rng, crdbNodes))
+		randomNode := c.Node(crdbNodes.SeededRandNode(rng)[0])
 		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, "", headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
 		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
 	}
@@ -430,7 +430,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// upgrade machinery, in which a) all ranges are touched and b) work proportional
 	// to the amount data may be carried out.
 	importLargeBank := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-		randomNode := c.Node(h.RandomNode(rng, crdbNodes))
+		randomNode := c.Node(crdbNodes.SeededRandNode(rng)[0])
 		cmd := roachtestutil.NewCommand(fmt.Sprintf("%s workload fixtures import bank", test.DefaultCockroachPath)).
 			Arg("{pgurl%s}", randomNode).
 			Flag("payload-bytes", 10240).
@@ -454,9 +454,9 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// If migrations are running we want to ramp up the workload faster in order
 		// to expose them to more concurrent load. In a similar goal, we also let the
 		// TPCC workload run longer.
-		if h.Context.Finalizing && !c.IsLocal() {
+		if h.IsFinalizing() && !c.IsLocal() {
 			rampDur = 1 * time.Minute
-			if h.Context.ToVersion.IsCurrent() {
+			if h.Context().ToVersion.IsCurrent() {
 				workloadDur = 100 * time.Minute
 			}
 		}
