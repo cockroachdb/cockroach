@@ -35,6 +35,10 @@ func TestOutboxCatchesPanics(t *testing.T) {
 
 	ctx := context.Background()
 
+	// Use the release-build panic-catching behavior instead of the
+	// crdb_test-build behavior.
+	defer colexecerror.ProductionBehaviorForTests()()
+
 	var (
 		input    = colexecop.NewBatchBuffer()
 		typs     = []*types.T{types.Int}
@@ -142,6 +146,10 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	// This is similar to TestOutboxCatchesPanics, but focuses on verifying that
 	// the Outbox drains its metadata sources even after an error.
 	t.Run("AfterOutboxError", func(t *testing.T) {
+		// Use the release-build panic-catching behavior instead of the
+		// crdb_test-build behavior.
+		defer colexecerror.ProductionBehaviorForTests()()
+
 		// This test, similar to TestOutboxCatchesPanics, relies on the fact that
 		// a BatchBuffer panics when there are no batches to return.
 		require.Panics(t, func() { input.Next() })
