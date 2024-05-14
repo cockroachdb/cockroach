@@ -4155,6 +4155,54 @@ func (r *Replica) adminScatter(
 			// The replica can not be processed, so skip it.
 			break
 		}
+
+		// If the range has only one replica, we can't scatter it via the replicate
+		// queue, which uses change replicas directly. We instead rely on
+		// relocating the range from one node to another, along with the lease via
+		// a multi-step AdminRelocateRange.
+		if len(desc.Replicas().Descriptors()) == 1 {
+			log.VEventf(ctx, 1, "can't scatter range with only one replica, relocating instead: %v", desc)
+			existingVoters := desc.Replicas().VoterDescriptors()
+			existingNonVoters := desc.Replicas().NonVoterDescriptors()
+			rangeUsageInfo := r.RangeUsageInfo()
+
+			if len(existingVoters) != 1 {
+				log.Fatalf(ctx, "expected exactly one voter, found %d: %v", len(existingVoters), desc)
+			}
+
+			addTarget, _, details, ok := r.store.allocator.RebalanceVoter(ctx, r.store.cfg.StorePool, conf,
+				r.RaftStatus(), existingVoters,
+				existingNonVoters, rangeUsageInfo,
+				storepool.StoreFilterThrottled,
+				r.store.allocator.ScorerOptionsForScatter(ctx),
+			)
+
+			log.Eventf(ctx, "relocating range from s%d to s%d: %v", r.store.StoreID(), addTarget.StoreID, details)
+
+			if !ok || addTarget == (roachpb.ReplicationTarget{}) {
+				// Nothing to do.
+				break
+			}
+
+			// Try relocating the range using the add target as the new replica.
+			voterTargets := []roachpb.ReplicationTarget{addTarget}
+			nonVoterTargets := []roachpb.ReplicationTarget{}
+			err = r.AdminRelocateRange(ctx, *desc,
+				[]roachpb.ReplicationTarget{addTarget}, []roachpb.ReplicationTarget{},
+				true /* transferLeaseToFirstVoter */)
+			if err != nil {
+				if isSnapshotError(err) {
+					continue
+				}
+				break
+			}
+
+			r.store.cfg.StorePool.UpdateLocalStoreAfterRelocate(
+				voterTargets, nonVoterTargets, existingVoters,
+				existingNonVoters, r.store.StoreID(), rangeUsageInfo,
+			)
+		}
+
 		_, err = rq.processOneChange(
 			ctx, r, desc, conf, true /* scatter */, false, /* dryRun */
 		)
