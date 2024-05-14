@@ -564,11 +564,14 @@ environment variables to the cockroach process.
 ` + tagHelp + `
 The default prometheus url is https://grafana.testeng.crdb.io/. This can be overwritten by using the
 environment variable COCKROACH_PROM_HOST_URL
+
+Note that if the cluster is started in insecure mode, set the insecure mode here as well by using the --insecure flag.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		clusterSettingsOpts := []install.ClusterSettingOption{
 			install.TagOption(tag),
+			install.SecureOption(isSecure),
 			install.EnvOption(nodeEnv),
 		}
 		return roachprod.UpdateTargets(context.Background(), config.Logger, args[0], clusterSettingsOpts...)

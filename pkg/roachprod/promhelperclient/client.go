@@ -67,7 +67,8 @@ func NewPromClient() *PromClient {
 // instanceConfigRequest is the HTTP request received for generating instance config
 type instanceConfigRequest struct {
 	//Config is the content of the yaml file
-	Config string `json:"config"`
+	Config   string `json:"config"`
+	Insecure bool   `json:"insecure"`
 }
 
 // UpdatePrometheusTargets updates the cluster config in the promUrl
@@ -76,9 +77,10 @@ func (c *PromClient) UpdatePrometheusTargets(
 	promUrl, clusterName string,
 	forceFetchCreds bool,
 	nodes []string,
+	insecure bool,
 	l *logger.Logger,
 ) error {
-	req, err := buildCreateRequest(nodes)
+	req, err := buildCreateRequest(nodes, insecure)
 	if err != nil {
 		return err
 	}
@@ -99,7 +101,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode == http.StatusUnauthorized && !forceFetchCreds {
 			l.Printf("request failed - this may be due to a stale token. retrying with forceFetchCreds true ...")
-			return c.UpdatePrometheusTargets(ctx, promUrl, clusterName, true, nodes, l)
+			return c.UpdatePrometheusTargets(ctx, promUrl, clusterName, true, nodes, insecure, l)
 		}
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
@@ -160,7 +162,7 @@ const clusterConfFileTemplate = `- targets:
 `
 
 // createClusterConfigFile creates the cluster config file per node
-func buildCreateRequest(nodes []string) (io.Reader, error) {
+func buildCreateRequest(nodes []string, insecure bool) (io.Reader, error) {
 	buffer := bytes.NewBufferString("---\n")
 	for i, n := range nodes {
 		if n == "" {
@@ -181,7 +183,7 @@ func buildCreateRequest(nodes []string) (io.Reader, error) {
 		}
 	}
 
-	b, err := json.Marshal(&instanceConfigRequest{Config: buffer.String()})
+	b, err := json.Marshal(&instanceConfigRequest{Config: buffer.String(), Insecure: insecure})
 	if err != nil {
 		return nil, err
 	}
