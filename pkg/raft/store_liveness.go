@@ -14,6 +14,8 @@ import "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 // StoreLivenessEpoch is an epoch in the Store Liveness fabric, referencing an
 // uninterrupted period of support from one store to another.
+// TODO(arul): Let's move this to the proto file so we can send it over in raft
+// messages/responses.
 type StoreLivenessEpoch int64
 
 // StoreLivenessExpiration is a timestamp indicating the extent of support from
@@ -68,4 +70,25 @@ func leadSupportUntil(r *raft) StoreLivenessExpiration {
 
 func leadSupported(r *raft) bool {
 	return leadSupportUntil(r) != StoreLivenessExpiration{}
+}
+
+// AlwaysLiveStoreLiveness is a mock implementation of the store liveness fabric
+// that considers stores to always be live.
+type AlwaysLiveStoreLiveness struct{}
+
+// Enabled implements the StoreLiveness interface.
+func (AlwaysLiveStoreLiveness) Enabled() bool {
+	return true
+}
+
+// SupportFor implements the StoreLiveness interface.
+func (AlwaysLiveStoreLiveness) SupportFor(uint64) (StoreLivenessEpoch, bool) {
+	return StoreLivenessEpoch(1), true
+}
+
+// SupportFrom implements the StoreLiveness interface.
+func (AlwaysLiveStoreLiveness) SupportFrom(
+	uint64,
+) (StoreLivenessEpoch, StoreLivenessExpiration, bool) {
+	return StoreLivenessEpoch(1), StoreLivenessExpiration(hlc.MaxTimestamp), true
 }

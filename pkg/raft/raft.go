@@ -351,12 +351,17 @@ type raft struct {
 
 	// the leader id
 	lead uint64
+	// leadEpoch, if set, corresponds to the StoreLiveness epoch that this
+	// follower has supported the leader in. It's unset on the leader or if the
+	// follower hasn't supported the leader.
+	leadEpoch StoreLivenessEpoch
 	// leadTransferee is id of the leader transfer target when its value is not zero.
 	// Follow the procedure defined in raft thesis 3.10.
 	leadTransferee uint64
 	// leadSupport contains a map of nodes which have supported the leader through
 	// fortification handshakes, and the corresponding Store Liveness epochs that
 	// they have supported the leader in.
+	// TODO(arul): should this be on the progress tracker?
 	leadSupport map[uint64]StoreLivenessEpoch
 	// Only one conf change may be pending (in the log, but not yet
 	// applied) at a time. This is enforced via pendingConfIndex, which
@@ -421,6 +426,7 @@ func newRaft(c *Config) *raft {
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
 		trk:                         tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes),
 		electionTimeout:             c.ElectionTick,
+		leadSupport:                 make(map[uint64]StoreLivenessEpoch),
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
 		checkQuorum:                 c.CheckQuorum,
@@ -478,7 +484,7 @@ func (r *raft) send(m pb.Message) {
 	if m.From == None {
 		m.From = r.id
 	}
-	if m.Type == pb.MsgVote || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVote || m.Type == pb.MsgPreVoteResp {
+	if m.Type == pb.MsgVote || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVote || m.Type == pb.MsgPreVoteResp || m.Type == pb.MsgFortifyLeader || m.Type == pb.MsgFortifyLeaderResp {
 		if m.Term == 0 {
 			// All {pre-,}campaign messages need to have the term set when
 			// sending.
@@ -563,6 +569,15 @@ func (r *raft) send(m pb.Message) {
 // current commit index to the given peer.
 func (r *raft) sendAppend(to uint64) {
 	r.maybeSendAppend(to, true)
+}
+
+// sendFortify sends a fortify RPC to the supplied follower.
+func (r *raft) sendFortify(to uint64) {
+	r.send(pb.Message{
+		To:   to,
+		Type: pb.MsgFortifyLeader,
+		Term: r.Term,
+	})
 }
 
 // maybeSendAppend sends an append RPC with new entries to the given peer,
@@ -675,6 +690,17 @@ func (r *raft) bcastAppend() {
 			return
 		}
 		r.sendAppend(id)
+	})
+}
+
+// bcastFortify sends an RPC to fortify the leader.
+func (r *raft) bcastFortify() {
+	runtimeAssert(r.state == StateLeader, "can't fortify if you're not a leader")
+	r.trk.Visit(func(id uint64, _ *tracker.Progress) {
+		if id == r.id {
+			return
+		}
+		r.sendFortify(id)
 	})
 }
 
@@ -1055,7 +1081,8 @@ func (r *raft) Step(m pb.Message) error {
 		default:
 			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
-			if m.Type == pb.MsgApp || m.Type == pb.MsgHeartbeat || m.Type == pb.MsgSnap {
+			if m.Type == pb.MsgApp || m.Type == pb.MsgHeartbeat || m.Type == pb.MsgFortifyLeader ||
+				m.Type == pb.MsgSnap {
 				r.becomeFollower(m.Term, m.From)
 			} else {
 				r.becomeFollower(m.Term, None)
@@ -1063,7 +1090,8 @@ func (r *raft) Step(m pb.Message) error {
 		}
 
 	case m.Term < r.Term:
-		if (r.checkQuorum || r.preVote) && (m.Type == pb.MsgHeartbeat || m.Type == pb.MsgApp) {
+		if (r.checkQuorum || r.preVote) &&
+			(m.Type == pb.MsgHeartbeat || m.Type == pb.MsgFortifyLeader || m.Type == pb.MsgApp) {
 			// We have received messages from a leader at a lower term. It is possible
 			// that these messages were simply delayed in the network, but this could
 			// also mean that this node has advanced its term number during a network
@@ -1285,6 +1313,8 @@ func stepLeader(r *raft, m pb.Message) error {
 
 	case pb.MsgForgetLeader:
 		return nil // noop on leader
+	case pb.MsgFortifyLeaderResp:
+		r.handleFortifyResp(m)
 	}
 
 	// All other message types require a progress for m.From (pr).
@@ -1602,6 +1632,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 			} else {
 				r.becomeLeader()
 				r.bcastAppend()
+				r.bcastFortify()
 			}
 		case quorum.VoteLost:
 			// pb.MsgPreVoteResp contains future term of pre-candidate
@@ -1610,6 +1641,10 @@ func stepCandidate(r *raft, m pb.Message) error {
 		}
 	case pb.MsgTimeoutNow:
 		r.logger.Debugf("%x [term %d state %v] ignored MsgTimeoutNow from %x", r.id, r.Term, r.state, m.From)
+	case pb.MsgFortifyLeader:
+		// TODO(arul): don't forget to add a test case for this.
+		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
+		r.handleFortify(m)
 	}
 	return nil
 }
@@ -1656,6 +1691,8 @@ func stepFollower(r *raft, m pb.Message) error {
 		// know we are not recovering from a partition so there is no need for the
 		// extra round trip.
 		r.hup(campaignTransfer)
+	case pb.MsgFortifyLeader:
+		r.handleFortify(m)
 	}
 	return nil
 }
@@ -1717,6 +1754,41 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 func (r *raft) handleHeartbeat(m pb.Message) {
 	r.raftLog.commitTo(m.Commit)
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
+}
+
+func (r *raft) handleFortify(m pb.Message) {
+	epoch, live := r.storeLiveness.SupportFor(r.lead)
+	if !live { // the leader isn't supported by the follower in its liveness fabric
+		r.send(pb.Message{
+			To:     m.From,
+			From:   r.id,
+			Reject: true,
+			Term:   r.Term,
+			Type:   pb.MsgFortifyLeaderResp,
+		})
+		return
+	}
+	// The leader is supported by this follower in its liveness fabric.
+	// TODO(arul): do the hard state handling here.
+	r.leadEpoch = epoch
+	r.send(pb.Message{
+		To:        m.From,
+		From:      r.id,
+		Reject:    false,
+		Term:      r.Term,
+		LeadEpoch: uint64(r.leadEpoch),
+		Type:      pb.MsgFortifyLeaderResp,
+	})
+}
+
+func (r *raft) handleFortifyResp(m pb.Message) {
+	runtimeAssert(r.state == StateLeader, "can't handle a fortify response if you're not a leader")
+	if m.Reject {
+		return // couldn't successfully fortify; we'll try again later
+	}
+	// The supported epoch should never regress. Guard against out of order
+	// delivery of fortify responses by using max.
+	r.leadSupport[m.From] = max(r.leadSupport[m.From], StoreLivenessEpoch(m.LeadEpoch))
 }
 
 func (r *raft) handleSnapshot(m pb.Message) {
@@ -1977,5 +2049,13 @@ func (r *raft) reduceUncommittedSize(s entryPayloadSize) {
 		r.uncommittedSize = 0
 	} else {
 		r.uncommittedSize -= s
+	}
+}
+
+// runtimeAssert panics with the supplied message if the condition does not hold
+// true.
+func runtimeAssert(condition bool, msg string) {
+	if !condition {
+		panic(msg)
 	}
 }

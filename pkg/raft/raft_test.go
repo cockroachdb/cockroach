@@ -3870,6 +3870,7 @@ func newTestConfig(id uint64, election, heartbeat int, storage Storage) *Config 
 		Storage:         storage,
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
+		StoreLiveness:   AlwaysLiveStoreLiveness{},
 	}
 }
 

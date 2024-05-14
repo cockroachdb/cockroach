@@ -102,6 +102,7 @@ func raftConfigStub() raft.Config {
 		HeartbeatTick:   1,
 		MaxSizePerMsg:   math.MaxUint64,
 		MaxInflightMsgs: math.MaxInt32,
+		StoreLiveness:   raft.AlwaysLiveStoreLiveness{},
 	}
 }
 
