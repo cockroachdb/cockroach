@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic/metamorphicutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -24,24 +25,22 @@ import (
 // IsMetamorphicBuild returns whether this build is metamorphic. By build being
 // "metamorphic" we mean that some magic constants in the codebase might get
 // initialized to non-default value.
-// A build will become metamorphic with metamorphicBuildProbability probability
+// A build will become metamorphic with metamorphicutil.IsMetamorphicBuildProbability probability
 // if 'crdb_test' build flag is specified (this is the case for all test
 // targets).
 func IsMetamorphicBuild() bool {
-	return metamorphicBuild
+	return metamorphicutil.IsMetamorphicBuild
 }
 
-var metamorphicBuild bool
-
 const (
-	metamorphicBuildProbability = 0.8
-	metamorphicValueProbability = 0.75
-	metamorphicBoolProbability  = 0.5
+	IsMetamorphicBuildProbability = 0.8
+	metamorphicValueProbability   = 0.75
+	metamorphicBoolProbability    = 0.5
 )
 
 // ConstantWithTestValue should be used to initialize "magic constants" that
 // should be varied during test scenarios to check for bugs at boundary
-// conditions. When metamorphicBuild is true, the test value will be used with
+// conditions. When metamorphicutil.IsMetamorphicBuild is true, the test value will be used with
 // metamorphicValueProbability probability. In all other cases, the production
 // ("default") value will be used.
 // The constant must be a "metamorphic variable": changing it cannot affect the
@@ -67,7 +66,7 @@ const (
 //
 // The given name is used for logging.
 func ConstantWithTestValue(name string, defaultValue, metamorphicValue int) int {
-	if metamorphicBuild {
+	if metamorphicutil.IsMetamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
 		if rng.r.Float64() < metamorphicValueProbability {
@@ -110,7 +109,7 @@ func init() {
 	if metamorphicEligible() {
 		if !disableMetamorphicTesting {
 			rng.r, _ = randutil.NewTestRand()
-			metamorphicBuild = rng.r.Float64() < metamorphicBuildProbability
+			metamorphicutil.IsMetamorphicBuild = rng.r.Float64() < IsMetamorphicBuildProbability
 		}
 	}
 }
@@ -121,7 +120,7 @@ func init() {
 //
 // The given name is used for logging.
 func ConstantWithTestRange(name string, defaultValue, min, max int) int {
-	if metamorphicBuild {
+	if metamorphicutil.IsMetamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
 		if rng.r.Float64() < metamorphicValueProbability {
@@ -145,7 +144,7 @@ func ConstantWithTestBool(name string, defaultValue bool) bool {
 }
 
 func constantWithTestBoolInternal(name string, defaultValue bool, doLog bool) bool {
-	if metamorphicBuild {
+	if metamorphicutil.IsMetamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
 		if rng.r.Float64() < metamorphicBoolProbability {
@@ -175,7 +174,7 @@ func ConstantWithTestBoolWithoutLogging(name string, defaultValue bool) bool {
 func ConstantWithTestChoice(
 	name string, defaultValue interface{}, otherValues ...interface{},
 ) interface{} {
-	if metamorphicBuild {
+	if metamorphicutil.IsMetamorphicBuild {
 		values := append([]interface{}{defaultValue}, otherValues...)
 		rng.Lock()
 		defer rng.Unlock()

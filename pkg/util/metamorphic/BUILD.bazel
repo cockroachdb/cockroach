@@ -13,6 +13,7 @@ go_library(
         "//pkg/build/bazel",
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
+        "//pkg/util/metamorphic/metamorphicutil",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
     ],
