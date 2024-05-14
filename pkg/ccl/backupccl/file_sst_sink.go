@@ -80,6 +80,9 @@ type fileSSTSink struct {
 	}
 }
 
+// fileSpanByteLimit is the maximum size of a file span that can be extended.
+const fileSpanByteLimit = 64 << 20
+
 func makeFileSSTSink(
 	conf sstSinkConf, dest cloud.ExternalStorage, pacer *admission.Pacer,
 ) *fileSSTSink {
@@ -264,6 +267,21 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 		return nil, err
 	}
 
+	// extend determines if the new span should be added to the last span. This
+	// will occur if the previous span ended mid row, or if the new span is a
+	// continuation of the previous span (i.e. the new span picks up where the
+	// previous one ended and has the same time bounds).
+	var extend bool
+	if s.midRow {
+		extend = true
+	} else if len(s.flushedFiles) > 0 {
+		last := s.flushedFiles[len(s.flushedFiles)-1]
+		extend = last.Span.EndKey.Equal(span.Key) &&
+			last.EndTime.EqOrdering(resp.metadata.EndTime) &&
+			last.StartTime.EqOrdering(resp.metadata.StartTime) &&
+			last.EntryCounts.DataSize < fileSpanByteLimit
+	}
+
 	if len(resp.resumeKey) > 0 {
 		span.EndKey, s.midRow = adjustFileEndKey(span.EndKey, maxKey, maxRange)
 		// Update the resume key to be the adjusted end key so that start key of the
@@ -273,12 +291,11 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 		s.midRow = false
 	}
 
-	// If this span extended the last span added -- that is, picked up where it
-	// ended and has the same time-bounds -- then we can simply extend that span
-	// and add to its entry counts. Otherwise we need to record it separately.
-	if l := len(s.flushedFiles) - 1; l >= 0 && s.flushedFiles[l].Span.EndKey.Equal(span.Key) &&
-		s.flushedFiles[l].EndTime.EqOrdering(resp.metadata.EndTime) &&
-		s.flushedFiles[l].StartTime.EqOrdering(resp.metadata.StartTime) {
+	if extend {
+		if len(s.flushedFiles) == 0 {
+			return nil, errors.AssertionFailedf("cannot extend an empty file sink")
+		}
+		l := len(s.flushedFiles) - 1
 		s.flushedFiles[l].Span.EndKey = span.EndKey
 		s.flushedFiles[l].EntryCounts.Add(resp.metadata.EntryCounts)
 		s.flushedFiles[l].ApproximatePhysicalSize += resp.metadata.ApproximatePhysicalSize
@@ -289,6 +306,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 		f.Span.EndKey = span.EndKey
 		s.flushedFiles = append(s.flushedFiles, f)
 	}
+
 	s.flushedRevStart.Forward(resp.revStart)
 	s.completedSpans += resp.completedSpans
 	s.flushedSize += int64(len(resp.dataSST))
