@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/stretchr/testify/require"
 )
@@ -51,16 +52,18 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			promNode := c.Spec().NodeCount
 			regularNode, elasticNode := c.Spec().NodeCount, c.Spec().NodeCount-1
 
+			for i := 1; i <= crdbNodes; i++ {
+				startOpts := option.NewStartOpts(option.NoBackupSchedule)
+				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--attrs=n%d", i))
+				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
+			}
+
 			promCfg := &prometheus.Config{}
 			promCfg.WithPrometheusNode(c.Node(promNode).InstallNodes()[0]).
 				WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
 				WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
 				WithGrafanaDashboard("https://go.crdb.dev/p/index-admission-control-grafana")
 			require.NoError(t, c.StartGrafana(ctx, t.L(), promCfg))
-
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, crdbNodes))
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(regularNode))
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(elasticNode))
 
 			// TODO(aaditya): This function shares a lot of logic with roachtestutil.DiskStaller. Consider merging the two.
 			setBandwidthLimit := func(nodes option.NodeListOption, rw string, bw int, max bool) error {
@@ -124,7 +127,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				// explicitly set it up to leave significant unused bandwidth).
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
-				cmd := "./workload run kv --init --histograms=perf/stats.json --concurrency=2 " +
+				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=2 " +
 					"--splits=1000 --read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 " +
 					"--background-qos=false --tolerate-errors" + dur + url
 				c.Run(ctx, option.WithNodes(c.Node(regularNode)), cmd)
@@ -140,7 +143,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
-				cmd := "./workload run kv --init --histograms=perf/stats.json --concurrency=1024 " +
+				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=1024 " +
 					"--splits=1000 --read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 " +
 					"--background-qos=true --tolerate-errors" + dur + url
 				c.Run(ctx, option.WithNodes(c.Node(elasticNode)), cmd)
