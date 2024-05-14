@@ -129,7 +129,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
 				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=2 " +
 					"--splits=1000 --read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 " +
-					"--background-qos=false --tolerate-errors" + dur + url
+					"--txn-qos='regular' --tolerate-errors" + dur + url
 				c.Run(ctx, option.WithNodes(c.Node(regularNode)), cmd)
 				return nil
 			})
@@ -145,7 +145,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
 				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=1024 " +
 					"--splits=1000 --read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 " +
-					"--background-qos=true --tolerate-errors" + dur + url
+					"--txn-qos='background' --tolerate-errors" + dur + url
 				c.Run(ctx, option.WithNodes(c.Node(elasticNode)), cmd)
 				return nil
 			})
