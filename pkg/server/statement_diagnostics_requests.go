@@ -12,10 +12,8 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -144,16 +142,10 @@ func (s *statusServer) StatementDiagnosticsRequests(
 
 	var err error
 
-	var extraColumns string
-	if s.st.Version.IsActive(ctx, clusterversion.TODODelete_V23_2_StmtDiagForPlanGist) {
-		extraColumns = `,
-			plan_gist,
-			anti_plan_gist`
-	}
 	// TODO(davidh): Add pagination to this request.
 	it, err := s.internalExecutor.QueryIteratorEx(ctx, "stmt-diag-get-all", nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
-		fmt.Sprintf(`SELECT
+		`SELECT
 			id,
 			statement_fingerprint,
 			completed,
@@ -161,9 +153,11 @@ func (s *statusServer) StatementDiagnosticsRequests(
 			requested_at,
 			min_execution_latency,
 			expires_at,
-			sampling_probability%s
+			sampling_probability,
+			plan_gist,
+			anti_plan_gist
 		FROM
-			system.statement_diagnostics_requests`, extraColumns))
+			system.statement_diagnostics_requests`)
 	if err != nil {
 		return nil, err
 	}
@@ -200,13 +194,11 @@ func (s *statusServer) StatementDiagnosticsRequests(
 				continue
 			}
 		}
-		if extraColumns != "" {
-			if planGist, ok := row[8].(*tree.DString); ok {
-				req.PlanGist = string(*planGist)
-			}
-			if antiGist, ok := row[9].(*tree.DBool); ok {
-				req.AntiPlanGist = bool(*antiGist)
-			}
+		if planGist, ok := row[8].(*tree.DString); ok {
+			req.PlanGist = string(*planGist)
+		}
+		if antiGist, ok := row[9].(*tree.DBool); ok {
+			req.AntiPlanGist = bool(*antiGist)
 		}
 
 		requests = append(requests, req)

@@ -1683,8 +1683,7 @@ func (p *Pebble) ClearEngineKey(key EngineKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	if !opts.ValueSizeKnown || !p.cfg.settings.Version.ActiveVersionOrEmpty(context.TODO()).
-		IsActive(clusterversion.TODODelete_V23_2_UseSizedPebblePointTombstones) {
+	if !opts.ValueSizeKnown {
 		return p.db.Delete(key.Encode(), pebble.Sync)
 	}
 	return p.db.DeleteSized(key.Encode(), opts.ValueSize, pebble.Sync)
@@ -1694,8 +1693,7 @@ func (p *Pebble) clear(key MVCCKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	if !opts.ValueSizeKnown || !p.cfg.settings.Version.ActiveVersionOrEmpty(context.TODO()).
-		IsActive(clusterversion.TODODelete_V23_2_UseSizedPebblePointTombstones) {
+	if !opts.ValueSizeKnown {
 		return p.db.Delete(EncodeMVCCKey(key), pebble.Sync)
 	}
 	// Use DeleteSized to propagate the value size.

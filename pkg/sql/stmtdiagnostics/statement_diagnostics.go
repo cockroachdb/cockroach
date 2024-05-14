@@ -16,7 +16,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -289,9 +288,6 @@ func (r *Registry) insertRequestInternal(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (RequestID, error) {
-	if planGist != "" && !r.st.Version.IsActive(ctx, clusterversion.TODODelete_V23_2_StmtDiagForPlanGist) {
-		return 0, errors.Newf("plan gists only supported after 23.2 version migrations have completed")
-	}
 	if samplingProbability != 0 {
 		if samplingProbability < 0 || samplingProbability > 1 {
 			return 0, errors.Newf(
@@ -654,7 +650,6 @@ func (r *Registry) InsertStatementDiagnostics(
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
-	isPlanGistSupported := r.st.Version.IsActive(ctx, clusterversion.TODODelete_V23_2_StmtDiagForPlanGist)
 
 	// Loop until we run the query without straddling an epoch increment.
 	for {
@@ -662,15 +657,11 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		epoch := r.mu.epoch
 		r.mu.Unlock()
 
-		var extraColumns string
-		if isPlanGistSupported {
-			extraColumns = ", plan_gist, anti_plan_gist"
-		}
 		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.NodeUserSessionDataOverride,
-			fmt.Sprintf(`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability%s
+			`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist
 				FROM system.statement_diagnostics_requests
-				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`, extraColumns),
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
 		)
 		if err != nil {
 			return err
@@ -721,13 +712,11 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 				samplingProbability = 1.0
 			}
 		}
-		if isPlanGistSupported {
-			if gist, ok := row[5].(*tree.DString); ok {
-				planGist = string(*gist)
-			}
-			if antiGist, ok := row[6].(*tree.DBool); ok {
-				antiPlanGist = bool(*antiGist)
-			}
+		if gist, ok := row[5].(*tree.DString); ok {
+			planGist = string(*gist)
+		}
+		if antiGist, ok := row[6].(*tree.DBool); ok {
+			antiPlanGist = bool(*antiGist)
 		}
 		ids.Add(int(id))
 		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt)
