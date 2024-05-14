@@ -208,6 +208,21 @@ type Config struct {
 	// throughput limit of 10 MB/s for this group. With RTT of 400ms, this drops
 	// to 2.5 MB/s. See Little's law to understand the maths behind.
 	MaxInflightBytes uint64
+	// DisableEagerAppends makes raft hold off constructing log append messages in
+	// response to Step() calls. The messages can be collected via a separate
+	// MessagesTo method.
+	//
+	// This way, the application has better control when raft may call Storage
+	// methods and allocate memory for entries and messages.
+	//
+	// Setting this to true also improves batching: messages are constructed on
+	// demand, and tend to contain more entries. The application can control the
+	// latency/throughput trade-off by collecting messages more or less
+	// frequently.
+	//
+	// With this setting set to false, messages are constructed eagerly in Step()
+	// calls, and typically will consist of a single / few entries.
+	DisableEagerAppends bool
 
 	// CheckQuorum specifies if the leader should check quorum activity. Leader
 	// steps down when quorum is not active for an electionTimeout.
@@ -310,6 +325,12 @@ func (c *Config) validate() error {
 	return nil
 }
 
+type msgBuf []pb.Message
+
+func (mb *msgBuf) append(m pb.Message) {
+	*(*[]pb.Message)(mb) = append(*(*[]pb.Message)(mb), m)
+}
+
 type raft struct {
 	id uint64
 
@@ -335,7 +356,7 @@ type raft struct {
 	// other nodes.
 	//
 	// Messages in this list must target other nodes.
-	msgs []pb.Message
+	msgs msgBuf
 	// msgsAfterAppend contains the list of messages that should be sent after
 	// the accumulated unstable state (e.g. term, vote, []entry, and snapshot)
 	// has been persisted to durable storage. This includes waiting for any
@@ -347,6 +368,10 @@ type raft struct {
 	// Messages in this list have the type MsgAppResp, MsgVoteResp, or
 	// MsgPreVoteResp. See the comment in raft.send for details.
 	msgsAfterAppend []pb.Message
+	// disableEagerAppends instructs append message construction and sending until
+	// the Ready() call. This improves batching and allows better resource
+	// allocation control by the application.
+	disableEagerAppends bool
 
 	// the leader id
 	lead uint64
@@ -431,6 +456,7 @@ func newRaft(c *Config) *raft {
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
 		trk:                         tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes),
+		disableEagerAppends:         c.DisableEagerAppends,
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
@@ -505,6 +531,11 @@ func (r *raft) hardState() pb.HardState {
 // send schedules persisting state to a stable storage and AFTER that
 // sending the message (as part of next Ready message processing).
 func (r *raft) send(m pb.Message) {
+	r.sendTo(&r.msgs, m)
+}
+
+// sendTo prepares the given message, and puts it to the output messages buffer.
+func (r *raft) sendTo(buf *msgBuf, m pb.Message) {
 	if m.From == None {
 		m.From = r.id
 	}
@@ -585,8 +616,18 @@ func (r *raft) send(m pb.Message) {
 		if m.To == r.id {
 			r.logger.Panicf("message should not be self-addressed when sending %s", m.Type)
 		}
-		r.msgs = append(r.msgs, m)
+		buf.append(m)
 	}
+}
+
+func (r *raft) getMessages(to uint64, fc FlowControl, buffer []pb.Message) []pb.Message {
+	if to == r.id {
+		// TODO(pav-kv): async log storage writes should go through this path.
+		return buffer
+	}
+	buf := msgBuf(buffer)
+	r.maybeSendAppendBuf(to, &buf)
+	return buf
 }
 
 // maybeSendAppend sends an append RPC with log entries (if any) that are not
@@ -603,8 +644,16 @@ func (r *raft) send(m pb.Message) {
 // if the follower log and commit index are up-to-date, the flow is paused (for
 // reasons like in-flight limits), or the message could not be constructed.
 func (r *raft) maybeSendAppend(to uint64) bool {
-	pr := r.trk.Progress[to]
+	if r.disableEagerAppends {
+		return false
+	}
+	return r.maybeSendAppendBuf(to, &r.msgs)
+}
 
+// maybeSendAppendBuf implements maybeSendAppend, and puts the messages into the
+// provided buffer.
+func (r *raft) maybeSendAppendBuf(to uint64, buf *msgBuf) bool {
+	pr := r.trk.Progress[to]
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
 	msgAppType := pr.ShouldSendMsgApp(last, commit)
 	if msgAppType == tracker.MsgAppNone {
@@ -616,19 +665,19 @@ func (r *raft) maybeSendAppend(to uint64) bool {
 	if err != nil {
 		// The log probably got truncated at >= pr.Next, so we can't catch up the
 		// follower log anymore. Send a snapshot instead.
-		return r.maybeSendSnapshot(to, pr)
+		return r.maybeSendSnapshot(to, pr, buf)
 	}
 
 	var entries []pb.Entry
 	if msgAppType == tracker.MsgAppWithEntries {
 		if entries, err = r.raftLog.entries(pr.Next, r.maxMsgSize); err != nil {
 			// Send a snapshot if we failed to get the entries.
-			return r.maybeSendSnapshot(to, pr)
+			return r.maybeSendSnapshot(to, pr, buf)
 		}
 	}
 
 	// Send the MsgApp, and update the progress accordingly.
-	r.send(pb.Message{
+	r.sendTo(buf, pb.Message{
 		To:      to,
 		Type:    pb.MsgApp,
 		Index:   prevIndex,
@@ -647,7 +696,7 @@ func (r *raft) maybeSendAppend(to uint64) bool {
 
 // maybeSendSnapshot fetches a snapshot from Storage, and sends it to the given
 // node. Returns true iff the snapshot message has been emitted successfully.
-func (r *raft) maybeSendSnapshot(to uint64, pr *tracker.Progress) bool {
+func (r *raft) maybeSendSnapshot(to uint64, pr *tracker.Progress, buf *msgBuf) bool {
 	if !pr.RecentActive {
 		r.logger.Debugf("ignore sending snapshot to %x since it is not recently active", to)
 		return false
@@ -670,7 +719,7 @@ func (r *raft) maybeSendSnapshot(to uint64, pr *tracker.Progress) bool {
 	pr.BecomeSnapshot(sindex)
 	r.logger.Debugf("%x paused sending replication messages to %x [%s]", r.id, to, pr)
 
-	r.send(pb.Message{To: to, Type: pb.MsgSnap, Snapshot: &snapshot})
+	r.sendTo(buf, pb.Message{To: to, Type: pb.MsgSnap, Snapshot: &snapshot})
 	return true
 }
 

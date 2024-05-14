@@ -125,6 +125,29 @@ func (rn *RawNode) Ready() Ready {
 	return rd
 }
 
+// FlowControl tunes the volume and types of messages that GetMessages call can
+// return to the application.
+type FlowControl struct {
+	// MaxMsgAppBytes limits the number of byte in append messages. Ignored if
+	// zero.
+	MaxMsgAppBytes uint64
+
+	// TODO(pav-kv): specify limits for local storage append messages.
+	// TODO(pav-kv): control the snapshots.
+}
+
+// MessagesTo returns outstanding messages to a particular node. It appends the
+// messages to the given slice, and returns the resulting slice.
+//
+// At the moment, MessagesTo only returns MsgApp or MsgSnap messages, and only
+// if Config.DisableEagerAppends is true. All other messages are communicated
+// via Ready calls.
+//
+// WARNING: this is an experimental API, use it with caution.
+func (rn *RawNode) MessagesTo(id uint64, fc FlowControl, buffer []pb.Message) []pb.Message {
+	return rn.raft.getMessages(id, fc, buffer)
+}
+
 // readyWithoutAccept returns a Ready. This is a read-only operation, i.e. there
 // is no obligation that the Ready must be handled.
 func (rn *RawNode) readyWithoutAccept() Ready {
