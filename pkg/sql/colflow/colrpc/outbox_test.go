@@ -35,6 +35,13 @@ func TestOutboxCatchesPanics(t *testing.T) {
 
 	ctx := context.Background()
 
+	// Use the release-build panic-catching behavior instead of the
+	// crdb_test-build behavior.
+	defer func(prev bool) {
+		colexecerror.TestingKnobs.ShouldCatchPanic = prev
+	}(colexecerror.TestingKnobs.ShouldCatchPanic)
+	colexecerror.TestingKnobs.ShouldCatchPanic = true
+
 	var (
 		input    = colexecop.NewBatchBuffer()
 		typs     = []*types.T{types.Int}

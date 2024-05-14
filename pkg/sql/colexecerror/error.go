@@ -17,11 +17,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
 
 const panicLineSubstring = "runtime/panic.go"
+
+// TestingKnobs are testing knobs for colexecerror.
+var TestingKnobs struct {
+	// ShouldCatchPanic, when true, reinstates the release-build behavior for
+	// CatchVectorizedRuntimeError, which is to catch all panics originating from
+	// within the vectorized execution engine, including runtime panics that are
+	// not wrapped in InternalError or ExpectedError. When false, under crdb_test
+	// builds, CatchVectorizedRuntimeError will not catch runtime panics that are
+	// not wrapped in InternalError or ExpectedError.
+	ShouldCatchPanic bool
+}
 
 // CatchVectorizedRuntimeError executes operation, catches a runtime error if
 // it is coming from the vectorized engine, and returns it. If an error not
@@ -164,6 +176,14 @@ const (
 //
 // panicEmittedFrom must be trimmed to not have any white spaces in the prefix.
 func shouldCatchPanic(panicEmittedFrom string) bool {
+	// In crdb_test builds we do not catch runtime panics even if they originate
+	// from within the vectorized execution engine. These panics probably
+	// represent bugs in vectorized execution, and we want them to fail loudly in
+	// tests, but not take down the node in production clusters.
+	if buildutil.CrdbTestBuild && !TestingKnobs.ShouldCatchPanic {
+		return false
+	}
+
 	const panicFromTheCatcherItselfPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexecerror.CatchVectorizedRuntimeError"
 	if strings.HasPrefix(panicEmittedFrom, panicFromTheCatcherItselfPrefix) {
 		// This panic came from the catcher itself, so we will propagate it
