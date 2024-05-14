@@ -106,12 +106,16 @@ func TestGranterBasic(t *testing.T) {
 		case "init-store-grant-coordinator":
 			clearRequesterAndCoord()
 			metrics := makeGrantCoordinatorMetrics()
-			workQueueMetrics := makeWorkQueueMetrics("", registry)
+			regularWorkQueueMetrics := makeWorkQueueMetrics("regular", registry)
+			elasticWorkQUeueMetrics := makeWorkQueueMetrics("elastic", registry)
+			workQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
+				regularWorkQueueMetrics, elasticWorkQUeueMetrics,
+			}
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
 					ambientCtx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
-					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
+					settings *cluster.Settings, metrics [admissionpb.NumWorkClasses]*WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
 					_ OnLogEntryAdmitted, _ *metric.Counter, _ *syncutil.Mutex,
 				) storeRequester {
 					makeTestRequester := func(wc admissionpb.WorkClass) *testRequester {
@@ -325,10 +329,10 @@ func TestStoreCoordinators(t *testing.T) {
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
 			ctx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
-			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, _ *TestingKnobs, _ OnLogEntryAdmitted,
+			settings *cluster.Settings, metrics [admissionpb.NumWorkClasses]*WorkQueueMetrics, opts workQueueOptions, _ *TestingKnobs, _ OnLogEntryAdmitted,
 			_ *metric.Counter, _ *syncutil.Mutex) storeRequester {
-			reqReg := makeRequesterFunc(ctx, KVWork, granters[admissionpb.RegularWorkClass], settings, metrics, opts)
-			reqElastic := makeRequesterFunc(ctx, KVWork, granters[admissionpb.ElasticWorkClass], settings, metrics, opts)
+			reqReg := makeRequesterFunc(ctx, KVWork, granters[admissionpb.RegularWorkClass], settings, metrics[admissionpb.RegularWorkClass], opts)
+			reqElastic := makeRequesterFunc(ctx, KVWork, granters[admissionpb.ElasticWorkClass], settings, metrics[admissionpb.ElasticWorkClass], opts)
 			str := &storeTestRequester{}
 			str.requesters[admissionpb.RegularWorkClass] = reqReg.(*testRequester)
 			str.requesters[admissionpb.RegularWorkClass].additionalID = "-regular"

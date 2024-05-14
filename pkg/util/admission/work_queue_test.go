@@ -526,7 +526,9 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 	}
 
 	registry := metric.NewRegistry()
-	metrics := makeWorkQueueMetrics("", registry)
+	regMetrics := makeWorkQueueMetrics("regular", registry)
+	elasticMetrics := makeWorkQueueMetrics("elastic", registry)
+	workQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{regMetrics, elasticMetrics}
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "store_work_queue"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -545,7 +547,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 						tg[admissionpb.RegularWorkClass],
 						tg[admissionpb.ElasticWorkClass],
 					},
-					st, metrics, opts, nil /* testing knobs */, &noopOnLogEntryAdmitted{}, metric.NewCounter(metric.Metadata{}), &mockCoordMu).(*StoreWorkQueue)
+					st, workQueueMetrics, opts, nil /* testing knobs */, &noopOnLogEntryAdmitted{}, metric.NewCounter(metric.Metadata{}), &mockCoordMu).(*StoreWorkQueue)
 				tg[admissionpb.RegularWorkClass].r = q.getRequesters()[admissionpb.RegularWorkClass]
 				tg[admissionpb.ElasticWorkClass].r = q.getRequesters()[admissionpb.ElasticWorkClass]
 				wrkMap.resetMap()
