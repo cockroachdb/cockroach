@@ -38,6 +38,10 @@ func TestCatchVectorizedRuntimeError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Use the release-build panic-catching behavior instead of the
+	// crdb_test-build behavior.
+	defer colexecerror.ProductionBehaviorForTests()()
+
 	// Setup multiple levels of catchers to ensure that the panic-catcher
 	// doesn't fool itself into catching panics that the inner catcher emitted.
 	require.Panics(t, func() {
@@ -76,6 +80,10 @@ func TestCatchVectorizedRuntimeError(t *testing.T) {
 func TestNonCatchablePanicIsNotCaught(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Use the release-build panic-catching behavior instead of the
+	// crdb_test-build behavior.
+	defer colexecerror.ProductionBehaviorForTests()()
 
 	require.Panics(t, func() {
 		require.NoError(t, colexecerror.CatchVectorizedRuntimeError(func() {
@@ -137,6 +145,10 @@ func BenchmarkCatchVectorizedRuntimeError(b *testing.B) {
 			},
 		},
 	}
+
+	// Use the release-build panic-catching behavior instead of the
+	// crdb_test-build behavior.
+	defer colexecerror.ProductionBehaviorForTests()()
 
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
@@ -209,6 +221,10 @@ func BenchmarkSQLCatchVectorizedRuntimeError(b *testing.B) {
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(b, base.TestServerArgs{SQLMemoryPoolSize: 10 << 30})
 	defer s.Stopper().Stop(ctx)
+
+	// Use the release-build panic-catching behavior instead of the
+	// crdb_test-build behavior.
+	defer colexecerror.ProductionBehaviorForTests()()
 
 	for _, parallelism := range []int{1, 20, 50} {
 		numConns := runtime.GOMAXPROCS(0) * parallelism
