@@ -595,6 +595,41 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	}
 }
 
+// TestAllocatorFullDiskError asserts that attempting to allocate a replica
+// when there are no available targets and at least one store is full, returns
+// an error.
+func TestAllocatorFullDiskError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper, g, sp, a, _ := CreateTestAllocator(ctx, 1, false /* deterministic */)
+	defer stopper.Stop(ctx)
+
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(
+		[]*roachpb.StoreDescriptor{
+			{
+				StoreID:  1,
+				Node:     roachpb.NodeDescriptor{NodeID: 1},
+				Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 0},
+			},
+		},
+		t,
+	)
+
+	result, _, err := a.AllocateVoter(
+		ctx,
+		sp,
+		emptySpanConfig(),
+		nil /* existingVoters */, nil /* existingNonVoters */, nil, /* replacing */
+		Dead,
+	)
+	require.Equal(t, result, roachpb.ReplicationTarget{})
+	expectedErr := &allocatorError{aliveStores: 1, fullStores: 1}
+	require.EqualError(t, err, expectedErr.Error())
+}
+
 func TestAllocatorAllocateVoterIOOverloadCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -8013,6 +8048,18 @@ func TestAllocatorError(t *testing.T) {
 		{allocatorError{constraints: constraint, existingVoterCount: 1, aliveStores: 2, throttledStores: 1},
 			"0 of 2 live stores are able to take a new replica for the range" +
 				" (1 throttled, 1 already has a voter, 0 already have a non-voter);" +
+				" replicas must match constraints [{+one}];" +
+				" voting replicas must match voter_constraints []",
+		},
+		{allocatorError{constraints: constraint, existingVoterCount: 1, aliveStores: 2, fullStores: 1},
+			"0 of 2 live stores are able to take a new replica for the range" +
+				" (1 full disk, 1 already has a voter, 0 already have a non-voter);" +
+				" replicas must match constraints [{+one}];" +
+				" voting replicas must match voter_constraints []",
+		},
+		{allocatorError{constraints: constraint, existingVoterCount: 1, aliveStores: 3, throttledStores: 1, fullStores: 1},
+			"0 of 3 live stores are able to take a new replica for the range" +
+				" (1 throttled, 1 full disk, 1 already has a voter, 0 already have a non-voter);" +
 				" replicas must match constraints [{+one}];" +
 				" voting replicas must match voter_constraints []",
 		},
