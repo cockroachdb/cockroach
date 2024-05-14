@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
@@ -22,8 +23,9 @@ import (
 )
 
 var (
+	userHome, _ = os.UserHomeDir()
 	// promCredFile is where the prom helper credentials are stored
-	promCredFile = os.TempDir() + "promhelpers-secrets"
+	promCredFile = filepath.Join(userHome, ".roachprod", "promhelper-secrets")
 )
 
 // FetchedFrom indicates where the credentials have been fetched from.
