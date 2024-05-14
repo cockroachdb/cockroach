@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
 )
 
@@ -363,21 +362,29 @@ func (r *testRunner) Run(
 		if err := r.stopper.RunAsyncTask(ctx, "worker", func(ctx context.Context) {
 			defer wg.Done()
 
-			err := r.runWorker(
-				ctx, fmt.Sprintf("w%d", i) /* name */, r.work, qp,
+			name := fmt.Sprintf("w%d", i)
+			formattedPrefix := fmt.Sprintf("[%s] ", name)
+			childLogger, err := l.ChildLogger(name, logger.LogPrefix(formattedPrefix))
+			if err != nil {
+				l.ErrorfCtx(ctx, "unable to create logger %s: %s", name, err)
+				childLogger = l
+			}
+
+			err = r.runWorker(
+				ctx, name, r.work, qp,
 				r.stopper.ShouldQuiesce(),
 				clusterFactory,
 				clustersOpt,
 				lopt,
 				topt,
-				l,
+				childLogger,
 				n*count,
 			)
 
 			if err != nil {
 				// A worker returned an error. Let's shut down.
 				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %v", i, err)
-				shout(ctx, l, lopt.stdout, msg)
+				shout(ctx, childLogger, lopt.stdout, msg)
 				errs.AddErr(err)
 				// Stop the stopper. This will cause all workers to not pick up more
 				// tests after finishing the currently running one. We add one to the
@@ -557,7 +564,6 @@ func (r *testRunner) runWorker(
 ) error {
 	stdout := lopt.stdout
 
-	ctx = logtags.AddTag(ctx, name, nil /* value */)
 	wStatus := r.addWorker(ctx, name)
 	defer func() {
 		r.removeWorker(ctx, name)

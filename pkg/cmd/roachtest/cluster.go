@@ -1927,7 +1927,7 @@ func (c *clusterImpl) Get(
 	return errors.Wrap(roachprod.Get(ctx, l, c.MakeNodes(opts...), src, dest), "cluster.Get")
 }
 
-// Put a string into the specified file on the remote(s).
+// PutString into the specified file on the remote(s).
 func (c *clusterImpl) PutString(
 	ctx context.Context, content, dest string, mode os.FileMode, nodes ...option.Option,
 ) error {
