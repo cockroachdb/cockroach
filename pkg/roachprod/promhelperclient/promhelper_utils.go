@@ -20,6 +20,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"google.golang.org/api/option"
 )
 
 var (
@@ -35,7 +36,7 @@ type FetchedFrom string
 const (
 	Env   FetchedFrom = "Env"   // fetched from environment
 	File  FetchedFrom = "File"  // fetched from the promCredFile
-	Store FetchedFrom = "Store" // fetched from the secrets manager
+	Store FetchedFrom = "Store" // fetched from the store
 
 	// secretsDelimiter is used as a delimiter between service account audience and JSON when stored in
 	// promCredFile or cloud storage
@@ -62,7 +63,7 @@ func SetPromHelperCredsEnv(
 ) (FetchedFrom, error) {
 	creds := ""
 	fetchedFrom := Env
-	if !forceFetch { // bypass environment anf creds file if forceFetch is false
+	if !forceFetch { // bypass environment and creds file if forceFetch is false
 		// check if environment is set
 		audience := os.Getenv(ServiceAccountAudience)
 		saJson := os.Getenv(ServiceAccountJson)
@@ -79,9 +80,9 @@ func SetPromHelperCredsEnv(
 		}
 	}
 	if creds == "" {
-		// creds == "" means (env is not set and the file does not have the creds) or forFetch is true
-		l.Printf("creds need to be fetched from secret manager.")
-		client, err := storage.NewClient(ctx)
+		// creds == "" means (env is not set and the file does not have the creds) or forceFetch is true
+		l.Printf("creds need to be fetched from store.")
+		client, err := storage.NewClient(ctx, option.WithScopes(storage.ScopeReadOnly))
 		if err != nil {
 			return fetchedFrom, err
 		}
