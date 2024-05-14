@@ -2689,4 +2689,42 @@ func TestLint(t *testing.T) {
 			}
 		}
 	})
+
+	// This is a weird restriction we impose so that lints don't
+	// accidentally get skipped on some packages due to #124154.
+	// Namely, we use the string `external/` to filter out third-party
+	// code from lint analysis, and that check would exclude first-party
+	// packages if any ended in the word "external".
+	t.Run("TestExternalPackageName", func(t *testing.T) {
+		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*external*")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		filters := []stream.Filter{
+			filter,
+			stream.Grep(`\.go$`),
+			stream.Map(filepath.Dir),
+			stream.Uniq(),
+		}
+		if err := stream.ForEach(
+			stream.Sequence(filters...), func(pkgName string) {
+				pkgBase := filepath.Base(pkgName)
+				if strings.HasSuffix(pkgBase, "external") {
+					t.Errorf("package name cannot end in the string 'external': found package pkg/%s\n", pkgName)
+				}
+			}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
 }
