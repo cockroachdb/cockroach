@@ -559,9 +559,6 @@ var updateTargetsCmd = &cobra.Command{
 The "start" command updates the prometheus target configuration every time. But, in case of any  
 failure, this command can be used to update the configurations. 
 
-The --args and --env flags can be used to pass arbitrary command line flags and
-environment variables to the cockroach process.
-` + tagHelp + `
 The default prometheus url is https://grafana.testeng.crdb.io/. This can be overwritten by using the
 environment variable COCKROACH_PROM_HOST_URL
 
@@ -570,9 +567,7 @@ Note that if the cluster is started in insecure mode, set the insecure mode here
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		clusterSettingsOpts := []install.ClusterSettingOption{
-			install.TagOption(tag),
 			install.SecureOption(isSecure),
-			install.EnvOption(nodeEnv),
 		}
 		return roachprod.UpdateTargets(context.Background(), config.Logger, args[0], clusterSettingsOpts...)
 	}),
