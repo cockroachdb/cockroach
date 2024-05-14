@@ -1103,24 +1103,22 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 	},
 }
 
-/**
- * NB: The following system tables explicitly forbidden:
- *     - system.users: avoid downloading passwords.
- *     - system.web_sessions: avoid downloading active session tokens.
- *     - system.join_tokens: avoid downloading secret join keys.
- *     - system.comments: avoid downloading noise from SQL schema.
- *     - system.ui: avoid downloading noise from UI customizations.
- *     - system.zones: the contents of crdb_internal.zones is easier to use.
- *     - system.statement_bundle_chunks: avoid downloading a large table that's
- *    hard to interpret currently.
- *     - system.statement_statistics: historical data, usually too much to
- *    download.
- *     - system.transaction_statistics: ditto
- *  - system.statement_activity: ditto
- *  - system.transaction_activity: ditto
- *
- * A test makes this assertion in pkg/cli/zip_table_registry.go:TestNoForbiddenSystemTablesInDebugZip
- */
+// NB: The following system tables explicitly forbidden:
+//   - system.users: avoid downloading passwords.
+//   - system.web_sessions: avoid downloading active session tokens.
+//   - system.join_tokens: avoid downloading secret join keys.
+//   - system.comments: avoid downloading noise from SQL schema.
+//   - system.ui: avoid downloading noise from UI customizations.
+//   - system.zones: the contents of crdb_internal.zones is easier to use.
+//   - system.statement_bundle_chunks: avoid downloading a large table that's
+//     hard to interpret currently.
+//   - system.statement_statistics: historical data, usually too much to
+//     download.
+//   - system.transaction_statistics: ditto
+//   - system.statement_activity: ditto
+//   - system.transaction_activity: ditto
+//
+// A test makes this assertion in pkg/cli/zip_table_registry.go:TestNoForbiddenSystemTablesInDebugZip
 var zipSystemTables = DebugZipTableRegistry{
 	"system.database_role_settings": {
 		nonSensitiveCols: NonSensitiveColumns{
@@ -1130,13 +1128,14 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.descriptor": {
+		// For readability, we unmarsal the descriptor into JSON format.
 		customQueryUnredacted: `SELECT
 				id,
-				descriptor
+        crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS descriptor
 			FROM system.descriptor`,
 		customQueryRedacted: `SELECT
 				id,
-				crdb_internal.redact_descriptor(descriptor) AS descriptor
+        crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', crdb_internal.redact_descriptor(descriptor), false) AS descriptor
 			FROM system.descriptor`,
 	},
 	"system.eventlog": {
@@ -1347,17 +1346,26 @@ var zipSystemTables = DebugZipTableRegistry{
     	)`,
 	},
 	"system.span_configurations": {
+		// For readability, we decode the config into JSON format and pretty print the start and end keys.
 		nonSensitiveCols: NonSensitiveColumns{
-			"config",
+			"crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config) as config",
 			// Boundary keys for span configs, which are derived from zone configs, are typically on
 			// metadata object boundaries (database, table, or index), and not arbitrary range boundaries
 			// and therefore do not contain sensitive information. Therefore they can remain unredacted.
-			"start_key",
+			"crdb_internal.pretty_key(start_key, 0) as start_key",
 			// Boundary keys for span configs, which are derived from zone configs, are typically on
 			// metadata object boundaries (database, table, or index), and not arbitrary range boundaries
 			// and therefore do not contain sensitive information. Therefore they can remain unredacted.
-			"end_key",
+			"crdb_internal.pretty_key(end_key, 0) as end_key",
 		},
+		// Since we are decoding the columns while selecting them, we also need to
+		// provide a custom unredacted query to make sure it doesn't default to
+		// "TABLE system.span_configurations" when `--redact` flag is not set.
+		customQueryUnredacted: `SELECT
+    crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config) as config,
+    crdb_internal.pretty_key(start_key, 0) as start_key,
+    crdb_internal.pretty_key(end_key, 0) as end_key
+		FROM system.span_configurations`,
 	},
 	"system.sql_instances": {
 		// Some fields are marked as `<redacted>` because we want to redact hostname, ip address and other sensitive fields
