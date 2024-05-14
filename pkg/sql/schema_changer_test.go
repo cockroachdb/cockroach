@@ -7839,11 +7839,14 @@ func TestLeaseTimeoutWithConcurrentTransactions(t *testing.T) {
 	sqlRunner.Exec(t, `CREATE TABLE RIDES (my_int INT);`)
 
 	txn1 := sqlRunner.Begin(t)
-	txn1.Exec(`SELECT * FROM PROMO_CODES;`)
+	_, err := txn1.Exec(`SELECT * FROM PROMO_CODES;`)
+	require.NoError(t, err)
 
 	txn2 := sqlRunner.Begin(t)
-	txn2.Exec(`GRANT ALL ON TABLE PROMO_CODES TO ROACHMIN;`)
-	txn2.Exec(`GRANT ALL ON TABLE RIDES TO ROACHMIN;`)
+	_, err = txn2.Exec(`GRANT ALL ON TABLE PROMO_CODES TO ROACHMIN;`)
+	require.NoError(t, err)
+	_, err = txn2.Exec(`GRANT ALL ON TABLE RIDES TO ROACHMIN;`)
+	require.NoError(t, err)
 
 	blocker := make(chan struct{})
 	group := ctxgroup.WithContext(ctx)
@@ -7855,7 +7858,7 @@ func TestLeaseTimeoutWithConcurrentTransactions(t *testing.T) {
 	})
 
 	<-blocker
-	_, err := txn1.Exec("INSERT INTO promo_codes values (1)")
+	_, err = txn1.Exec("INSERT INTO promo_codes values (1)")
 	require.NoError(t, err)
 
 	// txn1.commit() completes with an error due to lease timeout on txn2.commit().
