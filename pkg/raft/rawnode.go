@@ -125,6 +125,27 @@ func (rn *RawNode) Ready() Ready {
 	return rd
 }
 
+// SendAppend a log replication messages to a particular node. The message
+// will be available via next Ready.
+//
+// This method is used when Config.EnableLazyAppends is true. Typically, it
+// should be called before processing Ready, for all node IDs in StateReplicate
+// which have pending replication work.
+//
+// TODO(pav-kv): this should take and propagate maxBytes down the stack, for
+// integration with Admission Control. AC will be calling this method under two
+// conditions: the "send queue" is not empty (see EntriesReady), and there are
+// some spare send tokens (hence the maxBytes argument).
+//
+// TODO(pav-kv): as an intermediate step, we should pull Progress.Inflights out
+// of internals. This today plays the role of the send tokens tracker.
+func (rn *RawNode) SendAppend(to uint64) bool {
+	if !rn.raft.enableLazyAppends || to == rn.raft.id {
+		return false
+	}
+	return rn.raft.maybeSendAppendImpl(to, false /* lazy */)
+}
+
 // readyWithoutAccept returns a Ready. This is a read-only operation, i.e. there
 // is no obligation that the Ready must be handled.
 func (rn *RawNode) readyWithoutAccept() Ready {
