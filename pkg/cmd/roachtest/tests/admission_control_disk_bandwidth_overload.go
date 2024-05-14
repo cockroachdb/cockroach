@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
-	"github.com/stretchr/testify/require"
 )
 
 // This test causes LSM overload induced by saturating disk bandwidth limits.
@@ -58,12 +58,20 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 			}
 
-			promCfg := &prometheus.Config{}
-			promCfg.WithPrometheusNode(c.Node(promNode).InstallNodes()[0]).
-				WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
-				WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
-				WithGrafanaDashboard("https://go.crdb.dev/p/index-admission-control-grafana")
-			require.NoError(t, c.StartGrafana(ctx, t.L(), promCfg))
+			t.Status(fmt.Sprintf("setting up prometheus/grafana (<%s)", 2*time.Minute))
+			{
+				promCfg := &prometheus.Config{}
+				promCfg.WithPrometheusNode(c.Node(promNode).InstallNodes()[0])
+				promCfg.WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
+				promCfg.WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
+				promCfg.ScrapeConfigs = append(promCfg.ScrapeConfigs, prometheus.MakeWorkloadScrapeConfig("workload",
+					"/", makeWorkloadScrapeNodes(c.Node(promNode).InstallNodes()[0], []workloadInstance{
+						{nodes: c.Node(promNode)},
+					})))
+				promCfg.WithGrafanaDashboardJSON(grafana.SnapshotAdmissionControlGrafanaJSON)
+				_, cleanupFunc := setupPrometheusForRoachtest(ctx, t, c, promCfg, nil)
+				defer cleanupFunc()
+			}
 
 			// TODO(aaditya): This function shares a lot of logic with roachtestutil.DiskStaller. Consider merging the two.
 			setBandwidthLimit := func(nodes option.NodeListOption, rw string, bw int, max bool) error {
@@ -109,38 +117,26 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), crdbNodes)
 			defer db.Close()
 
-			//db := c.Conn(ctx, t.L(), crdbNodes)
-			//defer db.Close()
-			//
-			////if _, err := db.ExecContext(
-			////	ctx, "SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '128MiB'"); err != nil {
-			////	t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
-			////}
+			if _, err := db.ExecContext(
+				ctx, "SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '75MiB'"); err != nil {
+				t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
+			}
 
 			duration := 30 * time.Minute
 			t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 			m.Go(func(ctx context.Context) error {
-				// Regular traffic: consumes 40-50% of the disk bandwidth (note
-				// the low concurrency=2, since regular traffic does not cause
-				// any disk bandwidth controls to be activated -- so we've
-				// explicitly set it up to leave significant unused bandwidth).
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
 				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=2 " +
-					"--splits=1000 --read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 " +
+					"--splits=1000 --read-percent=50 --min-block-bytes=4096 --max-block-bytes=4096 " +
 					"--txn-qos='regular' --tolerate-errors" + dur + url
 				c.Run(ctx, option.WithNodes(c.Node(regularNode)), cmd)
 				return nil
 			})
 
 			m.Go(func(ctx context.Context) error {
-				// Then add elastic traffic with a high concurrency=1024 (this
-				// is more than enough to blow past the provisioned limit if
-				// there was no disk bandwidth control). The throughput of
-				// regular traffic stays stable.
 				time.Sleep(5 * time.Minute)
-
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
 				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=1024 " +
