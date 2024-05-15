@@ -500,7 +500,6 @@ RESET testing_optimizer_disable_rule_probability
 # table when disallow_full_table_scans is set (#122708).
 statement ok
 SET disallow_full_table_scans = true;
-SET optimizer_apply_full_scan_penalty_to_virtual_tables = false;
 
 # Don't penalize for each full scan, so we use hash joins.
 query T
@@ -529,28 +528,4 @@ vectorized: true
               table: pg_class@primary
 
 statement ok
-SET optimizer_apply_full_scan_penalty_to_virtual_tables = true;
-
-# Penalize for each full scan, so we use virtual table lookup joins.
-query T
-EXPLAIN SELECT i.relname, ix.indisprimary FROM pg_class AS t, pg_class AS i, pg_index AS ix
-        WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND t.relkind = 'r';
-----
-distribution: local
-vectorized: true
-·
-• virtual table lookup join
-│ table: pg_class@pg_class_oid_idx
-│ equality: (indrelid) = (oid)
-│ pred: relkind = 'r'
-│
-└── • virtual table lookup join
-    │ table: pg_class@pg_class_oid_idx
-    │ equality: (indexrelid) = (oid)
-    │
-    └── • virtual table
-          table: pg_index@primary
-
-statement ok
 RESET disallow_full_table_scans;
-RESET optimizer_apply_full_scan_penalty_to_virtual_tables;
