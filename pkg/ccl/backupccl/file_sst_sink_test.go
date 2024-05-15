@@ -148,7 +148,8 @@ func TestFileSSTSinkWrite(t *testing.T) {
 		//
 		// TODO (msbutler): we currently don't test expected error handling. If this
 		// is non-empty, we just skip the test.
-		errorExplanation string
+		errorExplanation  string
+		noSSTSizeOverride bool
 	}
 
 	for _, tt := range []testCase{{name: "out-of-order-key-boundary",
@@ -181,7 +182,6 @@ func TestFileSSTSinkWrite(t *testing.T) {
 		{
 			name: "prefix-differ",
 			exportSpans: []exportedSpan{
-				// Note the resume key contains a column family because
 				newRawExportedSpanBuilder(s2k0("2/a"), s2k0("2/c"), s2k0("2/c")).withKVs([]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/c", timestamp: 10}}).build(),
 				newExportedSpanBuilder("2/c", "2/d").withKVs([]kvAndTS{{key: "2/c", timestamp: 9}, {key: "2/d", timestamp: 10}}).build(),
 				newExportedSpanBuilder("3/c", "3/e").withKVs([]kvAndTS{{key: "3/c", timestamp: 9}, {key: "3/d", timestamp: 10}}).build(),
@@ -342,6 +342,37 @@ func TestFileSSTSinkWrite(t *testing.T) {
 			},
 			unflushedSpans: []roachpb.Spans{},
 		},
+		{
+			// If a logical backup file is sufficiently large, the file may be cut
+			// even if the next span's start key matches the file's end key.
+			name: "file-size-cut",
+			exportSpans: []exportedSpan{
+				newExportedSpanBuilder("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10, value: make([]byte, 64<<20)}, {key: "b", timestamp: 10}}).build(),
+				newExportedSpanBuilder("c", "f").withKVs([]kvAndTS{{key: "c", timestamp: 10}, {key: "e", timestamp: 10}}).build(),
+			},
+			flushedSpans: []roachpb.Spans{},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}, {Key: s2k0("c"), EndKey: s2k0("f")}},
+			},
+			noSSTSizeOverride: true,
+		},
+		{
+			// No file cut can occur between the two column families of the same row,
+			// even if the file is sufficiently large to get cut.
+			name: "no-file-cut-mid-col-family",
+			exportSpans: []exportedSpan{
+				newRawExportedSpanBuilder(s2kWithColFamily("c", 0), s2kWithColFamily("c", 1), s2kWithColFamily("c", 1)).withKVs([]kvAndTS{
+					{key: "c", timestamp: 10, value: make([]byte, 65<<20)}}).build(),
+				newRawExportedSpanBuilder(s2kWithColFamily("c", 1), s2kWithColFamily("c", 2), s2kWithColFamily("c", 2)).withKVs([]kvAndTS{
+					{key: "c", timestamp: 10, value: make([]byte, 20<<20)}}).buildWithEncoding(func(stingedKey string) roachpb.Key { return s2kWithColFamily(stingedKey, 1) }),
+			},
+			flushedSpans: []roachpb.Spans{},
+			unflushedSpans: []roachpb.Spans{
+				// The export spans, even though they are very large, must merge because
+				// the first one is split mid key.
+				{{Key: s2kWithColFamily("c", 0), EndKey: s2kWithColFamily("c", 2)}},
+			},
+		},
 	} {
 		for _, elide := range []execinfrapb.ElidePrefix{execinfrapb.ElidePrefix_None, execinfrapb.ElidePrefix_TenantAndTable} {
 			t.Run(fmt.Sprintf("%s/elide=%s", tt.name, elide), func(t *testing.T) {
@@ -349,7 +380,9 @@ func TestFileSSTSinkWrite(t *testing.T) {
 					return
 				}
 				st := cluster.MakeTestingClusterSettings()
-				targetFileSize.Override(ctx, &st.SV, 10<<10)
+				if !tt.noSSTSizeOverride {
+					targetFileSize.Override(ctx, &st.SV, 10<<10)
+				}
 
 				sink, store := fileSSTSinkTestSetUp(ctx, t, st)
 				defer func() {
@@ -930,6 +963,10 @@ func newRawExportedSpanBuilder(spanStart, spanEnd, resumeKey roachpb.Key) *expor
 
 func (b *exportedSpanBuilder) withKVs(keyValues []kvAndTS) *exportedSpanBuilder {
 	b.keyValues = keyValues
+	for _, kv := range keyValues {
+		b.es.metadata.EntryCounts.DataSize += int64(len(kv.key))
+		b.es.metadata.EntryCounts.DataSize += int64(len(kv.value))
+	}
 	return b
 }
 
