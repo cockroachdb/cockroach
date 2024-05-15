@@ -749,8 +749,8 @@ func TestLogEntryPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = f.Close() }()
-	defer func(prevStderr *os.File) { OrigStderr = prevStderr }(OrigStderr)
-	OrigStderr = f
+	defer func(prevStderrFile *os.File) { OrigStderr.SwapFile(prevStderrFile) }(OrigStderr.File())
+	OrigStderr.SwapFile(f)
 
 	const specialMessage = `CAPTAIN KIRK`
 

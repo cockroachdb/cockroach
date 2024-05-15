@@ -41,9 +41,9 @@ func Example_shout_before_log() {
 
 	// Redirect stderr to stdout so the reference output checking below
 	// has something to work with.
-	origStderr := log.OrigStderr
-	log.OrigStderr = os.Stdout
-	defer func() { log.OrigStderr = origStderr }()
+	origStderrFile := log.OrigStderr.File()
+	log.OrigStderr.SwapFile(os.Stdout)
+	defer func() { log.OrigStderr.SwapFile(origStderrFile) }()
 
 	log.Shout(context.Background(), severity.INFO, "hello world")
 

@@ -52,11 +52,11 @@ type TestCLI struct {
 	// Insecure is a copy of the insecure mode parameter.
 	Insecure bool
 
-	Server      serverutils.TestServerInterface
-	tenant      serverutils.ApplicationLayerInterface
-	certsDir    string
-	cleanupFunc func() error
-	prevStderr  *os.File
+	Server         serverutils.TestServerInterface
+	tenant         serverutils.ApplicationLayerInterface
+	certsDir       string
+	cleanupFunc    func() error
+	prevStderrFile *os.File
 
 	// t is the testing.T instance used for this test.
 	// Example_xxx tests may have this set to nil.
@@ -211,8 +211,8 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 	// Ensure that CLI error messages and anything meant for the
 	// original stderr is redirected to stdout, where it can be
 	// captured.
-	c.prevStderr = stderr
-	stderr = os.Stdout
+	c.prevStderrFile = stderr.File()
+	stderr.SwapFile(os.Stdout)
 
 	return c
 }
@@ -274,7 +274,7 @@ func (c *TestCLI) Cleanup() {
 	}()
 
 	// Restore stderr.
-	stderr = c.prevStderr
+	stderr.SwapFile(c.prevStderrFile)
 
 	log.Info(context.Background(), "stopping server and cleaning up CLI test")
 
@@ -320,7 +320,7 @@ func captureOutput(f func()) (out string, err error) {
 		return "", err
 	}
 	os.Stdout = w
-	stderr = w
+	stderr = log.NewThreadSafeStderr(w)
 
 	// Send all bytes from piped stdout through the output channel.
 	type captureResult struct {

@@ -118,7 +118,7 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 	default:
 		return errors.New("unknown --trace value")
 	}
-	var traceFile *os.File
+	var traceFile io.Writer
 	if enableTracing {
 		fileName := debugSendKVBatchContext.traceFile
 		if fileName == "" {
@@ -128,7 +128,7 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 			traceFile = stderr
 		} else {
 			var err error
-			traceFile, err = os.OpenFile(
+			file, err := os.OpenFile(
 				fileName,
 				os.O_TRUNC|os.O_CREATE|os.O_WRONLY,
 				// Note: traces can contain sensitive information so we ensure
@@ -138,10 +138,11 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			defer func() {
-				if err := traceFile.Close(); err != nil {
+				if err := file.Close(); err != nil {
 					fmt.Fprintf(stderr, "warning: error while closing trace output: %v\n", err)
 				}
 			}()
+			traceFile = file
 		}
 	}
 
