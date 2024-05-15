@@ -32,6 +32,7 @@ import (
 type partitionedStreamClient struct {
 	urlPlaceholder url.URL
 	pgxConfig      *pgx.ConnConfig
+	compressed     bool
 
 	mu struct {
 		syncutil.Mutex
@@ -57,6 +58,7 @@ func NewPartitionedStreamClient(
 	client := partitionedStreamClient{
 		urlPlaceholder: *remote,
 		pgxConfig:      config,
+		compressed:     options.compressed,
 	}
 	client.mu.activeSubscriptions = make(map[*partitionedStreamSubscription]struct{})
 	client.mu.srcConn = conn
@@ -230,6 +232,7 @@ func (p *partitionedStreamClient) Subscribe(
 		})
 	}
 	sps.ConsumerID = consumerID
+	sps.Compressed = true
 
 	specBytes, err := protoutil.Marshal(&sps)
 	if err != nil {
@@ -242,6 +245,7 @@ func (p *partitionedStreamClient) Subscribe(
 		specBytes:     specBytes,
 		streamID:      streamID,
 		closeChan:     make(chan struct{}),
+		compressed:    sps.Compressed,
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -301,6 +305,8 @@ type partitionedStreamSubscription struct {
 	// Channel to send signal to close the subscription.
 	closeChan chan struct{}
 
+	compressed bool
+
 	specBytes []byte
 	streamID  streampb.StreamID
 }
@@ -335,7 +341,7 @@ func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) error {
 	}
 	defer rows.Close()
 
-	p.err = subscribeInternal(ctx, rows, p.eventsChan, p.closeChan)
+	p.err = subscribeInternal(ctx, rows, p.eventsChan, p.closeChan, p.compressed)
 	return p.err
 }
 
