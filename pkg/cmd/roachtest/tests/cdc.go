@@ -812,7 +812,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	m.Go(func(ctx context.Context) error {
 		defer workloadCancel()
 		defer func() { close(messageBuf) }()
-		v := cdctest.MakeCountValidator(cdctest.NoOpValidator)
+		v := cdctest.NewCountValidator(cdctest.NoOpValidator)
 		for {
 			m := tc.Next(ctx)
 			if m == nil {
@@ -863,7 +863,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 			fprintV,
 			baV,
 		}
-		v := cdctest.MakeCountValidator(validators)
+		v := cdctest.NewCountValidator(validators)
 
 		timeSpentValidatingRows := 0 * time.Second
 		numRowsValidated := 0

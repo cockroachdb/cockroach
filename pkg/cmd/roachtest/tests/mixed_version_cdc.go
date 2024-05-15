@@ -241,7 +241,7 @@ func (cmvt *cdcMixedVersionTester) setupValidator(
 		fprintV,
 	}
 
-	cmvt.validator = cdctest.MakeCountValidator(validators)
+	cmvt.validator = cdctest.NewCountValidator(validators)
 	cmvt.fprintV = fprintV
 	return nil
 }
