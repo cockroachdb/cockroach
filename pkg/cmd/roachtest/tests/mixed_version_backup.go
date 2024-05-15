@@ -2273,13 +2273,20 @@ func (bc *backupCollection) verifyBackupCollection(
 	if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
 		return err
 	}
-
-	restoredContents, err := d.computeTableContents(
-		ctx, l, rng, restoredTables, bc.contents, "", /* timestamp */
-	)
-
-	if err != nil {
-		return fmt.Errorf("backup %s: error loading restored contents: %w", bc.name, err)
+	var restoredContents []tableContents
+	var err error
+	if d.testUtils.onlineRestore {
+		restoredContents, err = bc.verifyOnlineRestore(ctx, l, rng, d, restoredTables, internalSystemJobs)
+		if err != nil {
+			return fmt.Errorf("backup %s: error verifying online restore: %w", bc.name, err)
+		}
+	} else {
+		restoredContents, err = d.computeTableContents(
+			ctx, l, rng, restoredTables, bc.contents, "", /* timestamp */
+		)
+		if err != nil {
+			return fmt.Errorf("backup %s: error loading restored contents: %w", bc.name, err)
+		}
 	}
 
 	for j, contents := range bc.contents {
@@ -2297,6 +2304,48 @@ func (bc *backupCollection) verifyBackupCollection(
 
 	l.Printf("%s: OK", bc.name)
 	return nil
+}
+
+func (bc *backupCollection) verifyOnlineRestore(
+	ctx context.Context,
+	l *logger.Logger,
+	rng *rand.Rand,
+	d *BackupRestoreTestDriver,
+	restoredTables []string,
+	internalSystemJobs bool,
+) ([]tableContents, error) {
+	var downloadJobID int
+	if err := d.testUtils.QueryRow(ctx, rng, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`).Scan(&downloadJobID); err != nil {
+		return nil, err
+	}
+
+	if rng.Intn(3) == 0 {
+		// Sometimes wait for the download job to complete before fingerprinting.
+		if err := d.testUtils.waitForJobSuccess(ctx, l, rng, downloadJobID, internalSystemJobs); err != nil {
+			return nil, err
+		}
+	}
+	restoredContents, err := d.computeTableContents(
+		ctx, l, rng, restoredTables, bc.contents, "", /* timestamp */
+	)
+	if err != nil {
+		return nil, fmt.Errorf("backup %s: error loading online restored contents: %w", bc.name, err)
+	}
+
+	// Verify the download job did indeed download all the data.
+	if err := d.testUtils.waitForJobSuccess(ctx, l, rng, downloadJobID, internalSystemJobs); err != nil {
+		return nil, err
+	}
+	conn := d.testUtils.cluster.Conn(ctx, l, d.roachNodes[0])
+	defer conn.Close()
+	var externalBytes int
+	if err := conn.QueryRowContext(ctx, jobutils.GetExternalBytesForConnectedTenant).Scan(&externalBytes); err != nil {
+		return nil, fmt.Errorf("could not get external bytes: %w", err)
+	}
+	if externalBytes != 0 {
+		return nil, fmt.Errorf("download job %d did not download all data", downloadJobID)
+	}
+	return restoredContents, nil
 }
 
 // resetCluster wipes the entire cluster and starts it again with the
