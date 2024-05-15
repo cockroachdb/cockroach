@@ -272,6 +272,9 @@ func (m *MultiQueue) QueueLen() int {
 	return m.queueLenLocked()
 }
 
+// TODO(lyang24): queueLenLocked method returns the length of the queue as if
+// one more tasks are added. We should look into renaming the method to closer
+// to its semantics.
 func (m *MultiQueue) queueLenLocked() int {
 	// TODO(lyang24): rename field remainingRuns to runningTasks
 	// and make sure it increment on every execution.
@@ -281,10 +284,6 @@ func (m *MultiQueue) queueLenLocked() int {
 	}
 	// Start counting from 1 since we will be the first in the queue if it gets added.
 	count := 1
-	// Start with 0 if queue is frozen.
-	if m.concurrencyLimit == 0 {
-		count = 0
-	}
 	for i := 0; i < len(m.outstanding); i++ {
 		count += len(m.outstanding[i])
 	}
