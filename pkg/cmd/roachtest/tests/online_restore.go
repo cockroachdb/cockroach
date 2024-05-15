@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -78,6 +79,20 @@ func registerOnlineRestorePerf(r registry.Registry) {
 			suites:                 registry.Suites(registry.Nightly),
 			restoreUptoIncremental: 1,
 			skip:                   "fails because of #118283",
+		},
+		{
+			// 400GB tpcc Online Restore
+			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 1000 /* MB/s */, workloadNode: true}),
+			backup: makeRestoringBackupSpecs(
+				backupSpecs{
+					nonRevisionHistory: true,
+					cloud:              spec.GCE,
+					version:            fixtureFromMasterVersion,
+					workload:           tpccRestore{tpccRestoreOptions{warehouses: 7000, waitFraction: 0, workers: 100, maxRate: 300}},
+					numBackupsInChain:  4}),
+			timeout:                1 * time.Hour,
+			suites:                 registry.Suites(registry.Nightly),
+			restoreUptoIncremental: 1,
 		},
 		{
 			// 8TB tpce Online Restore

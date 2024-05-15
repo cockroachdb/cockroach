@@ -820,6 +820,7 @@ type tpccRestoreOptions struct {
 	warehouses     int
 	workers        int
 	maxOps         int
+	maxRate        int
 	waitFraction   float64
 	queryTraceFile string
 	seed           uint64
@@ -838,6 +839,7 @@ func (tpcc tpccRestore) init(
 		MaybeFlag(tpcc.opts.warehouses > 0, "warehouses", tpcc.opts.warehouses).
 		MaybeFlag(tpcc.opts.seed != 0, "seed", tpcc.opts.seed).
 		MaybeFlag(tpcc.opts.fakeTime != 0, "fake-time", tpcc.opts.fakeTime).
+		MaybeFlag(tpcc.opts.maxRate != 0, "max-rate", tpcc.opts.maxRate).
 		Arg(fmt.Sprintf("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1]))
 	c.Run(ctx, option.WithNodes([]int{sp.getWorkloadNode()}), cmd.String())
 }
