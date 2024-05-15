@@ -2885,7 +2885,6 @@ func (ex *connExecutor) execCopyOut(
 			ex.implicitTxn(),
 			ex.planner.CurrentDatabase(),
 		)
-		var stats topLevelQueryStats
 		ex.planner.maybeLogStatement(
 			ctx,
 			ex.executorType,
@@ -2899,7 +2898,6 @@ func (ex *connExecutor) execCopyOut(
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
 			stmtFingerprintID,
-			&stats,
 			ex.statsCollector,
 			ex.extraTxnState.shouldLogToTelemetry)
 	}()
@@ -3150,7 +3148,6 @@ func (ex *connExecutor) execCopyIn(
 			ex.implicitTxn(),
 			ex.planner.CurrentDatabase(),
 		)
-		var stats topLevelQueryStats
 		ex.planner.maybeLogStatement(ctx, ex.executorType,
 			int(ex.state.mu.autoRetryCounter), int(ex.extraTxnState.txnCounter.Load()),
 			numInsertedRows, ex.state.mu.stmtCount,
@@ -3160,7 +3157,6 @@ func (ex *connExecutor) execCopyIn(
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
 			stmtFingerprintID,
-			&stats,
 			ex.statsCollector,
 			ex.extraTxnState.shouldLogToTelemetry)
 	}()
