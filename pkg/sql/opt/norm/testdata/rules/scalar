@@ -2441,3 +2441,15 @@ project
  └── projections
       ├── b.arr:5[1] [as=arr:8, outer=(5)]
       └── b.arr:5[2] [as=arr:9, outer=(5)]
+
+norm expect=NormalizeLikePattern
+SELECT i FROM a WHERE s LIKE '%%abc%%%%dddd'
+----
+project
+ ├── columns: i:2
+ └── select
+      ├── columns: i:2 s:4!null
+      ├── scan a
+      │    └── columns: i:2 s:4
+      └── filters
+           └── s:4 LIKE e'\'%abc%dddd\'' [outer=(4), constraints=(/4: [/e'\'' - /'('))]
