@@ -617,6 +617,11 @@ message LocalOnlySessionData {
   // that use reverse scans to get results in reverse index order on each
   // lookup.
   bool optimizer_plan_lookup_joins_with_reverse_scans = 158;
+  // RegisterLatchWaitContentionEvents, when true, causes latch wait contention
+  // events to be registered with the *.contention_events virtual tables. It
+  // defaults to false in order to avoid registering a large number of
+  // uninformative latch wait events.
+  bool register_latch_wait_contention_events = 159;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

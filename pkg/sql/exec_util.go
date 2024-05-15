@@ -4097,6 +4097,10 @@ func (m *sessionDataMutator) SetOptimizerPlanLookupJoinsWithReverseScans(val boo
 	m.data.OptimizerPlanLookupJoinsWithReverseScans = val
 }
 
+func (m *sessionDataMutator) SetRegisterLatchWaitContentionEvents(val bool) {
+	m.data.RegisterLatchWaitContentionEvents = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

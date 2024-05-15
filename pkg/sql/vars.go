@@ -3840,6 +3840,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`register_latch_wait_contention_events`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`register_latch_wait_contention_events`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("register_latch_wait_contention_events", s)
+			if err != nil {
+				return err
+			}
+			m.SetRegisterLatchWaitContentionEvents(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().RegisterLatchWaitContentionEvents), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
