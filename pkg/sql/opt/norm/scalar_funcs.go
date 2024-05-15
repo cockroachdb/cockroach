@@ -12,6 +12,7 @@ package norm
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -383,4 +385,15 @@ func (c *CustomFuncs) SplitTupleEq(lhs, rhs *memo.TupleExpr) memo.FiltersExpr {
 // ArrayFlatten exists within a UDF.
 func (c *CustomFuncs) CanNormalizeArrayFlatten(input memo.RelExpr, p *memo.SubqueryPrivate) bool {
 	return c.HasOuterCols(input) || p.WithinUDF
+}
+
+func (c *CustomFuncs) CollapseDupeChar(input opt.ScalarExpr) opt.ScalarExpr {
+	pattern := memo.ExtractConstDatum(input).String()
+	collapsed := util.CollapseDupeChar(pattern, '%')
+	return c.f.ConstructConstVal(tree.NewDString(collapsed), input.DataType())
+}
+
+func (c *CustomFuncs) CanCollapseDupe(input opt.ScalarExpr) bool {
+	d := memo.ExtractConstDatum(input)
+	return strings.Contains(d.String(), "%%")
 }
