@@ -61,6 +61,7 @@ import {
 } from "../api";
 import { checkInfoAvailable } from "../databases";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+import { ViewMode } from "./types";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -176,11 +177,6 @@ export interface DatabaseDetailsPageActions {
 export type DatabaseDetailsPageProps = DatabaseDetailsPageData &
   DatabaseDetailsPageActions &
   RouteComponentProps<unknown>;
-
-export enum ViewMode {
-  Tables = "Tables",
-  Grants = "Grants",
-}
 
 interface DatabaseDetailsPageState {
   pagination: ISortedTablePagination;

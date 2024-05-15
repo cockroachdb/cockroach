@@ -17,7 +17,7 @@ import {
   SqlStatsSortType,
   DEFAULT_STATS_REQ_OPTIONS,
 } from "src/api/statementsApi";
-import { ViewMode } from "src/databaseDetailsPage/databaseDetailsPage";
+import { ViewMode } from "src/databaseDetailsPage/types";
 
 type SortSetting = {
   ascending: boolean;
