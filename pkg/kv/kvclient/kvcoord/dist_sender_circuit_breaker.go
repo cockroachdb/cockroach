@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -49,10 +50,6 @@ const (
 	// another node's epoch before acquiring theirs. As such, a stalled or failed
 	// replica belonging to the liveness range that these requests get stuck on is
 	// no good -- nothing in the cluster will make progress.
-	//
-	// TODO(arul): currently, this doesn't do what it claims -- it just behaves like
-	// off. We should fix this. See
-	// https://github.com/cockroachdb/cockroach/issues/123117.
 	DistSenderCircuitBreakersLivenessRangeOnly
 	// DistSenderCircuitBreakersAllRanges indicates that we should trip circuit
 	// breakers for any replica that experiences a failure or a stall, regardless
@@ -73,7 +70,7 @@ var (
 		settings.ApplicationLevel,
 		"kv.dist_sender.circuit_breakers.mode",
 		"set of ranges to trip circuit breakers for failing or stalled replicas",
-		"no ranges",
+		"liveness range only",
 		map[int64]string{
 			int64(DistSenderCircuitBreakersNoRanges):          "no ranges",
 			int64(DistSenderCircuitBreakersLivenessRangeOnly): "liveness range only",
@@ -407,6 +404,18 @@ func (d *DistSenderCircuitBreakers) ForReplica(
 		return nil
 	}
 
+	// If circuit breakers are only enabled for the liveness range, don't check
+	// circuit breakers. If the mode changes for a tripped circuit breaker, the
+	// range will eventually idle and be GC'ed since we will stop tracking new
+	// requests to the range.
+	// NB: We may allow the liveness range to split in the future so the overlap
+	// check is safer.
+	if d.Mode() == DistSenderCircuitBreakersLivenessRangeOnly {
+		if !keys.NodeLivenessSpan.Overlaps(rangeDesc.KeySpan().AsRawSpanWithNoLocals()) {
+			return nil
+		}
+	}
+
 	key := cbKey{rangeID: rangeDesc.RangeID, replicaID: replDesc.ReplicaID}
 
 	// Fast path: use existing circuit breaker.
@@ -424,14 +433,7 @@ func (d *DistSenderCircuitBreakers) ForReplica(
 }
 
 func (d *DistSenderCircuitBreakers) Mode() DistSenderCircuitBreakersMode {
-	mode := DistSenderCircuitBreakersMode(CircuitBreakersMode.Get(&d.settings.SV))
-	// TODO(arul): Currently, even when configured for just the liveness range, we
-	// treat dist sender circuit breakers as off. See
-	// https://github.com/cockroachdb/cockroach/issues/123117.
-	if mode == DistSenderCircuitBreakersLivenessRangeOnly {
-		return DistSenderCircuitBreakersNoRanges
-	}
-	return mode
+	return DistSenderCircuitBreakersMode(CircuitBreakersMode.Get(&d.settings.SV))
 }
 
 // ReplicaCircuitBreaker is a circuit breaker for an individual replica.
