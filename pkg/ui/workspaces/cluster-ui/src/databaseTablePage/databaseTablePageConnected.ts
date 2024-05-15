@@ -90,6 +90,7 @@ export const mapStateToProps = (
       stats: deriveIndexDetailsMemoized({ database, table, indexUsageStats }),
       lastReset,
     },
+    isTenant,
   };
 };
 

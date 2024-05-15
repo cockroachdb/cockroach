@@ -259,7 +259,7 @@ export class IndexDetailsPage extends React.Component<
 
   private refresh() {
     this.props.refreshUserSQLRoles();
-    if (this.props.refreshNodes != null) {
+    if (this.props.refreshNodes != null && !this.props.isTenant) {
       this.props.refreshNodes();
     }
     if (!this.props.details.loaded && !this.props.details.loading) {

@@ -261,7 +261,9 @@ export class DatabaseDetailsPage extends React.Component<
   }
 
   componentDidMount(): void {
-    this.props.refreshNodes();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+    }
     if (!this.props.loaded && !this.props.loading && !this.props.requestError) {
       this.props.refreshDatabaseDetails(
         this.props.name,
