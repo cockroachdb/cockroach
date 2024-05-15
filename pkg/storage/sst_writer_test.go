@@ -139,6 +139,58 @@ func TestSSTWriterRangeKeys(t *testing.T) {
 	}, scanIter(t, iter))
 }
 
+func TestSSTWriterOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// makeCompressionWriterOpt returns a new SSTWriterOption that uses the
+	// cluster setting that has been set to the given algorithm as the basis for
+	// determining which compression algorithm is used when the SSTWriterOption
+	// runs over an sstable.WriterOptions.
+	makeCompressionWriterOpt := func(alg compressionAlgorithm) SSTWriterOption {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		CompressionAlgorithmStorage.Override(ctx, &st.SV, int64(alg))
+		return WithCompressionFromClusterSetting(ctx, st, CompressionAlgorithmStorage)
+	}
+
+	tcs := []struct {
+		name      string
+		writerOpt SSTWriterOption
+		wantFunc  func(*testing.T, *sstable.WriterOptions)
+	}{
+		{
+			"disable value blocks",
+			WithValueBlocksDisabled,
+			func(t *testing.T, opts *sstable.WriterOptions) {
+				require.True(t, opts.DisableValueBlocks)
+			},
+		},
+		{
+			"with snappy compression",
+			makeCompressionWriterOpt(compressionAlgorithmSnappy),
+			func(t *testing.T, opts *sstable.WriterOptions) {
+				require.Equal(t, sstable.SnappyCompression, opts.Compression)
+			},
+		},
+		{
+			"with zstd compression",
+			makeCompressionWriterOpt(compressionAlgorithmZstd),
+			func(t *testing.T, opts *sstable.WriterOptions) {
+				require.Equal(t, sstable.ZstdCompression, opts.Compression)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := &sstable.WriterOptions{}
+			tc.writerOpt(opts)
+			tc.wantFunc(t, opts)
+		})
+	}
+}
+
 func BenchmarkWriteSSTable(b *testing.B) {
 	b.StopTimer()
 	// Writing the SST 10 times keeps size needed for ~10s benchtime under 1gb.
