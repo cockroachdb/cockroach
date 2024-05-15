@@ -13,7 +13,6 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -536,7 +535,7 @@ func (p *authPipe) LogAuthInfof(ctx context.Context, format string, args ...inte
 		ev := &eventpb.ClientAuthenticationInfo{
 			CommonConnectionDetails: p.connDetails,
 			CommonSessionDetails:    p.authDetails,
-			Info:                    fmt.Sprintf(format, args...),
+			Info:                    redact.Sprintf(format, args...),
 			Method:                  p.authMethod,
 		}
 		log.StructuredEvent(ctx, ev)
