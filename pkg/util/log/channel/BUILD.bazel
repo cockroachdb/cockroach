@@ -20,7 +20,7 @@ genrule(
       $(location //pkg/util/log/gen) $(location //pkg/util/log/logpb:log.proto) \
         channel.go $(location channel_generated.go)
        """,
-    exec_tools = [
+    tools = [
         "//pkg/util/log/gen",
     ],
     visibility = [

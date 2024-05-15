@@ -43,7 +43,7 @@ genrule(
      awk '{printf("%d: \\"%s\\",\\n", $$4, $$2)}'; \
      echo "}" )> $@
     """,
-    exec_tools = [
+    tools = [
         "//pkg/sql/parser:sql-goyacc",
     ],
     visibility = [

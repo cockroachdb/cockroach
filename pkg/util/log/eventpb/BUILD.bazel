@@ -93,8 +93,8 @@ genrule(
         {} \
         >$(location eventlog_channels_generated.go)
     """.format(_EVENTPB_PROTO_LOCATIONS),
-    exec_tools = [
-        "//pkg/util/log/eventpb/eventpbgen:eventpbgen",
+    tools = [
+        "//pkg/util/log/eventpb/eventpbgen",
     ],
     visibility = [
         ":__pkg__",
@@ -113,8 +113,8 @@ genrule(
         {} \
         >$(location json_encode_generated.go)
     """.format(_EVENTPB_PROTO_LOCATIONS),
-    exec_tools = [
-        "//pkg/util/log/eventpb/eventpbgen:eventpbgen",
+    tools = [
+        "//pkg/util/log/eventpb/eventpbgen",
     ],
     visibility = [
         ":__pkg__",

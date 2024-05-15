@@ -20,7 +20,7 @@ genrule(
       $(location //pkg/util/log/gen) $(location //pkg/util/log/logpb:log.proto) \
         severity.go $(location severity_generated.go)
        """,
-    exec_tools = [
+    tools = [
         "//pkg/util/log/gen",
     ],
     visibility = [

@@ -14,7 +14,7 @@ genrule(
         $(location //pkg/util/log/gen) $(location //pkg/util/log/logpb:log.proto) \
           logging.md $(location logging.md)
        """,
-    exec_tools = [
+    tools = [
         "//pkg/util/log/gen",
     ],
     visibility = [
@@ -32,7 +32,7 @@ genrule(
     cmd = """
     $(location //pkg/util/log/logconfig:gen) < $(location //pkg/util/log/logconfig:config.go) > $(location logsinks.md)
     """,
-    exec_tools = [
+    tools = [
         "//pkg/util/log/logconfig:gen",
     ],
     visibility = [
@@ -50,8 +50,8 @@ genrule(
         {} \
         >$(location eventlog.md)
     """.format(_EVENTPB_PROTO_LOCATIONS),
-    exec_tools = [
-        "//pkg/util/log/eventpb/eventpbgen:eventpbgen",
+    tools = [
+        "//pkg/util/log/eventpb/eventpbgen",
     ],
     visibility = [
         ":__pkg__",
@@ -63,7 +63,7 @@ genrule(
     name = "gen-logformats-md",
     outs = ["logformats.md"],
     cmd = "$(location //pkg/cmd/docgen) logformats $(location logformats.md)",
-    exec_tools = ["//pkg/cmd/docgen"],
+    tools = ["//pkg/cmd/docgen"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",

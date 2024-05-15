@@ -82,6 +82,16 @@ func TestSingleNodeDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	f, err := os.Open(fsnotifyBinPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("file info = %+v\n", i)
+
 	var dockerTests = []singleNodeDockerTest{
 		{
 			testName:      "single-node-secure-mode",
@@ -512,6 +522,14 @@ func (dn *dockerNode) execCommand(
 func (dn *dockerNode) waitInitFinishes(ctx context.Context) error {
 	var res *execResult
 	var err error
+
+	res, err = dn.execCommand(ctx, []string{
+		"find",
+		"./docker-fsnotify",
+	}, "/cockroach")
+	if err != nil {
+		return errors.Wrapf(err, "cannot run fsnotify to listen to %s:\nres:%#v\n", initSuccessFile, res)
+	}
 
 	// Run the binary which listens to the /cockroach folder until the
 	// initialization process has finished or timeout.

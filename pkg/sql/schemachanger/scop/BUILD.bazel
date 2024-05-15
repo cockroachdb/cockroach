@@ -38,7 +38,7 @@ genrule(
     cmd = """
         $(location //pkg/sql/schemachanger/scop/generate-visitors) scop ImmediateMutation $(location immediate_mutation.go) $(location immediate_mutation_visitor_generated.go)
        """,
-    exec_tools = [
+    tools = [
         "//pkg/sql/schemachanger/scop/generate-visitors",
     ],
     visibility = [
@@ -54,7 +54,7 @@ genrule(
     cmd = """
         $(location //pkg/sql/schemachanger/scop/generate-visitors) scop DeferredMutation $(location deferred_mutation.go) $(location deferred_mutation_visitor_generated.go)
        """,
-    exec_tools = [
+    tools = [
         "//pkg/sql/schemachanger/scop/generate-visitors",
     ],
     visibility = [
@@ -70,7 +70,7 @@ genrule(
     cmd = """
         $(location //pkg/sql/schemachanger/scop/generate-visitors) scop Backfill $(location backfill.go) $(location backfill_visitor_generated.go)
        """,
-    exec_tools = [
+    tools = [
         "//pkg/sql/schemachanger/scop/generate-visitors",
     ],
     visibility = [
@@ -86,7 +86,7 @@ genrule(
     cmd = """
         $(location //pkg/sql/schemachanger/scop/generate-visitors) scop Validation $(location validation.go) $(location validation_visitor_generated.go)
        """,
-    exec_tools = [
+    tools = [
         "//pkg/sql/schemachanger/scop/generate-visitors",
     ],
     visibility = [

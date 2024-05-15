@@ -20,9 +20,9 @@ http_archive(
 # Like the above, but for JS.
 http_archive(
     name = "aspect_rules_js",
-    sha256 = "08061ba5e5e7f4b1074538323576dac819f9337a0c7d75aee43afc8ae7cb6e18",
-    strip_prefix = "rules_js-1.26.1",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v1.26.1.tar.gz",
+    sha256 = "bc9b4a01ef8eb050d8a7a050eedde8ffb1e45a56b0e4094e26f06c17d5fcf1d5",
+    strip_prefix = "rules_js-1.41.2",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v1.41.2.tar.gz",
 )
 
 http_archive(
@@ -99,10 +99,9 @@ http_archive(
 
 http_archive(
     name = "bazel_skylib",
-    sha256 = "4ede85dfaa97c5662c3fb2042a7ac322d5f029fdc7a6b9daa9423b746e8e8fc0",
-    strip_prefix = "bazelbuild-bazel-skylib-6a17363",
+    sha256 = "b8a1527901774180afc798aeb28c4634bdccf19c4d98e7bdd1ce79d1fe9aaad7",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazelbuild-bazel-skylib-1.3.0-0-g6a17363.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-skylib-1.4.1.tar.gz",
     ],
 )
 
@@ -206,18 +205,25 @@ go_register_toolchains(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 
 # bazel_skylib handled above.
 
+http_archive(
+    name = "bazel_features",
+    sha256 = "f3082bfcdca73dc77dcd68faace806135a2e08c230b02b1d9fbdbd7db9d9c450",
+    strip_prefix = "bazel_features-0.1.0",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel_features-v0.1.0.tar.gz"],
+)
+
 # The rules_nodejs "core" module.
 http_archive(
     name = "rules_nodejs",
-    sha256 = "764a3b3757bb8c3c6a02ba3344731a3d71e558220adcb0cf7e43c9bba2c37ba8",
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/js/rules_nodejs-core-5.8.2.tar.gz"],
+    sha256 = "8fc8e300cb67b89ceebd5b8ba6896ff273c84f6099fc88d23f24e7102319d8fd",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/js/rules_nodejs-core-5.8.4.tar.gz"],
 )
 
 http_archive(
     name = "aspect_bazel_lib",
-    sha256 = "0da75299c5a52737b2ac39458398b3f256e41a1a6748e5457ceb3a6225269485",
-    strip_prefix = "bazel-lib-1.31.2",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v1.31.2.tar.gz",
+    sha256 = "d0529773764ac61184eb3ad3c687fb835df5bee01afedf07f0cf1a45515c96bc",
+    strip_prefix = "bazel-lib-1.42.3",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v1.42.3.tar.gz"],
 )
 
 # Load custom toolchains.
