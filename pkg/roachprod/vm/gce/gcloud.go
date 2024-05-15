@@ -331,6 +331,29 @@ type Provider struct {
 	ServiceAccount string
 }
 
+// GetVMSpecs returns a json list of VM specs, provided by GCE
+func (p *Provider) GetVMSpecs(vms vm.List) ([]map[string]interface{}, error) {
+	if p.GetProject() == "" {
+		return nil, errors.New("project name cannot be empty")
+	}
+	if vms == nil {
+		return nil, errors.New("vms cannot be nil")
+	}
+	// Extract the spec of all VMs.
+	var vmSpecs []map[string]interface{}
+	for _, vmInstance := range vms {
+		var vmSpec map[string]interface{}
+		vmFullResourceName := "projects/" + p.GetProject() + "/zones/" + vmInstance.Zone + "/instances/" + vmInstance.Name
+		args := []string{"compute", "instances", "describe", vmFullResourceName, "--format=json"}
+
+		if err := runJSONCommand(args, &vmSpec); err != nil {
+			return nil, errors.Wrapf(err, "error describing instance %s in zone %s", vmInstance.Name, vmInstance.Zone)
+		}
+		vmSpecs = append(vmSpecs, vmSpec)
+	}
+	return vmSpecs, nil
+}
+
 type snapshotJson struct {
 	CreationSizeBytes  string    `json:"creationSizeBytes"`
 	CreationTimestamp  time.Time `json:"creationTimestamp"`

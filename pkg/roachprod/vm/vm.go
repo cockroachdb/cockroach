@@ -476,6 +476,8 @@ type Provider interface {
 	ListVolumeSnapshots(l *logger.Logger, vslo VolumeSnapshotListOpts) ([]VolumeSnapshot, error)
 	// DeleteVolumeSnapshots permanently deletes the given snapshots.
 	DeleteVolumeSnapshots(l *logger.Logger, snapshot ...VolumeSnapshot) error
+	// GetVMSpecs returns a json list of VM specs, according to a specific cloud provider.
+	GetVMSpecs(vms List) ([]map[string]interface{}, error)
 }
 
 // DeleteCluster is an optional capability for a Provider which can

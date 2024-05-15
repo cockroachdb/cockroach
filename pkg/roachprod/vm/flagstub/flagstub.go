@@ -32,6 +32,10 @@ type provider struct {
 	unimplemented string
 }
 
+func (p *provider) GetVMSpecs(vms vm.List) ([]map[string]interface{}, error) {
+	return nil, nil
+}
+
 func (p *provider) CreateVolumeSnapshot(
 	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
 ) (vm.VolumeSnapshot, error) {
