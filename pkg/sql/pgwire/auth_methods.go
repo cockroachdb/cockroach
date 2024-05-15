@@ -778,7 +778,6 @@ func authJwtToken(
 				errors.Join(authError, errors.Newf("%s", detailedErrors)))
 			return authError
 		}
-		c.LogAuthOK(ctx)
 		return nil
 	})
 	return b, nil
