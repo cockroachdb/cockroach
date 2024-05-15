@@ -30,7 +30,7 @@ import (
 const (
 	dnsManagedZone           = "roachprod-managed"
 	dnsDomain                = "roachprod-managed.crdb.io"
-	dnsMaxResults            = 1000
+	dnsMaxResults            = 10000
 	dnsMaxConcurrentRequests = 4
 
 	// dnsProblemLabel is the label used when we see transient DNS
