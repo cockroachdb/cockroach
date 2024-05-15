@@ -128,6 +128,7 @@ export interface DatabaseTablePageData {
   automaticStatsCollectionEnabled?: boolean;
   hasAdminRole?: UIConfigState["hasAdminRole"];
   csIndexUnusedDuration: string;
+  isTenant?: UIConfigState["isTenant"];
 }
 
 export interface DatabaseTablePageDataDetails {
@@ -281,7 +282,7 @@ export class DatabaseTablePage extends React.Component<
 
   private refresh() {
     this.props.refreshUserSQLRoles();
-    if (this.props.refreshNodes != null) {
+    if (this.props.refreshNodes != null && !this.props.isTenant) {
       this.props.refreshNodes();
     }
 
