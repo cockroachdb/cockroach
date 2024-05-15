@@ -29,6 +29,12 @@ import (
 type StatsCollector struct {
 	sqlstats.ApplicationStats
 
+	// stmtFingerprintID is the fingerprint ID of the current statement we are
+	// recording. Note that we don't observe sql stats for all statements (e.g. COMMIT).
+	// If no stats have been attempted to be recorded yet for the current statement,
+	// this value will be 0.
+	stmtFingerprintID appstatspb.StmtFingerprintID
+
 	// Allows StatsCollector to send statement and transaction stats to the insights system.
 	insightsWriter insights.Writer
 
@@ -76,6 +82,15 @@ func NewStatsCollector(
 	}
 }
 
+func (s *StatsCollector) SetStatementFingerprintID(fingerprintID appstatspb.StmtFingerprintID) {
+	s.stmtFingerprintID = fingerprintID
+}
+
+// StatementFingerprintID returns the fingerprint ID for the current statement.
+func (s *StatsCollector) StatementFingerprintID() appstatspb.StmtFingerprintID {
+	return s.stmtFingerprintID
+}
+
 // PhaseTimes returns the sessionphase.Times that this StatsCollector is
 // currently tracking.
 func (s *StatsCollector) PhaseTimes() *sessionphase.Times {
@@ -96,6 +111,7 @@ func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *se
 
 	s.previousPhaseTimes = previousPhaseTime
 	s.phaseTimes = phaseTime.Clone()
+	s.stmtFingerprintID = 0
 }
 
 // StartTransaction sets up the StatsCollector for a new transaction.

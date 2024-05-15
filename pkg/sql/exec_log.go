@@ -142,14 +142,14 @@ func (p *planner) maybeLogStatement(
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryLoggingMetrics *telemetryLoggingMetrics,
-	stmtFingerprintID appstatspb.StmtFingerprintID,
+	implicitTxn bool,
 	statsCollector *sslocal.StatsCollector,
 	shouldLogToTelemetry bool,
 ) {
 	p.maybeAuditRoleBasedAuditEvent(ctx, execType)
 	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter,
 		rows, stmtCount, bulkJobId, err, queryReceived, hasAdminRoleCache,
-		telemetryLoggingMetrics, stmtFingerprintID, statsCollector,
+		telemetryLoggingMetrics, implicitTxn, statsCollector,
 		shouldLogToTelemetry)
 }
 
@@ -162,7 +162,7 @@ func (p *planner) maybeLogStatementInternal(
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryMetrics *telemetryLoggingMetrics,
-	stmtFingerprintID appstatspb.StmtFingerprintID,
+	implicitTxn bool,
 	statsCollector *sslocal.StatsCollector,
 	shouldLogToTelemetry bool,
 ) {
@@ -352,6 +352,24 @@ func (p *planner) maybeLogStatementInternal(
 			sort.Slice(sqlInstanceIDs, func(i, j int) bool {
 				return sqlInstanceIDs[i] < sqlInstanceIDs[j]
 			})
+		}
+
+		// If the statement was recorded by the stats collector, we can extract
+		// the statement fingerprint ID. Otherwise, we'll need to compute it from the AST.
+		stmtFingerprintID := statsCollector.StatementFingerprintID()
+		if stmtFingerprintID == 0 {
+			repQuery := p.stmt.StmtNoConstants
+			if repQuery == "" {
+				flags := tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV))
+				f := tree.NewFmtCtx(flags)
+				f.FormatNode(p.stmt.AST)
+				repQuery = f.CloseAndGetString()
+			}
+			stmtFingerprintID = appstatspb.ConstructStatementFingerprintID(
+				repQuery,
+				implicitTxn,
+				p.CurrentDatabase(),
+			)
 		}
 
 		sampledQuery := getSampledQuery()
