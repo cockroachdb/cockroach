@@ -143,7 +143,6 @@ func TestGranterBasic(t *testing.T) {
 				},
 				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
 				kvIOTokensAvailable:         metrics.KVIOTokensAvailable,
-				kvElasticIOTokensAvailable:  metrics.KVElasticIOTokensAvailable,
 				kvIOTokensTaken:             metrics.KVIOTokensTaken,
 				kvIOTokensReturned:          metrics.KVIOTokensReturned,
 				kvIOTokensBypassed:          metrics.KVIOTokensBypassed,
