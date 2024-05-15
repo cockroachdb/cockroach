@@ -860,8 +860,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		SharedStorageEnabled:         cfg.SharedStorage != "",
 		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,
-		SnapshotApplyLimit:           cfg.SnapshotApplyLimit,
-		SnapshotSendLimit:            cfg.SnapshotSendLimit,
 		RangeLogWriter:               rangeLogWriter,
 		KVAdmissionController:        admissionControl.kvAdmissionController,
 		KVFlowController:             admissionControl.kvflowController,
