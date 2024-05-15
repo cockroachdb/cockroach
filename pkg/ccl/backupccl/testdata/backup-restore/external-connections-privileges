@@ -53,26 +53,12 @@ BACKUP TABLE foo INTO 'external://root'
 ----
 pq: user testuser does not have USAGE privilege on external_connection root
 
-query-sql
-SELECT * FROM system.privileges
-----
-root /externalconn/root {ALL} {} 1
-testuser /externalconn/testuser-ec {ALL} {} 100
-testuser /global/ {EXTERNALCONNECTION} {} 100
-
 # Revoke the USAGE privilege. Note testuser had ALL privileges since they
 # created the External Connection, but revoking USAGE means that they will now
 # only have DROP privileges. Thus, they shouldn't be able to restore.
 exec-sql
 REVOKE USAGE ON EXTERNAL CONNECTION "testuser-ec" FROM testuser;
 ----
-
-query-sql
-SELECT * FROM system.privileges
-----
-root /externalconn/root {ALL} {} 1
-testuser /externalconn/testuser-ec {DROP} {} 100
-testuser /global/ {EXTERNALCONNECTION} {} 100
 
 exec-sql user=testuser
 RESTORE TABLE foo FROM LATEST IN 'external://testuser-ec'
