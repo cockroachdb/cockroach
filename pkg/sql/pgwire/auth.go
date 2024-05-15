@@ -16,6 +16,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -419,6 +421,8 @@ type AuthConn interface {
 	LogAuthFailed(ctx context.Context, reason eventpb.AuthFailReason, err error)
 	// LogAuthOK logs when the authentication handshake has completed.
 	LogAuthOK(ctx context.Context)
+	// LogSessionEnd logs when the session is ended.
+	LogSessionEnd(ctx context.Context, endTime time.Time)
 	// GetTenantSpecificMetrics returns the tenant-specific metrics for the connection.
 	GetTenantSpecificMetrics() *tenantSpecificMetrics
 }
@@ -520,14 +524,13 @@ func (p *authPipe) SetSystemIdentity(systemIdentity username.SQLUsername) {
 }
 
 func (p *authPipe) LogAuthOK(ctx context.Context) {
-	if p.log {
-		ev := &eventpb.ClientAuthenticationOk{
-			CommonConnectionDetails: p.connDetails,
-			CommonSessionDetails:    p.authDetails,
-			Method:                  p.authMethod,
-		}
-		log.StructuredEvent(ctx, ev)
+	// Logged unconditionally.
+	ev := &eventpb.ClientAuthenticationOk{
+		CommonConnectionDetails: p.connDetails,
+		CommonSessionDetails:    p.authDetails,
+		Method:                  p.authMethod,
 	}
+	log.StructuredEvent(ctx, ev)
 }
 
 func (p *authPipe) LogAuthInfof(ctx context.Context, format string, args ...interface{}) {
@@ -540,6 +543,16 @@ func (p *authPipe) LogAuthInfof(ctx context.Context, format string, args ...inte
 		}
 		log.StructuredEvent(ctx, ev)
 	}
+}
+
+func (p *authPipe) LogSessionEnd(ctx context.Context, endTime time.Time) {
+	// Logged unconditionally.
+	ev := &eventpb.ClientSessionEnd{
+		CommonEventDetails:      logpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
+		CommonConnectionDetails: p.connDetails,
+		Duration:                endTime.Sub(p.c.startTime).Nanoseconds(),
+	}
+	log.StructuredEvent(ctx, ev)
 }
 
 func (p *authPipe) LogAuthFailed(
