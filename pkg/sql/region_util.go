@@ -2521,6 +2521,10 @@ func (p *planner) setSystemDatabaseSurvival(ctx context.Context) error {
 	return nil
 }
 
+// systemTableLocalityChangeJobName is the job name used when the locality is converted
+// to regional by row.
+const systemTableLocalityChangeJobName = "convert system.%s to %s locality"
+
 // optimizeSystemDatabase configures some tables in the system data as
 // global and regional by row. The locality changes reduce how long it
 // takes a server to start up in a multi-region deployment.
@@ -2604,7 +2608,7 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 			return err
 		}
 
-		jobName := fmt.Sprintf("convert system.%s to %s locality", desc.GetName(), locality)
+		jobName := fmt.Sprintf(systemTableLocalityChangeJobName, desc.GetName(), locality)
 		return p.writeSchemaChange(ctx, desc, descpb.InvalidMutationID, jobName)
 	}
 
