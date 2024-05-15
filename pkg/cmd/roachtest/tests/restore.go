@@ -867,12 +867,10 @@ func (tpcc tpccRestore) String() string {
 	switch tpcc.opts.warehouses {
 	case 10:
 		builder.WriteString("150MB")
-	case 500:
-		builder.WriteString("8GB")
 	case 7000:
-		builder.WriteString("115GB")
-	case 25000:
 		builder.WriteString("400GB")
+	case 140000:
+		builder.WriteString("8TB")
 	default:
 		panic("tpcc warehouse count not recognized")
 	}
