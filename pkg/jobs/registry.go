@@ -1587,6 +1587,7 @@ func (r *Registry) stepThroughStateMachine(
 	} else {
 		log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), status)
 	}
+	maybeLogStateChangeStructured(ctx, job, status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
 	onExecutionFailed := func(cause error) error {
 		log.ErrorfDepth(
