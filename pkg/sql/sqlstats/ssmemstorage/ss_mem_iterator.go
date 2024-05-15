@@ -71,7 +71,6 @@ func (s *StmtStatsIterator) Next() bool {
 
 	stmtKey := s.stmtKeys[s.idx]
 
-	stmtFingerprintID := constructStatementFingerprintIDFromStmtKey(stmtKey)
 	statementStats, _, _ :=
 		s.container.getStatsForStmtWithKey(stmtKey, invalidStmtFingerprintID, false /* createIfNonexistent */)
 
@@ -104,7 +103,7 @@ func (s *StmtStatsIterator) Next() bool {
 			PlanHash:                 stmtKey.planHash,
 			TransactionFingerprintID: stmtKey.transactionFingerprintID,
 		},
-		ID:    stmtFingerprintID,
+		ID:    statementStats.ID,
 		Stats: data,
 	}
 
