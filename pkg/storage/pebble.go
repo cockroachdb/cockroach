@@ -129,37 +129,92 @@ var MinCapacityForBulkIngest = settings.RegisterFloatSetting(
 	0.05,
 )
 
+// CompressionAlgorithm is an enumeration of available compression algorithms
+// available.
+type compressionAlgorithm int64
+
 const (
-	compressionAlgorithmSnappy int64 = 1
-	compressionAlgorithmZstd   int64 = 2
+	compressionAlgorithmSnappy compressionAlgorithm = 1
+	compressionAlgorithmZstd   compressionAlgorithm = 2
 )
 
-// compressionAlgorithm determines the compression algorithm used to compress
-// data blocks when writing sstables. Users should call getCompressionAlgorithm
-// rather than calling compressionAlgorithm.Get directly.
-var compressionAlgorithm = settings.RegisterEnumSetting(
-	// NB: We can't use settings.SystemOnly today because we may need to read the
-	// value from within a tenant building an sstable for AddSSTable.
-	settings.SystemVisible,
-	"storage.sstable.compression_algorithm",
-	`determines the compression algorithm to use when compressing sstable data blocks;`+
-		` supported values: "snappy", "zstd"`,
-	// TODO(jackson): Consider using a metamorphic constant here, but many tests
-	// will need to override it because they depend on a deterministic sstable
-	// size.
-	"snappy",
-	map[int64]string{
-		compressionAlgorithmSnappy: "snappy",
-		compressionAlgorithmZstd:   "zstd",
-	},
-	settings.WithPublic,
-)
-
-func getCompressionAlgorithm(ctx context.Context, settings *cluster.Settings) pebble.Compression {
-	switch compressionAlgorithm.Get(&settings.SV) {
+// String implements fmt.Stringer for CompressionAlgorithm.
+func (c compressionAlgorithm) String() string {
+	switch c {
 	case compressionAlgorithmSnappy:
-		return pebble.SnappyCompression
+		return "snappy"
 	case compressionAlgorithmZstd:
+		return "zstd"
+	default:
+		panic(errors.Errorf("unknown compression type: %d", c))
+	}
+}
+
+// RegisterCompressionAlgorithmClusterSetting is a helper to register an enum
+// cluster setting with the given name, description and default value.
+func RegisterCompressionAlgorithmClusterSetting(
+	name settings.InternalKey, desc string, defaultValue compressionAlgorithm,
+) *settings.EnumSetting {
+	return settings.RegisterEnumSetting(
+		// NB: We can't use settings.SystemOnly today because we may need to read the
+		// value from within a tenant building an sstable for AddSSTable.
+		settings.SystemVisible, name, desc,
+		// TODO(jackson): Consider using a metamorphic constant here, but many tests
+		// will need to override it because they depend on a deterministic sstable
+		// size.
+		defaultValue.String(),
+		map[int64]string{
+			int64(compressionAlgorithmSnappy): compressionAlgorithmSnappy.String(),
+			int64(compressionAlgorithmZstd):   compressionAlgorithmZstd.String(),
+		},
+		settings.WithPublic,
+	)
+}
+
+// CompressionAlgorithmStorage determines the compression algorithm used to
+// compress data blocks when writing sstables for use in a Pebble store (written
+// directly, or constructed for ingestion on a remote store via AddSSTable).
+// Users should call getCompressionAlgorithm with the cluster setting, rather
+// than calling Get directly.
+var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
+	"storage.sstable.compression_algorithm",
+	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`+
+		` supported values: "snappy", "zstd"`,
+	compressionAlgorithmZstd, // Default.
+)
+
+// CompressionAlgorithmBackupStorage determines the compression algorithm used
+// to compress data blocks when writing sstables that contain backup row data
+// storage. Users should call getCompressionAlgorithm with the cluster setting,
+// rather than calling Get directly.
+var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetting(
+	"storage.sstable.compression_algorithm_backup_storage",
+	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`+
+		` supported values: "snappy", "zstd"`,
+	compressionAlgorithmSnappy, // Default.
+)
+
+// CompressionAlgorithmBackupTransport determines the compression algorithm used
+// to compress data blocks when writing sstables that will be immediately
+// iterated and will never need to touch disk. These sstables typically have
+// much larger blocks and benefit from compression. However, this compression
+// algorithm may be different to the one used when writing out the sstables for
+// remote storage. Users should call getCompressionAlgorithm with the cluster
+// setting, rather than calling Get directly.
+var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSetting(
+	"storage.sstable.compression_algorithm_backup_transport",
+	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`+
+		` supported values: "snappy", "zstd"`,
+	compressionAlgorithmSnappy, // Default.
+)
+
+func getCompressionAlgorithm(
+	ctx context.Context, settings *cluster.Settings, setting *settings.EnumSetting,
+) pebble.Compression {
+	switch setting.Get(&settings.SV) {
+	case int64(compressionAlgorithmSnappy):
+		return pebble.SnappyCompression
+	case int64(compressionAlgorithmZstd):
 		// Pre-24.1 Pebble's implementation of zstd had bugs that could cause
 		// in-memory corruption. We require that the cluster version is 24.1 which
 		// implies that all nodes are running 24.1 code and will never run code
@@ -1091,7 +1146,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.ErrorIfNotExists = cfg.mustExist
 	for i := range cfg.opts.Levels {
 		cfg.opts.Levels[i].Compression = func() sstable.Compression {
-			return getCompressionAlgorithm(ctx, cfg.settings)
+			return getCompressionAlgorithm(ctx, cfg.settings, CompressionAlgorithmStorage)
 		}
 	}
 
