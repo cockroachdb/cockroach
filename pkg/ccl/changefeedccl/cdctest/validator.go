@@ -677,8 +677,8 @@ type CountValidator struct {
 	rowsSinceResolved                    int
 }
 
-// MakeCountValidator returns a CountValidator wrapping the given Validator.
-func MakeCountValidator(v Validator) *CountValidator {
+// NewCountValidator returns a CountValidator wrapping the given Validator.
+func NewCountValidator(v Validator) *CountValidator {
 	return &CountValidator{v: v}
 }
 
