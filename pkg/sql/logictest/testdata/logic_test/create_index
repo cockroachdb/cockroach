@@ -448,3 +448,89 @@ CREATE INDEX ON v (b);
 # schema changer.
 statement ok
 CREATE INDEX ON v ((b>0));
+
+statement ok
+CREATE TABLE test_updated_at (
+  temp1 TEXT,
+  temp2 TEXT,
+  updated_at_1 TIMESTAMPTZ DEFAULT current_timestamp(),
+  updated_at_2 TIMESTAMP DEFAULT clock_timestamp(),
+  updated_at_3 DATE DEFAULT current_date(),
+  updated_at_4 TIME DEFAULT current_time(),
+  updated_at_5 INT DEFAULT localtimestamp()::int,
+  updated_at_6 INTEGER DEFAULT now()::int,
+  updated_at_7 BIGINT DEFAULT statement_timestamp()::bigint,
+  updated_at_8 SMALLINT DEFAULT transaction_timestamp()::smallint
+);
+
+statement ok
+CREATE INDEX test_updated_at_index_1 ON test_updated_at(temp1, updated_at_1);
+
+statement ok
+CREATE INDEX test_updated_at_index_2 ON test_updated_at(temp1, updated_at_1, temp2);
+
+statement ok
+CREATE INDEX test_updated_at_index_3 ON test_updated_at(temp1, updated_at_4, updated_at_7);
+
+query T noticetrace
+CREATE INDEX test_updated_at_index_4 ON test_updated_at(updated_at_1);
+----
+NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.
+HINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+
+query T noticetrace
+CREATE INDEX test_updated_at_index_5 ON test_updated_at(updated_at_2, temp1);
+----
+NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.
+HINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+
+query T noticetrace
+CREATE INDEX test_updated_at_index_6 ON test_updated_at(updated_at_2, temp1, temp2);
+----
+NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.
+HINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+
+query T noticetrace
+CREATE INDEX test_updated_at_index_7 ON test_updated_at(updated_at_3);
+----
+NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.
+HINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+
+query T noticetrace
+CREATE INDEX test_updated_at_index_8 ON test_updated_at(updated_at_4);
+----
+NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.
+HINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+
+query T noticetrace
+CREATE INDEX test_updated_at_index_9 ON test_updated_at(updated_at_5);
+----
+NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.
+HINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+
+query T noticetrace
+CREATE INDEX test_updated_at_index_10 ON test_updated_at(updated_at_6);
+----
+NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.
+HINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+
+query T noticetrace
+CREATE INDEX test_updated_at_index_11 ON test_updated_at(updated_at_7);
+----
+NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.
+HINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+
+query T noticetrace
+CREATE INDEX test_updated_at_index_12 ON test_updated_at(updated_at_8);
+----
+NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.
+HINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+
+query T noticetrace
+CREATE INDEX test_updated_at_index_13 ON test_updated_at(updated_at_1, updated_at_2);
+----
+NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.
+HINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+
+statement ok
+DROP TABLE test_updated_at;
