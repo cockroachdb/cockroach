@@ -34,11 +34,12 @@ import (
 var (
 	// flagEach controls how long we are going to run each compose test. Ensure bazel BUILD file
 	// of compose tests has a longer timeout.
-	flagEach      = flag.Duration("each", 10*time.Minute, "individual test timeout")
-	flagTests     = flag.String("tests", ".", "tests within docker compose to run")
-	flagArtifacts = flag.String("artifacts", "", "artifact directory")
-	flagCockroach = flag.String("cockroach", "", "path to the cockroach executable")
-	flagCompare   = flag.String("compare", "", "path to the compare test (only valid for bazel-driven test)")
+	flagEach       = flag.Duration("each", 10*time.Minute, "individual test timeout")
+	flagTests      = flag.String("tests", ".", "tests within docker compose to run")
+	flagArtifacts  = flag.String("artifacts", "", "artifact directory")
+	flagCockroach  = flag.String("cockroach", "", "path to the cockroach executable")
+	flagLibGeosDir = flag.String("libgeosdir", "", "path to the libgeos directory (only valid for bazel-driven test)")
+	flagCompare    = flag.String("compare", "", "path to the compare test (only valid for bazel-driven test)")
 )
 
 func copyBin(src, dst string) error {
@@ -57,7 +58,7 @@ func copyBin(src, dst string) error {
 }
 
 func TestComposeCompare(t *testing.T) {
-	var cockroachBin, compareDir, dockerComposeYml string
+	var cockroachBin, libGeosDir, compareDir, dockerComposeYml string
 	if bazel.BuiltWithBazel() {
 		var err error
 		dockerComposeYml, err = bazel.Runfile("pkg/compose/compare/docker-compose.yml")
@@ -66,6 +67,9 @@ func TestComposeCompare(t *testing.T) {
 		}
 		if *flagCockroach == "" {
 			t.Fatal("-cockroach not set")
+		}
+		if *flagLibGeosDir == "" {
+			t.Fatal("-libgeosdir not set")
 		}
 		if *flagCompare == "" {
 			t.Fatal("-compare not set")
@@ -77,12 +81,21 @@ func TestComposeCompare(t *testing.T) {
 		composeBinsDir := t.TempDir()
 		compareDir = composeBinsDir
 		cockroachBin = filepath.Join(composeBinsDir, "cockroach")
-		err = copyBin(*flagCockroach, cockroachBin)
-		if err != nil {
+		libGeosDir = filepath.Join(composeBinsDir, "lib")
+		if err = os.MkdirAll(libGeosDir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		err = copyBin(*flagCompare, filepath.Join(composeBinsDir, "compare.test"))
-		if err != nil {
+		if err := copyBin(*flagCockroach, cockroachBin); err != nil {
+			t.Fatal(err)
+		}
+		for _, geoLib := range []string{"libgeos.so", "libgeos_c.so"} {
+			src := filepath.Join(*flagLibGeosDir, geoLib)
+			dst := filepath.Join(libGeosDir, geoLib)
+			if err := copyBin(src, dst); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err = copyBin(*flagCompare, filepath.Join(composeBinsDir, "compare.test")); err != nil {
 			t.Fatal(err)
 		}
 		if *flagArtifacts == "" {
@@ -95,6 +108,10 @@ func TestComposeCompare(t *testing.T) {
 		cockroachBin = *flagCockroach
 		if cockroachBin == "" {
 			cockroachBin = "../../../cockroach-linux-2.6.32-gnu-amd64"
+		}
+		libGeosDir = *flagLibGeosDir
+		if libGeosDir == "" {
+			libGeosDir = "../../../lib"
 		}
 		compareDir = "./compare"
 		dockerComposeYml = filepath.Join("compare", "docker-compose.yml")
@@ -114,14 +131,15 @@ func TestComposeCompare(t *testing.T) {
 		fmt.Sprintf("EACH=%s", *flagEach),
 		fmt.Sprintf("TESTS=%s", *flagTests),
 		fmt.Sprintf("COCKROACH_PATH=%s", cockroachBin),
+		fmt.Sprintf("LIBGEOS_DIR_PATH=%s", libGeosDir),
 		fmt.Sprintf("COMPARE_DIR_PATH=%s", compareDir),
 		fmt.Sprintf("ARTIFACTS=%s", *flagArtifacts),
 		fmt.Sprintf("COCKROACH_DEV_LICENSE=%s", envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")),
 		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
 	}
 	out, err := cmd.CombinedOutput()
+	t.Log(string(out))
 	if err != nil {
-		t.Log(string(out))
 		t.Fatal(err)
 	}
 }
