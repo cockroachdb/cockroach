@@ -16,6 +16,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -76,7 +77,11 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	// TableFormatPebblev4.
 	format := sstable.TableFormatPebblev4
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
-	opts.Compression = getCompressionAlgorithm(ctx, cs)
+	// By default, compress with the algorithm used for storage in a Pebble store.
+	// There are other, more specific, use cases that may call for a different
+	// algorithm, which can be set by overriding the default (see
+	// MakeIngestionSSTWriterWithOverrides).
+	opts.Compression = getCompressionAlgorithm(ctx, cs, CompressionAlgorithmStorage)
 	opts.MergerName = "nullptr"
 	return opts
 }
@@ -112,7 +117,7 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	// block checksums and more index entries are just overhead and smaller blocks
 	// reduce compression ratio.
 	opts.BlockSize = 128 << 10
-	opts.Compression = getCompressionAlgorithm(ctx, cs)
+	opts.Compression = getCompressionAlgorithm(ctx, cs, CompressionAlgorithmBackupTransport)
 	opts.MergerName = "nullptr"
 	return SSTWriter{
 		fw:                sstable.NewWriter(&noopFinishAbort{f}, opts),
@@ -126,22 +131,42 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 func MakeIngestionSSTWriter(
 	ctx context.Context, cs *cluster.Settings, w objstorage.Writable,
 ) SSTWriter {
-	return MakeIngestionSSTWriterWithValueBlockOverride(ctx, cs, w, false)
+	return MakeIngestionSSTWriterWithOverrides(ctx, cs, w)
 }
 
-// MakeIngestionSSTWriterWithValueBlockOverride creates a new SSTWriter
-// tailored for ingestion SSTs. These SSTs have bloom filters enabled (as set
-// in DefaultPebbleOptions) and format set to the highest permissible by the
+// SSTWriterOption augments one or more sstable.WriterOptions.
+type SSTWriterOption func(opts *sstable.WriterOptions)
+
+// WithValueBlocksDisabled disables the use of value blocks in an SSTable.
+var WithValueBlocksDisabled SSTWriterOption = func(opts *sstable.WriterOptions) {
+	opts.DisableValueBlocks = true
+}
+
+// WithCompressionFromClusterSetting sets the compression algorithm for an
+// SSTable based on the value of the given cluster setting.
+func WithCompressionFromClusterSetting(
+	ctx context.Context, cs *cluster.Settings, setting *settings.EnumSetting,
+) SSTWriterOption {
+	return func(opts *sstable.WriterOptions) {
+		opts.Compression = getCompressionAlgorithm(ctx, cs, setting)
+	}
+}
+
+// MakeIngestionSSTWriterWithOverrides creates a new SSTWriter tailored for
+// ingestion SSTs. These SSTs have bloom filters enabled (as set in
+// DefaultPebbleOptions) and format set to the highest permissible by the
 // cluster settings. Callers that expect to write huge SSTs, say 200+MB, which
-// could contain multiple versions for the same key, should set
-// disableValueBlocks to true. This is because value blocks are buffered
+// could contain multiple versions for the same key, should pass in a
+// WithValueBlocksDisabled option. This is because value blocks are buffered
 // in-memory while writing the SST (see
 // https://github.com/cockroachdb/cockroach/issues/117113).
-func MakeIngestionSSTWriterWithValueBlockOverride(
-	ctx context.Context, cs *cluster.Settings, w objstorage.Writable, disableValueBlocks bool,
+func MakeIngestionSSTWriterWithOverrides(
+	ctx context.Context, cs *cluster.Settings, w objstorage.Writable, overrides ...SSTWriterOption,
 ) SSTWriter {
 	opts := MakeIngestionWriterOptions(ctx, cs)
-	opts.DisableValueBlocks = disableValueBlocks
+	for _, o := range overrides {
+		o(&opts)
+	}
 	return SSTWriter{
 		fw:                sstable.NewWriter(w, opts),
 		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,

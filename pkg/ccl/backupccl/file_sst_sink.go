@@ -206,8 +206,13 @@ func (s *fileSSTSink) open(ctx context.Context) error {
 	// Value blocks are disabled since such SSTs can be huge (e.g. 750MB in the
 	// mixed_version_backup.go roachtest), which can cause OOMs due to value
 	// block buffering.
-	s.sst = storage.MakeIngestionSSTWriterWithValueBlockOverride(
-		ctx, s.dest.Settings(), storage.NoopFinishAbortWritable(s.out), true)
+	s.sst = storage.MakeIngestionSSTWriterWithOverrides(
+		ctx, s.dest.Settings(), storage.NoopFinishAbortWritable(s.out),
+		storage.WithValueBlocksDisabled,
+		storage.WithCompressionFromClusterSetting(
+			ctx, s.dest.Settings(), storage.CompressionAlgorithmBackupStorage,
+		),
+	)
 
 	return nil
 }
