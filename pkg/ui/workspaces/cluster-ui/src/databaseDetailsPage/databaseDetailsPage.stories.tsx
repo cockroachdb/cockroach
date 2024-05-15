@@ -22,13 +22,13 @@ import {
   DatabaseDetailsPage,
   DatabaseDetailsPageDataTable,
   DatabaseDetailsPageProps,
-  ViewMode,
 } from "./databaseDetailsPage";
 
 import * as H from "history";
 import moment from "moment-timezone";
 import { defaultFilters } from "src/queryFilter";
 import { indexUnusedDuration } from "src/util/constants";
+import { ViewMode } from "./types";
 const history = H.createHashHistory();
 
 const withLoadingIndicator: DatabaseDetailsPageProps = {
