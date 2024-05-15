@@ -79,6 +79,7 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	jobutils.WaitForJobToSucceed(t, rSQLDB, downloadJobID)
 
 	rSQLDB.CheckQueryResults(t, createStmt, createStmtRes)
+	sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
 }
 
 func TestOnlineRestorePartitioned(t *testing.T) {
@@ -181,7 +182,6 @@ func TestOnlineRestoreStatementResult(t *testing.T) {
 func TestOnlineRestoreWaitForDownload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
 	const numAccounts = 1000
@@ -202,9 +202,9 @@ func TestOnlineRestoreWaitForDownload(t *testing.T) {
 	var downloadJobID jobspb.JobID
 	sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
 	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
-	sqlDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.tenant_span_stats(
-		ARRAY(SELECT(crdb_internal.table_span('data2.bank'::regclass::oid::int)[1], crdb_internal.table_span('data2.bank'::regclass::oid::int)[2]))
-	) WHERE (stats->>'external_file_bytes')::int > 0`, [][]string{})
+
+	sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+
 }
 
 // TestOnlineRestoreTenant runs an online restore of a tenant and ensures the
@@ -292,6 +292,10 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	require.Greater(t, preRestoreTs, maxRestoreMVCCTimestamp)
 	dbAbove.QueryRow(t, "SELECT max(crdb_internal_mvcc_timestamp) FROM foo.bar").Scan(&maxRestoreMVCCTimestamp)
 	require.Greater(t, preRestoreTs, maxRestoreMVCCTimestamp)
+
+	dbAbove.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+	dbBelow.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+	rSQLDB.CheckQueryResults(t, jobutils.GetExternalBytesTenantKeySpace, [][]string{{"0"}})
 }
 
 func TestOnlineRestoreErrors(t *testing.T) {
