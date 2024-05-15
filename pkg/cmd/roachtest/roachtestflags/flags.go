@@ -357,10 +357,12 @@ var (
 			run at least one test per prefix.`,
 	})
 
-	UseSpotVM bool
+	UseSpotVM = NeverUseSpot
 	_         = registerRunFlag(&UseSpotVM, FlagInfo{
-		Name:  "use-spot",
-		Usage: `Use SpotVM to run tests, If the provider does not support spotVM, it will be ignored`,
+		Name: "use-spot",
+		Usage: `
+			[never|always|auto] Use spot VMs for the cluster. If 'auto', the framework may use SpotVM to run tests.
+			Note, this is merely a _hint_. The framework decides if a SpotVM should be used.`,
 	})
 
 	AutoKillThreshold float64 = 1.0
@@ -439,6 +441,9 @@ const (
 	defaultEncryptionProbability = 1
 	defaultFIPSProbability       = 0
 	defaultARM64Probability      = 0
+	NeverUseSpot                 = "never"
+	AlwaysUseSpot                = "always"
+	AutoUseSpot                  = "auto"
 )
 
 // FlagInfo contains the name and usage of a flag. Used to make the code
@@ -479,12 +484,12 @@ func AddRunOpsFlags(cmdFlags *pflag.FlagSet) {
 	globalMan.AddFlagsToCommand(runOpsCmdID, cmdFlags)
 }
 
-// Changed returns true if a flag associated with a given value was present.
+// Changed returns non-nil FlagInfo iff a flag associated with a given value was present.
 //
-// For example: roachtestflags.Changed(&roachtestflags.Cloud) returns true if
+// For example: roachtestflags.Changed(&roachtestflags.Cloud) returns non-nil FlagInfo iff
 // the `--cloud` flag was passed (even if the given value was the same with the
 // default value).
-func Changed(valPtr interface{}) bool {
+func Changed(valPtr interface{}) *FlagInfo {
 	return globalMan.Changed(valPtr)
 }
 
