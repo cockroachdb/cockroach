@@ -286,12 +286,6 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().LargeFullScanRows = 0
 	notStale()
 
-	// Stale OptimizerApplyFullScanPenaltyToVirtualTables.
-	evalCtx.SessionData().OptimizerApplyFullScanPenaltyToVirtualTables = true
-	stale()
-	evalCtx.SessionData().OptimizerApplyFullScanPenaltyToVirtualTables = false
-	notStale()
-
 	// Stale txn rows read error.
 	evalCtx.SessionData().TxnRowsReadErr = 1000
 	stale()
