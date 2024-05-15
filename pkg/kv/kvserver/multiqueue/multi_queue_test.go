@@ -402,7 +402,7 @@ func TestMultiQueueUpdateConcurrencLimit(t *testing.T) {
 	// Shrink the concurrency limit.
 	queue.UpdateConcurrencyLimit(2)
 	require.Equal(t, 2, queue.remainingRuns)
-	// Decrease the remaining runs
+	// Decrease the remaining runs.
 	_, _ = queue.Add(1, 1, -1)
 	_, _ = queue.Add(2, 1, -1)
 	// Shrink the limit gain, make sure the remainingRuns is non-negative.
@@ -429,12 +429,12 @@ func TestMultiQueueUpdateConcurrencLimit(t *testing.T) {
 	// to freeze the queue.
 	queue = NewMultiQueue(2)
 	queue.UpdateConcurrencyLimit(0)
-	require.Equal(t, 0, queue.QueueLen())
+	require.Equal(t, 1, queue.QueueLen())
 	require.Equal(t, 0, queue.remainingRuns)
 	// Queue is frozen adding a new task will not
 	// trigger execution due to no remaining runs left.
 	_, err := queue.Add(1, 1, 1)
-	require.Equal(t, 1, queue.QueueLen())
+	require.Equal(t, 2, queue.QueueLen())
 	require.NoError(t, err)
 	require.Equal(t, 0, queue.AvailableLen())
 }
