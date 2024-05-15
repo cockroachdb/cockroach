@@ -602,6 +602,7 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 		LogTerm: prevTerm,
 		Entries: ents,
 		Commit:  r.raftLog.committed,
+		Match:   pr.Match,
 	})
 	pr.SentEntries(len(ents), uint64(payloadsSize(ents)))
 	pr.SentCommit(r.raftLog.committed)
@@ -651,6 +652,7 @@ func (r *raft) sendHeartbeat(to uint64) {
 		To:     to,
 		Type:   pb.MsgHeartbeat,
 		Commit: commit,
+		Match:  pr.Match,
 	})
 	pr.SentCommit(commit)
 }
@@ -1659,6 +1661,8 @@ func logSliceFromMsgApp(m *pb.Message) logSlice {
 }
 
 func (r *raft) handleAppendEntries(m pb.Message) {
+	r.checkMatch(m.Match)
+
 	// TODO(pav-kv): construct logSlice up the stack next to receiving the
 	// message, and validate it before taking any action (e.g. bumping term).
 	a := logSliceFromMsgApp(&m)
@@ -1702,7 +1706,22 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	})
 }
 
+// checkMatch ensures that the follower's log size does not contradict to the
+// leader's idea where it matches.
+func (r *raft) checkMatch(match uint64) {
+	// TODO(pav-kv): lastIndex() might be not yet durable. Make this check
+	// stronger by comparing `match` with the last durable index.
+	//
+	// TODO(pav-kv): make this check stronger when the raftLog stores the last
+	// accepted term. If `match` is non-zero, this follower's log last accepted
+	// term must equal the leader term, and have entries up to `match` durable.
+	if last := r.raftLog.lastIndex(); last < match {
+		r.logger.Panicf("match(%d) is out of range [lastIndex(%d)]. Was the raft log corrupted, truncated, or lost?", match, last)
+	}
+}
+
 func (r *raft) handleHeartbeat(m pb.Message) {
+	r.checkMatch(m.Match)
 	r.raftLog.commitTo(m.Commit)
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
 }
