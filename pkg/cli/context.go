@@ -339,7 +339,9 @@ var sqlCtx = func() *clisqlcfg.Context {
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
 func setSQLContextDefaults() {
-	sqlCtx.LoadDefaults(os.Stdout, stderr)
+	stderr.AtomicFunc(func(f *os.File) {
+		sqlCtx.LoadDefaults(os.Stdout, f)
+	})
 }
 
 // zipCtx captures the command-line parameters of the `zip` command.

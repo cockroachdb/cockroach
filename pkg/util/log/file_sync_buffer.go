@@ -130,7 +130,11 @@ func (l *fileSink) maybeRelinquishInternalStderrLocked() error {
 	if !l.mu.currentlyOwnsInternalStderr {
 		return nil
 	}
-	if err := hijackStderr(OrigStderr); err != nil {
+	var err error
+	OrigStderr.AtomicFunc(func(f *os.File) {
+		err = hijackStderr(f)
+	})
+	if err != nil {
 		return err
 	}
 	l.mu.currentlyOwnsInternalStderr = false

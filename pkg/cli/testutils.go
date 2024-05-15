@@ -56,7 +56,7 @@ type TestCLI struct {
 	tenant      serverutils.ApplicationLayerInterface
 	certsDir    string
 	cleanupFunc func() error
-	prevStderr  *os.File
+	prevStderr  *log.ThreadSafeStderr
 
 	// t is the testing.T instance used for this test.
 	// Example_xxx tests may have this set to nil.
@@ -211,8 +211,12 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 	// Ensure that CLI error messages and anything meant for the
 	// original stderr is redirected to stdout, where it can be
 	// captured.
+	//
+	// We reassign instead of calling SwapFile() on the prevStderr,
+	// because we only want this redirect to happen in pkg/cli, not
+	// the rest of the system (e.g. log.OrigStderr)
 	c.prevStderr = stderr
-	stderr = os.Stdout
+	stderr = log.NewThreadSafeStderr(os.Stdout)
 
 	return c
 }
@@ -320,7 +324,7 @@ func captureOutput(f func()) (out string, err error) {
 		return "", err
 	}
 	os.Stdout = w
-	stderr = w
+	stderr = log.NewThreadSafeStderr(w)
 
 	// Send all bytes from piped stdout through the output channel.
 	type captureResult struct {

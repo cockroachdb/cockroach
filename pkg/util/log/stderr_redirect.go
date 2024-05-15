@@ -12,6 +12,7 @@ package log
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"runtime/debug"
 
@@ -19,19 +20,78 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// ThreadSafeStderr wraps the stderr os.File in a RWMutex to protect
+// against race conditions. Today, these race conditions only exist in
+// tests where test code reassigns OrigStderr, but we should protect
+// against the possibility of such usages leaking into non-test code
+// as well, since reassignment of the underlying file is not uncommon.
+type ThreadSafeStderr struct {
+	mu struct {
+		syncutil.RWMutex
+		file *os.File
+	}
+}
+
+var _ io.Writer = (*ThreadSafeStderr)(nil)
+
+// NewThreadSafeStderr returns a thread safe wrapper around the
+// given *os.File.
+func NewThreadSafeStderr(file *os.File) *ThreadSafeStderr {
+	out := &ThreadSafeStderr{}
+	out.mu.file = file
+	return out
+}
+
+// Write implements the io.Writer interface.
+func (t *ThreadSafeStderr) Write(p []byte) (n int, err error) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.file.Write(p)
+}
+
+// AtomicFunc executes the provided function atomically against
+// the wrapped file within this ThreadSafeStderr. Uses a read-level
+// lock.
+func (t *ThreadSafeStderr) AtomicFunc(fn func(f *os.File)) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	fn(t.mu.file)
+}
+
+// SwapFile atomically swaps out the underlying file wrapped by this
+// ThreadSafeStderr
+func (t *ThreadSafeStderr) SwapFile(file *os.File) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.file = file
+}
+
+// File returns a reference to the underlying file. Generally, this is
+// only useful if you're about to call SwapFile, and you want to hold onto
+// the pre-exiting file to swap it back afterward.
+//
+// To actually use the underlying file for operations, use AtomicFunc instead.
+func (t *ThreadSafeStderr) File() *os.File {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.file
+}
+
 // OrigStderr points to the original stderr stream when the process
 // started.
 // Note that it is generally not sound to restore os.Stderr
 // and fd 2 from here as long as a stack of loggers (especially test
 // log scopes) are active, as the loggers keep track of what they are
 // redirecting themselves in a stack structure.
-var OrigStderr = func() *os.File {
+var OrigStderr = func() *ThreadSafeStderr {
 	fd, err := dupFD(os.Stderr.Fd())
 	if err != nil {
 		panic(err)
 	}
 
-	return os.NewFile(fd, os.Stderr.Name())
+	t := &ThreadSafeStderr{}
+	t.mu.file = os.NewFile(fd, os.Stderr.Name())
+	return t
 }()
 
 // hijackStderr replaces stderr with the given file descriptor.
@@ -112,7 +172,11 @@ func (l *fileSink) relinquishInternalStderr() error {
 
 	// If stderr actually redirected, restore it.
 	if l.mu.currentlyOwnsInternalStderr {
-		if err := hijackStderr(OrigStderr); err != nil {
+		var err error
+		OrigStderr.AtomicFunc(func(f *os.File) {
+			err = hijackStderr(f)
+		})
+		if err != nil {
 			return errors.Wrap(err, "unable to restore internal stderr")
 		}
 	}

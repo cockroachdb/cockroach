@@ -366,8 +366,8 @@ func TestConcurrentZip(t *testing.T) {
 		Server:   tc.Server(0),
 		Insecure: true,
 	}
-	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
-	stderr = os.Stdout
+	defer func(prevStderr *os.File) { stderr.SwapFile(prevStderr) }(stderr.File())
+	stderr.SwapFile(os.Stdout)
 
 	out, err := c.RunWithCapture("debug zip --timeout=30s --cpu-profile-duration=0s " + os.DevNull)
 	if err != nil {
@@ -671,8 +671,8 @@ func TestPartialZip(t *testing.T) {
 		Server:   tc.Server(0),
 		Insecure: true,
 	}
-	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
-	stderr = os.Stdout
+	defer func(prevStderr *os.File) { stderr.SwapFile(prevStderr) }(stderr.File())
+	stderr.SwapFile(os.Stdout)
 
 	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0s " + os.DevNull)
 	if err != nil {
