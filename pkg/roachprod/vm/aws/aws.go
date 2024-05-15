@@ -278,6 +278,10 @@ func (p *Provider) GetHostErrorVMs(
 	return nil, nil
 }
 
+func (p *Provider) GetVMSpecs(l *logger.Logger, vms vm.List) ([]map[string]interface{}, error) {
+	return nil, nil
+}
+
 const (
 	defaultSSDMachineType = "m6id.xlarge"
 	defaultMachineType    = "m6i.xlarge"
