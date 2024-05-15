@@ -36,4 +36,6 @@ timeout -s INT $((7800*60)) build/teamcity-roachtest-invoke.sh \
   --cpu-quota="${CPUQUOTA}" \
   --metamorphic-encryption-probability=0.5 \
   --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
+  --use-spot="${USE_SPOT:-true}" \
+  --use-spot-always=${USE_SPOT_ALWAYS:-false}" \
   --slack-token="${SLACK_TOKEN}"

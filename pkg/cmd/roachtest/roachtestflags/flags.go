@@ -359,8 +359,18 @@ var (
 
 	UseSpotVM bool
 	_         = registerRunFlag(&UseSpotVM, FlagInfo{
-		Name:  "use-spot",
-		Usage: `Use SpotVM to run tests, If the provider does not support spotVM, it will be ignored`,
+		Name: "use-spot",
+		Usage: `
+			May use SpotVM to run tests; note, this is merely a _hint_. The framework decides if a SpotVM should be used. 
+			You can override by passing --use-spot-always.`,
+	})
+
+	AlwaysUseSpotVM bool
+	_               = registerRunFlag(&UseSpotVM, FlagInfo{
+		Name: "use-spot-always",
+		Usage: `
+			Always use SpotVM to run test(s). If the cloud provider doesn't support SpotVMs, the flag will be ignored.
+			At this time, only GCE supports SpotVMs.`,
 	})
 
 	AutoKillThreshold float64 = 1.0
