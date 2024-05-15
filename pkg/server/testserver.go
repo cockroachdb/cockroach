@@ -252,9 +252,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.EnableDemoLoginEndpoint {
 		cfg.EnableDemoLoginEndpoint = true
 	}
-	if params.SnapshotApplyLimit != 0 {
-		cfg.SnapshotApplyLimit = params.SnapshotApplyLimit
-	}
 	if params.SnapshotSendLimit != 0 {
 		cfg.SnapshotSendLimit = params.SnapshotSendLimit
 	}

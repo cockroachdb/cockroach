@@ -300,6 +300,22 @@ var exportRequestsLimit = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// SnapshotApplyLimit is the number of concurrent snapshots a store will
+// apply. The send limit is typically higher than the apply limit for a few
+// reasons. One is that it keeps "pipelining" of requests in the case where
+// there is only a single sender and single receiver. As soon as a receiver
+// finishes a request, there will be another one to start. The performance
+// impact of sending snapshots is lower than applying. Finally, snapshots are
+// not sent until the receiver is ready to apply, so the cost of sending is
+// low until the receiver is ready.
+var snapshotApplyLimit = settings.RegisterIntSetting(
+	settings.SystemVisible,
+	"kv.store.raft_snapshot.apply_limit",
+	"number of concurrent snapshot apply request can be handled by store",
+	1,
+	settings.PositiveInt,
+)
+
 // raftStepDownOnRemoval is a metamorphic test parameter that makes Raft leaders
 // step down on demotion or removal. Following an upgrade, clusters may have
 // replicas with mixed settings, because it's only changed when initializing
@@ -332,7 +348,6 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		ProtectedTimestampReader:    spanconfig.EmptyProtectedTSReader(clock),
 		SnapshotSendLimit:           DefaultSnapshotSendLimit,
-		SnapshotApplyLimit:          DefaultSnapshotApplyLimit,
 		RangeCount:                  &atomic.Int64{},
 
 		// Use a constant empty system config, which mirrors the previously
@@ -1213,11 +1228,6 @@ type StoreConfig struct {
 	// Can be nil, which disables the limit.
 	EagerLeaseAcquisitionLimiter *quotapool.IntPool
 
-	// SnapshotApplyLimit specifies the maximum number of empty
-	// snapshots and the maximum number of non-empty snapshots that are permitted
-	// to be applied concurrently.
-	SnapshotApplyLimit int64
-
 	// SnapshotSendLimit specifies the maximum number of each type of
 	// snapshot that are permitted to be sent concurrently.
 	SnapshotSendLimit int64
@@ -1545,7 +1555,10 @@ func NewStore(
 
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
-	s.snapshotApplyQueue = multiqueue.NewMultiQueue(uint(cfg.SnapshotApplyLimit))
+	s.snapshotApplyQueue = multiqueue.NewMultiQueue(uint(snapshotApplyLimit.Get(&cfg.Settings.SV)))
+	snapshotApplyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		s.snapshotApplyQueue.UpdateConcurrencyLimit(uint(snapshotApplyLimit.Get(&cfg.Settings.SV)))
+	})
 	s.snapshotSendQueue = multiqueue.NewMultiQueue(uint(cfg.SnapshotSendLimit))
 
 	s.consistencyLimiter = quotapool.NewRateLimiter(
