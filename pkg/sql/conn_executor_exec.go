@@ -853,7 +853,6 @@ func (ex *connExecutor) execStmtInOpenState(
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
 			stmtFingerprintID,
-			&topLevelQueryStats{},
 			ex.statsCollector,
 			ex.extraTxnState.shouldLogToTelemetry)
 	}()
@@ -1868,7 +1867,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						&ex.extraTxnState.hasAdminRoleCache,
 						ex.server.TelemetryLoggingMetrics,
 						ppInfo.dispatchToExecutionEngine.stmtFingerprintID,
-						ppInfo.dispatchToExecutionEngine.queryStats,
 						ex.statsCollector,
 						ex.extraTxnState.shouldLogToTelemetry)
 				},
@@ -1895,7 +1893,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				&ex.extraTxnState.hasAdminRoleCache,
 				ex.server.TelemetryLoggingMetrics,
 				stmtFingerprintID,
-				&stats,
 				ex.statsCollector,
 				ex.extraTxnState.shouldLogToTelemetry)
 		}
@@ -2095,9 +2092,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 }
 
 // populateQueryLevelStats collects query-level execution statistics
-// and populates it in the instrumentationHelper's queryLevelStatsWithErr field.
-// Query-level execution statistics are collected using the statement's trace
-// and the plan's flow metadata.
+// and populates it in the instrumentationHelper's fields:
+//   - topLevelStats contains the top-level execution statistics.
+//   - queryLevelStatsWithErr contains query-level execution statistics are
+//     collected using the statement's trace and the plan's flow metadata.
 func populateQueryLevelStats(
 	ctx context.Context,
 	p *planner,
@@ -2106,6 +2104,8 @@ func populateQueryLevelStats(
 	cpuStats *multitenantcpu.CPUUsageHelper,
 ) {
 	ih := &p.instrumentation
+	ih.topLevelStats = *topLevelStats
+
 	if _, ok := ih.Tracing(); !ok {
 		return
 	}
@@ -2560,7 +2560,6 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
 			stmtFingerprintID,
-			&topLevelQueryStats{},
 			ex.statsCollector,
 			ex.extraTxnState.shouldLogToTelemetry)
 	}()
