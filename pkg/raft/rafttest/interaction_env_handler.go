@@ -30,6 +30,33 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 	env.Output.Reset()
 	var err error
 	switch d.Cmd {
+	case "store-liveness":
+		// Print global store liveness state.
+		//
+		// Example:
+		//
+		// store-liveness
+		_, err = env.Output.WriteString(env.fabric.String())
+	case "bump-epoch":
+		err = env.handleBumpEpoch(t, d)
+	case "bump-support-for":
+		// Bumps support for a remote store.
+		//
+		// Example:
+		//
+		// bump-support-for 1 2
+		// bumps support for store 1 from the perspective of store 2.
+		err = env.handleBumpSupport(t, d)
+	case "withdraw-support-for":
+		// Withdraws support for a remote store. The epoch is left un-altered. The
+		// caller may bump support for the remote store to bump the epoch and start
+		// providing support at the higher epoch.
+		//
+		// Example:
+		//
+		// withdraw-support-for 1 2
+		// withdraws support for store 1 from the perspective of store 2.
+		err = env.handleWithdrawSupport(t, d)
 	case "_breakpoint":
 		// This is a helper case to attach a debugger to when a problem needs
 		// to be investigated in a longer test file. In such a case, add the
@@ -211,8 +238,12 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 }
 
 func firstAsInt(t *testing.T, d datadriven.TestData) int {
+	return nthAsInt(t, d, 0)
+}
+
+func nthAsInt(t *testing.T, d datadriven.TestData, nth int) int {
 	t.Helper()
-	n, err := strconv.Atoi(d.CmdArgs[0].Key)
+	n, err := strconv.Atoi(d.CmdArgs[nth].Key)
 	if err != nil {
 		t.Fatal(err)
 	}

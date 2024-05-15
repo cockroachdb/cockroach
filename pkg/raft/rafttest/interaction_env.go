@@ -53,6 +53,7 @@ type InteractionEnv struct {
 	Options  *InteractionOpts
 	Nodes    []Node
 	Messages []pb.Message // in-flight messages
+	fabric   *globalLivenessFabric
 
 	Output *RedirectLogger
 }

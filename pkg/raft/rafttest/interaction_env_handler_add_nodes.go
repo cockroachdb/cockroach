@@ -65,7 +65,14 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 			}
 		}
 	}
-	return env.AddNodes(n, cfg, snap)
+	if env.fabric == nil {
+		// TODO(arul): we should instead initialize this when the receiver is
+		// constructed, and then call addNode n times.
+		env.fabric = newGlobalLivenessFabric(n)
+	} else {
+		env.fabric.addNode()
+	}
+	return env.AddNodes(n, cfg, snap, env.fabric)
 }
 
 type snapOverrideStorage struct {
@@ -84,7 +91,9 @@ var _ raft.Storage = snapOverrideStorage{}
 
 // AddNodes adds n new nodes initialized from the given snapshot (which may be
 // empty), and using the cfg as template. They will be assigned consecutive IDs.
-func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) error {
+func (env *InteractionEnv) AddNodes(
+	n int, cfg raft.Config, snap pb.Snapshot, fabric *globalLivenessFabric,
+) error {
 	bootstrap := !reflect.DeepEqual(snap, pb.Snapshot{})
 	for i := 0; i < n; i++ {
 		id := uint64(1 + len(env.Nodes))
@@ -136,6 +145,9 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			return errors.New("OnConfig must not set Logger")
 		}
 		cfg.Logger = env.Output
+		if fabric != nil {
+			cfg.StoreLiveness = &storeLiveness{nodeID: id, fabric: fabric}
+		}
 
 		rn, err := raft.NewRawNode(&cfg)
 		if err != nil {
