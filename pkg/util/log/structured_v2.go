@@ -24,7 +24,8 @@ import (
 type EventType string
 
 const (
-	STATEMENT_STATS EventType = "stmt_stats"
+	STATEMENT_STATS  EventType = "stmt_stats"
+	JOB_STATE_CHANGE EventType = "job_state_change"
 )
 
 var (
