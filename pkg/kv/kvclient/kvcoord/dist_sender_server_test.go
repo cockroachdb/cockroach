@@ -4894,13 +4894,8 @@ func TestProxyTracing(t *testing.T) {
 
 	p.EnablePartition(true)
 
-	// TODO(kvoli,andrewbaptist): Currently this may return an error on first
-	// attempt with 'pq: partitioned from 127.0.0.1:XXXXX, n3'. Remove the retry
-	// loop below once this is resolved.
-	testutils.SucceedsSoon(t, func() error {
-		_, err = conn.Exec("SET TRACING = on; SELECT FROM t where i = 987654321; SET TRACING = off")
-		return err
-	})
+	_, err = conn.Exec("SET TRACING = on; SELECT FROM t where i = 987654321; SET TRACING = off")
+	require.NoError(t, err)
 
 	// Expect the "proxy request complete" message to be in the trace and that it
 	// comes from the proxy node n2.
