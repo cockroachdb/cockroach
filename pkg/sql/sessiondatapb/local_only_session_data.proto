@@ -520,6 +520,11 @@ message LocalOnlySessionData {
   // OptimizerPushOffsetIntoIndexJoin, when true, indicates that the optimizer
   // should push offset expressions into index joins.
   bool optimizer_push_offset_into_index_join = 132;
+  // RegisterLatchWaitContentionEvents, when true, causes latch wait contention
+  // events to be registered with the *.contention_events virtual tables. It
+  // defaults to false in order to avoid registering a large number of
+  // uninformative latch wait events.
+  bool register_latch_wait_contention_events = 133;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
