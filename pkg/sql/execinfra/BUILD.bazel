@@ -89,6 +89,7 @@ go_test(
     srcs = [
         "base_test.go",
         "main_test.go",
+        "version_test.go",
     ],
     args = ["-test.timeout=55s"],
     embed = [":execinfra"],
@@ -106,6 +107,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
