@@ -2442,8 +2442,8 @@ project
       ├── b.arr:5[1] [as=arr:8, outer=(5)]
       └── b.arr:5[2] [as=arr:9, outer=(5)]
 
-norm expect=Abc
-SELECT i FROM a WHERE s LIKE '%%abc%'
+norm expect=NormalizeLikePattern
+SELECT i FROM a WHERE s LIKE '%%abc%%%%dddd'
 ----
 project
  ├── columns: i:2
@@ -2452,4 +2452,4 @@ project
       ├── scan a
       │    └── columns: i:2 s:4
       └── filters
-           └── s:4 LIKE '%abc%' [outer=(4), constraints=(/4: (/NULL - ])]
+           └── s:4 LIKE e'\'%abc%dddd\'' [outer=(4), constraints=(/4: [/e'\'' - /'('))]

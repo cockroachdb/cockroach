@@ -446,7 +446,7 @@ $value
 [NormalizeLikePattern, Normalize]
 (Like | NotLike | ILike | NotILike | SimilarTo | NotSimilarTo
     $left:*
-    $right:(ConstValue) & (RequiresDedup $right)
+    $right:(ConstValue) & (CanCollapseDupe $right)
 )
 =>
-((OpName) $left (DeDuped $right))
+((OpName) $left (CollapseDupeChar $right))

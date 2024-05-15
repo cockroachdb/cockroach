@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -386,12 +387,13 @@ func (c *CustomFuncs) CanNormalizeArrayFlatten(input memo.RelExpr, p *memo.Subqu
 	return c.HasOuterCols(input) || p.WithinUDF
 }
 
-func (c *CustomFuncs) DeDuped(input opt.ScalarExpr) opt.ScalarExpr {
+func (c *CustomFuncs) CollapseDupeChar(input opt.ScalarExpr) opt.ScalarExpr {
 	pattern := memo.ExtractConstDatum(input).String()
-	return c.f.ConstructConstVal(tree.NewDString("%abc%"), input.DataType())
+	collapsed := util.CollapseDupeChar(pattern, '%')
+	return c.f.ConstructConstVal(tree.NewDString(collapsed), input.DataType())
 }
 
-func (c *CustomFuncs) RequiresDedup(input opt.ScalarExpr) bool {
+func (c *CustomFuncs) CanCollapseDupe(input opt.ScalarExpr) bool {
 	d := memo.ExtractConstDatum(input)
 	return strings.Contains(d.String(), "%%")
 }
