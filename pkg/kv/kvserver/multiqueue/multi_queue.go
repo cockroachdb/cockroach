@@ -273,7 +273,7 @@ func (m *MultiQueue) QueueLen() int {
 }
 
 func (m *MultiQueue) queueLenLocked() int {
-	if m.remainingRuns < m.remainingRuns {
+	if m.remainingRuns < m.concurrencyLimit {
 		return 0
 	}
 	// Start counting from 1 since we will be the first in the queue if it gets added.
