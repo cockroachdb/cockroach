@@ -79,6 +79,10 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	jobutils.WaitForJobToSucceed(t, rSQLDB, downloadJobID)
 
 	rSQLDB.CheckQueryResults(t, createStmt, createStmtRes)
+
+	externalBytesBelow, err := jobutils.CheckDownloadCompletenessOnDatabase(ctx, rtc.Conns[0], "data")
+	require.NoError(t, err)
+	require.Zero(t, externalBytesBelow)
 }
 
 func TestOnlineRestorePartitioned(t *testing.T) {
@@ -181,11 +185,11 @@ func TestOnlineRestoreStatementResult(t *testing.T) {
 func TestOnlineRestoreWaitForDownload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
+	ctx := context.Background()
 	const numAccounts = 1000
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
 		// Online restore is not supported in a secondary tenant yet.
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
@@ -202,9 +206,51 @@ func TestOnlineRestoreWaitForDownload(t *testing.T) {
 	var downloadJobID jobspb.JobID
 	sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
 	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
-	sqlDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.tenant_span_stats(
-		ARRAY(SELECT(crdb_internal.table_span('data2.bank'::regclass::oid::int)[1], crdb_internal.table_span('data2.bank'::regclass::oid::int)[2]))
-	) WHERE (stats->>'external_file_bytes')::int > 0`, [][]string{})
+
+	externalBytes, err := jobutils.CheckDownloadCompletenessOnDatabase(ctx, tc.Conns[0], "data2")
+	require.NoError(t, err)
+	require.Zero(t, externalBytes)
+}
+
+// TestOnlineRestoreVerifyStats checks that crdb_internal.span_stats can be used
+// to grab external file bytes data.
+func TestOnlineRestoreVerifyStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	ctx := context.Background()
+
+	const numAccounts = 1000
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		// Online restore is not supported in a secondary tenant yet.
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	})
+	defer cleanupFn()
+	externalStorage := "nodelocal://1/backup"
+
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_do_download_files'`)
+
+	sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, new_db_name=data2", externalStorage))
+
+	// Wait for the download job to complete.
+	var downloadJobID jobspb.JobID
+	sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
+	jobutils.WaitForJobToPause(t, sqlDB, downloadJobID)
+	externalBytes, err := jobutils.CheckDownloadCompletenessOnDatabase(ctx, tc.Conns[0], "data2")
+	require.NoError(t, err)
+	require.NotZero(t, externalBytes)
+
+	sqlDB.Exec(t, `RESET CLUSTER SETTING jobs.debug.pausepoints`)
+	sqlDB.Exec(t, `RESUME JOB $1`, downloadJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
+
+	externalBytes, err = jobutils.CheckDownloadCompletenessOnDatabase(ctx, tc.Conns[0], "data2")
+	require.NoError(t, err)
+	require.Zero(t, externalBytes)
 }
 
 // TestOnlineRestoreTenant runs an online restore of a tenant and ensures the
@@ -216,6 +262,8 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	ctx := context.Background()
 
 	externalStorage := "nodelocal://1/backup"
 
@@ -292,6 +340,15 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	require.Greater(t, preRestoreTs, maxRestoreMVCCTimestamp)
 	dbAbove.QueryRow(t, "SELECT max(crdb_internal_mvcc_timestamp) FROM foo.bar").Scan(&maxRestoreMVCCTimestamp)
 	require.Greater(t, preRestoreTs, maxRestoreMVCCTimestamp)
+
+	// Check all data was downloaded
+	externalBytes, err := jobutils.CheckDownloadCompletenessOnDatabase(ctx, cBelow, "foo")
+	require.NoError(t, err)
+	require.Zero(t, externalBytes)
+
+	externalBytes, err = jobutils.CheckDownloadCompletenessOnDatabase(ctx, cAbove, "foo")
+	require.NoError(t, err)
+	require.Zero(t, externalBytes)
 }
 
 func TestOnlineRestoreErrors(t *testing.T) {

@@ -57,12 +57,14 @@ message SpanStats {
   // RemoteFileBytes is the subset of ApproximateDiskBytes which are stored in
   // "remote" files (i.e. shared files and external files). It represents a
   // physical value across all replicas.
-  uint64 remote_file_bytes = 5;
+  // NB: The explicit jsontag prevents 'omitempty` from being added by default.
+  uint64 remote_file_bytes = 5 [(gogoproto.jsontag) = "remote_file_bytes"];
 
   // ExternalFileBytes is the subset of RemoteFileBytes that are in "external"
   // files (not written/owned by this cluster, such as in restored backups).
   // It represents a physical value across all replicas.
-  uint64 external_file_bytes = 6;
+  // NB: The explicit jsontag prevents 'omitempty` from being added by default.
+  uint64 external_file_bytes = 6 [(gogoproto.jsontag) = "external_file_bytes"];
 
   // ApproximateTotalStats is the approximate, post-replicated MVCC stats for
   // the requested span. This is an approximate value as it is constructed by
