@@ -441,3 +441,12 @@ $value
 (Indirection $input:* $index:* & (IsJSON $input))
 =>
 (FetchVal $input $index)
+
+
+[NormalizeLikePattern, Normalize]
+(Like | NotLike | ILike | NotILike | SimilarTo | NotSimilarTo
+    $left:*
+    $right:(ConstValue) & (RequiresDedup $right)
+)
+=>
+((OpName) $left (DeDuped $right))

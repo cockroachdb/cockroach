@@ -12,6 +12,7 @@ package norm
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -383,4 +384,14 @@ func (c *CustomFuncs) SplitTupleEq(lhs, rhs *memo.TupleExpr) memo.FiltersExpr {
 // ArrayFlatten exists within a UDF.
 func (c *CustomFuncs) CanNormalizeArrayFlatten(input memo.RelExpr, p *memo.SubqueryPrivate) bool {
 	return c.HasOuterCols(input) || p.WithinUDF
+}
+
+func (c *CustomFuncs) DeDuped(input opt.ScalarExpr) opt.ScalarExpr {
+	pattern := memo.ExtractConstDatum(input).String()
+	return c.f.ConstructConstVal(tree.NewDString("%abc%"), input.DataType())
+}
+
+func (c *CustomFuncs) RequiresDedup(input opt.ScalarExpr) bool {
+	d := memo.ExtractConstDatum(input)
+	return strings.Contains(d.String(), "%%")
 }
