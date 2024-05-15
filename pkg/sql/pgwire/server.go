@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -165,6 +166,13 @@ var (
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaPGWirePipelineCount = metric.Metadata{
+		Name:        "sql.pgwire.pipeline.count",
+		Help:        "Number of pgwire commands received by the server that have not yet begun processing",
+		Measurement: "Commands",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
 )
 
 const (
@@ -262,6 +270,7 @@ type tenantSpecificMetrics struct {
 	Conns                       *metric.Gauge
 	NewConns                    *metric.Counter
 	ConnsWaitingToHash          *metric.Gauge
+	PGWirePipelineCount         *metric.Gauge
 	ConnLatency                 metric.IHistogram
 	ConnFailures                *metric.Counter
 	PGWireCancelTotalCount      *metric.Counter
@@ -275,11 +284,12 @@ func newTenantSpecificMetrics(
 	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
 ) *tenantSpecificMetrics {
 	return &tenantSpecificMetrics{
-		BytesInCount:       metric.NewCounter(MetaBytesIn),
-		BytesOutCount:      metric.NewCounter(MetaBytesOut),
-		Conns:              metric.NewGauge(MetaConns),
-		NewConns:           metric.NewCounter(MetaNewConns),
-		ConnsWaitingToHash: metric.NewGauge(MetaConnsWaitingToHash),
+		BytesInCount:        metric.NewCounter(MetaBytesIn),
+		BytesOutCount:       metric.NewCounter(MetaBytesOut),
+		Conns:               metric.NewGauge(MetaConns),
+		NewConns:            metric.NewCounter(MetaNewConns),
+		ConnsWaitingToHash:  metric.NewGauge(MetaConnsWaitingToHash),
+		PGWirePipelineCount: metric.NewGauge(MetaPGWirePipelineCount),
 		ConnLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     MetaConnLatency,
@@ -843,6 +853,7 @@ func (s *Server) newConn(
 		alwaysLogAuthActivity: s.testingAuthLogEnabled.Get(),
 	}
 	c.stmtBuf.Init()
+	c.stmtBuf.PipelineCount = s.tenantMetrics.PGWirePipelineCount
 	c.res.released = true
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
