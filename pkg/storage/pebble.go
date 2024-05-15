@@ -180,7 +180,7 @@ var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm",
 	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`+
 		` supported values: "snappy", "zstd"`,
-	compressionAlgorithmSnappy, // Default.
+	compressionAlgorithmZstd, // Default.
 )
 
 // CompressionAlgorithmBackupStorage determines the compression algorithm used
