@@ -1438,6 +1438,7 @@ var zipSystemTables = DebugZipTableRegistry{
 			"sampling_probability",
 			"plan_gist",
 			"anti_plan_gist",
+			"redacted",
 		},
 	},
 	// statement_statistics can have over 100k rows in just the last hour.

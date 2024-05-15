@@ -1792,6 +1792,7 @@ system              public             29_36_2_not_null                         
 system              public             29_36_3_not_null                                                                                                system         public        statement_diagnostics            CHECK            NO             NO
 system              public             29_36_4_not_null                                                                                                system         public        statement_diagnostics            CHECK            NO             NO
 system              public             primary                                                                                                         system         public        statement_diagnostics            PRIMARY KEY      NO             NO
+system              public             29_35_11_not_null                                                                                               system         public        statement_diagnostics_requests   CHECK            NO             NO
 system              public             29_35_1_not_null                                                                                                system         public        statement_diagnostics_requests   CHECK            NO             NO
 system              public             29_35_2_not_null                                                                                                system         public        statement_diagnostics_requests   CHECK            NO             NO
 system              public             29_35_3_not_null                                                                                                system         public        statement_diagnostics_requests   CHECK            NO             NO
@@ -2019,6 +2020,7 @@ system              public             29_33_2_not_null                         
 system              public             29_33_4_not_null                                                                                                user_id IS NOT NULL
 system              public             29_34_1_not_null                                                                                                id IS NOT NULL
 system              public             29_34_3_not_null                                                                                                data IS NOT NULL
+system              public             29_35_11_not_null                                                                                               redacted IS NOT NULL
 system              public             29_35_1_not_null                                                                                                id IS NOT NULL
 system              public             29_35_2_not_null                                                                                                completed IS NOT NULL
 system              public             29_35_3_not_null                                                                                                statement_fingerprint IS NOT NULL
@@ -3042,6 +3044,7 @@ system         public        statement_diagnostics_requests   expires_at        
 system         public        statement_diagnostics_requests   id                                                                                                        1
 system         public        statement_diagnostics_requests   min_execution_latency                                                                                     6
 system         public        statement_diagnostics_requests   plan_gist                                                                                                 9
+system         public        statement_diagnostics_requests   redacted                                                                                                  11
 system         public        statement_diagnostics_requests   requested_at                                                                                              5
 system         public        statement_diagnostics_requests   sampling_probability                                                                                      8
 system         public        statement_diagnostics_requests   statement_diagnostics_id                                                                                  4

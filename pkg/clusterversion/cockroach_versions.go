@@ -188,10 +188,6 @@ const (
 	// DeleteSized operations.
 	TODODelete_V23_2_UseSizedPebblePointTombstones
 
-	// TODODelete_V23_2_StmtDiagForPlanGist enables statement diagnostic feature to collect
-	// the bundle for particular plan gist.
-	TODODelete_V23_2_StmtDiagForPlanGist
-
 	// TODODelete_V23_2_RemoveLockTableWaiterTouchPush simplifies the push logic in
 	// lock_table_waiter by passing the wait policy of the pusher as part of the
 	// push request and leaving the push outcome to the server-side logic.
@@ -264,6 +260,10 @@ const (
 	// the process of upgrading from 24.1 to 24.2.
 	V24_2Start
 
+	// V24_2_StmtDiagRedacted is the migration to add `redacted` column to the
+	// system.statement_diagnostics_requests table.
+	V24_2_StmtDiagRedacted
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -300,7 +300,6 @@ var versionTable = [numKeys]roachpb.Version{
 
 	// v23.2 versions. Internal versions must be even.
 	TODODelete_V23_2_UseSizedPebblePointTombstones:  {Major: 23, Minor: 1, Internal: 14},
-	TODODelete_V23_2_StmtDiagForPlanGist:            {Major: 23, Minor: 1, Internal: 18},
 	TODODelete_V23_2_RemoveLockTableWaiterTouchPush: {Major: 23, Minor: 1, Internal: 22},
 	TODODelete_V23_2_ChangefeedLaggingRangesOpts:    {Major: 23, Minor: 1, Internal: 24},
 
@@ -328,6 +327,8 @@ var versionTable = [numKeys]roachpb.Version{
 
 	// v24.2 versions. Internal versions must be even.
 	V24_2Start: {Major: 24, Minor: 1, Internal: 2},
+
+	V24_2_StmtDiagRedacted: {Major: 24, Minor: 1, Internal: 4},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

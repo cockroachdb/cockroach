@@ -742,6 +742,7 @@ type StmtDiagnosticsRequestInsertFunc func(
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
+	redacted bool,
 ) error
 
 // AsOfSystemTime represents the result from the evaluation of AS OF SYSTEM TIME
