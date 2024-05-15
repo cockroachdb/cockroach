@@ -640,7 +640,7 @@ func (s *Container) PopAllStats(
 				PlanHash:                 key.planHash,
 				TransactionFingerprintID: key.transactionFingerprintID,
 			},
-			ID:    constructStatementFingerprintIDFromStmtKey(key),
+			ID:    stmt.ID,
 			Stats: data,
 		})
 	}
