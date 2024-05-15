@@ -100,6 +100,7 @@ func registerAcceptance(r registry.Registry) {
 			{
 				name:     "multitenant-multiregion",
 				fn:       runAcceptanceMultitenantMultiRegion,
+				timeout:  20 * time.Minute,
 				numNodes: 9,
 				nodeRegions: []string{"us-west1-b", "us-west1-b", "us-west1-b",
 					"us-west1-b", "us-west1-b", "us-west1-b",
