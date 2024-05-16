@@ -1,10 +1,11 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "operations",
     srcs = [
         "add_column.go",
         "add_index.go",
+        "cluster_settings.go",
         "disk_stall.go",
         "network_partition.go",
         "node_kill.go",
@@ -22,5 +23,13 @@ go_library(
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/roachprod",
         "//pkg/util/randutil",
+        "//pkg/util/timeutil",
     ],
+)
+
+go_test(
+    name = "operations_test",
+    srcs = ["cluster_settings_test.go"],
+    embed = [":operations"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
