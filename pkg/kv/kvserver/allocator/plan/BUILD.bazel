@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "plan",
@@ -24,5 +24,20 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@io_etcd_go_raft_v3//:raft",
+    ],
+)
+
+go_test(
+    name = "plan_test",
+    srcs = ["util_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":plan"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/roachpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )
