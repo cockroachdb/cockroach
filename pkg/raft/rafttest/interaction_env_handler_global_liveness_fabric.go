@@ -143,7 +143,8 @@ func (env *InteractionEnv) handleBumpSupport(t *testing.T, d datadriven.TestData
 	byStore := nthAsInt(t, d, 1)
 	// First off, bump the forStore's epoch.
 	env.fabric.state[forStore][forStore].epoch++
-	env.fabric.state[byStore][forStore].epoch++
+	env.fabric.state[byStore][forStore] = env.fabric.state[forStore][forStore]
+	env.fabric.state[byStore][forStore].isSupported = true
 	_, err := env.Output.WriteString(env.fabric.String())
 	return err
 }

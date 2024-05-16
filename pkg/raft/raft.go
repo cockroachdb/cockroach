@@ -693,6 +693,39 @@ func (r *raft) bcastAppend() {
 	})
 }
 
+// maybeRefortify goes through the list of all peers and figures out whether
+// fortification support from any has expired. If it has, it tries to gain this
+// back by refortifying (if possible).
+func (r *raft) maybeRefortify() {
+	runtimeAssert(r.state == StateLeader, "can't fortify if you're not a leader")
+	r.trk.Visit(func(id uint64, _ *tracker.Progress) {
+		if id == r.id {
+			return
+		}
+		livenessEpoch, _, isSupported := r.storeLiveness.SupportFrom(id)
+		if !isSupported {
+			// TODO(arul): should we try regardless?
+			return
+		}
+		fortifiedEpoch, found := r.leadSupport[id]
+		if !found {
+			// We hadn't successfully fortified this peer before. The peer's store is
+			// supporting us, so we have a chance to do so now.
+			r.sendFortify(id)
+			return
+		}
+		runtimeAssert(fortifiedEpoch <= livenessEpoch,
+			"store liveness epoch can't be less than an already fortified epoch",
+		)
+		if fortifiedEpoch != livenessEpoch {
+			// Support from the fortified epoch has been withdrawn, however, the
+			// peer's store is currently providing support at a higher epoch. Try to
+			// re-fortify.
+			r.sendFortify(id)
+		}
+	})
+}
+
 // bcastFortify sends an RPC to fortify the leader.
 func (r *raft) bcastFortify() {
 	runtimeAssert(r.state == StateLeader, "can't fortify if you're not a leader")
@@ -857,6 +890,8 @@ func (r *raft) tickHeartbeat() {
 			r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
 		}
 	}
+
+	r.maybeRefortify()
 }
 
 func (r *raft) becomeFollower(term uint64, lead uint64) {
