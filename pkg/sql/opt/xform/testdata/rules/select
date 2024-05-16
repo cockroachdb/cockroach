@@ -11538,3 +11538,18 @@ select
  │    └── columns: c0:1 c1:2
  └── filters
       └── c0:1 = '2001-12-01 00:00:00' [outer=(1), constraints=(/1: [/'2001-12-01 00:00:00' - /'2001-12-01 00:00:00']; tight), fd=()-->(1)]
+
+# Regression test for 124455: LIKE expressions with an escaped backslash before
+# the wildcard should still become constrained scans.
+
+exec-ddl
+CREATE TABLE t124455 (s STRING PRIMARY KEY)
+----
+
+opt expect=GenerateConstrainedScans
+SELECT * FROM t124455 WHERE s LIKE e'\\\\%'
+----
+scan t124455
+ ├── columns: s:1!null
+ ├── constraint: /1: [/e'\\' - /']')
+ └── key: (1)
