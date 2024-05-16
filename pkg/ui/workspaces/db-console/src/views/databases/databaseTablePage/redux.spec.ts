@@ -216,6 +216,7 @@ describe("Database Table Page", function () {
         stats: [],
         lastReset: util.minDate,
       },
+      isTenant: false,
     });
   });
 

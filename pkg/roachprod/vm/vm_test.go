@@ -132,12 +132,18 @@ func TestDNSSafeAccount(t *testing.T) {
 			"dot and underscore", "u.ser_n.a_me", "username",
 		},
 		{
-			"Unicode and other characters", "~/❦u.ser_ऄn.a_meλ", "username",
+			"leading and trailing hyphens", "--username-clustername-&", "username-clustername",
+		},
+		{
+			"consecutive hyphens", "username---clustername", "username-clustername",
+		},
+		{
+			"Unicode and other characters", "~/❦--u.ser_ऄn.a_meλ", "username",
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.description, func(t *testing.T) {
-			assert.EqualValues(t, DNSSafeAccount(c.input), c.expected)
+			assert.EqualValues(t, c.expected, DNSSafeName(c.input))
 		})
 	}
 }

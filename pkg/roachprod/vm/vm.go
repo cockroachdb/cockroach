@@ -710,21 +710,31 @@ func ExpandZonesFlag(zoneFlag []string) (zones []string, err error) {
 	return zones, nil
 }
 
-// DNSSafeAccount takes a string and returns a cleaned version of the string that can be used in DNS entries.
+// DNSSafeName takes a string and returns a cleaned version of the string that can be used in DNS entries.
 // Unsafe characters are dropped. No length check is performed.
-func DNSSafeAccount(account string) string {
+func DNSSafeName(name string) string {
 	safe := func(r rune) rune {
 		switch {
 		case r >= 'a' && r <= 'z':
 			return r
 		case r >= 'A' && r <= 'Z':
 			return unicode.ToLower(r)
+		case r >= '0' && r <= '9':
+			return r
+		case r == '-':
+			return r
 		default:
 			// Negative value tells strings.Map to drop the rune.
 			return -1
 		}
 	}
-	return strings.Map(safe, account)
+	name = strings.Map(safe, name)
+
+	// DNS entries cannot start or end with hyphens.
+	name = strings.Trim(name, "-")
+
+	// Consecutive hyphens are allowed in DNS entries, but disallow it for readability.
+	return regexp.MustCompile(`-+`).ReplaceAllString(name, "-")
 }
 
 // SanitizeLabel returns a version of the string that can be used as a label.

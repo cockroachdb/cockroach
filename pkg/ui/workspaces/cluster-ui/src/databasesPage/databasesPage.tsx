@@ -240,7 +240,7 @@ export class DatabasesPage extends React.Component<
   };
 
   componentDidMount(): void {
-    if (this.props.refreshNodes != null) {
+    if (this.props.refreshNodes != null && !this.props.isTenant) {
       this.props.refreshNodes();
     }
 
