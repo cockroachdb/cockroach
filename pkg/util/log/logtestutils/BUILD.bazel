@@ -4,6 +4,7 @@ go_library(
     name = "logtestutils",
     srcs = [
         "log_test_utils.go",
+        "structured_log_spy.go",
         "telemetry_logging_test_utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logtestutils",
