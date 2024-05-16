@@ -1783,10 +1783,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				)
 			},
 			Info: infoBuilder{
-				info: fmt.Sprintf(
-					"Returns the GeoJSON representation of a given Geometry. Coordinates have a maximum of %d decimal digits.",
-					geo.DefaultGeoJSONDecimalDigits,
-				),
+				info: "Returns the GeoJSON representation of a given Geometry.",
 			}.String(),
 			Volatility: volatility.Immutable,
 		},
@@ -1804,10 +1801,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				)
 			},
 			Info: infoBuilder{
-				info: fmt.Sprintf(
-					"Returns the GeoJSON representation of a given Geometry, using geo_column as the geometry for the given Feature. Coordinates have a maximum of %d decimal digits.",
-					geo.DefaultGeoJSONDecimalDigits,
-				),
+				info: "Returns the GeoJSON representation of a given Geometry, using geo_column as the geometry for the given Feature.",
 			}.String(),
 			Volatility: volatility.Stable,
 		},
@@ -1869,10 +1863,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{
-				info: fmt.Sprintf(
-					"Returns the GeoJSON representation of a given Geometry. Coordinates have a maximum of %d decimal digits.",
-					geo.DefaultGeoJSONDecimalDigits,
-				),
+				info: "Returns the GeoJSON representation of a given Geometry.",
 			},
 			volatility.Immutable,
 		),
@@ -1926,10 +1917,7 @@ Options is a flag that can be bitmasked. The options are:
 			},
 			types.String,
 			infoBuilder{
-				info: fmt.Sprintf(
-					"Returns the GeoJSON representation of a given Geography. Coordinates have a maximum of %d decimal digits.",
-					geo.DefaultGeoJSONDecimalDigits,
-				),
+				info: "Returns the GeoJSON representation of a given Geography.",
 			},
 			volatility.Immutable,
 		),

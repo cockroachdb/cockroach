@@ -33,7 +33,7 @@ import (
 )
 
 // DefaultGeoJSONDecimalDigits is the default number of digits coordinates in GeoJSON.
-const DefaultGeoJSONDecimalDigits = 9
+const DefaultGeoJSONDecimalDigits = -1
 
 // SpatialObjectToWKT transforms a given SpatialObject to WKT.
 func SpatialObjectToWKT(so geopb.SpatialObject, maxDecimalDigits int) (geopb.WKT, error) {
