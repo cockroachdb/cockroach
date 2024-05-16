@@ -101,6 +101,9 @@ func (k *kafkaSinkClient) Close() error {
 func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error {
 	msgs := payload.([]*sarama.ProducerMessage)
 	for _, msg := range msgs {
+		// ProducerMessage has an `expectation` field thats a callback chan, which is what the SyncProducer uses internally. But we cant use it, nor can we really implement it ourselves.
+		// It's pretty expensive also... a channel per message.
+		// Probably better to use one client per parallelIO worker, if we can
 		k.producer.Input() <- msg
 	}
 	// TODO: next: we need to basically account for each of the messages we sent. but this will be called in parallel from the batching sink / parallel io guy
