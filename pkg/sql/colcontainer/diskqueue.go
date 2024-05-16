@@ -400,7 +400,7 @@ func newDiskQueue(
 		return nil, err
 	}
 	d := &diskQueue{
-		dirName:          uuid.FastMakeV4().String(),
+		dirName:          uuid.MakeV4().String(),
 		typs:             typs,
 		cfg:              cfg,
 		files:            make([]file, 0, 4),

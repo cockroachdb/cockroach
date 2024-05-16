@@ -148,7 +148,7 @@ func TestCollectionThreshold(t *testing.T) {
 		{
 			BlockingEvent: kvpb.ContentionEvent{
 				TxnMeta: enginepb.TxnMeta{
-					ID: uuid.FastMakeV4(),
+					ID: uuid.MakeV4(),
 				},
 				Duration: 10 * time.Millisecond,
 			},
@@ -156,7 +156,7 @@ func TestCollectionThreshold(t *testing.T) {
 		{
 			BlockingEvent: kvpb.ContentionEvent{
 				TxnMeta: enginepb.TxnMeta{
-					ID: uuid.FastMakeV4(),
+					ID: uuid.MakeV4(),
 				},
 				Duration: 2 * time.Second,
 			},
@@ -206,7 +206,7 @@ func BenchmarkEventStoreIntake(b *testing.B) {
 		input := make([]contentionpb.ExtendedContentionEvent, 0, b.N)
 		for i := 0; i < b.N; i++ {
 			event := contentionpb.ExtendedContentionEvent{}
-			event.BlockingEvent.TxnMeta.ID = uuid.FastMakeV4()
+			event.BlockingEvent.TxnMeta.ID = uuid.MakeV4()
 			input = append(input, event)
 		}
 		starter := make(chan struct{})
@@ -271,11 +271,11 @@ func randomlyGenerateTestData(testSize int, numOfCoordinator int) []testData {
 	for i := 0; i < testSize; i++ {
 		tcs = append(tcs, testData{
 			blockingTxn: contentionpb.ResolvedTxnID{
-				TxnID:            uuid.FastMakeV4(),
+				TxnID:            uuid.MakeV4(),
 				TxnFingerprintID: appstatspb.TransactionFingerprintID(math.MaxUint64 - uint64(i)),
 			},
 			waitingTxn: contentionpb.ResolvedTxnID{
-				TxnID:            uuid.FastMakeV4(),
+				TxnID:            uuid.MakeV4(),
 				TxnFingerprintID: appstatspb.TransactionFingerprintID(math.MaxUint64/2 - uint64(i)),
 			},
 			coordinatorNodeID: strconv.Itoa(rand.Intn(numOfCoordinator)),

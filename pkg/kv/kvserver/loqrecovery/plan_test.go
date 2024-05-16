@@ -39,7 +39,7 @@ func TestVersionIsPreserved(t *testing.T) {
 // infoWithVersion creates a skeleton info that passes all checks beside version.
 func infoWithVersion(v roachpb.Version) loqrecoverypb.ClusterReplicaInfo {
 	return loqrecoverypb.ClusterReplicaInfo{
-		ClusterID: uuid.FastMakeV4().String(),
+		ClusterID: uuid.MakeV4().String(),
 		Version:   v,
 	}
 }
