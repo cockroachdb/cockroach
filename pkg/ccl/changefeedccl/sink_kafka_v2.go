@@ -2,14 +2,18 @@ package changefeedccl
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 type kafkaSinkClient struct {
@@ -27,8 +31,8 @@ type kafkaSinkClient struct {
 	lastMetadataRefresh time.Time
 }
 
-func makeKafkaSinkClient(
-	ctx context.Context,
+func newKafkaSinkClient(
+	ctx context.Context, // TODO: do we need this ctx
 	batchCfg sinkBatchConfig,
 	kafkaCfg *sarama.Config,
 	bootstrapAddrs string,
@@ -47,11 +51,30 @@ func makeKafkaSinkClient(
 	if err != nil {
 		return nil, err
 	}
-	sinkClient.producer, err = newAsyncProducer(sinkClient.client, bootstrapAddrs, knobs)
-	if err != nil {
-		return nil, err
-	}
+	// sinkClient.producer, err = newAsyncProducer(sinkClient.client, bootstrapAddrs, knobs)
+	// if err != nil {
+	// 	return nil, err
+	// }
 	return sinkClient, nil
+}
+
+func makeKafkaClient(
+	config *sarama.Config,
+	bootstrapAddrs string,
+	knobs kafkaSinkKnobs,
+) (kafkaClient, error) {
+	// Initialize client and producer
+	if knobs.OverrideClientInit != nil {
+		client, err := knobs.OverrideClientInit(config)
+		return client, err
+	}
+
+	client, err := sarama.NewClient(strings.Split(bootstrapAddrs, `,`), config)
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.CannotConnectNow,
+			`connecting to kafka: %s`, bootstrapAddrs)
+	}
+	return client, err
 }
 
 // Close implements SinkClient.
@@ -86,8 +109,53 @@ func makeKafkaSinkV2(ctx context.Context,
 	timeSource timeutil.TimeSource,
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
-) (*batchingSink, error) {
+) (Sink, error) {
+	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
+		// TODO[rachael]: Change to kafka defaults
+		// ..but the defaults for these are all zero -- flush immediately.
+		Flush: sinkBatchConfig{
+			Frequency: jsonDuration(10 * time.Millisecond),
+			Messages:  100,
+			Bytes:     1e6,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
+	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
+	if schemaTopic := u.consumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
+		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
+	}
 
-	return makeBatchingSink(ctx, sinkTypeKafka, sinkClient, time.Second, retry.Options{},
-		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings)
+	m := mb(requiresResourceAccounting)
+	kafkaCfg, err := buildKafkaConfig(ctx, u, jsonConfig, m.getKafkaThrottlingMetrics(settings))
+	if err != nil {
+		return nil, err
+	}
+
+	topicNamer, err := MakeTopicNamer(
+		targets,
+		WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(SQLNameToKafkaName))
+
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: how to make batching sink framework work with this kafka-specific retry with smaller batches setting.
+	// internalRetryEnabled := settings != nil && changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV)
+
+	// TODO: how to handle knobs
+	sinkClient, err := newKafkaSinkClient(ctx, batchCfg, kafkaCfg, u.Host, topicNamer, kafkaSinkKnobs{})
+	if err != nil {
+		return nil, err
+	}
+
+	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
+		return nil, errors.Errorf(
+			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
+	}
+
+	return makeBatchingSink(ctx, sinkTypeKafka, sinkClient, time.Second, retryOpts,
+		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
 }

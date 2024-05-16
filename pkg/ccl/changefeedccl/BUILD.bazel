@@ -33,6 +33,7 @@ go_library(
         "sink_cloudstorage.go",
         "sink_external_connection.go",
         "sink_kafka.go",
+        "sink_kafka_v2.go",
         "sink_pubsub.go",
         "sink_pubsub_v2.go",
         "sink_pulsar.go",
