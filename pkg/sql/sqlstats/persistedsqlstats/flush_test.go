@@ -779,7 +779,7 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 
 	dbName := "defaultdb"
 
-	appName := fmt.Sprintf("TestSQLStatsPlanSampling_%s", uuid.FastMakeV4().String())
+	appName := fmt.Sprintf("TestSQLStatsPlanSampling_%s", uuid.MakeV4().String())
 	sqlRun.Exec(t, "SET application_name = $1", appName)
 
 	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)

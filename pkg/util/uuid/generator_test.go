@@ -360,12 +360,7 @@ func BenchmarkGenerator(b *testing.B) {
 	})
 	b.Run("V4", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			Must(NewV4())
-		}
-	})
-	b.Run("FastV4", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			FastMakeV4()
+			MakeV4()
 		}
 	})
 	b.Run("V5", func(b *testing.B) {

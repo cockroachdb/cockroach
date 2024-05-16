@@ -4878,7 +4878,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 	localityFiler roachpb.Locality,
 ) *PlanningCtx {
 	distribute := distributionType == FullDistribution
-	infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewaySQLInstanceID)
+	infra := physicalplan.NewPhysicalInfrastructure(uuid.MakeV4(), dsp.gatewaySQLInstanceID)
 	planCtx := &PlanningCtx{
 		ExtendedEvalCtx: evalCtx,
 		localityFilter:  localityFiler,

@@ -675,7 +675,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	// RegisterFlow with an immediate timeout.
 	flow := &FlowBase{
 		FlowCtx: execinfra.FlowCtx{
-			ID: execinfrapb.FlowID{UUID: uuid.FastMakeV4()},
+			ID: execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		},
 		inboundStreams: inboundStreams,
 		flowRegistry:   fr,

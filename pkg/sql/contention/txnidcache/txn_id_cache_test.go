@@ -263,11 +263,11 @@ func TestInvalidTxnID(t *testing.T) {
 
 	inputData := []contentionpb.ResolvedTxnID{
 		{
-			TxnID:            uuid.FastMakeV4(),
+			TxnID:            uuid.MakeV4(),
 			TxnFingerprintID: appstatspb.TransactionFingerprintID(1),
 		},
 		{
-			TxnID:            uuid.FastMakeV4(),
+			TxnID:            uuid.MakeV4(),
 			TxnFingerprintID: appstatspb.TransactionFingerprintID(2),
 		},
 	}

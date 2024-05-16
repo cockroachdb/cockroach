@@ -141,7 +141,7 @@ func generateInputBlock(
 	expected = make(map[uuid.UUID]appstatspb.TransactionFingerprintID)
 
 	for i := 0; i < size; i++ {
-		input[i].TxnID = uuid.FastMakeV4()
+		input[i].TxnID = uuid.MakeV4()
 		input[i].TxnFingerprintID =
 			appstatspb.TransactionFingerprintID(rand.Uint64())
 
