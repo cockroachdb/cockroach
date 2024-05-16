@@ -22,6 +22,7 @@ package lexbase
 
 import (
 	"bytes"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
@@ -112,7 +113,8 @@ func EncodeEscapedSQLIdent(buf *bytes.Buffer, s string) {
 	buf.WriteByte('"')
 }
 
-var mustQuoteMap = map[byte]bool{
+const minQuoteChar = ' ' // 0x20
+var mustQuoteMap = [unicode.MaxASCII + 1]bool{
 	' ': true,
 	',': true,
 	'{': true,
@@ -151,7 +153,7 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 			continue
 		}
 		ch := byte(r)
-		if r >= 0x20 && r < 0x7F {
+		if r >= minQuoteChar && r <= unicode.MaxASCII {
 			if mustQuoteMap[ch] {
 				// We have to quote this string - ignore bareStrings setting
 				bareStrings = false
