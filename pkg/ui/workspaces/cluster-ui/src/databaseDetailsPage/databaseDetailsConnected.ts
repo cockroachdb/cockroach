@@ -25,7 +25,6 @@ import {
   DatabaseDetailsPage,
   DatabaseDetailsPageActions,
   DatabaseDetailsPageData,
-  ViewMode,
 } from "./databaseDetailsPage";
 import { actions as analyticsActions } from "../store/analytics";
 import { Filters } from "../queryFilter";
@@ -44,6 +43,7 @@ import {
   selectIndexRecommendationsEnabled,
 } from "../store/clusterSettings/clusterSettings.selectors";
 import { actions as nodesActions } from "../store/nodes/nodes.reducer";
+import { ViewMode } from "./types";
 
 const mapStateToProps = (
   state: AppState,

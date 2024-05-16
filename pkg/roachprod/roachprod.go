@@ -67,6 +67,21 @@ const (
 	prometheusHostUrlEnv = "COCKROACH_PROM_HOST_URL"
 )
 
+// MalformedClusterNameError is returned when the cluster name passed to Create is invalid.
+type MalformedClusterNameError struct {
+	name        string
+	reason      string
+	suggestions []string
+}
+
+func (e *MalformedClusterNameError) Error() string {
+	return fmt.Sprintf("Malformed cluster name %s, %s. Did you mean one of %s", e.name, e.reason, e.suggestions)
+}
+
+// findActiveAccounts is a hook for tests to inject their own FindActiveAccounts
+// implementation. i.e. unit tests that don't want to actually access a provider.
+var findActiveAccounts = vm.FindActiveAccounts
+
 // verifyClusterName ensures that the given name conforms to
 // our naming pattern of "<username>-<clustername>". The
 // username must match one of the vm.Provider account names
@@ -76,12 +91,9 @@ func verifyClusterName(l *logger.Logger, clusterName, username string) error {
 		return fmt.Errorf("cluster name cannot be blank")
 	}
 
-	alphaNum, err := regexp.Compile(`^[a-zA-Z0-9\-]+$`)
-	if err != nil {
-		return err
-	}
-	if !alphaNum.MatchString(clusterName) {
-		return errors.Errorf("cluster name must match %s", alphaNum.String())
+	sanitizedName := vm.DNSSafeName(clusterName)
+	if sanitizedName != clusterName {
+		return &MalformedClusterNameError{name: clusterName, reason: "invalid characters", suggestions: []string{sanitizedName}}
 	}
 
 	if config.IsLocalClusterName(clusterName) {
@@ -91,17 +103,21 @@ func verifyClusterName(l *logger.Logger, clusterName, username string) error {
 	// Use the vm.Provider account names, or --username.
 	var accounts []string
 	if len(username) > 0 {
-		accounts = []string{username}
+		cleanAccount := vm.DNSSafeName(username)
+		if cleanAccount != username {
+			l.Printf("WARN: using `%s' as username instead of `%s'", cleanAccount, username)
+		}
+		accounts = []string{cleanAccount}
 	} else {
 		seenAccounts := map[string]bool{}
-		active, err := vm.FindActiveAccounts(l)
+		active, err := findActiveAccounts(l)
 		if err != nil {
 			return err
 		}
 		for _, account := range active {
 			if !seenAccounts[account] {
 				seenAccounts[account] = true
-				cleanAccount := vm.DNSSafeAccount(account)
+				cleanAccount := vm.DNSSafeName(account)
 				if cleanAccount != account {
 					l.Printf("WARN: using `%s' as username instead of `%s'", cleanAccount, account)
 				}
@@ -119,17 +135,20 @@ func verifyClusterName(l *logger.Logger, clusterName, username string) error {
 
 	// Try to pick out a reasonable cluster name from the input.
 	var suffix string
+	var reason string
 	if i := strings.Index(clusterName, "-"); i != -1 {
 		// The user specified a username prefix, but it didn't match an active
 		// account name. For example, assuming the account is "peter", `roachprod
 		// create joe-perf` should be specified as `roachprod create joe-perf -u
 		// joe`.
 		suffix = clusterName[i+1:]
+		reason = "username prefix does not match an active account name"
 	} else {
 		// The user didn't specify a username prefix. For example, assuming the
 		// account is "peter", `roachprod create perf` should be specified as
 		// `roachprod create peter-perf`.
 		suffix = clusterName
+		reason = "cluster name should start with a username prefix: <username>-<clustername>"
 	}
 
 	// Suggest acceptable cluster names.
@@ -137,8 +156,7 @@ func verifyClusterName(l *logger.Logger, clusterName, username string) error {
 	for _, account := range accounts {
 		suggestions = append(suggestions, fmt.Sprintf("%s-%s", account, suffix))
 	}
-	return fmt.Errorf("malformed cluster name %s, did you mean one of %s",
-		clusterName, suggestions)
+	return &MalformedClusterNameError{name: clusterName, reason: reason, suggestions: suggestions}
 }
 
 func sortedClusters() []string {

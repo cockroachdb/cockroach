@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "roachprod",
@@ -36,5 +36,16 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@org_golang_x_sys//unix",
+    ],
+)
+
+go_test(
+    name = "roachprod_test",
+    srcs = ["roachprod_test.go"],
+    embed = [":roachprod"],
+    deps = [
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
+        "@com_github_stretchr_testify//assert",
     ],
 )
