@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	math_rand "math/rand/v2"
 	"net"
 	"sync"
 	"time"
@@ -175,11 +176,8 @@ func (g *Gen) NewV3(ns UUID, name string) UUID {
 func (g *Gen) NewV4() (UUID, error) {
 	u := UUID{}
 	if r, ok := g.rand.(mathRandReader); ok {
-		if n, err := r.Read(u[:]); n != len(u) {
-			panic("math/rand.Read always returns len(p)")
-		} else if err != nil {
-			panic("math/rand.Read always returns a nil error")
-		}
+		binary.BigEndian.PutUint64(u[:Size/2], r.Uint64())
+		binary.BigEndian.PutUint64(u[Size/2:], r.Uint64())
 	} else {
 		willEscape := UUID{}
 		if _, err := io.ReadFull(g.rand, willEscape[:]); err != nil {
@@ -291,11 +289,9 @@ func defaultHWAddrFunc() (net.HardwareAddr, error) {
 // RandomHardwareAddrFunc returns a random hardware address, with the multicast
 // and local-admin bits set as per the IEEE802 spec.
 func RandomHardwareAddrFunc() (net.HardwareAddr, error) {
-	var err error
 	var hardwareAddr = make(net.HardwareAddr, 6)
-	if _, err = io.ReadFull(mathRandReader{}, hardwareAddr[:]); err != nil {
-		return []byte{}, err
-	}
+	binary.BigEndian.PutUint32(hardwareAddr[:4], math_rand.Uint32())
+	binary.BigEndian.PutUint32(hardwareAddr[2:], math_rand.Uint32())
 	// Set multicast bit and local-admin bit to match Postgres.
 	hardwareAddr[0] |= 0x03
 	return hardwareAddr, nil
