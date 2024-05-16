@@ -4085,9 +4085,9 @@ func AsJSON(
 			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
 		), nil
 	case *DGeometry:
-		return t.ToJSON(geo.DefaultGeoJSONDecimalDigits)
+		return t.ToJSON(geo.FullPrecisionGeoJSON)
 	case *DGeography:
-		return t.ToJSON(geo.DefaultGeoJSONDecimalDigits)
+		return t.ToJSON(geo.FullPrecisionGeoJSON)
 	case *DVoid:
 		return json.FromString(AsStringWithFlags(t, fmtRawStrings)), nil
 	default:
