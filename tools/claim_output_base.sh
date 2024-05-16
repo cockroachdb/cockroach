@@ -20,11 +20,15 @@ if [ ! -z "${BAZEL_OUTPUT_BASE-}" ]; then
   return
 fi
 
-if [ -d "${HOME}/.cache/bazel/_bazel_${USER}" ]; then
+if which md5 > /dev/null; then 
+  SUFFIX="$(pwd | md5 | head -c6)"        
+else 
   SUFFIX="$(pwd | md5sum | head -c6)"
+fi 
+
+if [ -d "${HOME}/.cache/bazel/_bazel_${USER}" ]; then
   OUTPUT_ROOT="${HOME}/.cache/bazel/_bazel_${USER}"
 elif [ -d "/private/var/tmp/_bazel_${USER}" ]; then
-  SUFFIX="$(pwd | md5 | head -c6)"
   OUTPUT_ROOT="/private/var/tmp/_bazel_${USER}"
 else
   # the known places for output_bases don't exist so just let bazel figure it out.
