@@ -118,12 +118,6 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 			return unimplemented.NewWithIssue(70099, "cannot use table record type as table column")
 		}
 
-	case types.TSQueryFamily, types.TSVectorFamily:
-		if !version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-			return pgerror.Newf(pgcode.FeatureNotSupported,
-				"TSVector/TSQuery not supported until version 23.1")
-		}
-
 	case types.PGLSNFamily:
 		if !version.IsActive(ctx, clusterversion.V23_2) {
 			return pgerror.Newf(

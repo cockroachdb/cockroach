@@ -299,13 +299,12 @@ func restore(
 		return emptyRowCount, err
 	}
 
-	on231 := clusterversion.TODODelete_V23_1.Version().LessEq(job.Payload().CreationClusterVersion)
 	restoreCheckpoint := job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
 	requiredSpans := dataToRestore.getSpans()
 	progressTracker, err := makeProgressTracker(
 		requiredSpans,
 		restoreCheckpoint,
-		on231,
+		false, /* useFrontier */
 		restoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV),
 		endTime)
 	if err != nil {

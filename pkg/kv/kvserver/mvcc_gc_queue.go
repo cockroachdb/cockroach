@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -742,10 +741,7 @@ func (mgcq *mvccGCQueue) process(
 	maxLocksPerCleanupBatch := gc.MaxLocksPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
 	maxLocksKeyBytesPerCleanupBatch := gc.MaxLockKeyBytesPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
 	txnCleanupThreshold := gc.TxnCleanupThreshold.Get(&repl.store.ClusterSettings().SV)
-	var clearRangeMinKeys int64 = 0
-	if repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-		clearRangeMinKeys = gc.ClearRangeMinKeys.Get(&repl.store.ClusterSettings().SV)
-	}
+	clearRangeMinKeys := gc.ClearRangeMinKeys.Get(&repl.store.ClusterSettings().SV)
 
 	info, err := gc.Run(ctx, desc, snap, gcTimestamp, newThreshold,
 		gc.RunOptions{
