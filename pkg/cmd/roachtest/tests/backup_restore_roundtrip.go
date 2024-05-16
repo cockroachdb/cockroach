@@ -56,7 +56,6 @@ type roundTripSpecs struct {
 }
 
 func registerBackupRestoreRoundTrip(r registry.Registry) {
-
 	for _, sp := range []roundTripSpecs{
 		{
 			name:                 "backup-restore/round-trip",
@@ -86,9 +85,10 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			RequiresLicense:   true,
 			NativeLibs:        registry.LibGEOS,
-			CompatibleClouds:  registry.OnlyGCE,
-			Suites:            registry.Suites(registry.Nightly),
-			Skip:              sp.skip,
+			// See https://github.com/cockroachdb/cockroach/issues/105968
+			CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
+			Suites:           registry.Suites(registry.Nightly),
+			Skip:             sp.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				backupRestoreRoundTrip(ctx, t, c, sp)
 			},
@@ -101,17 +101,11 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 func backupRestoreRoundTrip(
 	ctx context.Context, t test.Test, c cluster.Cluster, sp roundTripSpecs,
 ) {
-	if c.Cloud() != spec.GCE && !c.IsLocal() {
-		t.Skip("uses gs://cockroachdb-backup-testing; see https://github.com/cockroachdb/cockroach/issues/105968")
-	}
 	pauseProbability := 0.2
 	roachNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 	testRNG, seed := randutil.NewLockedPseudoRand()
 	t.L().Printf("random seed: %d", seed)
-
-	// Upload cockroach and start cluster.
-	uploadCockroach(ctx, t, c, c.All(), clusterupgrade.CurrentVersion())
 
 	envOption := install.EnvOption([]string{
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
