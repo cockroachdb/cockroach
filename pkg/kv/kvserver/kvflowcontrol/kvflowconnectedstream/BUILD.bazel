@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvflowconnectedstream",
+    srcs = ["stream.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker",
+        "//pkg/raft/raftpb",
+        "//pkg/raft/tracker",
+        "//pkg/roachpb",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/syncutil",
+    ],
+)

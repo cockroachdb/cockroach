@@ -24,7 +24,8 @@ import (
 // Data slice.
 //
 // A raftpb.Entry's EntryEncoding is determined by the Entry's raftpb.EntryType
-// and, in some cases, the first byte of the Entry's Data payload.
+// and, in some cases, the first byte of the Entry's Data payload. This is a
+// decoded type and not on the wire.
 type EntryEncoding byte
 
 const (
@@ -35,8 +36,8 @@ const (
 	// EntryEncodingStandardWithAC is the default encoding for a CockroachDB
 	// raft log entry.
 	//
-	// This is a raftpb.Entry of type EntryNormal whose Data slice is either
-	// empty or whose first byte matches entryEncodingStandardWithACPrefixByte.
+	// This is a raftpb.Entry of type EntryNormal whose Data slice has a first byte
+	// that matches entryEncodingStandardWithACPrefixByte.
 	// The subsequent eight bytes represent a CmdIDKey. The remaining bytes
 	// represent a kvserverpb.RaftCommand that also includes data used for
 	// below-raft admission control (Admission{Priority,CreateTime,OriginNode}).
@@ -45,8 +46,8 @@ const (
 	// result of a kvpb.AddSSTableRequest for which the payload (the SST) is
 	// stored outside the storage engine to improve storage performance.
 	//
-	// This is a raftpb.Entry of type EntryNormal whose data slice is either
-	// empty or with first byte == entryEncodingSideloadedWithACPrefixByte. The
+	// This is a raftpb.Entry of type EntryNormal whose data slice has a first
+	// byte == entryEncodingSideloadedWithACPrefixByte. The
 	// subsequent eight bytes represent a CmdIDKey. The remaining bytes
 	// represent a kvserverpb.RaftCommand whose kvserverpb.ReplicatedEvalResult
 	// holds a nontrival kvserverpb.ReplicatedEvalResult_AddSSTable, the Data
@@ -72,18 +73,28 @@ const (
 	// EntryEncodingRaftConfChange, with the replacements
 	// raftpb.EntryConfChange{,V2} and raftpb.ConfChange{,V2} applied.
 	EntryEncodingRaftConfChangeV2
+	// EntryEncodingStandardWithACPriority is analogous to
+	// EntryEncodingStandardWithAC, but has the second data byte containing the
+	// admission priority. This is often the priority that is also encoded in
+	// the kvflowcontrolpb.RaftAdmissionMeta, but could be the overridden
+	// priority.
+	EntryEncodingStandardWithACPriority
+	// EntryEncodingSideloadedWithACPriority ...
+	EntryEncodingSideloadedWithACPriority
 )
 
 // IsSideloaded returns true if the encoding is
 // EntryEncodingSideloadedWith{,out}AC.
 func (enc EntryEncoding) IsSideloaded() bool {
-	return enc == EntryEncodingSideloadedWithAC || enc == EntryEncodingSideloadedWithoutAC
+	return enc == EntryEncodingSideloadedWithAC || enc == EntryEncodingSideloadedWithoutAC ||
+		enc == EntryEncodingSideloadedWithACPriority
 }
 
 // UsesAdmissionControl returns true if the encoding is
 // EntryEncoding{Standard,Sideloaded}WithAC.
 func (enc EntryEncoding) UsesAdmissionControl() bool {
-	return enc == EntryEncodingStandardWithAC || enc == EntryEncodingSideloadedWithAC
+	return enc == EntryEncodingStandardWithAC || enc == EntryEncodingSideloadedWithAC ||
+		enc == EntryEncodingStandardWithACPriority || enc == EntryEncodingSideloadedWithACPriority
 }
 
 // prefixByte returns the prefix byte used during encoding, applicable only to
@@ -98,6 +109,10 @@ func (enc EntryEncoding) prefixByte() byte {
 		return entryEncodingStandardWithoutACPrefixByte
 	case EntryEncodingSideloadedWithoutAC:
 		return entryEncodingSideloadedWithoutACPrefixByte
+	case EntryEncodingStandardWithACPriority:
+		return 0 // TODO
+	case EntryEncodingSideloadedWithACPriority:
+		return 0 // TODO
 	default:
 		panic(fmt.Sprintf("invalid encoding: %v has no prefix byte", enc))
 	}
@@ -120,8 +135,15 @@ const (
 	// raftpb.Entry's Data slice for an Entry of encoding
 	// EntryEncodingSideloadedWithoutAC.
 	entryEncodingSideloadedWithoutACPrefixByte = byte(1) // 0b00000001
+	// TODO: other encodings.
 )
 
+// TODO: change the encoding and decoding.
+// Placing the priority in the second byte serves multiple purposes:
+//   - The prority of each entry in the Entries provided in Ready can be cheaply computed.
+//     This is needed for both eval token and send token accounting.
+//   - When the priority is overridden in the RaftMessageRequest, the receiver can
+//     cheaply alter the entries before feeding them Raft.
 const (
 	// RaftCommandIDLen is the length of a command ID.
 	RaftCommandIDLen = 8
@@ -129,10 +151,15 @@ const (
 	// the EntryEncoding{Standard,Sideloaded}With{,out}AC encodings. The bytes
 	// after the prefix represent the kvserverpb.RaftCommand.
 	RaftCommandPrefixLen = 1 + RaftCommandIDLen
+	// RaftCommandPrefixLenWithPriority is the length of .... The second byte is
+	// admissionpb.WorkPriority.
+	RaftCommandPrefixLenWithPriority = RaftCommandPrefixLen + 1
 )
 
 // EncodeCommandBytes encodes a marshaled kvserverpb.RaftCommand using
 // the given encoding (one of EntryEncoding{Standard,Sideloaded}With{,out}AC).
+//
+// This is 1 byte for the EntryEncoding + 8 bytes for the CmdIDKey + command.
 func EncodeCommandBytes(enc EntryEncoding, commandID kvserverbase.CmdIDKey, command []byte) []byte {
 	b := make([]byte, RaftCommandPrefixLen+len(command))
 	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], enc, commandID)
@@ -167,7 +194,7 @@ func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, er
 	// present at the start of the marshaled raft command. This could speed it
 	// up slightly.
 	var raftAdmissionMeta kvflowcontrolpb.RaftAdmissionMeta
-	if err := protoutil.Unmarshal(data[1+RaftCommandIDLen:], &raftAdmissionMeta); err != nil {
+	if err := protoutil.Unmarshal(data[RaftCommandPrefixLen:], &raftAdmissionMeta); err != nil {
 		return kvflowcontrolpb.RaftAdmissionMeta{}, err
 	}
 	return raftAdmissionMeta, nil

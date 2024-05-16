@@ -13,6 +13,7 @@ package kvserverpb
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -40,3 +41,5 @@ func (m *SnapshotResponse) Error() (deprecated bool, _ error) {
 	}
 	return true, errors.Newf("%s", m.DeprecatedMessage)
 }
+
+const AdmissionPriorityNotOverridden = admissionpb.OneAboveHighPri

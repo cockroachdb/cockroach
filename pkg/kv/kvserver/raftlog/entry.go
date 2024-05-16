@@ -45,6 +45,7 @@ func EncodingOf(ent raftpb.Entry) (EntryEncoding, error) {
 		return 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
 	}
 
+	// TODO: update.
 	switch ent.Data[0] {
 	case entryEncodingStandardWithACPrefixByte:
 		return EntryEncodingStandardWithAC, nil
@@ -156,6 +157,7 @@ func (e *Entry) load() error {
 	case EntryEncodingStandardWithAC, EntryEncodingSideloadedWithAC:
 		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.Entry.Data)
 		e.ApplyAdmissionControl = true
+		// TODO: handle the *WithACPriority case
 	case EntryEncodingStandardWithoutAC, EntryEncodingSideloadedWithoutAC:
 		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.Entry.Data)
 	case EntryEncodingEmpty:

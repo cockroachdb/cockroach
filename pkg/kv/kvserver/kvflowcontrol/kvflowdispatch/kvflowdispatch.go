@@ -51,6 +51,14 @@ type Dispatch struct {
 // transmitting two kvflowcontrolpb.AdmittedRaftLogEntries with the same
 // <RangeID,StoreID,WorkPriority> triple, with UpToRaftLogPositions L1 and L2
 // where L1 < L2, we can simply dispatch the one with L2.
+//
+// NB: it may seem we are trading off some loss of fidelity for compression
+// here, since there may be other entries with raft log position L' < L2 that
+// have not been admitted, because of a higher
+// RaftAdmissionMeta.AdmissionCreateTime. But even though the
+// RaftAdmissionMeta sent over the wire correctly represents the original
+// CreateTime, StoreWorkQueue adjusts the CreateTimes to make them monotonic
+// for a range (see sequenceReplicatedWork).
 type dispatchKey struct {
 	roachpb.RangeID
 	roachpb.StoreID

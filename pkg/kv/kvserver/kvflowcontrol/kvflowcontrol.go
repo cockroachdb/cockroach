@@ -112,6 +112,9 @@ type Tokens int64
 
 // Controller provides flow control for replication traffic in KV, held at the
 // node-level.
+//
+// The Controller methods (other than inspection methods) are internal to the
+// kvflowcontrol implementation, and used by the Handle implementation.
 type Controller interface {
 	// Admit seeks admission to replicate data, regardless of size, for work with
 	// the given priority, create-time, and over the given stream. This blocks

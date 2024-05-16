@@ -96,6 +96,11 @@ message RaftMessageRequest {
   // that were admitted below raft.
   repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedRaftLogEntries admitted_raft_log_entries = 11 [(gogoproto.nullable) = false];
 
+  // AdmissionPriorityOverride specifies whether the priority of the Entries
+  // in the Message, which is of type MsgApp are overridden, and the new
+  // priority. It is ignored if the Message is not a MsgApp, or if this is
+  // AdmissionPriorityNotOverridden.
+  int32 admission_priority_override = 12;
   reserved 10;
 }
 
