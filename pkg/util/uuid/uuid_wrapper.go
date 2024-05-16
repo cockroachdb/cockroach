@@ -14,7 +14,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	math_rand "math/rand"
+	math_rand "math/rand/v2"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
@@ -104,10 +104,11 @@ func MakeV4() UUID {
 type mathRandReader struct{}
 
 func (r mathRandReader) Read(p []byte) (n int, err error) {
-	// https://github.com/cockroachdb/cockroach/issues/110597 tracks this
-	// deprecated usage.
-	//lint:ignore SA1019 deprecated
-	return math_rand.Read(p)
+	panic("unimplemented")
+}
+
+func (r mathRandReader) Uint64() uint64 {
+	return math_rand.Uint64()
 }
 
 // NewPopulatedUUID returns a populated UUID.
