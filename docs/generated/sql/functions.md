@@ -1736,7 +1736,7 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 <tr><td><a name="st_asewkt"></a><code>st_asewkt(geometry_str: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geography. Coordinates have a maximum of 9 decimal digits.</p>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geography.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geography: geography, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geography with max_decimal_digits output for each coordinate value.</p>
 </span></td><td>Immutable</td></tr>
@@ -1750,7 +1750,7 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 <li>8: GeoJSON Short CRS if not EPSG:4326</li>
 </ul>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry. Coordinates have a maximum of 9 decimal digits.</p>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry: geometry, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry with max_decimal_digits output for each coordinate value.</p>
 </span></td><td>Immutable</td></tr>
@@ -1764,7 +1764,7 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 <li>8: GeoJSON Short CRS if not EPSG:4326 (default for Geometry)</li>
 </ul>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry_str: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry. Coordinates have a maximum of 9 decimal digits.</p>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry_str: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry_str: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry with max_decimal_digits output for each coordinate value.</p>
@@ -1781,9 +1781,9 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 </ul>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(row: tuple) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry. Coordinates have a maximum of 9 decimal digits.</p>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(row: tuple) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(row: tuple, geo_column: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry, using geo_column as the geometry for the given Feature. Coordinates have a maximum of 9 decimal digits.</p>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(row: tuple, geo_column: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry, using geo_column as the geometry for the given Feature.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="st_asgeojson"></a><code>st_asgeojson(row: tuple, geo_column: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry, using geo_column as the geometry for the given Feature. max_decimal_digits will be output for each coordinate value.</p>
 </span></td><td>Stable</td></tr>
