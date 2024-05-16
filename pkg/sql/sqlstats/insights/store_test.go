@@ -43,7 +43,7 @@ func TestStore(t *testing.T) {
 func addInsight(store *lockingStore, idBase uint64) {
 	store.AddInsight(&Insight{
 		Transaction: &Transaction{
-			ID: uuid.FastMakeV4(),
+			ID: uuid.MakeV4(),
 		},
 		Statements: []*Statement{{ID: clusterunique.ID{Uint128: uint128.FromInts(0, idBase)}}},
 	})

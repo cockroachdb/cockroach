@@ -628,7 +628,7 @@ func sendBatchRequest(
 	if err != nil {
 		return kvpb.BatchResponse{}, err
 	}
-	requestFileName := "request-" + uuid.FastMakeV4().String() + ".json"
+	requestFileName := "request-" + uuid.MakeV4().String() + ".json"
 	if err := c.PutString(ctx, reqArg, requestFileName, 0755, c.Node(node)); err != nil {
 		return kvpb.BatchResponse{}, err
 	}

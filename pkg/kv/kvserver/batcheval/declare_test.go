@@ -65,7 +65,7 @@ func TestRequestsSerializeWithAllKeys(t *testing.T) {
 			}
 			testTxn := &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					ID:             uuid.FastMakeV4(),
+					ID:             uuid.MakeV4(),
 					Key:            startKey,
 					WriteTimestamp: hlc.Timestamp{WallTime: 1},
 				},

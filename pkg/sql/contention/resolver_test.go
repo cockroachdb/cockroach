@@ -41,66 +41,66 @@ func TestResolver(t *testing.T) {
 		tcs := []testData{
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 100,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 900,
 				},
 				coordinatorNodeID: "1",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 101,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 901,
 				},
 				coordinatorNodeID: "1",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 102,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 903,
 				},
 				coordinatorNodeID: "1",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 200,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 904,
 				},
 				coordinatorNodeID: "2",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 201,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 905,
 				},
 				coordinatorNodeID: "2",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 300,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 906,
 				},
 				coordinatorNodeID: "3",
@@ -130,55 +130,55 @@ func TestResolver(t *testing.T) {
 		tcs := []testData{
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 101,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 901,
 				},
 				coordinatorNodeID: "3",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 902,
 				},
 				coordinatorNodeID: "1",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 102,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 903,
 				},
 				coordinatorNodeID: "1",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 201,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 				},
 				coordinatorNodeID: "2",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 				},
 				coordinatorNodeID: "2",
@@ -213,11 +213,11 @@ func TestResolver(t *testing.T) {
 		newData := []testData{
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 2000,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 904,
 				},
 				coordinatorNodeID: "2",
@@ -311,26 +311,26 @@ func TestResolver(t *testing.T) {
 
 	t.Run("retry_after_missing_value", func(t *testing.T) {
 		statusServer.clear()
-		missingTxnID := uuid.FastMakeV4()
+		missingTxnID := uuid.MakeV4()
 		tcs := []testData{
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 101,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 901,
 				},
 				coordinatorNodeID: "3",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 102,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 902,
 				},
 				coordinatorNodeID: "1",
@@ -341,7 +341,7 @@ func TestResolver(t *testing.T) {
 					TxnFingerprintID: 1000,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 903,
 				},
 				coordinatorNodeID: "1",
@@ -385,16 +385,16 @@ func TestResolver(t *testing.T) {
 	})
 
 	t.Run("handle_transient_rpc_failure", func(t *testing.T) {
-		missingTxnID1 := uuid.FastMakeV4()
+		missingTxnID1 := uuid.MakeV4()
 		statusServer.clear()
 		tcs := []testData{
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 201,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 901,
 				},
 				coordinatorNodeID: "2",
@@ -405,29 +405,29 @@ func TestResolver(t *testing.T) {
 					TxnFingerprintID: 301,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 902,
 				},
 				coordinatorNodeID: "3",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 100,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 903,
 				},
 				coordinatorNodeID: "1",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 101,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 904,
 				},
 				coordinatorNodeID: "1",
@@ -473,7 +473,7 @@ func TestResolver(t *testing.T) {
 
 		// Throw in a second unresolved contention event where the RPC failure
 		// is happening.
-		missingTxnID2 := uuid.FastMakeV4()
+		missingTxnID2 := uuid.MakeV4()
 		tcs = []testData{
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
@@ -481,7 +481,7 @@ func TestResolver(t *testing.T) {
 					TxnFingerprintID: 202,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
-					TxnID:            uuid.FastMakeV4(),
+					TxnID:            uuid.MakeV4(),
 					TxnFingerprintID: 905,
 				},
 				coordinatorNodeID: "2",
