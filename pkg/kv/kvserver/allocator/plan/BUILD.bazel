@@ -33,9 +33,15 @@ go_library(
 
 go_test(
     name = "plan_test",
-    srcs = ["token_test.go"],
+    srcs = [
+        "token_test.go",
+        "util_test.go",
+    ],
     embed = [":plan"],
     deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/roachpb",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_stretchr_testify//require",
