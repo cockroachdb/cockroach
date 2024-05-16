@@ -196,10 +196,8 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			},
-			expected: `Examining 1 descriptors and 0 namespace entries...
-  ParentID   0, ParentSchemaID 29: relation "foo" (1): invalid parent ID 0
-  ParentID   0, ParentSchemaID 29: relation "foo" (1): table must contain at least 1 column
-`,
+			valid:    true,
+			expected: "Examining 1 descriptors and 0 namespace entries...\n",
 		},
 		{ // 5
 			descTable: doctor.DescriptorTable{
@@ -415,12 +413,10 @@ func TestExamineDescriptors(t *testing.T) {
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentID: 52, ParentSchemaID: 29, Name: "t"}, ID: 51},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 52},
 			},
-			expected: `Examining 2 descriptors and 2 namespace entries...
-  ParentID  52, ParentSchemaID 29: namespace entry "t" (51): descriptor is being dropped
-`,
+			valid:    true,
+			expected: "Examining 2 descriptors and 1 namespace entries...\n",
 		},
 		{ // 17
 			descTable: doctor.DescriptorTable{

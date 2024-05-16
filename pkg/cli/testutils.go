@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -100,6 +101,10 @@ type TestCLIParams struct {
 	// UseSystemTenant is used to force the test to target the system tenant
 	// in a shared process multitenant test.
 	UseSystemTenant bool
+
+	// DisableAutoStats is used to disable the collection of automatic table statistics
+	// for the entire cluster.
+	DisableAutoStats bool
 }
 
 // testTempFilePrefix is a sentinel marker to be used as the prefix of a
@@ -145,6 +150,11 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 
 	c.cleanupFunc = func() error { return nil }
 
+	settings := makeClusterSettings()
+	if params.DisableAutoStats {
+		stats.AutomaticStatisticsClusterMode.Override(context.Background(), &settings.SV, false)
+	}
+
 	if !params.NoServer {
 		if !params.Insecure {
 			c.cleanupFunc = securitytest.CreateTestCerts(certsDir)
@@ -154,6 +164,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 
 			Insecure:      params.Insecure,
+			Settings:      settings,
 			SSLCertsDir:   c.certsDir,
 			StoreSpecs:    params.StoreSpecs,
 			Locality:      params.Locality,
