@@ -299,9 +299,8 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 					// If pattern is simply prefix + .* the span is tight. Also pattern
 					// will have regexp special chars escaped and so prefix needs to be
 					// escaped too.
-					if prefixEscape, err := eval.LikeEscape(prefix); err == nil {
-						return strings.HasSuffix(pattern, ".*") && strings.TrimSuffix(pattern, ".*") == prefixEscape
-					}
+					prefixEscape := regexp.QuoteMeta(prefix)
+					return strings.HasSuffix(pattern, ".*") && strings.TrimSuffix(pattern, ".*") == prefixEscape
 				}
 			}
 		}
