@@ -89,7 +89,7 @@ func registerClusterSettings(r registry.Registry) {
 		{
 			Name:      "kv.expiration_leases_only.enabled",
 			Generator: timeBasedValues(timeSupplier, []string{"true", "false"}, 24*7*time.Minute),
-			Owner:     registry.OwnerTestEng,
+			Owner:     registry.OwnerKV,
 		},
 		// When running multi-store with `--wal-failover=among-stores`, this configures
 		// the threshold to trigger a fail-over to a secondary store’s WAL.
@@ -99,7 +99,7 @@ func registerClusterSettings(r registry.Registry) {
 			Generator: timeBasedRandomValue(timeSupplier, 20*time.Minute, func(rng *rand.Rand) string {
 				return fmt.Sprintf("%d", rng.Intn(246)+5)
 			}),
-			Owner: registry.OwnerTestEng,
+			Owner: registry.OwnerStorage,
 		},
 	}
 	sanitizeOpName := func(name string) string {
