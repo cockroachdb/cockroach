@@ -1576,6 +1576,7 @@ GO_TARGETS = [
     "//pkg/roachprod/vm/aws:aws",
     "//pkg/roachprod/vm/azure:azure",
     "//pkg/roachprod/vm/flagstub:flagstub",
+    "//pkg/roachprod/vm/gce/testutils:testutils",
     "//pkg/roachprod/vm/gce:gce",
     "//pkg/roachprod/vm/gce:gce_test",
     "//pkg/roachprod/vm/local:local",
