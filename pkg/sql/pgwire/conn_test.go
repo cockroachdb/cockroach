@@ -244,7 +244,7 @@ func TestPipelineMetric(t *testing.T) {
 
 	// Run the conn's loop in the background - it will push commands to the
 	// buffer. serveImpl also performs the server handshake.
-	serveCtx, stopServe := context.WithCancel(ctx)
+	serveCtx, stopServe := context.WithCancel(context.Background())
 	defer stopServe()
 	serveGroup := ctxgroup.WithContext(serveCtx)
 	serveGroup.GoCtx(func(ctx context.Context) error {
