@@ -16,21 +16,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type kafkaSinkClient struct {
-	ctx            context.Context
-	format         changefeedbase.FormatType
-	batchCfg       sinkBatchConfig
-	topics         *TopicNamer
-	bootstrapAddrs string
-	kafkaCfg       *sarama.Config
-	client         kafkaClient
-	producer       sarama.AsyncProducer
-
-	knobs kafkaSinkKnobs
-
-	lastMetadataRefresh time.Time
-}
-
 func newKafkaSinkClient(
 	ctx context.Context, // TODO: do we need this ctx
 	batchCfg sinkBatchConfig,
@@ -47,18 +32,18 @@ func newKafkaSinkClient(
 		kafkaCfg: kafkaCfg,
 		topics:   topics,
 	}
-	sinkClient.client, err = makeKafkaClient(kafkaCfg, bootstrapAddrs, knobs)
+	sinkClient.client, err = newKafkaClient(kafkaCfg, bootstrapAddrs, knobs)
 	if err != nil {
 		return nil, err
 	}
-	// sinkClient.producer, err = newAsyncProducer(sinkClient.client, bootstrapAddrs, knobs)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	sinkClient.producer, err = newAsyncProducer(sinkClient.client, bootstrapAddrs, knobs)
+	if err != nil {
+		return nil, err
+	}
 	return sinkClient, nil
 }
 
-func makeKafkaClient(
+func newKafkaClient(
 	config *sarama.Config,
 	bootstrapAddrs string,
 	knobs kafkaSinkKnobs,
@@ -75,6 +60,36 @@ func makeKafkaClient(
 			`connecting to kafka: %s`, bootstrapAddrs)
 	}
 	return client, err
+}
+
+func newAsyncProducer(client kafkaClient, bootstrapAddrs string, knobs kafkaSinkKnobs) (sarama.AsyncProducer, error) {
+	var producer sarama.AsyncProducer
+	var err error
+	if knobs.OverrideAsyncProducerFromClient != nil {
+		producer, err = knobs.OverrideAsyncProducerFromClient(client)
+	} else {
+		producer, err = sarama.NewAsyncProducerFromClient(client.(sarama.Client))
+	}
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.CannotConnectNow,
+			`connecting to kafka: %s`, bootstrapAddrs)
+	}
+	return producer, nil
+}
+
+type kafkaSinkClient struct {
+	ctx            context.Context
+	format         changefeedbase.FormatType
+	batchCfg       sinkBatchConfig
+	topics         *TopicNamer
+	bootstrapAddrs string
+	kafkaCfg       *sarama.Config
+	client         kafkaClient
+	producer       sarama.AsyncProducer
+
+	knobs kafkaSinkKnobs
+
+	lastMetadataRefresh time.Time
 }
 
 // Close implements SinkClient.
