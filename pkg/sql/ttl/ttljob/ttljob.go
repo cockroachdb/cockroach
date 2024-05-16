@@ -131,44 +131,30 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 	ttlExpr := rowLevelTTL.GetTTLExpr()
 
 	labelMetrics := rowLevelTTL.LabelMetrics
-	group := ctxgroup.WithContext(ctx)
+	statsCtx, statsCancel := context.WithCancelCause(ctx)
+	defer statsCancel(nil)
+	statsGroup := ctxgroup.WithContext(statsCtx)
 	err := func() error {
-		statsCloseCh := make(chan struct{})
-		defer close(statsCloseCh)
 		if rowLevelTTL.RowStatsPollInterval != 0 {
-
+			defer statsCancel(errors.New("cancelling TTL stats query because TTL job completed"))
 			metrics := execCfg.JobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
 				labelMetrics,
 				relationName,
 			)
 
-			group.GoCtx(func(ctx context.Context) error {
-
-				handleError := func(err error) error {
-					if err == nil {
-						return nil
-					}
-					if knobs.ReturnStatsError {
-						return err
-					}
-					log.Warningf(ctx, "failed to get statistics for table id %d: %v", details.TableID, err)
-					return nil
-				}
-
+			statsGroup.GoCtx(func(ctx context.Context) error {
 				// Do once initially to ensure we have some base statistics.
-				err := metrics.fetchStatistics(ctx, execCfg, relationName, details, aostDuration, ttlExpr)
-				if err := handleError(err); err != nil {
+				if err := metrics.fetchStatistics(ctx, execCfg, relationName, details, aostDuration, ttlExpr); err != nil {
 					return err
 				}
 				// Wait until poll interval is reached, or early exit when we are done
 				// with the TTL job.
 				for {
 					select {
-					case <-statsCloseCh:
+					case <-ctx.Done():
 						return nil
 					case <-time.After(rowLevelTTL.RowStatsPollInterval):
-						err := metrics.fetchStatistics(ctx, execCfg, relationName, details, aostDuration, ttlExpr)
-						if err := handleError(err); err != nil {
+						if err := metrics.fetchStatistics(ctx, execCfg, relationName, details, aostDuration, ttlExpr); err != nil {
 							return err
 						}
 					}
@@ -299,7 +285,15 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 		return err
 	}
 
-	return group.Wait()
+	if err := statsGroup.Wait(); err != nil {
+		// If the stats group was cancelled, use that error instead.
+		err = errors.CombineErrors(context.Cause(statsCtx), err)
+		if knobs.ReturnStatsError {
+			return err
+		}
+		log.Warningf(ctx, "failed to get statistics for table id %d: %v", details.TableID, err)
+	}
+	return nil
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.

@@ -837,8 +837,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
 				t,
 				&sql.TTLTestingKnobs{
-					AOSTDuration:     &zeroDuration,
-					ReturnStatsError: true,
+					AOSTDuration: &zeroDuration,
 				},
 				tc.numSplits == 0 && !tc.forceNonMultiTenant, // SPLIT AT does not work with multi-tenant
 				1, /* numNodes */
@@ -929,6 +928,41 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			th.verifyExpiredRowsJobOnly(t, tc.numExpiredRows)
 		})
 	}
+}
+
+func TestRowLevelTTLCancelStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+		t,
+		&sql.TTLTestingKnobs{
+			AOSTDuration:     &zeroDuration,
+			ReturnStatsError: true,
+			ExtraStatsQuery:  "SELECT pg_sleep(100)",
+		},
+		false, /* testMultiTenant */
+		1,     /* numNodes */
+	)
+	defer cleanupFunc()
+
+	th.sqlDB.Exec(t, `
+CREATE TABLE t (
+  id INT PRIMARY KEY,
+  expire_at TIMESTAMPTZ
+) WITH (
+  ttl_expiration_expression = 'expire_at',
+  ttl_row_stats_poll_interval = '1 minute'
+)`)
+	th.sqlDB.Exec(t, `INSERT INTO t (id, expire_at) VALUES (1, '2020-01-01')`)
+
+	// Force the schedule to execute. Normally, the job would not fail due to a
+	// stats error, but we have set the ReturnStatsError knob to true in this
+	// test.
+	th.waitForScheduledJob(t, jobs.StatusFailed, "cancelling TTL stats query because TTL job completed")
+
+	results := th.sqlDB.QueryStr(t, "SELECT * FROM t")
+	require.Empty(t, results)
 }
 
 func TestOutboundForeignKey(t *testing.T) {
