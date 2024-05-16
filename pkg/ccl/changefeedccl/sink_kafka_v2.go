@@ -98,7 +98,20 @@ func (k *kafkaSinkClient) Close() error {
 }
 
 // Flush implements SinkClient.
-func (k *kafkaSinkClient) Flush(context.Context, SinkPayload) error {
+func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error {
+	msgs := payload.([]*sarama.ProducerMessage)
+	for _, msg := range msgs {
+		k.producer.Input() <- msg
+	}
+	// TODO: next: we need to basically account for each of the messages we sent. but this will be called in parallel from the batching sink / parallel io guy
+	// so we probably need a parent goroutine to do accounting. ideally i think i'd just have a kafkaSinkClient per parallelIO worker. is that possible with the current api?
+
+	// TODO: this STILL doesnt guarantee per-key ordering though (see below). is there a way we can do that?
+	// if we enable the idempotent producer, then that should work right? if we have (for one key) A B C D. C fails and we retry it, the idempotent magic will put it in the right place?
+	// TODO: look into this. in the meantime proceed under the assumption that this works
+	// enable.idempotence=true; acks=all
+	a := <-k.producer.Successes()
+
 	panic("unimplemented")
 }
 
@@ -109,11 +122,64 @@ func (k *kafkaSinkClient) FlushResolvedPayload(context.Context, []byte, func(fun
 
 // MakeBatchBuffer implements SinkClient.
 func (k *kafkaSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
-	panic("unimplemented")
+	kb := &kafkaBuffer{kc: k, topic: topic}
+	return kb
 }
 
 var _ SinkClient = (*kafkaSinkClient)(nil)
-var _ SinkPayload = (*sarama.ProducerMessage)(nil)
+var _ SinkPayload = ([]*sarama.ProducerMessage)(nil) // this doesnt actually assert anything lol
+
+type keyPlusPayload struct {
+	key     []byte
+	payload []byte
+}
+
+// TODO[rachael]: Should the kafka buffer look like a sarama.ProducerMessage? A MessageSet?
+type kafkaBuffer struct {
+	kc        *kafkaSinkClient
+	topic     string
+	messages  []keyPlusPayload
+	byteCount int
+	msgCount  int
+}
+
+// Append implements BatchBuffer.
+func (k *kafkaBuffer) Append(key []byte, value []byte, _ attributes) {
+	k.messages = append(k.messages, keyPlusPayload{key: key, payload: value})
+	k.byteCount += len(value)
+	k.msgCount++
+}
+
+// Close implements BatchBuffer. Convert the buffer into a SinkPayload for sending to kafka.
+func (k *kafkaBuffer) Close() (SinkPayload, error) {
+	// return &sarama.ProducerMessage{
+	// 	Topic: k.topic,
+	// 	// TODO: the key has to be the row key, but batches aren't per row. they have Keys() in fact (but we dont expose that here anyway)
+	// 	// so we probably can't use this api. maybe one sync producer per buffer? or smth like that
+	// 	// or we could store the keys in the buffer and emit one message per key...?
+	// 	// ...
+	// 	// even if we do that, or use a sync producer with SendMessages(), is it even possible to guarantee no out-of-order-by-key delivery?
+	// 	// what if we send 1,2,3,4 - 1,2,4 are delivered but 3 fails. then we need to retry 3 and it will be out of order. afaik
+	// 	Key: nil,
+	// }, nil
+
+	msgs := make([]*sarama.ProducerMessage, 0, len(k.messages))
+	for _, m := range k.messages {
+		msgs = append(msgs, &sarama.ProducerMessage{
+			Topic: k.topic,
+			Key:   sarama.ByteEncoder(m.key),
+			Value: sarama.ByteEncoder(m.payload),
+		})
+	}
+	return msgs, nil
+}
+
+// ShouldFlush implements BatchBuffer.
+func (k *kafkaBuffer) ShouldFlush() bool {
+	return true // TODO
+}
+
+var _ BatchBuffer = (*kafkaBuffer)(nil)
 
 func makeKafkaSinkV2(ctx context.Context,
 	u sinkURL,
@@ -148,6 +214,8 @@ func makeKafkaSinkV2(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	kafkaCfg.Producer.Idempotent = true                // ?
+	kafkaCfg.Producer.RequiredAcks = sarama.WaitForAll // TODO: this is user configurable so idk lol
 
 	topicNamer, err := MakeTopicNamer(
 		targets,
