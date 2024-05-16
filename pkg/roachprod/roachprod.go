@@ -2572,6 +2572,8 @@ func Deploy(
 	maxWait int,
 	secure bool,
 ) error {
+	// Stage supports `workload` as well, so it needs to be excluded here. This
+	// list contains a subset that only pulls the cockroach binary.
 	supportedApplicationNames := []string{"cockroach", "release", "customized"}
 	if !slices.Contains(supportedApplicationNames, applicationName) {
 		return errors.Errorf("unsupported application name %s, supported names are %v", applicationName, supportedApplicationNames)
