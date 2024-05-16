@@ -27,3 +27,19 @@ func BenchmarkMakeV4(b *testing.B) {
 		uuid.MakeV4()
 	}
 }
+
+func BenchmarkConcurrentFastMakeV4(b *testing.B) {
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			uuid.FastMakeV4()
+		}
+	})
+}
+
+func BenchmarkConcurrentMakeV4(b *testing.B) {
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			uuid.MakeV4()
+		}
+	})
+}
