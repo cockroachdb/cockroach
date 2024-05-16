@@ -67,6 +67,7 @@ var (
 	sig                   = 9
 	waitFlag              = false
 	maxWait               = 0
+	pause                 = time.Duration(0)
 	createVMOpts          = vm.DefaultCreateOpts()
 	startOpts             = roachprod.DefaultStartOpts()
 	stageOS               string
@@ -246,11 +247,22 @@ func initFlags() {
 	startInstanceCmd.Flags().StringVar(&startOpts.VirtualClusterLocation, "external-nodes", startOpts.VirtualClusterLocation, "if set, starts service in external mode, as a separate process in the given nodes")
 
 	// Flags for processes that stop (kill) processes.
-	for _, stopProcessesCmd := range []*cobra.Command{stopCmd, stopInstanceCmd} {
-		stopProcessesCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
-		stopProcessesCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
-		stopProcessesCmd.Flags().IntVar(&maxWait, "max-wait", maxWait, "approx number of seconds to wait for processes to exit")
+	for _, stopProcessesCmd := range []*cobra.Command{stopCmd, stopInstanceCmd, deployCmd} {
+		defaultSig := sig
+		defaultWait := waitFlag
+		defaultMaxWait := maxWait
+		// deployCmd is a special case, because it is used to stop processes in a
+		// rolling restart, and we want to drain the nodes by default.
+		if stopProcessesCmd == deployCmd {
+			defaultSig = 15
+			defaultWait = true
+			defaultMaxWait = 300
+		}
+		stopProcessesCmd.Flags().IntVar(&sig, "sig", defaultSig, "signal to pass to kill")
+		stopProcessesCmd.Flags().BoolVar(&waitFlag, "wait", defaultWait, "wait for processes to exit")
+		stopProcessesCmd.Flags().IntVar(&maxWait, "max-wait", defaultMaxWait, "approx number of seconds to wait for processes to exit")
 	}
+	deployCmd.Flags().DurationVar(&pause, "pause", pause, "duration to pause between node restarts")
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
 
