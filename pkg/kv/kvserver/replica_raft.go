@@ -580,6 +580,11 @@ var errRemoved = errors.New("replica removed")
 // stepRaftGroup calls Step on the replica's RawNode with the provided request's
 // message. Before doing so, it assures that the replica is unquiesced and ready
 // to handle the request.
+//
+// TODO: change the contents of the entry based on the priority override. If
+// we receive the same entry multiple times and with different priority
+// override, what will happen? Will raft notice and panic for this harmless
+// difference in the byte slices.
 func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		// We're processing an incoming raft message (from a batch that may

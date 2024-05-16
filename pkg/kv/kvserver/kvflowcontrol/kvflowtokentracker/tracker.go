@@ -34,6 +34,10 @@ type Tracker struct {
 	// assignment (shows up in CPU profiles). We could introduce a struct that
 	// internally embeds this list of tracked deductions, and append there
 	// instead. Do this as part of #104154.
+	//
+	// TODO: Priorities here are the original priorities. So the key will always be
+	// based on the original priority. Just the AC StoreQueue will admit based on overridden
+	// priority.
 	trackedM map[admissionpb.WorkPriority][]tracked
 
 	// lowerBound tracks on a per-stream basis the log position below which
