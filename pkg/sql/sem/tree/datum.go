@@ -4074,9 +4074,9 @@ func AsJSON(
 			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
 		), nil
 	case *DGeometry:
-		return json.FromSpatialObject(t.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
+		return json.FromSpatialObject(t.Geometry.SpatialObject(), geo.FullPrecisionGeoJSON)
 	case *DGeography:
-		return json.FromSpatialObject(t.Geography.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
+		return json.FromSpatialObject(t.Geography.SpatialObject(), geo.FullPrecisionGeoJSON)
 	case *DVoid:
 		return json.FromString(AsStringWithFlags(t, fmtRawStrings)), nil
 	default:
