@@ -18,7 +18,6 @@ package uuid
 
 import (
 	"crypto/md5"
-	crypto_rand "crypto/rand"
 	"crypto/sha1"
 	"encoding/binary"
 	"fmt"
@@ -42,7 +41,9 @@ type epochFunc func() time.Time
 type HWAddrFunc func() (net.HardwareAddr, error)
 
 // DefaultGenerator is the default UUID Generator used by this package.
-// It uses crypto/rand as the source of entropy.
+// It uses math/rand as the source of entropy, which is backed by the
+// cryptographically random ChaCha8 algorithm.
+// See https://go.dev/blog/chacha8rand.
 var DefaultGenerator Generator = NewGen()
 
 // NewV1 returns a UUID based on the current timestamp and MAC address.
@@ -132,7 +133,7 @@ func NewGenWithHWAF(hwaf HWAddrFunc) *Gen {
 	return &Gen{
 		epochFunc:  time.Now,
 		hwAddrFunc: hwaf,
-		rand:       crypto_rand.Reader,
+		rand:       mathRandReader{},
 	}
 }
 
@@ -292,7 +293,7 @@ func defaultHWAddrFunc() (net.HardwareAddr, error) {
 func RandomHardwareAddrFunc() (net.HardwareAddr, error) {
 	var err error
 	var hardwareAddr = make(net.HardwareAddr, 6)
-	if _, err = io.ReadFull(crypto_rand.Reader, hardwareAddr[:]); err != nil {
+	if _, err = io.ReadFull(mathRandReader{}, hardwareAddr[:]); err != nil {
 		return []byte{}, err
 	}
 	// Set multicast bit and local-admin bit to match Postgres.
