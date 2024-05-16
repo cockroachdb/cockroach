@@ -775,23 +775,23 @@ func UpdateTargets(
 
 // updatePrometheusTargets updates the prometheus instance cluster config. Any error is logged and ignored.
 func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.SyncedCluster) {
-	nodeIPPorts := make([]string, len(c.Nodes))
+	nodeIPPorts := make(map[int]string)
 	var wg sync.WaitGroup
-	for i, node := range c.Nodes {
+	for _, node := range c.Nodes {
 		if c.VMs[node-1].Provider == gce.ProviderName {
 			wg.Add(1)
 			go func(index int, v vm.VM) {
 				defer wg.Done()
 				// only gce is supported for prometheus
-				desc, err := c.DiscoverService(ctx, install.Node(index+1), "", install.ServiceTypeUI, 0)
+				desc, err := c.DiscoverService(ctx, install.Node(index), "", install.ServiceTypeUI, 0)
 				if err != nil {
-					l.Errorf("error getting the port for node %d: %v", index+1, err)
+					l.Errorf("error getting the port for node %d: %v", index, err)
 					return
 				}
 				nodeInfo := fmt.Sprintf("%s:%d", v.PublicIP, desc.Port)
 				l.Printf("node information obtained for node index %d: %s", index, nodeInfo)
 				nodeIPPorts[index] = nodeInfo
-			}(i, c.VMs[node-1])
+			}(int(node), c.VMs[node-1])
 		}
 	}
 	wg.Wait()
@@ -849,7 +849,6 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 		return err
 	}
 
-	_ = deleteClusterConfig(clusterName, l)
 	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait, "")
 }
 
@@ -1421,7 +1420,9 @@ func destroyCluster(cld *cloud.Cloud, l *logger.Logger, clusterName string) erro
 		l.Printf("Destroying cluster %s with %d nodes", clusterName, len(c.VMs))
 	}
 
-	_ = deleteClusterConfig(clusterName, l)
+	if err := deleteClusterConfig(clusterName, l); err != nil {
+		l.Printf("Failed to delete cluster config: %v", err)
+	}
 
 	return cloud.DestroyCluster(l, c)
 }
