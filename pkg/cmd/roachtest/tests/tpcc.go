@@ -418,7 +418,10 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		bankRows = 1000
 	}
 
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, crdbNodes)
+	mvt := mixedversion.NewTest(
+		ctx, t, t.L(), c, crdbNodes,
+		mixedversion.MaxUpgrades(3),
+	)
 
 	importTPCC := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 		randomNode := c.Node(crdbNodes.SeededRandNode(rng)[0])
