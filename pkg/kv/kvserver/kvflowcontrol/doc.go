@@ -462,8 +462,9 @@ package kvflowcontrol
 //     range quiesces after observing caught up replicas, one of which is
 //     holding onto tokens due to slow below-raft admission, and post-quiescence
 //     the node crashes? We do react to the raft transport breaking, so that
-//     frees up tokens. But it's perhaps surprising that the replica-inactivity
-//     check is disabled. It's not clear what to do here.
+//     frees up tokens. TODO: why isn't this sufficient?
+//     But it's perhaps surprising that the replica-inactivity check is
+//     disabled. It's not clear what to do here.
 //     - We could observe node liveness directly, but we're already effectively
 //       doing that when reacting to raft transport streams breaking.
 //     - We could release all flow tokens whenever replicas quiesce (though
