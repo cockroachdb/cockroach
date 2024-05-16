@@ -294,7 +294,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 			benchSpec.nodes+addlNodeCount+1,
 			specOptions...,
 		),
-		CompatibleClouds:    registry.AllExceptAWS,
+		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Timeout:             timeout,
