@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -973,18 +972,10 @@ func (s StatementOptions) GetMetricScope() (string, bool) {
 func (s StatementOptions) GetLaggingRangesConfig(
 	ctx context.Context, settings *cluster.Settings,
 ) (threshold time.Duration, pollingInterval time.Duration, e error) {
-	// This version gate prevents the scenario where the changefeed is created
-	// with options on a 23.2 node and resumed on a node with an old version
-	// which does not have those options.
-	laggingRangesVersionIsActive := settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_2_ChangefeedLaggingRangesOpts)
 	threshold = DefaultLaggingRangesThreshold
 	pollingInterval = DefaultLaggingRangesPollingInterval
 	_, ok := s.m[OptLaggingRangesThreshold]
 	if ok {
-		if !laggingRangesVersionIsActive {
-			return threshold, pollingInterval, WithTerminalError(errors.New("cluster version must be 23.2 or" +
-				" greater to use lagging ranges metrics configs"))
-		}
 		t, err := s.getDurationValue(OptLaggingRangesThreshold)
 		if err != nil {
 			return threshold, pollingInterval, err
@@ -993,10 +984,6 @@ func (s StatementOptions) GetLaggingRangesConfig(
 	}
 	_, ok = s.m[OptLaggingRangesPollingInterval]
 	if ok {
-		if !laggingRangesVersionIsActive {
-			return threshold, pollingInterval, WithTerminalError(errors.New("cluster version must be 23.2 or" +
-				" greater to use lagging ranges metrics configs"))
-		}
 		i, err := s.getDurationValue(OptLaggingRangesPollingInterval)
 		if err != nil {
 			return threshold, pollingInterval, err

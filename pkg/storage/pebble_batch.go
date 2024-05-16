@@ -14,7 +14,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -54,13 +53,6 @@ func newWriteBatch(
 		parent:             parent,
 		batchStatsReporter: batchStatsReporter,
 		settings:           settings,
-		// NB: We do not use settings.Version.IsActive because we do not
-		// generally have a guarantee that the cluster version has been
-		// initialized. As a part of initializing a store, we use a Batch to
-		// write the store identifer key; this is written before any cluster
-		// version has been initialized.
-		mayWriteSizedDeletes: settings.Version.ActiveVersionOrEmpty(context.TODO()).
-			IsActive(clusterversion.TODODelete_V23_2_UseSizedPebblePointTombstones),
 	}
 	return wb
 }
@@ -75,7 +67,6 @@ type writeBatch struct {
 	batchStatsReporter               batchStatsReporter
 	settings                         *cluster.Settings
 	closed                           bool
-	mayWriteSizedDeletes             bool
 	shouldWriteLocalTimestamps       bool
 	shouldWriteLocalTimestampsCached bool
 }
@@ -114,7 +105,7 @@ func (wb *writeBatch) ClearEngineKey(key EngineKey, opts ClearOptions) error {
 		return emptyKeyError()
 	}
 	wb.buf = key.EncodeToBuf(wb.buf[:0])
-	if !opts.ValueSizeKnown || !wb.mayWriteSizedDeletes {
+	if !opts.ValueSizeKnown {
 		return wb.batch.Delete(wb.buf, nil)
 	}
 	return wb.batch.DeleteSized(wb.buf, opts.ValueSize, nil)
@@ -135,7 +126,7 @@ func (wb *writeBatch) clear(key MVCCKey, opts ClearOptions) error {
 	}
 
 	wb.buf = EncodeMVCCKeyToBuf(wb.buf[:0], key)
-	if !opts.ValueSizeKnown || !wb.mayWriteSizedDeletes {
+	if !opts.ValueSizeKnown {
 		return wb.batch.Delete(wb.buf, nil)
 	}
 	return wb.batch.DeleteSized(wb.buf, opts.ValueSize, nil)
@@ -490,13 +481,6 @@ func newPebbleBatch(
 			parent:             parent,
 			batchStatsReporter: batchStatsReporter,
 			settings:           settings,
-			// NB: We do not use settings.Version.IsActive because we do not
-			// generally have a guarantee that the cluster version has been
-			// initialized. As a part of initializing a store, we use a Batch to
-			// write the store identifer key; this is written before any cluster
-			// version has been initialized.
-			mayWriteSizedDeletes: settings.Version.ActiveVersionOrEmpty(context.TODO()).
-				IsActive(clusterversion.TODODelete_V23_2_UseSizedPebblePointTombstones),
 		},
 		prefixIter: pebbleIterator{
 			lowerBoundBuf: pb.prefixIter.lowerBoundBuf,
