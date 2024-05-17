@@ -11,12 +11,12 @@ package migrations
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 )
 
 // TestMigrationHaveColumns test that all migrations created for

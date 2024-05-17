@@ -12,8 +12,7 @@ package util
 
 import (
 	"cmp"
-
-	"golang.org/x/exp/slices"
+	"slices"
 )
 
 // CombineUnique merges two ordered slices. If both slices have unique elements

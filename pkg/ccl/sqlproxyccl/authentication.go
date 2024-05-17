@@ -10,13 +10,13 @@ package sqlproxyccl
 
 import (
 	"net"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/errors"
 	pgproto3 "github.com/jackc/pgproto3/v2"
-	"golang.org/x/exp/slices"
 )
 
 // These errors occur after successful auth but are sent back as a result of
