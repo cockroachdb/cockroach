@@ -12,6 +12,7 @@ import (
 	"context"
 	"math/rand"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -35,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 )
 
 // TestParquetRows tests that the parquetWriter correctly writes datums. It does
