@@ -13,10 +13,10 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -105,7 +106,7 @@ func (c *conn) handleAuthentication(
 	}
 
 	ac.SetAuthMethod(hbaEntry.Method.String())
-	ac.LogAuthInfof(ctx, "HBA rule: %s", hbaEntry.Input)
+	ac.LogAuthInfof(ctx, redact.Sprintf("HBA rule: %s", hbaEntry.Input))
 
 	// Populate the AuthMethod with per-connection information so that it
 	// can compose the next layer of behaviors that we're going to apply
@@ -415,11 +416,13 @@ type AuthConn interface {
 	SetSystemIdentity(systemIdentity username.SQLUsername)
 	// LogAuthInfof logs details about the progress of the
 	// authentication.
-	LogAuthInfof(ctx context.Context, format string, args ...interface{})
+	LogAuthInfof(ctx context.Context, msg redact.RedactableString)
 	// LogAuthFailed logs details about an authentication failure.
 	LogAuthFailed(ctx context.Context, reason eventpb.AuthFailReason, err error)
 	// LogAuthOK logs when the authentication handshake has completed.
 	LogAuthOK(ctx context.Context)
+	// LogSessionEnd logs when the session is ended.
+	LogSessionEnd(ctx context.Context, endTime time.Time)
 	// GetTenantSpecificMetrics returns the tenant-specific metrics for the connection.
 	GetTenantSpecificMetrics() *tenantSpecificMetrics
 }
@@ -521,26 +524,35 @@ func (p *authPipe) SetSystemIdentity(systemIdentity username.SQLUsername) {
 }
 
 func (p *authPipe) LogAuthOK(ctx context.Context) {
+	// Logged unconditionally.
+	ev := &eventpb.ClientAuthenticationOk{
+		CommonConnectionDetails: p.connDetails,
+		CommonSessionDetails:    p.authDetails,
+		Method:                  p.authMethod,
+	}
+	log.StructuredEvent(ctx, ev)
+}
+
+func (p *authPipe) LogAuthInfof(ctx context.Context, msg redact.RedactableString) {
 	if p.log {
-		ev := &eventpb.ClientAuthenticationOk{
+		ev := &eventpb.ClientAuthenticationInfo{
 			CommonConnectionDetails: p.connDetails,
 			CommonSessionDetails:    p.authDetails,
+			Info:                    msg,
 			Method:                  p.authMethod,
 		}
 		log.StructuredEvent(ctx, ev)
 	}
 }
 
-func (p *authPipe) LogAuthInfof(ctx context.Context, format string, args ...interface{}) {
-	if p.log {
-		ev := &eventpb.ClientAuthenticationInfo{
-			CommonConnectionDetails: p.connDetails,
-			CommonSessionDetails:    p.authDetails,
-			Info:                    fmt.Sprintf(format, args...),
-			Method:                  p.authMethod,
-		}
-		log.StructuredEvent(ctx, ev)
+func (p *authPipe) LogSessionEnd(ctx context.Context, endTime time.Time) {
+	// Logged unconditionally.
+	ev := &eventpb.ClientSessionEnd{
+		CommonEventDetails:      logpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
+		CommonConnectionDetails: p.connDetails,
+		Duration:                endTime.Sub(p.c.startTime).Nanoseconds(),
 	}
+	log.StructuredEvent(ctx, ev)
 }
 
 func (p *authPipe) LogAuthFailed(
