@@ -17,19 +17,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // FirstNodeID is the NodeID assigned to the node bootstrapping a new cluster.
@@ -245,76 +245,136 @@ func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent
 }
 
 // IterateRangeDescriptorsFromDisk discovers the initialized replicas and calls
-// the provided function with each such descriptor from the provided Engine. The
-// return values of this method and fn have semantics similar to
-// storage.MVCCIterate.
+// the provided function with each such descriptor from the provided Engine. If
+// the function returns an error, IterateRangeDescriptorsFromDisk fails with
+// that error.
 func IterateRangeDescriptorsFromDisk(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
 	log.Info(ctx, "beginning range descriptor iteration")
-	// MVCCIterator over all range-local key-based data.
-	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
-	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
 
-	allCount := 0
-	matchCount := 0
-	bySuffix := make(map[redact.RedactableString]int)
-
-	var scanStats kvpb.ScanStats
-	opts := storage.MVCCScanOptions{
-		Inconsistent: true,
-		ScanStats:    &scanStats,
+	// We are going to find all range descriptor keys. This code is equivalent to
+	// using MVCCIterate on all range-local keys in Inconsistent mode and with
+	// hlc.MaxTimestamp, but is faster in that it completely skips over areas with
+	// transaction records (these areas can contain large numbers of LSM
+	// tombstones).
+	iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		UpperBound: keys.LocalRangeMax,
+	})
+	if err != nil {
+		return err
 	}
+	defer iter.Close()
+
+	var descriptorCount, intentCount, tombstoneCount int
 	lastReportTime := timeutil.Now()
-	kvToDesc := func(kv roachpb.KeyValue) error {
-		const reportPeriod = 10 * time.Second
-		if timeutil.Since(lastReportTime) >= reportPeriod {
-			// Note: MVCCIterate scans and buffers 1000 keys at a time which could
-			// make the scan stats confusing. However, because this callback can't
-			// take a long time, it's very unlikely that we will log twice for the
-			// same batch of keys.
-			log.Infof(ctx, "range descriptor iteration in progress: %d keys, %d range descriptors (by suffix: %v); %v",
-				allCount, matchCount, bySuffix, &scanStats)
-			lastReportTime = timeutil.Now()
+
+	iter.SeekGE(storage.MVCCKey{Key: keys.LocalRangePrefix})
+	for {
+		if valid, err := iter.Valid(); err != nil {
+			return err
+		} else if !valid {
+			break
 		}
 
-		allCount++
-		// Only consider range metadata entries; ignore others.
-		startKey, suffix, _, err := keys.DecodeRangeKey(kv.Key)
+		const reportPeriod = 10 * time.Second
+		if timeutil.Since(lastReportTime) >= reportPeriod {
+			stats := iter.Stats().Stats
+			log.Infof(ctx, "range descriptor iteration in progress: %d range descriptors, %d intents, %d tombstones; stats: %s",
+				descriptorCount, intentCount, tombstoneCount, stats.String())
+		}
+
+		key := iter.UnsafeKey()
+		startKey, suffix, _, err := keys.DecodeRangeKey(key.Key)
 		if err != nil {
 			return err
 		}
-		bySuffix[redact.RedactableString(suffix)]++
-		if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
-			return nil
+
+		if suffixCmp := bytes.Compare(suffix, keys.LocalRangeDescriptorSuffix); suffixCmp != 0 {
+			if suffixCmp < 0 {
+				// Seek to the range descriptor key for this range.
+				//
+				// Note that inside Pebble, SeekGE will try to iterate through the next
+				// few keys so it's ok to seek even if there are very few keys before the
+				// descriptor.
+				iter.SeekGE(storage.MVCCKey{Key: keys.RangeDescriptorKey(keys.MustAddr(startKey))})
+			} else {
+				// This case shouldn't happen in practice: we have a key that isn't
+				// associated with any range descriptor.
+				if buildutil.CrdbTestBuild {
+					panic(errors.AssertionFailedf("range local key %s outside of a known range", key.Key))
+				}
+				iter.NextKey()
+			}
+			continue
 		}
-		var desc roachpb.RangeDescriptor
-		if err := kv.Value.GetProto(&desc); err != nil {
+
+		// We are at a descriptor key.
+		rawValue, err := iter.UnsafeValue()
+		if err != nil {
 			return err
+		}
+
+		if key.Timestamp.IsEmpty() {
+			// This is an intent. We want to get its timestamp and read the latest
+			// version before that timestamp. This is consistent with what MVCCIterate
+			// does in Inconsistent mode.
+			intentCount++
+			var meta enginepb.MVCCMetadata
+			if err := protoutil.Unmarshal(rawValue, &meta); err != nil {
+				return err
+			}
+			metaTS := meta.Timestamp.ToTimestamp()
+			if metaTS.IsEmpty() {
+				return errors.AssertionFailedf("range key has intent with no timestamp")
+			}
+			// Seek to the latest value below the intent timestamp.
+			iter.SeekGE(storage.MVCCKey{Key: key.Key, Timestamp: metaTS.Prev()})
+			continue
+		}
+
+		value, err := storage.DecodeValueFromMVCCValue(rawValue)
+		if err != nil {
+			return errors.Wrap(err, "decoding range descriptor MVCC value")
+		}
+		if len(value.RawBytes) == 0 {
+			// This is a tombstone, so this key no longer exists; skip over any older
+			// versions of this key.
+			tombstoneCount++
+			iter.NextKey()
+			continue
+		}
+
+		// This is what we are looking for: the latest version of a range
+		// descriptor key.
+		var desc roachpb.RangeDescriptor
+		if err := value.GetProto(&desc); err != nil {
+			return errors.Wrap(err, "decoding range descriptor proto")
 		}
 		// Descriptor for range `[a,z)` must be found at `/Local/Range/a/RangeDescriptor`.
 		if !startKey.Equal(desc.StartKey.AsRawKey()) {
-			return errors.AssertionFailedf("descriptor stored at %s but has StartKey %s",
-				kv.Key, desc.StartKey)
+			return errors.AssertionFailedf("descriptor stored at %q but has StartKey %q",
+				key.Key, desc.StartKey)
 		}
+		// We should never be writing out uninitialized descriptors.
 		if !desc.IsInitialized() {
 			return errors.AssertionFailedf("uninitialized descriptor: %s", desc)
 		}
-		matchCount++
-		err = fn(desc)
-		if err == nil {
-			return nil
+
+		descriptorCount++
+		nextRangeDescKey := keys.RangeDescriptorKey(desc.EndKey)
+		if err := fn(desc); err != nil {
+			return err
 		}
-		if iterutil.Map(err) == nil {
-			return iterutil.StopIteration()
-		}
-		return err
+		// Seek to the next possible descriptor key. This seek is important as it
+		// can skip over a large amount of txn record keys or tombstones.
+		iter.SeekGE(storage.MVCCKey{Key: nextRangeDescKey})
 	}
 
-	_, err := storage.MVCCIterate(ctx, reader, start, end, hlc.MaxTimestamp, opts, kvToDesc)
-	log.Infof(ctx, "range descriptor iteration done: %d keys, %d range descriptors (by suffix: %v); %s",
-		allCount, matchCount, bySuffix, &scanStats)
-	return err
+	stats := iter.Stats().Stats
+	log.Infof(ctx, "range descriptor iteration done: %d range descriptors, %d intents, %d tombstones; stats: %s",
+		descriptorCount, intentCount, tombstoneCount, stats.String())
+	return nil
 }
 
 // A Replica references a CockroachDB Replica. The data in this struct does not
