@@ -9,10 +9,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/util/httputil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_google_cloud_go_storage//:storage",
+        "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_google_api//idtoken",
         "@org_golang_google_api//option",
         "@org_golang_x_oauth2//:oauth2",
@@ -26,6 +28,7 @@ go_test(
     deps = [
         "//pkg/roachprod/logger",
         "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_google_api//idtoken",
         "@org_golang_x_oauth2//:oauth2",
     ],
