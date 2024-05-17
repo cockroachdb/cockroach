@@ -17,9 +17,9 @@ import (
 )
 
 var schemaExprContextAllowingUDF = map[tree.SchemaExprContext]clusterversion.Key{
-	tree.CheckConstraintExpr:           clusterversion.TODODelete_V23_1,
-	tree.ColumnDefaultExprInNewTable:   clusterversion.TODODelete_V23_1,
-	tree.ColumnDefaultExprInSetDefault: clusterversion.TODODelete_V23_1,
+	tree.CheckConstraintExpr:           clusterversion.MinSupported,
+	tree.ColumnDefaultExprInNewTable:   clusterversion.MinSupported,
+	tree.ColumnDefaultExprInSetDefault: clusterversion.MinSupported,
 }
 
 // MaybeFailOnUDFUsage returns an error if the given expression or any

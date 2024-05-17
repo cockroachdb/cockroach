@@ -16,7 +16,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -1441,15 +1440,6 @@ func mergeTrigger(
 	// it's only used at evaluation time and doesn't affect below-Raft state.
 	if merge.RightRangeIDLocalMVCCStats != (enginepb.MVCCStats{}) {
 		ms.Subtract(merge.RightRangeIDLocalMVCCStats)
-	} else {
-		_ = clusterversion.TODODelete_V23_1 // remove this branch when 23.1 support is removed
-		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
-		sysMS, err := storage.ComputeStats(
-			ctx, batch, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
-		if err != nil {
-			return result.Result{}, err
-		}
-		ms.Subtract(sysMS)
 	}
 
 	var pd result.Result

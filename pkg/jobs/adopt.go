@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -76,10 +75,6 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 	if sp == nil || sp.IsNoop() {
 		// Should never be true since TraceableJobs force real tracing spans to be
 		// attached to the context.
-		return
-	}
-
-	if !r.settings.Version.IsActive(dumpCtx, clusterversion.TODODelete_V23_1) {
 		return
 	}
 

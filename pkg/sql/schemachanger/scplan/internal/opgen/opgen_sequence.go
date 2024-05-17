@@ -11,7 +11,6 @@
 package opgen
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -58,13 +57,6 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.Sequence, md *opGenContext) *scop.CreateGCJobForTable {
-					if !md.ActiveVersion.IsActive(clusterversion.TODODelete_V23_1) {
-						return &scop.CreateGCJobForTable{
-							TableID:             this.SequenceID,
-							DatabaseID:          databaseIDFromDroppedNamespaceTarget(md, this.SequenceID),
-							StatementForDropJob: statementForDropJob(this, md),
-						}
-					}
 					return nil
 				}),
 			),

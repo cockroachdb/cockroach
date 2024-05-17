@@ -197,10 +197,7 @@ func visitStoreReplicas(
 			return err
 		}
 
-		var localIsLeaseholder bool
-		if targetVersion.IsActive(clusterversion.TODODelete_V23_1) {
-			localIsLeaseholder = rstate.Lease != nil && rstate.Lease.Replica.StoreID == storeID
-		}
+		localIsLeaseholder := rstate.Lease != nil && rstate.Lease.Replica.StoreID == storeID
 
 		return send(loqrecoverypb.ReplicaInfo{
 			StoreID:                  storeID,

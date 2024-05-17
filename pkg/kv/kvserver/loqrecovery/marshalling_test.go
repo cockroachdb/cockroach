@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -93,16 +92,6 @@ func TestJsonSerialization(t *testing.T) {
 		},
 	}
 
-	lcr := loqrecoverypb.ClusterReplicaInfo{
-		ClusterID: "id1",
-		Version:   legacyInfoFormatVersion,
-		LocalInfo: []loqrecoverypb.NodeReplicaInfo{
-			{
-				Replicas: rs,
-			},
-		},
-	}
-
 	rup := []loqrecoverypb.ReplicaUpdate{
 		{
 			RangeID:      53,
@@ -137,24 +126,6 @@ func TestJsonSerialization(t *testing.T) {
 		ucr, err := UnmarshalReplicaInfo(out)
 		require.NoError(t, err, "failed to unmarshal replica info")
 		require.Equal(t, cr, ucr, "replica info before and after serialization")
-	})
-
-	t.Run("cluster replica info with v1 format", func(t *testing.T) {
-		out, err := MarshalReplicaInfo(lcr)
-		require.NoError(t, err, "failed to marshal legacy replica info")
-		ucr, err := UnmarshalReplicaInfo(out)
-		require.NoError(t, err, "failed to unmarshal replica info")
-		require.Equal(t, ucr.Version, legacyInfoFormatVersion, "legacy format should have generated version")
-		require.Empty(t, ucr.ClusterID, "legacy format should have no cluster id")
-		require.Nil(t, ucr.Descriptors, "legacy format should have no descriptors")
-		require.Equal(t, ucr.LocalInfo, ucr.LocalInfo, "replica info")
-
-		// For collected replica info we want to check if raw object could be loaded
-		// with a legacy loader in previous versions.
-		jsonpb := protoutil.JSONPb{}
-		var nr loqrecoverypb.NodeReplicaInfo
-		require.NoError(t, jsonpb.Unmarshal(out, &nr), "failed to unmarshal with legacy unmashaler")
-		require.Equal(t, lcr.LocalInfo[0], nr, "replica info before and after serialization")
 	})
 
 	t.Run("update plan", func(t *testing.T) {

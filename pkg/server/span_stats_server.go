@@ -440,12 +440,6 @@ func isLegacyRequest(req *roachpb.SpanStatsRequest) bool {
 func verifySpanStatsRequest(
 	ctx context.Context, req *roachpb.SpanStatsRequest, version clusterversion.Handle,
 ) error {
-
-	// If the cluster's active version is less than 23.1 return a mixed version error.
-	if !version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-		return errors.New(MixedVersionErr)
-	}
-
 	// If we receive a request using the old format.
 	if isLegacyRequest(req) {
 		// We want to force 23.1 callers to use the new format (e.g. Spans field).

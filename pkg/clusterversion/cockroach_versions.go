@@ -181,8 +181,8 @@ const (
 
 	VBootstrapMax
 
-	// TODODelete_V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
-	TODODelete_V23_1
+	// V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
+	V23_1
 
 	// V23_2 is CockroachDB v23.2. It's used for all v23.2.x patch releases.
 	V23_2
@@ -283,7 +283,7 @@ var versionTable = [numKeys]roachpb.Version{
 	VBootstrapTenant: {Major: 0, Minor: 0, Internal: 4},
 	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
 
-	TODODelete_V23_1: {Major: 23, Minor: 1, Internal: 0},
+	V23_1: {Major: 23, Minor: 1, Internal: 0},
 
 	V23_2: {Major: 23, Minor: 2, Internal: 0},
 
