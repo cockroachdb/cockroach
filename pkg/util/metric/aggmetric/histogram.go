@@ -169,6 +169,11 @@ type Histogram struct {
 	h metric.IHistogram
 }
 
+// TODO(wenyihu6): think about adding parent.GetUnit() here
+func (g *Histogram) GetUnit() metric.Unit {
+	return g.parent.GetUnit()
+}
+
 // ToPrometheusMetric constructs a prometheus metric for this Histogram.
 func (g *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return g.h.ToPrometheusMetric()

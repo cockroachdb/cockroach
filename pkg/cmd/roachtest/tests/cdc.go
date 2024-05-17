@@ -255,6 +255,10 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		kafka.install(ct.ctx)
 		kafka.start(ct.ctx, "kafka")
 
+		if args.kafkaQuotaBytesPerSec > 0 {
+			kafka.setProducerQuota(ct.ctx)
+		}
+
 		if args.kafkaChaos {
 			ct.mon.Go(func(ctx context.Context) error {
 				period, downTime := 2*time.Minute, 20*time.Second
@@ -513,13 +517,14 @@ func makeDefaultFeatureFlags() cdcFeatureFlags {
 }
 
 type feedArgs struct {
-	sinkType        sinkType
-	targets         []string
-	opts            map[string]string
-	kafkaChaos      bool
-	assumeRole      string
-	tolerateErrors  bool
-	sinkURIOverride string
+	sinkType              sinkType
+	targets               []string
+	opts                  map[string]string
+	kafkaChaos            bool
+	assumeRole            string
+	tolerateErrors        bool
+	sinkURIOverride       string
+	kafkaQuotaBytesPerSec int
 	cdcFeatureFlags
 }
 
@@ -1556,6 +1561,60 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-quota",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "10m"})
+
+			kafka, cleanup := setupKafka(ctx, t, c, c.Node(c.Spec().NodeCount))
+			defer cleanup()
+			kafka.setProducerQuota(ct.ctx)
+
+			db := c.Conn(ctx, t.L(), 1)
+			defer stopFeeds(db)
+
+			ct.newChangefeed(feedArgs{
+				sinkURIOverride: kafka.sinkURL(ct.ctx),
+				targets:         allTpccTargets,
+				opts: map[string]string{
+					"metrics_label":     "'quota1'",
+					"initial_scan":      "'no'",
+					"kafka_sink_config": `'{"ClientID": "quota1"}'`,
+				},
+			})
+
+			ct.newChangefeed(feedArgs{
+				sinkURIOverride: kafka.sinkURL(ct.ctx),
+				targets:         allTpccTargets,
+				opts: map[string]string{
+					"metrics_label":     "'quota2'",
+					"initial_scan":      "'no'",
+					"kafka_sink_config": `'{"ClientID": "quota2"}'`,
+				},
+			})
+
+			ct.newChangefeed(feedArgs{
+				sinkURIOverride: kafka.sinkURL(ct.ctx),
+				targets:         allTpccTargets,
+				opts: map[string]string{
+					"metrics_label":     "'quota3'",
+					"initial_scan":      "'no'",
+					"kafka_sink_config": `'{"ClientID": "quota3"}'`,
+				},
+			})
+			ct.waitForWorkload()
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:             "cdc/crdb-chaos",
 		Owner:            `cdc`,
 		Benchmark:        true,
@@ -2360,6 +2419,43 @@ type kafkaManager struct {
 
 	// Our method of requiring OAuth on the broker only works with Kafka 2
 	useKafka2 bool
+}
+
+func (k kafkaManager) setProducerQuota(ctx context.Context) {
+	k.t.Status("setting producer quota to bytes per second for all users")
+	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNode), filepath.Join(k.binDir(), "kafka-configs"),
+		"--bootstrap-server", "localhost:9092",
+		"--alter",
+		"--add-config", "producer_byte_rate=2048",
+		"--entity-type", "clients",
+		"--entity-name", "quota1")
+
+	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNode), filepath.Join(k.binDir(), "kafka-configs"),
+		"--bootstrap-server", "localhost:9092",
+		"--alter",
+		"--add-config", "producer_byte_rate=1024",
+		"--entity-type", "clients",
+		"--entity-name", "quota2")
+
+	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNode), filepath.Join(k.binDir(), "kafka-configs"),
+		"--bootstrap-server", "localhost:9092",
+		"--alter",
+		"--add-config", "producer_byte_rate=1000000",
+		"--entity-type", "clients",
+		"--entity-name", "quota3")
+
+	//# Verify quota for client "client-id-1"
+	//kafka-configs.sh --zookeeper <zookeeper_connect> --describe --entity-type clients --entity-name client-id-1
+	//
+
+	//# Verify quota for client "client-id-2"
+	//kafka-configs.sh --zookeeper <zookeeper_connect> --describe --entity-type clients --entity-name client-id-2
+
+	//# Set quota for client "client-id-1"
+	//kafka-configs.sh --zookeeper <zookeeper_connect> --alter --add-config 'producer_byte_rate=1000000,consumer_byte_rate=2000000' --entity-type clients --entity-name client-id-1
+	//
+	//# Set quota for client "client-id-2"
+	//kafka-configs.sh --zookeeper <zookeeper_connect> --alter --add-config 'producer_byte_rate=500000,consumer_byte_rate=1000000' --entity-type clients --entity-name client-id-2
 }
 
 func (k kafkaManager) basePath() string {
