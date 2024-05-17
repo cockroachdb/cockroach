@@ -102,9 +102,8 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	reStripFileLinePrefix := regexp.MustCompile(`^[^ ]+ `)
-	// Scan stats (shown after loading the range descriptors) can be different in
-	// race builds.
-	reStripScanStats := regexp.MustCompile(`scan stats: .*$`)
+	// Scan stats (shown after loading the range descriptors) can be non-deterministic.
+	reStripScanStats := regexp.MustCompile(`stats: .*$`)
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		e := newEnv(t)
@@ -129,7 +128,7 @@ func TestDataDriven(t *testing.T) {
 					}
 					msg := string(l.Message)
 					msg = reStripFileLinePrefix.ReplaceAllString(msg, ``)
-					msg = reStripScanStats.ReplaceAllString(msg, `scan stats: <redacted>`)
+					msg = reStripScanStats.ReplaceAllString(msg, `stats: <redacted>`)
 
 					fmt.Fprintln(&buf, msg)
 				}
