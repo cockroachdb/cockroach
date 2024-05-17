@@ -124,4 +124,5 @@ func AddSQLFlags(
 		// the user can use \connect inside the shell.
 		_ = f.MarkHidden(cliflags.Database.Name)
 	}
+	cliflagcfg.VarFlag(f, &sqlCfg.ExecCtx.TableDisplayFormat, cliflags.TableDisplayFormat)
 }

@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -786,18 +787,17 @@ func init() {
 	// Commands that print tables.
 	tableOutputCommands := append(
 		[]*cobra.Command{
-			sqlShellCmd,
 			genSettingsListCmd,
 			genMetricListCmd,
-			demoCmd,
-			statementBundleRecreateCmd,
 			debugListFilesCmd,
-			debugJobTraceFromClusterCmd,
 			debugZipCmd,
 		},
-		demoCmd.Commands()...)
-	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
+		nodeCmds...)
 	tableOutputCommands = append(tableOutputCommands, authCmds...)
+	// duplicate
+	tableOutputCommands = slices.DeleteFunc(tableOutputCommands, func(v *cobra.Command) bool {
+		return slices.Contains(sqlCmds, v)
+	})
 
 	// By default, these commands print their output as pretty-formatted
 	// tables on terminals, and TSV when redirected to a file. The user
