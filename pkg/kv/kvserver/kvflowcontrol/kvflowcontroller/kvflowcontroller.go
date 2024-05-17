@@ -11,9 +11,10 @@
 package kvflowcontroller
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -265,11 +266,11 @@ func (c *Controller) Inspect(ctx context.Context) []kvflowinspectpb.Stream {
 		b.mu.RUnlock()
 		return true
 	})
-	sort.Slice(streams, func(i, j int) bool { // for determinism
-		if streams[i].TenantID != streams[j].TenantID {
-			return streams[i].TenantID.ToUint64() < streams[j].TenantID.ToUint64()
-		}
-		return streams[i].StoreID < streams[j].StoreID
+	slices.SortFunc(streams, func(a, b kvflowinspectpb.Stream) int { // for determinism
+		return cmp.Or(
+			cmp.Compare(a.TenantID.ToUint64(), b.TenantID.ToUint64()),
+			cmp.Compare(a.StoreID, b.StoreID),
+		)
 	})
 	return streams
 }

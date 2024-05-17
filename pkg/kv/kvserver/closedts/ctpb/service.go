@@ -11,8 +11,9 @@
 package ctpb
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -51,8 +52,8 @@ func (m *Update) String() string {
 	fmt.Fprintf(sb, "Added or updated (%d ranges): (<range>:<LAI>) ", len(m.AddedOrUpdated))
 	added := make([]Update_RangeUpdate, len(m.AddedOrUpdated))
 	copy(added, m.AddedOrUpdated)
-	sort.Slice(added, func(i, j int) bool {
-		return added[i].RangeID < added[j].RangeID
+	slices.SortFunc(added, func(a, b Update_RangeUpdate) int {
+		return cmp.Compare(a.RangeID, b.RangeID)
 	})
 	for i, upd := range m.AddedOrUpdated {
 		if i > 0 {
@@ -65,9 +66,7 @@ func (m *Update) String() string {
 	fmt.Fprintf(sb, "Removed (%d ranges): ", len(m.Removed))
 	removed := make([]roachpb.RangeID, len(m.Removed))
 	copy(removed, m.Removed)
-	sort.Slice(removed, func(i, j int) bool {
-		return removed[i] < removed[j]
-	})
+	slices.Sort(removed)
 	for i, rid := range removed {
 		if i > 0 {
 			sb.WriteString(", ")

@@ -11,9 +11,10 @@
 package kvflowtokentracker
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
@@ -210,14 +211,13 @@ func (dt *Tracker) Inspect(ctx context.Context) []kvflowinspectpb.TrackedDeducti
 		})
 		return true
 	})
-	sort.Slice(deductions, func(i, j int) bool { // for determinism
-		if deductions[i].Priority != deductions[j].Priority {
-			return deductions[i].Priority < deductions[j].Priority
-		}
-		if deductions[i].RaftLogPosition != deductions[j].RaftLogPosition {
-			return deductions[i].RaftLogPosition.Less(deductions[j].RaftLogPosition)
-		}
-		return deductions[i].Tokens < deductions[j].Tokens
+	slices.SortFunc(deductions, func(a, b kvflowinspectpb.TrackedDeduction) int { // for determinism
+		return cmp.Or(
+			cmp.Compare(a.Priority, b.Priority),
+			cmp.Compare(a.RaftLogPosition.Term, b.RaftLogPosition.Term),
+			cmp.Compare(a.RaftLogPosition.Index, b.RaftLogPosition.Index),
+			cmp.Compare(a.Tokens, b.Tokens),
+		)
 	})
 	return deductions
 }

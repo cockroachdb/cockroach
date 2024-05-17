@@ -10,10 +10,11 @@ package backupccl
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -3230,8 +3231,8 @@ func (r *restoreResumer) restoreSystemTables(
 
 	// Sort the system tables to be restored based on the order specified in the
 	// configuration.
-	sort.SliceStable(systemTablesToRestore, func(i, j int) bool {
-		return systemTablesToRestore[i].config.restoreInOrder < systemTablesToRestore[j].config.restoreInOrder
+	slices.SortStableFunc(systemTablesToRestore, func(a, b systemTableNameWithConfig) int {
+		return cmp.Compare(a.config.restoreInOrder, b.config.restoreInOrder)
 	})
 
 	// Copy the data from the temporary system DB to the real system table.

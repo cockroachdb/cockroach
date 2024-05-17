@@ -11,8 +11,9 @@
 package kvflowhandle
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
@@ -263,14 +264,14 @@ func (h *Handle) connectStreamLocked(
 	connections := make([]*connectedStream, len(h.mu.connections)+1)
 	copy(connections, h.mu.connections)
 	connections[len(connections)-1] = newConnectedStream(stream)
-	sort.Slice(connections, func(i, j int) bool {
+	slices.SortFunc(connections, func(a, b *connectedStream) int {
 		// Sort connections based on store IDs (this is the order in which we
 		// invoke Controller.Admit) for predictability. If in the future we use
 		// flow tokens for raft log catchup (see I11 and [^9] in
 		// kvflowcontrol/doc.go), we may want to introduce an Admit-variant that
 		// both blocks and deducts tokens before sending catchup MsgApps. In
 		// that case, this sorting will help avoid deadlocks.
-		return connections[i].Stream().StoreID < connections[j].Stream().StoreID
+		return cmp.Compare(a.Stream().StoreID, b.Stream().StoreID)
 	})
 	// NB: We use a copy-on-write scheme when appending to the connections slice
 	// -- the read path is what's performance critical.
