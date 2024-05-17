@@ -160,9 +160,7 @@ func registerExternalStorageProviderImpls(
 			earlyBootConfParsers[scheme] = provider.EarlyBootParseFn
 		}
 
-		for param := range provider.RedactedParams {
-			redactedQueryParams[param] = struct{}{}
-		}
+		RegisterRedactedParams(provider.RedactedParams)
 	}
 
 	if _, ok := implementations[providerType]; ok {
@@ -613,5 +611,11 @@ func ReplaceProviderForTesting(
 		if oldEaryParser != nil {
 			earlyBootConfParsers[scheme] = oldEaryParser
 		}
+	}
+}
+
+func RegisterRedactedParams(params map[string]struct{}) {
+	for param := range params {
+		redactedQueryParams[param] = struct{}{}
 	}
 }
