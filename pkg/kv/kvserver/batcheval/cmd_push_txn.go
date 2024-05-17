@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -342,18 +341,6 @@ func PushTxn(
 		// cache. We rely on the timestamp cache to prevent the record from ever
 		// being committed with a timestamp beneath this timestamp.
 		reply.PusheeTxn.WriteTimestamp.Forward(args.PushTo)
-		// If the transaction record was already present, continue to update the
-		// transaction record until all nodes are running v23.1. v22.2 nodes won't
-		// know to check the timestamp cache again on commit to learn about any
-		// successful timestamp pushes.
-		// TODO(nvanbenschoten): remove this logic in v23.2.
-		if ok && !cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-			txnRecord := reply.PusheeTxn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
-				storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: fs.BatchEvalReadCategory}); err != nil {
-				return result.Result{}, err
-			}
-		}
 	default:
 		return result.Result{}, errors.AssertionFailedf("unexpected push type: %v", pushType)
 	}

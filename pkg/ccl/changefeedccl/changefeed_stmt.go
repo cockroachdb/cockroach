@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -683,13 +682,6 @@ func createChangefeedJobRecord(
 	details.Opts = opts.AsMap()
 
 	if locFilter := details.Opts[changefeedbase.OptExecutionLocality]; locFilter != "" {
-		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-			return nil, pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"cannot create new changefeed with %s until upgrade to version %s is complete",
-				changefeedbase.OptExecutionLocality, clusterversion.TODODelete_V23_1.String(),
-			)
-		}
 		if err := utilccl.CheckEnterpriseEnabled(
 			p.ExecCfg().Settings, changefeedbase.OptExecutionLocality,
 		); err != nil {

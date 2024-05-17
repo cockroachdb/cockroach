@@ -1859,8 +1859,7 @@ func TestBackupRestoreResume(t *testing.T) {
 						Timestamp: completedSpanTime},
 				},
 			},
-			// Required because restore checkpointing is version gated.
-			clusterversion.TODODelete_V23_1.Version(),
+			clusterversion.MinSupported.Version(),
 		)
 		// If the restore properly took the (incorrect) low-water mark into account,
 		// the first half of the table will be missing.
