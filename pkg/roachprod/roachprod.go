@@ -808,7 +808,6 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 					return
 				}
 				nodeInfo := fmt.Sprintf("%s:%d", v.PublicIP, desc.Port)
-				l.Printf("node information obtained for node index %d: %s", index, nodeInfo)
 				nodeIPPorts[index] = nodeInfo
 			}(int(node), c.VMs[node-1])
 		}
