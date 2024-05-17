@@ -11,10 +11,11 @@
 package loqrecovery
 
 import (
+	"cmp"
 	"context"
 	"io"
 	"math"
-	"sort"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -92,8 +93,8 @@ func CollectRemoteReplicaInfo(
 		}
 		replInfos = append(replInfos, loqrecoverypb.NodeReplicaInfo{Replicas: replInfo})
 	}
-	sort.Slice(replInfos, func(i, j int) bool {
-		return replInfos[i].Replicas[0].NodeID < replInfos[j].Replicas[0].NodeID
+	slices.SortFunc(replInfos, func(a, b loqrecoverypb.NodeReplicaInfo) int {
+		return cmp.Compare(a.Replicas[0].NodeID, b.Replicas[0].NodeID)
 	})
 	// We don't want to process data outside of safe version range for this CLI
 	// binary. RPC allows us to communicate with a cluster that is newer than

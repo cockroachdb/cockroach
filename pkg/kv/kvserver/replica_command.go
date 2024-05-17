@@ -15,7 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -3954,13 +3954,16 @@ func RelocateOne(
 					[]roachpb.ReplicaDescriptor(nil),
 					existingVoters[:len(existingVoters)-added]...,
 				)
-				sort.Slice(
-					sortedTargetReplicas, func(i, j int) bool {
-						sl := sortedTargetReplicas
-						// finalRelocationTargets[0] goes to the front (if it's present).
-						return sl[i].StoreID == args.finalRelocationTargets()[0].StoreID
-					},
-				)
+				slices.SortStableFunc(sortedTargetReplicas, func(a, b roachpb.ReplicaDescriptor) int {
+					// finalRelocationTargets[0] goes to the front (if it's present).
+					front := args.finalRelocationTargets()[0].StoreID
+					if a.StoreID == front {
+						return -1
+					} else if b.StoreID == front {
+						return +1
+					}
+					return 0
+				})
 				for _, rDesc := range sortedTargetReplicas {
 					if rDesc.StoreID != curLeaseholder.StoreID {
 						transferTarget = &roachpb.ReplicationTarget{

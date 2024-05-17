@@ -11,9 +11,10 @@
 package metrics
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
@@ -124,8 +125,8 @@ func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {
 		sms = append(sms, sm)
 	}
 
-	sort.Slice(sms, func(i, j int) bool {
-		return sms[i].StoreID < sms[j].StoreID
+	slices.SortFunc(sms, func(a, b StoreMetrics) int {
+		return cmp.Compare(a.StoreID, b.StoreID)
 	})
 
 	for _, listener := range mt.storeListeners {

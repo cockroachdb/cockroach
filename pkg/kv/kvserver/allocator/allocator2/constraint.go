@@ -11,8 +11,10 @@
 package allocator2
 
 import (
+	"cmp"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -400,8 +402,8 @@ func doStructuralNormalization(conf *normalizedSpanConfig) (*normalizedSpanConfi
 		}
 	}
 	// Sort these relationships in the order we want to examine them.
-	sort.Slice(rels, func(i, j int) bool {
-		return rels[i].voterAndAllRel < rels[j].voterAndAllRel
+	slices.SortFunc(rels, func(a, b relationshipVoterAndAll) int {
+		return cmp.Compare(a.voterAndAllRel, b.voterAndAllRel)
 	})
 	// First are the intersecting constraints, which cause an error.
 	index := 0

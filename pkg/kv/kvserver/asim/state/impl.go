@@ -12,9 +12,11 @@ package state
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -222,7 +224,9 @@ func (s *state) Stores() []Store {
 		store := s.stores[key]
 		stores = append(stores, store)
 	}
-	sort.Slice(stores, func(i, j int) bool { return stores[i].StoreID() < stores[j].StoreID() })
+	slices.SortFunc(stores, func(a, b Store) int {
+		return cmp.Compare(a.StoreID(), b.StoreID())
+	})
 	return stores
 }
 
@@ -311,7 +315,9 @@ func (s *state) Nodes() []Node {
 	for _, node := range s.nodes {
 		nodes = append(nodes, node)
 	}
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i].NodeID() < nodes[j].NodeID() })
+	slices.SortFunc(nodes, func(a, b Node) int {
+		return cmp.Compare(a.NodeID(), b.NodeID())
+	})
 	return nodes
 }
 
@@ -347,11 +353,13 @@ func (s *state) rng(rangeID RangeID) (*rng, bool) {
 
 // Ranges returns all ranges that exist in this state.
 func (s *state) Ranges() []Range {
-	ranges := []Range{}
+	ranges := make([]Range, 0, len(s.ranges.rangeMap))
 	for _, r := range s.ranges.rangeMap {
 		ranges = append(ranges, r)
 	}
-	sort.Slice(ranges, func(i, j int) bool { return ranges[i].RangeID() < ranges[j].RangeID() })
+	slices.SortFunc(ranges, func(a, b Range) int {
+		return cmp.Compare(a.RangeID(), b.RangeID())
+	})
 	return ranges
 }
 

@@ -11,8 +11,9 @@
 package kvcoord
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -232,37 +233,40 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 	}
 
 	// Sort replicas by latency and then attribute affinity.
-	sort.Slice(rs, func(i, j int) bool {
+	slices.SortFunc(rs, func(a, b ReplicaInfo) int {
 		// Always sort healthy nodes before unhealthy nodes.
-		if rs[i].healthy != rs[j].healthy {
-			return rs[i].healthy
+		if a.healthy != b.healthy {
+			if a.healthy {
+				return -1
+			}
+			return +1
 		}
 
 		// If the region is different choose the closer one.
 		// If the setting is true(default) consider locality before latency.
 		if sortByLocalityFirst {
 			// If the region is different choose the closer one.
-			if rs[i].tierMatchLength != rs[j].tierMatchLength {
-				return rs[i].tierMatchLength > rs[j].tierMatchLength
+			if a.tierMatchLength != b.tierMatchLength {
+				return -cmp.Compare(a.tierMatchLength, b.tierMatchLength)
 			}
 		}
 
 		// Use latency if they are different. The local node has a latency of -1
 		// so will sort before any other node.
-		if rs[i].latency != rs[j].latency {
-			return rs[i].latency < rs[j].latency
+		if a.latency != b.latency {
+			return cmp.Compare(a.latency, b.latency)
 		}
 
 		// If the setting is false, sort locality after latency.
 		if !sortByLocalityFirst {
 			// If the region is different choose the closer one.
-			if rs[i].tierMatchLength != rs[j].tierMatchLength {
-				return rs[i].tierMatchLength > rs[j].tierMatchLength
+			if a.tierMatchLength != b.tierMatchLength {
+				return -cmp.Compare(a.tierMatchLength, b.tierMatchLength)
 			}
 		}
 
 		// If everything else is equal sort by node id.
-		return rs[i].NodeID < rs[j].NodeID
+		return cmp.Compare(a.NodeID, b.NodeID)
 	})
 }
 

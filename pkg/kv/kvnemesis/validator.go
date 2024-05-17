@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -66,7 +67,7 @@ func Validate(steps []Step, kvs *Engine, dt *SeqTracker) []error {
 	// by `After` timestamp is sufficient to get us the necessary ordering. This
 	// is because txns cannot be used concurrently, so none of the (Begin,After)
 	// timespans for a given transaction can overlap.
-	sort.Slice(steps, func(i, j int) bool { return steps[i].After.Less(steps[j].After) })
+	slices.SortFunc(steps, func(a, b Step) int { return a.After.Compare(b.After) })
 	for _, s := range steps {
 		v.processOp(s.Op)
 	}
@@ -1560,8 +1561,8 @@ func validReadTimes(
 		hist = append(hist, v)
 	}
 	// The slice isn't sorted due to MVCC rangedels. Sort in descending order.
-	sort.Slice(hist, func(i, j int) bool {
-		return hist[j].Value.Timestamp.Less(hist[i].Value.Timestamp)
+	slices.SortFunc(hist, func(a, b storage.MVCCValue) int {
+		return -a.Value.Timestamp.Compare(b.Value.Timestamp)
 	})
 
 	sv := mustGetStringValue(value)

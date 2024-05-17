@@ -11,7 +11,8 @@
 package rangefeedbuffer
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,12 +46,11 @@ func MergeKVs(base, updates []roachpb.KeyValue) []roachpb.KeyValue {
 	}
 	combined := make([]roachpb.KeyValue, 0, len(base)+len(updates))
 	combined = append(append(combined, base...), updates...)
-	sort.Slice(combined, func(i, j int) bool {
-		cmp := combined[i].Key.Compare(combined[j].Key)
-		if cmp == 0 {
-			return combined[i].Value.Timestamp.Less(combined[j].Value.Timestamp)
-		}
-		return cmp < 0
+	slices.SortFunc(combined, func(a, b roachpb.KeyValue) int {
+		return cmp.Or(
+			a.Key.Compare(b.Key),
+			a.Value.Timestamp.Compare(b.Value.Timestamp),
+		)
 	})
 	r := combined[:0]
 	for _, kv := range combined {

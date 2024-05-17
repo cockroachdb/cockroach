@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"bytes"
+	"slices"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -179,8 +180,8 @@ func makeKeyRewriter(
 			}
 		}
 	}
-	sort.Slice(prefixes.rewrites, func(i, j int) bool {
-		return bytes.Compare(prefixes.rewrites[i].OldPrefix, prefixes.rewrites[j].OldPrefix) < 0
+	slices.SortFunc(prefixes.rewrites, func(a, b prefixRewrite) int {
+		return bytes.Compare(a.OldPrefix, b.OldPrefix)
 	})
 
 	fromSystemTenant := isFromSystemTenant(tenants)
@@ -198,8 +199,8 @@ func makeKeyRewriter(
 			OldPrefix: from, NewPrefix: to, noop: bytes.Equal(from, to),
 		})
 	}
-	sort.Slice(tenantPrefixes.rewrites, func(i, j int) bool {
-		return bytes.Compare(tenantPrefixes.rewrites[i].OldPrefix, tenantPrefixes.rewrites[j].OldPrefix) < 0
+	slices.SortFunc(tenantPrefixes.rewrites, func(a, b prefixRewrite) int {
+		return bytes.Compare(a.OldPrefix, b.OldPrefix)
 	})
 	return &KeyRewriter{
 		codec:            codec,

@@ -12,8 +12,9 @@ package kvstorage
 
 import (
 	"bytes"
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -519,8 +520,8 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	for _, repl := range s {
 		sl = append(sl, repl)
 	}
-	sort.Slice(sl, func(i, j int) bool {
-		return sl[i].RangeID < sl[j].RangeID
+	slices.SortFunc(sl, func(a, b Replica) int {
+		return cmp.Compare(a.RangeID, b.RangeID)
 	})
 	return sl, nil
 }

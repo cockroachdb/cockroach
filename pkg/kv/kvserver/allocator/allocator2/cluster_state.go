@@ -11,7 +11,7 @@
 package allocator2
 
 import (
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -191,8 +191,8 @@ func (h *storeEnactedHistory) addEnactedChange(change *pendingReplicaChange) {
 		c.secondaryDelta[leaseCount] = 1
 	}
 	h.changes = append(h.changes, c)
-	sort.Slice(h.changes, func(i, j int) bool {
-		return h.changes[i].enactedAtTime.Before(h.changes[j].enactedAtTime)
+	slices.SortFunc(h.changes, func(a, b enactedReplicaChange) int {
+		return a.enactedAtTime.Compare(b.enactedAtTime)
 	})
 	h.totalDelta.add(c.loadDelta)
 	h.totalSecondary.add(c.secondaryDelta)

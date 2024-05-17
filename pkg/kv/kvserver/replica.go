@@ -12,7 +12,7 @@ package kvserver
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1682,9 +1682,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 		for id := range m {
 			sl = append(sl, id)
 		}
-		sort.Slice(sl, func(i, j int) bool {
-			return sl[i] < sl[j]
-		})
+		slices.Sort(sl)
 		ri.PausedReplicas = sl
 	}
 	return ri
