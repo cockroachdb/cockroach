@@ -550,6 +550,13 @@ func runRestore(
 			if _, err := db.Exec("SET CLUSTER SETTING admission.sql_kv_response.enabled=false"); err != nil {
 				return err
 			}
+			if _, err := db.Exec("SET CLUSTER SETTING kv.consistency_queue.enabled=false"); err != nil {
+				return err
+			}
+			if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.skip_external_bytes.enabled=true"); err != nil {
+				return err
+			}
+
 		}
 		opts := ""
 		if runOnline {
