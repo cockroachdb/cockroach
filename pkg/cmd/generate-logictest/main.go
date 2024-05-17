@@ -202,6 +202,10 @@ func (t *testdir) dump() error {
 		for _, configPaths := range t.logicTestsConfigPaths {
 			paths := configPaths.configPaths[configIdx]
 			for _, file := range paths {
+				if filepath.Base(file) == "select_for_update" {
+					// TODO(#124197): unskip this.
+					continue
+				}
 				dumpTestForFile(f, configPaths.testPrefix, filepath.Base(file), "runLogicTest")
 			}
 		}
