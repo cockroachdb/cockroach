@@ -2338,12 +2338,12 @@ func (bc *backupCollection) verifyOnlineRestore(
 	}
 	conn := d.testUtils.cluster.Conn(ctx, l, d.roachNodes[0])
 	defer conn.Close()
-	var externalBytes int
+	var externalBytes uint64
 	if err := conn.QueryRowContext(ctx, jobutils.GetExternalBytesForConnectedTenant).Scan(&externalBytes); err != nil {
 		return nil, fmt.Errorf("could not get external bytes: %w", err)
 	}
 	if externalBytes != 0 {
-		return nil, fmt.Errorf("download job %d did not download all data", downloadJobID)
+		return nil, fmt.Errorf("download job %d did not download all data. Cluster has %d external bytes", downloadJobID, externalBytes)
 	}
 	return restoredContents, nil
 }
