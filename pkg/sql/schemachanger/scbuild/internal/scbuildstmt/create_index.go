@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -84,11 +83,6 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		if len(n.Columns) > 1 {
 			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
 		}
-	}
-	activeVersion := b.EvalCtx().Settings.Version.ActiveVersion(b)
-	if !activeVersion.IsActive(clusterversion.V23_2) &&
-		n.Invisibility.Value > 0.0 && n.Invisibility.Value < 1.0 {
-		panic(unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported"))
 	}
 	var idxSpec indexSpec
 	idxSpec.secondary = &scpb.SecondaryIndex{
@@ -378,7 +372,6 @@ func processColNodeType(
 		})
 	}
 	// Only certain column types are supported for inverted indexes.
-	version := b.EvalCtx().Settings.Version.ActiveVersion(b)
 	if n.Inverted && lastColIdx &&
 		!colinfo.ColumnTypeIsInvertedIndexable(columnType.Type) {
 		colNameForErr := colName
@@ -387,9 +380,7 @@ func processColNodeType(
 		}
 		panic(tabledesc.NewInvalidInvertedColumnError(colNameForErr,
 			columnType.Type.String()))
-	} else if (!n.Inverted || !lastColIdx) &&
-		(!colinfo.ColumnTypeIsIndexable(columnType.Type) ||
-			(columnType.Type.Family() == types.JsonFamily && !version.IsActive(clusterversion.V23_2))) {
+	} else if (!n.Inverted || !lastColIdx) && !colinfo.ColumnTypeIsIndexable(columnType.Type) {
 		// Otherwise, check if the column type is indexable.
 		panic(unimplemented.NewWithIssueDetailf(35730,
 			columnType.Type.DebugString(),

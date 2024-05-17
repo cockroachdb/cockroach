@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -556,28 +555,22 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 
 	// Enable extra schema changes, if they are available this moment.
 	if !w.workload.declarativeStatementsEnabled.Load() {
-		cannotEnableSchemaChanges, err := isClusterVersionLessThan(ctx, tx, clusterversion.V23_2.Version())
+		// Transaction confirmed we are on a new enough version, so set the
+		// cluster setting.
+		err := tx.Rollback(ctx)
 		if err != nil {
-			return errors.Wrap(err, "cannot to get active")
+			return errors.Wrap(err, "could not rollback before cluster setting")
 		}
-		if !cannotEnableSchemaChanges {
-			// Transaction confirmed we are on a new enough version, so set the
-			// cluster setting.
-			err := tx.Rollback(ctx)
-			if err != nil {
-				return errors.Wrap(err, "could not rollback before cluster setting")
-			}
-			_, err = conn.Exec(ctx, `SET CLUSTER SETTING sql.schema.force_declarative_statements="+CREATE SCHEMA, +CREATE SEQUENCE"`)
-			if err != nil {
-				return errors.Wrap(err, "cannot enable extra schema changes")
-			}
-			// Restart the txn after the update.
-			tx, err = conn.Begin(ctx)
-			if err != nil {
-				return errors.Wrap(err, "cannot get a connection and begin a txn")
-			}
-			w.workload.declarativeStatementsEnabled.Store(true)
+		_, err = conn.Exec(ctx, `SET CLUSTER SETTING sql.schema.force_declarative_statements="+CREATE SCHEMA, +CREATE SEQUENCE"`)
+		if err != nil {
+			return errors.Wrap(err, "cannot enable extra schema changes")
 		}
+		// Restart the txn after the update.
+		tx, err = conn.Begin(ctx)
+		if err != nil {
+			return errors.Wrap(err, "cannot get a connection and begin a txn")
+		}
+		w.workload.declarativeStatementsEnabled.Store(true)
 	}
 
 	// Release log entry locks if holding all.

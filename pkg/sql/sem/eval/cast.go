@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -593,11 +592,6 @@ func performCastWithoutPrecisionTruncation(
 		}
 
 	case types.PGLSNFamily:
-		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"version %v must be finalized to use pg_lsn",
-				clusterversion.V23_2.Version())
-		}
 		switch d := d.(type) {
 		case *tree.DString:
 			return tree.ParseDPGLSN(string(*d))
@@ -608,11 +602,6 @@ func performCastWithoutPrecisionTruncation(
 		}
 
 	case types.RefCursorFamily:
-		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"version %v must be finalized to use refcursor",
-				clusterversion.V23_2.Version())
-		}
 		switch d := d.(type) {
 		case *tree.DString:
 			return tree.NewDRefCursor(string(*d)), nil

@@ -15,7 +15,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -74,9 +73,6 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	fallBackIfRegionalByRowTable(b, t.n, tbl.TableID)
 	fallBackIfDescColInRowLevelTTLTables(b, tbl.TableID, t)
 	fallBackIfSubZoneConfigExists(b, t.n, tbl.TableID)
-	// Version gates functionally that is implemented after the statement is
-	// publicly published.
-	fallbackIfAddColDropColAlterPKInOneAlterTableStmtBeforeV232(b, tbl.TableID, t.n)
 
 	inflatedChain := getInflatedPrimaryIndexChain(b, tbl.TableID)
 	if !haveSameIndexColsByKind(b, tbl.TableID, inflatedChain.oldSpec.primary.IndexID,
@@ -346,10 +342,8 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 		}
 
 		columnType := mustRetrieveColumnTypeElem(b, tbl.TableID, colElem.ColumnID)
-		version := b.EvalCtx().Settings.Version.ActiveVersion(b)
 		// Check if the column type is indexable.
-		if !colinfo.ColumnTypeIsIndexable(columnType.Type) ||
-			(columnType.Type.Family() == types.JsonFamily && !version.IsActive(clusterversion.V23_2)) {
+		if !colinfo.ColumnTypeIsIndexable(columnType.Type) {
 			panic(unimplemented.NewWithIssueDetailf(35730,
 				columnType.Type.DebugString(),
 				"column %s is of type %s and thus is not indexable",
@@ -458,16 +452,6 @@ func fallBackIfRegionalByRowTable(b BuildCtx, t tree.NodeFormatter, tableID cati
 func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t alterPrimaryKeySpec) {
 	if _, _, rowLevelTTLElem := scpb.FindRowLevelTTL(b.QueryByID(tableID)); rowLevelTTLElem == nil {
 		return
-	}
-
-	// It's a row-level-ttl table. Ensure it has no non-descending
-	// key columns, and there is no inbound/outbound foreign keys.
-	if !b.ClusterSettings().Version.IsActive(b, clusterversion.V23_2) {
-		for _, col := range t.Columns {
-			if indexColumnDirection(col.Direction) != catenumpb.IndexColumn_ASC {
-				panic(scerrors.NotImplementedErrorf(t.n, "non-ascending ordering on PRIMARY KEYs are not supported"))
-			}
-		}
 	}
 }
 

@@ -155,11 +155,9 @@ func makeState(
 	// certain transitions and fences like the two version invariant.
 	// This only applies for cluster at or beyond version 23.2.
 	var descriptorIDsInSchemaChange catalog.DescriptorIDSet
-	if version.IsActive(clusterversion.V23_2) {
-		for _, e := range bs.output {
-			if isElementAllowedInVersion(e.element) && e.metadata.IsLinkedToSchemaChange() {
-				descriptorIDsInSchemaChange.Add(screl.GetDescID(e.element))
-			}
+	for _, e := range bs.output {
+		if isElementAllowedInVersion(e.element) && e.metadata.IsLinkedToSchemaChange() {
+			descriptorIDsInSchemaChange.Add(screl.GetDescID(e.element))
 		}
 	}
 	for _, e := range bs.output {

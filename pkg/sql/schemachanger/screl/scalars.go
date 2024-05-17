@@ -124,7 +124,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		// These elements need v23.1 so they can be used without checking any version gates.
 		return true
 	case *scpb.SequenceOption:
-		return version.IsActive(clusterversion.V23_2)
+		return true
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}
