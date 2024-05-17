@@ -193,6 +193,13 @@ export default function (props: GraphDashboardProps) {
               sources={[nid]}
               downsampleMax
             />
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_durations.elastic-stores-p99"
+              title={"elastic (background) write " + nodeDisplayName(nodeDisplayNameByID, nid)}
+              sources={[nid]}
+              downsampleMax
+            />
           </>
         ))}
       </Axis>
