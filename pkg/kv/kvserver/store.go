@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -2359,8 +2360,8 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 
 		// The replicas with an active rangefeed. Updated periodically below. Reuse
 		// the rangeIDs slice across runs to minimize allocation.
-		var rangeIDs roachpb.RangeIDSlice
-		updateRangeIDs := func() roachpb.RangeIDSlice {
+		var rangeIDs []roachpb.RangeID
+		updateRangeIDs := func() []roachpb.RangeID {
 			rangeIDs = rangeIDs[:0]
 			s.rangefeedReplicas.Lock()
 			for rangeID := range s.rangefeedReplicas.m {
@@ -2372,7 +2373,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 			// closed timestamp lag for each range. The closedts-rangefeed-updater
 			// refresh loop operates independently of incoming closed timestamp
 			// updates, so this does not favor some replicas over others.
-			sort.Sort(&rangeIDs)
+			slices.Sort(rangeIDs)
 			return rangeIDs
 		}
 

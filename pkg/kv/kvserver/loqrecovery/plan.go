@@ -14,7 +14,6 @@ import (
 	"cmp"
 	"context"
 	"slices"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -183,7 +182,7 @@ func PlanReplicas(
 	for id := range deadNodes {
 		decommissionNodeIDs = append(decommissionNodeIDs, id)
 	}
-	sort.Sort(roachpb.NodeIDSlice(decommissionNodeIDs))
+	slices.Sort(decommissionNodeIDs)
 
 	var staleLeaseholderNodes []roachpb.NodeID
 	for node := range nodesWithDiscardedLeaseholders {
@@ -191,7 +190,7 @@ func PlanReplicas(
 			staleLeaseholderNodes = append(staleLeaseholderNodes, node)
 		}
 	}
-	sort.Sort(roachpb.NodeIDSlice(staleLeaseholderNodes))
+	slices.Sort(staleLeaseholderNodes)
 
 	return loqrecoverypb.ReplicaUpdatePlan{
 		Updates:                 updates,
