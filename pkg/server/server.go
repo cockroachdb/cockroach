@@ -631,6 +631,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		cfg.AmbientCtx,
 		st,
 		cfg.AmbientCtx.Tracer,
+		clock,
 		kvNodeDialer,
 		grpcServer.Server,
 		stopper,

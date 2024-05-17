@@ -237,6 +237,7 @@ func createTestStoreWithoutStart(
 		cfg.AmbientCtx,
 		cfg.Settings,
 		cfg.Tracer(),
+		cfg.Clock,
 		cfg.NodeDialer,
 		server,
 		stopper,
@@ -546,7 +547,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	require.NoError(t, eng.PutUnversioned(roachpb.Key("foo"), []byte("bar")))
 
 	cfg := TestStoreConfig(nil)
-	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer, cfg.Clock)
 	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.

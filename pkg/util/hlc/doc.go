@@ -38,6 +38,11 @@ between nodes in a cluster:
     Ref: (roachpb.Lease).Start.
     Ref: (roachpb.MergeTrigger).FreezeStart.
 
+    Raft also carries clock readings on messages sent between replicas, which
+    are consumed by the recipients of those messages.
+
+    Ref: (kvserverpb.RaftMessageRequestBatch).Now.
+
   - BatchRequest API (bidirectional): clients and servers of the KV BatchRequest
     API will attach HLC clock readings on requests and responses (successes and
     errors).
@@ -76,6 +81,8 @@ resolved to the transaction's commit timestamp, which may be later than the
 local timestamp. Since the commit status and timestamp are non-local
 properties, a range may contain committed values (as unresolved intents) that
 turn out to exist in the future of the local HLC when the intent gets resolved.
+
+  - Non-cooperative lease acquisition (Raft channel). TODO(nvanbenschoten).
 
   - Cooperative lease transfers (Raft channel). During a cooperative lease
     transfer from one replica of a range to another, the outgoing leaseholder

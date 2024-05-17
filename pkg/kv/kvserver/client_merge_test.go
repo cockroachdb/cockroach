@@ -2473,6 +2473,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 		tc.Servers[0].AmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
 		tc.Servers[0].AmbientCtx().Tracer,
+		tc.Servers[0].Clock(),
 		nodedialer.New(tc.Servers[0].RPCContext(),
 			gossip.AddressResolver(tc.Servers[0].GossipI().(*gossip.Gossip))),
 		nil, /* grpcServer */

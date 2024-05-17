@@ -3404,6 +3404,7 @@ func TestReplicaGCRace(t *testing.T) {
 		ambient,
 		cluster.MakeTestingClusterSettings(),
 		ambient.Tracer,
+		tc.Servers[0].Clock(),
 		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */
 		tc.Servers[0].Stopper(),
@@ -3796,6 +3797,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		tc.Servers[0].AmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
 		tc.Servers[0].AmbientCtx().Tracer,
+		tc.Servers[0].Clock(),
 		nodedialer.New(tc.Servers[0].RPCContext(),
 			gossip.AddressResolver(tc.GetFirstStoreFromServer(t, 0).Gossip())),
 		nil, /* grpcServer */
@@ -6904,7 +6906,7 @@ func TestStoreMetricsOnIncomingOutgoingMsg(t *testing.T) {
 	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
-	cfg.Transport = kvserver.NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+	cfg.Transport = kvserver.NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer, cfg.Clock)
 	store := kvserver.NewStore(ctx, cfg, eng, &node)
 	store.Ident = &roachpb.StoreIdent{
 		ClusterID: uuid.Nil,
