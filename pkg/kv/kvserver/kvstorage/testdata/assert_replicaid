@@ -7,7 +7,7 @@ load-and-reconcile trace=true
 ----
 no RaftReplicaID for r5:{a-c} [(n1,s1):50, next=51, gen=0]
 beginning range descriptor iteration
-range descriptor iteration done: 1 keys, 1 range descriptors (by suffix: map[rdsc:1]); scan stats: <redacted>
+range descriptor iteration done: 1 range descriptors, 0 intents, 0 tombstones; stats: <redacted>
 loaded replica ID for 1/1 replicas
 loaded Raft state for 1/1 replicas
 loaded 1 replicas

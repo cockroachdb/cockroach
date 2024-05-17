@@ -1,0 +1,16 @@
+# Test the handling of an invalid case of overlapping ranges.
+
+new-replica range-id=1 replica-id=10 k=a ek=c
+----
+r1:{a-c} [(n1,s1):10, next=11, gen=0]
+
+new-replica range-id=2 replica-id=20 k=b ek=d
+----
+r2:{b-d} [(n1,s1):20, next=21, gen=0]
+
+# The initialization process will skip over the range descriptor which is inside
+# the first range.
+load-and-reconcile
+----
+r1/10: r1:{a-c} [(n1,s1):10, next=11, gen=0]
+r2/20: uninitialized
