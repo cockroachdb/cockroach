@@ -23,13 +23,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -150,38 +150,29 @@ func getUrl(promUrl, clusterName string) string {
 	return fmt.Sprintf("%s/%s/%s/%s", promUrl, resourceVersion, resourceName, clusterName)
 }
 
-// ccParams are the params for the clusterConfFileTemplate
-type ccParams struct {
-	Targets []string
-	Labels  []string
+// CCParams are the params for the cluster configs
+type CCParams struct {
+	Targets []string          `yaml:"targets"`
+	Labels  map[string]string `yaml:"labels"`
 }
-
-const clusterConfFileTemplate = `- targets:
-{{range $val := .Targets}}  - {{$val}}
-{{end}}  labels:
-{{range $val := .Labels}}    {{$val}}
-{{end}}
-`
 
 // createClusterConfigFile creates the cluster config file per node
 func buildCreateRequest(nodes map[int]string, insecure bool) (io.Reader, error) {
-	buffer := bytes.NewBufferString("---\n")
+	configs := make([]*CCParams, 0)
 	for i, n := range nodes {
-		params := &ccParams{
+		params := &CCParams{
 			Targets: []string{n},
-			Labels:  make([]string, 0),
+			Labels:  make(map[string]string, 0),
 		}
-		params.Labels = append(params.Labels,
-			fmt.Sprintf("node: \"%s\"", strconv.Itoa(i)),
-			"tenant: system",
-		)
-		t := template.Must(template.New("start").Parse(clusterConfFileTemplate))
-		if err := t.Execute(buffer, params); err != nil {
-			return nil, err
-		}
+		params.Labels["node"] = strconv.Itoa(i)
+		params.Labels["tenant"] = "system"
+		configs = append(configs, params)
 	}
-
-	b, err := json.Marshal(&instanceConfigRequest{Config: buffer.String(), Insecure: insecure})
+	cb, err := yaml.Marshal(&configs)
+	if err != nil {
+		return nil, err
+	}
+	b, err := json.Marshal(&instanceConfigRequest{Config: string(cb), Insecure: insecure})
 	if err != nil {
 		return nil, err
 	}
