@@ -11,7 +11,9 @@
 package loqrecovery
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -94,8 +96,8 @@ func (m locationsMap) asSortedSlice() []NodeStores {
 	for k, v := range m {
 		nodes = append(nodes, NodeStores{NodeID: k, StoreIDs: v.storeSliceFromSet()})
 	}
-	sort.Slice(nodes, func(i, j int) bool {
-		return nodes[i].NodeID < nodes[j].NodeID
+	slices.SortFunc(nodes, func(a, b NodeStores) int {
+		return cmp.Compare(a.NodeID, b.NodeID)
 	})
 	return nodes
 }

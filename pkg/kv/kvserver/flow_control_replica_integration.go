@@ -11,8 +11,9 @@
 package kvserver
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -131,8 +132,8 @@ func (f *replicaFlowControlIntegrationImpl) onBecameLeader(ctx context.Context) 
 		for _, stream := range f.disconnectedStreams {
 			disconnected = append(disconnected, stream)
 		}
-		sort.Slice(disconnected, func(i, j int) bool {
-			return disconnected[i].StoreID < disconnected[j].StoreID
+		slices.SortFunc(disconnected, func(a, b kvflowcontrol.Stream) int {
+			return cmp.Compare(a.StoreID, b.StoreID)
 		})
 		log.VInfof(ctx, 1, "assumed raft leadership: initializing flow handle for %s starting at %s (disconnected streams: %s)",
 			f.replicaForFlowControl.getDescriptor(),
@@ -399,9 +400,7 @@ func (f *replicaFlowControlIntegrationImpl) tryReconnect(ctx context.Context) {
 		disconnectedRepls = append(disconnectedRepls, replID)
 	}
 	if buildutil.CrdbTestBuild {
-		sort.Slice(disconnectedRepls, func(i, j int) bool { // for determinism in tests
-			return disconnectedRepls[i] < disconnectedRepls[j]
-		})
+		slices.Sort(disconnectedRepls) // for determinism in tests
 	}
 
 	notActivelyReplicatingTo := f.notActivelyReplicatingTo()

@@ -11,7 +11,7 @@
 package gossip
 
 import (
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -44,13 +44,10 @@ func (u *fixedDelayExchange) put(tick time.Time, descs ...roachpb.StoreDescripto
 // updates returns back exchanged infos, wrapped as store details that have
 // completed between the last tick update was called and the tick given.
 func (u *fixedDelayExchange) updates(tick time.Time) []*storepool.StoreDetail {
-	sort.Slice(u.pending, func(i, j int) bool {
-		if u.pending[i].created == u.pending[j].created {
-			return i < j
-		}
-		return u.pending[i].created.Before(u.pending[j].created)
+	slices.SortStableFunc(u.pending, func(a, b exchangeInfo) int {
+		return a.created.Compare(b.created)
 	})
-	ready := []*storepool.StoreDetail{}
+	var ready []*storepool.StoreDetail
 	i := 0
 	for ; i < len(u.pending) && !tick.Before(u.pending[i].created.Add(u.settings.StateExchangeDelay)); i++ {
 		ready = append(ready, makeStoreDetail(&u.pending[i].desc, u.pending[i].created))

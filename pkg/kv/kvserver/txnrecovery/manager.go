@@ -11,8 +11,9 @@
 package txnrecovery
 
 import (
+	"bytes"
 	"context"
-	"sort"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -212,8 +213,8 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 	}
 
 	// Sort the query intent requests to maximize batching by range.
-	sort.Slice(queryIntentReqs, func(i, j int) bool {
-		return queryIntentReqs[i].Header().Key.Compare(queryIntentReqs[j].Header().Key) < 0
+	slices.SortFunc(queryIntentReqs, func(a, b kvpb.QueryIntentRequest) int {
+		return bytes.Compare(a.Key, b.Key)
 	})
 
 	// Query all of the intents in batches of size defaultBatchSize. The maximum
