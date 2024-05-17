@@ -134,8 +134,8 @@ func (c *conn) sendError(ctx context.Context, err error) error {
 	return err
 }
 
-func (c *conn) authLogEnabled() bool {
-	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
+func (c *conn) verboseAuthLogEnabled() bool {
+	return c.alwaysLogAuthActivity || logVerboseSessionAuth.Get(c.sv)
 }
 
 // processCommands authenticates the connection and then processes commands

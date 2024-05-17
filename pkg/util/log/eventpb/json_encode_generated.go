@@ -1114,9 +1114,7 @@ func (m *ClientAuthenticationInfo) AppendJSONFields(printComma bool, b redact.Re
 		}
 		printComma = true
 		b = append(b, "\"Info\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.Info)))))
-		b = append(b, redact.EndMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Info)))
 		b = append(b, '"')
 	}
 

@@ -2138,7 +2138,7 @@ Events of this type are only emitted when the cluster setting
 | Field | Description | Sensitive |
 |--|--|--|
 | `Method` | The authentication method used, once known. | no |
-| `Info` | The authentication progress message. | yes |
+| `Info` | The authentication progress message. | partially |
 
 
 #### Common fields

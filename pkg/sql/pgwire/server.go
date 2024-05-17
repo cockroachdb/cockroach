@@ -80,14 +80,18 @@ var connResultsBufferSize = settings.RegisterByteSizeSetting(
 var logConnAuth = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	sql.ConnAuditingClusterSettingName,
-	"if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)",
+	"if set, log SQL client connect and disconnect events to the SESSIONS log channel "+
+		"(note: may hinder performance on loaded nodes)",
 	false,
 	settings.WithPublic)
 
-var logSessionAuth = settings.RegisterBoolSetting(
+var logVerboseSessionAuth = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	sql.AuthAuditingClusterSettingName,
-	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
+	"if set, log verbose SQL session authentication events to the SESSIONS log channel "+
+		"(note: may hinder performance on loaded nodes). "+
+		"Session start and end events are always logged regardless of this setting; "+
+		"disable the SESSIONS log channel to suppress them.",
 	false,
 	settings.WithPublic)
 
@@ -950,35 +954,25 @@ func (s *Server) serveImpl(
 
 	sqlServer := s.SQLServer
 	inTestWithoutSQL := sqlServer == nil
-	if !inTestWithoutSQL {
-		sessionStart := timeutil.Now()
-		defer func() {
-			if c.authLogEnabled() {
-				endTime := timeutil.Now()
-				ev := &eventpb.ClientSessionEnd{
-					CommonEventDetails:      logpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
-					CommonConnectionDetails: authOpt.connDetails,
-					Duration:                endTime.Sub(sessionStart).Nanoseconds(),
-				}
-				log.StructuredEvent(ctx, ev)
-			}
-		}()
-	}
 
 	// NOTE: We're going to write a few messages to the connection in this method,
 	// for the handshake. After that, all writes are done async, in the
 	// startWriter() goroutine.
-
-	// the authPipe below logs authentication messages iff its auth
-	// logger is non-nil. We define this here.
-	logAuthn := !inTestWithoutSQL && c.authLogEnabled()
 
 	// We'll build an authPipe to communicate with the authentication process.
 	systemIdentity := c.sessionArgs.SystemIdentity
 	if systemIdentity.Undefined() {
 		systemIdentity = c.sessionArgs.User
 	}
-	authPipe := newAuthPipe(c, logAuthn, authOpt, systemIdentity)
+	logVerboseAuthn := !inTestWithoutSQL && c.verboseAuthLogEnabled()
+	authPipe := newAuthPipe(c, logVerboseAuthn, authOpt, systemIdentity)
+
+	if !inTestWithoutSQL {
+		defer func() {
+			endTime := timeutil.Now()
+			authPipe.LogSessionEnd(ctx, endTime)
+		}()
+	}
 
 	// procWg waits for the command processor to return.
 	var procWg sync.WaitGroup
