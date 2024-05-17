@@ -48,7 +48,7 @@ var (
 		settings.TenantWritable,
 		"sql.ttl.default_delete_rate_limit",
 		"default delete rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.",
-		0,
+		100,
 		settings.NonNegativeInt,
 	).WithPublic()
 	jobEnabled = settings.RegisterBoolSetting(
