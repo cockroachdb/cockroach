@@ -1188,7 +1188,7 @@ func buildKafkaConfig(
 	}
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
-	config.Producer.Partitioner = newChangefeedPartitioner
+	config.Producer.Partitioner = newChangefeedPartitioner // this means that we send to one partition only per topic?
 	// Do not fetch metadata for all topics but just for the necessary ones.
 	config.Metadata.Full = false
 	config.MetricRegistry = newMetricsRegistryInterceptor(kafkaThrottlingMetrics)
