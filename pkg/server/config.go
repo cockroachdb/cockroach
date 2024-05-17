@@ -465,9 +465,6 @@ type KVConfig struct {
 	DelayedBootstrapFn func()
 
 	enginesCreated bool
-
-	// SnapshotSendLimit is the number of concurrent snapshots a store will send.
-	SnapshotSendLimit int64
 }
 
 // MakeKVConfig returns a KVConfig with default values.
@@ -488,7 +485,6 @@ func (kvCfg *KVConfig) SetDefaults() {
 	kvCfg.ScanMinIdleTime = defaultScanMinIdleTime
 	kvCfg.ScanMaxIdleTime = defaultScanMaxIdleTime
 	kvCfg.EventLogEnabled = defaultEventLogEnabled
-	kvCfg.SnapshotSendLimit = kvserver.DefaultSnapshotSendLimit
 }
 
 // SQLConfig holds the parameters that (together with a BaseConfig) allow
@@ -957,7 +953,6 @@ func (cfg *Config) readEnvironmentVariables() {
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMinIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MIN_IDLE_TIME", cfg.ScanMinIdleTime)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
-	cfg.SnapshotSendLimit = envutil.EnvOrDefaultInt64("COCKROACH_CONCURRENT_SNAPSHOT_SEND_LIMIT", cfg.SnapshotSendLimit)
 }
 
 // parseGossipBootstrapAddresses parses list of gossip bootstrap addresses.

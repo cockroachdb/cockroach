@@ -252,9 +252,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.EnableDemoLoginEndpoint {
 		cfg.EnableDemoLoginEndpoint = true
 	}
-	if params.SnapshotSendLimit != 0 {
-		cfg.SnapshotSendLimit = params.SnapshotSendLimit
-	}
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
