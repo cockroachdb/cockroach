@@ -11,7 +11,8 @@
 package util
 
 import (
-	"golang.org/x/exp/constraints"
+	"cmp"
+
 	"golang.org/x/exp/slices"
 )
 
@@ -25,7 +26,7 @@ import (
 // has mostly the same elements as the other. If the two slices are large and
 // don't have many duplicates, this function should be avoided, because of the
 // usage of `copy` that can increase CPU.
-func CombineUnique[T constraints.Ordered](a, b []T) []T {
+func CombineUnique[T cmp.Ordered](a, b []T) []T {
 	// We want b to be the smaller slice, so there are fewer elements to be added.
 	if len(b) > len(a) {
 		b, a = a, b

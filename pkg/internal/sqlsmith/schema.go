@@ -12,13 +12,14 @@ package sqlsmith
 
 import (
 	"fmt"
+	// Import builtins so they are reflected in tree.FunDefs.
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/lib/pq/oid"
-	"golang.org/x/exp/slices"
 )
 
 // tableRef represents a table and its columns.
