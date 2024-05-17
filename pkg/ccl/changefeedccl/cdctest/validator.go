@@ -142,8 +142,11 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 	})
 	seen := timestampsIdx < len(timestampValueTuples) &&
 		timestampValueTuples[timestampsIdx].ts == updated
+	if seen {
+		return nil
+	}
 
-	if !seen && len(timestampValueTuples) > 0 &&
+	if len(timestampValueTuples) > 0 &&
 		updated.Less(timestampValueTuples[len(timestampValueTuples)-1].ts) {
 		v.failures = append(v.failures, fmt.Sprintf(
 			`topic %s partition %s: saw new row timestamp %s after %s was seen`,
@@ -152,21 +155,20 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 			timestampValueTuples[len(timestampValueTuples)-1].ts.AsOfSystemTime(),
 		))
 	}
-	if !seen && updated.Less(v.resolved[partition]) {
+	latestResolved := v.resolved[partition]
+	if updated.Less(latestResolved) {
 		v.failures = append(v.failures, fmt.Sprintf(
 			`topic %s partition %s: saw new row timestamp %s after %s was resolved`,
-			v.topic, partition, updated.AsOfSystemTime(), v.resolved[partition].AsOfSystemTime(),
+			v.topic, partition, updated.AsOfSystemTime(), latestResolved.AsOfSystemTime(),
 		))
 	}
 
-	if !seen {
-		v.keyTimestampAndValues[key] = append(
-			append(timestampValueTuples[:timestampsIdx], timestampValue{
-				ts:    updated,
-				value: value,
-			}),
-			timestampValueTuples[timestampsIdx:]...)
-	}
+	v.keyTimestampAndValues[key] = append(
+		append(timestampValueTuples[:timestampsIdx], timestampValue{
+			ts:    updated,
+			value: value,
+		}),
+		timestampValueTuples[timestampsIdx:]...)
 	return nil
 }
 
@@ -675,8 +677,8 @@ type CountValidator struct {
 	rowsSinceResolved                    int
 }
 
-// MakeCountValidator returns a CountValidator wrapping the given Validator.
-func MakeCountValidator(v Validator) *CountValidator {
+// NewCountValidator returns a CountValidator wrapping the given Validator.
+func NewCountValidator(v Validator) *CountValidator {
 	return &CountValidator{v: v}
 }
 
