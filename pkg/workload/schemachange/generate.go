@@ -11,9 +11,11 @@
 package schemachange
 
 import (
+	"cmp"
 	"fmt"
 	"math/rand"
 	"reflect"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -21,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/exp/slices"
 )
 
 // ErrCaseNotPossible is a sentinel indicating that an elected case could not
@@ -181,17 +182,20 @@ func Generate[T tree.Statement](
 		compiledCases[i], compiledCases[j] = compiledCases[j], compiledCases[i]
 	})
 
-	// Prioritize cases that will succeed but pushing them to the front of our
+	// Prioritize cases that will succeed by pushing them to the front of our
 	// slice. If no successful case is possible, we'll fallback to error cases.
-	slices.SortStableFunc(compiledCases, func(a, b compiledCase) bool {
+	slices.SortStableFunc(compiledCases, func(a, b compiledCase) int {
 		aIsSuccess := a.Code == pgcode.SuccessfulCompletion
 		bIsSuccess := b.Code == pgcode.SuccessfulCompletion
 
 		if aIsSuccess && bIsSuccess {
 			// If both are valid, choose randomly.
-			return rng.Float64() < 0.5
+			return cmp.Compare(rng.Float64(), 0.5)
 		}
-		return aIsSuccess && !bIsSuccess
+		if aIsSuccess {
+			return -1
+		}
+		return +1
 	})
 
 	for _, c := range compiledCases {
