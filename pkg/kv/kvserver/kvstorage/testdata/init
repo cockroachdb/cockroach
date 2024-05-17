@@ -14,7 +14,7 @@ load-and-reconcile trace=true
 r6/60: uninitialized
 r8/80: r8:{c-f} [(n1,s1):80, next=81, gen=0]
 beginning range descriptor iteration
-range descriptor iteration done: 1 keys, 1 range descriptors (by suffix: map[rdsc:1]); scan stats: <redacted>
+range descriptor iteration done: 1 range descriptors, 0 intents, 0 tombstones; stats: <redacted>
 loaded replica ID for 2/2 replicas
 loaded Raft state for 2/2 replicas
 loaded 2 replicas
@@ -26,7 +26,7 @@ load-and-reconcile trace=true
 r6/60: uninitialized
 r8/80: r8:{c-f} [(n1,s1):80, next=81, gen=0]
 beginning range descriptor iteration
-range descriptor iteration done: 1 keys, 1 range descriptors (by suffix: map[rdsc:1]); scan stats: <redacted>
+range descriptor iteration done: 1 range descriptors, 0 intents, 0 tombstones; stats: <redacted>
 loaded replica ID for 2/2 replicas
 loaded Raft state for 2/2 replicas
 loaded 2 replicas
