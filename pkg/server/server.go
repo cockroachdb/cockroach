@@ -630,7 +630,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	raftTransport := kvserver.NewRaftTransport(
 		cfg.AmbientCtx,
 		st,
-		cfg.AmbientCtx.Tracer,
 		kvNodeDialer,
 		grpcServer.Server,
 		stopper,

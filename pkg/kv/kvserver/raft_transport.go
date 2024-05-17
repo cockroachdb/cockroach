@@ -169,7 +169,6 @@ type OutgoingRaftMessageHandler interface {
 type RaftTransport struct {
 	log.AmbientContext
 	st      *cluster.Settings
-	tracer  *tracing.Tracer
 	stopper *stop.Stopper
 	metrics *RaftTransportMetrics
 
@@ -283,15 +282,13 @@ type raftSendQueue struct {
 
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
-func NewDummyRaftTransport(st *cluster.Settings, tracer *tracing.Tracer) *RaftTransport {
+func NewDummyRaftTransport(ambient log.AmbientContext, st *cluster.Settings) *RaftTransport {
 	resolver := func(roachpb.NodeID) (net.Addr, error) {
 		return nil, errors.New("dummy resolver")
 	}
-	return NewRaftTransport(log.MakeTestingAmbientContext(tracer), st, tracer,
-		nodedialer.New(nil, resolver), nil, nil,
+	return NewRaftTransport(ambient, st, nodedialer.New(nil, resolver), nil, nil,
 		kvflowdispatch.NewDummyDispatch(), NoopStoresFlowControlIntegration{},
-		NoopRaftTransportDisconnectListener{},
-		nil,
+		NoopRaftTransportDisconnectListener{}, nil,
 	)
 }
 
@@ -299,7 +296,6 @@ func NewDummyRaftTransport(st *cluster.Settings, tracer *tracing.Tracer) *RaftTr
 func NewRaftTransport(
 	ambient log.AmbientContext,
 	st *cluster.Settings,
-	tracer *tracing.Tracer,
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
 	stopper *stop.Stopper,
@@ -314,7 +310,6 @@ func NewRaftTransport(
 	t := &RaftTransport{
 		AmbientContext: ambient,
 		st:             st,
-		tracer:         tracer,
 		stopper:        stopper,
 		dialer:         dialer,
 		knobs:          knobs,
@@ -1145,7 +1140,7 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
-	return sendSnapshot(ctx, clusterID, t.st, t.tracer, stream, storePool, header, snap, newWriteBatch, sent, recordBytesSent)
+	return sendSnapshot(ctx, clusterID, t.st, t.Tracer, stream, storePool, header, snap, newWriteBatch, sent, recordBytesSent)
 }
 
 // DelegateSnapshot sends a DelegateSnapshotRequest to a remote store

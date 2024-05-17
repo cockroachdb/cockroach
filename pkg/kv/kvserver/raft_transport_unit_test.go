@@ -67,11 +67,9 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		return addr, nil
 	}
 
-	ctxWithTracer := log.MakeTestingAmbientCtxWithNewTracer()
 	tp := NewRaftTransport(
-		ctxWithTracer,
+		log.MakeTestingAmbientCtxWithNewTracer(),
 		cluster.MakeTestingClusterSettings(),
-		ctxWithTracer.Tracer,
 		nodedialer.New(rpcC, resolver),
 		grpcServer,
 		stopper,
