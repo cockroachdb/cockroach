@@ -742,6 +742,14 @@ func (r *testRunner) runWorker(
 				l.PrintfCtx(ctx, "Created new cluster for test %s: %s (arch=%q)", testToRun.spec.Name, c.Name(), arch)
 			}
 		}
+
+		// If DebugKeepAlways is set, mark it as a saved cluster, so it isn't
+		// cleaned up. Do it now instead of at the end as the test may be interrupted
+		// with ctrl c before we get there.
+		if clustersOpt.debugMode == DebugKeepAlways {
+			c.Save(ctx, "cluster saved since --debug-always set", l)
+		}
+
 		// Prepare the test's logger. Always set this up with real files, using a
 		// temp dir if necessary. This simplifies testing.
 		artifactsRootDir := lopt.artifactsDir
@@ -886,6 +894,8 @@ func (r *testRunner) runWorker(
 				switch clustersOpt.debugMode {
 				case DebugKeepAlways, DebugKeepOnFailure:
 					// Save the cluster for future debugging.
+					// We already marked the cluster as a saved cluster above in the case
+					// of DebugKeepAlways, but update it with the failureMsg.
 					c.Save(ctx, failureMsg, l)
 
 					// Continue with a fresh cluster.
@@ -904,9 +914,9 @@ func (r *testRunner) runWorker(
 				getPerfArtifacts(ctx, c, t)
 			}
 			if clustersOpt.debugMode == DebugKeepAlways {
+				// We already marked the cluster as a saved cluster above.
 				alloc.Freeze()
 				alloc = nil
-				c.Save(ctx, "cluster saved since --debug-always set", l)
 				c = nil
 			}
 		}
