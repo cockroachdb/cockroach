@@ -73,7 +73,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="KV Admission IO Tokens Exhausted Duration Per Second"
+      title="Admission IO Tokens Exhausted Duration Per Second"
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
@@ -81,13 +81,22 @@ export default function (props: GraphDashboardProps) {
     >
       <Axis label="Duration (micros/sec)">
         {nodeIDs.map(nid => (
-          <Metric
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.admission.granter.io_tokens_exhausted_duration.kv"
+              title={"Regular (Foreground) IO Exhausted " + nodeDisplayName(nodeDisplayNameByID, nid)}
+              sources={[nid]}
+              nonNegativeRate
+            />
+            <Metric
             key={nid}
-            name="cr.node.admission.granter.io_tokens_exhausted_duration.kv"
-            title={"IO Exhausted " + nodeDisplayName(nodeDisplayNameByID, nid)}
+            name="cr.node.admission.granter.elastic_io_tokens_exhausted_duration.kv"
+            title={"Elastic (Background) IO Exhausted " + nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={[nid]}
             nonNegativeRate
-          />
+            />
+          </>
         ))}
       </Axis>
     </LineGraph>,
