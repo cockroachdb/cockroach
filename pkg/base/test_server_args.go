@@ -112,7 +112,6 @@ type TestServerArgs struct {
 	TimeSeriesQueryMemoryBudget int64
 	SQLMemoryPoolSize           int64
 	CacheSize                   int64
-	SnapshotSendLimit           int64
 	SnapshotApplyLimit          int64
 
 	// By default, test servers have AutoInitializeCluster=true set in

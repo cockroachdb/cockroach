@@ -60,10 +60,6 @@ const (
 	// tagSnapshotTiming is the tracing span tag that the *snapshotTimingTag
 	// lives under.
 	tagSnapshotTiming = "snapshot_timing_tag"
-
-	// DefaultSnapshotSendLimit is the max number of snapshots concurrently sent.
-	// See server.KVConfig for more info.
-	DefaultSnapshotSendLimit = 2
 )
 
 // snapshotMetrics contains metrics on the number and size of snapshots in
