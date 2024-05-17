@@ -68,10 +68,6 @@ func (p *planner) AlterPrimaryKey(
 		return err
 	}
 
-	if err := p.disallowDroppingPrimaryIndexReferencedInUDFOrView(ctx, tableDesc); err != nil {
-		return err
-	}
-
 	if alterPrimaryKeyLocalitySwap != nil {
 		if err := p.checkNoRegionChangeUnderway(
 			ctx,
@@ -453,6 +449,26 @@ func (p *planner) AlterPrimaryKey(
 		if idx.GetID() != newPrimaryIndexDesc.ID && shouldRewrite {
 			indexesToRewrite = append(indexesToRewrite, idx)
 		}
+		// If this index is referenced by any other objects, then we wil
+		// block the primary key swap, since we don't have a mechanism to
+		// fix these references yet.
+		for _, tableRef := range tableDesc.GetDependedOnBy() {
+			if tableRef.IndexID == idx.GetID() {
+				refDesc, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Desc(ctx, tableRef.ID)
+				if err != nil {
+					return err
+				}
+				return unimplemented.NewWithIssuef(124131,
+					"table %q has an index (%s) that is still referenced by %q",
+					tableDesc.GetName(),
+					idx.GetName(),
+					refDesc.GetName())
+			}
+		}
+	}
+
+	if err := p.disallowDroppingPrimaryIndexReferencedInUDFOrView(ctx, tableDesc); err != nil {
+		return err
 	}
 
 	// TODO (rohany): this loop will be unused until #45510 is resolved.
