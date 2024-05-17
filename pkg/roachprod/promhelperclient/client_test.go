@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
+	"gopkg.in/yaml.v2"
 )
 
 func TestUpdatePrometheusTargets(t *testing.T) {
@@ -57,8 +58,19 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 			require.Equal(t, getUrl(promUrl, "c1"), url)
 			ir, err := getInstanceConfigRequest(io.NopCloser(body))
 			require.Nil(t, err)
-			// TODO (bhaskar): check for the correct yaml
 			require.NotNil(t, ir.Config)
+			configs := make([]*CCParams, 0)
+			require.Nil(t, yaml.UnmarshalStrict([]byte(ir.Config), &configs))
+			require.Equal(t, 2, len(configs))
+			for _, c := range configs {
+				if c.Labels["node"] == "1" {
+					require.Equal(t, "n1", c.Targets[0])
+				} else {
+					require.Equal(t, "n3", c.Targets[0])
+					require.Equal(t, "3", c.Labels["node"])
+				}
+				c.Labels["tenant"] = "system"
+			}
 			return &http.Response{
 				StatusCode: 200,
 			}, nil
