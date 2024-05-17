@@ -17,6 +17,7 @@ import (
 	"io"
 	"math/rand"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"text/template"
@@ -40,7 +41,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lib/pq/oid"
-	"golang.org/x/exp/slices"
 )
 
 // All of the fields of operationGeneratorParams should only be accessed by

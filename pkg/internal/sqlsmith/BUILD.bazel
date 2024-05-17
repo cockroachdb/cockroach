@@ -42,7 +42,6 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
-        "@org_golang_x_exp//slices",
     ],
 )
 
