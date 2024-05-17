@@ -1531,3 +1531,20 @@ func (s ShowCommitTimestamp) Format(ctx *FmtCtx) {
 }
 
 var _ Statement = (*ShowCommitTimestamp)(nil)
+
+// ShowExternalConnections represents a SHOW EXTERNAL CONNECTIONS statement.
+type ShowExternalConnections struct {
+	ConnectionLabel Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowExternalConnections) Format(ctx *FmtCtx) {
+	if node.ConnectionLabel != nil {
+		ctx.WriteString("SHOW EXTERNAL CONNECTION ")
+		ctx.FormatNode(node.ConnectionLabel)
+		return
+	}
+	ctx.Printf("SHOW EXTERNAL CONNECTIONS")
+}
+
+var _ Statement = &ShowExternalConnections{}

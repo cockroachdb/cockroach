@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -178,6 +179,28 @@ func (e *MutableExternalConnection) UnredactedConnectionStatement() string {
 		As: tree.NewDString(e.rec.ConnectionDetails.UnredactedURI()),
 	}
 	return tree.AsString(ecNode)
+}
+
+// RedactedConnectionURI implements the ExternalConnection interface and
+// returns the redacted URI
+func (e *MutableExternalConnection) RedactedConnectionURI() string {
+	unredactedURI := e.rec.ConnectionDetails.UnredactedURI()
+	var err error
+	switch e.rec.ConnectionType {
+	case connectionpb.TypeStorage.String():
+		redactedURI, err := cloud.SanitizeExternalStorageURI(unredactedURI, nil)
+		if err == nil {
+			return redactedURI
+		}
+	case connectionpb.TypeKMS.String():
+		redactedURI, err := cloud.RedactKMSURI(unredactedURI)
+		if err == nil {
+			return redactedURI
+		}
+	default:
+		err = fmt.Errorf("cannot redact URI for unknown connection type: %s", e.rec.ConnectionType)
+	}
+	return fmt.Sprintf("failed to redact the URI: %s", err.Error())
 }
 
 // datumToNative is a helper to convert tree.Datum into Go native types.  We

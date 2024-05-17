@@ -279,6 +279,7 @@ show_stmt ::=
 	| show_create_external_connections_stmt
 	| show_databases_stmt
 	| show_enums_stmt
+	| show_external_connections_stmt
 	| show_types_stmt
 	| show_functions_stmt
 	| show_procedures_stmt
@@ -835,6 +836,10 @@ show_enums_stmt ::=
 	'SHOW' 'ENUMS'
 	| 'SHOW' 'ENUMS' 'FROM' name '.' name
 	| 'SHOW' 'ENUMS' 'FROM' name
+
+show_external_connections_stmt ::=
+	'SHOW' 'EXTERNAL' 'CONNECTIONS'
+	| 'SHOW' 'EXTERNAL' 'CONNECTION' string_or_placeholder
 
 show_types_stmt ::=
 	'SHOW' 'TYPES'
