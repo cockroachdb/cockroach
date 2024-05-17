@@ -443,62 +443,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		cancelQuery = portal.pauseInfo.execStmtInOpenState.cancelQueryFunc
 	}
 
-	// Make sure that we always unregister the query. It also deals with
-	// overwriting res.Error to a more user-friendly message in case of query
-	// cancellation.
-	defer func(ctx context.Context, res RestrictedCommandResult) {
-		if queryTimeoutTicker != nil {
-			if !queryTimeoutTicker.Stop() {
-				// Wait for the timer callback to complete to avoid a data race on
-				// queryTimedOut.
-				<-queryDoneAfterFunc
-			}
-		}
-		if txnTimeoutTicker != nil {
-			if !txnTimeoutTicker.Stop() {
-				// Wait for the timer callback to complete to avoid a data race on
-				// txnTimedOut.
-				<-txnDoneAfterFunc
-			}
-		}
-
+	// Make sure that we always unregister the query.
+	defer func() {
 		processCleanupFunc("cancel query", func() {
-			cancelQueryCtx := ctx
-			if isPausablePortal() {
-				cancelQueryCtx = portal.pauseInfo.execStmtInOpenState.cancelQueryCtx
-			}
-			resToPushErr := res
-			// For pausable portals, we retain the query but update the result for
-			// each execution. When the query context is cancelled and we're in the
-			// middle of an portal execution, push the error to the current result.
-			if isPausablePortal() {
-				resToPushErr = portal.pauseInfo.curRes
-			}
-			// Detect context cancelation and overwrite whatever error might have been
-			// set on the result before. The idea is that once the query's context is
-			// canceled, all sorts of actors can detect the cancelation and set all
-			// sorts of errors on the result. Rather than trying to impose discipline
-			// in that jungle, we just overwrite them all here with an error that's
-			// nicer to look at for the client.
-			if resToPushErr != nil && cancelQueryCtx.Err() != nil && resToPushErr.ErrAllowReleased() != nil {
-				// Even in the cases where the error is a retryable error, we want to
-				// intercept the event and payload returned here to ensure that the query
-				// is not retried.
-				retEv = eventNonRetriableErr{
-					IsCommit: fsm.FromBool(isCommit(ast)),
-				}
-				errToPush := cancelchecker.QueryCanceledError
-				// For pausable portal, we can arrive here after encountering a timeout
-				// error and then perform a query-cleanup step. In this case, we don't
-				// want to override the original timeout error with the query-cancelled
-				// error.
-				if isPausablePortal() && (errors.Is(resToPushErr.Err(), sqlerrors.QueryTimeoutError) ||
-					errors.Is(resToPushErr.Err(), sqlerrors.TxnTimeoutError)) {
-					errToPush = resToPushErr.Err()
-				}
-				resToPushErr.SetError(errToPush)
-				retPayload = eventNonRetriableErrPayload{err: errToPush}
-			}
 			ex.removeActiveQuery(queryID, ast)
 			cancelQuery()
 		})
@@ -506,33 +453,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 		// client connection, and is Server.InternalMetrics for internal executors.
 		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
-
-		// If the query timed out, we intercept the error, payload, and event here
-		// for the same reasons we intercept them for canceled queries above.
-		// Overriding queries with a QueryTimedOut error needs to happen after
-		// we've checked for canceled queries as some queries may be canceled
-		// because of a timeout, in which case the appropriate error to return to
-		// the client is one that indicates the timeout, rather than the more general
-		// query canceled error. It's important to note that a timed out query may
-		// not have been canceled (eg. We never even start executing a query
-		// because the timeout has already expired), and therefore this check needs
-		// to happen outside the canceled query check above.
-		if queryTimedOut {
-			// A timed out query should never produce retryable errors/events/payloads
-			// so we intercept and overwrite them all here.
-			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(ast)),
-			}
-			res.SetError(sqlerrors.QueryTimeoutError)
-			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
-		} else if txnTimedOut {
-			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(ast)),
-			}
-			res.SetError(sqlerrors.TxnTimeoutError)
-			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
-		}
-	}(ctx, res)
+	}()
 
 	// Special handling for SET TRANSACTION statements within a stored procedure
 	// that uses COMMIT or ROLLBACK. This has to happen before the call to
@@ -813,18 +734,45 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
-	shouldLogToExecAndAudit := true
-	defer func() {
-		if !shouldLogToExecAndAudit {
-			// We don't want to log this statement, since another layer of the
-			// conn_executor will handle the logging for this statement.
-			return
+	// This flag informs logging decisions.
+	// Some statements are not dispatched to the execution engine and need
+	// some special plan initialization for logging.
+	dispatchToExecEngine := false
+
+	// resErr is used to capture the error returned by the result of the
+	// statement execution for logging.
+	var resErr error
+	defer processCleanupFunc("log statement", func() {
+		// If we did not dispatch to the execution engine, we need to initialize
+		// the plan here.
+		if !dispatchToExecEngine {
+			p.curPlan.init(&p.stmt, &p.instrumentation)
+			if p, ok := retPayload.(payloadWithError); ok {
+				resErr = p.errorCause()
+			}
 		}
 
-		p.curPlan.init(&p.stmt, &p.instrumentation)
-		var execErr error
-		if p, ok := retPayload.(payloadWithError); ok {
-			execErr = p.errorCause()
+		var bulkJobId uint64
+		var rowsAffected int
+		if isPausablePortal() {
+			ppInfo := portal.pauseInfo
+			if p.extendedEvalCtx.Annotations == nil {
+				// This is a safety check in case resetPlanner() was
+				// executed, but then we never set the annotations on
+				// the planner. Formatting the stmt for logging requires
+				// non-nil annotations.
+				p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
+			}
+			rowsAffected = ppInfo.dispatchToExecutionEngine.rowsAffected
+		} else {
+			switch p.stmt.AST.(type) {
+			case *tree.Import, *tree.Restore, *tree.Backup:
+				bulkJobId = res.GetBulkJobId()
+			}
+			// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
+			// use this numRows entry. We emit the number of changed rows when the job
+			// completes. (see the usages of logutil.LogJobCompletion()).
+			rowsAffected = res.RowsAffected()
 		}
 
 		p.maybeLogStatement(
@@ -832,17 +780,106 @@ func (ex *connExecutor) execStmtInOpenState(
 			ex.executorType,
 			int(ex.state.mu.autoRetryCounter),
 			int(ex.extraTxnState.txnCounter.Load()),
-			0, /* rowsAffected */
+			rowsAffected,
 			ex.state.mu.stmtCount,
-			0, /* bulkJobId */
-			execErr,
+			bulkJobId,
+			resErr,
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
 			ex.implicitTxn(),
 			ex.statsCollector,
 			ex.extraTxnState.shouldLogToTelemetry)
-	}()
+	})
+
+	// Overwrite res.Error to a more user-friendly message in case of query
+	// cancellation.
+	defer func(ctx context.Context, res RestrictedCommandResult) {
+		if queryTimeoutTicker != nil {
+			if !queryTimeoutTicker.Stop() {
+				// Wait for the timer callback to complete to avoid a data race on
+				// queryTimedOut.
+				<-queryDoneAfterFunc
+			}
+		}
+		if txnTimeoutTicker != nil {
+			if !txnTimeoutTicker.Stop() {
+				// Wait for the timer callback to complete to avoid a data race on
+				// txnTimedOut.
+				<-txnDoneAfterFunc
+			}
+		}
+
+		processCleanupFunc("set query error", func() {
+			cancelQueryCtx := ctx
+			if isPausablePortal() {
+				cancelQueryCtx = portal.pauseInfo.execStmtInOpenState.cancelQueryCtx
+			}
+			resToPushErr := res
+			// For pausable portals, we retain the query but update the result for
+			// each execution. When the query context is cancelled and we're in the
+			// middle of an portal execution, push the error to the current result.
+			if isPausablePortal() {
+				resToPushErr = portal.pauseInfo.curRes
+			}
+			resErr = resToPushErr.ErrAllowReleased()
+			// Detect context cancelation and overwrite whatever error might have been
+			// set on the result before. The idea is that once the query's context is
+			// canceled, all sorts of actors can detect the cancelation and set all
+			// sorts of errors on the result. Rather than trying to impose discipline
+			// in that jungle, we just overwrite them all here with an error that's
+			// nicer to look at for the client.
+			if resToPushErr != nil && cancelQueryCtx.Err() != nil && resToPushErr.ErrAllowReleased() != nil {
+				// Even in the cases where the error is a retryable error, we want to
+				// intercept the event and payload returned here to ensure that the query
+				// is not retried.
+				retEv = eventNonRetriableErr{
+					IsCommit: fsm.FromBool(isCommit(ast)),
+				}
+				errToPush := cancelchecker.QueryCanceledError
+				// For pausable portal, we can arrive here after encountering a timeout
+				// error and then perform a query-cleanup step. In this case, we don't
+				// want to override the original timeout error with the query-cancelled
+				// error.
+				if isPausablePortal() && (errors.Is(resToPushErr.Err(), sqlerrors.QueryTimeoutError) ||
+					errors.Is(resToPushErr.Err(), sqlerrors.TxnTimeoutError)) {
+					errToPush = resToPushErr.Err()
+				}
+				resToPushErr.SetError(errToPush)
+				retPayload = eventNonRetriableErrPayload{err: errToPush}
+				resErr = errToPush
+			}
+		})
+
+		// If the query timed out, we intercept the error, payload, and event here
+		// for the same reasons we intercept them for canceled queries above.
+		// Overriding queries with a QueryTimedOut error needs to happen after
+		// we've checked for canceled queries as some queries may be canceled
+		// because of a timeout, in which case the appropriate error to return to
+		// the client is one that indicates the timeout, rather than the more general
+		// query canceled error. It's important to note that a timed out query may
+		// not have been canceled (eg. We never even start executing a query
+		// because the timeout has already expired), and therefore this check needs
+		// to happen outside the canceled query check above.
+		if queryTimedOut {
+			// A timed out query should never produce retryable errors/events/payloads
+			// so we intercept and overwrite them all here.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(ast)),
+			}
+			res.SetError(sqlerrors.QueryTimeoutError)
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
+			resErr = sqlerrors.QueryTimeoutError
+		} else if txnTimedOut {
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(ast)),
+			}
+			res.SetError(sqlerrors.TxnTimeoutError)
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
+			resErr = sqlerrors.TxnTimeoutError
+		}
+
+	}(ctx, res)
 
 	switch s := ast.(type) {
 	case *tree.BeginTransaction:
@@ -955,9 +992,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		return nil, nil, nil
 	}
 
-	// Don't write to the exec/audit logs here; it will be handled in
-	// dispatchToExecutionEngine.
-	shouldLogToExecAndAudit = false
+	dispatchToExecEngine = true
 
 	// Check if we need to auto-commit the transaction due to DDL.
 	if ev, payload := ex.maybeAutoCommitBeforeDDL(ctx, ast); ev != nil {
@@ -1826,64 +1861,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		res.DisableBuffering()
 	}
 
-	var stats topLevelQueryStats
-	defer func() {
-		var bulkJobId uint64
-		if ppInfo := getPausablePortalInfo(); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
-			ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
-				fName: "log statement",
-				f: func() {
-					if planner.extendedEvalCtx.Annotations == nil {
-						// This is a safety check in case resetPlanner() was
-						// executed, but then we never set the annotations on
-						// the planner. Formatting the stmt for logging requires
-						// non-nil annotations.
-						planner.extendedEvalCtx.Annotations = &planner.semaCtx.Annotations
-					}
-					planner.maybeLogStatement(
-						ctx,
-						ex.executorType,
-						int(ex.state.mu.autoRetryCounter),
-						int(ex.extraTxnState.txnCounter.Load()),
-						ppInfo.dispatchToExecutionEngine.rowsAffected,
-						ex.state.mu.stmtCount,
-						bulkJobId,
-						ppInfo.curRes.ErrAllowReleased(),
-						ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
-						&ex.extraTxnState.hasAdminRoleCache,
-						ex.server.TelemetryLoggingMetrics,
-						ex.implicitTxn(),
-						ex.statsCollector,
-						ex.extraTxnState.shouldLogToTelemetry)
-				},
-			})
-		} else {
-			// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
-			// use this numRows entry. We emit the number of changed rows when the job
-			// completes. (see the usages of logutil.LogJobCompletion()).
-			nonBulkJobNumRows := res.RowsAffected()
-			switch planner.stmt.AST.(type) {
-			case *tree.Import, *tree.Restore, *tree.Backup:
-				bulkJobId = res.GetBulkJobId()
-			}
-			planner.maybeLogStatement(
-				ctx,
-				ex.executorType,
-				int(ex.state.mu.autoRetryCounter),
-				int(ex.extraTxnState.txnCounter.Load()),
-				nonBulkJobNumRows,
-				ex.state.mu.stmtCount,
-				bulkJobId,
-				res.Err(),
-				ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
-				&ex.extraTxnState.hasAdminRoleCache,
-				ex.server.TelemetryLoggingMetrics,
-				ex.implicitTxn(),
-				ex.statsCollector,
-				ex.extraTxnState.shouldLogToTelemetry)
-		}
-	}()
-
 	// TODO(sql-sessions): fix the phase time for pausable portals.
 	// https://github.com/cockroachdb/cockroach/issues/99410
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndLogicalPlan, timeutil.Now())
@@ -1984,7 +1961,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		distribute = FullDistribution
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
-	stats, err = ex.execWithDistSQLEngine(
+	stats, err := ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic, distSQLProhibitedErr,
 	)
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
