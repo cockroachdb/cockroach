@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -155,14 +154,6 @@ func (s Server) ServeClusterReplicas(
 	outStream serverpb.Admin_RecoveryCollectReplicaInfoServer,
 	kvDB *kv.DB,
 ) (err error) {
-	// Block requests that require fan-out to other nodes until upgrade is finalized.
-	// We can't assume that caller is up-to-date with cluster version and process
-	// regardless of version known by current node as recommended for RPC
-	// requests because caller is a CLI which that only knows its binary version.
-	if !s.settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-		return errors.Newf("loss of quorum recovery service requires cluster upgraded to 23.1")
-	}
-
 	var descriptors, nodes, replicas atomic.Int64
 	defer func() {
 		if err == nil {
@@ -289,14 +280,6 @@ func serveClusterReplicasParallelFn(
 func (s Server) StagePlan(
 	ctx context.Context, req *serverpb.RecoveryStagePlanRequest,
 ) (*serverpb.RecoveryStagePlanResponse, error) {
-	// Block requests that require fan-out to other nodes until upgrade is finalized.
-	// We can't assume that caller is up-to-date with cluster version and process
-	// regardless of version known by current node as recommended for RPC
-	// requests because caller is a CLI which that only knows its binary version.
-	if !s.settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-		return nil, errors.Newf("loss of quorum recovery service requires cluster upgraded to 23.1")
-	}
-
 	if !req.ForcePlan && req.Plan == nil {
 		return nil, errors.New("stage plan request can't be used with empty plan without force flag")
 	}
@@ -519,11 +502,6 @@ func (s Server) NodeStatus(
 func (s Server) Verify(
 	ctx context.Context, req *serverpb.RecoveryVerifyRequest, nl *liveness.NodeLiveness, db *kv.DB,
 ) (*serverpb.RecoveryVerifyResponse, error) {
-	// Block requests that require fan-out to other nodes until upgrade is finalized.
-	if !s.settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-		return nil, errors.Newf("loss of quorum recovery service requires cluster upgraded to 23.1")
-	}
-
 	var nss threadSafeSlice[loqrecoverypb.NodeRecoveryStatus]
 	err := s.visitAdminNodes(
 		ctx,

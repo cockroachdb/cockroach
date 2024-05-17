@@ -15,7 +15,6 @@ package storageparam
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -148,10 +147,6 @@ func storageParamPreChecks(
 
 	for _, key := range keys {
 		if key == `schema_locked` {
-			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-				return pgerror.Newf(pgcode.FeatureNotSupported, "cannot set/reset "+
-					"storage parameter %q until the cluster version is at least 23.1", key)
-			}
 			// We only allow setting/resetting `schema_locked` storage parameter in
 			// single-statement implicit transaction with no other storage params.
 			// This is an over-constraining but simple way to ensure that if we are
