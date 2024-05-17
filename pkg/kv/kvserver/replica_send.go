@@ -16,7 +16,6 @@ import (
 	"runtime/pprof"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -315,14 +314,8 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 	// DistSender and never use ClientRangeInfo.
 	//
 	// From 23.2, all DistSenders ensure ExplicitlyRequested is set when otherwise
-	// empty. Fall back to check for lease requests, to avoid 23.1 regressions.
-	if r.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_2) {
-		if ba.ClientRangeInfo == (roachpb.ClientRangeInfo{}) {
-			return
-		}
-	} else if ba.IsSingleRequestLeaseRequest() {
-		// TODO(erikgrinaker): Remove this branch when 23.1 support is dropped.
-		_ = clusterversion.TODODelete_V23_1
+	// empty.
+	if ba.ClientRangeInfo == (roachpb.ClientRangeInfo{}) {
 		return
 	}
 

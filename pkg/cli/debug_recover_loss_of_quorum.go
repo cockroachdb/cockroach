@@ -22,7 +22,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -575,29 +574,20 @@ Discarded live replicas: %d
 		return errors.Wrap(err, "failed to write recovery plan")
 	}
 
-	v := clusterversion.ClusterVersion{
-		Version: plan.Version,
-	}
-	if v.IsActive(clusterversion.TODODelete_V23_1) {
-		// No args means we collected connection info from cluster and need to
-		// preserve flags for subsequent invocation.
-		remoteArgs := getCLIClusterFlags(len(args) == 0, cmd, func(flag string) bool {
-			_, filter := planSpecificFlags[flag]
-			return filter
-		})
+	// No args means we collected connection info from cluster and need to
+	// preserve flags for subsequent invocation.
+	remoteArgs := getCLIClusterFlags(len(args) == 0, cmd, func(flag string) bool {
+		_, filter := planSpecificFlags[flag]
+		return filter
+	})
 
-		_, _ = fmt.Fprintf(stderr, `Plan created.
+	_, _ = fmt.Fprintf(stderr, `Plan created.
 To stage recovery application in half-online mode invoke:
 
 cockroach debug recover apply-plan %s %s
 
 Alternatively distribute plan to below nodes and invoke 'debug recover apply-plan --store=<store-dir> %s' on:
 `, remoteArgs, planFile, planFile)
-	} else {
-		_, _ = fmt.Fprintf(stderr, `Plan created.
-To complete recovery, distribute plan to below nodes and invoke 'debug recover apply-plan --store=<store-dir> %s' on:
-`, planFile)
-	}
 	for _, node := range report.UpdatedNodes {
 		_, _ = fmt.Fprintf(stderr, "- node n%d, store(s) %s\n", node.NodeID,
 			strutil.JoinIDs("s", node.StoreIDs))

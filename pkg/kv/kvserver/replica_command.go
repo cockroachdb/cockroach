@@ -2685,12 +2685,6 @@ func (r *Replica) getSenderReplicas(
 		return nil, err
 	}
 
-	// Unless all nodes are on V23.1, don't delegate. This prevents sending to a
-	// node that doesn't understand the request.
-	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-		return []roachpb.ReplicaDescriptor{coordinator}, nil
-	}
-
 	// Check follower snapshots, if zero just self-delegate.
 	numFollowers := int(NumDelegateLimit.Get(&r.ClusterSettings().SV))
 	if numFollowers == 0 {

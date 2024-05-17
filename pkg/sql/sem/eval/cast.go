@@ -894,11 +894,6 @@ func performCastWithoutPrecisionTruncation(
 			return tree.ParseDJSON(string(j))
 		}
 	case types.TSQueryFamily:
-		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"version %v must be finalized to use TSVector",
-				clusterversion.TODODelete_V23_1.Version())
-		}
 		switch v := d.(type) {
 		case *tree.DString:
 			q, err := tsearch.ParseTSQuery(string(*v))
@@ -908,11 +903,6 @@ func performCastWithoutPrecisionTruncation(
 			return &tree.DTSQuery{TSQuery: q}, nil
 		}
 	case types.TSVectorFamily:
-		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V23_1) {
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"version %v must be finalized to use TSVector",
-				clusterversion.TODODelete_V23_1.Version())
-		}
 		switch v := d.(type) {
 		case *tree.DString:
 			vec, err := tsearch.ParseTSVector(string(*v))

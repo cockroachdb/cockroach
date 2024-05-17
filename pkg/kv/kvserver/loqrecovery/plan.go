@@ -14,7 +14,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -192,22 +191,13 @@ func PlanReplicas(
 	}
 	sort.Sort(roachpb.NodeIDSlice(staleLeaseholderNodes))
 
-	v := clusterversion.ClusterVersion{
-		Version: clusterInfo.Version,
-	}
-	if v.IsActive(clusterversion.TODODelete_V23_1) {
-		return loqrecoverypb.ReplicaUpdatePlan{
-			Updates:                 updates,
-			PlanID:                  planID,
-			DecommissionedNodeIDs:   decommissionNodeIDs,
-			ClusterID:               clusterInfo.ClusterID,
-			StaleLeaseholderNodeIDs: staleLeaseholderNodes,
-			Version:                 clusterInfo.Version,
-		}, report, err
-	}
-
 	return loqrecoverypb.ReplicaUpdatePlan{
-		Updates: updates,
+		Updates:                 updates,
+		PlanID:                  planID,
+		DecommissionedNodeIDs:   decommissionNodeIDs,
+		ClusterID:               clusterInfo.ClusterID,
+		StaleLeaseholderNodeIDs: staleLeaseholderNodes,
+		Version:                 clusterInfo.Version,
 	}, report, err
 }
 

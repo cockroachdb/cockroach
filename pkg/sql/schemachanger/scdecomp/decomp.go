@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -121,14 +120,6 @@ func (w *walkCtx) walkRoot() {
 	case catalog.TableDescriptor:
 		w.walkRelation(d)
 	case catalog.FunctionDescriptor:
-		if !w.clusterVersion.IsActive(clusterversion.TODODelete_V23_1) {
-			panic(
-				scerrors.NotImplementedErrorf(
-					nil, // n
-					"function relevant elements and rules are not supported until fully upgraded to 23.1",
-				),
-			)
-		}
 		w.walkFunction(d)
 	default:
 		panic(errors.AssertionFailedf("unexpected descriptor type %T: %+v",
@@ -693,7 +684,7 @@ func (w *walkCtx) walkUniqueWithoutIndexConstraint(
 				c.GetName(), tbl.GetName(), tbl.GetID()))
 		}
 	}
-	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.TODODelete_V23_1) {
+	if c.IsConstraintUnvalidated() {
 		uwi := &scpb.UniqueWithoutIndexConstraintUnvalidated{
 			TableID:      tbl.GetID(),
 			ConstraintID: c.GetConstraintID(),
@@ -730,7 +721,7 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "check constraint %q in table %q (%d)",
 			c.GetName(), tbl.GetName(), tbl.GetID()))
 	}
-	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.TODODelete_V23_1) {
+	if c.IsConstraintUnvalidated() {
 		w.ev(scpb.Status_PUBLIC, &scpb.CheckConstraintUnvalidated{
 			TableID:      tbl.GetID(),
 			ConstraintID: c.GetConstraintID(),
@@ -763,7 +754,7 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 func (w *walkCtx) walkForeignKeyConstraint(
 	tbl catalog.TableDescriptor, c catalog.ForeignKeyConstraint,
 ) {
-	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.TODODelete_V23_1) {
+	if c.IsConstraintUnvalidated() {
 		w.ev(scpb.Status_PUBLIC, &scpb.ForeignKeyConstraintUnvalidated{
 			TableID:                 tbl.GetID(),
 			ConstraintID:            c.GetConstraintID(),
