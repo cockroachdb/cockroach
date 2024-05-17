@@ -14,7 +14,6 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,7 +37,7 @@ func (s storeIDSet) storeSliceFromSet() []roachpb.StoreID {
 	for k := range s {
 		storeIDs = append(storeIDs, k)
 	}
-	sort.Sort(roachpb.StoreIDSlice(storeIDs))
+	slices.Sort(storeIDs)
 	return storeIDs
 }
 
@@ -142,7 +141,7 @@ func (m locationsMap) joinNodeIDs() string {
 	for k := range m {
 		nodeIDs = append(nodeIDs, k)
 	}
-	sort.Sort(roachpb.NodeIDSlice(nodeIDs))
+	slices.Sort(nodeIDs)
 	return strutil.JoinIDs("n", nodeIDs)
 }
 

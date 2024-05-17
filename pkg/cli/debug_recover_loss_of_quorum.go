@@ -18,6 +18,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
@@ -1098,7 +1099,7 @@ func diffPlanWithNodeStatus(
 		for k := range nodesWithPlan {
 			missing = append(missing, k)
 		}
-		sort.Sort(roachpb.NodeIDSlice(missing))
+		slices.Sort(missing)
 		for _, id := range missing {
 			result.appendError(fmt.Sprintf(" failed to find node n%d where plan must be staged", id))
 		}

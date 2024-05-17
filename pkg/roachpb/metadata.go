@@ -99,13 +99,6 @@ func (r RangeID) String() string {
 // SafeValue implements the redact.SafeValue interface.
 func (r RangeID) SafeValue() {}
 
-// RangeIDSlice implements sort.Interface.
-type RangeIDSlice []RangeID
-
-func (r RangeIDSlice) Len() int           { return len(r) }
-func (r RangeIDSlice) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
-func (r RangeIDSlice) Less(i, j int) bool { return r[i] < r[j] }
-
 // ReplicaID is a custom type for a range replica ID.
 type ReplicaID int32
 
