@@ -12,6 +12,7 @@ package builtins
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"math"
@@ -39,7 +40,6 @@ import (
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/constraints"
 )
 
 func TestCategory(t *testing.T) {
@@ -84,7 +84,7 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 
 // sorterWithSwapCount implements sort.Interface and wraps a slice of data
 // with a counter that tracks the number of swaps performed during sorting.
-type sorterWithSwapCount[T constraints.Ordered] struct {
+type sorterWithSwapCount[T cmp.Ordered] struct {
 	data      []T
 	swapCount int
 }
