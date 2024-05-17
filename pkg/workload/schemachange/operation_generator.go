@@ -1224,17 +1224,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
-	tsQueryNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.TODODelete_V23_1.Version())
-	if err != nil {
-		return nil, err
-	}
 	hasUnsupportedTSQuery := func() bool {
-		if !tsQueryNotSupported {
-			return false
-		}
 		// Check if any of the indexes have text search types involved.
 		for _, def := range stmt.Defs {
 			if col, ok := def.(*tree.ColumnTableDef); ok &&
@@ -1257,15 +1247,6 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		ctx,
 		tx,
 		clusterversion.V23_2.Version())
-	if err != nil {
-		return nil, err
-	}
-	// Forward indexes for arrays were added in 23.1, so check the index
-	// definitions for them in mixed version states.
-	forwardIndexesOnArraysNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.TODODelete_V23_1.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -1308,9 +1289,6 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 						if err != nil {
 							return false, err
 						}
-						if forwardIndexesOnArraysNotSupported && typ.Family() == types.ArrayFamily {
-							return true, nil
-						}
 						if forwardIndexesOnJSONNotSupported && typ.Family() == types.JsonFamily {
 							return true, nil
 						}
@@ -1327,9 +1305,6 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 			typ, err := tree.ResolveType(ctx, colInfo.Type, &txTypeResolver{tx: tx})
 			if err != nil {
 				return false, err
-			}
-			if forwardIndexesOnArraysNotSupported && typ.Family() == types.ArrayFamily {
-				return true, nil
 			}
 			if forwardIndexesOnJSONNotSupported && typ.Family() == types.JsonFamily {
 				return true, nil

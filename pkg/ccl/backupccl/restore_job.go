@@ -299,13 +299,11 @@ func restore(
 		return emptyRowCount, err
 	}
 
-	on231 := clusterversion.TODODelete_V23_1.Version().LessEq(job.Payload().CreationClusterVersion)
 	restoreCheckpoint := job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
 	requiredSpans := dataToRestore.getSpans()
 	progressTracker, err := makeProgressTracker(
 		requiredSpans,
 		restoreCheckpoint,
-		on231,
 		restoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV),
 		endTime)
 	if err != nil {
@@ -340,7 +338,7 @@ func restore(
 			introducedSpanFrontier,
 			targetSize,
 			maxFileCount,
-			progressTracker.useFrontier)
+			true /* useFrontierCheckpointing */)
 	}(); err != nil {
 		return roachpb.RowCount{}, err
 	}
@@ -418,13 +416,6 @@ func restore(
 			return errors.Wrap(progressLogger.Loop(ctx, requestFinishedCh), "job progress loop")
 		}
 		tasks = append(tasks, jobProgressLoop)
-	}
-	if !progressTracker.useFrontier {
-		// This goroutine feeds the deprecated high water mark variant of the
-		// generativeCheckpointLoop.
-		tasks = append(tasks, func(ctx context.Context) error {
-			return genSpan(ctx, progressTracker.inFlightSpanFeeder)
-		})
 	}
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)

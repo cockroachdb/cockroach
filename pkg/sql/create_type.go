@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -315,11 +314,6 @@ func (p *planner) createUserDefinedType(params runParams, n *createTypeNode) err
 			params, id, n.n.EnumLabels, n.dbDesc, n.typeName, EnumTypeUserDefined,
 		)
 	case tree.Composite:
-		if !p.execCfg.Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V23_1) {
-			return pgerror.Newf(pgcode.FeatureNotSupported,
-				"version %v must be finalized to create composite types",
-				clusterversion.TODODelete_V23_1)
-		}
 		return params.p.createCompositeWithID(
 			params, id, n.n.CompositeTypeList, n.dbDesc, n.typeName,
 		)
