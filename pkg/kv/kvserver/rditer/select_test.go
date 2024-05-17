@@ -13,7 +13,7 @@ package rditer
 import (
 	"bytes"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -104,8 +104,8 @@ func TestSelect(t *testing.T) {
 					}
 					fmt.Fprintf(&buf, "Select(%+v):\n", opts)
 					sl := Select(roachpb.RangeID(123), opts)
-					assert.True(t, sort.SliceIsSorted(sl, func(i, j int) bool {
-						return bytes.Compare(sl[i].EndKey, sl[j].Key) < 0
+					assert.True(t, slices.IsSortedFunc(sl, func(a, b roachpb.Span) int {
+						return bytes.Compare(a.EndKey, b.Key)
 					}))
 					for _, sp := range sl {
 						fmt.Fprintf(&buf, "  %s\n", sp)
