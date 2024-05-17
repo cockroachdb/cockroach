@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -4813,15 +4814,15 @@ func (d *DTuple) Normalize(ctx CompareContext) {
 
 func (d *DTuple) sort(ctx CompareContext) {
 	if !d.sorted {
-		lessFn := func(i, j int) bool {
-			return d.D[i].Compare(ctx, d.D[j]) < 0
+		lessFn := func(a, b Datum) int {
+			return a.Compare(ctx, b)
 		}
 
 		// It is possible for the tuple to be sorted even though the sorted flag
 		// is not true. So before we perform the sort we check that it is not
 		// already sorted.
-		if !sort.SliceIsSorted(d.D, lessFn) {
-			sort.Slice(d.D, lessFn)
+		if !slices.IsSortedFunc(d.D, lessFn) {
+			slices.SortFunc(d.D, lessFn)
 		}
 		d.SetSorted()
 	}
