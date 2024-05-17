@@ -187,7 +187,7 @@ func RunNemesis(
 	if err != nil {
 		return nil, err
 	}
-	ns.v = MakeCountValidator(Validators{
+	ns.v = NewCountValidator(Validators{
 		NewOrderValidator(`foo`),
 		baV,
 		fprintV,
