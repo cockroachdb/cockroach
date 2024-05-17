@@ -794,7 +794,7 @@ func init() {
 		},
 		nodeCmds...)
 	tableOutputCommands = append(tableOutputCommands, authCmds...)
-	// duplicate
+	// against duplicate flag registration
 	tableOutputCommands = slices.DeleteFunc(tableOutputCommands, func(v *cobra.Command) bool {
 		return slices.Contains(sqlCmds, v)
 	})
