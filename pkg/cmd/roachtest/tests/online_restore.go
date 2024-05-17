@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	crdbworkload "github.com/cockroachdb/cockroach/pkg/workload"
@@ -105,7 +106,7 @@ func registerOnlineRestorePerf(r registry.Registry) {
 			timeout:                3 * time.Hour,
 			suites:                 registry.Suites(registry.Nightly),
 			restoreUptoIncremental: 0,
-			skip: "link phase is really slow, which will cause the test to time out",
+			skip:                   "link phase is really slow, which will cause the test to time out",
 		},
 	} {
 		for _, runOnline := range []bool{true, false} {
@@ -120,6 +121,9 @@ func registerOnlineRestorePerf(r registry.Registry) {
 						sp.namePrefix = "online/"
 					} else {
 						sp.namePrefix = "offline/"
+						sp.skip = "used for ad hoc experiments"
+					}
+					if !runWorkload {
 						sp.skip = "used for ad hoc experiments"
 					}
 
@@ -171,6 +175,30 @@ func registerOnlineRestorePerf(r registry.Registry) {
 			}
 		}
 	}
+}
+
+// maybeAddSomeEmptyTables adds some empty tables to the cluster to exercise
+// prefix rewrite rules.
+func maybeAddSomeEmptyTables(ctx context.Context, rd restoreDriver) error {
+	if rd.rng.Intn(2) == 0 {
+		return nil
+	}
+	rd.t.L().Printf("adding some empty tables")
+	db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE DATABASE empty`); err != nil {
+		return err
+	}
+	numTables := rd.rng.Intn(10)
+	for i := 0; i < numTables; i++ {
+		if _, err := db.Exec(fmt.Sprintf(`CREATE TABLE empty.t%d (a INT)`, i)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func registerOnlineRestoreCorrectness(r registry.Registry) {
@@ -424,6 +452,13 @@ func waitForDownloadJob(
 				return downloadJobEndTimeLowerBound, err
 			}
 			if status == string(jobs.StatusSucceeded) {
+				var externalBytes uint64
+				if err := conn.QueryRow(jobutils.GetExternalBytesForConnectedTenant).Scan(&externalBytes); err != nil {
+					return downloadJobEndTimeLowerBound, errors.Wrapf(err, "could not get external bytes")
+				}
+				if externalBytes != 0 {
+					return downloadJobEndTimeLowerBound, errors.Newf(" not all data downloaded. %d external bytes still in cluster", externalBytes)
+				}
 				postDownloadDelay := time.Minute
 				l.Printf("Download job completed; let workload run for %.2f minute before proceeding", postDownloadDelay.Minutes())
 				time.Sleep(postDownloadDelay)
@@ -519,6 +554,9 @@ func runRestore(
 		opts := ""
 		if runOnline {
 			opts = "WITH EXPERIMENTAL DEFERRED COPY"
+		}
+		if err := maybeAddSomeEmptyTables(ctx, rd); err != nil {
+			return errors.Wrapf(err, "failed to add some empty tables")
 		}
 		restoreStartTime = timeutil.Now()
 		restoreCmd := rd.restoreCmd(fmt.Sprintf("DATABASE %s", sp.backup.workload.DatabaseName()), opts)

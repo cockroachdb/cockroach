@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
@@ -965,13 +966,18 @@ type restoreDriver struct {
 	// gets computed during test execution, it is stored in the restoreDriver
 	// rather than the restoreSpecs.
 	aost string
+
+	rng *rand.Rand
 }
 
 func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreDriver {
+	rng, seed := randutil.NewPseudoRand()
+	t.L().Printf(`Random Seed is %d`, seed)
 	return restoreDriver{
-		t:  t,
-		c:  c,
-		sp: sp,
+		t:   t,
+		c:   c,
+		sp:  sp,
+		rng: rng,
 	}
 }
 
