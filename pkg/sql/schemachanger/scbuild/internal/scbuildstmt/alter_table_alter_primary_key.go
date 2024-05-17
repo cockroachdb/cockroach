@@ -106,7 +106,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	b.LogEventForExistingTarget(inflatedChain.finalSpec.primary)
 
 	// Recreate all secondary indexes.
-	recreateAllSecondaryIndexes(b, tbl, inflatedChain.finalSpec.primary, inflatedChain.inter2Spec.primary)
+	recreateAllSecondaryIndexes(b, t, tbl, inflatedChain.finalSpec.primary, inflatedChain.inter2Spec.primary)
 
 	// Drop the rowid column, if applicable.
 	rowidToDrop := getPrimaryIndexDefaultRowIDColumn(b, tbl.TableID, inflatedChain.oldSpec.primary.IndexID)
@@ -666,7 +666,10 @@ func checkIfConstraintNameAlreadyExists(b BuildCtx, tbl *scpb.Table, t alterPrim
 // columns remain the same in the face of a primary key change, the key suffix
 // columns or the stored columns may not.
 func recreateAllSecondaryIndexes(
-	b BuildCtx, tbl *scpb.Table, newPrimaryIndex, sourcePrimaryIndex *scpb.PrimaryIndex,
+	b BuildCtx,
+	t alterPrimaryKeySpec,
+	tbl *scpb.Table,
+	newPrimaryIndex, sourcePrimaryIndex *scpb.PrimaryIndex,
 ) {
 	publicTableElts := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
 	// Generate all possible key suffix columns.
@@ -685,6 +688,37 @@ func recreateAllSecondaryIndexes(
 	// Recreate each secondary index.
 	scpb.ForEachSecondaryIndex(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
 		out := makeIndexSpec(b, idx.TableID, idx.IndexID)
+		// If this index is referenced by any other objects, then we wil
+		// block the primary key swap, since we don't have a mechanism to
+		// fix these references yet.
+		// TODO(fqazi): As a part of #124131 we should add logic to fix
+		// these references.
+		backrefs := b.BackReferences(idx.TableID)
+		functions := backrefs.FilterFunctionBody().Elements()
+		for _, function := range functions {
+			for _, tableRef := range function.UsesTables {
+				if tableRef.TableID == idx.TableID && tableRef.IndexID == idx.IndexID {
+					panic(unimplemented.NewWithIssuef(124131,
+						"table %q has an index (%s) that is still referenced by %q",
+						publicTableElts.FilterNamespace().MustGetOneElement().Name,
+						out.name.Name,
+						b.QueryByID(function.FunctionID).FilterFunctionName().MustGetOneElement().Name))
+				}
+			}
+		}
+		views := backrefs.FilterView().Elements()
+		for _, view := range views {
+			for _, f := range view.ForwardReferences {
+				if f.ToID == idx.TableID && f.IndexID == idx.IndexID {
+					panic(unimplemented.NewWithIssuef(124131,
+						"table %q has an index (%s) that is still referenced by %q",
+						publicTableElts.FilterNamespace().MustGetOneElement().Name,
+						out.name.Name,
+						b.QueryByID(view.ViewID).FilterNamespace().MustGetOneElement().Name))
+				}
+			}
+		}
+
 		var idxColIDs catalog.TableColSet
 		inColumns := make([]indexColumnSpec, 0, len(out.columns))
 		// Determine which columns end up in the new secondary index.
