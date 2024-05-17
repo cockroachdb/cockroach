@@ -532,15 +532,8 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger.Logg
 	}
 }
 
-func makeGCEClusterName(name string) string {
-	name = strings.ToLower(name)
-	name = regexp.MustCompile(`[^-a-z0-9]+`).ReplaceAllString(name, "-")
-	name = regexp.MustCompile(`-+`).ReplaceAllString(name, "-")
-	return name
-}
-
 func makeClusterName(name string) string {
-	return makeGCEClusterName(name)
+	return vm.DNSSafeName(name)
 }
 
 // MachineTypeToCPUs returns a CPU count for GCE, AWS, and Azure machine types.
@@ -847,6 +840,10 @@ func (f *clusterFactory) clusterMock(cfg clusterConfig) *clusterImpl {
 	}
 }
 
+// create is a hook for tests to inject their own cluster create implementation.
+// i.e. unit tests that don't want to actually access a provider.
+var create = roachprod.Create
+
 // newCluster creates a new roachprod cluster.
 //
 // setStatus is called with status messages indicating the stage of cluster
@@ -957,7 +954,7 @@ func (f *clusterFactory) newCluster(
 
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
-		err = roachprod.Create(ctx, l, cfg.username, cfg.spec.NodeCount, createVMOpts, providerOptsContainer)
+		err = create(ctx, l, cfg.username, cfg.spec.NodeCount, createVMOpts, providerOptsContainer)
 		if err == nil {
 			if err := f.r.registerCluster(c); err != nil {
 				return nil, nil, err
@@ -971,6 +968,9 @@ func (f *clusterFactory) newCluster(
 			// If the cluster couldn't be created because it existed already, bail.
 			// In reality when this is hit is when running with the `local` flag
 			// or a destroy from the previous iteration failed.
+			return nil, nil, err
+		}
+		if errors.HasType(err, (*roachprod.MalformedClusterNameError)(nil)) {
 			return nil, nil, err
 		}
 

@@ -13,13 +13,14 @@ package promhelperclient
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
-	secretmanager "cloud.google.com/go/secretmanager/apiv1"
-	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
+	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"google.golang.org/api/option"
 )
 
 var (
@@ -33,18 +34,17 @@ var (
 type FetchedFrom string
 
 const (
-	Env       FetchedFrom = "Env"       // fetched from environment
-	File      FetchedFrom = "File"      // fetched from the promCredFile
-	SecretMgr FetchedFrom = "SecretMgr" // fetched from the secrets manager
+	Env   FetchedFrom = "Env"   // fetched from environment
+	File  FetchedFrom = "File"  // fetched from the promCredFile
+	Store FetchedFrom = "Store" // fetched from the store
 
-	// secretsDelimiter is used as a delimeter between service account audience and JSON when stored in promCredFile or
-	// secrets manager
+	// secretsDelimiter is used as a delimiter between service account audience and JSON when stored in
+	// promCredFile or cloud storage
 	secretsDelimiter = "--||--"
 
-	// project secrets and versions are for fetching the creds from secrets manager
-	project  = "cockroach-ephemeral"
-	secrets  = "prom-helpers-access"
-	versions = "latest"
+	// bucket and objectLocation are for fetching the creds for store
+	bucket         = "promhelpers"
+	objectLocation = "promhelpers-secrets"
 )
 
 // SetPromHelperCredsEnv sets the environment variables ServiceAccountAudience and
@@ -63,7 +63,7 @@ func SetPromHelperCredsEnv(
 ) (FetchedFrom, error) {
 	creds := ""
 	fetchedFrom := Env
-	if !forceFetch { // bypass environment anf creds file if forceFetch is false
+	if !forceFetch { // bypass environment and creds file if forceFetch is false
 		// check if environment is set
 		audience := os.Getenv(ServiceAccountAudience)
 		saJson := os.Getenv(ServiceAccountJson)
@@ -80,23 +80,26 @@ func SetPromHelperCredsEnv(
 		}
 	}
 	if creds == "" {
-		// creds == "" means (env is not set and the file does not have the creds) or forFetch is true
-		l.Printf("creds need to be fetched from secret manager.")
-		client, err := secretmanager.NewClient(ctx)
+		// creds == "" means (env is not set and the file does not have the creds) or forceFetch is true
+		l.Printf("creds need to be fetched from store.")
+		client, err := storage.NewClient(ctx, option.WithScopes(storage.ScopeReadOnly))
 		if err != nil {
 			return fetchedFrom, err
 		}
 		defer func() { _ = client.Close() }()
-		req := &secretmanagerpb.AccessSecretVersionRequest{
-			Name: fmt.Sprintf("projects/%s/secrets/%s/versions/%s", project, secrets, versions),
-		}
-		fetchedFrom = SecretMgr
-		secrets, err := client.AccessSecretVersion(ctx, req)
+		fetchedFrom = Store
+		obj := client.Bucket(bucket).Object(objectLocation)
+		r, err := obj.NewReader(ctx)
 		if err != nil {
 			return fetchedFrom, err
 		}
-		creds = string(secrets.GetPayload().GetData())
-		err = os.WriteFile(promCredFile, []byte(creds), 0700)
+		defer func() { _ = r.Close() }()
+		body, err := io.ReadAll(r)
+		creds = string(body)
+		if err != nil {
+			return fetchedFrom, err
+		}
+		err = os.WriteFile(promCredFile, body, 0700)
 		if err != nil {
 			l.Errorf("error writing to the credential file: %v", err)
 		}

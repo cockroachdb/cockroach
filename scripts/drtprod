@@ -166,16 +166,16 @@ EOF"
 
     # Create external connection on each cluster to the other.
     ua2="$(roachprod ssh drt-ua2:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
-    $0 sql drt-ua1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ua2' AS '${ua2}'" 
+    $0 sql drt-ua1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ua2' AS '${ua2}'"
     ua1="$(roachprod ssh drt-ua1:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
-    $0 sql drt-ua2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ua1' AS '${ua1}'" 
+    $0 sql drt-ua2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ua1' AS '${ua1}'"
 
     # Setup the main tenant, on ua1 initilly.
     $0 sql drt-ua1:1 -- -e "CREATE VIRTUAL CLUSTER main"
     $0 sql drt-ua1:1 -- -e "ALTER VIRTUAL CLUSTER main START SERVICE SHARED"
     $0 sql drt-ua1:1 --cluster=main -- -e "CREATE USER roachprod WITH PASSWORD 'cockroachdb'"
     $0 sql drt-ua1:1 --cluster=main -- -e "GRANT admin TO roachprod"
-    
+
     # Set the default tenant on both.
     $0 sql drt-ua1:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
     $0 sql drt-ua2:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
@@ -225,22 +225,26 @@ EOF"
     ;;
   "create")
     if [ "$#" -lt 2 ]; then
-      echo "usage: drtprod create {drt-main,drt-chaos,drt-ua1,drt-ua2}"
+      echo "usage: drtprod create {drt-large,drt-chaos,drt-ua1,drt-ua2}"
       exit 1
     fi
     case "${2}" in
-      "drt-main")
-        roachprod create drt-main \
+      "drt-large")
+        roachprod create drt-large \
           --clouds gce \
           --gce-managed \
-          --gce-zones "us-east1-b,us-west1-b,europe-west2-b" \
+          --gce-enable-multiple-stores \
+          --gce-zones "northamerica-northeast2-a:2,northamerica-northeast2-b:2,northamerica-northeast2-c:1,us-east5-a:2,us-east5-b:2,us-east5-c:2,northamerica-northeast1-a:2,northamerica-northeast1-b:2,northamerica-northeast1-c:1" \
+          --gce-use-spot \
           --nodes 15 \
           --gce-machine-type n2-standard-16 \
-          --gce-pd-volume-size 10000 --local-ssd=false \
+          --local-ssd=true \
+          --gce-local-ssd-count 16 \
+          --os-volume-size 100 \
           --username drt \
           --lifetime 8760h
         # setup dns
-        $0 dns drt-main create
+        $0 dns drt-large create
         ;;
       "drt-chaos")
         roachprod create drt-chaos \
@@ -300,11 +304,11 @@ EOF"
           --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
         $0 dns workload-ua create || $0 dns workload-ua
-        
+
         # push cockroach to the worker to run its built-in workloads
         roachprod stage workload-ua:1 cockroach
         roachprod stage workload-ua:1 workload
-        
+
         # Push certs for both clusters to the worker.
         roachprod get drt-ua1:1 certs certs.ua1
         roachprod put workload-ua:1 certs.ua1
@@ -312,15 +316,15 @@ EOF"
         roachprod put workload-ua:1 certs.ua2
         roachprod ssh workload-ua:1 -- "chmod 0600 certs.ua1/* certs.ua2/*"
         rm -rf certs.ua1 certs.ua2
-        
+
         # Setup pgurls for worklooads to use.
         roachprod ssh workload-ua:1 -- "
-        echo \"$(roachprod pgurl drt-ua1 --secure --cluster=main | sed 's/=certs/=certs.ua1/g' | sed "s/'//g" )\" > pgurls.ua1.txt; 
+        echo \"$(roachprod pgurl drt-ua1 --secure --cluster=main | sed 's/=certs/=certs.ua1/g' | sed "s/'//g" )\" > pgurls.ua1.txt;
         echo \"$(roachprod pgurl drt-ua2 --secure --cluster=main | sed 's/=certs/=certs.ua2/g' | sed "s/'//g" )\" > pgurls.ua2.txt;
         ln -sf pgurls.ua1.txt pgurls.txt"
-      
+
         # Setup the tpcc workload runner as a script invoked by systemd.
-        roachprod ssh workload-ua:1 -- 'cat - > tpcc << EOF 
+        roachprod ssh workload-ua:1 -- 'cat - > tpcc << EOF
 #!/usr/bin/env bash
 
 exec ./cockroach workload run tpcc \\

@@ -12,7 +12,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvpb",
@@ -37,13 +36,11 @@ go_test(
     embed = [":changefeedbase"],
     deps = [
         "//pkg/ccl",
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/kv/kvpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/settings/cluster",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",

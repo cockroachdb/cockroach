@@ -15,7 +15,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -447,20 +446,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	h := w.pushHeader(req)
 	var pushType kvpb.PushTxnType
 	var beforePushObs roachpb.ObservedTimestamp
-	// For read-write conflicts, try to push the lock holder's timestamp forward
-	// so the read request can read under the lock. For write-write conflicts, try
-	// to abort the lock holder entirely so the write request can revoke and
-	// replace the lock with its own lock.
-	if req.WaitPolicy == lock.WaitPolicy_Error &&
-		!w.st.Version.IsActive(ctx, clusterversion.TODODelete_V23_2_RemoveLockTableWaiterTouchPush) {
-		// This wait policy signifies that the request wants to raise an error
-		// upon encountering a conflicting lock. We still need to push the lock
-		// holder to ensure that it is active and that this isn't an abandoned
-		// lock, but we push using a PUSH_TOUCH to immediately return an error
-		// if the lock hold is still active.
-		pushType = kvpb.PUSH_TOUCH
-		log.VEventf(ctx, 2, "pushing txn %s to check if abandoned", ws.txn.Short())
-	} else if ws.guardStrength == lock.None {
+	if ws.guardStrength == lock.None {
 		pushType = kvpb.PUSH_TIMESTAMP
 		beforePushObs = roachpb.ObservedTimestamp{
 			NodeID:    w.nodeDesc.NodeID,

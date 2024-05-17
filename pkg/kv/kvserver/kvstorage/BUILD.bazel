@@ -22,13 +22,14 @@ go_library(
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

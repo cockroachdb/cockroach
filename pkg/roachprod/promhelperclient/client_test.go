@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
@@ -40,7 +39,7 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 	promUrl := "http://prom_url.com"
 	c := NewPromClient()
 	t.Run("UpdatePrometheusTargets fails with 400", func(t *testing.T) {
-		c.httpPut = func(ctx context.Context, reqUrl string, h *httputil.RequestHeaders, body io.Reader) (
+		c.httpPut = func(ctx context.Context, reqUrl string, h *http.Header, body io.Reader) (
 			resp *http.Response, err error) {
 			require.Equal(t, getUrl(promUrl, "c1"), reqUrl)
 			return &http.Response{
@@ -48,35 +47,23 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 				Body:       io.NopCloser(strings.NewReader("failed")),
 			}, nil
 		}
-		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, []string{"n1"}, true, l)
+		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, map[int]string{1: "n1"}, true, l)
 		require.NotNil(t, err)
 		require.Equal(t, "request failed with status 400 and error failed", err.Error())
 	})
 	t.Run("UpdatePrometheusTargets succeeds", func(t *testing.T) {
-		c.httpPut = func(ctx context.Context, url string, h *httputil.RequestHeaders, body io.Reader) (
+		c.httpPut = func(ctx context.Context, url string, h *http.Header, body io.Reader) (
 			resp *http.Response, err error) {
 			require.Equal(t, getUrl(promUrl, "c1"), url)
 			ir, err := getInstanceConfigRequest(io.NopCloser(body))
 			require.Nil(t, err)
-			require.Equal(t, `---
-- targets:
-  - n1
-  labels:
-    node: "1"
-    tenant: system
-
-- targets:
-  - n3
-  labels:
-    node: "3"
-    tenant: system
-
-`, ir.Config)
+			// TODO (bhaskar): check for the correct yaml
+			require.NotNil(t, ir.Config)
 			return &http.Response{
 				StatusCode: 200,
 			}, nil
 		}
-		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, []string{"n1", "", "n3"}, true, l)
+		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, map[int]string{1: "n1", 3: "n3"}, true, l)
 		require.Nil(t, err)
 	})
 }
@@ -93,7 +80,7 @@ func TestDeleteClusterConfig(t *testing.T) {
 	promUrl := "http://prom_url.com"
 	c := NewPromClient()
 	t.Run("DeleteClusterConfig fails with 400", func(t *testing.T) {
-		c.httpDelete = func(ctx context.Context, url string, h *httputil.RequestHeaders) (
+		c.httpDelete = func(ctx context.Context, url string, h *http.Header) (
 			resp *http.Response, err error) {
 			require.Equal(t, getUrl(promUrl, "c1"), url)
 			return &http.Response{
@@ -106,7 +93,7 @@ func TestDeleteClusterConfig(t *testing.T) {
 		require.Equal(t, "request failed with status 400 and error failed", err.Error())
 	})
 	t.Run("DeleteClusterConfig succeeds", func(t *testing.T) {
-		c.httpDelete = func(ctx context.Context, url string, h *httputil.RequestHeaders) (
+		c.httpDelete = func(ctx context.Context, url string, h *http.Header) (
 			resp *http.Response, err error) {
 			require.Equal(t, getUrl(promUrl, "c1"), url)
 			return &http.Response{

@@ -1023,6 +1023,9 @@ wait
 			go func() {
 				<-monitorCtx.Done()
 				sess.Close()
+				if pc, ok := p.(io.ReadCloser); ok {
+					_ = pc.Close()
+				}
 			}()
 
 			readerWg.Wait()
@@ -3031,6 +3034,13 @@ func (c *SyncedCluster) allPublicAddrs(ctx context.Context) (string, error) {
 	}
 
 	return strings.Join(addrs, ","), nil
+}
+
+// WithNodes creates a new copy of SyncedCluster with the given nodes.
+func (c *SyncedCluster) WithNodes(nodes Nodes) *SyncedCluster {
+	clusterCopy := *c
+	clusterCopy.Nodes = nodes
+	return &clusterCopy
 }
 
 // GenFilenameFromArgs given a list of cmd args, returns an alphahumeric string up to

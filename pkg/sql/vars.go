@@ -147,7 +147,7 @@ func makeDummyBooleanSessionVar(
 	name string,
 	getFunc func(*extendedEvalContext, *kv.Txn) (string, error),
 	setFunc func(sessionDataMutator, bool),
-	sv func(_ *settings.Values) string,
+	globalDefault func(_ *settings.Values) string,
 ) sessionVar {
 	return sessionVar{
 		GetStringVal: makePostgresBoolGetStringValFn(name),
@@ -160,7 +160,7 @@ func makeDummyBooleanSessionVar(
 			return nil
 		},
 		Get:           getFunc,
-		GlobalDefault: sv,
+		GlobalDefault: globalDefault,
 	}
 }
 
@@ -204,9 +204,7 @@ var varGen = map[string]sessionVar{
 			m.SetAvoidBuffering(b)
 			return nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return "false"
-		},
+		GlobalDefault: globalFalse,
 	},
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
@@ -334,6 +332,8 @@ var varGen = map[string]sessionVar{
 			return sd.GetDateStyle().SQLString()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
+			// Note that dateStyle.String(sv) would return the lower-case
+			// strings, but we want to preserve the upper-case ones.
 			return dateStyleEnumMap[dateStyle.Get(sv)]
 		},
 		Equal: func(a, b *sessiondata.SessionData) bool {
@@ -589,7 +589,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData().DistSQLMode.String(), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)).String()
+			return DistSQLClusterExecMode.String(sv)
 		},
 	},
 
@@ -631,7 +631,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData().ExperimentalDistSQLPlanningMode.String(), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondatapb.ExperimentalDistSQLPlanningMode(experimentalDistSQLPlanningClusterMode.Get(sv)).String()
+			return experimentalDistSQLPlanningClusterMode.String(sv)
 		},
 	},
 
@@ -733,8 +733,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData().VectorizeMode.String(), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondatapb.VectorizeExecMode(
-				VectorizeClusterMode.Get(sv)).String()
+			return VectorizeClusterMode.String(sv)
 		},
 	},
 
@@ -784,9 +783,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return "on", nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return "on"
-		},
+		GlobalDefault: globalTrue,
 	},
 
 	// CockroachDB extension.
@@ -973,8 +970,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData().SerialNormalizationMode.String(), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondatapb.SerialNormalizationMode(
-				SerialNormalizationMode.Get(sv)).String()
+			return SerialNormalizationMode.String(sv)
 		},
 	},
 
@@ -1070,7 +1066,7 @@ var varGen = map[string]sessionVar{
 			return strings.ToLower(sd.GetIntervalStyle().String())
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return strings.ToLower(duration.IntervalStyle_name[int32(intervalStyle.Get(sv))])
+			return intervalStyle.String(sv)
 		},
 		Equal: func(a, b *sessiondata.SessionData) bool {
 			return a.GetIntervalStyle() == b.GetIntervalStyle()
@@ -1331,8 +1327,6 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatFloatAsPostgresSetting(evalCtx.SessionData().TrigramSimilarityThreshold), nil
 		},
-		// SetWithPlanner is defined in init(), as otherwise there is a circular
-		// initialization loop with the planner.
 		GlobalDefault: func(sv *settings.Values) string {
 			return "0.3"
 		},
@@ -1375,7 +1369,7 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(ms, 10), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return strconv.FormatInt(0, 10)
+			return "0s"
 		},
 	},
 
@@ -1891,7 +1885,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData().NewSchemaChangerMode.String(), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondatapb.NewSchemaChangerMode(experimentalUseNewSchemaChanger.Get(sv)).String()
+			return experimentalUseNewSchemaChanger.String(sv)
 		},
 	},
 
@@ -2226,7 +2220,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return rowexec.ParallelizeMultiKeyLookupJoinsEnabled.String(sv)
+			return formatBoolAsPostgresSetting(rowexec.ParallelizeMultiKeyLookupJoinsEnabled.Get(sv))
 		},
 	},
 
@@ -2246,7 +2240,9 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().CostScansWithDefaultColSize), nil
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(costScansWithDefaultColSize.Get(sv))
+		},
 	},
 
 	// CockroachDB extension.
@@ -2308,7 +2304,7 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	`copy_num_retries_per_batch`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`copy_num_retries_per_batch`),
+		GetStringVal: makeIntGetStringValFn(`copy_num_retries_per_batch`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			b, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {

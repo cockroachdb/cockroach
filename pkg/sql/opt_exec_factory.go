@@ -1220,16 +1220,20 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalDB.NewInternalExecutor(
 		ef.planner.SessionData(),
 	)
-	c := makeStmtEnvCollector(ef.ctx, ie.(*InternalExecutor))
+	c := makeStmtEnvCollector(ef.ctx, ef.planner, ie.(*InternalExecutor))
 
 	// Show the version of Cockroach running.
 	if err := c.PrintVersion(&out.buf); err != nil {
 		return nil, err
 	}
 	out.writef("")
-	// Show the values of any non-default session variables that can impact
-	// planning decisions.
-	if err := c.PrintSessionSettings(&out.buf, &ef.planner.extendedEvalCtx.Settings.SV); err != nil {
+	// Show the values of all non-default session variables and session
+	// settings.
+	if err := c.PrintSessionSettings(&out.buf, &ef.planner.extendedEvalCtx.Settings.SV, false /* all */); err != nil {
+		return nil, err
+	}
+	out.writef("")
+	if err := c.PrintClusterSettings(&out.buf, false /* all */); err != nil {
 		return nil, err
 	}
 

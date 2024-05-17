@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -66,6 +67,21 @@ const (
 	prometheusHostUrlEnv = "COCKROACH_PROM_HOST_URL"
 )
 
+// MalformedClusterNameError is returned when the cluster name passed to Create is invalid.
+type MalformedClusterNameError struct {
+	name        string
+	reason      string
+	suggestions []string
+}
+
+func (e *MalformedClusterNameError) Error() string {
+	return fmt.Sprintf("Malformed cluster name %s, %s. Did you mean one of %s", e.name, e.reason, e.suggestions)
+}
+
+// findActiveAccounts is a hook for tests to inject their own FindActiveAccounts
+// implementation. i.e. unit tests that don't want to actually access a provider.
+var findActiveAccounts = vm.FindActiveAccounts
+
 // verifyClusterName ensures that the given name conforms to
 // our naming pattern of "<username>-<clustername>". The
 // username must match one of the vm.Provider account names
@@ -75,12 +91,9 @@ func verifyClusterName(l *logger.Logger, clusterName, username string) error {
 		return fmt.Errorf("cluster name cannot be blank")
 	}
 
-	alphaNum, err := regexp.Compile(`^[a-zA-Z0-9\-]+$`)
-	if err != nil {
-		return err
-	}
-	if !alphaNum.MatchString(clusterName) {
-		return errors.Errorf("cluster name must match %s", alphaNum.String())
+	sanitizedName := vm.DNSSafeName(clusterName)
+	if sanitizedName != clusterName {
+		return &MalformedClusterNameError{name: clusterName, reason: "invalid characters", suggestions: []string{sanitizedName}}
 	}
 
 	if config.IsLocalClusterName(clusterName) {
@@ -90,17 +103,21 @@ func verifyClusterName(l *logger.Logger, clusterName, username string) error {
 	// Use the vm.Provider account names, or --username.
 	var accounts []string
 	if len(username) > 0 {
-		accounts = []string{username}
+		cleanAccount := vm.DNSSafeName(username)
+		if cleanAccount != username {
+			l.Printf("WARN: using `%s' as username instead of `%s'", cleanAccount, username)
+		}
+		accounts = []string{cleanAccount}
 	} else {
 		seenAccounts := map[string]bool{}
-		active, err := vm.FindActiveAccounts(l)
+		active, err := findActiveAccounts(l)
 		if err != nil {
 			return err
 		}
 		for _, account := range active {
 			if !seenAccounts[account] {
 				seenAccounts[account] = true
-				cleanAccount := vm.DNSSafeAccount(account)
+				cleanAccount := vm.DNSSafeName(account)
 				if cleanAccount != account {
 					l.Printf("WARN: using `%s' as username instead of `%s'", cleanAccount, account)
 				}
@@ -118,17 +135,20 @@ func verifyClusterName(l *logger.Logger, clusterName, username string) error {
 
 	// Try to pick out a reasonable cluster name from the input.
 	var suffix string
+	var reason string
 	if i := strings.Index(clusterName, "-"); i != -1 {
 		// The user specified a username prefix, but it didn't match an active
 		// account name. For example, assuming the account is "peter", `roachprod
 		// create joe-perf` should be specified as `roachprod create joe-perf -u
 		// joe`.
 		suffix = clusterName[i+1:]
+		reason = "username prefix does not match an active account name"
 	} else {
 		// The user didn't specify a username prefix. For example, assuming the
 		// account is "peter", `roachprod create perf` should be specified as
 		// `roachprod create peter-perf`.
 		suffix = clusterName
+		reason = "cluster name should start with a username prefix: <username>-<clustername>"
 	}
 
 	// Suggest acceptable cluster names.
@@ -136,8 +156,7 @@ func verifyClusterName(l *logger.Logger, clusterName, username string) error {
 	for _, account := range accounts {
 		suggestions = append(suggestions, fmt.Sprintf("%s-%s", account, suffix))
 	}
-	return fmt.Errorf("malformed cluster name %s, did you mean one of %s",
-		clusterName, suggestions)
+	return &MalformedClusterNameError{name: clusterName, reason: reason, suggestions: suggestions}
 }
 
 func sortedClusters() []string {
@@ -775,23 +794,22 @@ func UpdateTargets(
 
 // updatePrometheusTargets updates the prometheus instance cluster config. Any error is logged and ignored.
 func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.SyncedCluster) {
-	nodeIPPorts := make([]string, len(c.Nodes))
+	nodeIPPorts := make(map[int]string)
 	var wg sync.WaitGroup
-	for i, node := range c.Nodes {
+	for _, node := range c.Nodes {
 		if c.VMs[node-1].Provider == gce.ProviderName {
 			wg.Add(1)
 			go func(index int, v vm.VM) {
 				defer wg.Done()
 				// only gce is supported for prometheus
-				desc, err := c.DiscoverService(ctx, install.Node(index+1), "", install.ServiceTypeUI, 0)
+				desc, err := c.DiscoverService(ctx, install.Node(index), "", install.ServiceTypeUI, 0)
 				if err != nil {
-					l.Errorf("error getting the port for node %d: %v", index+1, err)
+					l.Errorf("error getting the port for node %d: %v", index, err)
 					return
 				}
 				nodeInfo := fmt.Sprintf("%s:%d", v.PublicIP, desc.Port)
-				l.Printf("node information obtained for node index %d: %s", index, nodeInfo)
 				nodeIPPorts[index] = nodeInfo
-			}(i, c.VMs[node-1])
+			}(int(node), c.VMs[node-1])
 		}
 	}
 	wg.Wait()
@@ -849,7 +867,6 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 		return err
 	}
 
-	_ = deleteClusterConfig(clusterName, l)
 	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait, "")
 }
 
@@ -1421,7 +1438,9 @@ func destroyCluster(cld *cloud.Cloud, l *logger.Logger, clusterName string) erro
 		l.Printf("Destroying cluster %s with %d nodes", clusterName, len(c.VMs))
 	}
 
-	_ = deleteClusterConfig(clusterName, l)
+	if err := deleteClusterConfig(clusterName, l); err != nil {
+		l.Printf("Failed to delete cluster config: %v", err)
+	}
 
 	return cloud.DestroyCluster(l, c)
 }
@@ -2553,6 +2572,73 @@ func CreateLoadBalancer(
 		err = c.Signal(ctx, l, int(unix.SIGHUP))
 		if err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// Deploy deploys a new version of cockroach to the given cluster. It currently
+// does not support clusters running external SQL instances.
+// TODO(herko): Add support for virtual clusters (external SQL processes)
+func Deploy(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName, applicationName, version string,
+	pauseDuration time.Duration,
+	sig int,
+	wait bool,
+	maxWait int,
+	secure bool,
+) error {
+	// Stage supports `workload` as well, so it needs to be excluded here. This
+	// list contains a subset that only pulls the cockroach binary.
+	supportedApplicationNames := []string{"cockroach", "release", "customized"}
+	if !slices.Contains(supportedApplicationNames, applicationName) {
+		return errors.Errorf("unsupported application name %s, supported names are %v", applicationName, supportedApplicationNames)
+	}
+	c, err := getClusterFromCache(l, clusterName, install.SecureOption(secure))
+	if err != nil {
+		return err
+	}
+
+	stageDir := "stage-cockroach"
+	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(c.TargetNodes()), "creating staging dir",
+		fmt.Sprintf("rm -rf %[1]s && mkdir -p %[1]s", stageDir))
+	if err != nil {
+		return err
+	}
+	err = Stage(ctx, l, clusterName, "", "", stageDir, applicationName, version)
+	if err != nil {
+		return err
+	}
+
+	l.Printf("Performing rolling restart of %d nodes on %s", len(c.VMs), clusterName)
+	for _, node := range c.TargetNodes() {
+		curNode := []install.Node{node}
+
+		err = c.WithNodes(curNode).Stop(ctx, l, sig, wait, maxWait, "")
+		if err != nil {
+			return err
+		}
+
+		err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(curNode),
+			"relocate binary", fmt.Sprintf(`
+		mv -f ./cockroach ./cockroach.old \
+		&& cp ./%[1]s/cockroach ./cockroach \
+		&& rm -rf %[1]s`, stageDir))
+
+		if err != nil {
+			return err
+		}
+		err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(curNode),
+			"start cockroach", "./"+install.StartScriptPath(install.SystemInterfaceName, 0 /* sqlInstance */))
+		if err != nil {
+			l.Printf("Failed to start cockroach on node %d. The previous binary can be restored from 'cockroach.old'", node)
+			return err
+		}
+		if pauseDuration > 0 {
+			l.Printf("Pausing for %s", pauseDuration)
+			time.Sleep(pauseDuration)
 		}
 	}
 	return nil

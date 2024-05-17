@@ -440,6 +440,8 @@ func (ih *instrumentationHelper) Setup(
 	default:
 		ih.collectBundle, ih.diagRequestID, ih.diagRequest =
 			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint, "" /* planGist */)
+		// IsRedacted will be false when ih.collectBundle is false.
+		ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
 	}
 
 	ih.stmtDiagnosticsRecorder = stmtDiagnosticsRecorder
@@ -527,6 +529,8 @@ func (ih *instrumentationHelper) setupWithPlanGist(
 ) context.Context {
 	ih.collectBundle, ih.diagRequestID, ih.diagRequest =
 		ih.stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint, planGist)
+	// IsRedacted will be false when ih.collectBundle is false.
+	ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
 	if ih.collectBundle {
 		ih.needFinish = true
 		ih.collectExecStats = true
@@ -668,7 +672,7 @@ func (ih *instrumentationHelper) Finish(
 				planString = "-- plan elided due to gist matching"
 			}
 			bundle = buildStatementBundle(
-				bundleCtx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor),
+				bundleCtx, ih.explainFlags, cfg.DB, p, ie.(*InternalExecutor),
 				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.ErrAllowReleased(),
 				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV, ih.inFlightTraceCollector,
 			)

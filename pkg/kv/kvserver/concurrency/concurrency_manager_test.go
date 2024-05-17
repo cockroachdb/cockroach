@@ -26,7 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -102,11 +101,6 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
 		c := newCluster()
-		if strings.HasSuffix(path, "_v23_1") {
-			v := clusterversion.TODODelete_V23_1.Version()
-			st := clustersettings.MakeTestingClusterSettingsWithVersions(v, v, true)
-			c = newClusterWithSettings(st)
-		}
 		c.enableTxnPushes()
 		m := concurrency.NewManager(c.makeConfig())
 		m.OnRangeLeaseUpdated(1, true /* isLeaseholder */) // enable

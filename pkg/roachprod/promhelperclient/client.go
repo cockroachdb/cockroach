@@ -45,10 +45,10 @@ const (
 type PromClient struct {
 	// httpPut is used for http PUT operation.
 	httpPut func(
-		ctx context.Context, url string, h *httputil.RequestHeaders, body io.Reader,
+		ctx context.Context, url string, h *http.Header, body io.Reader,
 	) (resp *http.Response, err error)
 	// httpDelete is used for http DELETE operation.
-	httpDelete func(ctx context.Context, url string, h *httputil.RequestHeaders) (
+	httpDelete func(ctx context.Context, url string, h *http.Header) (
 		resp *http.Response, err error)
 	// newTokenSource is the token generator source.
 	newTokenSource func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (
@@ -76,7 +76,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 	ctx context.Context,
 	promUrl, clusterName string,
 	forceFetchCreds bool,
-	nodes []string,
+	nodes map[int]string,
 	insecure bool,
 	l *logger.Logger,
 ) error {
@@ -90,10 +90,12 @@ func (c *PromClient) UpdatePrometheusTargets(
 	}
 	url := getUrl(promUrl, clusterName)
 	l.Printf("invoking PUT for URL: %s", url)
-	response, err := c.httpPut(ctx, url, &httputil.RequestHeaders{
-		ContentType:   "application/json",
-		Authorization: token,
-	}, req)
+	h := &http.Header{}
+	h.Set("ContentType", "application/json")
+	if token != "" {
+		h.Set("Authorization", token)
+	}
+	response, err := c.httpPut(ctx, url, h, req)
 	if err != nil {
 		return err
 	}
@@ -123,9 +125,9 @@ func (c *PromClient) DeleteClusterConfig(
 	}
 	url := getUrl(promUrl, clusterName)
 	l.Printf("invoking DELETE for URL: %s", url)
-	response, err := c.httpDelete(ctx, url, &httputil.RequestHeaders{
-		Authorization: token,
-	})
+	h := &http.Header{}
+	h.Set("Authorization", token)
+	response, err := c.httpDelete(ctx, url, h)
 	if err != nil {
 		return err
 	}
@@ -162,19 +164,15 @@ const clusterConfFileTemplate = `- targets:
 `
 
 // createClusterConfigFile creates the cluster config file per node
-func buildCreateRequest(nodes []string, insecure bool) (io.Reader, error) {
+func buildCreateRequest(nodes map[int]string, insecure bool) (io.Reader, error) {
 	buffer := bytes.NewBufferString("---\n")
 	for i, n := range nodes {
-		if n == "" {
-			// this is an unsupported node
-			continue
-		}
 		params := &ccParams{
 			Targets: []string{n},
 			Labels:  make([]string, 0),
 		}
 		params.Labels = append(params.Labels,
-			fmt.Sprintf("node: \"%s\"", strconv.Itoa(i+1)),
+			fmt.Sprintf("node: \"%s\"", strconv.Itoa(i)),
 			"tenant: system",
 		)
 		t := template.Must(template.New("start").Parse(clusterConfFileTemplate))

@@ -10,3 +10,4 @@
 
 export * from "./databaseDetailsPage";
 export * from "./databaseDetailsConnected";
+export * from "./types";

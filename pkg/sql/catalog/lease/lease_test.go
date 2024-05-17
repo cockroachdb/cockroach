@@ -1762,7 +1762,7 @@ func TestModificationTimeTxnOrdering(testingT *testing.T) {
 
 	// Decide how long we should run this.
 	maxTime := time.Duration(20) * time.Second
-	if skip.NightlyStress() {
+	if skip.Duress() {
 		maxTime = time.Duration(2) * time.Minute
 	}
 
