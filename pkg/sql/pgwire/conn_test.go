@@ -11,7 +11,6 @@
 package pgwire
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
@@ -333,6 +332,92 @@ func TestPipelineMetric(t *testing.T) {
 	require.NoError(t, err)
 	err = serveGroup.Wait()
 	require.NoError(t, err)
+}
+
+// BenchmarkIdleConn monitors the cpu usage of a single connection when it is
+// idle.
+func BenchmarkIdleConn(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	// Start a pgwire "server". We use a fake server here since we don't want
+	// to measure any background resource usage done by a normal CRDB server.
+	addr := util.TestAddr
+	ln, err := net.Listen(addr.Network(), addr.String())
+	if err != nil {
+		b.Fatal(err)
+	}
+	serverAddr := ln.Addr()
+	log.Infof(context.Background(), "started listener on %s", serverAddr)
+
+	ctx, cancelConn := context.WithCancel(context.Background())
+	defer cancelConn()
+	connectGroup := ctxgroup.WithContext(ctx)
+
+	var pgxConns []*pgx5.Conn
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		connectGroup.GoCtx(func(ctx context.Context) error {
+			host, ports, err := net.SplitHostPort(serverAddr.String())
+			if err != nil {
+				return err
+			}
+			port, err := strconv.Atoi(ports)
+			if err != nil {
+				return err
+			}
+			pgxConn, err := pgx5.Connect(
+				ctx,
+				fmt.Sprintf("postgresql://%s@%s:%d/system?sslmode=disable", username.RootUser, host, port),
+			)
+			if err != nil {
+				return err
+			}
+			pgxConns = append(pgxConns, pgxConn)
+			return nil
+		})
+
+		server := newTestServer()
+		// Wait for the client to connect.
+		netConn, err := waitForClientConn(ln)
+		require.NoError(b, err)
+
+		// Run the conn's loop in the background - it will push commands to the
+		// buffer. serveImpl also performs the server handshake.
+		expectedTimeoutErr := errors.New("normal timeout")
+		serveCtx, stopServe := context.WithTimeoutCause(context.Background(), 15*time.Second, expectedTimeoutErr)
+		defer stopServe()
+		serveGroup := ctxgroup.WithContext(serveCtx)
+		serverSideConn := server.newConn(
+			serveCtx,
+			cancelConn,
+			netConn,
+			sql.SessionArgs{ConnResultsBufferSize: 16 << 10},
+			timeutil.Now(),
+		)
+
+		b.StartTimer()
+		serveGroup.GoCtx(func(ctx context.Context) error {
+			server.serveImpl(
+				ctx,
+				serverSideConn,
+				&mon.BoundAccount{}, /* reserved */
+				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
+				clusterunique.ID{},
+			)
+			return nil
+		})
+		err = serveGroup.Wait()
+		b.StopTimer()
+		require.NoError(b, err)
+		require.ErrorIs(b, context.Cause(serveCtx), expectedTimeoutErr)
+	}
+
+	_ = connectGroup.Wait()
+	for _, c := range pgxConns {
+		_ = c.Close(ctx)
+	}
 }
 
 func TestConnMessageTooBig(t *testing.T) {
@@ -1292,80 +1377,6 @@ func TestMaliciousInputs(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
-	}
-}
-
-// TestReadTimeoutConn asserts that a readTimeoutConn performs reads normally
-// and exits with an appropriate error when exit conditions are satisfied.
-func TestReadTimeoutConnExits(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	// Cannot use net.Pipe because deadlines are not supported.
-	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	log.Infof(context.Background(), "started listener on %s", ln.Addr())
-	defer func() {
-		if err := ln.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	expectedRead := []byte("expectedRead")
-
-	// Start a goroutine that performs reads using a readTimeoutConn.
-	errChan := make(chan error)
-	go func() {
-		defer close(errChan)
-		errChan <- func() error {
-			c, err := ln.Accept()
-			if err != nil {
-				return err
-			}
-			defer c.Close()
-
-			readTimeoutConn := &readTimeoutConn{
-				Conn: c,
-				checkExitConds: func() error {
-					return ctx.Err()
-				},
-			}
-			// Assert that reads are performed normally.
-			readBytes := make([]byte, len(expectedRead))
-			if _, err := readTimeoutConn.Read(readBytes); err != nil {
-				return err
-			}
-			if !bytes.Equal(readBytes, expectedRead) {
-				return errors.Errorf("expected %v got %v", expectedRead, readBytes)
-			}
-
-			// The main goroutine will cancel the context, which should abort
-			// this read with an appropriate error.
-			_, err = readTimeoutConn.Read(make([]byte, 1))
-			return err
-		}()
-	}()
-
-	c, err := net.Dial(ln.Addr().Network(), ln.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Close()
-
-	if _, err := c.Write(expectedRead); err != nil {
-		t.Fatal(err)
-	}
-
-	select {
-	case err := <-errChan:
-		t.Fatalf("goroutine unexpectedly returned: %v", err)
-	default:
-	}
-	cancel()
-	if err := <-errChan; !errors.Is(err, context.Canceled) {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
