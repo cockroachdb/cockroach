@@ -13,6 +13,7 @@ package pgwire
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"sync"
@@ -239,6 +240,9 @@ type Server struct {
 		// After the timeout set by server.shutdown.transactions.timeout,
 		// all connections will be closed regardless any txns in flight.
 		draining bool
+		// drainCh is closed when draining is set to true. If Undrain is called,
+		// this channel is reset.
+		drainCh chan struct{}
 		// rejectNewConnections is set true when the server does not accept new
 		// SQL connections, e.g. when the draining process enters the phase whose
 		// duration is specified by the server.shutdown.connections.timeout.
@@ -355,6 +359,7 @@ func MakeServer(
 
 	server.mu.Lock()
 	server.mu.connCancelMap = make(cancelChanMap)
+	server.mu.drainCh = make(chan struct{})
 	server.mu.Unlock()
 
 	connAuthConf.SetOnChange(&st.SV, func(ctx context.Context) {
@@ -449,6 +454,14 @@ func (s *Server) Undrain() {
 	s.setDrainingLocked(false)
 }
 
+// DrainCh returns a channel that can be watched to detect when the server
+// enters the draining state.
+func (s *Server) DrainCh() <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.drainCh
+}
+
 // setDrainingLocked sets the server's draining state and returns whether the
 // state changed (i.e. drain != s.mu.draining). s.mu must be locked when
 // setDrainingLocked is called.
@@ -457,6 +470,11 @@ func (s *Server) setDrainingLocked(drain bool) bool {
 		return false
 	}
 	s.mu.draining = drain
+	if drain {
+		close(s.mu.drainCh)
+	} else {
+		s.mu.drainCh = make(chan struct{})
+	}
 	return true
 }
 
@@ -840,18 +858,14 @@ func (s *Server) newConn(
 	sArgs sql.SessionArgs,
 	connStart time.Time,
 ) *conn {
-	// The net.Conn is switched to a conn that exits if the ctx is canceled.
-	rtc := &readTimeoutConn{
-		Conn: netConn,
-	}
 	sv := &s.execCfg.Settings.SV
 	c := &conn{
-		conn:                  rtc,
+		conn:                  netConn,
 		cancelConn:            cancelConn,
 		sessionArgs:           sArgs,
 		metrics:               s.tenantMetrics,
 		startTime:             connStart,
-		rd:                    *bufio.NewReader(rtc),
+		rd:                    *bufio.NewReader(netConn),
 		sv:                    sv,
 		readBuf:               pgwirebase.MakeReadBuffer(pgwirebase.ReadBufferOptionWithClusterSettings(sv)),
 		alwaysLogAuthActivity: s.testingAuthLogEnabled.Get(),
@@ -864,23 +878,6 @@ func (s *Server) newConn(
 	c.msgBuilder.init(s.tenantMetrics.BytesOutCount)
 	c.errWriter.sv = sv
 	c.errWriter.msgBuilder = &c.msgBuilder
-
-	var sentDrainSignal bool
-	rtc.checkExitConds = func() error {
-		// If the context was canceled, it's time to stop reading. Either a
-		// higher-level server or the command processor have canceled us.
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		// If the server is draining, we'll let the processor know by pushing a
-		// DrainRequest. This will make the processor quit whenever it finds a good
-		// time.
-		if !sentDrainSignal && s.IsDraining() {
-			_ /* err */ = c.stmtBuf.Push(ctx, sql.DrainRequest{})
-			sentDrainSignal = true
-		}
-		return nil
-	}
 	return c
 }
 
@@ -897,7 +894,8 @@ const maxRepeatedErrorCount = 1 << 15
 // canceled (which also happens when draining (but not from the get-go), and
 // when the processor encounters a fatal error).
 //
-// serveImpl always closes the network connection before returning.
+// serveImpl closes the stmtBuf before returning, which is a signal to the
+// processor goroutine to exit.
 //
 // sqlServer is used to create the command processor. As a special facility for
 // tests, sqlServer can be nil, in which case the command processor and the
@@ -929,15 +927,18 @@ const maxRepeatedErrorCount = 1 << 15
 //
 // Draining notes:
 //
-// The reader notices that the server is draining by polling the IsDraining
-// closure passed to serveImpl. At that point, the reader delegates the
+// The reader notices that the server is draining by watching the channel
+// returned by Server.DrainCh. At that point, the reader delegates the
 // responsibility of closing the connection to the statement processor: it will
 // push a DrainRequest to the stmtBuf which signals the processor to quit ASAP.
 // The processor will quit immediately upon seeing that command if it's not
 // currently in a transaction. If it is in a transaction, it will wait until the
 // first time a Sync command is processed outside of a transaction - the logic
 // being that we want to stop when we're both outside transactions and outside
-// batches.
+// batches. If the processor does not process the DrainRequest quickly enough
+// (based on the server.shutdown.transactions.timeout setting), the server
+// will cancel the context, which will close the connection and make the
+// reader goroutine exit.
 func (s *Server) serveImpl(
 	ctx context.Context,
 	c *conn,
@@ -945,6 +946,41 @@ func (s *Server) serveImpl(
 	authOpt authOptions,
 	sessionID clusterunique.ID,
 ) {
+	go func() {
+		select {
+		case <-ctx.Done():
+			// If the context was canceled, it's time to stop reading. Either a
+			// higher-level server or the command processor have canceled us.
+		case <-s.DrainCh():
+			// If the server is draining, we'll let the processor know by pushing a
+			// DrainRequest. This will make the processor quit whenever it finds a
+			// good time (i.e., outside of a transaction). The context will be
+			// cancelled by the server after all processors have quit or after the
+			// server.shutdown.transactions.timeout duration.
+			_ /* err */ = c.stmtBuf.Push(ctx, sql.DrainRequest{})
+			<-ctx.Done()
+		}
+		// If possible, we try to only close the read side of the connection. This will cause the
+		// ReadTypedMsg call in the reader goroutine to return an error, which will
+		// cause the reader to exit and signal the processor to quit also, and still
+		// be able to write an error message to the client. If we're unable to only
+		// close the read side, we fallback to setting a read deadline that will
+		// make all reads timeout.
+		var tcpConn *net.TCPConn
+		switch c := c.conn.(type) {
+		case *net.TCPConn:
+			tcpConn = c
+		case *tls.Conn:
+			underConn := c.NetConn()
+			tcpConn, _ = underConn.(*net.TCPConn)
+		}
+		if tcpConn == nil {
+			_ = c.conn.SetReadDeadline(timeutil.Now())
+		} else {
+			_ = tcpConn.CloseRead()
+		}
+	}()
+
 	if c.sessionArgs.User.IsRootUser() || c.sessionArgs.User.IsNodeUser() {
 		ctx = logtags.AddTag(ctx, "user", redact.Safe(c.sessionArgs.User))
 	} else {
