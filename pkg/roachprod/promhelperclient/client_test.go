@@ -49,12 +49,16 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 				Body:       io.NopCloser(strings.NewReader("failed")),
 			}, nil
 		}
-		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, map[int]string{1: "n1"}, true, l)
+		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false,
+			map[int]*NodeInfo{1: {Target: "n1"}}, true, l)
 		require.NotNil(t, err)
 		require.Equal(t, "request failed with status 400 and error failed", err.Error())
 	})
 	t.Run("UpdatePrometheusTargets succeeds", func(t *testing.T) {
-		nodeInfos := map[int]string{1: "n1", 3: "n3"}
+		nodeInfos := map[int]*NodeInfo{1: {Target: "n1"}, 3: {
+			Target:       "n3",
+			CustomLabels: map[string]string{"custom": "label"},
+		}}
 		c.httpPut = func(ctx context.Context, url string, h *http.Header, body io.Reader) (
 			resp *http.Response, err error) {
 			require.Equal(t, getUrl(promUrl, "c1"), url)
@@ -67,8 +71,12 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 			for _, c := range configs {
 				nodeID, err := strconv.Atoi(c.Labels["node"])
 				require.NoError(t, err)
-				require.Equal(t, nodeInfos[nodeID], c.Targets[0])
+				require.Equal(t, nodeInfos[nodeID].Target, c.Targets[0])
 				require.Equal(t, "system", c.Labels["tenant"])
+				require.Equal(t, "cockroachdb", c.Labels["job"])
+				for k, v := range nodeInfos[nodeID].CustomLabels {
+					require.Equal(t, v, c.Labels[k])
+				}
 			}
 			return &http.Response{
 				StatusCode: 200,
