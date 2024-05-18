@@ -469,8 +469,6 @@ func (f *rowBasedFlow) Cleanup(ctx context.Context) {
 	startCleanup, endCleanup := f.FlowBase.GetOnCleanupFns()
 	startCleanup()
 	defer endCleanup()
-	// Ensure that the "head" processor is always closed.
-	f.ConsumerClosedOnHeadProc()
 	f.FlowBase.Cleanup(ctx)
 	f.Release()
 }
