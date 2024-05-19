@@ -67,10 +67,11 @@ func newSQLStats(
 	latencyInformation insights.LatencyInformation,
 ) *SQLStats {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     "SQLStats",
-		CurCount: curMemBytesCount,
-		MaxHist:  maxMemBytesHist,
-		Settings: st,
+		Name:       "SQLStats",
+		CurCount:   curMemBytesCount,
+		MaxHist:    maxMemBytesHist,
+		Settings:   st,
+		LongLiving: true,
 	})
 	s := &SQLStats{
 		st:                 st,

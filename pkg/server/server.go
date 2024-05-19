@@ -686,7 +686,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		settings:                cfg.Settings,
 	})
 	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
-		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
+		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor, true, /* longLiving */
+	)
 	kvMemoryMonitor.StartNoReserved(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
 	rangeFeedBudgetFactory := serverrangefeed.NewBudgetFactory(
 		ctx,
@@ -711,9 +712,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	raftEntriesMonitor := logstore.NewRaftEntriesSoftLimit()
 	nodeRegistry.AddMetric(raftEntriesMonitor.Metric)
 
-	// Closer order is important with BytesMonitor.
-	stopper.AddCloser(stop.CloserFn(func() { rangeFeedBudgetFactory.Stop(ctx) }))
-	stopper.AddCloser(stop.CloserFn(func() { kvMemoryMonitor.Stop(ctx) }))
+	stopper.AddCloser(stop.CloserFn(func() {
+		// Stop the root SQL monitor to enforce (in test builds) that all
+		// short-living descendants are stopped too.
+		//
+		// Note that we don't do this for SQL servers of tenants since there we
+		// can have ungraceful shutdown whenever the node is quiescing, so we
+		// have some short-living monitors that are't stopped.
+		sqlMonitorAndMetrics.rootSQLMemoryMonitor.EmergencyStop(ctx)
+	}))
 
 	tsDB := ts.NewDB(db, cfg.Settings)
 	nodeRegistry.AddMetricStruct(tsDB.Metrics())

@@ -348,7 +348,9 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	rf.args = args
 
 	if args.MemMonitor != nil {
-		rf.mon = mon.NewMonitorInheritWithLimit("fetcher-mem", 0 /* limit */, args.MemMonitor)
+		rf.mon = mon.NewMonitorInheritWithLimit(
+			"fetcher-mem", 0 /* limit */, args.MemMonitor, false, /* longLiving */
+		)
 		rf.mon.StartNoReserved(ctx, args.MemMonitor)
 		memAcc := rf.mon.MakeBoundAccount()
 		rf.kvFetcherMemAcc = &memAcc

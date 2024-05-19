@@ -690,17 +690,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
 	// operations (IMPORT, index backfill). It is itself a child of the
 	// ParentMemoryMonitor.
-	bulkMemoryMonitor := mon.NewMonitorInheritWithLimit("bulk-mon", 0 /* limit */, rootSQLMemoryMonitor)
+	bulkMemoryMonitor := mon.NewMonitorInheritWithLimit(
+		"bulk-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
+	)
 	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(bulkMetrics)
 	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
 	bulkMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
 
 	backfillMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backfill-mon")
+	backfillMemoryMonitor.MarkLongLiving()
 	backupMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backup-mon")
+	backupMemoryMonitor.MarkLongLiving()
 
 	serverCacheMemoryMonitor := mon.NewMonitorInheritWithLimit(
-		"server-cache-mon", 0 /* limit */, rootSQLMemoryMonitor,
+		"server-cache-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
 	)
 	serverCacheMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
 
@@ -854,6 +858,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RootSQLMemoryPoolSize:    cfg.MemoryPoolSize,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
+	cfg.stopper.AddCloser(stop.CloserFn(func() {
+		cfg.TempStorageConfig.Mon.EmergencyStop(ctx)
+	}))
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}
@@ -1140,10 +1147,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// returning the memory allocated to internalDBMonitor since the
 	// parent monitor is being closed anyway.
 	internalDBMonitor := mon.NewMonitor(mon.Options{
-		Name:     "internal sql executor",
-		CurCount: internalMemMetrics.CurBytesCount,
-		MaxHist:  internalMemMetrics.MaxBytesHist,
-		Settings: cfg.Settings,
+		Name:       "internal sql executor",
+		CurCount:   internalMemMetrics.CurBytesCount,
+		MaxHist:    internalMemMetrics.MaxBytesHist,
+		Settings:   cfg.Settings,
+		LongLiving: true,
 	})
 	internalDBMonitor.StartNoReserved(ctx, pgServer.SQLServer.GetBytesMonitor())
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
