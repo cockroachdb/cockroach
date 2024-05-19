@@ -795,6 +795,7 @@ func UpdateTargets(
 // updatePrometheusTargets updates the prometheus instance cluster config. Any error is logged and ignored.
 func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.SyncedCluster) {
 	nodeIPPorts := make(map[int]string)
+	nodeIPPortsMutex := syncutil.RWMutex{}
 	var wg sync.WaitGroup
 	for _, node := range c.Nodes {
 		if c.VMs[node-1].Provider == gce.ProviderName {
@@ -808,7 +809,10 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 					return
 				}
 				nodeInfo := fmt.Sprintf("%s:%d", v.PublicIP, desc.Port)
+				nodeIPPortsMutex.Lock()
+				// ensure atomicity in map update
 				nodeIPPorts[index] = nodeInfo
+				nodeIPPortsMutex.Unlock()
 			}(int(node), c.VMs[node-1])
 		}
 	}
