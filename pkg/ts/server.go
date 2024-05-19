@@ -193,27 +193,20 @@ func MakeServer(
 			"timeseries-workers",
 			queryMemoryMax*2,
 			memoryMonitor,
+			true, /* longLiving */
 		),
 		resultMemMonitor: mon.NewMonitorInheritWithLimit(
 			"timeseries-results",
 			math.MaxInt64,
 			memoryMonitor,
+			true, /* longLiving */
 		),
 		queryMemoryMax: queryMemoryMax,
 		queryWorkerMax: queryWorkerMax,
 		workerSem:      workerSem,
 	}
-
 	s.workerMemMonitor.StartNoReserved(ctx, memoryMonitor)
-	stopper.AddCloser(stop.CloserFn(func() {
-		s.workerMemMonitor.Stop(ctx)
-	}))
-
 	s.resultMemMonitor.StartNoReserved(ambient.AnnotateCtx(context.Background()), memoryMonitor)
-	stopper.AddCloser(stop.CloserFn(func() {
-		s.resultMemMonitor.Stop(ctx)
-	}))
-
 	return s
 }
 

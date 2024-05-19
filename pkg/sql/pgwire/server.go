@@ -341,19 +341,21 @@ func MakeServer(
 		// monitor. Its children are the sql monitors for each new connection. The
 		// sum of those children, plus the extra memory in the "conn" monitor below,
 		// is more than enough metrics information about the monitors.
-		CurCount: nil,
-		MaxHist:  nil,
-		Settings: st,
+		CurCount:   nil,
+		MaxHist:    nil,
+		Settings:   st,
+		LongLiving: true,
 	})
 	server.sqlMemoryPool.StartNoReserved(ctx, parentMemoryMonitor)
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
 
 	server.tenantSpecificConnMonitor = mon.NewMonitor(mon.Options{
-		Name:      "conn",
-		CurCount:  server.tenantMetrics.ConnMemMetrics.CurBytesCount,
-		MaxHist:   server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
-		Increment: int64(connReservationBatchSize) * baseSQLMemoryBudget,
-		Settings:  st,
+		Name:       "conn",
+		CurCount:   server.tenantMetrics.ConnMemMetrics.CurBytesCount,
+		MaxHist:    server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
+		Increment:  int64(connReservationBatchSize) * baseSQLMemoryBudget,
+		Settings:   st,
+		LongLiving: true,
 	})
 	server.tenantSpecificConnMonitor.StartNoReserved(ctx, server.sqlMemoryPool)
 
