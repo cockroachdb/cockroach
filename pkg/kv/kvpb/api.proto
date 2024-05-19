@@ -1870,19 +1870,7 @@ message BulkOpSummary {
   int64 data_size = 1;
   // SSTDataSize is the size of the SST, post compression, sent to KV.
   int64 sst_data_size = 6 [(gogoproto.customname) = "SSTDataSize"];
-  // DeprecatedRows contained the row count when "rows" were always defined as
-  // entries in the index with ID 1, however since 20.1 and the introduction of
-  // PK changes, the low-level counters that produce BulkOpSummaries are unable
-  // to assume which index is primary and thus cannot distinguish "rows" vs
-  // "index entries". Callers wishing to get a "row count" from a BulkOpSummary
-  // should use EntryCounts instead, fetching the count for the table/index that
-  // corresponds to the PK.
-  int64 deprecated_rows = 2;
-  // DeprecatedIndexEntries contained the index entry count prior to 20.1. See
-  // the comment on DeprecatedRows for details.
-  int64 deprecated_index_entries = 3;
-
-  reserved 4;
+  reserved 2, 3, 4;
   // EntryCounts contains the number of keys processed for each tableID/indexID
   // pair, stored under the key (tableID << 32) | indexID. This EntryCount key
   // generation logic is also available in the BulkOpSummaryID helper. It does

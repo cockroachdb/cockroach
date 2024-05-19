@@ -2149,8 +2149,6 @@ func BulkOpSummaryID(tableID, indexID uint64) uint64 {
 func (b *BulkOpSummary) Add(other BulkOpSummary) {
 	b.DataSize += other.DataSize
 	b.SSTDataSize += other.SSTDataSize
-	b.DeprecatedRows += other.DeprecatedRows
-	b.DeprecatedIndexEntries += other.DeprecatedIndexEntries
 
 	if other.EntryCounts != nil && b.EntryCounts == nil {
 		b.EntryCounts = make(map[uint64]int64, len(other.EntryCounts))
