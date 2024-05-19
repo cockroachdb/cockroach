@@ -193,11 +193,13 @@ func MakeServer(
 			"timeseries-workers",
 			queryMemoryMax*2,
 			memoryMonitor,
+			true, /* longLiving */
 		),
 		resultMemMonitor: mon.NewMonitorInheritWithLimit(
 			"timeseries-results",
 			math.MaxInt64,
 			memoryMonitor,
+			true, /* longLiving */
 		),
 		queryMemoryMax: queryMemoryMax,
 		queryWorkerMax: queryWorkerMax,

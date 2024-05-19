@@ -292,6 +292,18 @@ func (rb *routerBase) init(
 		rb.outputs[i].rowBufToPushFromMon = execinfra.NewMonitor(
 			ctx, flowCtx.Mon, redact.Sprintf("router-unlimited-%d", rb.outputs[i].streamID),
 		)
+		// These monitors are not long-living ones, and they are generally
+		// stopped at the end of the output's goroutine (that is created in
+		// Start), but if Start is never called (e.g. because the server is
+		// shutting down), then these monitors won't be closed. This doesn't
+		// result in a leak of resources because the flow monitor is always
+		// closed, so we have this hack in place to go around the "non-stopped
+		// short-living monitors" assertion. (Changing the DistSQL code to clean
+		// up the monitors when Start isn't called is non-trivial and doesn't
+		// seem worth it.)
+		rb.outputs[i].memoryMonitor.MarkLongLiving()
+		rb.outputs[i].diskMonitor.MarkLongLiving()
+		rb.outputs[i].rowBufToPushFromMon.MarkLongLiving()
 		memAcc := rb.outputs[i].rowBufToPushFromMon.MakeBoundAccount()
 		rb.outputs[i].rowBufToPushFromAcc = &memAcc
 

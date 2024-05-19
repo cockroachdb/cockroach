@@ -1302,6 +1302,10 @@ func makeTenantSQLServerArgs(
 		histogramWindowInterval: baseCfg.HistogramWindowInterval(),
 		settings:                baseCfg.Settings,
 	})
+	// TODO(#122154): uncomment this.
+	//stopper.AddCloser(stop.CloserFn(func() {
+	//	monitorAndMetrics.rootSQLMemoryMonitor.EmergencyStop(startupCtx)
+	//}))
 	remoteFlowRunnerAcc := monitorAndMetrics.rootSQLMemoryMonitor.MakeBoundAccount()
 	remoteFlowRunner := flowinfra.NewRemoteFlowRunner(baseCfg.AmbientCtx, stopper, &remoteFlowRunnerAcc)
 

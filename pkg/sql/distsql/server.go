@@ -86,9 +86,10 @@ func NewServer(
 			// Note that we don't use 'sql.mem.distsql.*' metrics here since
 			// that would double count them with the 'flow' monitor in
 			// setupFlow.
-			CurCount: nil,
-			MaxHist:  nil,
-			Settings: cfg.Settings,
+			CurCount:   nil,
+			MaxHist:    nil,
+			Settings:   cfg.Settings,
+			LongLiving: true,
 		}),
 	}
 	ds.memMonitor.StartNoReserved(ctx, cfg.ParentMemoryMonitor)
