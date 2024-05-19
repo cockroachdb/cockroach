@@ -42,7 +42,7 @@ func TestAdjustMemoryUsage(t *testing.T) {
 	limitedMemMonitorName := "test-limited"
 	limit := int64(100000)
 	limitedMemMonitor := mon.NewMonitorInheritWithLimit(
-		redact.RedactableString(limitedMemMonitorName), limit, unlimitedMemMonitor,
+		redact.RedactableString(limitedMemMonitorName), limit, unlimitedMemMonitor, false, /* longLiving */
 	)
 	limitedMemMonitor.StartNoReserved(ctx, unlimitedMemMonitor)
 	defer limitedMemMonitor.Stop(ctx)
