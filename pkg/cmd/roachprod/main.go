@@ -605,7 +605,7 @@ SIGHUP), unless you also configure --max-wait.
 }
 
 var startInstanceCmd = &cobra.Command{
-	Use:   "start-sql <name> --storage-cluster <storage-cluster> [--external-cluster <virtual-cluster-nodes>]",
+	Use:   "start-sql <name> --storage-cluster <storage-cluster> [--external-nodes <virtual-cluster-nodes>]",
 	Short: "start the SQL/HTTP service for a virtual cluster as a separate process",
 	Long: `Start SQL/HTTP instances for a virtual cluster as separate processes.
 
