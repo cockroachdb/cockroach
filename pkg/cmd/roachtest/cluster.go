@@ -1418,18 +1418,12 @@ func (c *clusterImpl) FetchVMSpecs(ctx context.Context, l *logger.Logger) error 
 
 		for provider, vms := range providerToVMs {
 			p := vm.Providers[provider]
-			vmSpecs, err := p.GetVMSpecs(vms)
+			vmSpecs, err := p.GetVMSpecs(l, vms)
 			if err != nil {
 				l.Errorf("failed to get VM spec for provider %s: %s", provider, err)
 				continue
 			}
-			for _, vmSpec := range vmSpecs {
-				name, ok := vmSpec["name"].(string)
-				if !ok {
-					l.Errorf("failed to create spec files for VM\n%v", vmSpec)
-					continue
-				}
-
+			for name, vmSpec := range vmSpecs {
 				dest := filepath.Join(vmSpecsFolder, name+".json")
 				specJSON, err := json.MarshalIndent(vmSpec, "", "  ")
 				if err != nil {

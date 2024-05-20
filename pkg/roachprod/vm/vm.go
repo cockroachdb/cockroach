@@ -511,7 +511,7 @@ type Provider interface {
 	// GetHostErrorVMs returns a list of VMs that had host error since the time specified.
 	GetHostErrorVMs(l *logger.Logger, vms List, since time.Time) ([]string, error)
 	// GetVMSpecs returns a json list of VM specs, according to a specific cloud provider.
-	GetVMSpecs(vms List) ([]map[string]interface{}, error)
+	GetVMSpecs(l *logger.Logger, vms List) (map[string]map[string]interface{}, error)
 
 	// CreateLoadBalancer creates a load balancer, for a specific port, that
 	// delegates to the given cluster.

@@ -278,8 +278,57 @@ func (p *Provider) GetHostErrorVMs(
 	return nil, nil
 }
 
-func (p *Provider) GetVMSpecs(vms vm.List) ([]map[string]interface{}, error) {
-	return nil, nil
+func (p *Provider) GetVMSpecs(
+	l *logger.Logger, vms vm.List,
+) (map[string]map[string]interface{}, error) {
+	if vms == nil {
+		return nil, errors.New("vms cannot be nil")
+	}
+
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return nil, err
+	}
+
+	var instanceList []map[string]interface{}
+	// Extract the spec of all VMs and create a map from VM InstanceId to spec.
+	vmSpecs := make(map[string]map[string]interface{})
+	for region, list := range byRegion {
+		args := []string{
+			"ec2", "describe-instances",
+			"--region", region,
+			"--query", "Reservations[].Instances[]",
+			"--instance-ids",
+		}
+		args = append(args, list.ProviderIDs()...)
+		if err := p.runJSONCommand(l, args, &instanceList); err != nil {
+			return nil, errors.Wrapf(err, "error describing instances in region %s: ", region)
+		}
+
+		if len(instanceList) == 0 {
+			l.Errorf("no instances found in region %s", region)
+			continue
+		}
+
+		for _, instance := range instanceList {
+			instanceName := ""
+			for _, tag := range instance["Tags"].([]interface{}) {
+				tagMap, ok := tag.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				if tagMap["Key"].(string) == "Name" {
+					instanceName = tagMap["Value"].(string)
+					break
+				}
+			}
+			if instanceName != "" {
+				vmSpecs[instanceName] = instance
+			}
+		}
+	}
+
+	return vmSpecs, nil
 }
 
 const (
