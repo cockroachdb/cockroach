@@ -3,6 +3,7 @@ package changefeedccl
 import (
 	"context"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -105,32 +106,101 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 
 	var flushMsgs func(msgs []*sarama.ProducerMessage) error
 	flushMsgs = func(msgs []*sarama.ProducerMessage) error {
-		sent, confirmed := 0, 0
-		for !(sent == len(msgs) && confirmed == len(msgs)) {
+		allConfirmed := make(chan struct{})
+		stop := make(chan struct{})
+		errs := make(chan error, 1)
+		wg := sync.WaitGroup{}
+
+		// track confirmations
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			confirmed := 0
+			for confirmed < len(msgs) {
+				select {
+				case <-ctx.Done():
+					return
+				case <-stop:
+					return
+				case <-producer.Successes():
+					// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
+					// TODO: re add metrics support
+					confirmed++
+				}
+			}
+			close(allConfirmed)
+		}()
+
+		// track errors
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var err error
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-stop:
+					return
+				case err = <-producer.Errors():
+				case errs <- err:
+					return
+				}
+			}
+		}()
+
+		handleErr := func(err error) error {
+			if k.shouldTryResizing(err, msgs) {
+				a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
+				// shut down the tracking goroutines
+				close(stop)
+				wg.Wait()
+				return errors.Join(flushMsgs(a), flushMsgs(b))
+			}
+			return err
+		}
+
+		handleClose := func() error {
+			close(stop)
+			wg.Wait()
+			// Ignore errors related to outstanding messages since we're either shutting
+			// down or beginning to retry regardless.
+			_ = producer.Close()
+			k.producersClosed <- struct{}{}
+			return errors.New(`kafka sink client closing`)
+		}
+
+		// send input, while watching for errors & close
+		for sent := 0; sent < len(msgs); {
 			m := msgs[sent]
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case producer.Input() <- m:
 				sent++
-			case <-producer.Successes():
-				// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
-				// TODO: re add metrics support
-				confirmed++
-			case err := <-producer.Errors():
-				if k.shouldTryResizing(err, msgs) {
-					a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
-					return errors.Join(flushMsgs(a), flushMsgs(b))
-				}
-				return err
+			case err := <-errs:
+				return handleErr(err)
 			case <-k.producersClose:
-				// Ignore errors related to outstanding messages since we're either shutting
-				// down or beginning to retry regardless.
-				_ = producer.Close()
-				k.producersClosed <- struct{}{}
-				return errors.New(`kafka sink client closing`)
+				return handleClose()
 			}
 		}
+
+		// make sure all messages are confirmed or errored
+	confLoop:
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case err := <-errs:
+				return handleErr(err)
+			case <-k.producersClose:
+				return handleClose()
+			case <-allConfirmed:
+				break confLoop
+			}
+		}
+		close(stop)
+		wg.Wait()
 		return nil
 	}
 	return flushMsgs(msgs)
