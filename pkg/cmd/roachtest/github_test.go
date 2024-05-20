@@ -323,6 +323,21 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
+		// 11. When a transient error happens as a result of *another*
+		// transient error, the corresponding issue uses the first
+		// transient error in the chain.
+		{
+			failures: []failure{
+				createFailure(rperrors.TransientFailure(
+					rperrors.NewSSHError(errors.New("oops")), "some_problem",
+				)),
+			},
+			expectedPost:          true,
+			expectedTeam:          "@cockroachdb/test-eng",
+			expectedName:          "ssh_problem",
+			expectedMessagePrefix: testName + " failed",
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+		},
 	}
 
 	reg := makeTestRegistry()
