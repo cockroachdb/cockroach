@@ -991,7 +991,7 @@ func getGoCoverArtifacts(ctx context.Context, c *clusterImpl, t test.Test) {
 // this returns. This happens when the test doesn't respond to cancellation.
 //
 // Args:
-// c: The cluster on which the test will run. runTest() does not wipe or destroy  the cluster.
+// c: The cluster on which the test will run. runTest() does not wipe or destroy the cluster.
 func (r *testRunner) runTest(
 	ctx context.Context,
 	t *testImpl,
@@ -1486,7 +1486,7 @@ func (r *testRunner) teardownTest(
 func (r *testRunner) collectArtifacts(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool, timeout time.Duration,
 ) error {
-	// Collecting artifacts may hang so we run it in a goroutine which is abandoned
+	// Collecting artifacts may hang, so we run it in a goroutine which is abandoned
 	// after a timeout.
 	artifactsCollectedCh := make(chan struct{})
 	_ = r.stopper.RunAsyncTask(ctx, "collect-artifacts", func(ctx context.Context) {
@@ -1571,6 +1571,9 @@ func (r *testRunner) collectArtifacts(
 		}
 		if err := c.FetchDebugZip(ctx, t.L(), "debug.zip"); err != nil {
 			t.L().Printf("failed to collect zip: %s", err)
+		}
+		if err := c.FetchVMSpecs(ctx, t.L()); err != nil {
+			t.L().Errorf("failed to collect VM specs: %s", err)
 		}
 	})
 
