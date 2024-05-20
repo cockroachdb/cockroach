@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/xdg-go/scram"
 )
 
@@ -350,7 +351,7 @@ func scramAuthenticator(
 				return err
 			}
 			if reqMethod != "SCRAM-SHA-256" {
-				c.LogAuthInfof(ctx, "client requests unknown scram method %q", reqMethod)
+				c.LogAuthInfof(ctx, redact.Sprintf("client requests unknown scram method %q", redact.SafeString(reqMethod)))
 				err := unimplemented.NewWithIssue(74300, "channel binding not supported")
 				// We need to manually report the unimplemented error because it is not
 				// passed through to the client as-is (authn errors are hidden behind
@@ -778,7 +779,6 @@ func authJwtToken(
 				errors.Join(authError, errors.Newf("%s", detailedErrors)))
 			return authError
 		}
-		c.LogAuthOK(ctx)
 		return nil
 	})
 	return b, nil

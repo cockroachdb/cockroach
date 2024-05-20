@@ -179,8 +179,8 @@ func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) e
 	return nil
 }
 
-func (c *conn) authLogEnabled() bool {
-	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
+func (c *conn) verboseAuthLogEnabled() bool {
+	return c.alwaysLogAuthActivity || logVerboseSessionAuth.Get(c.sv)
 }
 
 // processCommandsAsync spawns a goroutine that authenticates the connection and
