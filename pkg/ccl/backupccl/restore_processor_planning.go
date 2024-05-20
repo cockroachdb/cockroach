@@ -12,7 +12,7 @@ import (
 	"bytes"
 	"context"
 	"math"
-	"sort"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -144,8 +144,8 @@ func distRestore(
 			rangeRouterSpec.Spans = append(rangeRouterSpec.Spans, span)
 		}
 		// The router expects the spans to be sorted.
-		sort.Slice(rangeRouterSpec.Spans, func(i, j int) bool {
-			return bytes.Compare(rangeRouterSpec.Spans[i].Start, rangeRouterSpec.Spans[j].Start) == -1
+		slices.SortFunc(rangeRouterSpec.Spans, func(a, b execinfrapb.OutputRouterSpec_RangeRouterSpec_Span) int {
+			return bytes.Compare(a.Start, b.Start)
 		})
 
 		// TODO(pbardea): This not super principled. I just wanted something that

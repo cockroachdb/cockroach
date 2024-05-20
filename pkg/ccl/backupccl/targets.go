@@ -11,7 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
@@ -172,8 +172,8 @@ func getRelevantDescChanges(
 		}
 	}
 
-	sort.Slice(interestingChanges, func(i, j int) bool {
-		return interestingChanges[i].Time.Less(interestingChanges[j].Time)
+	slices.SortFunc(interestingChanges, func(a, b backuppb.BackupManifest_DescriptorRevision) int {
+		return a.Time.Compare(b.Time)
 	})
 
 	return interestingChanges, nil

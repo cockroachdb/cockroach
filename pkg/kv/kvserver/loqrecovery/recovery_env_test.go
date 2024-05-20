@@ -14,7 +14,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -735,7 +735,7 @@ func (e *quorumRecoveryEnv) parseStoresArg(
 			stores = []roachpb.StoreID{}
 		}
 	}
-	sort.Sort(roachpb.StoreIDSlice(stores))
+	slices.Sort(stores)
 	return stores
 }
 
@@ -757,7 +757,7 @@ func (e *quorumRecoveryEnv) parseNodesArg(t *testing.T, d datadriven.TestData) [
 		}
 	}
 	if len(nodes) > 0 {
-		sort.Sort(roachpb.NodeIDSlice(nodes))
+		slices.Sort(nodes)
 	}
 	return nodes
 }

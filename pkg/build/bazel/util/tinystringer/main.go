@@ -11,6 +11,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"flag"
 	"fmt"
@@ -19,7 +20,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -221,8 +222,8 @@ var %s = []%s{
 				seen[nameToInt[constName]] = struct{}{}
 			}
 		}
-		sort.Slice(inLexicographicOrder, func(i, j int) bool {
-			return nameToPrinted[inLexicographicOrder[i]] < nameToPrinted[inLexicographicOrder[j]]
+		slices.SortFunc(inLexicographicOrder, func(a, b string) int {
+			return cmp.Compare(nameToPrinted[a], nameToPrinted[b])
 		})
 		seen = make(map[int]struct{})
 		for _, constName := range inLexicographicOrder {

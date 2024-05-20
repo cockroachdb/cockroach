@@ -15,7 +15,7 @@ package typedesc
 import (
 	"bytes"
 	"context"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -440,16 +440,6 @@ func (desc *Mutable) SetName(name string) {
 	desc.Name = name
 }
 
-// EnumMembers is a sortable list of TypeDescriptor_EnumMember, sorted by the
-// physical representation.
-type EnumMembers []descpb.TypeDescriptor_EnumMember
-
-func (e EnumMembers) Len() int { return len(e) }
-func (e EnumMembers) Less(i, j int) bool {
-	return bytes.Compare(e[i].PhysicalRepresentation, e[j].PhysicalRepresentation) < 0
-}
-func (e EnumMembers) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
-
 // ValidateSelf performs validation on the catalog.TypeDescriptor.
 func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.
@@ -519,7 +509,9 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 // Returns true iff the enums are sorted.
 func (desc *immutable) validateEnumMembers(vea catalog.ValidationErrorAccumulator) (isSorted bool) {
 	// All of the enum members should be in sorted order.
-	isSorted = sort.IsSorted(EnumMembers(desc.EnumMembers))
+	isSorted = slices.IsSortedFunc(desc.EnumMembers, func(a, b descpb.TypeDescriptor_EnumMember) int {
+		return bytes.Compare(a.PhysicalRepresentation, b.PhysicalRepresentation)
+	})
 	if !isSorted {
 		vea.Report(errors.AssertionFailedf("enum members are not sorted %v", desc.EnumMembers))
 	}

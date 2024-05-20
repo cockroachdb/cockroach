@@ -13,7 +13,8 @@
 package multiregion
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -430,8 +431,8 @@ func ValidateSuperRegions(
 	superRegionNames := make(map[string]struct{})
 
 	// Ensure that the super region names are in sorted order.
-	if !sort.SliceIsSorted(superRegions, func(i, j int) bool {
-		return superRegions[i].SuperRegionName < superRegions[j].SuperRegionName
+	if !slices.IsSortedFunc(superRegions, func(a, b descpb.SuperRegion) int {
+		return cmp.Compare(a.SuperRegionName, b.SuperRegionName)
 	}) {
 		err := errors.AssertionFailedf("super regions are not in sorted order based on the super region name %v", superRegions)
 		errorHandler(err)
@@ -456,9 +457,7 @@ func ValidateSuperRegions(
 		superRegionNames[superRegion.SuperRegionName] = struct{}{}
 
 		// Ensure that regions within a super region are sorted.
-		if !sort.SliceIsSorted(superRegion.Regions, func(i, j int) bool {
-			return superRegion.Regions[i] < superRegion.Regions[j]
-		}) {
+		if !slices.IsSorted(superRegion.Regions) {
 			err := errors.AssertionFailedf("the regions within super region %s were not in a sorted order", superRegion.SuperRegionName)
 			errorHandler(err)
 		}

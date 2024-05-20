@@ -14,7 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -186,11 +186,11 @@ func (p *testProcessor) readyCount(rangeID roachpb.RangeID) int {
 }
 
 func (p *testProcessor) countsLocked(m map[roachpb.RangeID]int) string {
-	var ids roachpb.RangeIDSlice
+	var ids []roachpb.RangeID
 	for id := range m {
 		ids = append(ids, id)
 	}
-	sort.Sort(ids)
+	slices.Sort(ids)
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "[")
 	for i, id := range ids {

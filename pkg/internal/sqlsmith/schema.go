@@ -12,6 +12,7 @@ package sqlsmith
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/lib/pq/oid"
-	"golang.org/x/exp/slices"
 )
 
 // tableRef represents a table and its columns.

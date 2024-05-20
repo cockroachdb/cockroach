@@ -13,10 +13,11 @@
 package sidetransport
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -905,8 +906,8 @@ func (s streamState) String() string {
 	}
 	for policy, ranges := range rangesByPolicy {
 		fmt.Fprintf(sb, "%s: ", policy)
-		sort.Slice(ranges, func(i, j int) bool {
-			return ranges[i].id < ranges[j].id
+		slices.SortFunc(ranges, func(a, b rangeInfo) int {
+			return cmp.Compare(a.id, b.id)
 		})
 		for i, rng := range ranges {
 			if i > 0 {
