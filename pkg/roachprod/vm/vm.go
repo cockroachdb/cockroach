@@ -508,8 +508,10 @@ type Provider interface {
 	// GetPreemptedSpotVMs returns a list of Spot VMs that were preempted since the time specified.
 	// Returns nil, nil when SupportsSpotVMs() is false.
 	GetPreemptedSpotVMs(l *logger.Logger, vms List, since time.Time) ([]PreemptedVM, error)
-	// GetHostErrorVMs returns a list of Spot VMs that had host error since the time specified.
+	// GetHostErrorVMs returns a list of VMs that had host error since the time specified.
 	GetHostErrorVMs(l *logger.Logger, vms List, since time.Time) ([]string, error)
+	// GetVMSpecs returns a json list of VM specs, according to a specific cloud provider.
+	GetVMSpecs(vms List) ([]map[string]interface{}, error)
 
 	// CreateLoadBalancer creates a load balancer, for a specific port, that
 	// delegates to the given cluster.

@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -1388,6 +1389,60 @@ func (c *clusterImpl) FetchDebugZip(
 				continue
 			}
 			return errors.Wrap(c.Get(ctx, c.l, zipName /* src */, path /* dest */, c.Node(node)), "cluster.FetchDebugZip")
+		}
+		return nil
+	})
+}
+
+// FetchVMSpecs downloads the VM specs from the cluster using `roachprod get`.
+// The logs will be placed in the test's artifacts dir.
+func (c *clusterImpl) FetchVMSpecs(ctx context.Context, l *logger.Logger) error {
+	if c.IsLocal() {
+		return nil
+	}
+
+	l.Printf("fetching VM specs")
+
+	vmSpecsFolder := filepath.Join(c.t.ArtifactsDir(), "vm_specs")
+	if err := os.MkdirAll(vmSpecsFolder, 0755); err != nil {
+		return err
+	}
+
+	// Don't hang forever if we can't fetch the VM specs.
+	return timeutil.RunWithTimeout(ctx, "fetch logs", 5*time.Minute, func(ctx context.Context) error {
+		cachedCluster, err := getCachedCluster(c.name)
+		if err != nil {
+			return err
+		}
+		providerToVMs := bucketVMsByProvider(cachedCluster)
+
+		for provider, vms := range providerToVMs {
+			p := vm.Providers[provider]
+			vmSpecs, err := p.GetVMSpecs(vms)
+			if err != nil {
+				l.Errorf("failed to get VM spec for provider %s: %s", provider, err)
+				continue
+			}
+			for _, vmSpec := range vmSpecs {
+				name, ok := vmSpec["name"].(string)
+				if !ok {
+					l.Errorf("failed to create spec files for VM\n%v", vmSpec)
+					continue
+				}
+
+				dest := filepath.Join(vmSpecsFolder, name+".json")
+				specJSON, err := json.MarshalIndent(vmSpec, "", "  ")
+				if err != nil {
+					l.Errorf("Failed to marshal JSON: %v", err)
+					continue
+				}
+
+				err = os.WriteFile(dest, specJSON, 0644)
+				if err != nil {
+					l.Printf("Failed to write spec to file for %s\n", name)
+					continue
+				}
+			}
 		}
 		return nil
 	})
