@@ -3,7 +3,6 @@ package changefeedccl
 import (
 	"context"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -104,65 +103,18 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 
 	msgs := payload.([]*sarama.ProducerMessage)
 
+	// TODO: make this better. possibly moving the resizing up into the batch worker would help a bit
 	var flushMsgs func(msgs []*sarama.ProducerMessage) error
 	flushMsgs = func(msgs []*sarama.ProducerMessage) error {
-		allConfirmed := make(chan struct{})
-		stop := make(chan struct{})
-		errs := make(chan error, 1)
-		wg := sync.WaitGroup{}
-
-		// track confirmations
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			confirmed := 0
-			for confirmed < len(msgs) {
-				select {
-				case <-ctx.Done():
-					return
-				case <-stop:
-					return
-				case <-producer.Successes():
-					// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
-					// TODO: re add metrics support
-					confirmed++
-				}
-			}
-			close(allConfirmed)
-		}()
-
-		// track errors
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			var err error
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-stop:
-					return
-				case err = <-producer.Errors():
-				case errs <- err:
-					return
-				}
-			}
-		}()
-
 		handleErr := func(err error) error {
 			if k.shouldTryResizing(err, msgs) {
 				a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
-				// shut down the tracking goroutines
-				close(stop)
-				wg.Wait()
+				// recurse
 				return errors.Join(flushMsgs(a), flushMsgs(b))
 			}
 			return err
 		}
-
 		handleClose := func() error {
-			close(stop)
-			wg.Wait()
 			// Ignore errors related to outstanding messages since we're either shutting
 			// down or beginning to retry regardless.
 			_ = producer.Close()
@@ -170,37 +122,42 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 			return errors.New(`kafka sink client closing`)
 		}
 
+		confirmed := 0
 		// send input, while watching for errors & close
 		for sent := 0; sent < len(msgs); {
 			m := msgs[sent]
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case producer.Input() <- m:
-				sent++
-			case err := <-errs:
-				return handleErr(err)
 			case <-k.producersClose:
 				return handleClose()
+			case producer.Input() <- m:
+				sent++
+			case <-producer.Successes():
+				// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
+				// TODO: re add metrics support
+				confirmed++
+			case err := <-producer.Errors():
+				return handleErr(err)
 			}
 		}
 
 		// make sure all messages are confirmed or errored
-	confLoop:
-		for {
+		for confirmed < len(msgs) {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case err := <-errs:
-				return handleErr(err)
 			case <-k.producersClose:
 				return handleClose()
-			case <-allConfirmed:
-				break confLoop
+			case err := <-producer.Errors():
+				return handleErr(err)
+			case <-producer.Successes():
+				// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
+				// TODO: re add metrics support
+				confirmed++
 			}
 		}
-		close(stop)
-		wg.Wait()
+
 		return nil
 	}
 	return flushMsgs(msgs)
