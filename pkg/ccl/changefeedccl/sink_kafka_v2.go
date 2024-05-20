@@ -32,11 +32,13 @@ func newKafkaSinkClient(
 	}
 
 	return &kafkaSinkClient{
-		client:         client,
-		knobs:          knobs,
-		topics:         topics,
-		batchCfg:       batchCfg,
-		canTryResizing: changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
+		client:          client,
+		knobs:           knobs,
+		topics:          topics,
+		batchCfg:        batchCfg,
+		canTryResizing:  changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
+		producersClose:  make(chan struct{}),
+		producersClosed: make(chan struct{}),
 	}, nil
 }
 
