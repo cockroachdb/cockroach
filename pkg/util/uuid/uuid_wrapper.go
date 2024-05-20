@@ -14,7 +14,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	math_rand "math/rand/v2"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
@@ -97,18 +96,6 @@ func (u *UUID) UnmarshalJSON(data []byte) error {
 // MakeV4 calls Must(NewV4)
 func MakeV4() UUID {
 	return Must(NewV4())
-}
-
-// mathRandReader is an io.Reader that calls through to "math/rand".Read
-// which is safe for concurrent use.
-type mathRandReader struct{}
-
-func (r mathRandReader) Read(p []byte) (n int, err error) {
-	panic("unimplemented")
-}
-
-func (r mathRandReader) Uint64() uint64 {
-	return math_rand.Uint64()
 }
 
 // NewPopulatedUUID returns a populated UUID.
