@@ -420,3 +420,9 @@ func (c *CustomFuncs) GeneratePartialOrderTopK(
 		grp.Memo().AddTopKToGroup(&memo.TopKExpr{Input: input, TopKPrivate: newPrivate}, grp)
 	}
 }
+
+// CanPushOffsetIntoIndexJoin returns true if the session setting
+// optimizer_push_offset_into_index_join is enabled.
+func (c *CustomFuncs) CanPushOffsetIntoIndexJoin() bool {
+	return c.e.evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin
+}
