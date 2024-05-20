@@ -3,6 +3,7 @@ package changefeedccl
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -53,14 +54,18 @@ func newKafkaClient(
 }
 
 type kafkaSinkClient struct {
-	format    changefeedbase.FormatType
-	topics    *TopicNamer
-	batchCfg  sinkBatchConfig
-	client    sarama.Client
+	format   changefeedbase.FormatType
+	topics   *TopicNamer
+	batchCfg sinkBatchConfig
+	client   sarama.Client
+
 	producers struct {
 		mu        syncutil.Mutex
 		producers []sarama.AsyncProducer
 	}
+	producersCheckedOut atomic.Int32
+	producersClose      chan struct{}
+	producersClosed     chan struct{}
 
 	knobs kafkaSinkKnobs
 
@@ -69,8 +74,13 @@ type kafkaSinkClient struct {
 
 // Close implements SinkClient.
 func (k *kafkaSinkClient) Close() error {
-	k.client.Close()
-	return nil
+	// close all the producers, waiting for them to finish
+	close(k.producersClose)
+	for k.producersCheckedOut.Load() > 0 {
+		<-k.producersClosed
+	}
+
+	return k.client.Close()
 }
 
 // Flush implements SinkClient. Does not retry -- retries will be handled by ParallelIO.
@@ -84,10 +94,7 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 	msgs := payload.([]*sarama.ProducerMessage)
 
 	sent, confirmed := 0, 0
-	for {
-		if sent == len(msgs) {
-			break
-		}
+	for !(sent == len(msgs) && confirmed == len(msgs)) {
 		m := msgs[sent]
 		select {
 		case <-ctx.Done():
@@ -101,6 +108,12 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 		case err := <-producer.Errors():
 			// TODO: resize option
 			return err
+		case <-k.producersClose:
+			// Ignore errors related to outstanding messages since we're either shutting
+			// down or beginning to retry regardless.
+			_ = producer.Close()
+			k.producersClosed <- struct{}{}
+			return errors.New(`kafka sink client closing`)
 		}
 	}
 
@@ -146,6 +159,7 @@ func (k *kafkaSinkClient) getProducer() (sarama.AsyncProducer, error) {
 	ap = k.producers.producers[last]
 	k.producers.producers[last] = nil
 	k.producers.producers = k.producers.producers[:last]
+	k.producersCheckedOut.Add(1)
 
 	return ap, nil
 }
@@ -154,6 +168,7 @@ func (k *kafkaSinkClient) returnProducer(ap sarama.AsyncProducer) {
 	k.producers.mu.Lock()
 	defer k.producers.mu.Unlock()
 	k.producers.producers = append(k.producers.producers, ap)
+	k.producersCheckedOut.Add(-1)
 }
 
 var _ SinkClient = (*kafkaSinkClient)(nil)
