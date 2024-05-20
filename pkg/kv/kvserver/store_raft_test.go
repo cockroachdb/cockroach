@@ -156,7 +156,7 @@ func TestRaftCrossLocalityMetrics(t *testing.T) {
 	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
-	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+	cfg.Transport = NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings)
 	store := NewStore(ctx, cfg, eng, &node)
 	store.Ident = &roachpb.StoreIdent{
 		ClusterID: uuid.Nil,
