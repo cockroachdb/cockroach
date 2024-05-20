@@ -763,6 +763,58 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 	}
 }
 
+// TestRawNodePersistenceRegression tests that a follower panics on receiving a
+// message from a leader thinking that the follower's log is persisted at a
+// previously promised match index that is out of bounds for this log now.
+//
+// This emulates the situation when the follower crashed and restarted, and its
+// storage durability guarantees were broken.
+func TestRawNodePersistenceRegression(t *testing.T) {
+	const nodeID = 1
+	newNode := func() *RawNode {
+		s := newTestMemoryStorage(withPeers(1, 2))
+		require.NoError(t, s.Append(index(1).terms(1, 2, 5)))
+		require.NoError(t, s.SetHardState(pb.HardState{
+			Term:   5,
+			Vote:   1,
+			Commit: 3,
+		}))
+		return newTestRawNode(nodeID, 10, 1, s)
+	}
+
+	t.Run("MsgApp", func(t *testing.T) {
+		node := newNode()
+		msg := pb.Message{
+			From: 2, To: 1, Type: pb.MsgApp,
+			Term: 5, Index: 3, LogTerm: 5, Commit: 3,
+		}
+		// Don't panic if we haven't reported a higher match index.
+		for _, match := range []uint64{0, 1, 3} {
+			msg.Match = match
+			require.NoError(t, node.Step(msg))
+		}
+		// Panic if the leader believes the match index is beyond our log size.
+		msg.Match = 4
+		require.Panics(t, func() { _ = node.Step(msg) })
+	})
+
+	t.Run("MsgHeartbeat", func(t *testing.T) {
+		node := newNode()
+		msg := pb.Message{
+			From: 2, To: 1, Type: pb.MsgHeartbeat,
+			Term: 5, Commit: 3,
+		}
+		// Don't panic if we haven't reported a higher match index.
+		for _, match := range []uint64{0, 1, 3} {
+			msg.Match = match
+			require.NoError(t, node.Step(msg))
+		}
+		// Panic if the leader believes the match index is beyond our log size.
+		msg.Match = 4
+		require.Panics(t, func() { _ = node.Step(msg) })
+	})
+}
+
 // TestRawNodeBoundedLogGrowthWithPartition tests a scenario where a leader is
 // partitioned from a quorum of nodes. It verifies that the leader's log is
 // protected from unbounded growth even as new entries continue to be proposed.

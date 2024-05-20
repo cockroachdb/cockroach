@@ -380,8 +380,8 @@ func TestLeaderStartReplication(t *testing.T) {
 	sort.Sort(messageSlice(msgs))
 	wents := []pb.Entry{{Index: li + 1, Term: 1, Data: []byte("some data")}}
 	assert.Equal(t, []pb.Message{
-		{From: 1, To: 2, Term: 1, Type: pb.MsgApp, Index: li, LogTerm: 1, Entries: wents, Commit: li},
-		{From: 1, To: 3, Term: 1, Type: pb.MsgApp, Index: li, LogTerm: 1, Entries: wents, Commit: li},
+		{From: 1, To: 2, Term: 1, Type: pb.MsgApp, Index: li, LogTerm: 1, Entries: wents, Commit: li, Match: li},
+		{From: 1, To: 3, Term: 1, Type: pb.MsgApp, Index: li, LogTerm: 1, Entries: wents, Commit: li, Match: li},
 	}, msgs)
 	assert.Equal(t, []pb.Entry{
 		{Index: li + 1, Term: 1, Data: []byte("some data")},
