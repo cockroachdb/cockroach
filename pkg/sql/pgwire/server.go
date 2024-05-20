@@ -1058,9 +1058,9 @@ func (s *Server) serveImpl(
 					}
 				}
 
-				// Write out the error over pgwire.
+				// Notify connExecutor of the error so it can send it to the client.
 				if err := c.stmtBuf.Push(ctx, sql.SendError{Err: err}); err != nil {
-					return false, isSimpleQuery, errors.New("pgwire: error writing too big error message to the client")
+					return false, isSimpleQuery, errors.New("pgwire: error writing error message to the client")
 				}
 
 				// If this is a simple query, we have to send the sync message back as
@@ -1071,7 +1071,7 @@ func (s *Server) serveImpl(
 						// protocol.
 						ExplicitFromClient: false,
 					}); err != nil {
-						return false, isSimpleQuery, errors.New("pgwire: error writing sync to the client whilst message is too big")
+						return false, isSimpleQuery, errors.New("pgwire: error writing sync to the client while handling error")
 					}
 				}
 
@@ -1202,7 +1202,8 @@ func (s *Server) serveImpl(
 			default:
 				return false, isSimpleQuery, c.stmtBuf.Push(
 					ctx,
-					sql.SendError{Err: pgwirebase.NewUnrecognizedMsgTypeErr(typ)})
+					sql.SendError{Err: pgwirebase.NewUnrecognizedMsgTypeErr(typ)},
+				)
 			}
 		}()
 		if err != nil {
