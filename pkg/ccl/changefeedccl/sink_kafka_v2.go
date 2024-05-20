@@ -23,6 +23,7 @@ func newKafkaSinkClient(
 	batchCfg sinkBatchConfig,
 	bootstrapAddrs string,
 	topics *TopicNamer,
+	settings *cluster.Settings,
 	knobs kafkaSinkKnobs,
 ) (*kafkaSinkClient, error) {
 	client, err := newKafkaClient(kafkaCfg, bootstrapAddrs, knobs)
@@ -30,7 +31,13 @@ func newKafkaSinkClient(
 		return nil, err
 	}
 
-	return &kafkaSinkClient{client: client, knobs: knobs, topics: topics, batchCfg: batchCfg}, nil
+	return &kafkaSinkClient{
+		client:         client,
+		knobs:          knobs,
+		topics:         topics,
+		batchCfg:       batchCfg,
+		canTryResizing: changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
+	}, nil
 }
 
 func newKafkaClient(
@@ -67,7 +74,8 @@ type kafkaSinkClient struct {
 	producersClose      chan struct{}
 	producersClosed     chan struct{}
 
-	knobs kafkaSinkKnobs
+	knobs          kafkaSinkKnobs
+	canTryResizing bool
 
 	lastMetadataRefresh time.Time
 }
@@ -93,31 +101,37 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 
 	msgs := payload.([]*sarama.ProducerMessage)
 
-	sent, confirmed := 0, 0
-	for !(sent == len(msgs) && confirmed == len(msgs)) {
-		m := msgs[sent]
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case producer.Input() <- m:
-			sent++
-		case <-producer.Successes():
-			// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
-			// TODO: re add metrics support
-			confirmed++
-		case err := <-producer.Errors():
-			// TODO: resize option
-			return err
-		case <-k.producersClose:
-			// Ignore errors related to outstanding messages since we're either shutting
-			// down or beginning to retry regardless.
-			_ = producer.Close()
-			k.producersClosed <- struct{}{}
-			return errors.New(`kafka sink client closing`)
+	var flushMsgs func(msgs []*sarama.ProducerMessage) error
+	flushMsgs = func(msgs []*sarama.ProducerMessage) error {
+		sent, confirmed := 0, 0
+		for !(sent == len(msgs) && confirmed == len(msgs)) {
+			m := msgs[sent]
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case producer.Input() <- m:
+				sent++
+			case <-producer.Successes():
+				// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
+				// TODO: re add metrics support
+				confirmed++
+			case err := <-producer.Errors():
+				if k.shouldTryResizing(err, msgs) {
+					a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
+					return errors.Join(flushMsgs(a), flushMsgs(b))
+				}
+				return err
+			case <-k.producersClose:
+				// Ignore errors related to outstanding messages since we're either shutting
+				// down or beginning to retry regardless.
+				_ = producer.Close()
+				k.producersClosed <- struct{}{}
+				return errors.New(`kafka sink client closing`)
+			}
 		}
+		return nil
 	}
-
-	return nil
+	return flushMsgs(msgs)
 }
 
 // FlushResolvedPayload implements SinkClient.
@@ -171,8 +185,16 @@ func (k *kafkaSinkClient) returnProducer(ap sarama.AsyncProducer) {
 	k.producersCheckedOut.Add(-1)
 }
 
+func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []*sarama.ProducerMessage) bool {
+	if !k.canTryResizing || err == nil || len(msgs) < 2 {
+		return false
+	}
+	var kError sarama.KError
+	return errors.As(err, &kError) && kError == sarama.ErrMessageSizeTooLarge
+}
+
 var _ SinkClient = (*kafkaSinkClient)(nil)
-var _ SinkPayload = (*[]sarama.ProducerMessage)(nil) // this doesnt actually assert anything fyi
+var _ SinkPayload = ([]*sarama.ProducerMessage)(nil) // this doesnt actually assert anything fyi
 
 type keyPlusPayload struct {
 	key     []byte
@@ -258,7 +280,7 @@ func makeKafkaSinkV2(ctx context.Context,
 	}
 
 	// TODO: how to handle knobs
-	sinkClient, err := newKafkaSinkClient(kafkaCfg, batchCfg, u.Host, topicNamer, kafkaSinkKnobs{})
+	sinkClient, err := newKafkaSinkClient(kafkaCfg, batchCfg, u.Host, topicNamer, settings, kafkaSinkKnobs{})
 	if err != nil {
 		return nil, err
 	}
