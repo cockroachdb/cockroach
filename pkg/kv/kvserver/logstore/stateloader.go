@@ -167,7 +167,8 @@ func (sl StateLoader) SynthesizeHardState(
 		Term: uint64(truncState.Term),
 		// Note that when applying a Raft snapshot, the applied index is
 		// equal to the Commit index represented by the snapshot.
-		Commit: uint64(raftAppliedIndex),
+		Commit:     uint64(raftAppliedIndex),
+		LeaderTerm: uint64(truncState.Term),
 	}
 
 	if oldHS.Commit > newHS.Commit {

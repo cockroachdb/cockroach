@@ -34,6 +34,15 @@ type raftLog struct {
 	// committed is the highest log position that is known to be in
 	// stable storage on a quorum of nodes.
 	committed uint64
+	// leaderTerm is the term of the leader whose append was accepted into the log
+	// last. The log is a prefix of the accTerm's leader log.
+	//
+	// Invariant: raftLog.lastEntryID().term <= accTerm <= Term
+	//
+	// NB: the log can be partially or fully compacted. When we say "log" above,
+	// we logically include all the entries that were the pre-image of a snapshot,
+	// as well as the entries that are still physically in the log.
+	leaderTerm uint64
 	// applying is the highest log position that the application has
 	// been instructed to apply to its state machine. Some of these
 	// entries may be in the process of applying and have not yet

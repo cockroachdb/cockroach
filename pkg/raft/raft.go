@@ -420,6 +420,9 @@ func newRaft(c *Config) *raft {
 	}
 
 	lastID := r.raftLog.lastEntryID()
+	// Invariant: accTerm needs to be initialized as the term of last raft entry
+	// to make sure restarted nodes can advance commit index immediately.
+	r.raftLog.leaderTerm = lastID.term
 	cfg, trk, err := confchange.Restore(confchange.Changer{
 		Tracker:   r.trk,
 		LastIndex: lastID.index,
@@ -454,9 +457,10 @@ func (r *raft) softState() SoftState { return SoftState{Lead: r.lead, RaftState:
 
 func (r *raft) hardState() pb.HardState {
 	return pb.HardState{
-		Term:   r.Term,
-		Vote:   r.Vote,
-		Commit: r.raftLog.committed,
+		Term:       r.Term,
+		Vote:       r.Vote,
+		Commit:     r.raftLog.committed,
+		LeaderTerm: r.raftLog.leaderTerm,
 	}
 }
 
@@ -891,6 +895,7 @@ func (r *raft) becomeLeader() {
 		// This won't happen because we just called reset() above.
 		r.logger.Panic("empty entry was dropped")
 	}
+	r.raftLog.leaderTerm = r.Term
 	// The payloadSize of an empty entry is 0 (see TestPayloadSizeOfEmptyEntry),
 	// so the preceding log append does not count against the uncommitted log
 	// quota of the new leader. In other words, after the call to appendEntry,
@@ -1668,6 +1673,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		return
 	}
 	if mlastIndex, ok := r.raftLog.maybeAppend(a, m.Commit); ok {
+		r.raftLog.leaderTerm = m.Term
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: mlastIndex})
 		return
 	}
@@ -1716,6 +1722,8 @@ func (r *raft) handleSnapshot(m pb.Message) {
 	}
 	sindex, sterm := s.Metadata.Index, s.Metadata.Term
 	if r.restore(s) {
+		// log is now consistent with leader
+		r.raftLog.leaderTerm = m.Term
 		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, sindex, sterm)
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex()})
@@ -1910,6 +1918,7 @@ func (r *raft) loadState(state pb.HardState) {
 	r.raftLog.committed = state.Commit
 	r.Term = state.Term
 	r.Vote = state.Vote
+	r.raftLog.leaderTerm = state.LeaderTerm
 }
 
 // pastElectionTimeout returns true if r.electionElapsed is greater
