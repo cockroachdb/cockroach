@@ -11,7 +11,6 @@
 package pgwire
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
@@ -1292,80 +1291,6 @@ func TestMaliciousInputs(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
-	}
-}
-
-// TestReadTimeoutConn asserts that a readTimeoutConn performs reads normally
-// and exits with an appropriate error when exit conditions are satisfied.
-func TestReadTimeoutConnExits(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	// Cannot use net.Pipe because deadlines are not supported.
-	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	log.Infof(context.Background(), "started listener on %s", ln.Addr())
-	defer func() {
-		if err := ln.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	expectedRead := []byte("expectedRead")
-
-	// Start a goroutine that performs reads using a readTimeoutConn.
-	errChan := make(chan error)
-	go func() {
-		defer close(errChan)
-		errChan <- func() error {
-			c, err := ln.Accept()
-			if err != nil {
-				return err
-			}
-			defer c.Close()
-
-			readTimeoutConn := &readTimeoutConn{
-				Conn: c,
-				checkExitConds: func() error {
-					return ctx.Err()
-				},
-			}
-			// Assert that reads are performed normally.
-			readBytes := make([]byte, len(expectedRead))
-			if _, err := readTimeoutConn.Read(readBytes); err != nil {
-				return err
-			}
-			if !bytes.Equal(readBytes, expectedRead) {
-				return errors.Errorf("expected %v got %v", expectedRead, readBytes)
-			}
-
-			// The main goroutine will cancel the context, which should abort
-			// this read with an appropriate error.
-			_, err = readTimeoutConn.Read(make([]byte, 1))
-			return err
-		}()
-	}()
-
-	c, err := net.Dial(ln.Addr().Network(), ln.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Close()
-
-	if _, err := c.Write(expectedRead); err != nil {
-		t.Fatal(err)
-	}
-
-	select {
-	case err := <-errChan:
-		t.Fatalf("goroutine unexpectedly returned: %v", err)
-	default:
-	}
-	cancel()
-	if err := <-errChan; !errors.Is(err, context.Canceled) {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

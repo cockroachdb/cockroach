@@ -28,6 +28,8 @@ echo 'deb https://packages.cloud.google.com/apt cloud-sdk main' > /etc/apt/sourc
 curl -sLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | apt-key add -
 echo "deb https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/azure-cli.list
 
+add-apt-repository ppa:git-core/ppa
+
 # Some images come with apt autoupgrade job running at start, let's give it a few minutes to finish to avoid races.
 echo "Sleeping for 3 minutes to allow apt daily cronjob to finish..."
 sleep 3m
@@ -44,11 +46,11 @@ apt-get install --yes \
   docker-ce \
   docker-compose \
   flex \
+  git \
   gnome-keyring \
   google-cloud-sdk \
   google-cloud-cli-gke-gcloud-auth-plugin \
   gnupg2 \
-  git \
   jq \
   openjdk-11-jre-headless \
   pass \

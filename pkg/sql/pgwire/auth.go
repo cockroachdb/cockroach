@@ -312,7 +312,7 @@ func (c *conn) findAuthenticationMethod(
 	// If the client is using SSL, retrieve the TLS state to provide as
 	// input to the method.
 	if authOpt.connType == hba.ConnHostSSL {
-		tlsConn, ok := c.conn.(*readTimeoutConn).Conn.(*tls.Conn)
+		tlsConn, ok := c.conn.(*tls.Conn)
 		if !ok {
 			err = errors.AssertionFailedf("server reports hostssl conn without TLS state")
 			return
