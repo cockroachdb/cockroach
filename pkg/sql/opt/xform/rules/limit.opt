@@ -59,6 +59,7 @@
 [PushOffsetIntoIndexJoin, Explore]
 (Offset
     (IndexJoin $input:* $indexJoinPrivate:*) &
+        (CanPushOffsetIntoIndexJoin) &
         (IndexJoinPreservesRows $indexJoinPrivate)
     $offsetExpr:(Const $offset:* & (IsPositiveInt $offset))
     $ordering:* &
