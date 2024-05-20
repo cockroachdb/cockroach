@@ -813,9 +813,8 @@ func makeSelect(s *Smither) (tree.Statement, bool) {
 		order := make(tree.OrderBy, len(refs))
 		for i, r := range refs {
 			var expr tree.Expr = r.item
-			// PostGIS cannot order box2d types, so we cast to string so the
-			// order is deterministic.
-			if s.postgres && r.typ.Family() == types.Box2DFamily {
+			if !s.isOrderable(r.typ) {
+				// Cast to string so the order is deterministic.
 				expr = &tree.CastExpr{Expr: r.item, Type: types.String}
 			}
 			order[i] = &tree.Order{
@@ -1722,6 +1721,20 @@ func (s *Smither) makeHaving(refs colRefs) *tree.Where {
 	return nil
 }
 
+func (s *Smither) isOrderable(typ *types.T) bool {
+	if s.postgres {
+		// PostGIS cannot order box2d types.
+		return typ.Family() != types.Box2DFamily
+	}
+	switch typ.Family() {
+	case types.TSQueryFamily, types.TSVectorFamily:
+		// We can't order by these types - see #92165.
+		return false
+	default:
+		return true
+	}
+}
+
 func (s *Smither) makeOrderBy(refs colRefs) tree.OrderBy {
 	if len(refs) == 0 {
 		return nil
@@ -1729,8 +1742,7 @@ func (s *Smither) makeOrderBy(refs colRefs) tree.OrderBy {
 	var ob tree.OrderBy
 	for s.coin() {
 		ref := refs[s.rnd.Intn(len(refs))]
-		// PostGIS cannot order box2d types.
-		if s.postgres && ref.typ.Family() == types.Box2DFamily {
+		if !s.isOrderable(ref.typ) {
 			continue
 		}
 		ob = append(ob, &tree.Order{
@@ -1748,8 +1760,7 @@ func (s *Smither) makeOrderByWithAllCols(refs colRefs) tree.OrderBy {
 	}
 	var ob tree.OrderBy
 	for _, ref := range refs {
-		// PostGIS cannot order box2d types.
-		if s.postgres && ref.typ.Family() == types.Box2DFamily {
+		if !s.isOrderable(ref.typ) {
 			continue
 		}
 		ob = append(ob, &tree.Order{
