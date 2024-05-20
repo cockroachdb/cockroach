@@ -64,52 +64,29 @@ func TestMeansMemo(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "store":
-				desc := parseStoreDescriptor(t, d)
-				cm.setStore(desc)
-				storeMap[desc.StoreID] = desc
+				for _, next := range strings.Split(d.Input, "\n") {
+					desc := parseStoreDescriptor(t, strings.TrimSpace(next))
+					cm.setStore(desc)
+					storeMap[desc.StoreID] = desc
+				}
 				return ""
 
 			case "store-load":
-				var storeID int
-				d.ScanArgs(t, "store-id", &storeID)
-				desc, ok := storeMap[roachpb.StoreID(storeID)]
-				require.True(t, ok)
-				var cpuLoad, wbLoad, bsLoad int64
-				d.ScanArgs(t, "load", &cpuLoad, &wbLoad, &bsLoad)
-				var cpuCapacity, wbCapacity, bsCapacity int64
-				d.ScanArgs(t, "capacity", &cpuCapacity, &wbCapacity, &bsCapacity)
-				var leaseCountLoad int64
-				d.ScanArgs(t, "secondary-load", &leaseCountLoad)
-				sLoad := &storeLoad{
-					StoreID:         desc.StoreID,
-					StoreDescriptor: desc,
-					NodeID:          desc.Node.NodeID,
-					reportedLoad:    loadVector{loadValue(cpuLoad), loadValue(wbLoad), loadValue(bsLoad)},
-					capacity: loadVector{
-						loadValue(cpuCapacity), loadValue(wbCapacity), loadValue(bsCapacity)},
-					reportedSecondaryLoad: secondaryLoadVector{loadValue(leaseCountLoad)},
+				for _, next := range strings.Split(d.Input, "\n") {
+					sLoad := parseStoreLoad(t, next)
+					desc, ok := storeMap[sLoad.StoreID]
+					require.True(t, ok)
+					sLoad.StoreDescriptor = desc
+					sLoad.NodeID = desc.Node.NodeID
+					loadProvider.sloads[sLoad.StoreID] = &sLoad
 				}
-				for i := range sLoad.capacity {
-					if sLoad.capacity[i] < 0 {
-						sLoad.capacity[i] = parentCapacity
-					}
-				}
-				loadProvider.sloads[roachpb.StoreID(storeID)] = sLoad
-
 				return ""
 
 			case "node-load":
-				var nodeID int
-				d.ScanArgs(t, "node-id", &nodeID)
-				var cpuLoad, cpuCapacity int64
-				d.ScanArgs(t, "cpu-load", &cpuLoad)
-				d.ScanArgs(t, "cpu-capacity", &cpuCapacity)
-				nLoad := &nodeLoad{
-					nodeID:      roachpb.NodeID(nodeID),
-					reportedCPU: loadValue(cpuLoad),
-					capacityCPU: loadValue(cpuCapacity),
+				for _, next := range strings.Split(d.Input, "\n") {
+					nLoad := parseNodeLoad(t, next)
+					loadProvider.nloads[nLoad.nodeID] = &nLoad
 				}
-				loadProvider.nloads[nLoad.nodeID] = nLoad
 				return ""
 
 			case "get-means":

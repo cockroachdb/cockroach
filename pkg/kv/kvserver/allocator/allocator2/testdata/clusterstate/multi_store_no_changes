@@ -1,0 +1,80 @@
+set-store
+store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
+store-id=2 node-id=1 attrs=yellow locality-tiers=region=us-west-1,zone=us-west-1a
+----
+node-id=1 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 init=full attrs=purple locality-code=1:2:3:
+  store-id=2 init=full attrs=yellow locality-code=1:2:3:
+
+set-store
+store-id=3 node-id=2 attrs=green  locality-tiers=region=us-west-1,zone=us-west-1b
+store-id=4 node-id=2 attrs=orange locality-tiers=region=us-west-1,zone=us-west-1b
+store-id=5 node-id=3 attrs=blue   locality-tiers=region=us-west-1,zone=us-west-1c
+store-id=6 node-id=3 attrs=red    locality-tiers=region=us-west-1,zone=us-west-1c
+store-id=7 node-id=4 attrs=purple locality-tiers=region=us-east-1,zone=us-east-1a
+store-id=8 node-id=4 attrs=teal   locality-tiers=region=us-east-1,zone=us-east-1a
+----
+node-id=1 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 init=full attrs=purple locality-code=1:2:3:
+  store-id=2 init=full attrs=yellow locality-code=1:2:3:
+node-id=2 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1b,node=2
+  store-id=3 init=full attrs=green locality-code=1:4:5:
+  store-id=4 init=full attrs=orange locality-code=1:4:5:
+node-id=3 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1c,node=3
+  store-id=5 init=full attrs=blue locality-code=1:6:7:
+  store-id=6 init=full attrs=red locality-code=1:6:7:
+node-id=4 failure-summary=ok locality-tiers=region=us-east-1,zone=us-east-1a,node=4
+  store-id=7 init=full attrs=purple locality-code=8:9:10:
+  store-id=8 init=full attrs=teal locality-code=8:9:10:
+
+remove-node node-id=4
+----
+non-removed store-ids: 1, 2, 3, 4, 5, 6
+removed store-ids: 7, 8
+
+update-failure-detection node-id=2 summary=suspect
+----
+node-id=1 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 init=full attrs=purple locality-code=1:2:3:
+  store-id=2 init=full attrs=yellow locality-code=1:2:3:
+node-id=2 failure-summary=suspect locality-tiers=region=us-west-1,zone=us-west-1b,node=2
+  store-id=3 init=full attrs=green locality-code=1:4:5:
+  store-id=4 init=full attrs=orange locality-code=1:4:5:
+node-id=3 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1c,node=3
+  store-id=5 init=full attrs=blue locality-code=1:6:7:
+  store-id=6 init=full attrs=red locality-code=1:6:7:
+
+msg last-seq=-1 cur-seq=-1
+node-id=1 cpu-load=60 cpu-capacity=100
+  store: store-id=1 load=(20,15,10) capacity=(-1,100,100) secondary-load=25
+    range: range-id=1 lease=true type=VOTER_FULL
+      replica: store-id=1 replica-id=1 type=VOTER_FULL
+      replica: store-id=3 replica-id=2 type=VOTER_FULL
+      replica: store-id=5 replica-id=3 type=VOTER_FULL
+  store: store-id=2 load=(40,30,20) capacity=(-1,200,200) secondary-load=50
+    range: range-id=2 lease=true type=VOTER_FULL
+      replica: store-id=2 replica-id=1 type=VOTER_FULL
+      replica: store-id=4 replica-id=2 type=VOTER_FULL
+      replica: store-id=6 replica-id=3 type=VOTER_FULL
+----
+OK
+
+ranges
+----
+range-id=1
+  store-id=1 replica-id=1 lease=true type=VOTER_FULL
+  store-id=3 replica-id=2 lease=false type=VOTER_FULL
+  store-id=5 replica-id=3 lease=false type=VOTER_FULL
+range-id=2
+  store-id=2 replica-id=1 lease=true type=VOTER_FULL
+  store-id=4 replica-id=2 lease=false type=VOTER_FULL
+  store-id=6 replica-id=3 lease=false type=VOTER_FULL
+
+get-load-info
+----
+store-id=1 reported=[20 15 10] adjusted=[20 15 10] node-reported-cpu=60 node-adjusted-cpu=60 seq=1
+store-id=2 reported=[40 30 20] adjusted=[40 30 20] node-reported-cpu=60 node-adjusted-cpu=60 seq=1
+store-id=3 reported=[0 0 0] adjusted=[0 0 0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=4 reported=[0 0 0] adjusted=[0 0 0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=5 reported=[0 0 0] adjusted=[0 0 0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=6 reported=[0 0 0] adjusted=[0 0 0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0

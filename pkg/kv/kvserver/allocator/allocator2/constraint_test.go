@@ -344,7 +344,6 @@ func testingAnalyzeFn(
 	return toRemove, toAdd, err
 }
 
-// TODO(sumeer): testing of query methods.
 func TestRangeAnalyzedConstraints(t *testing.T) {
 	interner := newStringInterner()
 	cm := newConstraintMatcher(interner)
@@ -357,9 +356,11 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "store":
-				desc := parseStoreDescriptor(t, d)
-				cm.setStore(desc)
-				stores[desc.StoreID] = desc
+				for _, next := range strings.Split(d.Input, "\n") {
+					desc := parseStoreDescriptor(t, strings.TrimSpace(next))
+					cm.setStore(desc)
+					stores[desc.StoreID] = desc
+				}
 				return ""
 
 			case "span-config":

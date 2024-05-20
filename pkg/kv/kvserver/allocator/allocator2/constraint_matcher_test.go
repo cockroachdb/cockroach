@@ -21,30 +21,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func parseStoreDescriptor(t *testing.T, d *datadriven.TestData) roachpb.StoreDescriptor {
+func parseStoreDescriptor(t *testing.T, in string) roachpb.StoreDescriptor {
 	var desc roachpb.StoreDescriptor
-	var storeID int
-	d.ScanArgs(t, "store-id", &storeID)
-	desc.StoreID = roachpb.StoreID(storeID)
-	var nodeID int
-	if d.HasArg("node-id") {
-		d.ScanArgs(t, "node-id", &nodeID)
-		desc.Node.NodeID = roachpb.NodeID(nodeID)
-	}
-	var attrs string
-	d.ScanArgs(t, "attrs", &attrs)
-	for _, v := range strings.Split(attrs, ",") {
-		v = strings.TrimSpace(v)
-		desc.Attrs.Attrs = append(desc.Attrs.Attrs, v)
-	}
-	var lts string
-	d.ScanArgs(t, "locality-tiers", &lts)
-	for _, v := range strings.Split(lts, ",") {
-		v = strings.TrimSpace(v)
-		kv := strings.Split(v, "=")
-		require.Equal(t, 2, len(kv))
-		desc.Node.Locality.Tiers = append(
-			desc.Node.Locality.Tiers, roachpb.Tier{Key: kv[0], Value: kv[1]})
+	for _, v := range strings.Split(in, " ") {
+		parts := strings.SplitN(v, "=", 2)
+		switch parts[0] {
+		case "store-id":
+			desc.StoreID = roachpb.StoreID(parseInt(t, parts[1]))
+		case "node-id":
+			desc.Node.NodeID = roachpb.NodeID(parseInt(t, parts[1]))
+		case "attrs":
+			desc.Attrs.Attrs = append(
+				desc.Attrs.Attrs,
+				strings.Split(parts[1], ",")...,
+			)
+		case "locality-tiers":
+			for _, lt := range strings.Split(parts[1], ",") {
+				kv := strings.Split(lt, "=")
+				require.Equal(t, 2, len(kv))
+				desc.Node.Locality.Tiers = append(
+					desc.Node.Locality.Tiers, roachpb.Tier{Key: kv[0], Value: kv[1]})
+			}
+		}
 	}
 	return desc
 }
@@ -89,8 +87,10 @@ func TestConstraintMatcher(t *testing.T) {
 
 			switch d.Cmd {
 			case "store":
-				desc := parseStoreDescriptor(t, d)
-				cm.setStore(desc)
+				for _, next := range strings.Split(d.Input, "\n") {
+					desc := parseStoreDescriptor(t, strings.TrimSpace(next))
+					cm.setStore(desc)
+				}
 				var b strings.Builder
 				printMatcher(&b)
 				return b.String()
