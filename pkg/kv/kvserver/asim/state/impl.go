@@ -12,9 +12,11 @@ package state
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -142,11 +144,11 @@ func (s *state) PrettyPrint() string {
 	builder := &strings.Builder{}
 	nStores := len(s.stores)
 	builder.WriteString(fmt.Sprintf("stores(%d)=[", nStores))
-	var storeIDs StoreIDSlice
+	var storeIDs []StoreID
 	for storeID := range s.stores {
 		storeIDs = append(storeIDs, storeID)
 	}
-	sort.Sort(storeIDs)
+	slices.Sort(storeIDs)
 
 	for i, storeID := range storeIDs {
 		store := s.stores[storeID]
@@ -176,11 +178,11 @@ func (s *state) String() string {
 
 	// Sort the unordered map storeIDs by its key to ensure deterministic
 	// printing.
-	var storeIDs StoreIDSlice
+	var storeIDs []StoreID
 	for storeID := range s.stores {
 		storeIDs = append(storeIDs, storeID)
 	}
-	sort.Sort(storeIDs)
+	slices.Sort(storeIDs)
 
 	for i, storeID := range storeIDs {
 		store := s.stores[storeID]
@@ -222,7 +224,9 @@ func (s *state) Stores() []Store {
 		store := s.stores[key]
 		stores = append(stores, store)
 	}
-	sort.Slice(stores, func(i, j int) bool { return stores[i].StoreID() < stores[j].StoreID() })
+	slices.SortFunc(stores, func(a, b Store) int {
+		return cmp.Compare(a.StoreID(), b.StoreID())
+	})
 	return stores
 }
 
@@ -311,7 +315,9 @@ func (s *state) Nodes() []Node {
 	for _, node := range s.nodes {
 		nodes = append(nodes, node)
 	}
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i].NodeID() < nodes[j].NodeID() })
+	slices.SortFunc(nodes, func(a, b Node) int {
+		return cmp.Compare(a.NodeID(), b.NodeID())
+	})
 	return nodes
 }
 
@@ -347,11 +353,13 @@ func (s *state) rng(rangeID RangeID) (*rng, bool) {
 
 // Ranges returns all ranges that exist in this state.
 func (s *state) Ranges() []Range {
-	ranges := []Range{}
+	ranges := make([]Range, 0, len(s.ranges.rangeMap))
 	for _, r := range s.ranges.rangeMap {
 		ranges = append(ranges, r)
 	}
-	sort.Slice(ranges, func(i, j int) bool { return ranges[i].RangeID() < ranges[j].RangeID() })
+	slices.SortFunc(ranges, func(a, b Range) int {
+		return cmp.Compare(a.RangeID(), b.RangeID())
+	})
 	return ranges
 }
 
@@ -378,18 +386,18 @@ func (r replicaList) Less(i, j int) bool {
 
 // Replicas returns all replicas that exist on a store.
 func (s *state) Replicas(storeID StoreID) []Replica {
-	replicas := []Replica{}
+	var replicas []Replica
 	store, ok := s.stores[storeID]
 	if !ok {
 		return replicas
 	}
 
 	repls := make(replicaList, 0, len(store.replicas))
-	var rangeIDs RangeIDSlice
+	var rangeIDs []RangeID
 	for rangeID := range store.replicas {
 		rangeIDs = append(rangeIDs, rangeID)
 	}
-	sort.Sort(rangeIDs)
+	slices.Sort(rangeIDs)
 	for _, rangeID := range rangeIDs {
 		rng := s.ranges.rangeMap[rangeID]
 		if replica := rng.replicas[storeID]; replica != nil {
@@ -1363,11 +1371,11 @@ func (s *store) String() string {
 
 	// Sort the unordered map rangeIDs by its key to ensure deterministic
 	// printing.
-	var rangeIDs RangeIDSlice
+	var rangeIDs []RangeID
 	for rangeID := range s.replicas {
 		rangeIDs = append(rangeIDs, rangeID)
 	}
-	sort.Sort(rangeIDs)
+	slices.Sort(rangeIDs)
 
 	for i, rangeID := range rangeIDs {
 		replicaID := s.replicas[rangeID]
@@ -1430,11 +1438,11 @@ func (r *rng) String() string {
 
 	// Sort the unordered map storeIDs by its key to ensure deterministic
 	// printing.
-	var storeIDs StoreIDSlice
+	var storeIDs []StoreID
 	for storeID := range r.replicas {
 		storeIDs = append(storeIDs, storeID)
 	}
-	sort.Sort(storeIDs)
+	slices.Sort(storeIDs)
 
 	for i, storeID := range storeIDs {
 		replica := r.replicas[storeID]

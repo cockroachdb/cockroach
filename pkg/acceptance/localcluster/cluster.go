@@ -12,6 +12,7 @@ package localcluster
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	gosql "database/sql"
 	"fmt"
@@ -23,7 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"text/tabwriter"
@@ -237,8 +238,8 @@ func (c *Cluster) joins() []string {
 			})
 		}
 	}
-	sort.Slice(joins, func(i, j int) bool {
-		return joins[i].seq < joins[j].seq
+	slices.SortFunc(joins, func(a, b addrAndSeq) int {
+		return cmp.Compare(a.seq, b.seq)
 	})
 
 	if len(joins) == 0 {

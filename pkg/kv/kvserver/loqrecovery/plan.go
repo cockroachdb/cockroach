@@ -11,8 +11,9 @@
 package loqrecovery
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -181,7 +182,7 @@ func PlanReplicas(
 	for id := range deadNodes {
 		decommissionNodeIDs = append(decommissionNodeIDs, id)
 	}
-	sort.Sort(roachpb.NodeIDSlice(decommissionNodeIDs))
+	slices.Sort(decommissionNodeIDs)
 
 	var staleLeaseholderNodes []roachpb.NodeID
 	for node := range nodesWithDiscardedLeaseholders {
@@ -189,7 +190,7 @@ func PlanReplicas(
 			staleLeaseholderNodes = append(staleLeaseholderNodes, node)
 		}
 	}
-	sort.Sort(roachpb.NodeIDSlice(staleLeaseholderNodes))
+	slices.Sort(staleLeaseholderNodes)
 
 	return loqrecoverypb.ReplicaUpdatePlan{
 		Updates:                 updates,
@@ -242,8 +243,8 @@ func planReplicasWithMeta(
 		}
 	}
 
-	sort.Slice(problems, func(i, j int) bool {
-		return problems[i].Span().Key.Compare(problems[j].Span().Key) < 0
+	slices.SortFunc(problems, func(a, b Problem) int {
+		return a.Span().Key.Compare(b.Span().Key)
 	})
 	return updates, problems, nil
 }
@@ -274,8 +275,8 @@ func planReplicasWithoutMeta(
 		updates = append(updates, u)
 	}
 
-	sort.Slice(problems, func(i, j int) bool {
-		return problems[i].Span().Key.Compare(problems[j].Span().Key) < 0
+	slices.SortFunc(problems, func(a, b Problem) int {
+		return a.Span().Key.Compare(b.Span().Key)
 	})
 	return updates, problems, nil
 }
@@ -417,19 +418,22 @@ func (p rankedReplicas) survivor() *loqrecoverypb.ReplicaInfo {
 // Note that replicas argument would be sorted in process of picking a
 // survivor
 func rankReplicasBySurvivability(replicas []loqrecoverypb.ReplicaInfo) rankedReplicas {
-	isVoter := func(desc loqrecoverypb.ReplicaInfo) int {
+	isVoter := func(desc loqrecoverypb.ReplicaInfo) bool {
 		for _, replica := range desc.Desc.InternalReplicas {
 			if replica.StoreID == desc.StoreID {
-				if replica.IsVoterNewConfig() {
-					return 1
-				}
-				return 0
+				return replica.IsVoterNewConfig()
 			}
 		}
 		// This is suspicious, our descriptor is not in replicas. Panic maybe?
+		return false
+	}
+	b2i := func(b bool) int {
+		if b {
+			return 1
+		}
 		return 0
 	}
-	sort.Slice(replicas, func(i, j int) bool {
+	slices.SortFunc(replicas, func(a, b loqrecoverypb.ReplicaInfo) int {
 		// When finding the best suitable replica evaluate 3 conditions in order:
 		//  - replica is a voter
 		//  - replica has the higher range committed index
@@ -439,24 +443,12 @@ func rankReplicasBySurvivability(replicas []loqrecoverypb.ReplicaInfo) rankedRep
 		// Note: that an outgoing voter cannot be designated, as the only
 		// replication change it could make is to turn itself into a learner, at
 		// which point the range is completely messed up.
-		voterI := isVoter(replicas[i])
-		voterJ := isVoter(replicas[j])
-		if voterI > voterJ {
-			return true
-		}
-		if voterI < voterJ {
-			return false
-		}
-		if replicas[i].RaftAppliedIndex > replicas[j].RaftAppliedIndex {
-			return true
-		}
-		if replicas[i].RaftAppliedIndex < replicas[j].RaftAppliedIndex {
-			return false
-		}
-		if replicas[i].LocalAssumesLeaseholder != replicas[j].LocalAssumesLeaseholder {
-			return replicas[i].LocalAssumesLeaseholder
-		}
-		return replicas[i].StoreID > replicas[j].StoreID
+		return -cmp.Or(
+			cmp.Compare(b2i(isVoter(a)), b2i(isVoter(b))),
+			cmp.Compare(a.RaftAppliedIndex, b.RaftAppliedIndex),
+			cmp.Compare(b2i(a.LocalAssumesLeaseholder), b2i(b.LocalAssumesLeaseholder)),
+			cmp.Compare(a.StoreID, b.StoreID),
+		)
 	})
 	return replicas
 }
@@ -465,20 +457,17 @@ func rankReplicasBySurvivability(replicas []loqrecoverypb.ReplicaInfo) rankedRep
 // keyspace is covered.
 // Note that slice would be sorted in process of the check.
 func checkKeyspaceCovering(replicas []rankedReplicas) ([]Problem, error) {
-	sort.Slice(replicas, func(i, j int) bool {
+	slices.SortFunc(replicas, func(a, b rankedReplicas) int {
 		// We only need to sort replicas in key order to detect
 		// key collisions or gaps, but if we have matching keys
 		// sort becomes unstable which makes it produce different
 		// errors on different runs on the same data. To address
 		// that, we also add RangeID as a sorting criteria as a
 		// second level key to add stability.
-		if replicas[i].startKey().Less(replicas[j].startKey()) {
-			return true
-		}
-		if replicas[i].startKey().Equal(replicas[j].startKey()) {
-			return replicas[i].rangeID() < replicas[j].rangeID()
-		}
-		return false
+		return cmp.Or(
+			a.startKey().Compare(b.startKey()),
+			cmp.Compare(a.rangeID(), b.rangeID()),
+		)
 	})
 	var problems []Problem
 	prevDesc := rankedReplicas{{Desc: roachpb.RangeDescriptor{}}}

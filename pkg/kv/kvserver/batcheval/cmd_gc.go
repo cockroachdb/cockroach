@@ -12,7 +12,7 @@ package batcheval
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -120,8 +120,8 @@ func mergeAdjacentSpans(spans []roachpb.Span) []roachpb.Span {
 	if len(spans) == 0 {
 		return nil
 	}
-	sort.Slice(spans, func(i, j int) bool {
-		return spans[i].Key.Compare(spans[j].Key) < 0
+	slices.SortFunc(spans, func(a, b roachpb.Span) int {
+		return a.Key.Compare(b.Key)
 	})
 	j := 0
 	for i := 1; i < len(spans); i++ {

@@ -12,6 +12,7 @@ import (
 	"context"
 	"math/rand"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -35,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 )
 
 // TestParquetRows tests that the parquetWriter correctly writes datums. It does
@@ -214,11 +214,11 @@ func TestParquetRows(t *testing.T) {
 			// NB: Rangefeeds have per-key ordering, so the rows in the parquet
 			// file may not match the order we insert them. To accommodate for
 			// this, sort the expected and actual datums by the primary key.
-			slices.SortStableFunc(datums, func(a []tree.Datum, b []tree.Datum) bool {
-				return a[0].Compare(&eval.Context{}, b[0]) == -1
+			slices.SortStableFunc(datums, func(a []tree.Datum, b []tree.Datum) int {
+				return a[0].Compare(&eval.Context{}, b[0])
 			})
-			slices.SortStableFunc(readDatums, func(a []tree.Datum, b []tree.Datum) bool {
-				return a[0].Compare(&eval.Context{}, b[0]) == -1
+			slices.SortStableFunc(readDatums, func(a []tree.Datum, b []tree.Datum) int {
+				return a[0].Compare(&eval.Context{}, b[0])
 			})
 			for r := 0; r < numRows; r++ {
 				t.Logf("comparing row expected: %s to actual: %s\n", datums[r], readDatums[r])

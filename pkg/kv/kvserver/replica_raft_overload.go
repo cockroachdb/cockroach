@@ -11,9 +11,10 @@
 package kvserver
 
 import (
+	"cmp"
 	"context"
 	"math/rand"
-	"sort"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -172,9 +173,7 @@ func computeExpendableOverloadedFollowers(
 			sl = append(sl, sid)
 		}
 		// Sort for determinism during tests.
-		sort.Slice(sl, func(i, j int) bool {
-			return sl[i] < sl[j]
-		})
+		slices.Sort(sl)
 		// Remove a random voter candidate, and loop around to see if we now have
 		// quorum.
 		if rnd == nil {
@@ -207,10 +206,10 @@ func (osm ioThresholdMap) SafeFormat(s redact.SafePrinter, verb rune) {
 	for id := range osm.m {
 		sl = append(sl, id)
 	}
-	sort.Slice(sl, func(i, j int) bool {
-		a, _ := osm.m[sl[i]].Score()
-		b, _ := osm.m[sl[j]].Score()
-		return a < b
+	slices.SortFunc(sl, func(a, b roachpb.StoreID) int {
+		aScore, _ := osm.m[a].Score()
+		bScore, _ := osm.m[b].Score()
+		return cmp.Compare(aScore, bScore)
 	})
 	for i, id := range sl {
 		if i > 0 {

@@ -10,6 +10,7 @@ package schemafeed
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -35,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 )
 
 func TestTableHistoryIngestionTracking(t *testing.T) {

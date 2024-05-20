@@ -13,6 +13,7 @@ package schemachanger_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 )
 
 // phaseOrdinal uniquely identifies a stage. The stageIdx cannot be used
@@ -504,14 +504,11 @@ func TestAlterTableDMLInjection(t *testing.T) {
 									}
 								}
 								// Sort expectedResults to match order returned by SELECT.
-								slices.SortFunc(expectedResults, func(a, b []string) bool {
+								slices.SortFunc(expectedResults, func(a, b []string) int {
 									require.Equal(t, len(a), len(b), errorMessage)
 									for i := 0; i < len(a); i++ {
-										switch strings.Compare(a[i], b[i]) {
-										case -1:
-											return true
-										case 1:
-											return false
+										if c := strings.Compare(a[i], b[i]); c != 0 {
+											return c
 										}
 									}
 									panic(fmt.Sprintf("slice contains duplicate elements a=%s b=%s %s", a, b, errorMessage))

@@ -11,8 +11,9 @@
 package validate
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -94,8 +95,8 @@ func validateSchemaChangerState(d catalog.Descriptor, vea catalog.ValidationErro
 	}
 
 	// Validate that the statements are sorted.
-	if !sort.SliceIsSorted(scs.RelevantStatements, func(i, j int) bool {
-		return scs.RelevantStatements[i].StatementRank < scs.RelevantStatements[j].StatementRank
+	if !slices.IsSortedFunc(scs.RelevantStatements, func(a, b scpb.DescriptorState_Statement) int {
+		return cmp.Compare(a.StatementRank, b.StatementRank)
 	}) {
 		report(errors.New("RelevantStatements are not sorted"))
 	}

@@ -11,6 +11,7 @@ package kvfeed
 import (
 	"context"
 	"math"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -39,7 +40,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 )
 
 func TestKVFeed(t *testing.T) {

@@ -12,7 +12,7 @@ package rangefeed
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -122,8 +122,8 @@ type testIterator struct {
 
 func newTestIterator(kvs []storage.MVCCKeyValue, upperBound roachpb.Key) *testIterator {
 	// Ensure that the key-values are sorted.
-	if !sort.SliceIsSorted(kvs, func(i, j int) bool {
-		return kvs[i].Key.Less(kvs[j].Key)
+	if !slices.IsSortedFunc(kvs, func(a, b storage.MVCCKeyValue) int {
+		return a.Key.Compare(b.Key)
 	}) {
 		panic("unsorted kvs")
 	}

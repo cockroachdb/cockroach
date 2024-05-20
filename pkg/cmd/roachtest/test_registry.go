@@ -11,9 +11,11 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -166,8 +168,8 @@ func (r testRegistryImpl) AllTests() []registry.TestSpec {
 	for _, t := range r.m {
 		tests = append(tests, *t)
 	}
-	sort.Slice(tests, func(i, j int) bool {
-		return tests[i].Name < tests[j].Name
+	slices.SortFunc(tests, func(i, j registry.TestSpec) int {
+		return cmp.Compare(i.Name, j.Name)
 	})
 	return tests
 }

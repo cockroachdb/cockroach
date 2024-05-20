@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 	"unsafe"
@@ -319,8 +319,8 @@ func divideAllSpansOnRangeBoundaries(
 	// but this time, we'll begin with the spans that might be substantially ahead
 	// of the rest of the spans. We simply sort input spans so that the oldest
 	// spans get a chance to complete their catch-up scan.
-	sort.Slice(spans, func(i, j int) bool {
-		return spans[i].StartAfter.Less(spans[j].StartAfter)
+	slices.SortFunc(spans, func(a, b SpanTimePair) int {
+		return a.StartAfter.Compare(b.StartAfter)
 	})
 
 	for _, stp := range spans {

@@ -13,7 +13,7 @@ package split
 import (
 	"bytes"
 	"math"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -208,8 +208,8 @@ func (f *UnweightedFinder) NoSplitKeyCauseLogMsg() redact.RedactableString {
 
 // PopularKeyFrequency implements the LoadBasedSplitter interface.
 func (f *UnweightedFinder) PopularKeyFrequency() float64 {
-	sort.Slice(f.samples[:], func(i, j int) bool {
-		return bytes.Compare(f.samples[i].key, f.samples[j].key) < 0
+	slices.SortFunc(f.samples[:], func(a, b sample) int {
+		return bytes.Compare(a.key, b.key)
 	})
 
 	currentKeyCount := 1
