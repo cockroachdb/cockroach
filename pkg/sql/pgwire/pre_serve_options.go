@@ -194,6 +194,18 @@ func parseClientProvidedSessionParameters(
 					args.tenantName = parts[0]
 					hasTenantSelectOption = true
 					continue
+				case "results_buffer_size":
+					if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(optvalue); err != nil {
+						return args, errors.WithSecondaryError(
+							pgerror.Newf(pgcode.ProtocolViolation,
+								"error parsing results_buffer_size option value '%s' as bytes", optvalue), err)
+					}
+					if args.ConnResultsBufferSize < 0 {
+						return args, pgerror.Newf(pgcode.ProtocolViolation,
+							"results_buffer_size option value '%s' cannot be negative", value)
+					}
+					args.foundBufferSize = true
+					continue
 				}
 				err = loadParameter(ctx, opt, optvalue, &args.SessionArgs)
 				if err != nil {
