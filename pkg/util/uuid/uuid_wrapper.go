@@ -99,8 +99,10 @@ func MakeV4() UUID {
 	return Must(NewV4())
 }
 
-// mathRandReader is an io.Reader that calls through to "math/rand".Read
-// which is safe for concurrent use.
+// mathRandReader is an RNG that calls through to "math/rand".Uint64
+// which is safe for concurrent use. As of go1.20, the math/rand (and
+// math/rand/v2) package uses a cryptographically secure RNG. See
+// https://go.dev/blog/randv2 and https://go.dev/blog/chacha8rand.
 type mathRandReader struct{}
 
 func (r mathRandReader) Read(p []byte) (n int, err error) {

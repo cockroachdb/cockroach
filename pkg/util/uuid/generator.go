@@ -22,7 +22,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash"
-	"io"
 	math_rand "math/rand/v2"
 	"net"
 	"sync"
@@ -92,7 +91,9 @@ type Gen struct {
 	hardwareAddrOnce  sync.Once
 	storageMutex      syncutil.Mutex
 
-	rand io.Reader
+	rand interface {
+		Uint64() uint64
+	}
 
 	epochFunc     epochFunc
 	hwAddrFunc    HWAddrFunc
@@ -113,7 +114,9 @@ func NewGen() *Gen {
 
 // NewGenWithReader returns a new instance of gen which uses r as its source of
 // randomness.
-func NewGenWithReader(r io.Reader) *Gen {
+func NewGenWithReader(r interface {
+	Uint64() uint64
+}) *Gen {
 	g := NewGen()
 	g.rand = r
 	return g
@@ -142,10 +145,7 @@ func NewGenWithHWAF(hwaf HWAddrFunc) *Gen {
 func (g *Gen) NewV1() (UUID, error) {
 	u := UUID{}
 
-	timeNow, clockSeq, err := g.getClockSequence()
-	if err != nil {
-		return Nil, err
-	}
+	timeNow, clockSeq := g.getClockSequence()
 	binary.BigEndian.PutUint32(u[0:], uint32(timeNow))
 	binary.BigEndian.PutUint16(u[4:], uint16(timeNow>>32))
 	binary.BigEndian.PutUint16(u[6:], uint16(timeNow>>48))
@@ -175,16 +175,8 @@ func (g *Gen) NewV3(ns UUID, name string) UUID {
 // NewV4 returns a randomly generated UUID.
 func (g *Gen) NewV4() (UUID, error) {
 	u := UUID{}
-	if r, ok := g.rand.(mathRandReader); ok {
-		binary.BigEndian.PutUint64(u[:Size/2], r.Uint64())
-		binary.BigEndian.PutUint64(u[Size/2:], r.Uint64())
-	} else {
-		willEscape := UUID{}
-		if _, err := io.ReadFull(g.rand, willEscape[:]); err != nil {
-			return Nil, err
-		}
-		u = willEscape
-	}
+	binary.BigEndian.PutUint64(u[:Size/2], g.rand.Uint64())
+	binary.BigEndian.PutUint64(u[Size/2:], g.rand.Uint64())
 	u.SetVersion(V4)
 	u.SetVariant(VariantRFC4122)
 
@@ -201,18 +193,12 @@ func (g *Gen) NewV5(ns UUID, name string) UUID {
 }
 
 // Returns the epoch and clock sequence.
-func (g *Gen) getClockSequence() (uint64, uint16, error) {
-	var err error
+func (g *Gen) getClockSequence() (uint64, uint16) {
 	g.clockSequenceOnce.Do(func() {
-		buf := make([]byte, 2)
-		if _, err = io.ReadFull(g.rand, buf); err != nil {
-			return
-		}
+		buf := make([]byte, 8)
+		binary.BigEndian.PutUint64(buf[:], g.rand.Uint64())
 		g.clockSequence = binary.BigEndian.Uint16(buf)
 	})
-	if err != nil {
-		return 0, 0, err
-	}
 
 	g.storageMutex.Lock()
 	defer g.storageMutex.Unlock()
@@ -225,7 +211,7 @@ func (g *Gen) getClockSequence() (uint64, uint16, error) {
 	}
 	g.lastTime = timeNow
 
-	return timeNow, g.clockSequence, nil
+	return timeNow, g.clockSequence
 }
 
 // Returns the hardware address.
@@ -238,11 +224,13 @@ func (g *Gen) getHardwareAddr() ([]byte, error) {
 			return
 		}
 
-		// Initialize hardwareAddr randomly in case
-		// of real network interfaces absence.
-		if _, err = io.ReadFull(g.rand, g.hardwareAddr[:]); err != nil {
-			return
+		// Initialize hardwareAddr randomly in case of real network interfaces
+		// absence.
+		hwAddr, err = RandomHardwareAddrFunc()
+		if err != nil {
+			panic("RandomHardwareAddrFunc does not return an error")
 		}
+		copy(g.hardwareAddr[:], hwAddr)
 		// Set multicast bit as recommended by RFC-4122
 		g.hardwareAddr[0] |= 0x01
 	})
@@ -287,7 +275,8 @@ func defaultHWAddrFunc() (net.HardwareAddr, error) {
 }
 
 // RandomHardwareAddrFunc returns a random hardware address, with the multicast
-// and local-admin bits set as per the IEEE802 spec.
+// and local-admin bits set as per the IEEE802 spec. This function never
+// returns an error, but the signature has to match the HWAddrFunc type.
 func RandomHardwareAddrFunc() (net.HardwareAddr, error) {
 	var hardwareAddr = make(net.HardwareAddr, 6)
 	binary.BigEndian.PutUint32(hardwareAddr[:4], math_rand.Uint32())
