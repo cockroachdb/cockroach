@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
+	"gopkg.in/yaml.v2"
 )
 
 func TestUpdatePrometheusTargets(t *testing.T) {
@@ -52,18 +54,27 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 		require.Equal(t, "request failed with status 400 and error failed", err.Error())
 	})
 	t.Run("UpdatePrometheusTargets succeeds", func(t *testing.T) {
+		nodeInfos := map[int]string{1: "n1", 3: "n3"}
 		c.httpPut = func(ctx context.Context, url string, h *http.Header, body io.Reader) (
 			resp *http.Response, err error) {
 			require.Equal(t, getUrl(promUrl, "c1"), url)
 			ir, err := getInstanceConfigRequest(io.NopCloser(body))
 			require.Nil(t, err)
-			// TODO (bhaskar): check for the correct yaml
 			require.NotNil(t, ir.Config)
+			configs := make([]*CCParams, 0)
+			require.Nil(t, yaml.UnmarshalStrict([]byte(ir.Config), &configs))
+			require.Len(t, configs, 2)
+			for _, c := range configs {
+				nodeID, err := strconv.Atoi(c.Labels["node"])
+				require.NoError(t, err)
+				require.Equal(t, nodeInfos[nodeID], c.Targets[0])
+				require.Equal(t, "system", c.Labels["tenant"])
+			}
 			return &http.Response{
 				StatusCode: 200,
 			}, nil
 		}
-		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, map[int]string{1: "n1", 3: "n3"}, true, l)
+		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, nodeInfos, true, l)
 		require.Nil(t, err)
 	})
 }
