@@ -12,12 +12,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 func newKafkaSinkClient(
 	kafkaCfg *sarama.Config,
+	batchCfg sinkBatchConfig,
 	bootstrapAddrs string,
 	topics *TopicNamer,
 	knobs kafkaSinkKnobs,
@@ -27,7 +29,7 @@ func newKafkaSinkClient(
 		return nil, err
 	}
 
-	return &kafkaSinkClient{client: client, knobs: knobs, topics: topics}, nil
+	return &kafkaSinkClient{client: client, knobs: knobs, topics: topics, batchCfg: batchCfg}, nil
 }
 
 func newKafkaClient(
@@ -50,27 +52,15 @@ func newKafkaClient(
 	return client, err
 }
 
-// TODO: update knbos
-// func newAsyncProducer(client kafkaClient, bootstrapAddrs string, knobs kafkaSinkKnobs) (sarama.AsyncProducer, error) {
-// 	var producer sarama.AsyncProducer
-// 	var err error
-// 	if knobs.OverrideAsyncProducerFromClient != nil {
-// 		producer, err = knobs.OverrideAsyncProducerFromClient(client.(sarama.Client))
-// 		return producer, err
-// 	} else {
-// 		producer, err = sarama.NewAsyncProducerFromClient(client.(sarama.Client))
-// 	}
-// 	if err != nil {
-// 		return nil, pgerror.Wrapf(err, pgcode.CannotConnectNow,
-// 			`connecting to kafka: %s`, bootstrapAddrs)
-// 	}
-// 	return producer, nil
-// }
-
 type kafkaSinkClient struct {
-	format changefeedbase.FormatType
-	client sarama.Client
-	topics *TopicNamer
+	format    changefeedbase.FormatType
+	topics    *TopicNamer
+	batchCfg  sinkBatchConfig
+	client    sarama.Client
+	producers struct {
+		mu        syncutil.Mutex
+		producers []sarama.AsyncProducer
+	}
 
 	knobs kafkaSinkKnobs
 
@@ -85,32 +75,13 @@ func (k *kafkaSinkClient) Close() error {
 
 // Flush implements SinkClient. Does not retry -- retries will be handled by ParallelIO.
 func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error {
-	// so the Broker is too low level to use -- it wont handle routing, brokers updating, metadata etc. it's literally a handle to a kafka broker
-	// we'd need to *correctly*: call client.Leader(topic, partition).Send(..), client.RefreshMetadata() periodically and also on (certain?) errors, with retries, timeouts, and circuit breaking. like the asyncproducer does internally.
-	// or maybe we can hack the asyncproducer's buffer size to never split the batch, and also single flight this stuff....?
-	// _, err := k.broker.Produce(payload.(*sarama.ProduceRequest))
-	// TODO: reduce batch size if that's enabled
-
-	// think outside the box. the problem is that there's a bug in sarama where batches can get reordered in the face of retries.
-	// can we then just make sure each producer only has one thing in flight at a time?
-
-	// if we 1) single flight this client (one per worker) and 2) make the producer only batch on command, this might work. can we do that? i dont think we can do 2
-
-	// broker, err := k.client.Leader("idk", 42)
-	// if err != nil {
-	// 	return err // and .. refresh metadata...?
-	// }
-
-	buf := payload.(*kafkaBuffer)
-
-	msgs := make([]*sarama.ProducerMessage, 0, len(buf.messages))
-	for _, m := range buf.messages {
-		msgs = append(msgs, &sarama.ProducerMessage{
-			Topic: buf.topic,
-			Key:   sarama.ByteEncoder(m.key),
-			Value: sarama.ByteEncoder(m.payload),
-		})
+	producer, err := k.getProducer()
+	if err != nil {
+		return err
 	}
+	defer k.returnProducer(producer)
+
+	msgs := payload.([]*sarama.ProducerMessage)
 
 	sent, confirmed := 0, 0
 	for {
@@ -121,17 +92,16 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case buf.ap.Input() <- m:
+		case producer.Input() <- m:
 			sent++
-		case <-buf.ap.Successes():
+		case <-producer.Successes():
+			// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
+			// TODO: re add metrics support
 			confirmed++
-		case err := <-buf.ap.Errors():
+		case err := <-producer.Errors():
+			// TODO: resize option
 			return err
 		}
-	}
-
-	if err := buf.ap.Close(); err != nil {
-		return err
 	}
 
 	return nil
@@ -149,21 +119,45 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 
 // MakeBatchBuffer implements SinkClient.
 func (k *kafkaSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
-	// these should be set elsewhere, just here for reference
-	// disable flushing effectively
-	k.client.Config().Producer.Flush.Bytes = 0
-	k.client.Config().Producer.Flush.Messages = 0
-	k.client.Config().Producer.Flush.MaxMessages = 0
-	k.client.Config().Producer.Flush.Frequency = 100 * 365 * 24 * time.Hour
-	ap, _ := sarama.NewAsyncProducerFromClient(k.client)
-	kb := &kafkaBuffer{kc: k, topic: topic, ap: ap}
-	return kb
+	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg}
+}
+
+// getProducer returns a producer from the pool, or creates a new one if the
+// pool is empty. k.returnProducer must be called when done to prevent leaks.
+func (k *kafkaSinkClient) getProducer() (sarama.AsyncProducer, error) {
+	var ap sarama.AsyncProducer
+	var err error
+	k.producers.mu.Lock()
+	defer k.producers.mu.Unlock()
+
+	if len(k.producers.producers) == 0 {
+		if k.knobs.OverrideAsyncProducerFromClient != nil {
+			ap, err = k.knobs.OverrideAsyncProducerFromClient(k.client)
+		} else {
+			ap, err = sarama.NewAsyncProducerFromClient(k.client)
+		}
+		if err != nil {
+			return nil, err
+		}
+		k.producers.producers = append(k.producers.producers, ap)
+	}
+
+	last := len(k.producers.producers) - 1
+	ap = k.producers.producers[last]
+	k.producers.producers[last] = nil
+	k.producers.producers = k.producers.producers[:last]
+
+	return ap, nil
+}
+
+func (k *kafkaSinkClient) returnProducer(ap sarama.AsyncProducer) {
+	k.producers.mu.Lock()
+	defer k.producers.mu.Unlock()
+	k.producers.producers = append(k.producers.producers, ap)
 }
 
 var _ SinkClient = (*kafkaSinkClient)(nil)
-var _ SinkPayload = (*kafkaBuffer)(nil)
-
-// var _ SinkPayload = (*sarama.ProduceRequest)(nil) // this doesnt actually assert anything lol
+var _ SinkPayload = (*[]sarama.ProducerMessage)(nil) // this doesnt actually assert anything fyi
 
 type keyPlusPayload struct {
 	key     []byte
@@ -171,30 +165,35 @@ type keyPlusPayload struct {
 }
 
 type kafkaBuffer struct {
-	kc        *kafkaSinkClient
 	topic     string
 	messages  []keyPlusPayload
 	byteCount int
-	msgCount  int
 
-	ap sarama.AsyncProducer
+	batchCfg sinkBatchConfig
 }
 
 // Append implements BatchBuffer.
-func (k *kafkaBuffer) Append(key []byte, value []byte, _ attributes) {
-	k.messages = append(k.messages, keyPlusPayload{key: key, payload: value})
-	k.byteCount += len(value)
-	k.msgCount++
+func (b *kafkaBuffer) Append(key []byte, value []byte, _ attributes) {
+	b.messages = append(b.messages, keyPlusPayload{key: key, payload: value})
+	b.byteCount += len(value)
 }
 
-// Close implements BatchBuffer. Convert the buffer into a SinkPayload for sending to kafka. it's itself
-func (k *kafkaBuffer) Close() (SinkPayload, error) {
-	return k, nil
+// Close implements BatchBuffer. Convert the buffer into a SinkPayload for sending to kafka.
+func (b *kafkaBuffer) Close() (SinkPayload, error) {
+	msgs := make([]*sarama.ProducerMessage, 0, len(b.messages))
+	for _, m := range b.messages {
+		msgs = append(msgs, &sarama.ProducerMessage{
+			Topic: b.topic,
+			Key:   sarama.ByteEncoder(m.key),
+			Value: sarama.ByteEncoder(m.payload),
+		})
+	}
+	return msgs, nil
 }
 
 // ShouldFlush implements BatchBuffer.
-func (k *kafkaBuffer) ShouldFlush() bool {
-	return true // TODO
+func (b *kafkaBuffer) ShouldFlush() bool {
+	return shouldFlushBatch(b.byteCount, len(b.messages), b.batchCfg)
 }
 
 var _ BatchBuffer = (*kafkaBuffer)(nil)
@@ -221,6 +220,7 @@ func makeKafkaSinkV2(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
 	if schemaTopic := u.consumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
@@ -232,6 +232,7 @@ func makeKafkaSinkV2(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	kafkaCfg.Producer.Retry.Max = 0 // retry is handled by the batching sink / parallelIO
 
 	topicNamer, err := MakeTopicNamer(
 		targets,
@@ -242,7 +243,7 @@ func makeKafkaSinkV2(ctx context.Context,
 	}
 
 	// TODO: how to handle knobs
-	sinkClient, err := newKafkaSinkClient(ctx, batchCfg, kafkaCfg, u.Host, topicNamer, kafkaSinkKnobs{})
+	sinkClient, err := newKafkaSinkClient(kafkaCfg, batchCfg, u.Host, topicNamer, kafkaSinkKnobs{})
 	if err != nil {
 		return nil, err
 	}
