@@ -738,6 +738,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 	h.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
 	h.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
 	h.evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
+	h.evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin = true
 
 	// Set up the test catalog.
 	h.testCat = testcat.New()

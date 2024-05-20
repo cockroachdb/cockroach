@@ -517,6 +517,9 @@ message LocalOnlySessionData {
   // index implication.
   bool optimizer_prove_implication_with_virtual_computed_columns = 130;
   reserved 131;
+  // OptimizerPushOffsetIntoIndexJoin, when true, indicates that the optimizer
+  // should push offset expressions into index joins.
+  bool optimizer_push_offset_into_index_join = 132;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

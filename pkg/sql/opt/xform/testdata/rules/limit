@@ -873,6 +873,27 @@ index-join kuv
       │         └── fd: (4)-->(1,2)
       └── 5
 
+# The offset is not pushed into the index join if
+# optimizer_push_offset_into_index_join is false.
+opt expect-not=PushOffsetIntoIndexJoin set=(optimizer_push_offset_into_index_join=off)
+SELECT * FROM kuv WHERE k = 1 OR k = 2 ORDER BY u OFFSET 5
+----
+offset
+ ├── columns: k:1!null u:2 v:3
+ ├── internal-ordering: +2
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: k:1!null u:2 v:3
+ │    ├── ordering: +2
+ │    └── index-join kuv
+ │         ├── columns: k:1!null u:2 v:3
+ │         └── scan kuv@kuv_k_u_idx
+ │              ├── columns: k:1!null u:2 rowid:4!null
+ │              ├── constraint: /1/2/4: [/1 - /2]
+ │              ├── key: (4)
+ │              └── fd: (4)-->(1,2)
+ └── 5
+
 # Ensure that the offset is not pushed down when the ordering requires columns
 # produced by the IndexJoin.
 opt expect-not=PushOffsetIntoIndexJoin
