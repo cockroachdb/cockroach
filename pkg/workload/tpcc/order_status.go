@@ -143,7 +143,7 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 				if err := o.selectByCustID.QueryRowTx(
 					ctx, tx, wID, d.dID, d.cID,
 				).Scan(&d.cBalance, &d.cFirst, &d.cMiddle, &d.cLast); err != nil {
-					return errors.Wrap(err, "select customer by id failed")
+					return errors.Wrapf(err, "select customer by id failed w_id %d d_id %d c_id %d", wID, d.dID, d.cID)
 				}
 			} else {
 				// Case 2: Pick the middle row, rounded up, from the selection by last name.
@@ -164,10 +164,10 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 					}
 					return rows.Err()
 				}(); err != nil {
-					return errors.Wrap(err, "select customer by last name failed")
+					return errors.Wrapf(err, "select customer by last name failed w_id %d d_id %d c_id %d", wID, d.dID, d.cID)
 				}
 				if len(customers) == 0 {
-					return errors.New("found no customers matching query orderStatus.selectByLastName")
+					return errors.Newf("found no customers matching query orderStatus.selectByLastName w_id %d d_id %d c_id %d", wID, d.dID, d.cID)
 				}
 				cIdx := (len(customers) - 1) / 2
 				c := customers[cIdx]

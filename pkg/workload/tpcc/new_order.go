@@ -278,7 +278,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 							n.config.auditor.newOrderRollbacks.Add(1)
 							return errSimulated
 						}
-						return errors.New("missing item row")
+						return errors.Newf("missing item row(s): %s", iIDs)
 					}
 
 					if err := rows.Scan(&item.iPrice, &item.iName, iData); err != nil {

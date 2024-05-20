@@ -243,7 +243,7 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 				&d.cCity, &d.cState, &d.cZip, &d.cPhone, &d.cSince, &d.cCredit,
 				&d.cCreditLim, &d.cDiscount, &d.cBalance, &d.cData,
 			); err != nil {
-				return errors.Wrap(err, "update customer failed")
+				return errors.Wrapf(err, "update customer failed %d %d %d", d.cWID, d.cDID, d.cID)
 			}
 
 			hData := fmt.Sprintf("%s    %s", wName, dName)
