@@ -183,6 +183,9 @@ func newChangeAggregatorProcessor(
 	}()
 
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, "changeagg-mem")
+	// CDC DistSQL flows are long-living, so we mark the memory monitors
+	// accordingly.
+	memMonitor.MarkLongLiving()
 	ca := &changeAggregator{
 		flowCtx:           flowCtx,
 		spec:              spec,
@@ -1116,6 +1119,9 @@ func newChangeFrontierProcessor(
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, "changefntr-mem")
+	// CDC DistSQL flows are long-living, so we mark the memory monitors
+	// accordingly.
+	memMonitor.MarkLongLiving()
 	sf, err := makeSchemaChangeFrontier(hlc.Timestamp{}, spec.TrackedSpans...)
 	if err != nil {
 		return nil, err
