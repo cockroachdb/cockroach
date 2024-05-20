@@ -48,7 +48,9 @@ func (p *provider) GetHostErrorVMs(
 	return nil, nil
 }
 
-func (p *provider) GetVMSpecs(vms vm.List) ([]map[string]interface{}, error) {
+func (p *provider) GetVMSpecs(
+	l *logger.Logger, vms vm.List,
+) (map[string]map[string]interface{}, error) {
 	return nil, nil
 }
 
