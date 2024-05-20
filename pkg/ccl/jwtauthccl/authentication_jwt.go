@@ -71,6 +71,7 @@ type jwtAuthenticatorConf struct {
 	jwks                 jwk.Set
 	claim                string
 	jwksAutoFetchEnabled bool
+	httpClient           *httputil.Client
 }
 
 // reloadConfig locks mutex and then refreshes the values in conf from the cluster settings.
@@ -91,6 +92,7 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 		jwks:                 mustParseJWKS(JWTAuthJWKS.Get(&st.SV)),
 		claim:                JWTAuthClaim.Get(&st.SV),
 		jwksAutoFetchEnabled: JWKSAutoFetchEnabled.Get(&st.SV),
+		httpClient:           httputil.NewClientWithTimeout(httputil.StandardHTTPTimeout),
 	}
 
 	if !authenticator.mu.conf.enabled && conf.enabled {
@@ -327,11 +329,7 @@ func getOpenIdConfigEndpoint(issuerUrl string) string {
 }
 
 var getHttpResponse = func(ctx context.Context, url string, authenticator *jwtAuthenticator) ([]byte, error) {
-	// TODO(souravcrl): cache the http client in a callback attached to customCA
-	// and other http client cluster settings as re parsing the custom CA every
-	// time is expensive
-	httpClient := httputil.NewClientWithTimeout(httputil.StandardHTTPTimeout)
-	resp, err := httpClient.Get(context.Background(), url)
+	resp, err := authenticator.mu.conf.httpClient.Get(context.Background(), url)
 	if err != nil {
 		return nil, err
 	}
