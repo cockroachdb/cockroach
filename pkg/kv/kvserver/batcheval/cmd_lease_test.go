@@ -144,7 +144,6 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 				StoreID:            1,
 				Desc:               &desc,
 				Clock:              clock,
-				Lease:              prevLease,
 				CurrentReadSummary: currentReadSummary,
 			}
 			cArgs := CommandArgs{

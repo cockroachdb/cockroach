@@ -12,7 +12,6 @@ package batcheval
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -57,29 +56,18 @@ func RequestLease(
 	// When returning an error from this method, must always return a
 	// newFailedLeaseTrigger() to satisfy stats.
 	args := cArgs.Args.(*kvpb.RequestLeaseRequest)
+	prevLease := args.PrevLease
+	newLease := args.Lease
 
-	// NOTE: we use the range's current lease as prevLease instead of
-	// args.PrevLease so that we can detect lease requests that will
-	// inevitably fail early and reject them with a detailed
-	// LeaseRejectedError before going through Raft.
-	prevLease, _ := cArgs.EvalCtx.GetLease()
 	rErr := &kvpb.LeaseRejectedError{
 		Existing:  prevLease,
-		Requested: args.Lease,
-	}
-
-	// However, we verify that the current lease's sequence number and proposed
-	// timestamp match the provided PrevLease. This ensures that the validation
-	// here is consistent with the validation that was performed when the lease
-	// request was constructed.
-	if prevLease.Sequence != args.PrevLease.Sequence || !prevLease.ProposedTS.Equal(args.PrevLease.ProposedTS) {
-		rErr.Message = fmt.Sprintf("expected previous lease %s, found %s", args.PrevLease, prevLease)
-		return newFailedLeaseTrigger(false /* isTransfer */), rErr
+		Requested: newLease,
 	}
 
 	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed
 	// before the StartStasis field was introduced.
-	newLease := args.Lease
+	// TODO(nvanbenschoten): remove in #124057 when clusterversion.MinSupported
+	// is v24.1 or greater.
 	if newLease.DeprecatedStartStasis == nil {
 		newLease.DeprecatedStartStasis = newLease.Expiration
 	}
@@ -91,7 +79,7 @@ func RequestLease(
 	// sending side would have to be removed as well.
 	wasLastLeaseholder := isExtension
 	if err := roachpb.CheckCanReceiveLease(
-		args.Lease.Replica, cArgs.EvalCtx.Desc().Replicas(), wasLastLeaseholder,
+		newLease.Replica, cArgs.EvalCtx.Desc().Replicas(), wasLastLeaseholder,
 	); err != nil {
 		rErr.Message = err.Error()
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
