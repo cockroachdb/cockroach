@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -802,6 +803,10 @@ func TestJWTAuthCanUseHTTPProxy(t *testing.T) {
 		})()
 
 	authenticator := jwtAuthenticator{}
+	authenticator.mu.Lock()
+	defer authenticator.mu.Unlock()
+	authenticator.mu.conf.httpClient = httputil.NewClientWithTimeout(httputil.StandardHTTPTimeout)
+
 	res, err := getHttpResponse(ctx, "http://my-server/.well-known/openid-configuration", &authenticator)
 	require.NoError(t, err)
 	require.EqualValues(t, "proxied-http://my-server/.well-known/openid-configuration", string(res))
