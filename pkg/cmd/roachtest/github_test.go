@@ -348,7 +348,22 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 13. Verify hostError failure are routed to test-eng and marked as infra-flake, when the
+		// 13. When a transient error happens as a result of *another*
+		// transient error, the corresponding issue uses the first
+		// transient error in the chain.
+		{
+			failures: []failure{
+				createFailure(rperrors.TransientFailure(
+					rperrors.NewSSHError(errors.New("oops")), "some_problem",
+				)),
+			},
+			expectedPost:          true,
+			expectedTeam:          "@cockroachdb/test-eng",
+			expectedName:          "ssh_problem",
+			expectedMessagePrefix: testName + " failed",
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+		},
+		// 14. Verify hostError failure are routed to test-eng and marked as infra-flake, when the
 		// first failure is a non-handled error.
 		{
 			nonReleaseBlocker:     true,
@@ -359,7 +374,7 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 14. Verify hostError failure are routed to test-eng and marked as infra-flake, when the only error is
+		// 15. Verify hostError failure are routed to test-eng and marked as infra-flake, when the only error is
 		// hostError failure
 		{
 			nonReleaseBlocker: true,
