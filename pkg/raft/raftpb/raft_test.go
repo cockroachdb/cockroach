@@ -1,3 +1,6 @@
+// This code has been modified from its original form by Cockroach Labs, Inc.
+// All modifications are Copyright 2024 Cockroach Labs, Inc.
+//
 // Copyright 2021 The etcd Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,7 +48,7 @@ func TestProtoMemorySizes(t *testing.T) {
 	assert(unsafe.Sizeof(s), if64Bit(144, 80), "Snapshot")
 
 	var m Message
-	assert(unsafe.Sizeof(m), if64Bit(160, 112), "Message")
+	assert(unsafe.Sizeof(m), if64Bit(168, 112), "Message")
 
 	var hs HardState
 	assert(unsafe.Sizeof(hs), 24, "HardState")
