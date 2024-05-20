@@ -489,6 +489,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = false
 	notStale()
 
+	// Stale optimizer_push_offset_into_index_join.
+	evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin = true
+	stale()
+	evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
