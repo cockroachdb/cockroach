@@ -22,7 +22,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash"
-	"io"
 	math_rand "math/rand/v2"
 	"net"
 	"sync"
@@ -92,7 +91,9 @@ type Gen struct {
 	hardwareAddrOnce  sync.Once
 	storageMutex      syncutil.Mutex
 
-	rand io.Reader
+	// randUint64 is the function used to generate random uint64 values. The
+	// function is stored directly to avoid the overhead of interface dispatch.
+	randUint64 func() uint64
 
 	epochFunc     epochFunc
 	hwAddrFunc    HWAddrFunc
@@ -111,11 +112,11 @@ func NewGen() *Gen {
 	return NewGenWithHWAF(defaultHWAddrFunc)
 }
 
-// NewGenWithReader returns a new instance of gen which uses r as its source of
-// randomness.
-func NewGenWithReader(r io.Reader) *Gen {
+// NewGenWithRand returns a new instance of gen which uses randUint64 as its
+// source of  randomness.
+func NewGenWithRand(randUint64 func() uint64) *Gen {
 	g := NewGen()
-	g.rand = r
+	g.randUint64 = randUint64
 	return g
 }
 
@@ -134,7 +135,10 @@ func NewGenWithHWAF(hwaf HWAddrFunc) *Gen {
 	return &Gen{
 		epochFunc:  time.Now,
 		hwAddrFunc: hwaf,
-		rand:       mathRandReader{},
+		// "math/rand".Uint64 is safe for concurrent use. As of go1.22, the
+		// math/rand (and math/rand/v2) package uses a cryptographically secure RNG.
+		// See https://go.dev/blog/randv2 and https://go.dev/blog/chacha8rand.
+		randUint64: math_rand.Uint64,
 	}
 }
 
@@ -142,10 +146,7 @@ func NewGenWithHWAF(hwaf HWAddrFunc) *Gen {
 func (g *Gen) NewV1() (UUID, error) {
 	u := UUID{}
 
-	timeNow, clockSeq, err := g.getClockSequence()
-	if err != nil {
-		return Nil, err
-	}
+	timeNow, clockSeq := g.getClockSequence()
 	binary.BigEndian.PutUint32(u[0:], uint32(timeNow))
 	binary.BigEndian.PutUint16(u[4:], uint16(timeNow>>32))
 	binary.BigEndian.PutUint16(u[6:], uint16(timeNow>>48))
@@ -175,16 +176,8 @@ func (g *Gen) NewV3(ns UUID, name string) UUID {
 // NewV4 returns a randomly generated UUID.
 func (g *Gen) NewV4() (UUID, error) {
 	u := UUID{}
-	if r, ok := g.rand.(mathRandReader); ok {
-		binary.BigEndian.PutUint64(u[:Size/2], r.Uint64())
-		binary.BigEndian.PutUint64(u[Size/2:], r.Uint64())
-	} else {
-		willEscape := UUID{}
-		if _, err := io.ReadFull(g.rand, willEscape[:]); err != nil {
-			return Nil, err
-		}
-		u = willEscape
-	}
+	binary.BigEndian.PutUint64(u[:Size/2], g.randUint64())
+	binary.BigEndian.PutUint64(u[Size/2:], g.randUint64())
 	u.SetVersion(V4)
 	u.SetVariant(VariantRFC4122)
 
@@ -201,18 +194,12 @@ func (g *Gen) NewV5(ns UUID, name string) UUID {
 }
 
 // Returns the epoch and clock sequence.
-func (g *Gen) getClockSequence() (uint64, uint16, error) {
-	var err error
+func (g *Gen) getClockSequence() (uint64, uint16) {
 	g.clockSequenceOnce.Do(func() {
-		buf := make([]byte, 2)
-		if _, err = io.ReadFull(g.rand, buf); err != nil {
-			return
-		}
+		buf := make([]byte, 8)
+		binary.BigEndian.PutUint64(buf[:], g.randUint64())
 		g.clockSequence = binary.BigEndian.Uint16(buf)
 	})
-	if err != nil {
-		return 0, 0, err
-	}
 
 	g.storageMutex.Lock()
 	defer g.storageMutex.Unlock()
@@ -225,7 +212,7 @@ func (g *Gen) getClockSequence() (uint64, uint16, error) {
 	}
 	g.lastTime = timeNow
 
-	return timeNow, g.clockSequence, nil
+	return timeNow, g.clockSequence
 }
 
 // Returns the hardware address.
@@ -238,11 +225,13 @@ func (g *Gen) getHardwareAddr() ([]byte, error) {
 			return
 		}
 
-		// Initialize hardwareAddr randomly in case
-		// of real network interfaces absence.
-		if _, err = io.ReadFull(g.rand, g.hardwareAddr[:]); err != nil {
-			return
+		// Initialize hardwareAddr randomly in case of real network interfaces
+		// absence.
+		hwAddr, err = RandomHardwareAddrFunc()
+		if err != nil {
+			panic("RandomHardwareAddrFunc does not return an error")
 		}
+		copy(g.hardwareAddr[:], hwAddr)
 		// Set multicast bit as recommended by RFC-4122
 		g.hardwareAddr[0] |= 0x01
 	})
@@ -287,7 +276,8 @@ func defaultHWAddrFunc() (net.HardwareAddr, error) {
 }
 
 // RandomHardwareAddrFunc returns a random hardware address, with the multicast
-// and local-admin bits set as per the IEEE802 spec.
+// and local-admin bits set as per the IEEE802 spec. This function never
+// returns an error, but the signature has to match the HWAddrFunc type.
 func RandomHardwareAddrFunc() (net.HardwareAddr, error) {
 	var hardwareAddr = make([]byte, 8)
 	binary.BigEndian.PutUint64(hardwareAddr, math_rand.Uint64())
