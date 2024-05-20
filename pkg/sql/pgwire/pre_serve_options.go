@@ -241,7 +241,6 @@ func parseClientProvidedSessionParameters(
 			telemetry.Inc(sqltelemetry.CockroachShellCounter)
 		}
 	}
-
 	return args, nil
 }
 

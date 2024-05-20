@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// The structure definitions in this file have been cross-checked against go1.20
-// and go1.21. Before allowing newer versions, please check that the structures
-// still match with those in go/src/runtime.
+// The structure definitions in this file have been cross-checked against
+// go1.20, go1.21, and go1.22. Before allowing newer versions, please check
+// that the structures still match with those in go/src/runtime.
 
-//go:build gc && go1.20
-// +build gc,go1.20
+//go:build gc && go1.20 && !go1.23
+// +build gc,go1.20,!go1.23
 
 package goschedstats
 
