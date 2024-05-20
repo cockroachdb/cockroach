@@ -213,6 +213,14 @@ var schemas = []string{
 	)
 	`,
 	`
+	CREATE TABLE json_table
+	(
+		k INT PRIMARY KEY,
+		i INT,
+		j JSON
+	)
+	`,
+	`
 		CREATE TABLE single_col_histogram (k TEXT PRIMARY KEY);
 	`,
 	`
@@ -445,6 +453,11 @@ var queries = [...]benchQuery{
 		name:  "single-col-histogram-range",
 		query: "SELECT * FROM single_col_histogram WHERE k >= $1",
 		args:  []interface{}{"'abc'"},
+	},
+	{
+		name:  "json-insert",
+		query: "INSERT INTO json_table(k, i, j) VALUES ($1, $2, $3)",
+		args:  []interface{}{1, 10, `'{"a": "foo", "b": "bar", "c": [2, 3, "baz", true, false, null]}'`},
 	},
 	{
 		name: "batch-insert-one",
