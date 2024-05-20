@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -102,6 +103,8 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 	defer k.returnProducer(producer)
 
 	msgs := payload.([]*sarama.ProducerMessage)
+
+	log.Infof(ctx, `sending %d messages to kafka`, len(msgs))
 
 	// TODO: make this better. possibly moving the resizing up into the batch worker would help a bit
 	var flushMsgs func(msgs []*sarama.ProducerMessage) error
