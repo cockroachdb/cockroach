@@ -112,7 +112,12 @@ func EncodeEscapedSQLIdent(buf *bytes.Buffer, s string) {
 	buf.WriteByte('"')
 }
 
-var mustQuoteMap = map[byte]bool{
+const (
+	minPrintableChar = 0x20 // ' '
+	maxPrintableChar = 0x7E // '~'
+)
+
+var mustQuoteMap = [maxPrintableChar + 1]bool{
 	' ': true,
 	',': true,
 	'{': true,
@@ -151,7 +156,7 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 			continue
 		}
 		ch := byte(r)
-		if r >= 0x20 && r < 0x7F {
+		if r >= minPrintableChar && r <= maxPrintableChar {
 			if mustQuoteMap[ch] {
 				// We have to quote this string - ignore bareStrings setting
 				bareStrings = false

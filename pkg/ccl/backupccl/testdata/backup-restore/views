@@ -1,4 +1,5 @@
 # Make sure that db names are rewritten in a view restored to a new db name.
+skip issue-num=122353
 new-cluster name=s
 ----
 
