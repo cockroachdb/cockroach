@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -278,8 +279,61 @@ func (p *Provider) GetHostErrorVMs(
 	return nil, nil
 }
 
-func (p *Provider) GetVMSpecs(vms vm.List) ([]map[string]interface{}, error) {
-	return nil, nil
+// GetVMSpecs returns a map from VM.Name to a map of VM attributes, provided by AWS
+func (p *Provider) GetVMSpecs(
+	l *logger.Logger, vms vm.List,
+) (map[string]map[string]interface{}, error) {
+	if vms == nil {
+		return nil, errors.New("vms cannot be nil")
+	}
+
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract the spec of all VMs and create a map from VM name to spec.
+	vmSpecs := make(map[string]map[string]interface{})
+	for region, list := range byRegion {
+		args := []string{
+			"ec2", "describe-instances",
+			"--region", region,
+			"--instance-ids",
+		}
+		args = append(args, list.ProviderIDs()...)
+		var describeInstancesResponse DescribeInstancesOutput
+		err := p.runJSONCommand(l, args, &describeInstancesResponse)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error describing instances in region %s: ", region)
+		}
+		if len(describeInstancesResponse.Reservations) == 0 {
+			l.Errorf("failed to create spec files for instances in region %s: no Reservations found", region)
+			continue
+		}
+
+		for _, r := range describeInstancesResponse.Reservations {
+			for _, instance := range r.Instances {
+				i := slices.IndexFunc(instance.Tags, func(tag Tag) bool {
+					return tag.Key == "Name"
+				})
+				if i != -1 {
+					instanceRecord, err := json.MarshalIndent(instance, "", " ")
+					if err != nil {
+						l.Errorf("Failed to marshal JSON: %v for instance \n%v", err, instance)
+						continue
+					}
+					var vmSpec map[string]interface{}
+					err = json.Unmarshal(instanceRecord, &vmSpec)
+					if err != nil {
+						l.Errorf("Failed to unmarshal JSON: %v for instance record \n%v", err, instanceRecord)
+						continue
+					}
+					vmSpecs[instance.Tags[i].Value] = vmSpec
+				}
+			}
+		}
+	}
+	return vmSpecs, nil
 }
 
 const (
