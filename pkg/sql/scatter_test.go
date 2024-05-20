@@ -17,7 +17,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -27,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
 func TestScatterRandomizeLeases(t *testing.T) {
@@ -175,4 +179,98 @@ func TestScatterResponse(t *testing.T) {
 	if e, a := 100, i; e != a {
 		t.Fatalf("expected %d rows, but got %d", e, a)
 	}
+}
+
+// TestScatterWithOneVoter tests that the scatter command works when the
+// replication factor is set to 1. We expect that the total number of replicas
+// remains unchanged and that the scattering store loses some replicas. Note we
+// don't assert on the final distribution being even across all stores, scatter
+// promises randomness, not necessarily uniformity.
+func TestScatterWithOneVoter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t) // Too slow under stressrace.
+	skip.UnderDeadlock(t)
+	skip.UnderShort(t)
+
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.NumReplicas = proto.Int32(1)
+
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DefaultZoneConfigOverride: &zcfg,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+
+	sqlutils.CreateTable(
+		t, tc.ServerConn(0), "t",
+		"k INT PRIMARY KEY, v INT",
+		500, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(10)),
+	)
+
+	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	// Create 49 splits, for 50 ranges in the test table.
+	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 49) AS g(i))")
+
+	getReplicaCounts := func() (map[int]int, int, error) {
+		rows := r.Query(t, `
+      WITH ranges_info AS (
+          SHOW RANGES FROM TABLE test.t
+      )
+      SELECT
+          store_id,
+          count(*) AS replica_count
+      FROM
+          (
+              SELECT
+                  unnest(replicas) AS store_id
+              FROM
+                  ranges_info
+          ) AS store_replicas
+      GROUP BY 
+          store_id;`)
+		replicaCounts := make(map[int]int)
+		totalReplicas := 0
+		for rows.Next() {
+			var storeID, replicaCount int
+			if err := rows.Scan(&storeID, &replicaCount); err != nil {
+				return nil, 0, err
+			}
+			replicaCounts[storeID] = replicaCount
+			totalReplicas += replicaCount
+		}
+		if err := rows.Err(); err != nil {
+			return nil, 0, err
+		}
+		return replicaCounts, totalReplicas, nil
+	}
+
+	oldReplicaCounts, oldTotalReplicas, err := getReplicaCounts()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Expect that the number of replicas on store 1 to have changed. We can't
+	// assert that the distribution will be even across all three stores, but s1
+	// (the initial leaseholder and replica) should have a different number of
+	// replicas than before. Rebalancing is otherwise disabled in this test, so
+	// the only replica movements are from the scatter.
+	r.Exec(t, "ALTER TABLE test.t SCATTER")
+	newReplicaCounts, newTotalReplicas, err := getReplicaCounts()
+	require.NoError(t, err)
+
+	require.Equal(t, oldTotalReplicas, newTotalReplicas,
+		"expected total replica count to remain the same post-scatter, "+
+			"old replica counts(%d): %v, new replica counts(%d): %v",
+		oldTotalReplicas, oldReplicaCounts, newTotalReplicas, newReplicaCounts)
+	require.NotEqual(t, oldReplicaCounts[1], newReplicaCounts[1])
 }
