@@ -1586,11 +1586,11 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			// _, err := ct.DB().ExecContext(ctx, `set cluster setting changefeed.new_kafka_sink.enabled = true;`)
-			// if err != nil {
-			// 	t.Fatal("failed to create table")
-			// }
-			_, err := ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
+			_, err := ct.DB().ExecContext(ctx, `set cluster setting changefeed.new_kafka_sink.enabled = true;`)
+			if err != nil {
+				t.Fatal("failed to set cluster setting")
+			}
+			_, err = ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
 			if err != nil {
 				t.Fatal("failed to create table")
 			}
