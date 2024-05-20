@@ -10,7 +10,7 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import { Modal as AntModal } from "antd";
+import { Modal as AntModal, Space } from "antd";
 
 import { Button } from "../button";
 import { Text, TextTypes } from "../text";
@@ -47,25 +47,24 @@ export const Modal: React.FC<ModalProps> = ({
       title={title && <Text textType={TextTypes.Heading3}>{title}</Text>}
       className={cx("crl-modal", className)}
       open={visible}
-      closeIcon={
-        <div className={cx("crl-modal__close-icon")} onClick={onCancel}>
-          &times;
-        </div>
+      closable
+      onCancel={onCancel}
+      footer={
+        <Space>
+          <Button onClick={onCancel} type="secondary" key="cancelButton">
+            {cancelText}
+          </Button>
+          <Button
+            onClick={onOk}
+            type="primary"
+            key="okButton"
+            icon={okLoading ? <SpinIcon width={15} height={15} /> : undefined}
+            disabled={okLoading}
+          >
+            {okText}
+          </Button>
+        </Space>
       }
-      footer={[
-        <Button onClick={onCancel} type="secondary" key="cancelButton">
-          {cancelText}
-        </Button>,
-        <Button
-          onClick={onOk}
-          type="primary"
-          key="okButton"
-          icon={okLoading ? <SpinIcon width={15} height={15} /> : undefined}
-          disabled={okLoading}
-        >
-          {okText}
-        </Button>,
-      ]}
     >
       {children}
     </AntModal>
