@@ -66,6 +66,9 @@ import (
 // seen with a 1-5% probability
 var kafkaCreateTopicRetryDuration = 1 * time.Minute
 
+// hydraRetryDuration is the length of time we retry hydra oauth setup.
+var hydraRetryDuration = 1 * time.Minute
+
 type sinkType string
 
 const (
@@ -2075,12 +2078,20 @@ func (k kafkaManager) configureHydraOauth(ctx context.Context) (string, string) 
 		err := k.c.RunE(ctx, k.nodes, `/home/ubuntu/hydra-serve.sh`)
 		return errors.Wrap(err, "hydra failed")
 	})
-	result, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, "/home/ubuntu/hydra create oauth2-client",
-		"-e", "http://localhost:4445",
-		"--grant-type", "client_credentials",
-		"--token-endpoint-auth-method", "client_secret_basic",
-		"--name", `"Test Client"`,
-	)
+
+	var result install.RunResultDetails
+	// The admin server may not be up immediately, so retry the create command
+	// until it succeeds or times out.
+
+	err = retry.ForDuration(hydraRetryDuration, func() error {
+		result, err = k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.c.Node(k.c.Spec().NodeCount), "/home/ubuntu/hydra create oauth2-client",
+			"-e", "http://localhost:4445",
+			"--grant-type", "client_credentials",
+			"--token-endpoint-auth-method", "client_secret_basic",
+			"--name", `"Test Client"`,
+		)
+		return err
+	})
 	if err != nil {
 		k.t.Fatal(err)
 	}
