@@ -173,7 +173,32 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 	forEachTopic func(func(topic string) error) error,
 	retryOpts retry.Options,
 ) error {
-	panic("unimplemented")
+	const metadataRefreshMinDuration = time.Minute
+	if timeutil.Since(k.lastMetadataRefresh) > metadataRefreshMinDuration {
+		if err := k.client.RefreshMetadata(k.topics.DisplayNamesSlice()...); err != nil {
+			return err
+		}
+		k.lastMetadataRefresh = timeutil.Now()
+	}
+
+	return forEachTopic(func(topic string) error {
+		partitions, err := k.client.Partitions(topic)
+		if err != nil {
+			return err
+		}
+		for _, partition := range partitions {
+			msgs := []*sarama.ProducerMessage{{
+				Topic:     topic,
+				Partition: partition,
+				Key:       nil,
+				Value:     sarama.ByteEncoder(body),
+			}}
+			if err := k.Flush(ctx, msgs); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // MakeBatchBuffer implements SinkClient.
