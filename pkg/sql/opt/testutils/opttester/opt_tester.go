@@ -320,6 +320,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
 	ot.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
 	ot.evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
+	ot.evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin = true
 
 	return ot
 }
