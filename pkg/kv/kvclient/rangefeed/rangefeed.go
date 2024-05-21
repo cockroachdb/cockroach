@@ -321,6 +321,9 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier) {
 	if f.withDiff {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithDiff())
 	}
+	if f.withFiltering {
+		rangefeedOpts = append(rangefeedOpts, kvcoord.WithFiltering())
+	}
 	if f.onMetadata != nil {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithMetadata())
 	}
