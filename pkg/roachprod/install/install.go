@@ -103,6 +103,8 @@ sudo apt-get install -y fluent-bit;
 	`,
 }
 
+var SideEyeApiKeyArg = "API_KEY"
+
 // installLocalCmds is a map from software name to a map of strings that
 // are replaced in the installCmd for that software with the stdout of executing
 // a command locally.

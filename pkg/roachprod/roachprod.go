@@ -2338,6 +2338,65 @@ func StopFluentBit(ctx context.Context, l *logger.Logger, clusterName string) er
 	return fluentbit.Stop(ctx, l, c)
 }
 
+// StartSideEyeAgents starts the Side-Eye agent on all the nodes in the given
+// cluster.
+//
+// envName is the name of the Side-Eye environment that the agents will register
+// with.
+//
+// apiToken is the token that the agents will use to identify their organization
+// (i.e. usually cockroachlabs.com) to the Side-Eye service.
+func StartSideEyeAgents(
+	ctx context.Context, l *logger.Logger, clusterName string, envName string, apiToken string,
+) error {
+	c, err := getClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	// Note that this command is similar to the one used by `roachprod install
+	// side-eye`. We could use that through install.InstallTool(), but that code
+	// is looks up the API token in `gcloud secrets`; we already know the token,
+	// so let's just use it directly.
+	cmd := fmt.Sprintf(
+		`curl https://sh.side-eye.io/ | SIDE_EYE_API_TOKEN="%s" SIDE_EYE_ENVIRONMENT="%s" sh`,
+		apiToken, envName)
+	allNodes := c.TargetNodes()
+	err = c.Run(
+		ctx, l, l.Stdout, l.Stderr, install.WithNodes(allNodes), "installing Side-Eye agent", cmd)
+	if err != nil {
+		return err
+	}
+
+	l.PrintfCtx(ctx, "installed the Side-Eye agent on all nodes. Access this cluster at https://app.side-eye.io")
+	return nil
+}
+
+// UpdateSideEyeEnvironmentName updates the environment name used by the
+// Side-Eye agents running on the given cluster.
+func UpdateSideEyeEnvironmentName(
+	ctx context.Context, l *logger.Logger, clusterName string, newEnvName string,
+) error {
+	c, err := getClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	cmd := fmt.Sprintf(
+		`sudo snap set side-eye-agent environment='%s' && sudo snap restart side-eye-agent`,
+		newEnvName)
+	allNodes := c.TargetNodes()
+	err = c.Run(
+		ctx, l, l.Stdout, l.Stderr, install.WithNodes(allNodes),
+		"updating Side-Eye agents with new environment name", cmd)
+	if err != nil {
+		return err
+	}
+
+	l.PrintfCtx(ctx, "updated Side-Eye environment name to %q", newEnvName)
+	return nil
+}
+
 // DestroyDNS destroys the DNS records for the given cluster.
 func DestroyDNS(ctx context.Context, l *logger.Logger, clusterName string) error {
 	c, err := getClusterFromCache(l, clusterName)

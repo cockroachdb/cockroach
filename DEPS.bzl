@@ -2224,6 +2224,14 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_dataexmachina_dev_side_eye_go",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/DataExMachina-dev/side-eye-go",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:0NRhNOBaRnkXED8mftbOSCNGAf8MZhv4zu840hIUpIc=",
+        version = "v0.0.0-20240528211710-5eb9c7a69e1d",
+    )
+    go_repository(
         name = "com_github_dave_dst",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/dave/dst",
