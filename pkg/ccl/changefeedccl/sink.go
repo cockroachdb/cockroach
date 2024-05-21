@@ -188,7 +188,7 @@ var KafkaV2Enabled = settings.RegisterBoolSetting(
 	"changefeed.new_kafka_sink_enabled",
 	"if enabled, this setting enables a new implementation of the kafka sink with improved reliability",
 	// TODO: delete the original kafka sink code
-	false, // metamorphic.ConstantWithTestBool("changefeed.new_kafka_sink.enabled", false), // trying to see if this is killing roachtest
+	metamorphic.ConstantWithTestBool("changefeed.new_kafka_sink.enabled", false),
 	settings.WithName("changefeed.new_kafka_sink.enabled"),
 )
 
