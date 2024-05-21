@@ -152,7 +152,6 @@ func sendAddRemoteSSTWorker(
 	return func(ctx context.Context) error {
 		var toAdd []execinfrapb.RestoreFileSpec
 		var batchSize int64
-		var err error
 		const targetBatchSize = 440 << 20
 
 		flush := func(splitAt roachpb.Key, elidedPrefixType execinfrapb.ElidePrefix) error {
@@ -177,10 +176,35 @@ func sendAddRemoteSSTWorker(
 		}
 
 		for entry := range restoreSpanEntriesCh {
-			firstSplitDone := false
 			if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
 				return err
 			}
+
+			// Split off the start of the chunk.
+			start, ok, err := kr.RewriteKey(entry.Span.Key.Clone(), 0)
+			if !ok || err != nil {
+				return errors.Newf("start key %s could not be rewritten", entry.Span.Key)
+			}
+			if err := sendSplitAt(ctx, execCtx, start); err != nil {
+				log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+			}
+
+			// Split the end to bookend the span in which we'll be operating, so we do
+			// not race when we scatter the chunk with another worker splitting their
+			// span that is to our right.
+			end, ok, err := kr.RewriteKey(entry.Span.EndKey.Clone(), 0)
+			if !ok || err != nil {
+				return errors.Newf("end key %s could not be rewritten", entry.Span.EndKey)
+			}
+			if err := sendSplitAt(ctx, execCtx, end); err != nil {
+				log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+			}
+
+			// Now we're ready to scatter our chunk (and only our chunk).
+			if err := sendAdminScatter(ctx, execCtx, start); err != nil {
+				log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
+			}
+
 			for _, file := range entry.Files {
 				if err := assertCommonPrefix(file.BackupFileEntrySpan, entry.ElidedPrefix); err != nil {
 					return err
@@ -206,15 +230,6 @@ func sendAddRemoteSSTWorker(
 				log.Infof(ctx, "experimental restore: sending span %s of file %s (file span: %s) as part of restore span (old key space) %s",
 					restoringSubspan, file.Path, file.BackupFileEntrySpan, entry.Span)
 				file.BackupFileEntrySpan = restoringSubspan
-				if !firstSplitDone {
-					if err := sendSplitAt(ctx, execCtx, restoringSubspan.Key); err != nil {
-						log.Warningf(ctx, "failed to split during experimental restore: %v", err)
-					}
-					if err := sendAdminScatter(ctx, execCtx, restoringSubspan.Key); err != nil {
-						log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
-					}
-					firstSplitDone = true
-				}
 
 				// If we've queued up a batch size of files, split before the next one
 				// then flush the ones we queued. We do this accumulate-into-batch, then
@@ -232,15 +247,9 @@ func sendAddRemoteSSTWorker(
 				toAdd = append(toAdd, file)
 				batchSize += file.BackupFileEntryCounts.DataSize
 			}
-			// TODO(msbutler): think hard about if this restore span entry is a safe
-			// key to split on. Note that it only is safe with
-			// https://github.com/cockroachdb/cockroach/pull/114464
+
 			log.Infof(ctx, "flushing %s batch of %d SSTs at end of restore span entry %s", sz(batchSize), len(toAdd), entry.Span)
-			rewrittenFlushKey, ok, err := kr.RewriteKey(entry.Span.EndKey.Clone(), 0)
-			if !ok || err != nil {
-				return errors.Newf("flush key %s could not be rewritten", entry.Span.EndKey)
-			}
-			if err := flush(rewrittenFlushKey, entry.ElidedPrefix); err != nil {
+			if err := flush(nil, entry.ElidedPrefix); err != nil {
 				return err
 			}
 			var rows, dataSize int64
