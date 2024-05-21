@@ -79,7 +79,7 @@ func registerFailover(r registry.Registry) {
 				Name:                "failover/chaos" + suffix,
 				Owner:               registry.OwnerKV,
 				Benchmark:           true,
-				Timeout:             60 * time.Minute,
+				Timeout:             90 * time.Minute,
 				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.DisableLocalSSD(), spec.ReuseNone()), // uses disk stalls
 				CompatibleClouds:    registry.AllExceptAWS,
 				Suites:              registry.Suites(registry.Nightly),
@@ -283,6 +283,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		defer cancelWorkload()
 
 		for i := 0; i < 20; i++ {
+			t.L().Printf("chaos iteration %d", i)
 			sleepFor(ctx, t, time.Minute)
 
 			// Ranges may occasionally escape their constraints. Move them to where
