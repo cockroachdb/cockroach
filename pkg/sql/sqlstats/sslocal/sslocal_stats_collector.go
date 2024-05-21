@@ -29,9 +29,12 @@ import (
 // statements for the entire lifetime of a session.
 type StatsCollector struct {
 
-	// ApplicationStats contains the current transaction's statement statistics.
-	// They will be flushed to flushTarget when the transaction is done.
-	ApplicationStats sqlstats.ApplicationStats
+	// currentTransactionStatementStats contains the current transaction's statement
+	// statistics. They will be flushed to flushTarget when the transaction is done
+	// so that we can include the transaction fingerprint ID as part of the
+	// statement's key. This container is local per stats collector and
+	// is cleared for reuse after every transaction.
+	currentTransactionStatementStats sqlstats.ApplicationStats
 
 	// Allows StatsCollector to send statement and transaction stats to the insights system.
 	insightsWriter insights.Writer
@@ -75,13 +78,13 @@ func NewStatsCollector(
 	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
 	return &StatsCollector{
-		flushTarget:        appStats,
-		ApplicationStats:   appStats.NewApplicationStatsWithInheritedOptions(),
-		insightsWriter:     insights,
-		phaseTimes:         phaseTime.Clone(),
-		uniqueServerCounts: uniqueServerCounts,
-		st:                 st,
-		knobs:              knobs,
+		flushTarget:                      appStats,
+		currentTransactionStatementStats: appStats.NewApplicationStatsWithInheritedOptions(),
+		insightsWriter:                   insights,
+		phaseTimes:                       phaseTime.Clone(),
+		uniqueServerCounts:               uniqueServerCounts,
+		st:                               st,
+		knobs:                            knobs,
 	}
 }
 
@@ -97,7 +100,7 @@ func (s *StatsCollector) PreviousPhaseTimes() *sessionphase.Times {
 	return s.previousPhaseTimes
 }
 
-// Reset resets the StatsCollector with a new ApplicationStats and a new copy
+// Reset resets the StatsCollector with a new currentTransactionStatementStats and a new copy
 // of the sessionphase.Times.
 func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *sessionphase.Times) {
 	previousPhaseTime := s.phaseTimes
@@ -131,7 +134,7 @@ func (s *StatsCollector) EndTransaction(
 
 	var discardedStats uint64
 	discardedStats += s.flushTarget.MergeApplicationStatementStats(
-		ctx, s.ApplicationStats, transactionFingerprintID,
+		ctx, s.currentTransactionStatementStats, transactionFingerprintID,
 	)
 
 	// Avoid taking locks if no stats are discarded.
@@ -139,7 +142,7 @@ func (s *StatsCollector) EndTransaction(
 		s.flushTarget.MaybeLogDiscardMessage(ctx)
 	}
 
-	s.ApplicationStats.Clear(ctx)
+	s.currentTransactionStatementStats.Clear(ctx)
 }
 
 // ShouldSample returns two booleans, the first one indicates whether we
@@ -157,7 +160,7 @@ func (s *StatsCollector) ShouldSample(
 // upgraded to an explicit transaction, thus all previously recorded statements
 // should be updated accordingly.
 func (s *StatsCollector) UpgradeImplicitTxn(ctx context.Context) error {
-	err := s.ApplicationStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
+	err := s.currentTransactionStatementStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
 		func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			statistics.Key.ImplicitTxn = false
 			return nil
@@ -318,7 +321,7 @@ func (s *StatsCollector) RecordTransaction(
 func (s *StatsCollector) RecordStatementExecStats(
 	key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats,
 ) error {
-	return s.ApplicationStats.RecordStatementExecStats(key, stats)
+	return s.currentTransactionStatementStats.RecordStatementExecStats(key, stats)
 }
 
 func (s *StatsCollector) IterateStatementStats(
