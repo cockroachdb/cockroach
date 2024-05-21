@@ -34,7 +34,11 @@ func TestDetailsRedacted(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
+
 	defer server.Stopper().Stop(ctx)
+
+	// Override cluster setting for this test
+	DebugZipRedactAddressesEnabled.Override(ctx, &server.ClusterSettings().SV, true)
 
 	s := server.StatusServer().(*systemStatusServer)
 	res, err := s.Details(ctx, &serverpb.DetailsRequest{
@@ -78,6 +82,9 @@ func TestNodesListRedacted(t *testing.T) {
 	ctx := context.Background()
 	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(ctx)
+
+	// Override cluster setting for this test
+	DebugZipRedactAddressesEnabled.Override(ctx, &server.ClusterSettings().SV, true)
 
 	s := server.StatusServer().(*systemStatusServer)
 	res, err := s.NodesList(ctx, &serverpb.NodesListRequest{
@@ -123,6 +130,9 @@ func TestNodesRedacted(t *testing.T) {
 	ctx := context.Background()
 	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(ctx)
+
+	// Override cluster setting for this test
+	DebugZipRedactAddressesEnabled.Override(ctx, &server.ClusterSettings().SV, true)
 
 	s := server.StatusServer().(*systemStatusServer)
 	res, err := s.Nodes(ctx, &serverpb.NodesRequest{Redact: true})
@@ -276,6 +286,9 @@ func TestNodeStatusRedacted(t *testing.T) {
 	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(ctx)
 
+	// Override cluster setting for this test
+	DebugZipRedactAddressesEnabled.Override(ctx, &server.ClusterSettings().SV, true)
+
 	s := server.StatusServer().(*systemStatusServer)
 	res, err := s.Node(ctx, &serverpb.NodeRequest{Redact: true})
 	require.NoError(t, err)
@@ -313,6 +326,9 @@ func TestRangesRedacted(t *testing.T) {
 	ctx := context.Background()
 	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(ctx)
+
+	// Override cluster setting for this test
+	DebugZipRedactAddressesEnabled.Override(ctx, &server.ClusterSettings().SV, true)
 
 	s := server.StatusServer().(*systemStatusServer)
 	res, err := s.Ranges(ctx, &serverpb.RangesRequest{Redact: true})
@@ -362,6 +378,9 @@ func TestGossipRedacted(t *testing.T) {
 	ctx := context.Background()
 	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(ctx)
+
+	// Override cluster setting for this test
+	DebugZipRedactAddressesEnabled.Override(ctx, &server.ClusterSettings().SV, true)
 
 	s := server.StatusServer().(*systemStatusServer)
 	res, err := s.Gossip(ctx, &serverpb.GossipRequest{

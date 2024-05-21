@@ -146,6 +146,9 @@ type instrumentationHelper struct {
 
 	inFlightTraceCollector
 
+	// topLevelStats are the statistics collected for every query execution.
+	topLevelStats topLevelQueryStats
+
 	queryLevelStatsWithErr *execstats.QueryLevelStatsWithErr
 
 	// If savePlanForStats is true and the explainPlan was collected, the
@@ -424,6 +427,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.evalCtx = p.EvalContext()
 	ih.isTenant = execinfra.IncludeRUEstimateInExplainAnalyze.Get(cfg.SV()) && cfg.DistSQLSrv != nil &&
 		cfg.DistSQLSrv.TenantCostController != nil
+	ih.topLevelStats = topLevelQueryStats{}
 
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:

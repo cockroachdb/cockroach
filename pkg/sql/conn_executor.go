@@ -2876,16 +2876,6 @@ func (ex *connExecutor) execCopyOut(
 		}
 
 		// Log the query for sampling.
-		// These fields are not available in COPY, so use the empty value.
-		flags := tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
-		f := tree.NewFmtCtx(flags)
-		f.FormatNode(cmd.Stmt)
-		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
-			f.CloseAndGetString(),
-			ex.implicitTxn(),
-			ex.planner.CurrentDatabase(),
-		)
-		var stats topLevelQueryStats
 		ex.planner.maybeLogStatement(
 			ctx,
 			ex.executorType,
@@ -2898,8 +2888,7 @@ func (ex *connExecutor) execCopyOut(
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
-			stmtFingerprintID,
-			&stats,
+			ex.implicitTxn(),
 			ex.statsCollector,
 			ex.extraTxnState.shouldLogToTelemetry)
 	}()
@@ -3141,16 +3130,6 @@ func (ex *connExecutor) execCopyIn(
 			numInsertedRows = cm.numInsertedRows()
 			res.SetRowsAffected(ctx, numInsertedRows)
 		}
-		// These fields are not available in COPY, so use the empty value.
-		flags := tree.FmtHideConstants | tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
-		f := tree.NewFmtCtx(flags)
-		f.FormatNode(cmd.Stmt)
-		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
-			f.CloseAndGetString(),
-			ex.implicitTxn(),
-			ex.planner.CurrentDatabase(),
-		)
-		var stats topLevelQueryStats
 		ex.planner.maybeLogStatement(ctx, ex.executorType,
 			int(ex.state.mu.autoRetryCounter), int(ex.extraTxnState.txnCounter.Load()),
 			numInsertedRows, ex.state.mu.stmtCount,
@@ -3159,8 +3138,7 @@ func (ex *connExecutor) execCopyIn(
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
-			stmtFingerprintID,
-			&stats,
+			ex.implicitTxn(),
 			ex.statsCollector,
 			ex.extraTxnState.shouldLogToTelemetry)
 	}()

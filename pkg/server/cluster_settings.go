@@ -50,3 +50,14 @@ var PersistedInsightsUIEnabled = settings.RegisterBoolSetting(
 	"sql.stats.persisted_insights.ui.enabled",
 	"enable the insights endpoint to get data from the persisted insights tables",
 	false)
+
+// DebugZipRedactAddressesEnabled guards whether hostname / ip address and other sensitive fields
+// should be redacted in the debug zip
+var DebugZipRedactAddressesEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"debug.zip.redact_addresses.enabled",
+	"enables the redaction of hostnames and ip addresses in debug zip",
+	false,
+	settings.WithPublic,
+	settings.WithReportable(true),
+)
