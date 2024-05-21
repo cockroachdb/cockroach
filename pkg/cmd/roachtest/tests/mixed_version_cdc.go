@@ -230,7 +230,7 @@ func (cmvt *cdcMixedVersionTester) setupValidator(
 	// The fingerprint validator will save this db connection and use it
 	// when we submit rows for validation. This can be changed later using
 	// `(*FingerprintValidator) DBFunc`.
-	_, db := h.RandomDB(r, cmvt.crdbNodes)
+	_, db := h.RandomDB(r)
 	fprintV, err := cdctest.NewFingerprintValidator(db, tableName, `fprint`,
 		cmvt.kafka.consumer.partitions, 0)
 	if err != nil {
@@ -303,7 +303,7 @@ func (cmvt *cdcMixedVersionTester) validate(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
 	// Choose a random node to run the validation on.
-	n, db := h.RandomDB(r, cmvt.crdbNodes)
+	n, db := h.RandomDB(r)
 	l.Printf("running validation on node %d", n)
 	cmvt.fprintV.DBFunc(func(f func(*gosql.DB) error) error {
 		return f(db)
@@ -362,7 +362,7 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		return ctx.Err()
 	case <-cmvt.workloadInit:
 	}
-	node, db := h.RandomDB(r, cmvt.crdbNodes)
+	node, db := h.RandomDB(r)
 	l.Printf("starting changefeed on node %d", node)
 
 	options := map[string]string{
@@ -417,7 +417,8 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 		Flag("seed", r.Int63()).
 		Arg("{pgurl%s}", cmvt.crdbNodes)
 
-	if err := cmvt.c.RunE(ctx, option.WithNodes(option.NodeListOption{h.RandomNode(r, cmvt.workloadNodes)}), bankInit.String()); err != nil {
+	initNode := cmvt.workloadNodes[r.Intn(len(cmvt.workloadNodes))]
+	if err := cmvt.c.RunE(ctx, option.WithNodes(option.NodeListOption{initNode}), bankInit.String()); err != nil {
 		return err
 	}
 	close(cmvt.workloadInit)
@@ -429,6 +430,7 @@ func (cmvt *cdcMixedVersionTester) muxRangeFeedSupported(
 ) (bool, option.NodeListOption, error) {
 	// changefeed.mux_rangefeed.enabled was added in 22.2 and deleted in 24.1.
 	return canMixedVersionUseDeletedClusterSetting(h,
+		false, /* isSystem */
 		clusterupgrade.MustParseVersion("v22.2.0"),
 		clusterupgrade.MustParseVersion("v24.1.0-alpha.00000000"),
 	)
@@ -455,11 +457,16 @@ func (cmvt *cdcMixedVersionTester) distributionStrategySupported(
 // also return the subset of nodes that understand the setting.
 func canMixedVersionUseDeletedClusterSetting(
 	h *mixedversion.Helper,
+	isSystem bool,
 	addedVersion *clusterupgrade.Version,
 	deletedVersion *clusterupgrade.Version,
 ) (bool, option.NodeListOption, error) {
-	fromVersion := h.Context.FromVersion
-	toVersion := h.Context.ToVersion
+	fromVersion := h.System.FromVersion
+	toVersion := h.System.ToVersion
+	if !isSystem {
+		fromVersion = h.DefaultService().FromVersion
+		toVersion = h.DefaultService().ToVersion
+	}
 
 	// Cluster setting was deleted at or before the from version so no nodes
 	// know about the setting.
@@ -472,7 +479,7 @@ func canMixedVersionUseDeletedClusterSetting(
 	// all the nodes on that version will know about the setting.
 	if toVersion.AtLeast(deletedVersion) {
 		if fromVersion.AtLeast(addedVersion) {
-			fromVersionNodes := h.Context.NodesInPreviousVersion()
+			fromVersionNodes := h.Context().NodesInPreviousVersion()
 			if len(fromVersionNodes) > 0 {
 				return true, fromVersionNodes, nil
 			}
@@ -484,11 +491,11 @@ func canMixedVersionUseDeletedClusterSetting(
 	// at least the added version will know about the setting.
 
 	if fromVersion.AtLeast(addedVersion) {
-		return true, h.Context.CockroachNodes, nil
+		return true, h.Context().Descriptor.Nodes, nil
 	}
 
 	if toVersion.AtLeast(addedVersion) {
-		toVersionNodes := h.Context.NodesInNextVersion()
+		toVersionNodes := h.Context().NodesInNextVersion()
 		if len(toVersionNodes) > 0 {
 			return true, toVersionNodes, nil
 		}
