@@ -3553,8 +3553,8 @@ func (d *DGeography) Size() uintptr {
 }
 
 // ToJSON converts the DGeography to JSON.
-func (d *DGeography) ToJSON() (json.JSON, error) {
-	return spatialObjectToJSON(d.Geography.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
+func (d *DGeography) ToJSON(maxDecimalDigits int) (json.JSON, error) {
+	return spatialObjectToJSON(d.Geography.SpatialObject(), maxDecimalDigits)
 }
 
 // DGeometry is the Geometry Datum.
@@ -3680,8 +3680,8 @@ func (d *DGeometry) Size() uintptr {
 }
 
 // ToJSON converts the DGeometry to JSON.
-func (d *DGeometry) ToJSON() (json.JSON, error) {
-	return spatialObjectToJSON(d.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
+func (d *DGeometry) ToJSON(maxDecimalDigits int) (json.JSON, error) {
+	return spatialObjectToJSON(d.Geometry.SpatialObject(), maxDecimalDigits)
 }
 
 type DPGLSN struct {
@@ -4100,9 +4100,9 @@ func AsJSON(
 			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
 		), nil
 	case *DGeometry:
-		return t.ToJSON()
+		return t.ToJSON(geo.DefaultGeoJSONDecimalDigits)
 	case *DGeography:
-		return t.ToJSON()
+		return t.ToJSON(geo.DefaultGeoJSONDecimalDigits)
 	case *DVoid:
 		return json.FromString(AsStringWithFlags(t, fmtRawStrings)), nil
 	default:
@@ -4114,8 +4114,8 @@ func AsJSON(
 	}
 }
 
-func spatialObjectToJSON(so geopb.SpatialObject, numDecimalDigits int) (json.JSON, error) {
-	j, err := geo.SpatialObjectToGeoJSON(so, numDecimalDigits, geo.SpatialObjectToGeoJSONFlagZero)
+func spatialObjectToJSON(so geopb.SpatialObject, maxDecimalDigits int) (json.JSON, error) {
+	j, err := geo.SpatialObjectToGeoJSON(so, maxDecimalDigits, geo.SpatialObjectToGeoJSONFlagZero)
 	if err != nil {
 		return nil, err
 	}

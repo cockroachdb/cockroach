@@ -7777,7 +7777,7 @@ This variant will cast all geometry_str arguments into Geometry types.
 // stAsGeoJSONFromTuple returns a *tree.DString representing JSON output
 // for ST_AsGeoJSON.
 func stAsGeoJSONFromTuple(
-	evalCtx *eval.Context, tuple *tree.DTuple, geoColumn string, numDecimalDigits int, pretty bool,
+	evalCtx *eval.Context, tuple *tree.DTuple, geoColumn string, maxDecimalDigits int, pretty bool,
 ) (*tree.DString, error) {
 	typ := tuple.ResolvedType()
 	labels := typ.TupleLabels()
@@ -7805,7 +7805,7 @@ func stAsGeoJSONFromTuple(
 			if g, ok := d.(*tree.DGeometry); ok {
 				foundGeoColumn = true
 				var err error
-				geometry, err = g.ToJSON()
+				geometry, err = g.ToJSON(maxDecimalDigits)
 				if err != nil {
 					return nil, err
 				}
@@ -7814,7 +7814,7 @@ func stAsGeoJSONFromTuple(
 			if g, ok := d.(*tree.DGeography); ok {
 				foundGeoColumn = true
 				var err error
-				geometry, err = g.ToJSON()
+				geometry, err = g.ToJSON(maxDecimalDigits)
 				if err != nil {
 					return nil, err
 				}
