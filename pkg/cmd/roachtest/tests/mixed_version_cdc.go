@@ -232,7 +232,7 @@ func (cmvt *cdcMixedVersionTester) setupValidator(
 	// The fingerprint validator will save this db connection and use it
 	// when we submit rows for validation. This can be changed later using
 	// `(*FingerprintValidator) DBFunc`.
-	_, db := h.RandomDB(r, cmvt.crdbNodes)
+	_, db := h.RandomDB(r)
 	fprintV, err := cdctest.NewFingerprintValidator(db, tableName, `fprint`,
 		cmvt.kafka.consumer.partitions, 0)
 	if err != nil {
@@ -305,7 +305,7 @@ func (cmvt *cdcMixedVersionTester) validate(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
 	// Choose a random node to run the validation on.
-	n, db := h.RandomDB(r, cmvt.crdbNodes)
+	n, db := h.RandomDB(r)
 	l.Printf("running validation on node %d", n)
 	cmvt.fprintV.DBFunc(func(f func(*gosql.DB) error) error {
 		return f(db)
@@ -364,7 +364,7 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		return ctx.Err()
 	case <-cmvt.workloadInit:
 	}
-	node, db := h.RandomDB(r, cmvt.crdbNodes)
+	node, db := h.RandomDB(r)
 	l.Printf("starting changefeed on node %d", node)
 
 	options := map[string]string{
@@ -419,7 +419,8 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 		Flag("seed", r.Int63()).
 		Arg("{pgurl%s}", cmvt.crdbNodes)
 
-	if err := cmvt.c.RunE(ctx, option.NodeListOption{h.RandomNode(r, cmvt.workloadNodes)}, bankInit.String()); err != nil {
+	initNode := cmvt.workloadNodes[r.Intn(len(cmvt.workloadNodes))]
+	if err := cmvt.c.RunE(ctx, option.NodeListOption{initNode}, bankInit.String()); err != nil {
 		return err
 	}
 	close(cmvt.workloadInit)
