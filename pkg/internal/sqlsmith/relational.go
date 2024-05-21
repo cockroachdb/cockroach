@@ -862,7 +862,10 @@ func (s *Smither) makeSelect(desiredTypes []*types.T, refs colRefs) (*tree.Selec
 	if limit != nil && s.disableNondeterministicLimits {
 		// The ORDER BY clause must be fully specified with all select list columns
 		// in order to make a LIMIT clause deterministic.
-		orderBy = s.makeOrderByWithAllCols(orderByRefs.extend(selectRefs...))
+		orderBy, ok = s.makeOrderByWithAllCols(orderByRefs.extend(selectRefs...))
+		if !ok {
+			return nil, nil, false
+		}
 	} else {
 		orderBy = s.makeOrderBy(orderByRefs)
 	}
@@ -1271,8 +1274,8 @@ func (s *Smither) makeDelete(refs colRefs) (*tree.Delete, []*tableRef, bool) {
 	var using tree.TableExprs
 	// With 50% probably add another table into the USING clause.
 	for s.coin() {
-		t, _, tRef, c, ok := s.getSchemaTable()
-		if !ok {
+		t, _, tRef, c, ok2 := s.getSchemaTable()
+		if !ok2 {
 			break
 		}
 		hasJoinTable = true
@@ -1286,7 +1289,10 @@ func (s *Smither) makeDelete(refs colRefs) (*tree.Delete, []*tableRef, bool) {
 	if limit != nil && s.disableNondeterministicLimits {
 		// The ORDER BY clause must be fully specified with all columns in order to
 		// make a LIMIT clause deterministic.
-		orderBy = s.makeOrderByWithAllCols(cols)
+		orderBy, ok = s.makeOrderByWithAllCols(cols)
+		if !ok {
+			return nil, nil, false
+		}
 	} else {
 		orderBy = s.makeOrderBy(cols)
 	}
@@ -1347,8 +1353,8 @@ func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, []*tableRef, bool) {
 	var from tree.TableExprs
 	// With 50% probably add another table into the FROM clause.
 	for s.coin() {
-		t, _, tRef, c, ok := s.getSchemaTable()
-		if !ok {
+		t, _, tRef, c, ok2 := s.getSchemaTable()
+		if !ok2 {
 			break
 		}
 		hasJoinTable = true
@@ -1362,7 +1368,10 @@ func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, []*tableRef, bool) {
 	if limit != nil && s.disableNondeterministicLimits {
 		// The ORDER BY clause must be fully specified with all columns in order to
 		// make a LIMIT clause deterministic.
-		orderBy = s.makeOrderByWithAllCols(cols)
+		orderBy, ok = s.makeOrderByWithAllCols(cols)
+		if !ok {
+			return nil, nil, false
+		}
 	} else {
 		orderBy = s.makeOrderBy(cols)
 	}
@@ -1754,14 +1763,17 @@ func (s *Smither) makeOrderBy(refs colRefs) tree.OrderBy {
 	return ob
 }
 
-func (s *Smither) makeOrderByWithAllCols(refs colRefs) tree.OrderBy {
+// makeOrderByWithAllCols returns the ORDER BY that includes all reference
+// columns in random order. If at least one of the columns is not orderable,
+// then ok=false is returned.
+func (s *Smither) makeOrderByWithAllCols(refs colRefs) (_ tree.OrderBy, ok bool) {
 	if len(refs) == 0 {
-		return nil
+		return nil, true
 	}
 	var ob tree.OrderBy
 	for _, ref := range refs {
 		if !s.isOrderable(ref.typ) {
-			continue
+			return nil, false
 		}
 		ob = append(ob, &tree.Order{
 			Expr:       ref.item,
@@ -1772,7 +1784,7 @@ func (s *Smither) makeOrderByWithAllCols(refs colRefs) tree.OrderBy {
 	s.rnd.Shuffle(len(ob), func(i, j int) {
 		ob[i], ob[j] = ob[j], ob[i]
 	})
-	return ob
+	return ob, true
 }
 
 func makeLimit(s *Smither) *tree.Limit {
