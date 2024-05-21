@@ -392,7 +392,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	} else {
 		stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
 	}
-	stmtFingerprint := stmt.StmtNoConstants
 
 	var queryTimeoutTicker *time.Timer
 	var txnTimeoutTicker *time.Timer
@@ -619,12 +618,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		// TODO(radu): should we trim the "EXPLAIN ANALYZE (DEBUG)" part from
 		// stmt.SQL?
 
-		// Recompute statement fingerprint since the AST has changed.
-		flags := tree.FmtHideConstants | stmtFingerprintFmtMask
-		f := tree.NewFmtCtx(flags)
-		f.FormatNode(ast)
-		stmtFingerprint = f.CloseAndGetString()
-
 		// Clear any ExpectedTypes we set if we prepared this statement (they
 		// reflect the column types of the EXPLAIN itself and not those of the inner
 		// statement).
@@ -656,7 +649,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.ExpectedTypes = ps.Columns
 		stmt.StmtNoConstants = ps.StatementNoConstants
 		stmt.StmtSummary = ps.StatementSummary
-		stmtFingerprint = stmt.StmtNoConstants
 		res.ResetStmtType(ps.AST)
 
 		if e.DiscardRows {
@@ -834,11 +826,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		if p, ok := retPayload.(payloadWithError); ok {
 			execErr = p.errorCause()
 		}
-		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
-			stmtFingerprint,
-			ex.implicitTxn(),
-			p.CurrentDatabase(),
-		)
 
 		p.maybeLogStatement(
 			ctx,
@@ -852,8 +839,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
-			stmtFingerprintID,
-			&topLevelQueryStats{},
+			ex.implicitTxn(),
 			ex.statsCollector,
 			ex.extraTxnState.shouldLogToTelemetry)
 	}()
@@ -1840,7 +1826,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		res.DisableBuffering()
 	}
 
-	var stmtFingerprintID appstatspb.StmtFingerprintID
 	var stats topLevelQueryStats
 	defer func() {
 		var bulkJobId uint64
@@ -1867,8 +1852,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 						&ex.extraTxnState.hasAdminRoleCache,
 						ex.server.TelemetryLoggingMetrics,
-						ppInfo.dispatchToExecutionEngine.stmtFingerprintID,
-						ppInfo.dispatchToExecutionEngine.queryStats,
+						ex.implicitTxn(),
 						ex.statsCollector,
 						ex.extraTxnState.shouldLogToTelemetry)
 				},
@@ -1894,8 +1878,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 				&ex.extraTxnState.hasAdminRoleCache,
 				ex.server.TelemetryLoggingMetrics,
-				stmtFingerprintID,
-				&stats,
+				ex.implicitTxn(),
 				ex.statsCollector,
 				ex.extraTxnState.shouldLogToTelemetry)
 		}
@@ -2047,7 +2030,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		})
 	} else {
 		populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
-		stmtFingerprintID = ex.recordStatementSummary(
+		ex.recordStatementSummary(
 			ctx, planner,
 			int(ex.state.mu.autoRetryCounter), res.RowsAffected(), res.Err(), stats,
 		)
@@ -2095,9 +2078,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 }
 
 // populateQueryLevelStats collects query-level execution statistics
-// and populates it in the instrumentationHelper's queryLevelStatsWithErr field.
-// Query-level execution statistics are collected using the statement's trace
-// and the plan's flow metadata.
+// and populates it in the instrumentationHelper's fields:
+//   - topLevelStats contains the top-level execution statistics.
+//   - queryLevelStatsWithErr contains query-level execution statistics are
+//     collected using the statement's trace and the plan's flow metadata.
 func populateQueryLevelStats(
 	ctx context.Context,
 	p *planner,
@@ -2106,6 +2090,8 @@ func populateQueryLevelStats(
 	cpuStats *multitenantcpu.CPUUsageHelper,
 ) {
 	ih := &p.instrumentation
+	ih.topLevelStats = *topLevelStats
+
 	if _, ok := ih.Tracing(); !ok {
 		return
 	}
@@ -2541,12 +2527,6 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			execErr = p.errorCause()
 		}
 
-		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
-			stmt.StmtNoConstants,
-			ex.implicitTxn(),
-			p.CurrentDatabase(),
-		)
-
 		p.maybeLogStatement(
 			ctx,
 			ex.executorType,
@@ -2559,8 +2539,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
-			stmtFingerprintID,
-			&topLevelQueryStats{},
+			ex.implicitTxn(),
 			ex.statsCollector,
 			ex.extraTxnState.shouldLogToTelemetry)
 	}()

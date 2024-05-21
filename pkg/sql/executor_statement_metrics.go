@@ -222,6 +222,10 @@ func (ex *connExecutor) recordStatementSummary(
 	stmtFingerprintID, err :=
 		ex.statsCollector.RecordStatement(ctx, recordedStmtStatsKey, recordedStmtStats)
 
+	// TODO(xinhaoz): This can be set directly within statsCollector once
+	// https://github.com/cockroachdb/cockroach/pull/123698 is merged.
+	ex.statsCollector.SetStatementFingerprintID(stmtFingerprintID)
+
 	if err != nil {
 		if log.V(1) {
 			log.Warningf(ctx, "failed to record statement: %s", err)
@@ -300,6 +304,7 @@ func (ex *connExecutor) recordStatementSummary(
 			sessionAge,
 		)
 	}
+
 	return stmtFingerprintID
 }
 
