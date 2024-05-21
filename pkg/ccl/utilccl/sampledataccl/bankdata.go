@@ -44,7 +44,7 @@ func toBackup(
 
 	for rowIdx := 0; rowIdx < data.InitialRows.NumBatches; rowIdx++ {
 		var stmts bytes.Buffer
-		for _, row := range data.InitialRows.BatchRows(rowIdx) {
+		for _, row := range data.InitialRows.BatchRows(ctx, rowIdx) {
 			rowBatch := strings.Join(workloadsql.StringTuple(row), `,`)
 			fmt.Fprintf(&stmts, "INSERT INTO %s VALUES (%s);\n", data.Name, rowBatch)
 		}

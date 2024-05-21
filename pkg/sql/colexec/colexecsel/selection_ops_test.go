@@ -84,7 +84,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	constVal := int64(31)
 	constArg := tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(constVal))
 	op, err := GetSelectionConstOperator(
-		cmpOp, input, inputTypes, colIdx, constArg, nil /* EvalCtx */, nil, /* cmpExpr */
+		context.Background(), cmpOp, input, inputTypes, colIdx, constArg, nil /* EvalCtx */, nil, /* cmpExpr */
 	)
 	if err != nil {
 		t.Error(err)
@@ -112,7 +112,7 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 	constVal := int64(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
 	op, err := GetSelectionConstOperator(
-		cmpOp, input, inputTypes, colIdx, constArg, nil /* EvalCtx */, nil, /* cmpExpr */
+		context.Background(), cmpOp, input, inputTypes, colIdx, constArg, nil /* EvalCtx */, nil, /* cmpExpr */
 	)
 	if err != nil {
 		t.Error(err)
@@ -141,7 +141,7 @@ func TestGetSelectionOperator(t *testing.T) {
 	inputTypes[col1Idx] = ct
 	inputTypes[col2Idx] = ct
 	op, err := GetSelectionOperator(
-		cmpOp, input, inputTypes, col1Idx, col2Idx, nil /* EvalCtx */, nil, /* cmpExpr */
+		context.Background(), cmpOp, input, inputTypes, col1Idx, col2Idx, nil /* EvalCtx */, nil, /* cmpExpr */
 	)
 	if err != nil {
 		t.Error(err)
@@ -210,7 +210,7 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 		func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
 			constArg := tree.DInt(0)
 			return GetSelectionConstOperator(
-				treecmp.MakeComparisonOperator(treecmp.LT), source, inputTypes, 0, /* colIdx */
+				context.Background(), treecmp.MakeComparisonOperator(treecmp.LT), source, inputTypes, 0, /* colIdx */
 				&constArg, nil /* evalCtx */, nil, /* cmpExpr */
 			)
 		},
@@ -224,7 +224,7 @@ func BenchmarkSelLTInt64Int64Op(b *testing.B) {
 		b,
 		func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
 			return GetSelectionOperator(
-				treecmp.MakeComparisonOperator(treecmp.LT), source, inputTypes, 0 /* col1Idx */, 1, /* col2Idx */
+				context.Background(), treecmp.MakeComparisonOperator(treecmp.LT), source, inputTypes, 0 /* col1Idx */, 1, /* col2Idx */
 				nil /* evalCtx */, nil, /* cmpExpr */
 			)
 		},
@@ -238,7 +238,7 @@ func BenchmarkSelLTBytesBytesOp(b *testing.B) {
 		b,
 		func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
 			return GetSelectionOperator(
-				treecmp.MakeComparisonOperator(treecmp.LT), source, inputTypes, 0 /* col1Idx */, 1, /* col2Idx */
+				context.Background(), treecmp.MakeComparisonOperator(treecmp.LT), source, inputTypes, 0 /* col1Idx */, 1, /* col2Idx */
 				nil /* evalCtx */, nil, /* cmpExpr */
 			)
 		},

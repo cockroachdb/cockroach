@@ -107,7 +107,7 @@ func BenchmarkTCPHLineItem(b *testing.B) {
 	evalCtx := eval.NewTestingEvalContext(st)
 	factory := coldataext.NewExtendedColumnFactory(evalCtx)
 	numRows := 1000
-	cb := coldata.NewMemBatchWithCapacity(lineitemTypes, numRows, factory)
+	cb := coldata.NewMemBatchWithCapacity(ctx, lineitemTypes, numRows, factory)
 	for i, t := range lineitemTypes {
 		vec := cb.ColVec(i)
 		for row := 0; row < numRows; row++ {

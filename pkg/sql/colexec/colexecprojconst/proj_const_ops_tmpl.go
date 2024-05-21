@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -54,6 +55,8 @@ var (
 	_ telemetry.Counter
 	_ json.JSON
 	_ = coldataext.CompareDatum
+	_ = encoding.UnsafeConvertStringToBytes
+	_ ipaddr.IPAddr
 )
 
 // {{/*
@@ -320,7 +323,7 @@ func GetProjection_CONST_SIDEConstOperator(
 		outputIdx:         outputIdx,
 		calledOnNullInput: calledOnNullInput,
 	}
-	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
+	c := colconv.GetDatumToPhysicalFn(allocator.Ctx, constType)(constArg)
 	// {{if _IS_CONST_LEFT}}
 	leftType, rightType := constType, inputTypes[colIdx]
 	// {{else}}
@@ -331,14 +334,14 @@ func GetProjection_CONST_SIDEConstOperator(
 		switch op.Symbol {
 		// {{range .BinOps}}
 		case treebin._NAME:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			// {{range .LeftFamilies}}
 			// {{$leftFamilyStr := .LeftCanonicalFamilyStr}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
 				switch leftType.Width() {
 				// {{range .LeftWidths}}
 				case _LEFT_TYPE_WIDTH:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					// {{range .RightFamilies}}
 					// {{$rightFamilyStr := .RightCanonicalFamilyStr}}
 					case _RIGHT_CANONICAL_TYPE_FAMILY:
@@ -389,13 +392,13 @@ func GetProjection_CONST_SIDEConstOperator(
 			switch op.Symbol {
 			// {{range .CmpOps}}
 			case treecmp._NAME:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 				// {{range .LeftFamilies}}
 				case _LEFT_CANONICAL_TYPE_FAMILY:
 					switch leftType.Width() {
 					// {{range .LeftWidths}}
 					case _LEFT_TYPE_WIDTH:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						// {{range .RightFamilies}}
 						case _RIGHT_CANONICAL_TYPE_FAMILY:
 							switch rightType.Width() {
@@ -421,7 +424,7 @@ func GetProjection_CONST_SIDEConstOperator(
 			adapter:             colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
 			constArg:            constArg,
 			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}, true /* willRelease */),
-			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
+			datumToVecConverter: colconv.GetDatumToPhysicalFn(allocator.Ctx, outputType),
 		}, nil
 		// {{end}}
 	}

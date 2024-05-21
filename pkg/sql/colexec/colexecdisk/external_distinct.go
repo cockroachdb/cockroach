@@ -77,7 +77,7 @@ func NewExternalDistinct(
 		}
 		diskBackedWithoutOrdinality := colexecbase.NewSimpleProjectOp(diskBackedSorter, len(sortTypes), projection)
 		return colexecbase.NewOrderedDistinct(
-			diskBackedWithoutOrdinality, distinctCols, inputTypes,
+			unlimitedAllocator.Ctx, diskBackedWithoutOrdinality, distinctCols, inputTypes,
 			distinctSpec.NullsAreDistinct, distinctSpec.ErrorOnDup,
 		)
 	}

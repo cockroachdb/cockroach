@@ -69,9 +69,14 @@ const _TYPE_WIDTH = 0
 // {{define "distinctOpConstructor"}}
 
 func newSingleDistinct(
-	input colexecop.Operator, distinctColIdx int, outputCol []bool, t *types.T, nullsAreDistinct bool,
+	ctx context.Context,
+	input colexecop.Operator,
+	distinctColIdx int,
+	outputCol []bool,
+	t *types.T,
+	nullsAreDistinct bool,
 ) colexecop.Operator {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
@@ -114,8 +119,8 @@ type partitioner interface {
 }
 
 // newPartitioner returns a new partitioner on type t.
-func newPartitioner(t *types.T, nullsAreDistinct bool) partitioner {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+func newPartitioner(ctx context.Context, t *types.T, nullsAreDistinct bool) partitioner {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {

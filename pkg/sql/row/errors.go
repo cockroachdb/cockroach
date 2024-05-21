@@ -63,7 +63,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 				return "", "", nil, nil, err
 			}
 			var spec fetchpb.IndexFetchSpec
-			if err := rowenc.InitIndexFetchSpec(&spec, codec, tableDesc, index, nil /* fetchColumnIDs */); err != nil {
+			if err := rowenc.InitIndexFetchSpec(ctx, &spec, codec, tableDesc, index, nil /* fetchColumnIDs */); err != nil {
 				return "", "", nil, nil, err
 			}
 
@@ -253,7 +253,7 @@ func DecodeRowInfo(
 		cols[i] = col
 	}
 	var spec fetchpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(&spec, codec, tableDesc, index, colIDs); err != nil {
+	if err := rowenc.InitIndexFetchSpec(ctx, &spec, codec, tableDesc, index, colIDs); err != nil {
 		return nil, nil, nil, err
 	}
 	rf.IgnoreUnexpectedNulls = true

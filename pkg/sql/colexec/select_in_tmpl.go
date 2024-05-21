@@ -22,6 +22,8 @@
 package colexec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -46,6 +49,7 @@ var (
 	_ duration.Duration
 	_ = coldataext.CompareDatum
 	_ json.JSON
+	_ ipaddr.IPAddr
 )
 
 // Remove unused warnings.
@@ -92,7 +96,7 @@ func GetInProjectionOperator(
 	negate bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
@@ -105,7 +109,7 @@ func GetInProjectionOperator(
 				outputIdx:      resultIdx,
 				negate:         negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(evalCtx, t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(allocator.Ctx, evalCtx, t, datumTuple)
 			return obj, nil
 			// {{end}}
 		}
@@ -115,6 +119,7 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	t *types.T,
 	input colexecop.Operator,
@@ -122,7 +127,7 @@ func GetInOperator(
 	datumTuple *tree.DTuple,
 	negate bool,
 ) (colexecop.Operator, error) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
@@ -133,7 +138,7 @@ func GetInOperator(
 				colIdx:         colIdx,
 				negate:         negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(evalCtx, t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(ctx, evalCtx, t, datumTuple)
 			return obj, nil
 			// {{end}}
 		}
@@ -168,16 +173,16 @@ type projectInOp_TYPE struct {
 var _ colexecop.Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(
-	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
+	ctx context.Context, evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]_GOTYPE_UPCAST_INT, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
 
 	// {{if or (eq .VecMethod "Int16") (eq .VecMethod "Int32")}}
 	// Ensure that we always upcast all integer types.
-	conv := colconv.GetDatumToPhysicalFn(types.Int)
+	conv := colconv.GetDatumToPhysicalFn(ctx, types.Int)
 	//{{else}}
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	// {{end}}
 	var result []_GOTYPE_UPCAST_INT
 	hasNulls := false

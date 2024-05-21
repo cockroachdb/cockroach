@@ -8,11 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// This file lives here instead of sql/distsql to avoid an import cycle.
+package execversion
 
-package execinfra
+import (
+	"context"
 
-import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/errors"
+)
+
+// DistSQLVersion identifies DistSQL engine versions.
+type DistSQLVersion uint32
 
 // Version identifies the distsql protocol version.
 //
@@ -64,11 +69,35 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 71
+// TODO: update comment.
+const Version DistSQLVersion = 72
+
+const NativeINetVersion = 72
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 71
+const MinAcceptedVersion DistSQLVersion = 71
+
+type versionKey struct{}
+
+func WithVersion(ctx context.Context, version DistSQLVersion) context.Context {
+	return context.WithValue(ctx, versionKey{}, version)
+}
+
+var ctxWithLatestVersion = WithVersion(context.Background(), Version)
+
+func WithLatestVersion() context.Context {
+	return ctxWithLatestVersion
+}
+
+func VersionFromContext(ctx context.Context) DistSQLVersion {
+	val := ctx.Value(versionKey{})
+	if v, ok := val.(DistSQLVersion); !ok {
+		panic(errors.AssertionFailedf("didn't find execversion in context.Context"))
+	} else {
+		return v
+	}
+}
 
 /*
 

@@ -99,8 +99,9 @@ func checkAllNodesForIngestingJob(
 
 	res := sql.NewMetadataOnlyMetadataCallbackWriter()
 
-	recv := sql.MakeDistSQLReceiver(
+	recv, _ := sql.MakeDistSQLReceiver(
 		ctx,
+		evalCtx.Settings.Version,
 		res,
 		tree.Ack,
 		nil, /* rangeCache */
@@ -111,6 +112,6 @@ func checkAllNodesForIngestingJob(
 	defer recv.Release()
 
 	evalCtxCopy := *evalCtx
-	dsp.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	dsp.Run(planCtx, nil, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	return res.Err()
 }

@@ -244,7 +244,7 @@ func NewHashAggregator(
 	if len(args.Spec.OrderedGroupCols) > 0 {
 		hashAgg.distincterInput = &colexecop.FeedOperator{}
 		hashAgg.distincter, hashAgg.distinctOutput = colexecbase.OrderedDistinctColsToOperators(
-			hashAgg.distincterInput, args.Spec.OrderedGroupCols, args.InputTypes, false, /* nullsAreDistinct */
+			ctx, hashAgg.distincterInput, args.Spec.OrderedGroupCols, args.InputTypes, false, /* nullsAreDistinct */
 		)
 	}
 	return hashAgg

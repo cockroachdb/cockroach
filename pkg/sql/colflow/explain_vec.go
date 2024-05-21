@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -67,6 +68,7 @@ func convertToVecTree(
 	if flowCtx.Local && !execinfra.HasParallelProcessors(flow) {
 		fuseOpt = flowinfra.FuseAggressively
 	}
+	ctx = execversion.WithVersion(ctx, execversion.Version)
 	opChains, _, err = creator.setupFlow(ctx, flow.Processors, fuseOpt)
 	cleanup = func() {
 		creator.cleanup(ctx)

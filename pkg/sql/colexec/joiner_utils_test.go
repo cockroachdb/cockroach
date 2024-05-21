@@ -11,6 +11,7 @@
 package colexec
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -157,7 +158,7 @@ func (tc *joinTestCase) mutateTypes() []*joinTestCase {
 					if tups[i][j] == nil {
 						continue
 					}
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(context.Background(), typ.Family()) {
 					case types.DecimalFamily:
 						var d apd.Decimal
 						_, _ = d.SetFloat64(float64(tups[i][j].(int)))

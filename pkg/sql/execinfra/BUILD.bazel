@@ -15,7 +15,6 @@ go_library(
         "server_config.go",
         "testutils.go",
         "utils.go",
-        "version.go",
         ":gen-consumerstatus-stringer",  # keep
         ":gen-procstate-stringer",  # keep
     ],

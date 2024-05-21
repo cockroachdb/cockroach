@@ -69,7 +69,7 @@ func newSpanEncoder(
 	switch asc {
 	// {{range .}}
 	case _IS_ASC:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, typ.Family()) {
 		// {{range .TypeFamilies}}
 		case _CANONICAL_TYPE_FAMILY:
 			switch typ.Width() {

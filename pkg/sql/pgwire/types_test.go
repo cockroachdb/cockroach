@@ -433,7 +433,7 @@ func benchmarkWriteColumnar(b *testing.B, batch coldata.Batch, format pgwirebase
 // coldata.BatchSize() in length.
 func getBatch(t *types.T) coldata.Batch {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	batch := coldata.NewMemBatch([]*types.T{t}, coldataext.NewExtendedColumnFactory(&evalCtx))
+	batch := coldata.NewMemBatch(context.Background(), []*types.T{t}, coldataext.NewExtendedColumnFactory(&evalCtx))
 	rng, _ := randutil.NewTestRand()
 	coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
 		Rand:             rng,
