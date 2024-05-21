@@ -794,7 +794,7 @@ func UpdateTargets(
 
 // updatePrometheusTargets updates the prometheus instance cluster config. Any error is logged and ignored.
 func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.SyncedCluster) {
-	nodeIPPorts := make(map[int]string)
+	nodeIPPorts := make(map[int]*promhelperclient.NodeInfo)
 	nodeIPPortsMutex := syncutil.RWMutex{}
 	var wg sync.WaitGroup
 	for _, node := range c.Nodes {
@@ -808,10 +808,10 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 					l.Errorf("error getting the port for node %d: %v", index, err)
 					return
 				}
-				nodeInfo := fmt.Sprintf("%s:%d", v.PublicIP, desc.Port)
+				nodeInfo := fmt.Sprintf("%s:%d", v.PrivateIP, desc.Port)
 				nodeIPPortsMutex.Lock()
 				// ensure atomicity in map update
-				nodeIPPorts[index] = nodeInfo
+				nodeIPPorts[index] = &promhelperclient.NodeInfo{Target: nodeInfo, CustomLabels: getLabels(v)}
 				nodeIPPortsMutex.Unlock()
 			}(int(node), c.VMs[node-1])
 		}
@@ -824,6 +824,32 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
 		}
 	}
+}
+
+// regionRegEx is the regex to extract the region label from zone available as vm property
+var regionRegEx = regexp.MustCompile("(^.+[0-9]+)(-[a-f]$)")
+
+// getLabels returns the labels to be populated in the target configuration in prometheus
+func getLabels(v vm.VM) map[string]string {
+	labels := map[string]string{
+		"cluster":  v.Labels["cluster"],
+		"instance": v.Name,
+		"host_ip":  v.PrivateIP,
+		"project":  v.Project,
+		"zone":     v.Zone,
+	}
+	match := regionRegEx.FindStringSubmatch(v.Zone)
+	if len(match) > 1 {
+		labels["region"] = match[1]
+	}
+	// the following labels are present if the test labels are added before the VM is started
+	if t, ok := v.Labels["test_name"]; ok {
+		labels["test_name"] = t
+	}
+	if t, ok := v.Labels["test_run_id"]; ok {
+		labels["test_run_id"] = t
+	}
+	return labels
 }
 
 // Monitor monitors the status of cockroach nodes in a cluster.
