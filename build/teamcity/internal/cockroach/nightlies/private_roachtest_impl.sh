@@ -5,6 +5,9 @@ set -exuo pipefail
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 
 source "$dir/teamcity-support.sh"
+if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
+  ssh-keygen -q -C "private-roachtest-nightly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
+fi
 
 $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh amd64
 
