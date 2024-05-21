@@ -4142,12 +4142,13 @@ func (r *Replica) adminScatter(
 	}
 
 	// Loop until we hit an error or until we hit `maxAttempts` for the range.
+	var err error
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
 			break
 		}
 		desc, conf := r.DescAndSpanConfig()
-		_, err := rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
+		_, err = rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
 		if err != nil {
 			// The replica can not be processed, so skip it.
 			break
