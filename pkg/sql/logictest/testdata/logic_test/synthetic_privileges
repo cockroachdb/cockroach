@@ -386,7 +386,8 @@ GRANT SYSTEM ALL TO testuser
 statement ok
 CANCEL SESSION (SELECT session_id FROM [SHOW SESSIONS] WHERE user_name = 'testuser')
 
-user testuser
+# Force a new session to be created, causing a connection attempt.
+user testuser nodeIdx=0 newsession
 
 statement ok
 SELECT 1
