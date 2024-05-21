@@ -686,7 +686,7 @@ func recreateAllSecondaryIndexes(
 	// Recreate each secondary index.
 	scpb.ForEachSecondaryIndex(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
 		out := makeIndexSpec(b, idx.TableID, idx.IndexID)
-		// If this index is referenced by any other objects, then we wil
+		// If this index is referenced by any other objects, then we will
 		// block the primary key swap, since we don't have a mechanism to
 		// fix these references yet.
 		// TODO(fqazi): As a part of #124131 we should add logic to fix
