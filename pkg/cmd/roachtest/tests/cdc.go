@@ -1554,6 +1554,12 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
+			// for testing
+			_, err := ct.DB().ExecContext(ctx, `set cluster setting changefeed.new_kafka_sink.enabled = true;`)
+			if err != nil {
+				t.Fatal("failed to set cluster setting")
+			}
+
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
