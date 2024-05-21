@@ -484,7 +484,7 @@ func (r *raft) send(m pb.Message) {
 	if m.From == None {
 		m.From = r.id
 	}
-	if m.Type == pb.MsgVote || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVote || m.Type == pb.MsgPreVoteResp || m.Type == pb.MsgFortifyLeader || m.Type == pb.MsgFortifyLeaderResp {
+	if m.Type == pb.MsgVote || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVote || m.Type == pb.MsgPreVoteResp {
 		if m.Term == 0 {
 			// All {pre-,}campaign messages need to have the term set when
 			// sending.
@@ -510,6 +510,8 @@ func (r *raft) send(m pb.Message) {
 			m.Term = r.Term
 		}
 	}
+	// TODO(arul): once we start persisting leadEpoch, we'll need to make this change.
+	//if m.Type == pb.MsgAppResp || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVoteResp || m.Type == pb.MsgFortifyLeaderResp {
 	if m.Type == pb.MsgAppResp || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVoteResp {
 		// If async storage writes are enabled, messages added to the msgs slice
 		// are allowed to be sent out before unstable state (e.g. log entry
@@ -573,11 +575,7 @@ func (r *raft) sendAppend(to uint64) {
 
 // sendFortify sends a fortify RPC to the supplied follower.
 func (r *raft) sendFortify(to uint64) {
-	r.send(pb.Message{
-		To:   to,
-		Type: pb.MsgFortifyLeader,
-		Term: r.Term,
-	})
+	r.send(pb.Message{To: to, Type: pb.MsgFortifyLeader})
 }
 
 // maybeSendAppend sends an append RPC with new entries to the given peer,
@@ -730,6 +728,7 @@ func (r *raft) maybeRefortify() {
 func (r *raft) bcastFortify() {
 	runtimeAssert(r.state == StateLeader, "can't fortify if you're not a leader")
 	r.trk.Visit(func(id uint64, _ *tracker.Progress) {
+		// TODO(arul): we want to handle this like a leader's own MsgVote. See campaign.
 		if id == r.id {
 			return
 		}
@@ -1116,8 +1115,7 @@ func (r *raft) Step(m pb.Message) error {
 		default:
 			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
-			if m.Type == pb.MsgApp || m.Type == pb.MsgHeartbeat || m.Type == pb.MsgFortifyLeader ||
-				m.Type == pb.MsgSnap {
+			if m.Type == pb.MsgApp || m.Type == pb.MsgHeartbeat || m.Type == pb.MsgFortifyLeader || m.Type == pb.MsgSnap {
 				r.becomeFollower(m.Term, m.From)
 			} else {
 				r.becomeFollower(m.Term, None)
@@ -1794,26 +1792,13 @@ func (r *raft) handleHeartbeat(m pb.Message) {
 func (r *raft) handleFortify(m pb.Message) {
 	epoch, live := r.storeLiveness.SupportFor(r.lead)
 	if !live { // the leader isn't supported by the follower in its liveness fabric
-		r.send(pb.Message{
-			To:     m.From,
-			From:   r.id,
-			Reject: true,
-			Term:   r.Term,
-			Type:   pb.MsgFortifyLeaderResp,
-		})
+		r.send(pb.Message{To: m.From, Type: pb.MsgFortifyLeaderResp, Reject: true})
 		return
 	}
 	// The leader is supported by this follower in its liveness fabric.
 	// TODO(arul): do the hard state handling here.
 	r.leadEpoch = epoch
-	r.send(pb.Message{
-		To:        m.From,
-		From:      r.id,
-		Reject:    false,
-		Term:      r.Term,
-		LeadEpoch: uint64(r.leadEpoch),
-		Type:      pb.MsgFortifyLeaderResp,
-	})
+	r.send(pb.Message{To: m.From, Type: pb.MsgFortifyLeaderResp, LeadEpoch: uint64(r.leadEpoch)})
 }
 
 func (r *raft) handleFortifyResp(m pb.Message) {
