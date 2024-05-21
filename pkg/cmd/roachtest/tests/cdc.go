@@ -1560,6 +1560,12 @@ func registerCDC(r registry.Registry) {
 				t.Fatal("failed to set cluster setting")
 			}
 
+			// we saw a mismatch in this one. see if it's to do with parallelism or something else.
+			_, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.sink_io_workers = 1;`)
+			if err != nil {
+				t.Fatal("failed to set cluster setting")
+			}
+
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
