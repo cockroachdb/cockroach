@@ -148,6 +148,11 @@ func (b *Builder) buildControlSchedules(
 
 func (b *Builder) buildCreateStatistics(n *tree.CreateStats, inScope *scope) (outScope *scope) {
 	outScope = inScope.push()
+
+	if n.Options.AsOf.Expr == nil {
+		n.Options.AsOf.Expr = tree.NewStrVal("-1us")
+	}
+
 	outScope.expr = b.factory.ConstructCreateStatistics(&memo.CreateStatisticsPrivate{
 		Syntax: n,
 	})
