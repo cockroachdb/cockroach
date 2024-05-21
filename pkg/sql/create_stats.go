@@ -230,6 +230,12 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		)
 	}
 
+	if n.Options.AsOf.Expr == nil {
+		return nil, pgerror.New(pgcode.Syntax,
+			"creating partial statistics requires an AS OF SYSTEM TIME clause such as AS OF SYSTEM TIME '-0.001s'",
+		)
+	}
+
 	if err := n.p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
 		return nil, err
 	}

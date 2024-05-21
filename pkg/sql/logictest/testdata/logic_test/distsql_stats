@@ -59,7 +59,7 @@ statement ok
 SET CLUSTER SETTING feature.stats.enabled = TRUE
 
 statement ok
-CREATE STATISTICS s1 ON a FROM data
+CREATE STATISTICS s1 ON a FROM data AS OF SYSTEM TIME '-1us'
 
 query TTIIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count, histogram_id
@@ -72,7 +72,7 @@ statement ok
 SET CLUSTER SETTING sql.stats.histogram_collection.enabled = true
 
 statement ok
-CREATE STATISTICS s1 ON a FROM data
+CREATE STATISTICS s1 ON a FROM data AS OF SYSTEM TIME '-1us'
 
 query TTIIIB colnames
 SELECT
@@ -101,7 +101,7 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 4            0           0                    64
 
 statement ok
-CREATE STATISTICS "" ON b FROM data
+CREATE STATISTICS "" ON b FROM data AS OF SYSTEM TIME '-1us'
 
 query TTIIIB colnames
 SELECT
@@ -128,7 +128,7 @@ statement ok
 SET CLUSTER SETTING sql.stats.histogram_buckets.count = 2
 
 statement ok
-CREATE STATISTICS s2 ON a FROM data
+CREATE STATISTICS s2 ON a FROM data AS OF SYSTEM TIME '-1us'
 
 let $hist_id_2
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's2'
@@ -145,7 +145,7 @@ statement ok
 ALTER TABLE data SET (sql_stats_histogram_buckets_count = 3)
 
 statement ok
-CREATE STATISTICS s3 ON a FROM data
+CREATE STATISTICS s3 ON a FROM data AS OF SYSTEM TIME '-1us'
 
 let $hist_id_3
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's3'
@@ -174,7 +174,7 @@ CREATE TABLE big (i INT PRIMARY KEY);
 INSERT INTO big SELECT generate_series(1, 20000)
 
 statement ok
-CREATE STATISTICS s20000 FROM big
+CREATE STATISTICS s20000 FROM big AS OF SYSTEM TIME '-1us'
 
 let $hist_id_20000
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's20000'
@@ -189,7 +189,7 @@ statement ok
 ALTER TABLE big SET (sql_stats_histogram_samples_count = 500)
 
 statement ok
-CREATE STATISTICS s500 FROM big
+CREATE STATISTICS s500 FROM big AS OF SYSTEM TIME '-1us'
 
 let $hist_id_500
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's500'
@@ -259,7 +259,7 @@ s1               {a}           256        4               0           true
 
 # Verify that any other statistics are blown away when we INJECT.
 statement ok
-CREATE STATISTICS s3 ON c FROM data
+CREATE STATISTICS s3 ON c FROM data AS OF SYSTEM TIME '-1us'
 
 query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
@@ -347,7 +347,7 @@ statement ok
 SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = false
 
 statement ok
-CREATE STATISTICS s3 FROM data
+CREATE STATISTICS s3 FROM data AS OF SYSTEM TIME '-1us'
 
 query TIIIB colnames
 SELECT column_names, row_count, distinct_count, null_count, histogram_id IS NOT NULL AS has_histogram
@@ -372,7 +372,7 @@ statement ok
 CREATE INDEX ON data (c DESC, b ASC); CREATE INDEX ON data (b DESC, a);
 
 statement ok
-CREATE STATISTICS s4 FROM data
+CREATE STATISTICS s4 FROM data AS OF SYSTEM TIME '-1us'
 
 # Check that stats are only collected once per column.
 query TIII colnames
@@ -397,7 +397,7 @@ statement ok
 DROP INDEX data@c_idx; DROP INDEX data@data_c_b_idx
 
 statement ok
-CREATE STATISTICS s5 FROM [$t_id]
+CREATE STATISTICS s5 FROM [$t_id] AS OF SYSTEM TIME '-1us'
 
 query TIII colnames
 SELECT column_names, row_count, distinct_count, null_count
@@ -420,7 +420,7 @@ statement ok
 CREATE TABLE simple (x INT, y INT)
 
 statement ok
-CREATE STATISTICS default_stat1 FROM simple
+CREATE STATISTICS default_stat1 FROM simple AS OF SYSTEM TIME '-1us'
 
 query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
@@ -441,7 +441,7 @@ statement ok
 CREATE UNIQUE INDEX ON simple (y) STORING (x)
 
 statement ok
-CREATE STATISTICS default_stat2 FROM simple
+CREATE STATISTICS default_stat2 FROM simple AS OF SYSTEM TIME '-1us'
 
 # Now stats are collected on the index column y before column x.
 query TTIII colnames
@@ -466,7 +466,7 @@ statement ok
 CREATE INDEX ON simple (x, y)
 
 statement ok
-CREATE STATISTICS default_stat3 FROM simple
+CREATE STATISTICS default_stat3 FROM simple AS OF SYSTEM TIME '-1us'
 
 query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
@@ -496,7 +496,7 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 #
 
 statement ok
-CREATE STATISTICS s6 ON a FROM [$t_id]
+CREATE STATISTICS s6 ON a FROM [$t_id] AS OF SYSTEM TIME '-1us'
 
 query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
@@ -517,7 +517,7 @@ s6               {a}           256        4               0
 
 # Combine default columns and numeric reference.
 statement ok
-CREATE STATISTICS __auto__ FROM [$t_id]
+CREATE STATISTICS __auto__ FROM [$t_id] AS OF SYSTEM TIME '-1us'
 
 query TIII colnames
 SELECT column_names, row_count, distinct_count, null_count
@@ -543,12 +543,12 @@ statement ok
 DROP INDEX data@data_b_a_idx
 
 statement ok
-CREATE STATISTICS __auto__ FROM [$t_id];
-CREATE STATISTICS __auto__ FROM [$t_id];
-CREATE STATISTICS __auto__ FROM [$t_id];
-CREATE STATISTICS __auto__ FROM [$t_id];
-CREATE STATISTICS __auto__ FROM [$t_id];
-CREATE STATISTICS __auto__ FROM [$t_id];
+CREATE STATISTICS __auto__ FROM [$t_id] AS OF SYSTEM TIME '-1us';
+CREATE STATISTICS __auto__ FROM [$t_id] AS OF SYSTEM TIME '-1us';
+CREATE STATISTICS __auto__ FROM [$t_id] AS OF SYSTEM TIME '-1us';
+CREATE STATISTICS __auto__ FROM [$t_id] AS OF SYSTEM TIME '-1us';
+CREATE STATISTICS __auto__ FROM [$t_id] AS OF SYSTEM TIME '-1us';
+CREATE STATISTICS __auto__ FROM [$t_id] AS OF SYSTEM TIME '-1us';
 
 # Only the last 4-5 automatic stats should remain for each column.
 query TT colnames
@@ -600,7 +600,7 @@ s4               {b,c}
 s4               {c,d}
 
 statement ok
-CREATE STATISTICS s7 ON a FROM [$t_id]
+CREATE STATISTICS s7 ON a FROM [$t_id] AS OF SYSTEM TIME '-1us'
 
 query TT colnames
 SELECT statistics_name, column_names
@@ -651,7 +651,7 @@ s4               {c,d}
 s7               {a}
 
 statement ok
-CREATE STATISTICS s8 ON a FROM [$t_id]
+CREATE STATISTICS s8 ON a FROM [$t_id] AS OF SYSTEM TIME '-1us'
 
 # s7 is deleted but the automatic stats remain.
 query TT colnames
@@ -766,12 +766,14 @@ statement ok
 SET CLUSTER SETTING sql.stats.non_default_columns.min_retention_period = '0s'
 
 statement ok
-CREATE STATISTICS s9 ON e FROM data;
+CREATE STATISTICS s9 ON e FROM data AS OF SYSTEM TIME '-1us'
+
+statement ok
 ALTER TABLE data DROP COLUMN e
 
 # Collecting stats on a specific column should not cause deletion of other stats.
 statement ok
-CREATE STATISTICS s10 ON a FROM data
+CREATE STATISTICS s10 ON a FROM data AS OF SYSTEM TIME '-1us'
 
 query TT colnames
 SELECT statistics_name, column_names
@@ -912,7 +914,7 @@ CREATE TABLE t (x int); INSERT INTO t VALUES (1); ALTER TABLE t DROP COLUMN x
 
 # Ensure that creating stats on a table with no columns does not cause a panic.
 statement ok
-CREATE STATISTICS s FROM t
+CREATE STATISTICS s FROM t AS OF SYSTEM TIME '-1us'
 
 # Arrays are supported.
 statement ok
@@ -922,7 +924,7 @@ statement ok
 INSERT INTO arr VALUES (ARRAY[1,2]), (ARRAY[1,2]), (ARRAY[3,4]), (NULL)
 
 statement ok
-CREATE STATISTICS arr_stats FROM arr
+CREATE STATISTICS arr_stats FROM arr AS OF SYSTEM TIME '-1us'
 
 query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
@@ -935,7 +937,7 @@ arr_stats        {x}           4          3               1
 # Regression test for #46964 (however we have added array histogram
 # support since this).
 statement ok
-CREATE STATISTICS arr_stats_x ON x FROM arr
+CREATE STATISTICS arr_stats_x ON x FROM arr AS OF SYSTEM TIME '-1us'
 
 query TTIIIB colnames
 SELECT
@@ -963,7 +965,7 @@ statement ok
 INSERT INTO et VALUES ('hello', 'hello'), ('howdy', 'howdy'), ('hi', 'hi');
 
 statement ok
-CREATE STATISTICS s FROM et
+CREATE STATISTICS s FROM et AS OF SYSTEM TIME '-1us'
 
 query TTIIB colnames
 SELECT
@@ -987,7 +989,7 @@ CREATE TABLE groups (data JSON); INSERT INTO groups VALUES ('{"data": {"domain":
 
 # JSON can be specified.
 statement ok
-CREATE STATISTICS s ON data FROM groups
+CREATE STATISTICS s ON data FROM groups AS OF SYSTEM TIME '-1us'
 
 query TT colnames
 SELECT statistics_name, column_names
@@ -998,7 +1000,7 @@ s                {data}
 
 # JSON is auto-included.
 statement ok
-CREATE STATISTICS s FROM groups
+CREATE STATISTICS s FROM groups AS OF SYSTEM TIME '-1us'
 
 query TT colnames
 SELECT statistics_name, column_names
@@ -1029,7 +1031,7 @@ INSERT INTO users (user_profile) VALUES
 # Ensure that trying to create statistics with default columns does not fail
 # when there is an inverted index.
 statement ok
-CREATE STATISTICS s FROM users
+CREATE STATISTICS s FROM users AS OF SYSTEM TIME '-1us'
 
 query TTIIIB colnames
 SELECT
@@ -1063,7 +1065,7 @@ statement ok
 INSERT INTO prim VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 
 statement ok
-CREATE STATISTICS s FROM prim
+CREATE STATISTICS s FROM prim AS OF SYSTEM TIME '-1us'
 
 query TTIIB colnames
 SELECT
@@ -1103,7 +1105,7 @@ statement ok
 INSERT INTO sec VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 
 statement ok
-CREATE STATISTICS s FROM sec
+CREATE STATISTICS s FROM sec AS OF SYSTEM TIME '-1us'
 
 query TTIIB colnames
 SELECT
@@ -1152,7 +1154,7 @@ statement ok
 INSERT INTO partial VALUES (1, 1, 1, 1, '{"a": "b"}'), (2, 2, 2, 10, '{"c": "d"}'), (3, 3, 3, 1, '{"e": "f"}');
 
 statement ok
-CREATE STATISTICS s FROM partial
+CREATE STATISTICS s FROM partial AS OF SYSTEM TIME '-1us'
 
 query TTIIB colnames
 SELECT
@@ -1208,7 +1210,7 @@ statement ok
 INSERT INTO virt VALUES (1), (2), (3)
 
 statement ok
-CREATE STATISTICS s FROM virt
+CREATE STATISTICS s FROM virt AS OF SYSTEM TIME '-1us'
 
 query TTIIB colnames
 SELECT
@@ -1245,7 +1247,7 @@ statement ok
 INSERT INTO expression VALUES (1, 1, '{"a": "b"}'), (2, 10, '{"c": "d"}'), (3, 1, '{"e": "f"}');
 
 statement ok
-CREATE STATISTICS s FROM expression
+CREATE STATISTICS s FROM expression AS OF SYSTEM TIME '-1us'
 
 query TTIIB colnames
 SELECT
@@ -1277,7 +1279,7 @@ statement ok
 INSERT INTO noind VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 
 statement ok
-CREATE STATISTICS s FROM noind
+CREATE STATISTICS s FROM noind AS OF SYSTEM TIME '-1us'
 
 query TTIIB colnames
 SELECT
@@ -1320,7 +1322,7 @@ statement ok
 INSERT INTO geo_table VALUES (1, 'LINESTRING(0 0, 100 100)', ST_GeomFromText('LINESTRING(0 0, 100 100)', 3857));
 
 statement ok
-CREATE STATISTICS s FROM geo_table;
+CREATE STATISTICS s FROM geo_table AS OF SYSTEM TIME '-1us';
 
 query TB colnames
 SELECT
@@ -1343,7 +1345,7 @@ statement ok
 CREATE INDEX geog_idx_1 ON geo_table USING GIST(geog) WITH (s2_level_mod=3);
 
 statement ok
-CREATE STATISTICS s FROM geo_table;
+CREATE STATISTICS s FROM geo_table AS OF SYSTEM TIME '-1us';
 
 query TB colnames
 SELECT
@@ -1366,7 +1368,7 @@ statement ok
 CREATE INDEX geog_idx_2 ON geo_table USING GIST(geog);
 
 statement ok
-CREATE STATISTICS s FROM geo_table;
+CREATE STATISTICS s FROM geo_table AS OF SYSTEM TIME '-1us';
 
 query TB colnames
 SELECT
@@ -1398,7 +1400,7 @@ statement ok
 DROP INDEX geo_table@geog_idx_1;
 
 statement ok
-CREATE STATISTICS s FROM geo_table;
+CREATE STATISTICS s FROM geo_table AS OF SYSTEM TIME '-1us';
 
 # Demonstrate that buckets change when the first chosen index is dropped.
 let $hist_id_1
@@ -1427,7 +1429,7 @@ statement ok
 INSERT INTO multi_col VALUES (1, 'foo', '{"a": "b"}');
 
 statement ok
-CREATE STATISTICS s FROM multi_col;
+CREATE STATISTICS s FROM multi_col AS OF SYSTEM TIME '-1us';
 
 query TB colnames
 SELECT
@@ -1448,7 +1450,7 @@ statement ok
 SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
 
 statement ok
-CREATE STATISTICS s FROM multi_col;
+CREATE STATISTICS s FROM multi_col AS OF SYSTEM TIME '-1us';
 
 # Do not create multi-column stats with an invertable column.
 query TB colnames
@@ -1478,7 +1480,7 @@ statement ok
 INSERT INTO all_null VALUES (1, NULL);
 
 statement ok
-CREATE STATISTICS s FROM all_null
+CREATE STATISTICS s FROM all_null AS OF SYSTEM TIME '-1us'
 
 query T
 SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
@@ -1536,7 +1538,7 @@ statement ok
 INSERT INTO greeting_stats VALUES ('hi');
 
 statement ok
-CREATE STATISTICS s FROM greeting_stats
+CREATE STATISTICS s FROM greeting_stats AS OF SYSTEM TIME '-1us'
 
 query T
 SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
@@ -1603,7 +1605,7 @@ statement ok
 INSERT INTO t63387 VALUES (1, '{}');
 
 statement ok
-CREATE STATISTICS s FROM t63387;
+CREATE STATISTICS s FROM t63387 AS OF SYSTEM TIME '-1us';
 
 # Regression test for #71080. Stats collection should succeed on tables with NOT
 # NULL virtual columns.
@@ -1625,13 +1627,13 @@ statement ok
 INSERT INTO t71080 VALUES (1, 2)
 
 statement ok
-CREATE STATISTICS s FROM t71080
+CREATE STATISTICS s FROM t71080 AS OF SYSTEM TIME '-1us'
 
 statement error cannot create statistics on virtual column \"b\"
-CREATE STATISTICS s ON b FROM t71080
+CREATE STATISTICS s ON b FROM t71080 AS OF SYSTEM TIME '-1us'
 
 statement error cannot create statistics on virtual column \"b\"
-CREATE STATISTICS s ON a, b FROM t71080
+CREATE STATISTICS s ON a, b FROM t71080 AS OF SYSTEM TIME '-1us'
 
 # Regression test for #76867. Do not attempt to collect empty multi-column stats
 # when there are indexes on columns that are all virtual.
@@ -1685,7 +1687,7 @@ statement ok
 CREATE TABLE tabula (r INT, a INT, sa INT, PRIMARY KEY (r), INDEX (a, sa))
 
 statement ok
-CREATE STATISTICS aristotle FROM tabula
+CREATE STATISTICS aristotle FROM tabula AS OF SYSTEM TIME '-1us'
 
 query TTIB colnames
 SELECT statistics_name, column_names, row_count, histogram_id IS NOT NULL AS has_histogram
@@ -1770,7 +1772,7 @@ statement ok
 INSERT INTO tabula VALUES (11, 12, NULL)
 
 statement ok
-CREATE STATISTICS locke FROM tabula
+CREATE STATISTICS locke FROM tabula AS OF SYSTEM TIME '-1us'
 
 query TTIIB colnames
 SELECT statistics_name, column_names, row_count, null_count, histogram_id IS NOT NULL AS has_histogram
@@ -1880,13 +1882,13 @@ statement ok
 ANALYZE t1
 
 statement ok
-CREATE STATISTICS t1_ab ON a,b FROM t1
+CREATE STATISTICS t1_ab ON a,b FROM t1 AS OF SYSTEM TIME '-1us'
 
 statement ok
-CREATE STATISTICS t1_ac ON a,c FROM t1
+CREATE STATISTICS t1_ac ON a,c FROM t1 AS OF SYSTEM TIME '-1us'
 
 statement ok
-CREATE STATISTICS t1_bc ON b,c FROM t1
+CREATE STATISTICS t1_bc ON b,c FROM t1 AS OF SYSTEM TIME '-1us'
 
 statement ok
 ALTER TABLE t1 drop column c
@@ -1972,16 +1974,16 @@ statement ok
 CREATE TABLE u (d INT, c INT, b INT, a INT, PRIMARY KEY (a, b), INDEX (c, d, a, b));
 
 statement ok
-CREATE STATISTICS u_defaults FROM u;
+CREATE STATISTICS u_defaults FROM u AS OF SYSTEM TIME '-1us';
 
 statement ok
-CREATE STATISTICS u_a_b ON a, b FROM u;
+CREATE STATISTICS u_a_b ON a, b FROM u AS OF SYSTEM TIME '-1us';
 
 statement ok
-CREATE STATISTICS u_b_a ON b, a FROM u;
+CREATE STATISTICS u_b_a ON b, a FROM u AS OF SYSTEM TIME '-1us';
 
 statement ok
-CREATE STATISTICS u_c_d_b ON c, d, b FROM u;
+CREATE STATISTICS u_c_d_b ON c, d, b FROM u AS OF SYSTEM TIME '-1us';
 
 query TT colnames
 SELECT statistics_name, column_names
@@ -2077,13 +2079,13 @@ INSERT INTO abcd VALUES
 (8, 80, 800, 8000);
 
 statement ok
-CREATE STATISTICS abcd_a ON a FROM abcd;
+CREATE STATISTICS abcd_a ON a FROM abcd AS OF SYSTEM TIME '-1us';
 
 statement ok
-CREATE STATISTICS abcd_c ON c FROM abcd;
+CREATE STATISTICS abcd_c ON c FROM abcd AS OF SYSTEM TIME '-1us';
 
 statement ok
-CREATE STATISTICS xy_x ON x FROM xy;
+CREATE STATISTICS xy_x ON x FROM xy AS OF SYSTEM TIME '-1us';
 
 # insert values at the extremes of column a and c.
 statement ok
@@ -2097,22 +2099,25 @@ statement ok
 INSERT INTO xy VALUES (-1, 9), (-2, 8), (5, 15), (6, 16)
 
 statement error pgcode 0A000 creating partial statistics with a WHERE clause is not yet supported
-CREATE STATISTICS abcd_a_partial ON a FROM abcd WHERE a > 1;
+CREATE STATISTICS abcd_a_partial ON a FROM abcd WHERE a > 1 AS OF SYSTEM TIME '-1us';
 
 statement error pgcode 0A000 creating partial statistics at extremes is not yet supported
-CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES;
+CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES AS OF SYSTEM TIME '-1us';
+
+statement error pgcode 42601 creating partial statistics requires an AS OF SYSTEM TIME clause such as AS OF SYSTEM TIME '-0.001s'
+CREATE STATISTICS abcd_a_partial ON a FROM abcd;
 
 statement ok
 SET enable_create_stats_using_extremes = on
 
 statement ok
-CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES;
+CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 statement ok
-CREATE STATISTICS abcd_c_partial ON c FROM abcd USING EXTREMES;
+CREATE STATISTICS abcd_c_partial ON c FROM abcd USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 statement ok
-CREATE STATISTICS xy_x_partial ON x FROM xy USING EXTREMES;
+CREATE STATISTICS xy_x_partial ON x FROM xy USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 let $hist_abcd_a_partial
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE abcd] WHERE statistics_name = 'abcd_a_partial';
@@ -2167,7 +2172,7 @@ xy_x_partial  (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))
 
 # Test if requesting a partial stat again uses the previous full stat and not the previous partial stat.
 statement ok
-CREATE STATISTICS xy_x_partial_2 ON x FROM xy USING EXTREMES
+CREATE STATISTICS xy_x_partial_2 ON x FROM xy USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 query TTII colnames
 SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
@@ -2203,7 +2208,7 @@ statement ok
 INSERT INTO a_null VALUES (NULL), (1), (2);
 
 statement ok
-CREATE STATISTICS a_null_stat ON a FROM a_null;
+CREATE STATISTICS a_null_stat ON a FROM a_null AS OF SYSTEM TIME '-1us';
 
 let $a_null_stats
 SHOW STATISTICS USING JSON FOR TABLE a_null
@@ -2219,7 +2224,7 @@ statement ok
 INSERT INTO a_null VALUES (NULL), (NULL), (NULL);
 
 statement ok
-CREATE STATISTICS a_null_stat_partial ON a FROM a_null USING EXTREMES;
+CREATE STATISTICS a_null_stat_partial ON a FROM a_null USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 let $hist_a_null_stat_partial
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE a_null] WHERE statistics_name = 'a_null_stat_partial';
@@ -2246,7 +2251,7 @@ statement ok
 INSERT INTO d_desc VALUES (1, 10), (2, 20), (3, 30), (4, 40);
 
 statement ok
-CREATE STATISTICS sd ON a FROM d_desc;
+CREATE STATISTICS sd ON a FROM d_desc AS OF SYSTEM TIME '-1us';
 
 let $d_desc_stats
 SHOW STATISTICS USING JSON FOR TABLE d_desc;
@@ -2262,7 +2267,7 @@ statement ok
 INSERT INTO d_desc VALUES (0, 0), (5, 50);
 
 statement ok
-CREATE STATISTICS sdp ON a FROM d_desc USING EXTREMES;
+CREATE STATISTICS sdp ON a FROM d_desc USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 let $hist_d_desc
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE d_desc] WHERE statistics_name = 'sdp';
@@ -2288,7 +2293,7 @@ statement ok
 INSERT INTO d_desc VALUES (NULL, NULL), (NULL, 2);
 
 statement ok
-CREATE STATISTICS sdn ON a FROM d_desc;
+CREATE STATISTICS sdn ON a FROM d_desc AS OF SYSTEM TIME '-1us';
 
 let $d_desc_null_stats
 SHOW STATISTICS USING JSON FOR TABLE d_desc;
@@ -2301,7 +2306,7 @@ statement ok
 ALTER TABLE d_desc INJECT STATISTICS '$d_desc_null_stats'
 
 statement ok
-CREATE STATISTICS sdnp ON a FROM d_desc USING EXTREMES;
+CREATE STATISTICS sdnp ON a FROM d_desc USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 query TTII colnames
 SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
@@ -2314,10 +2319,10 @@ sdnp             (a IS NULL) OR ((a < 0:::INT8) OR (a > 5:::INT8))  2          2
 
 # Verify errors.
 statement error pq: cannot process multiple partial statistics at once
-CREATE STATISTICS abcd_defaults FROM abcd USING EXTREMES;
+CREATE STATISTICS abcd_defaults FROM abcd USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 statement error pq: multi-column partial statistics are not currently supported
-CREATE STATISTICS abcd_a_b ON a, c FROM abcd USING EXTREMES;
+CREATE STATISTICS abcd_a_b ON a, c FROM abcd USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 # Verify that a non-inverted index string column with a string histogram
 # can have partial statistics
@@ -2328,7 +2333,7 @@ statement ok
 INSERT INTO s VALUES ('c'), ('d'), ('e');
 
 statement ok
-CREATE STATISTICS str ON s FROM s;
+CREATE STATISTICS str ON s FROM s AS OF SYSTEM TIME '-1us';
 
 let $s_stats
 SHOW STATISTICS USING JSON FOR TABLE s;
@@ -2344,7 +2349,7 @@ statement ok
 ALTER TABLE s INJECT STATISTICS '$s_stats'
 
 statement ok
-CREATE STATISTICS s_partial ON s FROM s USING EXTREMES;
+CREATE STATISTICS s_partial ON s FROM s USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 query TTII colnames
 SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
@@ -2363,7 +2368,7 @@ statement ok
 INSERT INTO j VALUES ('{"1":"10"}'), ('{"2":"20"}'),  ('{"3":"30"}');
 
 statement ok
-CREATE STATISTICS j_full ON j FROM j;
+CREATE STATISTICS j_full ON j FROM j AS OF SYSTEM TIME '-1us';
 
 let $j_stats
 SHOW STATISTICS USING JSON FOR TABLE j;
@@ -2376,19 +2381,19 @@ statement ok
 ALTER TABLE j INJECT STATISTICS '$j_stats'
 
 statement error pq: table j does not contain a non-partial forward index with j as a prefix column
-CREATE STATISTICS j_partial ON j FROM j USING EXTREMES;
+CREATE STATISTICS j_partial ON j FROM j USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX (x, y));
 
 statement error pq: column x does not have a prior statistic
-CREATE STATISTICS xyz_x ON x FROM xyz USING EXTREMES;
+CREATE STATISTICS xyz_x ON x FROM xyz USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 statement error pq: the latest full statistic for column a has no histogram
-CREATE STATISTICS u_partial ON a FROM u USING EXTREMES;
+CREATE STATISTICS u_partial ON a FROM u USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
-CREATE STATISTICS xy_y_partial ON y FROM xy USING EXTREMES;
+CREATE STATISTICS xy_y_partial ON y FROM xy USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 statement ok
 CREATE TABLE only_null (a INT, INDEX (a));
@@ -2397,7 +2402,7 @@ statement ok
 INSERT INTO only_null VALUES (NULL), (NULL), (NULL);
 
 statement ok
-CREATE STATISTICS only_null_stat ON a FROM only_null;
+CREATE STATISTICS only_null_stat ON a FROM only_null AS OF SYSTEM TIME '-1us';
 
 let $only_null_stat
 SHOW STATISTICS USING JSON FOR TABLE only_null;
@@ -2410,13 +2415,13 @@ statement ok
 ALTER TABLE only_null INJECT STATISTICS '$only_null_stat';
 
 statement error pq: only NULL values exist in the index, so partial stats cannot be collected
-CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
+CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 statement ok
 CREATE INDEX ON xy (y) WHERE y > 5;
 
 statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
-CREATE STATISTICS xy_partial_idx ON y FROM xy USING EXTREMES;
+CREATE STATISTICS xy_partial_idx ON y FROM xy USING EXTREMES AS OF SYSTEM TIME '-1us';
 
 statement ok
 RESET enable_create_stats_using_extremes
@@ -2428,7 +2433,7 @@ CREATE TABLE t100909 (x int, y enum1);
 INSERT INTO t100909 VALUES (1, 'hello'), (2, 'hello'), (3, 'hi');
 
 statement ok
-CREATE STATISTICS s1 ON y FROM t100909;
+CREATE STATISTICS s1 ON y FROM t100909 AS OF SYSTEM TIME '-1us';
 
 let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t100909] WHERE statistics_name = 's1'
@@ -2488,7 +2493,7 @@ statement ok
 INSERT INTO tab_test_privileges VALUES (1);
 
 statement ok
-CREATE STATISTICS tab_test_privileges_stat ON a FROM tab_test_privileges;
+CREATE STATISTICS tab_test_privileges_stat ON a FROM tab_test_privileges AS OF SYSTEM TIME '-1us';
 
 user testuser
 
@@ -2534,7 +2539,7 @@ statement ok
 INSERT INTO t68254 (a, b, c) VALUES (4, NULL, NULL)
 
 statement ok
-CREATE STATISTICS j1 FROM t68254
+CREATE STATISTICS j1 FROM t68254 AS OF SYSTEM TIME '-1us'
 
 query TTIIIB colnames
 SELECT
@@ -2558,13 +2563,13 @@ j1               {e}           5          5               1           true
 j1               {f}           5          5               1           true
 
 statement ok
-CREATE STATISTICS j2 ON d FROM t68254
+CREATE STATISTICS j2 ON d FROM t68254 AS OF SYSTEM TIME '-1us'
 
 statement ok
-CREATE STATISTICS j3 ON e FROM t68254
+CREATE STATISTICS j3 ON e FROM t68254 AS OF SYSTEM TIME '-1us'
 
 statement ok
-CREATE STATISTICS j4 ON f FROM t68254
+CREATE STATISTICS j4 ON f FROM t68254 AS OF SYSTEM TIME '-1us'
 
 let $hist_d
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j2'
@@ -2658,7 +2663,7 @@ statement ok
 CREATE INDEX ON t68254 ((c->'foo'))
 
 statement ok
-CREATE STATISTICS j4 FROM t68254
+CREATE STATISTICS j4 FROM t68254 AS OF SYSTEM TIME '-1us'
 
 query TTIIIB colnames
 SELECT
@@ -2683,7 +2688,7 @@ j4               {e}                       5          5               1         
 j4               {f}                       5          5               1           true
 
 statement ok
-CREATE STATISTICS j5 ON crdb_internal_idx_expr FROM t68254
+CREATE STATISTICS j5 ON crdb_internal_idx_expr FROM t68254 AS OF SYSTEM TIME '-1us'
 
 let $hist_crdb_internal_idx_expr
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j5'
@@ -2705,13 +2710,13 @@ statement ok
 INSERT INTO t68254 (a, b, c) VALUES (5, '5', '{"foo": {"bar": {"baz": 5}}}')
 
 statement ok
-CREATE STATISTICS j6 ON d FROM t68254 USING EXTREMES
+CREATE STATISTICS j6 ON d FROM t68254 USING EXTREMES AS OF SYSTEM TIME '-1us'
 
 statement ok
-CREATE STATISTICS j7 ON e FROM t68254 USING EXTREMES
+CREATE STATISTICS j7 ON e FROM t68254 USING EXTREMES AS OF SYSTEM TIME '-1us'
 
 statement ok
-CREATE STATISTICS j8 ON crdb_internal_idx_expr FROM t68254 USING EXTREMES
+CREATE STATISTICS j8 ON crdb_internal_idx_expr FROM t68254 USING EXTREMES AS OF SYSTEM TIME '-1us'
 
 let $hist_d
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j6'
@@ -2762,7 +2767,7 @@ statement error job \d+ was paused before it completed with reason: pause point 
 ALTER TABLE t118537 ALTER PRIMARY KEY USING COLUMNS (a) USING HASH
 
 statement ok
-CREATE STATISTICS mutation FROM t118537
+CREATE STATISTICS mutation FROM t118537 AS OF SYSTEM TIME '-1us'
 
 query TTIB colnames
 SELECT statistics_name, column_names, row_count, histogram_id IS NOT NULL AS has_histogram
