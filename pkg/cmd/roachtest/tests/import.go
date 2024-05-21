@@ -137,14 +137,26 @@ func registerImportTPCC(r registry.Registry) {
 		m := c.NewMonitor(ctx)
 		dul := roachtestutil.NewDiskUsageLogger(t, c)
 		m.Go(dul.Runner)
-		hc := roachtestutil.NewHealthChecker(t, c, c.All())
-		m.Go(hc.Runner)
+		var hc *roachtestutil.HealthChecker
+		if !c.Spec().Geo {
+			// We skip the health checker in the geo config since it is prone to
+			// network errors, and we don't want to fail the test if the health
+			// check fails.
+			hc = roachtestutil.NewHealthChecker(t, c, c.All())
+			m.Go(hc.Runner)
+		}
 
 		tick, perfBuf := initBulkJobPerfArtifacts(testName, timeout)
 		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081' {pgurl:1}`
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
-			defer hc.Done()
+			if c.Spec().Geo {
+				// Increase the retry duration in the geo config to harden the
+				// test.
+				c.Run(ctx, c.Node(1), `./cockroach sql -e "SET CLUSTER SETTING bulkio.import.retry_duration = '20m';" --url={pgurl:1}`)
+			} else {
+				defer hc.Done()
+			}
 			cmd := fmt.Sprintf(workloadStr, warehouses)
 			// Tick once before starting the import, and once after to capture the
 			// total elapsed time. This is used by roachperf to compute and display
@@ -187,8 +199,9 @@ func registerImportTPCC(r registry.Registry) {
 	}
 	const geoWarehouses = 4000
 	const geoZones = "europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b"
+	testName := fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses)
 	r.Add(registry.TestSpec{
-		Name:              fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
+		Name:              testName,
 		Owner:             registry.OwnerSQLQueries,
 		Cluster:           r.MakeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.GCEZones(geoZones)),
 		CompatibleClouds:  registry.OnlyGCE,
@@ -197,8 +210,7 @@ func registerImportTPCC(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runImportTPCC(ctx, t, c, fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
-				5*time.Hour, geoWarehouses)
+			runImportTPCC(ctx, t, c, testName, 5*time.Hour, geoWarehouses)
 		},
 	})
 }
