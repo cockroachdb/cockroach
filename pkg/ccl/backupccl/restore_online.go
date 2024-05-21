@@ -89,6 +89,23 @@ func sendAddRemoteSSTs(
 		return 0, 0, errors.Wrap(err, "creating key rewriter from rekeys")
 	}
 
+	// init split
+	firstKey := dataToRestore.getSpans()[0].Key.Clone()
+	firstSplitKey, ok, err := kr.RewriteKey(firstKey, 0)
+	if !ok || err != nil {
+		return 0, 0, errors.Wrapf(err, "first key %s was not rewritten", firstKey)
+	}
+
+	if err := sendSplitAt(ctx, execCtx, firstSplitKey); err != nil {
+		log.Warningf(ctx, "failed first split during experimental restore: %v", err)
+	}
+	// scatter it a few times
+	for i := 0; i < 5; i++ {
+		if err := sendAdminScatter(ctx, execCtx, firstSplitKey); err != nil {
+			log.Warningf(ctx, "failed first scatter during experimental restore: %v", err)
+		}
+	}
+
 	fromSystemTenant := isFromSystemTenant(dataToRestore.getTenantRekeys())
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
