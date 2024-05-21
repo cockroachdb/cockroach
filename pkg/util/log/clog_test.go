@@ -749,8 +749,8 @@ func TestLogEntryPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = f.Close() }()
-	defer func(prevStderr *os.File) { OrigStderr = prevStderr }(OrigStderr)
-	OrigStderr = f
+	require.NoError(t, hijackStderr(f))
+	defer func() { require.NoError(t, hijackStderr(OrigStderr)) }()
 
 	const specialMessage = `CAPTAIN KIRK`
 
