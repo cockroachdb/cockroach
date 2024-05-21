@@ -457,6 +457,13 @@ func NewEventDecoder(
 		return nil, err
 	}
 
+	return NewEventDecoderWithCache(ctx, rfCache, includeVirtual, keyOnly), nil
+}
+
+// NewEventDecoderWithCache returns key value decoder.
+func NewEventDecoderWithCache(
+	ctx context.Context, rfCache *rowFetcherCache, includeVirtual bool, keyOnly bool,
+) Decoder {
 	eventDescriptorCache := cache.NewUnorderedCache(DefaultCacheConfig)
 	getEventDescriptor := func(
 		desc catalog.TableDescriptor,
@@ -469,7 +476,7 @@ func NewEventDecoder(
 	return &eventDecoder{
 		getEventDescriptor: getEventDescriptor,
 		rfCache:            rfCache,
-	}, nil
+	}
 }
 
 // RowType is the type of the row being decoded.
