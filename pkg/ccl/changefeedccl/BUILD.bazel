@@ -214,7 +214,7 @@ go_test(
         "show_changefeed_jobs_test.go",
         "sink_cloudstorage_test.go",
         "sink_kafka_connection_test.go",
-        "sink_pulsar_test.go",
+        "sink_kafka_v2_test.go",
         "sink_test.go",
         "sink_webhook_test.go",
         "testfeed_test.go",
