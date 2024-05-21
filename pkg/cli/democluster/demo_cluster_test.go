@@ -173,7 +173,8 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		}
 	}()
 
-	ctx := context.Background()
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
 
 	// Setup the transient cluster.
 	c := transientCluster{
@@ -185,16 +186,16 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		warnLog:           log.Warningf,
 		shoutLog:          log.Ops.Shoutf,
 	}
+
+	// Ensure the context gets canceled when the stopper terminates.
+	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
+
+	require.NoError(t, c.Start(ctx))
+
 	// Stop the cluster when the test exits, including when it fails.
 	// This also calls the Stop() method on the stopper, and thus
 	// cancels everything controlled by the stopper.
 	defer c.Close(ctx)
-
-	// Also ensure the context gets canceled when the stopper
-	// terminates above.
-	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
-
-	require.NoError(t, c.Start(ctx))
 
 	c.SetSimulatedLatency(true)
 
