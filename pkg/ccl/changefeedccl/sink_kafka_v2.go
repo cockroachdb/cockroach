@@ -233,6 +233,8 @@ func (k *kafkaSinkClient) getProducer() (sarama.AsyncProducer, error) {
 	k.producers.producers = k.producers.producers[:last]
 	k.producersCheckedOut.Add(1)
 
+	log.Infof(context.TODO(), `checked out producer. %d checked out`, k.producersCheckedOut.Load())
+
 	return ap, nil
 }
 

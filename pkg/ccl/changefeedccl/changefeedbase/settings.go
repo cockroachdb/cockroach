@@ -217,7 +217,7 @@ var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"changefeed.batch_reduction_retry_enabled",
 	"if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes",
-	false,
+	false, // TODO: metamorph?
 	settings.WithName("changefeed.batch_reduction_retry.enabled"),
 	settings.WithPublic)
 
