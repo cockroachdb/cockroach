@@ -1,12 +1,43 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "storeliveness",
-    srcs = ["fabric.go"],
+    srcs = [
+        "callback_scheduler.go",
+        "fabric.go",
+        "support_manager.go",
+        "support_state.go",
+        "transport.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/kv/kvserver/storeliveness/storelivenesspb",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
         "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@org_golang_google_grpc//:go_default_library",
+    ],
+)
+
+go_test(
+    name = "storeliveness_test",
+    srcs = ["support_manager_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":storeliveness"],
+    deps = [
+        "//pkg/kv/kvserver/storeliveness/storelivenesspb",
+        "//pkg/roachpb",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

@@ -1,0 +1,55 @@
+# Time starts at 1000 milli, heartbeat interval is 1000 milli.
+# Initially, there's only one store: Node 1, Store 1.
+# It heartbeats itself: n1-s1 => n1-s1
+
+# Next, we add another store: Node: 1, Store 2.
+# n1-s1 => n1-s2
+add-store node-id=1 store-id=2
+----
+heartbeats:
+{Header:{From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:1} SenderTime:1.000000000,0} Heartbeat:{Epoch:0 EndTime:0,0}}
+{Header:{From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:2} SenderTime:1.000000000,1} Heartbeat:{Epoch:0 EndTime:0,0}}
+
+# After one heartbeat interval, each of the two heartbeats is resent.
+# n1-s1 => n1-s1
+# n1-s1 => n1-s2
+set-time now-milli=2000
+----
+hlc: 2.000000000,2
+heartbeats:
+{Header:{From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:1} SenderTime:2.000000000,0} Heartbeat:{Epoch:0 EndTime:0,0}}
+{Header:{From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:2} SenderTime:2.000000000,1} Heartbeat:{Epoch:0 EndTime:0,0}}
+
+# Next, we add another store: Node: 2, Store 3.
+# n1-s1 => n2-s3
+add-store node-id=2 store-id=3
+----
+heartbeats:
+{Header:{From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:3} SenderTime:2.000000000,3} Heartbeat:{Epoch:0 EndTime:0,0}}
+
+# After one more heartbeat interval, each of the three heartbeats is sent again.
+# n1-s1 => n1-s1
+# n1-s1 => n1-s2
+# n1-s2 => n2-s3
+set-time now-milli=3000
+----
+hlc: 3.000000000,3
+heartbeats:
+{Header:{From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:1} SenderTime:3.000000000,0} Heartbeat:{Epoch:0 EndTime:0,0}}
+{Header:{From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:2} SenderTime:3.000000000,1} Heartbeat:{Epoch:0 EndTime:0,0}}
+{Header:{From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:3} SenderTime:3.000000000,2} Heartbeat:{Epoch:0 EndTime:0,0}}
+
+# Remove the latest remote store. No new heartbeats are sent.
+remove-store node-id=2 store-id=3
+----
+heartbeats:
+
+# After one more heartbeat interval, each of the remaining two heartbeats is sent again.
+# n1-s1 => n1-s1
+# n1-s1 => n1-s2
+set-time now-milli=4000
+----
+hlc: 4.000000000,2
+heartbeats:
+{Header:{From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:1} SenderTime:4.000000000,0} Heartbeat:{Epoch:0 EndTime:0,0}}
+{Header:{From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:2} SenderTime:4.000000000,1} Heartbeat:{Epoch:0 EndTime:0,0}}

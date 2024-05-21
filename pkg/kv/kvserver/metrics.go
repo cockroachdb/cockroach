@@ -3492,6 +3492,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			raftpb.MsgHeartbeatResp:  metric.NewCounter(metaRaftRcvdHeartbeatResp),
 			raftpb.MsgTransferLeader: metric.NewCounter(metaRaftRcvdTransferLeader),
 			raftpb.MsgTimeoutNow:     metric.NewCounter(metaRaftRcvdTimeoutNow),
+			// TODO(#124498): Set these to their own metric metas.
+			raftpb.MsgFortifyLeader:     metric.NewCounter(metaRaftRcvdTimeoutNow),
+			raftpb.MsgFortifyLeaderResp: metric.NewCounter(metaRaftRcvdTimeoutNow),
 		},
 		RaftRcvdDropped:          metric.NewCounter(metaRaftRcvdDropped),
 		RaftRcvdDroppedBytes:     metric.NewCounter(metaRaftRcvdDroppedBytes),

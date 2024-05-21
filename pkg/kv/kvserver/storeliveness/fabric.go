@@ -11,7 +11,7 @@
 package storeliveness
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -42,7 +42,7 @@ type Fabric interface {
 	// If S_local cannot map the replica ID to a store ID, false will be returned.
 	// It is therefore important to ensure that the replica ID to store ID mapping
 	// is not lost during periods of support.
-	SupportFor(id roachpb.StoreID) (Epoch, bool)
+	SupportFor(id storelivenesspb.StoreIdent) (Epoch, bool)
 
 	// SupportFrom returns the epoch of the current uninterrupted period of Store
 	// Liveness support from the specified replica's remote store (S_remote) for
@@ -58,5 +58,5 @@ type Fabric interface {
 	// However, S_remote will never be unaware of support it is providing.
 	//
 	// If S_local cannot map the replica ID to a store ID, false will be returned.
-	SupportFrom(id roachpb.StoreID) (Epoch, Expiration, bool)
+	SupportFrom(id storelivenesspb.StoreIdent) (Epoch, Expiration, bool)
 }

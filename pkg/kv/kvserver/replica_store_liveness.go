@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -26,13 +27,13 @@ func (r *replicaRLockedStoreLiveness) fabric() storeliveness.Fabric {
 	return r.store.cfg.StoreLiveness
 }
 
-func (r *replicaRLockedStoreLiveness) getStoreID(replicaID uint64) (roachpb.StoreID, bool) {
+func (r *replicaRLockedStoreLiveness) getStoreIdentifier(replicaID uint64) (storelivenesspb.StoreIdent, bool) {
 	r.mu.AssertRHeld()
 	desc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(replicaID))
 	if ok {
-		return 0, false
+		return storelivenesspb.StoreIdent{}, false
 	}
-	return desc.StoreID, true
+	return storelivenesspb.StoreIdent{NodeID: desc.NodeID, StoreID: desc.StoreID}, true
 }
 
 // Enabled implements the raft.StoreLiveness interface.
@@ -44,7 +45,7 @@ func (r *replicaRLockedStoreLiveness) Enabled() bool {
 
 // SupportFor implements the raft.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFor(replicaID uint64) (raft.StoreLivenessEpoch, bool) {
-	storeID, ok := r.getStoreID(replicaID)
+	storeID, ok := r.getStoreIdentifier(replicaID)
 	if !ok {
 		return 0, false
 	}
@@ -59,7 +60,7 @@ func (r *replicaRLockedStoreLiveness) SupportFor(replicaID uint64) (raft.StoreLi
 func (r *replicaRLockedStoreLiveness) SupportFrom(
 	replicaID uint64,
 ) (raft.StoreLivenessEpoch, raft.StoreLivenessExpiration, bool) {
-	storeID, ok := r.getStoreID(replicaID)
+	storeID, ok := r.getStoreIdentifier(replicaID)
 	if !ok {
 		return 0, raft.StoreLivenessExpiration{}, false
 	}
