@@ -1530,7 +1530,7 @@ func (mvb *mixedVersionBackup) maybeTakePreviousVersionBackup(
 		return err
 	}
 
-	previousVersion := h.Context.FromVersion
+	previousVersion := h.Context().FromVersion
 	label := fmt.Sprintf("before upgrade in %s", sanitizeVersionForBackup(previousVersion))
 	allPrevVersionNodes := labeledNodes{Nodes: mvb.roachNodes, Version: previousVersion.String()}
 	executeOnAllNodesSpec := backupSpec{PauseProbability: neverPause, Plan: allPrevVersionNodes, Execute: allPrevVersionNodes}
@@ -1558,12 +1558,12 @@ func (d *BackupRestoreTestDriver) nextRestoreID() int64 {
 // provide more context. Example: '22.2.4-to-current_final'
 func (mvb *mixedVersionBackup) backupNamePrefix(h *mixedversion.Helper, label string) string {
 	var finalizing string
-	if h.Context.Finalizing {
+	if h.IsFinalizing() {
 		finalizing = finalizingLabel
 	}
 
-	fromVersion := sanitizeVersionForBackup(h.Context.FromVersion)
-	toVersion := sanitizeVersionForBackup(h.Context.ToVersion)
+	fromVersion := sanitizeVersionForBackup(h.Context().FromVersion)
+	toVersion := sanitizeVersionForBackup(h.Context().ToVersion)
 	sanitizedLabel := strings.ReplaceAll(label, " ", "-")
 
 	return fmt.Sprintf(
@@ -1876,7 +1876,7 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 		label = labelOverride
 	}
 	backupNamePrefix := mvb.backupNamePrefix(h, label)
-	n, db := h.RandomDB(rng, mvb.roachNodes)
+	n, db := h.System.RandomDB(rng)
 	l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
 	internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
 	if err != nil {
@@ -2051,10 +2051,10 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
 	onPrevious := labeledNodes{
-		Nodes: h.Context.NodesInPreviousVersion(), Version: sanitizeVersionForBackup(h.Context.FromVersion),
+		Nodes: h.Context().NodesInPreviousVersion(), Version: sanitizeVersionForBackup(h.Context().FromVersion),
 	}
 	onNext := labeledNodes{
-		Nodes: h.Context.NodesInNextVersion(), Version: sanitizeVersionForBackup(h.Context.ToVersion),
+		Nodes: h.Context().NodesInNextVersion(), Version: sanitizeVersionForBackup(h.Context().ToVersion),
 	}
 	onRandom := labeledNodes{Nodes: mvb.roachNodes, Version: "random node"}
 	defaultPauseProbability := 0.2
@@ -2092,7 +2092,7 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 		},
 	}
 
-	if h.Context.MixedBinary() {
+	if h.Context().MixedBinary() {
 		const numCollections = 2
 		rng.Shuffle(len(collectionSpecs), func(i, j int) {
 			collectionSpecs[i], collectionSpecs[j] = collectionSpecs[j], collectionSpecs[i]
@@ -2298,7 +2298,7 @@ func (mvb *mixedVersionBackup) verifySomeBackups(
 		l.Printf("skipping check_files as it is not supported")
 	}
 
-	n, db := h.RandomDB(rng, mvb.roachNodes)
+	n, db := h.System.RandomDB(rng)
 	l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
 	internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
 	if err != nil {
@@ -2364,7 +2364,7 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 				l.Printf("skipping check_files as it is not supported")
 			}
 
-			n, db := h.RandomDB(rng, mvb.roachNodes)
+			n, db := h.System.RandomDB(rng)
 			l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
 			internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
 			if err != nil {
@@ -2387,8 +2387,8 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 		}
 	}
 
-	verify(h.Context.FromVersion)
-	verify(h.Context.ToVersion)
+	verify(h.Context().FromVersion)
+	verify(h.Context().ToVersion)
 
 	// If the context was canceled (most likely due to a test timeout),
 	// return early. In these cases, it's likely that `restoreErrors`
