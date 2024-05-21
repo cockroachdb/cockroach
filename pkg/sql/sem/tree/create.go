@@ -1441,7 +1441,7 @@ func (node *RangePartition) Format(ctx *FmtCtx) {
 
 // StorageParam is a key-value parameter for table storage.
 type StorageParam struct {
-	Key   Name
+	Key   string
 	Value Expr
 }
 
@@ -1450,14 +1450,13 @@ type StorageParams []StorageParam
 
 // Format implements the NodeFormatter interface.
 func (o *StorageParams) Format(ctx *FmtCtx) {
+	buf, f := &ctx.Buffer, ctx.flags
 	for i := range *o {
 		n := &(*o)[i]
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		// TODO(knz): the key may need to be formatted differently
-		// if we want to de-anonymize it.
-		ctx.FormatNode(&n.Key)
+		lexbase.EncodeSQLStringWithFlags(buf, n.Key, f.EncodeFlags())
 		if n.Value != nil {
 			ctx.WriteString(` = `)
 			ctx.FormatNode(n.Value)
@@ -1468,9 +1467,8 @@ func (o *StorageParams) Format(ctx *FmtCtx) {
 // GetVal returns corresponding value if a key exists, otherwise nil is
 // returned.
 func (o *StorageParams) GetVal(key string) Expr {
-	k := Name(key)
 	for _, param := range *o {
-		if param.Key == k {
+		if param.Key == key {
 			return param.Value
 		}
 	}
