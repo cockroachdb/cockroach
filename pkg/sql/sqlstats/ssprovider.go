@@ -84,14 +84,6 @@ type ApplicationStats interface {
 		transactionFingerprintID appstatspb.TransactionFingerprintID,
 	) uint64
 
-	// MergeApplicationTransactionStats merges the other application's transaction
-	// statistics into the current ApplicationStats. It returns how many number
-	// of statistics were being discarded due to memory constraint.
-	MergeApplicationTransactionStats(
-		ctx context.Context,
-		other ApplicationStats,
-	) uint64
-
 	// MaybeLogDiscardMessage is used to possibly log a message when statistics
 	// are being discarded because of memory limits.
 	MaybeLogDiscardMessage(ctx context.Context)
@@ -99,10 +91,6 @@ type ApplicationStats interface {
 	// NewApplicationStatsWithInheritedOptions returns a new ApplicationStats
 	// interface that inherits all memory limits of the existing
 	NewApplicationStatsWithInheritedOptions() ApplicationStats
-
-	// Free frees the current ApplicationStats and zeros out the memory counts
-	// and fingerprint counts.
-	Free(context.Context)
 
 	// Clear is like Free but also prepares the container for reuse.
 	Clear(context.Context)
