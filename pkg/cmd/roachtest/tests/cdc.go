@@ -1575,6 +1575,8 @@ func registerCDC(r registry.Registry) {
 			// - try to get order validator to dump the problematic key reordering and also all the data?
 			// - try and get it to happen with spam.sql
 			// - see if other users of batching sink can hit this. might need tooling af tho
+			//   - might be able to just do webhook sink -> whx -> python
+			//   - doesnt seem to be triggering it but TODO see if i can make it happen there
 			// can parallelio reorder buffers??
 
 			// _, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.sink_io_workers = 1;`)

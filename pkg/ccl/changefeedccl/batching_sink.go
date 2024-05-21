@@ -351,7 +351,12 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 	// Once finalized, batches are sent to a parallelIO struct which handles
 	// performing multiple Flushes in parallel while maintaining Keys() ordering.
 	ioHandler := func(ctx context.Context, req IORequest, workerStuff any) error {
-		client := workerStuff.(SinkClient) // if not nil
+		var client SinkClient
+		if workerStuff == nil {
+			client = s.client
+		} else {
+			client = workerStuff.(SinkClient)
+		}
 		batch, _ := req.(*sinkBatch)
 		defer s.metrics.recordSinkIOInflightChange(int64(-batch.numMessages))
 		s.metrics.recordSinkIOInflightChange(int64(batch.numMessages))
