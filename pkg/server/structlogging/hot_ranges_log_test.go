@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -141,7 +140,6 @@ func TestHotRangesStats(t *testing.T) {
 	for _, i := range []int{1, 2} {
 		spy.Reset()
 		ts := tc.ApplicationLayer(i)
-		logcrash.DiagnosticsReportingEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
 		structlogging.TelemetryHotRangesStatsEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
 		structlogging.TelemetryHotRangesStatsInterval.Override(ctx, &ts.ClusterSettings().SV, time.Second)
 		structlogging.TelemetryHotRangesStatsLoggingDelay.Override(ctx, &ts.ClusterSettings().SV, 0*time.Millisecond)

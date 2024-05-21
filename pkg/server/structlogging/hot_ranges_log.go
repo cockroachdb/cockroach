@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -99,7 +98,7 @@ func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Sto
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if !logcrash.DiagnosticsReportingEnabled.Get(&s.st.SV) || !TelemetryHotRangesStatsEnabled.Get(&s.st.SV) {
+				if !TelemetryHotRangesStatsEnabled.Get(&s.st.SV) {
 					continue
 				}
 				resp, err := s.sServer.HotRangesV2(ctx,

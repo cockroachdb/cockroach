@@ -6294,3 +6294,11 @@ statement error pgcode 22023 pq: st_tileenvelope\(\): Unable to compute bbox
 SELECT st_tileenvelope(0, 0, 0, '010500000000000000');
 
 subtest end
+
+# Regression test for not respecting max_decimal_digits argument of the
+# st_geojson builtin function (#124368).
+query T
+SELECT st_asgeojson(tbl.*, 'g', 4)::JSONB->'geometry'->'coordinates'
+  FROM (VALUES ('SRID=4326;POINT (-123.45678901234 12.3456789012)'::GEOMETRY)) tbl(g);
+----
+[-123.4568, 12.3457]

@@ -65,17 +65,28 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 
 	appName := "telemetry-logging-datadriven"
 	ctx := context.Background()
-	stmtSpy := logtestutils.NewSampledQueryLogScrubVolatileFields(t)
-	stmtSpy.AddFilter(func(ev logpb.Entry) bool {
-		return strings.Contains(ev.Message, appName) || strings.Contains(ev.Message, internalConsoleAppName)
-	})
+	stmtSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY},
+		[]string{"sampled_query"},
+		logtestutils.FormatEntryAsJSON,
+		func(_ logpb.Entry, logStr string) bool {
+			return strings.Contains(logStr, appName) || strings.Contains(logStr, internalConsoleAppName)
+		},
+	)
+
 	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	txnsSpy := logtestutils.NewSampledTransactionLogScrubVolatileFields(t)
-	txnsSpy.AddFilter(func(ev logpb.Entry) bool {
-		return strings.Contains(ev.Message, appName) || strings.Contains(ev.Message, internalConsoleAppName)
-	})
+	txnsSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY},
+		[]string{"sampled_transaction"},
+		logtestutils.FormatEntryAsJSON,
+		func(_ logpb.Entry, logStr string) bool {
+			return strings.Contains(logStr, appName) || strings.Contains(logStr, internalConsoleAppName)
+		},
+	)
 	cleanupTxnSpy := log.InterceptWith(ctx, txnsSpy)
 	defer cleanupTxnSpy()
 
@@ -184,13 +195,13 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 				}
 
 				newStmtLogCount := stmtSpy.Count()
-				sb.WriteString(stmtSpy.GetLastNLogs(newStmtLogCount - stmtLogCount))
+				sb.WriteString(strings.Join(stmtSpy.GetLastNLogs(logpb.Channel_TELEMETRY, newStmtLogCount-stmtLogCount), "\n"))
 				if newStmtLogCount > stmtLogCount {
 					sb.WriteString("\n")
 				}
 
 				newTxnLogCount := txnsSpy.Count()
-				sb.WriteString(txnsSpy.GetLastNLogs(newTxnLogCount - txnLogCount))
+				sb.WriteString(strings.Join(txnsSpy.GetLastNLogs(logpb.Channel_TELEMETRY, newTxnLogCount-txnLogCount), "\n"))
 				return sb.String()
 			case "reset-last-sampled":
 				telemetryLogging.resetLastSampledTime()
