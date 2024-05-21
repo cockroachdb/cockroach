@@ -671,11 +671,15 @@ func (s *Container) Clear(ctx context.Context) {
 }
 
 func (s *Container) clearLocked(ctx context.Context) {
-	// freeLocked needs to be called before we clear the containers as
+	// We need to reset the counts before we clear the containers as
 	// it uses the size of each container to decrements counters that
 	// track the node-wide unique in-memory fingerprint counts for stmts
 	// and txns.
-	s.freeLocked(ctx)
+	if s.uniqueServerCount != nil {
+		s.uniqueServerCount.freeByCnt(int64(len(s.mu.stmts)), int64(len(s.mu.txns)))
+	}
+
+	s.mu.acc.Clear(ctx)
 
 	// Clear the map, to release the memory; make the new map somewhat already
 	// large for the likely future workload.
@@ -685,24 +689,6 @@ func (s *Container) clearLocked(ctx context.Context) {
 	if s.knobs != nil && s.knobs.OnAfterClear != nil {
 		s.knobs.OnAfterClear()
 	}
-}
-
-// Free frees the accounted resources from the Container. The Container is
-// presumed to be no longer in use and its actual allocated memory will
-// eventually be GC'd.
-func (s *Container) Free(ctx context.Context) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.freeLocked(ctx)
-}
-
-func (s *Container) freeLocked(ctx context.Context) {
-	if s.uniqueServerCount != nil {
-		s.uniqueServerCount.freeByCnt(int64(len(s.mu.stmts)), int64(len(s.mu.txns)))
-	}
-
-	s.mu.acc.Clear(ctx)
 }
 
 // MergeApplicationStatementStats implements the sqlstats.ApplicationStats interface.
@@ -745,39 +731,6 @@ func (s *Container) MergeApplicationStatementStats(
 			return nil
 		},
 	); err != nil {
-		// Calling Iterate.*Stats() function with a visitor function that does not
-		// return error should not cause any error.
-		panic(
-			errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error returned when iterating through application stats"),
-		)
-	}
-
-	return discardedStats
-}
-
-// MergeApplicationTransactionStats implements the sqlstats.ApplicationStats interface.
-func (s *Container) MergeApplicationTransactionStats(
-	ctx context.Context, other sqlstats.ApplicationStats,
-) (discardedStats uint64) {
-	if err := other.IterateTransactionStats(
-		ctx,
-		sqlstats.IteratorOptions{},
-		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
-			txnStats, _, throttled :=
-				s.getStatsForTxnWithKey(
-					statistics.TransactionFingerprintID,
-					statistics.StatementFingerprintIDs,
-					true, /* createIfNonexistent */
-				)
-
-			if throttled {
-				discardedStats++
-				return nil
-			}
-
-			txnStats.mergeStats(&statistics.Stats)
-			return nil
-		}); err != nil {
 		// Calling Iterate.*Stats() function with a visitor function that does not
 		// return error should not cause any error.
 		panic(
