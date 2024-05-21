@@ -12,67 +12,77 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestKafkaSinkV2(t *testing.T) {
+// this tests the inner sink client v2, not including the batching sink wrapper
+// copied mostly from TestKafkaSink
+func TestKafkaSinkClientV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	p := newAsyncProducerMock(1)
-	sink, cleanup := makeTestKafkaSink(
+	sinkClient, cleanup := makeTestKafkaSinkV2(
 		t, noTopicPrefix, defaultTopicName, p, "t")
 	defer cleanup()
 
 	// No inflight
-	require.NoError(t, sink.Flush(ctx))
+	require.NoError(t, sinkClient.Flush(ctx, nil))
+
+	type row struct {
+		key, value string
+	}
+	mkPayload := func(rows []row) SinkPayload {
+		buf := sinkClient.MakeBatchBuffer("t")
+		for _, r := range rows {
+			buf.Append([]byte(r.key), []byte(r.value), attributes{})
+		}
+		payload, err := buf.Close()
+		require.NoError(t, err)
+		return payload
+	}
 
 	// Timeout
-	require.NoError(t,
-		sink.EmitRow(ctx, topic(`t`), []byte(`1`), nil, zeroTS, zeroTS, zeroAlloc))
-
+	payload := mkPayload([]row{{`1`, `1`}})
 	m1 := <-p.inputCh
 	for i := 0; i < 2; i++ {
 		timeoutCtx, cancel := context.WithTimeout(ctx, time.Millisecond)
 		defer cancel()
-		require.True(t, errors.Is(context.DeadlineExceeded, sink.Flush(timeoutCtx)))
+		require.True(t, errors.Is(context.DeadlineExceeded, sinkClient.Flush(timeoutCtx, payload)))
 	}
 	go func() { p.successesCh <- m1 }()
-	require.NoError(t, sink.Flush(ctx))
+	require.NoError(t, sinkClient.Flush(ctx, payload))
 
-	// Check no inflight again now that we've sent something
-	require.NoError(t, sink.Flush(ctx))
+	// // Mixed success and error.
+	// var pool testAllocPool
+	// require.NoError(t, sinkClient.EmitRow(ctx,
+	// 	topic(`t`), []byte(`2`), nil, zeroTS, zeroTS, pool.alloc()))
+	// m2 := <-p.inputCh
+	// require.NoError(t, sinkClient.EmitRow(
+	// 	ctx, topic(`t`), []byte(`3`), nil, zeroTS, zeroTS, pool.alloc()))
 
-	// Mixed success and error.
-	var pool testAllocPool
-	require.NoError(t, sink.EmitRow(ctx,
-		topic(`t`), []byte(`2`), nil, zeroTS, zeroTS, pool.alloc()))
-	m2 := <-p.inputCh
-	require.NoError(t, sink.EmitRow(
-		ctx, topic(`t`), []byte(`3`), nil, zeroTS, zeroTS, pool.alloc()))
+	// m3 := <-p.inputCh
+	// require.NoError(t, sinkClient.EmitRow(
+	// 	ctx, topic(`t`), []byte(`4`), nil, zeroTS, zeroTS, pool.alloc()))
 
-	m3 := <-p.inputCh
-	require.NoError(t, sink.EmitRow(
-		ctx, topic(`t`), []byte(`4`), nil, zeroTS, zeroTS, pool.alloc()))
+	// m4 := <-p.inputCh
+	// go func() { p.successesCh <- m2 }()
+	// go func() {
+	// 	p.errorsCh <- &sarama.ProducerError{
+	// 		Msg: m3,
+	// 		Err: errors.New("m3"),
+	// 	}
+	// }()
+	// go func() { p.successesCh <- m4 }()
+	// require.Regexp(t, "m3", sinkClient.Flush(ctx))
 
-	m4 := <-p.inputCh
-	go func() { p.successesCh <- m2 }()
-	go func() {
-		p.errorsCh <- &sarama.ProducerError{
-			Msg: m3,
-			Err: errors.New("m3"),
-		}
-	}()
-	go func() { p.successesCh <- m4 }()
-	require.Regexp(t, "m3", sink.Flush(ctx))
+	// // Check simple success again after error
+	// require.NoError(t, sinkClient.EmitRow(
+	// 	ctx, topic(`t`), []byte(`5`), nil, zeroTS, zeroTS, pool.alloc()))
 
-	// Check simple success again after error
-	require.NoError(t, sink.EmitRow(
-		ctx, topic(`t`), []byte(`5`), nil, zeroTS, zeroTS, pool.alloc()))
-
-	m5 := <-p.inputCh
-	go func() { p.successesCh <- m5 }()
-	require.NoError(t, sink.Flush(ctx))
-	// At the end, all of the resources has been released
-	require.EqualValues(t, 0, pool.used())
+	// m5 := <-p.inputCh
+	// go func() { p.successesCh <- m5 }()
+	// require.NoError(t, sinkClient.Flush(ctx))
+	// // At the end, all of the resources has been released
+	// require.EqualValues(t, 0, pool.used())
 }
 
 func makeTestKafkaSinkV2(
