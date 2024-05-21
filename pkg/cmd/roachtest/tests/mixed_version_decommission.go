@@ -189,7 +189,7 @@ func fullyDecommissionStep(target, from int, binaryVersion *clusterupgrade.Versi
 			}
 
 			if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
-				resp, err := httputil.Get(ctx, healthCheckURL)
+				resp, err := httputil.Get(ctx, healthCheckURL, nil)
 				if err != nil {
 					return errors.Wrapf(err, "failed to get n%d /health?ready=1 HTTP endpoint", target)
 				}

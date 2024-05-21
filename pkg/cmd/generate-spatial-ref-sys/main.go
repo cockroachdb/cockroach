@@ -141,7 +141,7 @@ func buildData() embeddedproj.Data {
 					} {
 						var resp *http.Response
 						for i := 0; i < 5; i++ {
-							resp, err = httputil.Get(ctx, fmt.Sprintf("http://epsg.io/?q=%s&format=json", searchArgs))
+							resp, err = httputil.Get(ctx, fmt.Sprintf("http://epsg.io/?q=%s&format=json", searchArgs), nil)
 							if err == nil {
 								break
 							}

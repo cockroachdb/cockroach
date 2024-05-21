@@ -113,7 +113,7 @@ func (u *UpdateChecker) CheckForUpdates(ctx context.Context) bool {
 		return true // don't bother with asking for retry -- we'll never succeed.
 	}
 
-	res, err := httputil.Get(ctx, url.String())
+	res, err := httputil.Get(ctx, url.String(), nil)
 	if err != nil {
 		// This is probably going to be relatively common in production
 		// environments where network access is usually curtailed.

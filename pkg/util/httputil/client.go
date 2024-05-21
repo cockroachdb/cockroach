@@ -63,8 +63,8 @@ type Client struct {
 
 // Get does like http.Get but uses the provided context and obeys its cancellation.
 // It also uses the default client with a default 3 second timeout.
-func Get(ctx context.Context, url string) (resp *http.Response, err error) {
-	return DefaultClient.Get(ctx, url)
+func Get(ctx context.Context, url string, h *http.Header) (resp *http.Response, err error) {
+	return DefaultClient.GetWithHeaders(ctx, url, h)
 }
 
 // Head does like http.Head but uses the provided context and obeys its cancellation.
@@ -95,11 +95,22 @@ func Delete(ctx context.Context, url string, h *http.Header) (resp *http.Respons
 	return DefaultClient.Delete(ctx, url, h)
 }
 
-// Get does like http.Client.Get but uses the provided context and obeys its cancellation.
+// Get is like http.Client.Get but uses the provided context and obeys its cancellation.
 func (c *Client) Get(ctx context.Context, url string) (resp *http.Response, err error) {
+	return c.GetWithHeaders(ctx, url, nil)
+}
+
+// GetWithHeaders is like http.Client.Get but uses the provided context and
+// obeys its cancellation along with http headers.
+func (c *Client) GetWithHeaders(
+	ctx context.Context, url string, h *http.Header,
+) (resp *http.Response, err error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
+	}
+	if h != nil {
+		req.Header = *h
 	}
 	return c.Do(req)
 }

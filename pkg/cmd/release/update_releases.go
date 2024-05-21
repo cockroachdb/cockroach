@@ -261,7 +261,7 @@ func validateReleaseData(data map[string]release.Series) error {
 }
 
 func downloadReleases() ([]Release, error) {
-	resp, err := httputil.Get(context.Background(), releaseDataURL)
+	resp, err := httputil.Get(context.Background(), releaseDataURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not download release data: %w", err)
 	}

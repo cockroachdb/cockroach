@@ -1542,6 +1542,18 @@ func AddLabels(l *logger.Logger, clusterName string, labels map[string]string) e
 			m.Labels[k] = v
 		}
 	}
+	nodeLabels := make(map[int]map[string]string)
+
+	for _, node := range c.Nodes {
+		if c.VMs[node-1].Provider == gce.ProviderName {
+			nodeLabels[int(node)] = labels
+		}
+	}
+	if err := promhelperclient.NewPromClient().AppendOrUpdateLabels(context.Background(),
+		envutil.EnvOrDefaultString(prometheusHostUrlEnv, defaultPrometheusHostUrl),
+		c.Name, false, !c.Secure, nodeLabels, l); err != nil {
+		l.Errorf("failed adding labels %v for cluster %s: %v", labels, c.Name, err)
+	}
 
 	return saveCluster(l, &c.Cluster)
 }
@@ -1565,6 +1577,20 @@ func RemoveLabels(l *logger.Logger, clusterName string, labels []string) error {
 			delete(m.Labels, label)
 		}
 	}
+
+	nodeLabels := make(map[int][]string)
+
+	for _, node := range c.Nodes {
+		if c.VMs[node-1].Provider == gce.ProviderName {
+			nodeLabels[int(node)] = labels
+		}
+	}
+	if err := promhelperclient.NewPromClient().RemoveLabels(context.Background(),
+		envutil.EnvOrDefaultString(prometheusHostUrlEnv, defaultPrometheusHostUrl),
+		c.Name, false, !c.Secure, nodeLabels, l); err != nil {
+		l.Errorf("failed adding labels %v for cluster %s: %v", labels, c.Name, err)
+	}
+
 	return saveCluster(l, &c.Cluster)
 }
 

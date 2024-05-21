@@ -1514,7 +1514,7 @@ func (c *clusterImpl) HealthStatus(
 	}
 	getStatus := func(ctx context.Context, node int) *HealthStatusResult {
 		url := fmt.Sprintf(`https://%s/health?ready=1`, adminAddrs[node-1])
-		resp, err := httputil.Get(ctx, url)
+		resp, err := httputil.Get(ctx, url, nil)
 		if err != nil {
 			return newHealthStatusResult(node, 0, nil, err)
 		}

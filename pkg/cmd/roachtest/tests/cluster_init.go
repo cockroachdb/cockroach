@@ -68,7 +68,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.L().Printf("waiting for the servers to bind their ports")
 		if err := retry.ForDuration(10*time.Second, func() error {
 			for i := 1; i <= c.Spec().NodeCount; i++ {
-				resp, err := httputil.Get(ctx, urlMap[i]+"/health")
+				resp, err := httputil.Get(ctx, urlMap[i]+"/health", nil)
 				if err != nil {
 					return err
 				}
