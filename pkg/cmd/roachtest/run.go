@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
+	"github.com/DataExMachina-dev/side-eye-go/sideeyeclient"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/operations"
@@ -95,6 +97,18 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		}
 	}
 
+	artifactsDir := roachtestflags.ArtifactsDir
+	literalArtifactsDir := roachtestflags.LiteralArtifactsDir
+	if literalArtifactsDir == "" {
+		literalArtifactsDir = artifactsDir
+	}
+	setLogConfig(artifactsDir)
+	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
+	runnerLogPath := filepath.Join(
+		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
+	l, tee := testRunnerLogger(context.Background(), parallelism, runnerLogPath)
+	roachprod.ClearClusterCache = roachtestflags.ClearClusterCache
+
 	if runtime.GOOS == "darwin" {
 		// This will suppress the annoying "Allow incoming network connections" popup from
 		// OSX when running a roachtest
@@ -118,6 +132,32 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		opt.debugMode = NoDebug
 	}
 
+	if roachtestflags.SideEyeApiToken != "" {
+		if roachtestflags.Local {
+			l.Printf("--side-eye-token is ignored in --local mode. The Side-Eye agents will not be started; " +
+				"you can run the agent manually.")
+		} else {
+			switch roachtestflags.SideEyeApiToken {
+			// "secret" means read the token from gcloud secrets.
+			case "secret":
+				cmd := exec.Command("gcloud", "secrets", "versions", "access", "latest", "--secret", "side-eye-key")
+				out, err := cmd.Output()
+				if err != nil {
+					return errors.Wrap(err, "running gcloud to get Side-Eye API token failed")
+				}
+				opt.sideEyeToken = string(out)
+			default:
+				opt.sideEyeToken = roachtestflags.SideEyeApiToken
+			}
+			client, err := sideeyeclient.NewSideEyeClient(sideeyeclient.WithApiToken(opt.sideEyeToken))
+			if err != nil {
+				l.Errorf("failed to create Side-Eye client: %s", err)
+			} else {
+				runner.setSideEyeClient(client)
+			}
+		}
+	}
+
 	if err := runner.runHTTPServer(roachtestflags.HTTPPort, os.Stdout, bindTo); err != nil {
 		return err
 	}
@@ -139,19 +179,6 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		return errors.Newf("--debug-always is only allowed when running a single test")
 	}
 
-	artifactsDir := roachtestflags.ArtifactsDir
-	literalArtifactsDir := roachtestflags.LiteralArtifactsDir
-	if literalArtifactsDir == "" {
-		literalArtifactsDir = artifactsDir
-	}
-
-	roachprod.ClearClusterCache = roachtestflags.ClearClusterCache
-
-	setLogConfig(artifactsDir)
-	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
-	runnerLogPath := filepath.Join(
-		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
-	l, tee := testRunnerLogger(context.Background(), parallelism, runnerLogPath)
 	lopt := loggingOpt{
 		l:                   l,
 		tee:                 tee,

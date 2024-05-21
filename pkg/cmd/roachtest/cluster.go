@@ -34,6 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/DataExMachina-dev/side-eye-go/sideeyeclient"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -671,6 +672,15 @@ type clusterImpl struct {
 	// tagged grafana annotations. If empty, grafana is not available.
 	grafanaTags               []string
 	disableGrafanaAnnotations atomic.Bool
+
+	// State that can be accessed concurrently (in particular, read from the UI
+	// HTML generator).
+	mu struct {
+		syncutil.Mutex
+		// sideEyeEnvName is the name of the environment used by the Side-Eye agents
+		// running on this cluster. Empty if the Side-Eye integration is not active.
+		sideEyeEnvName string
+	}
 }
 
 // Name returns the cluster name, i.e. something like `teamcity-....`
@@ -696,6 +706,20 @@ func (c *clusterImpl) workerStatus(args ...interface{}) {
 	if impl, ok := c.t.(*testImpl); ok {
 		impl.WorkerStatus(args...)
 	}
+}
+
+// sideEyeEnvName is the name of the environment used by the Side-Eye agents
+// running on this cluster. Empty if the Side-Eye integration is not active.
+func (c *clusterImpl) sideEyeEnvName() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.sideEyeEnvName
+}
+
+func (c *clusterImpl) setSideEyeEnvName(newEnv string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.sideEyeEnvName = newEnv
 }
 
 func (c *clusterImpl) String() string {
@@ -751,6 +775,14 @@ type clusterConfig struct {
 	arch vm.CPUArch
 	// Specifies the OS which may require a custom AMI and cockroach binary.
 	os string
+	// sideEyeToken, if not empty, is the token used to authenticate with the
+	// Side-Eye. If set, each node in the cluster will run the Side-Eye agent.
+	// These agents are configured to allow monitoring of cockroach processes.
+	// app.side-eye.io will list all currently-running clusters. The test runner's
+	// Side-Eye client can be used to programmatically take snapshots of this
+	// cluster using the cluster's name; snapshots are taken when the test times
+	// out.
+	sideEyeToken string
 }
 
 // clusterFactory is a creator of clusters.
@@ -957,6 +989,13 @@ func (f *clusterFactory) newCluster(
 		createVMOpts.ClusterName = c.name
 		err = create(ctx, l, cfg.username, cfg.spec.NodeCount, createVMOpts, providerOptsContainer)
 		if err == nil {
+			// Start the Side-Eye agents on all the nodes if we are configured to do so. Side-Eye
+			// doesn't currently support ARM64, so skip those clusters.
+			if cfg.sideEyeToken != "" && !cfg.localCluster && c.arch != vm.ArchARM64 {
+				if err := c.StartSideEyeAgents(ctx, l, cfg.sideEyeToken); err != nil {
+					l.Errorf("failed to start Side-Eye agents. Continuing without them.\nError: %s", err)
+				}
+			}
 			if err := f.r.registerCluster(c); err != nil {
 				return nil, nil, err
 			}
@@ -3028,6 +3067,66 @@ func (c *clusterImpl) MaybeExtendCluster(
 		}
 	}
 	return nil
+}
+
+// StartSideEyeAgents starts the Side-Eye agent on all the nodes in the cluster.
+// These agents are configured to allow monitoring of cockroach processes.
+// app.side-eye.io will list all currently-running clusters. The test runner's
+// Side-Eye client can be used to programmatically take snapshots of this
+// cluster using the cluster's name; snapshots are taken when the test times
+// out.
+func (c *clusterImpl) StartSideEyeAgents(
+	ctx context.Context, l *logger.Logger, apiToken string,
+) error {
+	envName := c.Name()
+	err := roachprod.StartSideEyeAgents(ctx, l, c.Name(), envName, apiToken)
+	if err != nil {
+		return err
+	}
+	c.setSideEyeEnvName(envName)
+	return nil
+}
+
+// UpdateSideEyeEnvironmentName updates the environment name used by the
+// Side-Eye agents running on this cluster.
+func (c *clusterImpl) UpdateSideEyeEnvironmentName(
+	ctx context.Context, l *logger.Logger, newEnvName string,
+) error {
+	err := roachprod.UpdateSideEyeEnvironmentName(ctx, l, c.Name(), newEnvName)
+	if err != nil {
+		return err
+	}
+	c.setSideEyeEnvName(newEnvName)
+	return nil
+}
+
+// CaptureSideEyeSnapshot asks the Side-Eye service to take a snapshot of the
+// cockroach processes running on this cluster. All errors are logged and
+// swallowed.
+func (c *clusterImpl) CaptureSideEyeSnapshot(
+	ctx context.Context, l *logger.Logger, client *sideeyeclient.SideEyeClient,
+) {
+	l.PrintfCtx(ctx, "capturing snapshot of the cluster with Side-Eye...")
+
+	if c.arch == vm.ArchARM64 {
+		l.Printf("Side-Eye does not support ARM64 machines; skipping snapshot")
+		return
+	}
+
+	envName := c.sideEyeEnvName()
+	if envName == "" {
+		l.PrintfCtx(ctx, "cluster does not have Side-Eye agents set up; skipping snapshot")
+		return
+	}
+
+	snapURL, ok := roachprod.CaptureSideEyeSnapshot(ctx, l, envName, client)
+	if ok {
+		l.PrintfCtx(ctx, "captured Side-eye Snapshot: %s", snapURL)
+		annotation := fmt.Sprintf("Captured Side-Eye snaphost: %s", snapURL)
+		if err := c.AddGrafanaAnnotation(ctx, l, grafana.AddAnnotationRequest{Text: annotation}); err != nil {
+			l.PrintfCtx(ctx, "error adding Grafana annotation for snapshot: %s", err)
+		}
+	}
 }
 
 // archForTest determines the CPU architecture to use for a test. If the test
