@@ -371,6 +371,7 @@ func makeWebhookSink(
 		ctx,
 		sinkTypeWebhook,
 		sinkClient,
+		nil,
 		time.Duration(batchCfg.Frequency),
 		retryOpts,
 		parallelism,

@@ -39,7 +39,8 @@ type ParallelIO struct {
 	metrics   metricsRecorder
 	doneCh    chan struct{}
 
-	ioHandler IOHandler
+	ioHandler   IOHandler
+	workerSetup func(ctx context.Context) (any, error)
 
 	quota     *quotapool.IntPool
 	requestCh chan AdmittedIORequest
@@ -74,7 +75,7 @@ func freeIORequest(e *ioRequest) {
 }
 
 // IOHandler performs a blocking IO operation on an IORequest
-type IOHandler func(context.Context, IORequest) error
+type IOHandler func(ctx context.Context, req IORequest, workerStuff any) error
 
 // NewParallelIO creates a new ParallelIO.
 func NewParallelIO(
@@ -82,17 +83,19 @@ func NewParallelIO(
 	retryOpts retry.Options,
 	numWorkers int,
 	handler IOHandler,
+	workerSetup func(ctx context.Context) (any, error),
 	metrics metricsRecorder,
 	settings *cluster.Settings,
 ) *ParallelIO {
 	quota := uint64(requestQuota.Get(&settings.SV))
 	wg := ctxgroup.WithContext(ctx)
 	io := &ParallelIO{
-		retryOpts: retryOpts,
-		wg:        wg,
-		metrics:   metrics,
-		ioHandler: handler,
-		quota:     quotapool.NewIntPool("changefeed-parallel-io", quota),
+		retryOpts:   retryOpts,
+		wg:          wg,
+		metrics:     metrics,
+		ioHandler:   handler,
+		workerSetup: workerSetup,
+		quota:       quotapool.NewIntPool("changefeed-parallel-io", quota),
 		// NB: The size of these channels should not be less than the quota. This prevents the producer from
 		// blocking on sending requests which have been admitted.
 		requestCh: make(chan AdmittedIORequest, quota),
@@ -247,7 +250,7 @@ func (p *ParallelIO) GetResult() chan IOResult {
 // The conflict checking is done via an intset.Fast storing the union of all
 // keys currently being sent, followed by checking each pending batch's intset.
 func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
-	emitWithRetries := func(ctx context.Context, r IORequest) error {
+	emitWithRetries := func(ctx context.Context, r IORequest, s any) error {
 		if testQueuingDelay > 0*time.Second {
 			select {
 			case <-ctx.Done():
@@ -262,7 +265,7 @@ func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 				p.metrics.recordInternalRetry(int64(r.Keys().Len()), false)
 			}
 			initialSend = false
-			return p.ioHandler(ctx, r)
+			return p.ioHandler(ctx, r, s)
 		})
 	}
 
@@ -273,8 +276,17 @@ func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 
 	for i := 0; i < numEmitWorkers; i++ {
 		p.wg.GoCtx(func(ctx context.Context) error {
+			var workerStuff any
+			var err error
+			if p.workerSetup != nil {
+				workerStuff, err = p.workerSetup(ctx)
+				if err != nil {
+					return err
+				}
+			}
+
 			for req := range workerEmitCh {
-				req.err = emitWithRetries(ctx, req.r)
+				req.err = emitWithRetries(ctx, req.r, workerStuff)
 				req.resultTime = timeutil.Now()
 				select {
 				case <-ctx.Done():

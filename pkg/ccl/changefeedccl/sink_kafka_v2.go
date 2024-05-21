@@ -3,7 +3,6 @@ package changefeedccl
 import (
 	"context"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -14,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -32,14 +30,23 @@ func newKafkaSinkClient(
 		return nil, err
 	}
 
+	var ap sarama.AsyncProducer
+	if knobs.OverrideAsyncProducerFromClient != nil {
+		ap, err = knobs.OverrideAsyncProducerFromClient(client)
+	} else {
+		ap, err = sarama.NewAsyncProducerFromClient(client)
+	}
+	if err != nil {
+		return nil, err
+	}
+
 	return &kafkaSinkClient{
-		client:          client,
-		knobs:           knobs,
-		topics:          topics,
-		batchCfg:        batchCfg,
-		canTryResizing:  changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
-		producersClose:  make(chan struct{}),
-		producersClosed: make(chan struct{}),
+		client:         client,
+		producer:       ap,
+		knobs:          knobs,
+		topics:         topics,
+		batchCfg:       batchCfg,
+		canTryResizing: changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
 	}, nil
 }
 
@@ -64,19 +71,13 @@ func newKafkaClient(
 }
 
 // TODO: rename, with v2 in there somewhere
+// single threaded ONLY
 type kafkaSinkClient struct {
 	format   changefeedbase.FormatType
 	topics   *TopicNamer
 	batchCfg sinkBatchConfig
 	client   sarama.Client
-
-	producers struct {
-		mu        syncutil.Mutex
-		producers []sarama.AsyncProducer
-	}
-	producersCheckedOut atomic.Int32
-	producersClose      chan struct{}
-	producersClosed     chan struct{}
+	producer sarama.AsyncProducer
 
 	knobs          kafkaSinkKnobs
 	canTryResizing bool
@@ -86,23 +87,14 @@ type kafkaSinkClient struct {
 
 // Close implements SinkClient.
 func (k *kafkaSinkClient) Close() error {
-	// close all the producers, waiting for them to finish
-	close(k.producersClose)
-	for k.producersCheckedOut.Load() > 0 {
-		<-k.producersClosed
+	if err := k.producer.Close(); err != nil {
+		return err
 	}
-
 	return k.client.Close()
 }
 
 // Flush implements SinkClient. Does not retry -- retries will be handled by ParallelIO.
 func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error {
-	producer, err := k.getProducer()
-	if err != nil {
-		return err
-	}
-	defer k.returnProducer(producer)
-
 	msgs := payload.([]*sarama.ProducerMessage)
 
 	log.Infof(ctx, `sending %d messages to kafka`, len(msgs))
@@ -118,13 +110,6 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 			}
 			return err
 		}
-		handleClose := func() error {
-			// Ignore errors related to outstanding messages since we're either shutting
-			// down or beginning to retry regardless.
-			_ = producer.Close()
-			k.producersClosed <- struct{}{}
-			return errors.New(`kafka sink client closing`)
-		}
 
 		confirmed := 0
 		// send input, while watching for errors & close
@@ -133,15 +118,13 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-k.producersClose:
-				return handleClose()
-			case producer.Input() <- m:
+			case k.producer.Input() <- m:
 				sent++
-			case <-producer.Successes():
+			case <-k.producer.Successes():
 				// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
 				// TODO: re add metrics support
 				confirmed++
-			case err := <-producer.Errors():
+			case err := <-k.producer.Errors():
 				return handleErr(err)
 			}
 		}
@@ -151,11 +134,9 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-k.producersClose:
-				return handleClose()
-			case err := <-producer.Errors():
+			case err := <-k.producer.Errors():
 				return handleErr(err)
-			case <-producer.Successes():
+			case <-k.producer.Successes():
 				// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
 				// TODO: re add metrics support
 				confirmed++
@@ -205,44 +186,6 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 // MakeBatchBuffer implements SinkClient.
 func (k *kafkaSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
 	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg}
-}
-
-// getProducer returns a producer from the pool, or creates a new one if the
-// pool is empty. k.returnProducer must be called when done to prevent leaks.
-func (k *kafkaSinkClient) getProducer() (sarama.AsyncProducer, error) {
-	var ap sarama.AsyncProducer
-	var err error
-	k.producers.mu.Lock()
-	defer k.producers.mu.Unlock()
-
-	if len(k.producers.producers) == 0 {
-		if k.knobs.OverrideAsyncProducerFromClient != nil {
-			ap, err = k.knobs.OverrideAsyncProducerFromClient(k.client)
-		} else {
-			ap, err = sarama.NewAsyncProducerFromClient(k.client)
-		}
-		if err != nil {
-			return nil, err
-		}
-		k.producers.producers = append(k.producers.producers, ap)
-	}
-
-	last := len(k.producers.producers) - 1
-	ap = k.producers.producers[last]
-	k.producers.producers[last] = nil
-	k.producers.producers = k.producers.producers[:last]
-	k.producersCheckedOut.Add(1)
-
-	log.Infof(context.TODO(), `checked out producer. %d checked out`, k.producersCheckedOut.Load())
-
-	return ap, nil
-}
-
-func (k *kafkaSinkClient) returnProducer(ap sarama.AsyncProducer) {
-	k.producers.mu.Lock()
-	defer k.producers.mu.Unlock()
-	k.producers.producers = append(k.producers.producers, ap)
-	k.producersCheckedOut.Add(-1)
 }
 
 func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []*sarama.ProducerMessage) bool {
@@ -339,17 +282,16 @@ func makeKafkaSinkV2(ctx context.Context,
 		return nil, err
 	}
 
-	// TODO: how to handle knobs
-	sinkClient, err := newKafkaSinkClient(kafkaCfg, batchCfg, u.Host, topicNamer, settings, kafkaSinkKnobs{})
-	if err != nil {
-		return nil, err
-	}
-
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
 		return nil, errors.Errorf(
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
-	return makeBatchingSink(ctx, sinkTypeKafka, sinkClient, time.Second, retryOpts,
+	clientFactory := func(ctx context.Context) (any, error) {
+		// TODO: how to handle knobs
+		return newKafkaSinkClient(kafkaCfg, batchCfg, u.Host, topicNamer, settings, kafkaSinkKnobs{})
+	}
+
+	return makeBatchingSink(ctx, sinkTypeKafka, nil, clientFactory, time.Second, retryOpts,
 		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
 }
