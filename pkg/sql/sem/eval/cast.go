@@ -881,13 +881,13 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DJSON:
 			return v, nil
 		case *tree.DGeography:
-			j, err := geo.SpatialObjectToGeoJSON(v.Geography.SpatialObject(), -1, geo.SpatialObjectToGeoJSONFlagZero)
+			j, err := geo.SpatialObjectToGeoJSON(v.Geography.SpatialObject(), geo.FullPrecisionGeoJSON, geo.SpatialObjectToGeoJSONFlagZero)
 			if err != nil {
 				return nil, err
 			}
 			return tree.ParseDJSON(string(j))
 		case *tree.DGeometry:
-			j, err := geo.SpatialObjectToGeoJSON(v.Geometry.SpatialObject(), -1, geo.SpatialObjectToGeoJSONFlagZero)
+			j, err := geo.SpatialObjectToGeoJSON(v.Geometry.SpatialObject(), geo.FullPrecisionGeoJSON, geo.SpatialObjectToGeoJSONFlagZero)
 			if err != nil {
 				return nil, err
 			}

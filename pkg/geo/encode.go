@@ -32,8 +32,10 @@ import (
 	"github.com/twpayne/go-geom/encoding/wkt"
 )
 
-// DefaultGeoJSONDecimalDigits is the default number of digits coordinates in GeoJSON.
-const DefaultGeoJSONDecimalDigits = 9
+// FullPrecisionGeoJSON, when used in place of max decimal digits in
+// GeoJSON functions, indicates to GeoJSON that it should use full
+// precision when encoding JSON.
+const FullPrecisionGeoJSON = -1
 
 // SpatialObjectToWKT transforms a given SpatialObject to WKT.
 func SpatialObjectToWKT(so geopb.SpatialObject, maxDecimalDigits int) (geopb.WKT, error) {

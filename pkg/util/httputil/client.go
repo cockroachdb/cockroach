@@ -12,7 +12,6 @@ package httputil
 
 import (
 	"context"
-	"crypto/tls"
 	"io"
 	"net"
 	"net/http"
@@ -33,7 +32,6 @@ func NewClientWithTimeout(timeout time.Duration) *Client {
 
 // NewClientWithTimeouts defines a http.Client with the given dialer and client timeouts.
 func NewClientWithTimeouts(dialerTimeout, clientTimeout time.Duration) *Client {
-	var tlsConf *tls.Config
 	t := http.DefaultTransport.(*http.Transport)
 	return &Client{&http.Client{
 		Timeout: clientTimeout,
@@ -48,9 +46,6 @@ func NewClientWithTimeouts(dialerTimeout, clientTimeout time.Duration) *Client {
 			IdleConnTimeout:       t.IdleConnTimeout,
 			TLSHandshakeTimeout:   t.TLSHandshakeTimeout,
 			ExpectContinueTimeout: t.ExpectContinueTimeout,
-
-			// Add our custom CA.
-			TLSClientConfig: tlsConf,
 		},
 	}}
 }
