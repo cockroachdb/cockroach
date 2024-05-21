@@ -140,6 +140,7 @@ export default function (props: ClusterSummaryProps) {
         <SummaryStat
           title="Unavailable ranges"
           value={nodeSums.unavailableRanges}
+          numberAlert={nodeSums.unavailableRanges > 0}
         />
         <SummaryMetricStat
           id="qps"

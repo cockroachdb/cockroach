@@ -502,13 +502,25 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 	if !details.ExperimentalOnline {
 		return nil
 	}
+	rekey := mainRestoreData.getRekeys()
+	rekey = append(rekey, preRestoreData.getRekeys()...)
 
-	kr, err := MakeKeyRewriterFromRekeys(execConfig.Codec, mainRestoreData.getRekeys(), mainRestoreData.getTenantRekeys(),
+	tenantRekey := mainRestoreData.getTenantRekeys()
+	tenantRekey = append(tenantRekey, preRestoreData.getTenantRekeys()...)
+	kr, err := MakeKeyRewriterFromRekeys(execConfig.Codec, rekey, tenantRekey,
 		false /* restoreTenantFromStream */)
 	if err != nil {
 		return errors.Wrap(err, "creating key rewriter from rekeys")
 	}
 	downloadSpans := mainRestoreData.getSpans()
+
+	// Intentionally download preRestoreData after the main data. During a cluster
+	// restore, preRestore data are linked to a temp system db that are then
+	// copied over to the real system db. This temp system db is then deleted and
+	// should never be queried. We still want to download this data, however, to
+	// protect against external storage deletions of these linked in ssts, but at
+	// lower priority to the main data.
+	downloadSpans = append(downloadSpans, preRestoreData.getSpans()...)
 	for i := range downloadSpans {
 		var err error
 		downloadSpans[i], err = rewriteSpan(kr, downloadSpans[i].Clone(), execinfrapb.ElidePrefix_None)
