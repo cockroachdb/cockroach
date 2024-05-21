@@ -40,6 +40,7 @@ type config struct {
 	useRowTimestampInInitialScan bool
 
 	withDiff             bool
+	withFiltering        bool
 	onUnrecoverableError OnUnrecoverableError
 	onCheckpoint         OnCheckpoint
 	frontierQuantize     time.Duration
@@ -143,6 +144,14 @@ func WithOnInternalError(f OnUnrecoverableError) Option {
 func WithDiff(withDiff bool) Option {
 	return optionFunc(func(c *config) {
 		c.withDiff = withDiff
+	})
+}
+
+// WithFiltering makes an option to set whether to filter rangefeeds events where
+// the user has set omit_from_changefeeds in their session.
+func WithFiltering(withFiltering bool) Option {
+	return optionFunc(func(c *config) {
+		c.withFiltering = withFiltering
 	})
 }
 
