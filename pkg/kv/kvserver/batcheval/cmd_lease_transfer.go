@@ -69,13 +69,7 @@ func TransferLease(
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
 	args := cArgs.Args.(*kvpb.TransferLeaseRequest)
-
-	// NOTE: we use the range's current lease as prevLease instead of
-	// args.PrevLease so that we can detect lease transfers that will
-	// inevitably fail early and reject them with a detailed
-	// LeaseRejectedError before going through Raft.
-	prevLease, _ := cArgs.EvalCtx.GetLease()
-
+	prevLease := args.PrevLease
 	newLease := args.Lease
 
 	// If this check is removed at some point, the filtering of learners on the
@@ -105,7 +99,7 @@ func TransferLease(
 	// such cases, we could detect that here and fail fast, but it's safe and
 	// easier to just let the TransferLease be proposed under the wrong lease
 	// and be rejected with the correct error below Raft.
-	cArgs.EvalCtx.RevokeLease(ctx, args.PrevLease.Sequence)
+	cArgs.EvalCtx.RevokeLease(ctx, prevLease.Sequence)
 
 	// Forward the lease's start time to a current clock reading. At this
 	// point, we're holding latches across the entire range, we know that

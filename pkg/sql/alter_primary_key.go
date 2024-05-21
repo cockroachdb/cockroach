@@ -449,7 +449,7 @@ func (p *planner) AlterPrimaryKey(
 		if idx.GetID() != newPrimaryIndexDesc.ID && shouldRewrite {
 			indexesToRewrite = append(indexesToRewrite, idx)
 		}
-		// If this index is referenced by any other objects, then we wil
+		// If this index is referenced by any other objects, then we will
 		// block the primary key swap, since we don't have a mechanism to
 		// fix these references yet.
 		for _, tableRef := range tableDesc.GetDependedOnBy() {
