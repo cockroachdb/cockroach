@@ -31,7 +31,7 @@ FROM system.eventlog
 WHERE "eventType" = 'create_statistics' AND ("info"::JSONB ->> 'DescriptorID')::INT = 106
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "create_statistics", "Statement": "CREATE STATISTICS s1 ON id FROM test.public.a", "TableName": "test.public.a", "Tag": "CREATE STATISTICS", "User": "root"}
+1  {"EventType": "create_statistics", "Statement": "CREATE STATISTICS s1 ON id FROM test.public.a WITH OPTIONS AS OF SYSTEM TIME '-1us'", "TableName": "test.public.a", "Tag": "CREATE STATISTICS", "User": "root"}
 
 statement ok
 DROP TABLE a
