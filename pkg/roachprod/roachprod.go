@@ -1542,8 +1542,25 @@ func AddLabels(l *logger.Logger, clusterName string, labels map[string]string) e
 			m.Labels[k] = v
 		}
 	}
+	updatePrometheusLabels(l, c, labels)
 
 	return saveCluster(l, &c.Cluster)
+}
+
+// updatePrometheusLabels updates the labels in the prometheus cluster  config
+func updatePrometheusLabels(l *logger.Logger, c *install.SyncedCluster, labels map[string]string) {
+	nodeLabels := make(map[int]map[string]string)
+
+	for _, node := range c.Nodes {
+		if c.VMs[node-1].Provider == gce.ProviderName {
+			nodeLabels[int(node)] = labels
+		}
+	}
+	if err := promhelperclient.NewPromClient().AppendOrUpdateLabels(context.Background(),
+		envutil.EnvOrDefaultString(prometheusHostUrlEnv, defaultPrometheusHostUrl),
+		c.Name, false, !c.Secure, nodeLabels, l); err != nil {
+		l.Errorf("failed adding labels %v for cluster %s: %v", labels, c.Name, err)
+	}
 }
 
 func RemoveLabels(l *logger.Logger, clusterName string, labels []string) error {
@@ -1565,7 +1582,26 @@ func RemoveLabels(l *logger.Logger, clusterName string, labels []string) error {
 			delete(m.Labels, label)
 		}
 	}
+
+	removePrometheusLabels(l, c, labels)
+
 	return saveCluster(l, &c.Cluster)
+}
+
+// removePrometheusLabels removes the labels from the prometheus cluster  config
+func removePrometheusLabels(l *logger.Logger, c *install.SyncedCluster, labels []string) {
+	nodeLabels := make(map[int][]string)
+
+	for _, node := range c.Nodes {
+		if c.VMs[node-1].Provider == gce.ProviderName {
+			nodeLabels[int(node)] = labels
+		}
+	}
+	if err := promhelperclient.NewPromClient().RemoveLabels(context.Background(),
+		envutil.EnvOrDefaultString(prometheusHostUrlEnv, defaultPrometheusHostUrl),
+		c.Name, false, !c.Secure, nodeLabels, l); err != nil {
+		l.Errorf("failed adding labels %v for cluster %s: %v", labels, c.Name, err)
+	}
 }
 
 // Create TODO
