@@ -1101,9 +1101,6 @@ func TestLeaseEquivalence(t *testing.T) {
 	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: 2, ProposedTS: &ts1}
 	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: &ts2}
 
-	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts1.ToTimestamp().Clone()}
-	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts2.ToTimestamp().Clone()}
-
 	r1Voter, r1Learner := r1, r1
 	r1Voter.Type = VOTER_FULL
 	r1Learner.Type = LEARNER
@@ -1134,7 +1131,6 @@ func TestLeaseEquivalence(t *testing.T) {
 		{proposed1, proposed1, true},       // exact leases with identical timestamps
 		{proposed1, proposed2, false},      // same proposed timestamps, but diff epochs
 		{proposed1, proposed3, true},       // different proposed timestamps, same lease
-		{stasis1, stasis2, true},           // same lease, different stasis timestamps
 		{epoch1, epoch1Voter, true},        // same epoch lease, different replica type
 		{epoch1, epoch1Learner, true},      // same epoch lease, different replica type
 		{epoch1Voter, epoch1Learner, true}, // same epoch lease, different replica type
@@ -1151,9 +1147,10 @@ func TestLeaseEquivalence(t *testing.T) {
 		}
 	}
 
-	// #18689 changed the nullability of the DeprecatedStartStasis, ProposedTS, and Expiration
-	// field. It introduced a bug whose regression is caught below where a zero Expiration and a nil
-	// Expiration in an epoch-based lease led to mistakenly considering leases non-equivalent.
+	// #18689 changed the nullability of the ProposedTS, and Expiration field. It
+	// introduced a bug whose regression is caught below where a zero Expiration
+	// and a nil Expiration in an epoch-based lease led to mistakenly considering
+	// leases non-equivalent.
 	prePRLease := Lease{
 		Start: hlc.ClockTimestamp{WallTime: 10},
 		Epoch: 123,
@@ -1162,11 +1159,9 @@ func TestLeaseEquivalence(t *testing.T) {
 		Expiration: new(hlc.Timestamp),
 
 		// Similar potential bug triggers, but these were actually handled correctly.
-		DeprecatedStartStasis: new(hlc.Timestamp),
-		ProposedTS:            &hlc.ClockTimestamp{WallTime: 10},
+		ProposedTS: &hlc.ClockTimestamp{WallTime: 10},
 	}
 	postPRLease := prePRLease
-	postPRLease.DeprecatedStartStasis = nil
 	postPRLease.Expiration = nil
 
 	if !postPRLease.Equivalent(prePRLease, true) || !prePRLease.Equivalent(postPRLease, true) {
@@ -1176,14 +1171,13 @@ func TestLeaseEquivalence(t *testing.T) {
 
 func TestLeaseEqual(t *testing.T) {
 	type expectedLease struct {
-		Start                 hlc.ClockTimestamp
-		Expiration            *hlc.Timestamp
-		Replica               ReplicaDescriptor
-		DeprecatedStartStasis *hlc.Timestamp
-		ProposedTS            *hlc.ClockTimestamp
-		Epoch                 int64
-		Sequence              LeaseSequence
-		AcquisitionType       LeaseAcquisitionType
+		Start           hlc.ClockTimestamp
+		Expiration      *hlc.Timestamp
+		Replica         ReplicaDescriptor
+		ProposedTS      *hlc.ClockTimestamp
+		Epoch           int64
+		Sequence        LeaseSequence
+		AcquisitionType LeaseAcquisitionType
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
 	// error occurs on the following line of code, update the expectedLease
@@ -1194,20 +1188,11 @@ func TestLeaseEqual(t *testing.T) {
 	// DeprecatedStartStasis fields. See #19843.
 	a := Lease{}
 	b := Lease{
-		Expiration:            &hlc.Timestamp{},
-		DeprecatedStartStasis: &hlc.Timestamp{},
+		Expiration: &hlc.Timestamp{},
 	}
 	if !a.Equal(b) {
 		t.Fatalf("unexpectedly did not compare equal: %s", pretty.Diff(a, b))
 	}
-
-	// Verify that DeprecatedStartStasis is ignored entirely.
-	a = Lease{DeprecatedStartStasis: &hlc.Timestamp{WallTime: 1}}
-	b = Lease{DeprecatedStartStasis: &hlc.Timestamp{WallTime: 2}}
-	c := Lease{}
-	require.True(t, a.Equal(b))
-	require.True(t, a.Equal(c))
-	require.True(t, b.Equal(c))
 
 	if !(*Lease)(nil).Equal(nil) {
 		t.Fatalf("unexpectedly did not compare equal")

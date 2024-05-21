@@ -77,13 +77,7 @@ func RequestLease(
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
 
-	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed
-	// before the StartStasis field was introduced.
 	newLease := args.Lease
-	if newLease.DeprecatedStartStasis == nil {
-		newLease.DeprecatedStartStasis = newLease.Expiration
-	}
-
 	isExtension := prevLease.Replica.StoreID == newLease.Replica.StoreID
 	effectiveStart := newLease.Start
 
