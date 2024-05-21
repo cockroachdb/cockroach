@@ -1755,13 +1755,11 @@ func (r *raft) restore(s pb.Snapshot) bool {
 	if r.state != StateFollower {
 		// This is defense-in-depth: if the leader somehow ended up applying a
 		// snapshot, it could move into a new term without moving into a
-		// follower state. This should never fire, but if it did, we'd have
-		// prevented damage by returning early, so log only a loud warning.
+		// follower state. This should never fire, but if it does, we panic.
 		//
 		// At the time of writing, the instance is guaranteed to be in follower
 		// state when this method is called.
-		r.logger.Warningf("%x attempted to restore snapshot as leader; should never happen", r.id)
-		r.becomeFollower(r.Term+1, None)
+		r.logger.Panicf("%x attempted to restore snapshot in state %s", r.id, r.state)
 		return false
 	}
 
