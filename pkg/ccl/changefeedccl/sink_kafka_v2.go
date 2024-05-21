@@ -103,6 +103,7 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 	var flushMsgs func(msgs []*sarama.ProducerMessage) error
 	flushMsgs = func(msgs []*sarama.ProducerMessage) error {
 		handleErr := func(err error) error {
+			log.Infof(ctx, `kafka error: %s`, err.Error())
 			if k.shouldTryResizing(err, msgs) {
 				a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
 				// recurse
@@ -111,7 +112,11 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 			return err
 		}
 
-		confirmed := 0
+		trk := tracker{pendingIDs: make(map[int]struct{})}
+		for _, m := range msgs {
+			m.Metadata = map[string]any{`id`: trk.next()}
+		}
+
 		// send input, while watching for errors & close
 		for sent := 0; sent < len(msgs); {
 			m := msgs[sent]
@@ -120,26 +125,24 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 				return ctx.Err()
 			case k.producer.Input() <- m:
 				sent++
-			case <-k.producer.Successes():
-				// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
+			case ms := <-k.producer.Successes():
+				trk.remove(ms.Metadata.(map[string]any)[`id`].(int))
 				// TODO: re add metrics support
-				confirmed++
 			case err := <-k.producer.Errors():
 				return handleErr(err)
 			}
 		}
 
 		// make sure all messages are confirmed or errored
-		for confirmed < len(msgs) {
+		for !trk.empty() {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case err := <-k.producer.Errors():
 				return handleErr(err)
-			case <-k.producer.Successes():
-				// TODO: will this emit only one mesage per? or do we need to do more advanced tracking?
+			case ms := <-k.producer.Successes():
 				// TODO: re add metrics support
-				confirmed++
+				trk.remove(ms.Metadata.(map[string]any)[`id`].(int))
 			}
 		}
 
@@ -294,4 +297,26 @@ func makeKafkaSinkV2(ctx context.Context,
 
 	return makeBatchingSink(ctx, sinkTypeKafka, nil, clientFactory, time.Second, retryOpts,
 		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
+}
+
+type tracker struct {
+	nextID     int
+	pendingIDs map[int]struct{}
+}
+
+func (t *tracker) next() int {
+	t.nextID++
+	t.pendingIDs[t.nextID] = struct{}{}
+	return t.nextID
+}
+
+func (t *tracker) remove(id int) {
+	if _, ok := t.pendingIDs[id]; !ok {
+		panic(errors.Errorf(`id %d not found in pendingIDs`, id))
+	}
+	delete(t.pendingIDs, id)
+}
+
+func (t *tracker) empty() bool {
+	return len(t.pendingIDs) == 0
 }
