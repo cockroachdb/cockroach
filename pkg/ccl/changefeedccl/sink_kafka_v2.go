@@ -103,7 +103,7 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 	var flushMsgs func(msgs []*sarama.ProducerMessage) error
 	flushMsgs = func(msgs []*sarama.ProducerMessage) error {
 		handleErr := func(err error) error {
-			log.Infof(ctx, `kafka error: %s`, err.Error())
+			// log.Infof(ctx, `kafka error: %s`, err.Error())
 			if k.shouldTryResizing(err, msgs) {
 				a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
 				// recurse
@@ -111,6 +111,8 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 			}
 			return err
 		}
+
+		// TODO: this is basically just a sarama.SyncProducer. maybe use that?
 
 		trk := tracker{pendingIDs: make(map[int]struct{})}
 		for _, m := range msgs {

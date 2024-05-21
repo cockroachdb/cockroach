@@ -1568,6 +1568,15 @@ func registerCDC(r registry.Registry) {
 			// with the per-worker flush, it's still hitting that error
 			// but with this option set, it doesnt. is it just a throughput thing? dont see how since they should be independent.
 			// so what's the dealb?
+			//
+			// maybe a bug in parallelio? how to proceed
+			// - try making the single row test but with 2 keys and see if it still works.
+			// - read code
+			// - try to get order validator to dump the problematic key reordering and also all the data?
+			// - try and get it to happen with spam.sql
+			// - see if other users of batching sink can hit this. might need tooling af tho
+			// can parallelio reorder buffers??
+
 			// _, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.sink_io_workers = 1;`)
 			// if err != nil {
 			// 	t.Fatal("failed to set cluster setting")
