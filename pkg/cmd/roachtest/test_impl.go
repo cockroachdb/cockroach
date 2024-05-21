@@ -499,14 +499,33 @@ func (t *testImpl) failureMsg() string {
 // target. If it does, `refError` is set to that target error value
 // and returns true. Otherwise, it returns false.
 func failuresMatchingError(failures []failure, refError any) bool {
+	// unwrap unwraps the error passed to find the innermost error in the
+	// chain that satisfies the `refError` provided.
+	unwrap := func(err error) bool {
+		var matched bool
+		for {
+			if isRef := errors.As(err, refError); !isRef {
+				break
+			}
+
+			matched = true
+			err = errors.Unwrap(err)
+			if err == nil {
+				break
+			}
+		}
+
+		return matched
+	}
+
 	for _, f := range failures {
 		for _, err := range f.errors {
-			if errors.As(err, refError) {
+			if unwrap(err) {
 				return true
 			}
 		}
 
-		if errors.As(f.squashedErr, refError) {
+		if unwrap(f.squashedErr) {
 			return true
 		}
 	}

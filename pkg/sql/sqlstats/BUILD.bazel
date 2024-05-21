@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "sqlstats",
     srcs = [
+        "aggregate.go",
         "cluster_settings.go",
         "ssprovider.go",
         "test_utils.go",
@@ -10,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/obs/eventagg",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql/appstatspb",
@@ -18,7 +20,10 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats/insights",
+        "//pkg/util/metric",
         "//pkg/util/stop",
+        "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
