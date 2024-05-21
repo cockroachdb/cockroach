@@ -77,7 +77,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 	ctx context.Context,
 	promUrl, clusterName string,
 	forceFetchCreds bool,
-	nodes map[int]string,
+	nodes map[int]*NodeInfo,
 	insecure bool,
 	l *logger.Logger,
 ) error {
@@ -157,16 +157,28 @@ type CCParams struct {
 	Labels  map[string]string `yaml:"labels"`
 }
 
+// NodeInfo contains the target and labels for the node
+type NodeInfo struct {
+	Target       string            // Name of the node
+	CustomLabels map[string]string // Custom labels to be added to the cluster config
+}
+
 // createClusterConfigFile creates the cluster config file per node
-func buildCreateRequest(nodes map[int]string, insecure bool) (io.Reader, error) {
+func buildCreateRequest(nodes map[int]*NodeInfo, insecure bool) (io.Reader, error) {
 	configs := make([]*CCParams, 0)
 	for i, n := range nodes {
 		params := &CCParams{
-			Targets: []string{n},
+			Targets: []string{n.Target},
 			Labels: map[string]string{
+				// default labels
 				"node":   strconv.Itoa(i),
 				"tenant": install.SystemInterfaceName,
+				"job":    "cockroachdb",
 			},
+		}
+		// custom labels - this can override the default labels if needed
+		for n, v := range n.CustomLabels {
+			params.Labels[n] = v
 		}
 		configs = append(configs, params)
 	}
