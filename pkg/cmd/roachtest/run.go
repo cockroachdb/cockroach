@@ -95,19 +95,34 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		}
 	}
 
+	artifactsDir := roachtestflags.ArtifactsDir
+	literalArtifactsDir := roachtestflags.LiteralArtifactsDir
+	if literalArtifactsDir == "" {
+		literalArtifactsDir = artifactsDir
+	}
+	setLogConfig(artifactsDir)
+	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
+	runnerLogPath := filepath.Join(
+		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
+	l, tee := testRunnerLogger(context.Background(), parallelism, runnerLogPath)
+	roachprod.ClearClusterCache = roachtestflags.ClearClusterCache
+
 	if runtime.GOOS == "darwin" {
 		// This will suppress the annoying "Allow incoming network connections" popup from
 		// OSX when running a roachtest
 		bindTo = "localhost"
 	}
 
+	sideEyeToken := runner.maybeInitSideEyeClient(context.Background(), l)
+
 	opt := clustersOpt{
 		typ:         clusterType,
 		clusterName: roachtestflags.ClusterNames,
 		// Precedence for resolving the user: cli arg, env.ROACHPROD_USER, current user.
-		user:      getUser(roachtestflags.Username),
-		cpuQuota:  roachtestflags.CPUQuota,
-		clusterID: roachtestflags.ClusterID,
+		user:         getUser(roachtestflags.Username),
+		cpuQuota:     roachtestflags.CPUQuota,
+		clusterID:    roachtestflags.ClusterID,
+		sideEyeToken: sideEyeToken,
 	}
 	switch {
 	case roachtestflags.DebugAlways:
@@ -139,19 +154,6 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		return errors.Newf("--debug-always is only allowed when running a single test")
 	}
 
-	artifactsDir := roachtestflags.ArtifactsDir
-	literalArtifactsDir := roachtestflags.LiteralArtifactsDir
-	if literalArtifactsDir == "" {
-		literalArtifactsDir = artifactsDir
-	}
-
-	roachprod.ClearClusterCache = roachtestflags.ClearClusterCache
-
-	setLogConfig(artifactsDir)
-	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
-	runnerLogPath := filepath.Join(
-		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
-	l, tee := testRunnerLogger(context.Background(), parallelism, runnerLogPath)
 	lopt := loggingOpt{
 		l:                   l,
 		tee:                 tee,
