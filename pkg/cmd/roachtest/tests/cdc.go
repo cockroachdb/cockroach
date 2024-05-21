@@ -1561,6 +1561,8 @@ func registerCDC(r registry.Registry) {
 			}
 
 			// we saw a mismatch in this one. see if it's to do with parallelism or something else.
+			// this made it pass. so it sounds like a parallelism issue.
+			// the handler is just -> s.client.Flush(ctx, batch.payload)
 			_, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.sink_io_workers = 1;`)
 			if err != nil {
 				t.Fatal("failed to set cluster setting")
