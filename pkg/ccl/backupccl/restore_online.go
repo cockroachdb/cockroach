@@ -166,17 +166,24 @@ func sendAddRemoteSSTWorker(
 				}
 			}
 
-			for _, file := range toAdd {
-				if err := sendRemoteAddSSTable(ctx, execCtx, file, elidedPrefixType, fromSystemTenant); err != nil {
-					return err
-				}
-			}
+			//for _, file := range toAdd {
+			//	if err := sendRemoteAddSSTable(ctx, execCtx, file, elidedPrefixType, fromSystemTenant); err != nil {
+			//		return err
+			//	}
+			//}
 			toAdd = nil
 			batchSize = 0
 			return nil
 		}
 
 		for entry := range restoreSpanEntriesCh {
+
+			var davidSum sz
+			for _, file := range entry.Files {
+				davidSum += sz(file.Size())
+			}
+
+			log.Infof(ctx, "experimental restore: processing chunk of %s data in %d files covering [%s,%s)", davidSum, len(entry.Files), entry.Span.Key, entry.Span.EndKey)
 			firstSplitDone := false
 			if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
 				return err
@@ -273,7 +280,15 @@ func sendAdminScatter(
 	defer sp.Finish()
 
 	const maxSize = 4 << 20
-	_, err := execCtx.ExecCfg().DB.AdminScatter(ctx, scatterKey, maxSize)
+	ret, err := execCtx.ExecCfg().DB.AdminScatter(ctx, scatterKey, maxSize)
+	if err != nil {
+		return err
+	}
+	var lhNodeID roachpb.NodeID
+	if len(ret.RangeInfos) > 0 {
+		lhNodeID = ret.RangeInfos[0].Lease.Replica.NodeID
+	}
+	log.Infof(ctx, "scattered LH to node %d ", lhNodeID)
 	return err
 }
 
