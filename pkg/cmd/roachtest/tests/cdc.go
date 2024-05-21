@@ -1564,10 +1564,10 @@ func registerCDC(r registry.Registry) {
 			// this made it pass. so it sounds like a parallelism issue.
 			// the handler is just -> s.client.Flush(ctx, batch.payload)
 			// yet with the new log it still shows many checked out
-			// _, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.sink_io_workers = 1;`)
-			// if err != nil {
-			// 	t.Fatal("failed to set cluster setting")
-			// }
+			_, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.sink_io_workers = 1;`)
+			if err != nil {
+				t.Fatal("failed to set cluster setting")
+			}
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
