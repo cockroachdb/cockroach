@@ -19,10 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -43,14 +41,6 @@ var (
 var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 
 var _ sqlstats.Writer = &Container{}
-
-func getStatus(statementError error) insights.Statement_Status {
-	if statementError == nil {
-		return insights.Statement_Completed
-	}
-
-	return insights.Statement_Failed
-}
 
 // RecordStatement implements sqlstats.Writer interface.
 // RecordStatement saves per-statement statistics.
@@ -193,48 +183,6 @@ func (s *Container) RecordStatement(
 		}
 	}
 
-	var autoRetryReason string
-	if value.AutoRetryReason != nil {
-		autoRetryReason = value.AutoRetryReason.Error()
-	}
-
-	var contention *time.Duration
-	var cpuSQLNanos int64
-	if value.ExecStats != nil {
-		contention = &value.ExecStats.ContentionTime
-		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
-	}
-
-	var errorCode string
-	var errorMsg redact.RedactableString
-	if value.StatementError != nil {
-		errorCode = pgerror.GetPGCode(value.StatementError).String()
-		errorMsg = redact.Sprint(value.StatementError)
-	}
-
-	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
-		ID:                   value.StatementID,
-		FingerprintID:        stmtFingerprintID,
-		LatencyInSeconds:     value.ServiceLatencySec,
-		Query:                value.Query,
-		Status:               getStatus(value.StatementError),
-		StartTime:            value.StartTime,
-		EndTime:              value.EndTime,
-		FullScan:             value.FullScan,
-		PlanGist:             value.PlanGist,
-		Retries:              int64(value.AutoRetryCount),
-		AutoRetryReason:      autoRetryReason,
-		RowsRead:             value.RowsRead,
-		RowsWritten:          value.RowsWritten,
-		Nodes:                value.Nodes,
-		Contention:           contention,
-		IndexRecommendations: value.IndexRecommendations,
-		Database:             value.Database,
-		CPUSQLNanos:          cpuSQLNanos,
-		ErrorCode:            errorCode,
-		ErrorMsg:             errorMsg,
-	})
-
 	return stats.ID, nil
 }
 
@@ -364,47 +312,6 @@ func (s *Container) RecordTransaction(
 		stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeySkippedPoints))
 	}
 
-	var retryReason string
-	if value.AutoRetryReason != nil {
-		retryReason = value.AutoRetryReason.Error()
-	}
-
-	var cpuSQLNanos int64
-	if value.ExecStats.CPUTime.Nanoseconds() >= 0 {
-		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
-	}
-
-	var errorCode string
-	var errorMsg redact.RedactableString
-	if value.TxnErr != nil {
-		errorCode = pgerror.GetPGCode(value.TxnErr).String()
-		errorMsg = redact.Sprint(value.TxnErr)
-	}
-
-	status := insights.Transaction_Failed
-	if value.Committed {
-		status = insights.Transaction_Completed
-	}
-
-	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
-		ID:              value.TransactionID,
-		FingerprintID:   key,
-		UserPriority:    value.Priority.String(),
-		ImplicitTxn:     value.ImplicitTxn,
-		Contention:      &value.ExecStats.ContentionTime,
-		StartTime:       value.StartTime,
-		EndTime:         value.EndTime,
-		User:            value.SessionData.User().Normalized(),
-		ApplicationName: value.SessionData.ApplicationName,
-		RowsRead:        value.RowsRead,
-		RowsWritten:     value.RowsWritten,
-		RetryCount:      value.RetryCount,
-		AutoRetryReason: retryReason,
-		CPUSQLNanos:     cpuSQLNanos,
-		LastErrorCode:   errorCode,
-		LastErrorMsg:    errorMsg,
-		Status:          status,
-	})
 	return nil
 }
 

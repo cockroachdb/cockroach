@@ -1126,10 +1126,12 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
+
 	ex.applicationStats = applicationStats
 	ex.statsCollector = sslocal.NewStatsCollector(
 		s.cfg.Settings,
 		applicationStats,
+		ex.server.insights.Writer(ex.sessionData().Internal),
 		ex.phaseTimes,
 		s.cfg.SQLStatsTestingKnobs,
 	)
@@ -1616,7 +1618,7 @@ type connExecutor struct {
 
 	// statsCollector is used to collect statistics about SQL statements and
 	// transactions.
-	statsCollector sqlstats.StatsCollector
+	statsCollector *sslocal.StatsCollector
 
 	// cpuStatsCollector is used to estimate RU consumption due to CPU usage for
 	// tenants.
