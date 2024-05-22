@@ -389,6 +389,13 @@ func TestCreateStatsProgress(t *testing.T) {
 	}(rowexec.SamplerProgressInterval)
 	rowexec.SamplerProgressInterval = 10
 
+	getLastCreateStatsJobID := func(t testing.TB, db *sqlutils.SQLRunner) jobspb.JobID {
+		var jobID jobspb.JobID
+		db.QueryRow(t, "SELECT id FROM system.jobs WHERE status = 'running' AND "+
+			"job_type = 'CREATE STATS' ORDER BY created DESC LIMIT 1").Scan(&jobID)
+		return jobID
+	}
+
 	var allowRequest chan struct{}
 	var serverArgs base.TestServerArgs
 	filter, setTableID := createStatsRequestFilter(&allowRequest)
@@ -454,7 +461,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	}
 
 	// Fetch the new job ID since we know it's running now.
-	jobID := jobutils.GetLastJobID(t, sqlDB)
+	jobID := getLastCreateStatsJobID(t, sqlDB)
 
 	// Ensure that 0 progress has been recorded since there are no existing
 	// stats available to estimate progress.
@@ -510,7 +517,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	}
 
 	// Fetch the new job ID since we know it's running now.
-	jobID = jobutils.GetLastJobID(t, sqlDB)
+	jobID = getLastCreateStatsJobID(t, sqlDB)
 
 	// Ensure that partial progress has been recorded since there are existing
 	// stats available.
