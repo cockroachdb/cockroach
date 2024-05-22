@@ -93,9 +93,9 @@ func (u *UUID) UnmarshalJSON(data []byte) error {
 	return err
 }
 
-// MakeV4 calls Must(NewV4)
+// MakeV4 calls NewV4.
 func MakeV4() UUID {
-	return Must(NewV4())
+	return NewV4()
 }
 
 // NewPopulatedUUID returns a populated UUID.

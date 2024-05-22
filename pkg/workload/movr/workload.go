@@ -37,10 +37,7 @@ type movrWorker struct {
 }
 
 func (m *movrWorker) getRandomUser(city string) (string, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return "", err
-	}
+	id := uuid.NewV4()
 	var user string
 	q := `
 		SELECT
@@ -53,15 +50,12 @@ func (m *movrWorker) getRandomUser(city string) (string, error) {
 					(SELECT id FROM users WHERE city = $1 ORDER BY id LIMIT 1) AS b
 			);
 		`
-	err = m.db.QueryRow(q, city, id.String()).Scan(&user)
+	err := m.db.QueryRow(q, city, id.String()).Scan(&user)
 	return user, err
 }
 
 func (m *movrWorker) getRandomPromoCode() (string, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return "", err
-	}
+	id := uuid.NewV4()
 	q := `
 		SELECT
 			IFNULL(a, b)
@@ -79,10 +73,7 @@ func (m *movrWorker) getRandomPromoCode() (string, error) {
 }
 
 func (m *movrWorker) getRandomVehicle(city string) (string, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return "", err
-	}
+	id := uuid.NewV4()
 	q := `
 		SELECT
 			IFNULL(a, b)
@@ -263,10 +254,7 @@ func (m *movrWorker) generateWorkSimulation() func(context.Context) error {
 
 	return func(ctx context.Context) error {
 		activeCity := randCity(m.rng)
-		id, err := uuid.NewV4()
-		if err != nil {
-			return err
-		}
+		id := uuid.NewV4()
 		// Our workload is as follows: with 95% chance, do a simple read operation.
 		// Else, update all active vehicle locations, then pick a random "write" operation
 		// weighted by the weights in movrWorkloadFns.

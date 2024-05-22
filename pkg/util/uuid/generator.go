@@ -57,7 +57,7 @@ func NewV3(ns UUID, name string) UUID {
 }
 
 // NewV4 returns a randomly generated UUID.
-func NewV4() (UUID, error) {
+func NewV4() UUID {
 	return DefaultGenerator.NewV4()
 }
 
@@ -71,7 +71,7 @@ type Generator interface {
 	NewV1() (UUID, error)
 	// NewV2(domain byte) (UUID, error) // CRL: Removed support for V2.
 	NewV3(ns UUID, name string) UUID
-	NewV4() (UUID, error)
+	NewV4() UUID
 	NewV5(ns UUID, name string) UUID
 }
 
@@ -174,14 +174,14 @@ func (g *Gen) NewV3(ns UUID, name string) UUID {
 }
 
 // NewV4 returns a randomly generated UUID.
-func (g *Gen) NewV4() (UUID, error) {
+func (g *Gen) NewV4() UUID {
 	u := UUID{}
 	binary.BigEndian.PutUint64(u[:Size/2], g.randUint64())
 	binary.BigEndian.PutUint64(u[Size/2:], g.randUint64())
 	u.SetVersion(V4)
 	u.SetVariant(VariantRFC4122)
 
-	return u, nil
+	return u
 }
 
 // NewV5 returns a UUID based on SHA-1 hash of the namespace UUID and name.

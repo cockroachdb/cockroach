@@ -122,10 +122,7 @@ func TestSplits(t *testing.T) {
 				Name:   `uuids`,
 				Schema: `(a UUID PRIMARY KEY)`,
 				Splits: workload.Tuples(ranges-1, func(i int) []interface{} {
-					u, err := uuid.NewV4()
-					if err != nil {
-						panic(err)
-					}
+					u := uuid.NewV4()
 					return []interface{}{u.String()}
 				}),
 			},
