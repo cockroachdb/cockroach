@@ -89,6 +89,9 @@ func makeAsOf(s *Smither) tree.AsOfClause {
 }
 
 func makeBackup(s *Smither) (tree.Statement, bool) {
+	if !s.bulkIOEnabled() {
+		return nil, false
+	}
 	name := fmt.Sprintf("%s/%s", s.bulkSrv.URL, s.name("backup"))
 	var targets tree.BackupTargetList
 	seen := map[tree.TableName]bool{}

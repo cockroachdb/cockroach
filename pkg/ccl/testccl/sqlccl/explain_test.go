@@ -38,6 +38,7 @@ func TestExplainRedactDDL(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "the test is too slow")
+	skip.UnderRace(t, "the test is too slow")
 
 	const numStatements = 10
 
@@ -266,13 +267,6 @@ func TestExplainGist(t *testing.T) {
 				// (skipping them makes reproduction easier).
 				for _, toSkipPrefix := range []string{"BACKUP", "EXPORT", "IMPORT", "RESTORE"} {
 					if strings.HasPrefix(stmt, toSkipPrefix) {
-						return true
-					}
-				}
-				for _, toSkipSubstring := range []string{
-					"ALTER PRIMARY KEY", // #123017
-				} {
-					if strings.Contains(stmt, toSkipSubstring) {
 						return true
 					}
 				}
