@@ -261,10 +261,14 @@ func newAggregator(
 	if spec.IsRowCount() {
 		return newCountAggregator(ctx, flowCtx, processorID, input, post)
 	}
-	if len(spec.OrderedGroupCols) == len(spec.GroupCols) {
-		return newOrderedAggregator(ctx, flowCtx, processorID, spec, input, post)
+	needHash, err := execagg.NeedHashAggregator(spec)
+	if err != nil {
+		return nil, err
 	}
-	return newHashAggregator(ctx, flowCtx, processorID, spec, input, post)
+	if needHash {
+		return newHashAggregator(ctx, flowCtx, processorID, spec, input, post)
+	}
+	return newOrderedAggregator(ctx, flowCtx, processorID, spec, input, post)
 }
 
 func newHashAggregator(

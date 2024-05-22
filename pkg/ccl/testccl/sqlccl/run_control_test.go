@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -205,6 +206,27 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 					_, err = conn1.ExecContext(ctx, "SELECT pg_sleep(1000000)")
 					errChan <- err
 				}()
+				// Block until the query goroutine was spun up and began
+				// executing the query - this is needed to avoid a race between
+				// canceling the session before vs after 'pg_sleep' query begins
+				// (the former would result in an unexpected error message).
+				testutils.SucceedsSoon(t, func() error {
+					row := conn2.QueryRowContext(ctx, `
+SELECT count(*) FROM [SHOW CLUSTER QUERIES] WHERE query LIKE '%pg_sleep%'
+                                              AND query NOT LIKE '%SHOW CLUSTER QUERIES%'
+;`)
+					var count int
+					if err = row.Scan(&count); err != nil {
+						t.Fatal(err)
+					}
+					if count == 1 {
+						return nil
+					}
+					if count > 1 {
+						t.Fatalf("unexpectedly found %d pg_sleep queries", count)
+					}
+					return errors.New("pg_sleep query hasn't started yet")
+				})
 			}
 
 			// Cancel the session on node 1.

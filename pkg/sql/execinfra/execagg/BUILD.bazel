@@ -12,6 +12,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/intsets",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
