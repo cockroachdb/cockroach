@@ -34,6 +34,7 @@ type SpanConfigClient interface {
 	// source cluster.
 	SetupSpanConfigsStream(tenant roachpb.TenantName) (Subscription, error)
 }
+
 type spanConfigClient struct {
 	pgxConfig    *pgx.ConnConfig
 	srcConn      *pgx.Conn // pgx connection to the source cluster
@@ -62,11 +63,7 @@ func NewSpanConfigStreamClient(
 	}
 
 	options := processOptions(opts)
-	config, err := setupPGXConfig(remote, options)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := pgx.ConnectConfig(ctx, config)
+	conn, config, err := newPGConnForClient(ctx, remote, options)
 	if err != nil {
 		return nil, err
 	}
