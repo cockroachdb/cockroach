@@ -88,20 +88,20 @@ func (m *manager) AddFlagsToCommand(cmd cmdID, cmdFlags *pflag.FlagSet) {
 	}
 }
 
-// Changed returns true if a flag associated with the given value was passed.
-func (m *manager) Changed(valPtr interface{}) bool {
+// Changed returns non-nil FlagInfo iff a flag associated with the given value was passed.
+func (m *manager) Changed(valPtr interface{}) *FlagInfo {
 	// We don't know which command we're running, but we'll only run one per
 	// program invocation; so check all of them.
 	for cmd := cmdID(0); cmd < numCmdIDs; cmd++ {
 		if f, ok := m.flags[cmd][valPtr]; ok {
 			for _, flagSet := range f.flagSets {
 				if flagSet.Changed(f.Name) {
-					return true
+					return &f.FlagInfo
 				}
 			}
 		}
 	}
-	return false
+	return nil
 }
 
 // cleanupString converts a multi-line string into a single-line string,
