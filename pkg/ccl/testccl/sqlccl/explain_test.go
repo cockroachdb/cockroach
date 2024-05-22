@@ -32,6 +32,7 @@ func TestExplainRedactDDL(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "the test is too slow")
+	skip.UnderRace(t, "the test is too slow")
 
 	const numStatements = 10
 
