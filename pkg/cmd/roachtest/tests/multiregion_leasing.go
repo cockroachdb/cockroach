@@ -111,6 +111,9 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 	}
 
 	for modeIdx, sessionBasedLeasingEnabled := range []bool{true, false} {
+		// Re-assign loop variables that are used in a closure.
+		modeIdx := modeIdx
+		sessionBasedLeasingEnabled := sessionBasedLeasingEnabled
 		func() {
 			// When session based leasing is disabled, force expiry based leasing.
 			var options map[string]string
@@ -147,6 +150,7 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 			// we have is high so the lease manager can't keep everything refreshed
 			// intentionally. The session based leasing will not have to deal with
 			// renewals and take a shorter execution time.
+			t.Status(fmt.Sprintf("starting benchmark for session_based_leasing=%t", sessionBasedLeasingEnabled))
 			for _, node := range c.All() {
 				nodeIdx := node
 				grp.GoCtx(func(ctx context.Context) error {
@@ -167,8 +171,7 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 						// 	real 173.58
 						// 	user 0.47
 						// 	sys 0.16
-						// We are going to intentionally extract the first line to get the
-						// elapsed time for the set of queries.
+						// We extract the first line to get the elapsed time for the set of queries.
 						outputSlice := strings.Split(output.Output(false), "\n")
 						realExecTimeSeconds := 0.0
 						realPrefix := ""
@@ -177,12 +180,15 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 							return err
 						}
 						// Update our tally of execution time for this set of queries.
+						t.Status(fmt.Sprintf(
+							"session_based_leasing=%t node=%d iteration=%d completed in %.2f",
+							sessionBasedLeasingEnabled, nodeIdx, iter, realExecTimeSeconds,
+						))
 						syncutil.AddFloat64(&totalTimeSeconds, realExecTimeSeconds)
 					}
 					return nil
 				})
 			}
-			t.Status(fmt.Sprintf("starting benchmark for session_based_leasing=%t", sessionBasedLeasingEnabled))
 			if err := grp.Wait(); err != nil {
 				t.Fatal(err)
 			}
@@ -192,21 +198,24 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 	}
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 
-	percentage := int((durations[1]*100)/durations[0]) - 100
-	t.Status(fmt.Sprintf("Observed the following percentage(%d), "+
-		"session based leasing time(%d), expiry based leasing time (%d)",
-		percentage, durations[0], durations[1]))
+	percentage := (1 - float64(durations[0])/float64(durations[1])) * 100
+	t.Status(fmt.Sprintf(
+		"observed a %.2f%% improvement; session based leasing time is %s, expiry based leasing time is %s",
+		percentage, durations[0], durations[1],
+	))
 	if percentage < 0 {
-		t.Fatal(fmt.Sprintf("Expected session based leasing to be faster with many descriptors (%d%%).",
-			percentage))
+		t.Fatalf(
+			"expected session based leasing to be faster with many descriptors; got %.2f%% improvement",
+			percentage,
+		)
 	}
-	// Track the percentage improvement between the two.
-	t.Status(fmt.Sprintf("session based leasing produced a median improvement of %d%% ",
-		percentage))
-	// We see an at least a 15% improvement in this scenario, so fail fatally if we miss
+	// We see an at least a 13% improvement in this scenario, so fail if we miss
 	// a percentage of that mark.
-	if percentage < 15 {
-		t.Fatal("lower than expected improvement in execution time")
+	if percentage < 13 {
+		t.Fatalf(
+			"lower than expected improvement in execution time; got %.2f%%, expected at least 13%%",
+			percentage,
+		)
 	}
 }
 
