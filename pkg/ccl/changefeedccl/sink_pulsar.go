@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -303,6 +304,12 @@ func makePulsarSink(
 	knobs *TestingKnobs,
 ) (Sink, error) {
 	// TODO(#118858): configure auth and validate URL query params
+	unsupportedParams := []string{changefeedbase.SinkParamTopicPrefix, changefeedbase.SinkParamTopicName, changefeedbase.SinkParamSchemaTopic}
+	for _, param := range unsupportedParams {
+		if u.consumeParam(param) != "" {
+			return nil, unimplemented.NewWithIssuef(118863, "%s is not yet supported", param)
+		}
+	}
 
 	topicNamer, err := MakeTopicNamer(targets)
 	if err != nil {
