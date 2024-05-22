@@ -507,6 +507,7 @@ func (m *RandomStreamClient) Subscribe(
 	spec SubscriptionToken,
 	initialScanTime hlc.Timestamp,
 	_ span.Frontier,
+	_ ...SubscribeOption,
 ) (Subscription, error) {
 	partitionURL, err := url.Parse(string(spec))
 	if err != nil {

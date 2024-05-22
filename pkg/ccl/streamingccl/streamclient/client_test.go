@@ -87,6 +87,7 @@ func (sc testStreamClient) Subscribe(
 	_ SubscriptionToken,
 	_ hlc.Timestamp,
 	_ span.Frontier,
+	_ ...SubscribeOption,
 ) (Subscription, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),

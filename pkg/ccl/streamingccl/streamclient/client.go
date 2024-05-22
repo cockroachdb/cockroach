@@ -87,7 +87,7 @@ type Client interface {
 	// open its subscription to its partition of a larger stream.
 	// TODO(dt): ts -> checkpointToken.
 	Subscribe(ctx context.Context, streamID streampb.StreamID, procID int32, spec SubscriptionToken,
-		initialScanTime hlc.Timestamp, previousReplicatedTimes span.Frontier) (Subscription, error)
+		initialScanTime hlc.Timestamp, previousReplicatedTimes span.Frontier, opts ...SubscribeOption) (Subscription, error)
 
 	// Complete completes a replication stream consumption.
 	Complete(ctx context.Context, streamID streampb.StreamID, successfulIngestion bool) error
@@ -104,6 +104,24 @@ type Client interface {
 	PriorReplicationDetails(
 		ctx context.Context, tenant roachpb.TenantName,
 	) (id string, replicatedFrom string, activated hlc.Timestamp, _ error)
+}
+
+type subscribeConfig struct {
+	// withFiltering controls whether the producer-side rangefeeds
+	// should be started with the WithFiltering option which
+	// elides rangefeed events.
+	withFiltering bool
+}
+
+type SubscribeOption func(*subscribeConfig)
+
+// WithFiltering controls whether the producer side rangefeed is
+// started with the WithFiltering option, eliding rows where
+// OmitInRangefeed was set at write-time.
+func WithFiltering(filteringEnabled bool) SubscribeOption {
+	return func(cfg *subscribeConfig) {
+		cfg.withFiltering = filteringEnabled
+	}
 }
 
 // Topology is a configuration of stream partitions. These are particular to a
