@@ -255,6 +255,7 @@ func MakeRegistry(
 	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
 	r.mu.waiting = make(map[jobspb.JobID]map[*waitingSet]struct{})
 	r.metrics.init(histogramWindowInterval)
+	InitJobStateLogProcessor(ctx, stopper)
 	return r
 }
 
@@ -1587,7 +1588,7 @@ func (r *Registry) stepThroughStateMachine(
 	} else {
 		log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), status)
 	}
-	maybeLogStateChangeStructured(ctx, job, status, jobErr)
+	maybeLogStateChangeStructured(ctx, job, status)
 	jm := r.metrics.JobMetrics[jobType]
 	onExecutionFailed := func(cause error) error {
 		log.ErrorfDepth(

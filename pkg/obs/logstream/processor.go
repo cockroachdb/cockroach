@@ -10,7 +10,11 @@
 
 package logstream
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/errors"
+)
 
 // Processor defines how a component can process streams of structured log events as they're
 // passed to log.Structured. Processor enables engineers to use streams of log events as the
@@ -21,3 +25,26 @@ type Processor interface {
 	// Process processes a single log stream event.
 	Process(context.Context, any) error
 }
+
+type StructuredLogProcessor[T any] struct {
+	processFn func(ctx context.Context, t T) error
+}
+
+func NewStructuredLogProcessor[T any](
+	processFn func(ctx context.Context, t T) error,
+) *StructuredLogProcessor[T] {
+	return &StructuredLogProcessor[T]{
+		processFn: processFn,
+	}
+}
+
+func (s *StructuredLogProcessor[T]) Process(ctx context.Context, a any) error {
+	log, ok := a.(T)
+	if !ok {
+		return errors.Newf("unexpected type for event: %v", a)
+	}
+
+	return s.processFn(ctx, log)
+}
+
+var _ Processor = (*StructuredLogProcessor[any])(nil)

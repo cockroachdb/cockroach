@@ -12,70 +12,44 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/logstream"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/redact"
 )
 
-type ProgressHighWatermark struct {
-	WallTime int64 `json:"wall_time"`
-	Logical  int32 `json:"logical"`
-}
-
-type ProgressFractional struct {
-	FractionCompleted float32 `json:"fraction_completed;omitempty"`
-}
-
+// TODO[kyle.wong] should we have a job run id or job run number or something?
 type JobStateChange struct {
-	JobID   jobspb.JobID `json:"job_id"`
-	JobType string       `json:"job_type"`
-	Status  Status       `json:"status"`
-	// TODO(abarganier): we need to consider redaction for this string field.
-	RunningStatus        redact.RedactableString `json:"running_status,omitempty"`
-	StateChangeTimeNanos int64                   `json:"state_change_time_nanos"`
-	ModifiedMicros       int64                   `json:"modified_micros"`
-	// TODO(abarganier): Figure out redactable errors.
-	// TODO(abarganier): Payload struct has error, resume_errors, cleanup_errors, final_resume_error,
-	// do we need to include these?
-	Error redact.RedactableString `json:"error,omitempty"`
-	// TODO(abarganier): Should we include the RetriableExecutionFailures from the Payload?
-	ProgressWatermark  *ProgressHighWatermark  `json:"progress_watermark,omitempty"`
-	ProgressFractional *ProgressFractional     `json:"progress_fractional,omitempty"`
-	PauseReason        redact.RedactableString `json:"pause_reason,omitempty"`
-	// TODO(abarganier) should we include the Session?
+	JobID                jobspb.JobID `json:"job_id"`
+	JobType              string       `json:"job_type"`
+	Status               Status       `json:"status"`
+	StateChangeTimestamp int64        `json:"state_change_timestamp"`
 }
 
-func maybeLogStateChangeStructured(ctx context.Context, job *Job, status Status, jobErr error) {
+func maybeLogStateChangeStructured(ctx context.Context, job *Job, status Status) {
 	if job == nil {
 		return
 	}
 	payload := job.Payload()
-	progress := job.Progress()
 	out := &JobStateChange{
-		JobID:   job.ID(),
-		JobType: payload.Type().String(),
-		Status:  status,
-		// TODO(abarganier): properly redact
-		RunningStatus:        redact.RedactableString(progress.RunningStatus),
-		StateChangeTimeNanos: timeutil.Now().UnixNano(),
-		ModifiedMicros:       progress.ModifiedMicros,
-		// TODO(abarganier): properly redact
-		PauseReason: redact.RedactableString(payload.PauseReason),
-	}
-	if jobErr != nil {
-		// TODO(abarganier): properly redact
-		out.Error = redact.RedactableString(jobErr.Error())
-	}
-	switch p := progress.Progress.(type) {
-	case *jobspb.Progress_FractionCompleted:
-		out.ProgressFractional = &ProgressFractional{FractionCompleted: p.FractionCompleted}
-	case *jobspb.Progress_HighWater:
-		out.ProgressWatermark = &ProgressHighWatermark{
-			WallTime: p.HighWater.WallTime,
-			Logical:  p.HighWater.Logical,
-		}
+		JobID:                job.ID(),
+		JobType:              payload.Type().String(),
+		Status:               status,
+		StateChangeTimestamp: timeutil.Now().UnixNano(),
 	}
 	log.Structured(ctx, log.StructuredMeta{EventType: log.JOB_STATE_CHANGE}, out)
+}
+
+func JobStateChangeProcessor(ctx context.Context, j *JobStateChange) error {
+	// TODO: define a new systems table and persist job state changes to said table.
+	fmt.Println(j)
+	return nil
+}
+
+func InitJobStateLogProcessor(ctx context.Context, stopper *stop.Stopper) {
+	processor := logstream.NewStructuredLogProcessor[*JobStateChange](JobStateChangeProcessor)
+	logstream.RegisterProcessor(ctx, stopper, log.JOB_STATE_CHANGE, processor)
 }
