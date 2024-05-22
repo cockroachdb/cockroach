@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -40,11 +39,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if string(cf.Name.CatalogName) != b.evalCtx.SessionData().Database {
 			panic(unimplemented.New("CREATE FUNCTION", "cross-db references not supported"))
 		}
-	}
-
-	activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
-	if cf.IsProcedure && !activeVersion.IsActive(clusterversion.V23_2) {
-		panic(unimplemented.New("procedures", "procedures are not yet supported"))
 	}
 
 	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name)
@@ -122,9 +116,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		panic(pgerror.New(pgcode.InvalidFunctionDefinition, "no language specified"))
 	}
 	if language == tree.RoutineLangPLpgSQL {
-		if !activeVersion.IsActive(clusterversion.V23_2) {
-			panic(unimplemented.New("PLpgSQL", "PLpgSQL is not supported until version 23.2"))
-		}
 		if err := plpgsql.CheckClusterSupportsPLpgSQL(b.evalCtx.Settings); err != nil {
 			panic(err)
 		}

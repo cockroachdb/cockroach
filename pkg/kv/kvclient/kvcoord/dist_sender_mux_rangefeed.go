@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -645,9 +644,6 @@ func (c *muxStream) close() (toRestart []*activeMuxRangeFeed) {
 func NewCloseStreamRequest(
 	ctx context.Context, st *cluster.Settings, streamID int64,
 ) (*kvpb.RangeFeedRequest, error) {
-	if !st.Version.IsActive(ctx, clusterversion.V23_2) {
-		return nil, errors.Newf("CloseStream request requires cluster version 23.2 or above, found %s", st.Version)
-	}
 	return &kvpb.RangeFeedRequest{
 		StreamID:    streamID,
 		CloseStream: true,

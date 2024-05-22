@@ -341,10 +341,6 @@ func (b *Builder) buildStmt(
 		switch stmt := stmt.(type) {
 		case *tree.Select, tree.SelectStatement:
 		case *tree.Insert, *tree.Update, *tree.Delete:
-			activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
-			if !activeVersion.IsActive(clusterversion.V23_2) {
-				panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition is not supported until version 23.2", stmt.StatementTag()))
-			}
 		case *tree.Call:
 			activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
 			if !activeVersion.IsActive(clusterversion.V24_1) {

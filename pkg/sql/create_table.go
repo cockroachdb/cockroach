@@ -1629,19 +1629,6 @@ func NewTableDesc(
 				incTelemetryForNewColumn(d, col)
 			}
 
-			// Version gates for enabling primary keys / unique indexes for JSONB columns
-			if col.Type.Family() == types.JsonFamily && (d.PrimaryKey.IsPrimaryKey || d.Unique.IsUnique) && !version.IsActive(clusterversion.V23_2) {
-				return nil, errors.WithHint(
-					pgerror.Newf(
-						pgcode.InvalidTableDefinition,
-						"index element %s of type %s is not indexable in a non-inverted index",
-						col.Name,
-						col.Type.Name(),
-					),
-					"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"),
-				)
-			}
-
 			desc.AddColumn(col)
 
 			if idx != nil {
@@ -1829,10 +1816,6 @@ func NewTableDesc(
 			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
 				return nil, err
 			}
-			if !version.IsActive(clusterversion.V23_2) &&
-				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
-				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
-			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
@@ -1947,10 +1930,6 @@ func NewTableDesc(
 			}
 			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
 				return nil, err
-			}
-			if !version.IsActive(clusterversion.V23_2) &&
-				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
-				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),

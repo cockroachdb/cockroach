@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -295,11 +294,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 
-				activeVersion := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-				if !activeVersion.IsActive(clusterversion.V23_2) &&
-					d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
-					return unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
-				}
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,

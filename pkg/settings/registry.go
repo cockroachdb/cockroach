@@ -243,6 +243,7 @@ var retiredSettings = map[InternalKey]struct{}{
 
 	// removed as of 24.2
 	"storage.value_blocks.enabled": {},
+	"kv.gc.sticky_hint.enabled":    {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults

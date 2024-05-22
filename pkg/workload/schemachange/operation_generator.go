@@ -941,17 +941,9 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	invisibility := tree.IndexInvisibility{Value: 0.0}
 	if notvisible := og.randIntn(20) == 0; notvisible {
 		invisibility.Value = 1.0
-		partiallyVisibleIndexNotSupported, err := isClusterVersionLessThan(
-			ctx, tx, clusterversion.V23_2.Version(),
-		)
-		if err != nil {
-			return nil, err
-		}
-		if !partiallyVisibleIndexNotSupported {
-			if og.randIntn(2) == 0 {
-				invisibility.Value = 1 - og.params.rng.Float64()
-				invisibility.FloatProvided = true
-			}
+		if og.randIntn(2) == 0 {
+			invisibility.Value = 1 - og.params.rng.Float64()
+			invisibility.FloatProvided = true
 		}
 	}
 
@@ -980,7 +972,6 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	duplicateRegionColumn := false
 	nonIndexableType := false
 	def.Columns = make(tree.IndexElemList, 1+og.randIntn(len(columnNames)))
-	jsonInvertedIndexesNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V23_2.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -1001,10 +992,6 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			invertedIndexableType := colinfo.ColumnTypeIsInvertedIndexable(columnNames[i].typ)
 			if (invertedIndexableType && i < len(def.Columns)-1) ||
 				(!invertedIndexableType && i == len(def.Columns)-1) {
-				nonIndexableType = true
-			}
-			// JSON families are not allowed unless we are on the correct version.
-			if jsonInvertedIndexesNotSupported && columnNames[i].typ.Family() == types.JsonFamily {
 				nonIndexableType = true
 			}
 		} else {
@@ -1212,15 +1199,9 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	partiallyVisibleIndexNotSupported, err := isClusterVersionLessThan(
-		ctx, tx, clusterversion.V23_2.Version(),
-	)
-	if err != nil {
-		return nil, err
-	}
 	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(
 		og.params.rng, "table", tableIdx, databaseHasMultiRegion,
-		!partiallyVisibleIndexNotSupported, og.newUniqueSeqNumSuffix,
+		true /* allowPartiallyVisibleIndex */, og.newUniqueSeqNumSuffix,
 	)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
@@ -1234,88 +1215,6 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		}
 		return false
 	}()
-	// PGLSN was added in 23.2.
-	pgLSNNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V23_2.Version())
-	if err != nil {
-		return nil, err
-	}
-	// REFCURSOR was added in 23.2.
-	refCursorNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V23_2.Version())
-	if err != nil {
-		return nil, err
-	}
-	// Forward indexes for JSON were added in 23.2.
-	forwardIndexesOnJSONNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V23_2.Version())
-	if err != nil {
-		return nil, err
-	}
-	// Configuring the visibility of indexes was added in 23.2.
-	indexVisibilityNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V23_2.Version())
-	if err != nil {
-		return nil, err
-	}
-	hasUnsupportedIdxQueries, err := func() (bool, error) {
-		colInfoMap := make(map[tree.Name]*tree.ColumnTableDef)
-		for _, def := range stmt.Defs {
-			if colDef, ok := def.(*tree.ColumnTableDef); ok {
-				colInfoMap[colDef.Name] = colDef
-			}
-			var idxDef *tree.IndexTableDef
-			if _, ok := def.(*tree.IndexTableDef); ok {
-				idxDef = def.(*tree.IndexTableDef)
-			} else if _, ok := def.(*tree.UniqueConstraintTableDef); ok {
-				idxDef = &(def.(*tree.UniqueConstraintTableDef)).IndexTableDef
-			}
-			if idxDef != nil {
-				if indexVisibilityNotSupported && idxDef.Invisibility.Value != 0 && idxDef.Invisibility.Value != 1.0 {
-					return true, nil
-				}
-				for _, col := range idxDef.Columns {
-					if col.Column != "" {
-						colInfo := colInfoMap[col.Column]
-						typ, err := tree.ResolveType(ctx, colInfo.Type, &txTypeResolver{tx: tx})
-						if err != nil {
-							return false, err
-						}
-						if forwardIndexesOnJSONNotSupported && typ.Family() == types.JsonFamily {
-							return true, nil
-						}
-					}
-				}
-			}
-		}
-		// Run a similar check against the partition by clauses.
-		if stmt.PartitionByTable == nil {
-			return false, nil
-		}
-		for _, f := range stmt.PartitionByTable.PartitionBy.Fields {
-			colInfo := colInfoMap[f]
-			typ, err := tree.ResolveType(ctx, colInfo.Type, &txTypeResolver{tx: tx})
-			if err != nil {
-				return false, err
-			}
-			if forwardIndexesOnJSONNotSupported && typ.Family() == types.JsonFamily {
-				return true, nil
-			}
-		}
-
-		return false, nil
-	}()
-	if err != nil {
-		return nil, err
-	}
 
 	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
@@ -1335,14 +1234,6 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Syntax, condition: hasUnsupportedTSQuery},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedTSQuery},
-		{code: pgcode.Syntax, condition: pgLSNNotSupported},
-		{code: pgcode.FeatureNotSupported, condition: pgLSNNotSupported},
-		{code: pgcode.UndefinedObject, condition: pgLSNNotSupported},
-		{code: pgcode.Syntax, condition: refCursorNotSupported},
-		{code: pgcode.FeatureNotSupported, condition: refCursorNotSupported},
-		{code: pgcode.UndefinedObject, condition: refCursorNotSupported},
-		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedIdxQueries},
-		{code: pgcode.InvalidTableDefinition, condition: hasUnsupportedIdxQueries},
 	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
@@ -3958,22 +3849,6 @@ FROM
 		possibleReturnReferences = append(possibleReturnReferences, enum["name"].(string))
 		possibleParamReferences = append(possibleParamReferences, fmt.Sprintf(`enum_%d %s`, i, enum["name"]))
 	}
-	// PGLSN was added in 23.2.
-	pgLSNNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V23_2.Version())
-	if err != nil {
-		return nil, err
-	}
-	// REFCURSOR was added in 23.2.
-	refCursorNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V23_2.Version())
-	if err != nil {
-		return nil, err
-	}
 
 	defaultExpressionsNotSupported, err := isClusterVersionLessThan(
 		ctx,
@@ -3991,9 +3866,7 @@ FROM
 		if typeVal.Identical(types.AnyTuple) ||
 			typeVal.IsWildcardType() ||
 			typeVal == types.RegClass ||
-			typeVal.Family() == types.OidFamily ||
-			(pgLSNNotSupported && typeVal.Family() == types.PGLSNFamily) ||
-			(refCursorNotSupported && typeVal.Family() == types.RefCursorFamily) {
+			typeVal.Family() == types.OidFamily {
 			continue
 		}
 		possibleReturnReferences = append(possibleReturnReferences, typeVal.SQLStandardName())
