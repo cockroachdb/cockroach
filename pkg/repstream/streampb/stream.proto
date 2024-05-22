@@ -100,7 +100,7 @@ message StreamPartitionSpec {
   // of the stream.  If unspecified, reasonable defaults will be set.
   message ExecutionConfig {
     reserved 1;
-    
+
     // Controls how often checkpoint records are published.
     google.protobuf.Duration min_checkpoint_frequency = 2
        [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
@@ -117,6 +117,11 @@ message StreamPartitionSpec {
   repeated cockroach.sql.jobs.jobspb.ResolvedSpan progress = 6  [(gogoproto.nullable) = false];
 
   bool compressed = 7;
+
+  // WithFiltering controls whether the rangefeed started for this
+  // partition should filter datums where OmitInRangefeeds should be
+  // set.
+  bool with_filtering = 8;
 }
 
 // SpanConfigEventStreamSpec is the span config event stream specification.
