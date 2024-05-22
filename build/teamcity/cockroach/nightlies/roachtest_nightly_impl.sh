@@ -60,6 +60,7 @@ build/teamcity-roachtest-invoke.sh \
   --metamorphic-encryption-probability=0.5 \
   --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
   --select-probability="${select_probability}" \
+  --use-spot="${USE_SPOT:-auto}" \
   --cloud="${CLOUD}" \
   --count="${COUNT-1}" \
   --clear-cluster-cache="${CLEAR_CLUSTER_CACHE:-true}" \

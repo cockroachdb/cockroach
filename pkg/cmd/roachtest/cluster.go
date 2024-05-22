@@ -812,22 +812,22 @@ func (f *clusterFactory) genName(cfg clusterConfig) string {
 
 // createFlagsOverride updates opts with the override values passed from the cli.
 func createFlagsOverride(opts *vm.CreateOpts) {
-	if roachtestflags.Changed(&roachtestflags.Lifetime) {
+	if roachtestflags.Changed(&roachtestflags.Lifetime) != nil {
 		opts.Lifetime = roachtestflags.Lifetime
 	}
-	if roachtestflags.Changed(&roachtestflags.OverrideUseLocalSSD) {
+	if roachtestflags.Changed(&roachtestflags.OverrideUseLocalSSD) != nil {
 		opts.SSDOpts.UseLocalSSD = roachtestflags.OverrideUseLocalSSD
 	}
-	if roachtestflags.Changed(&roachtestflags.OverrideFilesystem) {
+	if roachtestflags.Changed(&roachtestflags.OverrideFilesystem) != nil {
 		opts.SSDOpts.FileSystem = roachtestflags.OverrideFilesystem
 	}
-	if roachtestflags.Changed(&roachtestflags.OverrideNoExt4Barrier) {
+	if roachtestflags.Changed(&roachtestflags.OverrideNoExt4Barrier) != nil {
 		opts.SSDOpts.NoExt4Barrier = roachtestflags.OverrideNoExt4Barrier
 	}
-	if roachtestflags.Changed(&roachtestflags.OverrideOSVolumeSizeGB) {
+	if roachtestflags.Changed(&roachtestflags.OverrideOSVolumeSizeGB) != nil {
 		opts.OsVolumeSize = roachtestflags.OverrideOSVolumeSizeGB
 	}
-	if roachtestflags.Changed(&roachtestflags.OverrideGeoDistributed) {
+	if roachtestflags.Changed(&roachtestflags.OverrideGeoDistributed) != nil {
 		opts.GeoDistributed = roachtestflags.OverrideGeoDistributed
 	}
 }
@@ -858,7 +858,7 @@ func (f *clusterFactory) newCluster(
 		return nil, nil, errors.Wrap(ctx.Err(), "newCluster")
 	}
 
-	if roachtestflags.Changed(&roachtestflags.OverrideNumNodes) {
+	if roachtestflags.Changed(&roachtestflags.OverrideNumNodes) != nil {
 		cfg.spec.NodeCount = roachtestflags.OverrideNumNodes
 	}
 

@@ -60,7 +60,8 @@ func main() {
 		Short: "roachtest tool for testing cockroach clusters",
 		Long: `roachtest is a tool for testing cockroach clusters.
 `,
-		Version: "details:\n" + build.GetInfo().Long(),
+		Version:          "details:\n" + build.GetInfo().Long(),
+		PersistentPreRun: validateAndConfigure,
 	}
 
 	rootCmd.AddCommand(&cobra.Command{
@@ -378,4 +379,32 @@ func selectSpecs(
 	}
 
 	return sampled
+}
+
+// Before executing any command, validate and canonicalize args.
+func validateAndConfigure(cmd *cobra.Command, args []string) {
+	// Skip validation for commands that are self-sufficient.
+	switch cmd.Name() {
+	case "help", "version", "list":
+		return
+	}
+
+	printErrAndExit := func(err error) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", err)
+			os.Exit(1)
+		}
+	}
+	// Validate use-spot flag
+	if spotFlagInfo := roachtestflags.Changed(&roachtestflags.UseSpotVM); spotFlagInfo != nil {
+		val := strings.ToLower(roachtestflags.UseSpotVM)
+
+		switch val {
+		case roachtestflags.NeverUseSpot, roachtestflags.AlwaysUseSpot, roachtestflags.AutoUseSpot:
+			roachtestflags.UseSpotVM = val
+		default:
+			printErrAndExit(fmt.Errorf("unsupported option value %q for option %q; Usage: %s",
+				roachtestflags.UseSpotVM, spotFlagInfo.Name, spotFlagInfo.Usage))
+		}
+	}
 }
