@@ -1400,35 +1400,35 @@ const (
 	// NoStreaming means that the grouping columns have no useful order, so a
 	// hash aggregator should be used.
 	NoStreaming GroupingOrderType = iota
-	// PartialStreaming means that the grouping columns are partially ordered, so
-	// some optimizations can be done during aggregation.
+	// PartialStreaming means that the grouping columns are partially ordered,
+	// so some optimizations can be done during aggregation.
 	PartialStreaming
 	// Streaming means that the grouping columns are fully ordered.
 	Streaming
 )
 
-// GroupingOrderType calculates how many ordered columns that the grouping
-// and input columns have in common and returns NoStreaming if there are none, Streaming if
-// all columns match, and PartialStreaming if only some match. It is similar to
-// StreamingGroupingColOrdering, but does not build an ordering.
+// GroupingOrderType calculates how many ordered columns that the grouping and
+// input columns have in common and returns NoStreaming if there are none,
+// Streaming if all columns match, and PartialStreaming if only some match. It
+// is similar to StreamingGroupingColOrdering, but does not build an ordering.
 func (g *GroupingPrivate) GroupingOrderType(required *props.OrderingChoice) GroupingOrderType {
 	inputOrdering := required.Intersection(&g.Ordering)
-	count := 0
+	var orderedGroupingCols opt.ColSet
 	for i := range inputOrdering.Columns {
 		// Get any grouping column from the set. Normally there would be at most one
 		// because we have rules that remove redundant grouping columns.
 		cols := inputOrdering.Group(i).Intersection(g.GroupingCols)
-		_, ok := cols.Next(0)
+		c, ok := cols.Next(0)
 		if !ok {
 			// This group refers to a column that is not a grouping column.
 			// The rest of the ordering is not useful.
 			break
 		}
-		count++
+		orderedGroupingCols.Add(c)
 	}
-	if count == g.GroupingCols.Len() || g.GroupingCols.Len() == 0 {
+	if orderedGroupingCols.Len() == g.GroupingCols.Len() || g.GroupingCols.Len() == 0 {
 		return Streaming
-	} else if count == 0 {
+	} else if orderedGroupingCols.Len() == 0 {
 		return NoStreaming
 	}
 	return PartialStreaming
