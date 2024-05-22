@@ -58,7 +58,7 @@ func TestReplicaLeaseStatus(t *testing.T) {
 		Replica:    r1,
 		Start:      ts[1],
 		Expiration: ts[4].ToTimestamp().Clone(),
-		ProposedTS: &hlc.ClockTimestamp{WallTime: ts[1].WallTime - 100},
+		ProposedTS: hlc.ClockTimestamp{WallTime: ts[1].WallTime - 100},
 	}
 	epoLease := roachpb.Lease{
 		Replica:    expLease.Replica,
