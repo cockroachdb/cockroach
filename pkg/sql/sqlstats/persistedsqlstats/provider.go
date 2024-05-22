@@ -46,11 +46,12 @@ type Config struct {
 	JobRegistry             *jobs.Registry
 
 	// Metrics.
-	FlushesSuccessful       *metric.Counter
-	FlushLatency            metric.IHistogram
-	FlushDoneSignalsIgnored *metric.Counter
-	FlushesFailed           *metric.Counter
-	FlushedFingerprintCount *metric.Counter
+	FlushesSuccessful                     *metric.Counter
+	FlushLatency                          metric.IHistogram
+	FlushDoneSignalsIgnored               *metric.Counter
+	FlushesFailed                         *metric.Counter
+	FlushedFingerprintCount               *metric.Counter
+	FlushedFingerprintCardinalityEstimate *metric.Gauge
 
 	// Testing knobs.
 	Knobs *sqlstats.TestingKnobs

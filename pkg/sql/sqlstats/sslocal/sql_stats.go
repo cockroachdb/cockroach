@@ -43,6 +43,8 @@ type SQLStats struct {
 	// Server level counter
 	atomic *ssmemstorage.SQLStatsAtomicCounters
 
+	cardinality *ssmemstorage.SQLCardinality
+
 	// flushTarget is a Sink that, when the SQLStats resets at the end of its
 	// reset interval, the SQLStats will dump all of the stats into if it is not
 	// nil.
@@ -83,6 +85,7 @@ func newSQLStats(
 		st,
 		uniqueStmtFingerprintLimit,
 		uniqueTxnFingerprintLimit)
+	s.cardinality = ssmemstorage.NewSQLCardinality()
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
 	s.mu.mon.StartNoReserved(context.Background(), parentMon)
@@ -93,6 +96,10 @@ func newSQLStats(
 // transaction fingerprints stored in the current SQLStats.
 func (s *SQLStats) GetTotalFingerprintCount() int64 {
 	return s.atomic.GetTotalFingerprintCount()
+}
+
+func (s *SQLStats) GetCardinality() uint64 {
+	return s.cardinality.GetCardinality()
 }
 
 // GetTotalFingerprintBytes returns the total amount of bytes currently
@@ -117,6 +124,7 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 	a := ssmemstorage.New(
 		s.st,
 		s.atomic,
+		s.cardinality,
 		s.mu.mon,
 		appName,
 		s.knobs,

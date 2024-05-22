@@ -18,12 +18,25 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+type SQLCardinality struct {
+	syncutil.Mutex
+
+	cardinality *hyperloglog.Sketch
+}
+
+func NewSQLCardinality() *SQLCardinality {
+	return &SQLCardinality{
+		cardinality: hyperloglog.New14(),
+	}
+}
 
 type SQLStatsAtomicCounters struct {
 	st *cluster.Settings
@@ -174,6 +187,12 @@ func (s *SQLStatsAtomicCounters) freeByCnt(
 // transaction fingerprints stored in the current SQLStats.
 func (s *SQLStatsAtomicCounters) GetTotalFingerprintCount() int64 {
 	return atomic.LoadInt64(&s.uniqueStmtFingerprintCount) + atomic.LoadInt64(&s.uniqueTxnFingerprintCount)
+}
+
+func (s *SQLCardinality) GetCardinality() uint64 {
+	s.Lock()
+	defer s.Unlock()
+	return s.cardinality.Estimate()
 }
 
 // GetStatementCount returns the number of unique statement fingerprints stored

@@ -482,15 +482,16 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		DB: NewInternalDB(
 			s, MemoryMetrics{}, sqlStatsInternalExecutorMonitor,
 		),
-		ClusterID:               s.cfg.NodeInfo.LogicalClusterID,
-		SQLIDContainer:          cfg.NodeInfo.NodeID,
-		JobRegistry:             s.cfg.JobRegistry,
-		Knobs:                   cfg.SQLStatsTestingKnobs,
-		FlushesSuccessful:       serverMetrics.StatsMetrics.SQLStatsFlushesSuccessful,
-		FlushDoneSignalsIgnored: serverMetrics.StatsMetrics.SQLStatsFlushDoneSignalsIgnored,
-		FlushedFingerprintCount: serverMetrics.StatsMetrics.SQLStatsFlushFingerprintCount,
-		FlushesFailed:           serverMetrics.StatsMetrics.SQLStatsFlushesFailed,
-		FlushLatency:            serverMetrics.StatsMetrics.SQLStatsFlushLatency,
+		ClusterID:                             s.cfg.NodeInfo.LogicalClusterID,
+		SQLIDContainer:                        cfg.NodeInfo.NodeID,
+		JobRegistry:                           s.cfg.JobRegistry,
+		Knobs:                                 cfg.SQLStatsTestingKnobs,
+		FlushesSuccessful:                     serverMetrics.StatsMetrics.SQLStatsFlushesSuccessful,
+		FlushDoneSignalsIgnored:               serverMetrics.StatsMetrics.SQLStatsFlushDoneSignalsIgnored,
+		FlushedFingerprintCount:               serverMetrics.StatsMetrics.SQLStatsFlushFingerprintCount,
+		FlushedFingerprintCardinalityEstimate: serverMetrics.StatsMetrics.SQLStatsFlushFingerprintCardinalityEstimate,
+		FlushesFailed:                         serverMetrics.StatsMetrics.SQLStatsFlushesFailed,
+		FlushLatency:                          serverMetrics.StatsMetrics.SQLStatsFlushLatency,
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
@@ -585,11 +586,12 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 				SigFigs:      3,
 				BucketConfig: metric.MemoryUsage64MBBuckets,
 			}),
-			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(MetaReportedSQLStatsMemCurBytes),
-			DiscardedStatsCount:                 metric.NewCounter(MetaDiscardedSQLStats),
-			SQLStatsFlushesSuccessful:           metric.NewCounter(MetaSQLStatsFlushesSuccessful),
-			SQLStatsFlushDoneSignalsIgnored:     metric.NewCounter(MetaSQLStatsFlushDoneSignalsIgnored),
-			SQLStatsFlushFingerprintCount:       metric.NewCounter(MetaSQLStatsFlushFingerprintCount),
+			ReportedSQLStatsMemoryCurBytesCount:         metric.NewGauge(MetaReportedSQLStatsMemCurBytes),
+			DiscardedStatsCount:                         metric.NewCounter(MetaDiscardedSQLStats),
+			SQLStatsFlushesSuccessful:                   metric.NewCounter(MetaSQLStatsFlushesSuccessful),
+			SQLStatsFlushDoneSignalsIgnored:             metric.NewCounter(MetaSQLStatsFlushDoneSignalsIgnored),
+			SQLStatsFlushFingerprintCount:               metric.NewCounter(MetaSQLStatsFlushFingerprintCount),
+			SQLStatsFlushFingerprintCardinalityEstimate: metric.NewGauge(MetaSQLStatsFlushFingerprintCardinalityEstimate),
 
 			SQLStatsFlushesFailed: metric.NewCounter(MetaSQLStatsFlushesFailed),
 			SQLStatsFlushLatency: metric.NewHistogram(metric.HistogramOptions{

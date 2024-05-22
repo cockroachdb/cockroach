@@ -73,6 +73,8 @@ type Container struct {
 	// uniqueServerCount is a server level counter of all the unique fingerprints
 	uniqueServerCount *SQLStatsAtomicCounters
 
+	serverCardinality *SQLCardinality
+
 	mu struct {
 		syncutil.RWMutex
 
@@ -107,6 +109,7 @@ var _ sqlstats.ApplicationStats = &Container{}
 func New(
 	st *cluster.Settings,
 	uniqueServerCount *SQLStatsAtomicCounters,
+	serverCardinality *SQLCardinality,
 	mon *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
@@ -121,6 +124,7 @@ func New(
 		insights:           insightsWriter,
 		latencyInformation: latencyInformation,
 		uniqueServerCount:  uniqueServerCount,
+		serverCardinality:  serverCardinality,
 	}
 
 	if mon != nil {
@@ -217,6 +221,7 @@ func NewTempContainerFromExistingStmtStats(
 	container = New(
 		nil, /* st */
 		nil, /* uniqueServerCount */
+		nil,
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
@@ -292,6 +297,7 @@ func NewTempContainerFromExistingTxnStats(
 		nil, /* st */
 		nil, /* uniqueServerCount */
 		nil, /* mon */
+		nil,
 		appName,
 		nil, /* knobs */
 		nil, /* insights */
@@ -329,6 +335,7 @@ func (s *Container) NewApplicationStatsWithInheritedOptions() sqlstats.Applicati
 		// There is no need to constraint txn fingerprint limit since in temporary
 		// container, there will never be more than one transaction fingerprint.
 		nil, // uniqueServerCount
+		s.serverCardinality,
 		s.mon,
 		s.appName,
 		s.knobs,
@@ -516,6 +523,12 @@ func (s *Container) getStatsForStmtWithKey(
 func (s *Container) getStatsForStmtWithKeyLocked(
 	key stmtKey, stmtFingerprintID appstatspb.StmtFingerprintID, createIfNonexistent bool,
 ) (stats *stmtStats, created, throttled bool) {
+	func() {
+		s.serverCardinality.Lock()
+		defer s.serverCardinality.Unlock()
+		s.serverCardinality.cardinality.Insert([]byte(key.stmtNoConstants))
+	}()
+
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
 	stats, ok := s.mu.stmts[key]

@@ -68,6 +68,10 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 
 	fingerprintCount := s.SQLStats.GetTotalFingerprintCount()
 	s.cfg.FlushedFingerprintCount.Inc(fingerprintCount)
+
+	cardinality := s.SQLStats.GetCardinality()
+	s.cfg.FlushedFingerprintCardinalityEstimate.Update(int64(cardinality))
+
 	if log.V(1) {
 		log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
 			fingerprintCount, s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(s.lastFlushStarted))

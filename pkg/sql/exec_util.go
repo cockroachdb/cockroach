@@ -1099,6 +1099,12 @@ var (
 		Measurement: "successful flushes",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaSQLStatsFlushFingerprintCardinalityEstimate = metric.Metadata{
+		Name:        "sql.stats.flush.fingerprint.cardinality_estimate",
+		Help:        "Estimated number of distinct fingerprints seen over last flush interval",
+		Measurement: "distinct fingerprints",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaSQLStatsFlushFingerprintCount = metric.Metadata{
 		Name:        "sql.stats.flush.fingerprint.count",
 		Help:        "The number of unique statement and transaction fingerprints included in the SQL Stats flush",

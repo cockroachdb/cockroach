@@ -109,6 +109,7 @@ func (s *SQLStats) GetApplicationStats(appName string, internal bool) sqlstats.A
 	a := ssmemstorage.New(
 		s.st,
 		s.atomic,
+		s.cardinality,
 		s.mu.mon,
 		appName,
 		s.knobs,

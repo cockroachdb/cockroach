@@ -45,6 +45,7 @@ func TestRecordStatement(t *testing.T) {
 		}
 		memContainer := New(settings,
 			nil, /* uniqueServerCount */
+			NewSQLCardinality(),
 			testMonitor(ctx, "test-mon", settings),
 			"test-app",
 			knobs,
@@ -80,6 +81,7 @@ func TestRecordTransaction(t *testing.T) {
 		}
 		memContainer := New(settings,
 			nil, /* uniqueServerCount */
+			NewSQLCardinality(),
 			testMonitor(ctx, "test-mon", settings),
 			"test-app",
 			knobs,
