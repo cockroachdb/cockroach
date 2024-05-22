@@ -147,13 +147,19 @@ avoid large changes on `master` which might cause merge conflicts for backports.
 
 - [ ] File issue(s) to remove `TODO_Delete_` uses and simplify related code; assign
   to relevant teams (depending on which top-level packages use such gates).
+  Version checks against what is now the minimum version (e.g. `V23_2`) should
+  also be removed, as this version will always be active.
   <details><summary>For the overachiever</summary>
   Historically, these cleanup issues have not received much attention and the code
   was carried over for a long time. Feel free to ping individuals or do some of
-  the cleanup directly (in separate PRs). The cleanup comes down to simplifying the
-  code based on the knowledge that `IsActive()` will always return `true` for
-  obsolete gates. If simplifying the code becomes non-trivial, error on the side
-  of just removing `IsActive()` calls and leaving TODOs for further cleanup.
+  the cleanup directly (in separate PRs).
+  
+  The cleanup comes down to simplifying the code based on the knowledge that
+  `IsActive()` will always return `true` for obsolete gates. If simplifying the
+  code becomes non-trivial, error on the side of just removing `IsActive()` calls
+  and leaving TODOs for further cleanup.
+  
+  Example PRs: #124013, #124286
   </details>
   
 - [ ] Regenerate expected test data results as needed; file issues for any

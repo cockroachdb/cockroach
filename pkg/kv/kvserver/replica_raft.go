@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
@@ -2728,14 +2727,7 @@ func shouldCampaignAfterConfChange(
 			return false
 		}
 	}
-	// Prior to 23.2, the first voter in the descriptor campaigned, so we do
-	// the same in mixed-version clusters to avoid ties.
-	if !st.Version.IsActive(ctx, clusterversion.V23_2) {
-		if storeID != desc.Replicas().VoterDescriptors()[0].StoreID {
-			// We're not the designated campaigner.
-			return false
-		}
-	} else if !leaseStatus.OwnedBy(storeID) || !leaseStatus.IsValid() {
+	if !leaseStatus.OwnedBy(storeID) || !leaseStatus.IsValid() {
 		// We're not the leaseholder.
 		return false
 	}
