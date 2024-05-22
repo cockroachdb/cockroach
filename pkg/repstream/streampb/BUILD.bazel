@@ -11,6 +11,7 @@ proto_library(
         "//pkg/jobs/jobspb:jobspb_proto",
         "//pkg/kv/kvpb:kvpb_proto",
         "//pkg/roachpb:roachpb_proto",
+        "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/util:util_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -28,6 +29,7 @@ go_proto_library(
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
         "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/uuid",  # keep

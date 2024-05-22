@@ -116,8 +116,13 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		return err
 	}
 
-	log.Infof(ctx, "starting physical replication event stream: tenant=%s initial_scan_timestamp=%s previous_replicated_time=%s",
-		sourceTenantID, s.spec.InitialScanTimestamp, s.spec.PreviousReplicatedTimestamp)
+	if sourceTenantID.IsSet() {
+		log.Infof(ctx, "starting physical replication event stream: tenant=%s initial_scan_timestamp=%s previous_replicated_time=%s",
+			sourceTenantID, s.spec.InitialScanTimestamp, s.spec.PreviousReplicatedTimestamp)
+	} else {
+		log.Infof(ctx, "starting logical replication event stream: initial_scan_timestamp=%s previous_replicated_time=%s",
+			s.spec.InitialScanTimestamp, s.spec.PreviousReplicatedTimestamp)
+	}
 
 	s.acc = s.mon.MakeBoundAccount()
 
@@ -489,13 +494,16 @@ func (s *eventStream) validateProducerJobAndSpec(ctx context.Context) (roachpb.T
 	// Validate that the requested spans are a subset of the
 	// source tenant's keyspace.
 	sourceTenantID := sp.StreamReplication.TenantID
-	sourceTenantSpans := keys.MakeTenantSpan(sourceTenantID)
-	for _, sp := range s.spec.Spans {
-		if !sourceTenantSpans.Contains(sp) {
-			err := pgerror.Newf(pgcode.InvalidParameterValue, "requested span %s is not contained within the keyspace of source tenant %d",
-				sp,
-				sourceTenantID)
-			return roachpb.TenantID{}, err
+	// TODO(ssd): Do some validation for logical replication jobs.
+	if sourceTenantID.IsSet() {
+		sourceTenantSpans := keys.MakeTenantSpan(sourceTenantID)
+		for _, sp := range s.spec.Spans {
+			if !sourceTenantSpans.Contains(sp) {
+				err := pgerror.Newf(pgcode.InvalidParameterValue, "requested span %s is not contained within the keyspace of source tenant %d",
+					sp,
+					sourceTenantID)
+				return roachpb.TenantID{}, err
+			}
 		}
 	}
 	return sourceTenantID, nil

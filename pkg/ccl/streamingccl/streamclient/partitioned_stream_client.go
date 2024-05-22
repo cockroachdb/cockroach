@@ -45,13 +45,9 @@ type partitionedStreamClient struct {
 
 func NewPartitionedStreamClient(
 	ctx context.Context, remote *url.URL, opts ...Option,
-) (Client, error) {
+) (*partitionedStreamClient, error) {
 	options := processOptions(opts)
-	config, err := setupPGXConfig(remote, options)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := pgx.ConnectConfig(ctx, config)
+	conn, config, err := newPGConnForClient(ctx, remote, options)
 	if err != nil {
 		return nil, err
 	}
@@ -275,6 +271,65 @@ func (p *partitionedStreamClient) Complete(
 		return errors.Wrapf(err, "error completing replication stream %d", streamID)
 	}
 	return nil
+}
+
+func (p *partitionedStreamClient) PartitionSpans(
+	ctx context.Context, spans []roachpb.Span,
+) (Topology, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.PartitionSpans")
+	defer sp.Finish()
+
+	encodedSpans := [][]byte{}
+	for _, sourceSpan := range spans {
+		spanBytes, err := protoutil.Marshal(&sourceSpan)
+		if err != nil {
+			return Topology{}, err
+		}
+		encodedSpans = append(encodedSpans, spanBytes)
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	row := p.mu.srcConn.QueryRow(ctx, "SELECT crdb_internal.partition_spans($1)", encodedSpans)
+
+	streamSpecBytes := []byte{}
+	if err := row.Scan(&streamSpecBytes); err != nil {
+		return Topology{}, err
+	}
+
+	streamSpec := streampb.ReplicationStreamSpec{}
+	if err := protoutil.Unmarshal(streamSpecBytes, &streamSpec); err != nil {
+		return Topology{}, err
+	}
+
+	return p.createTopology(streamSpec)
+}
+
+func (p *partitionedStreamClient) CreateForTables(
+	ctx context.Context, req *streampb.ReplicationProducerRequest,
+) (*streampb.ReplicationProducerSpec, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.CreateForTables")
+	defer sp.Finish()
+
+	reqBytes, err := protoutil.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	r := p.mu.srcConn.QueryRow(ctx, "SELECT crdb_internal.start_replication_stream_for_tables($1)", reqBytes)
+	specBytes := []byte{}
+	if err := r.Scan(&specBytes); err != nil {
+		return nil, err
+	}
+
+	spec := &streampb.ReplicationProducerSpec{}
+	if err := protoutil.Unmarshal(specBytes, spec); err != nil {
+		return nil, err
+	}
+	return spec, nil
 }
 
 // PriorReplicationDetails implements the streamclient.Client interface.
