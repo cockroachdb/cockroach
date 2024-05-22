@@ -116,3 +116,15 @@ function is_release_or_master_build(){
   #                                                ^ calver prefix, e.g. 25.1
   # We don't strictly match the suffix to allow different ones, e.g. "rc" or have none.
 }
+
+# Compare the passed version to the latest published version. Returns 0 if the
+# passed version is the latest. Supports stable versions only.
+function is_latest() {
+  version=$1
+  url="https://get.cockroachdb.com/api/is_latest?version=$version"
+  maybe_latest="$(curl -fsSL "$url" || echo "")"
+  if [[ $maybe_latest == "yes" ]]; then
+    return 0
+  fi
+  return 1
+}
