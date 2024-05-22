@@ -1577,6 +1577,9 @@ func registerCDC(r registry.Registry) {
 			// - see if other users of batching sink can hit this. might need tooling af tho
 			//   - might be able to just do webhook sink -> whx -> python
 			//   - doesnt seem to be triggering it but TODO see if i can make it happen there
+			//   - i think i did make it trigger it! :/
+			//   - actually i think it was just my order checker that was not checking properly re dupes :/ back to square 1 ig
+			//   - so either my repro is bad and batching sink is broken, or it's not broken and my code is wrong
 			// can parallelio reorder buffers??
 
 			// _, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.sink_io_workers = 1;`)

@@ -30,19 +30,20 @@ func newKafkaSinkClient(
 		return nil, err
 	}
 
-	var ap sarama.AsyncProducer
-	if knobs.OverrideAsyncProducerFromClient != nil {
-		ap, err = knobs.OverrideAsyncProducerFromClient(client)
-	} else {
-		ap, err = sarama.NewAsyncProducerFromClient(client)
-	}
+	var producer sarama.SyncProducer
+	producer, err = sarama.NewSyncProducerFromClient(client)
+	// if knobs.OverrideAsyncProducerFromClient != nil {
+	// 	producer, err = knobs.OverrideAsyncProducerFromClient(client)
+	// } else {
+	// 	producer, err = sarama.NewAsyncProducerFromClient(client)
+	// }
 	if err != nil {
 		return nil, err
 	}
 
 	return &kafkaSinkClient{
 		client:         client,
-		producer:       ap,
+		producer:       producer,
 		knobs:          knobs,
 		topics:         topics,
 		batchCfg:       batchCfg,
@@ -77,7 +78,7 @@ type kafkaSinkClient struct {
 	topics   *TopicNamer
 	batchCfg sinkBatchConfig
 	client   sarama.Client
-	producer sarama.AsyncProducer
+	producer sarama.SyncProducer
 
 	knobs          kafkaSinkKnobs
 	canTryResizing bool
@@ -112,41 +113,46 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 			return err
 		}
 
-		// TODO: this is basically just a sarama.SyncProducer. maybe use that?
-
-		trk := tracker{pendingIDs: make(map[int]struct{})}
-		for _, m := range msgs {
-			m.Metadata = map[string]any{`id`: trk.next()}
+		if err := k.producer.SendMessages(msgs); err != nil {
+			return handleErr(err)
 		}
 
-		// send input, while watching for errors & close
-		for sent := 0; sent < len(msgs); {
-			m := msgs[sent]
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case k.producer.Input() <- m:
-				sent++
-			case ms := <-k.producer.Successes():
-				trk.remove(ms.Metadata.(map[string]any)[`id`].(int))
-				// TODO: re add metrics support
-			case err := <-k.producer.Errors():
-				return handleErr(err)
-			}
-		}
+		// // TODO: this is basically just a sarama.SyncProducer. maybe use that?
 
-		// make sure all messages are confirmed or errored
-		for !trk.empty() {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case err := <-k.producer.Errors():
-				return handleErr(err)
-			case ms := <-k.producer.Successes():
-				// TODO: re add metrics support
-				trk.remove(ms.Metadata.(map[string]any)[`id`].(int))
-			}
-		}
+		// trk := tracker{pendingIDs: make(map[int]struct{})}
+		// for _, m := range msgs {
+		// 	m.Metadata = map[string]any{`id`: trk.next()}
+		// }
+
+		// // send input, while watching for errors & close
+		// for sent := 0; sent < len(msgs); {
+		// 	m := msgs[sent]
+		// 	select {
+		// 	case <-ctx.Done():
+		// 		return ctx.Err()
+		// 	case k.producer.Input() <- m:
+		// 		sent++
+		// 	case ms := <-k.producer.Successes():
+		// 		// TODO: i saw a panic here: panic: id 1 not found in pendingIDs. not sure how it happened tho
+		// 		trk.remove(ms.Metadata.(map[string]any)[`id`].(int))
+		// 		// TODO: re add metrics support
+		// 	case err := <-k.producer.Errors():
+		// 		return handleErr(err)
+		// 	}
+		// }
+
+		// // make sure all messages are confirmed or errored
+		// for !trk.empty() {
+		// 	select {
+		// 	case <-ctx.Done():
+		// 		return ctx.Err()
+		// 	case err := <-k.producer.Errors():
+		// 		return handleErr(err)
+		// 	case ms := <-k.producer.Successes():
+		// 		// TODO: re add metrics support
+		// 		trk.remove(ms.Metadata.(map[string]any)[`id`].(int))
+		// 	}
+		// }
 
 		return nil
 	}
