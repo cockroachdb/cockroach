@@ -215,9 +215,15 @@ func (p *partitionedStreamClient) Subscribe(
 	spec SubscriptionToken,
 	initialScanTime hlc.Timestamp,
 	previousReplicatedTimes span.Frontier,
+	opts ...SubscribeOption,
 ) (Subscription, error) {
 	_, sp := tracing.ChildSpan(ctx, "streamclient.Client.Subscribe")
 	defer sp.Finish()
+
+	cfg := &subscribeConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
 
 	sps := streampb.StreamPartitionSpec{}
 	if err := protoutil.Unmarshal(spec, &sps); err != nil {
@@ -233,6 +239,7 @@ func (p *partitionedStreamClient) Subscribe(
 	}
 	sps.ConsumerID = consumerID
 	sps.Compressed = true
+	sps.WithFiltering = cfg.withFiltering
 
 	specBytes, err := protoutil.Marshal(&sps)
 	if err != nil {
