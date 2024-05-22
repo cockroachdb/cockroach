@@ -9,6 +9,7 @@
 package streamclient
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
@@ -31,6 +32,20 @@ const (
 	sslKeyURLParam      = "sslkey"
 	sslRootCertURLParam = "sslrootcert"
 )
+
+func newPGConnForClient(
+	ctx context.Context, remote *url.URL, options *options,
+) (*pgx.Conn, *pgx.ConnConfig, error) {
+	config, err := setupPGXConfig(remote, options)
+	if err != nil {
+		return nil, nil, err
+	}
+	conn, err := pgx.ConnectConfig(ctx, config)
+	if err != nil {
+		return nil, nil, err
+	}
+	return conn, config, nil
+}
 
 func setupPGXConfig(remote *url.URL, options *options) (*pgx.ConnConfig, error) {
 	noInlineCertURI, tlsInfo, err := uriWithInlineTLSCertsRemoved(remote)

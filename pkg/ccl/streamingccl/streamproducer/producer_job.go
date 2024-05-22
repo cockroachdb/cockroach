@@ -80,6 +80,32 @@ func makeProducerJobRecord(
 	}
 }
 
+func makeProducerJobRecordForLogicalReplication(
+	registry *jobs.Registry,
+	expirationWindow time.Duration,
+	user username.SQLUsername,
+	ptsID uuid.UUID,
+	spans []roachpb.Span,
+	desc string,
+) jobs.Record {
+	expiration := timeutil.Now().Add(expirationWindow)
+	status := jobspb.StreamReplicationProgress_NOT_FINISHED
+	return jobs.Record{
+		JobID:       registry.MakeJobID(),
+		Description: fmt.Sprintf("History Retention for Logical Replication of %s", desc),
+		Username:    user,
+		Details: jobspb.StreamReplicationDetails{
+			ProtectedTimestampRecordID: ptsID,
+			Spans:                      spans,
+			ExpirationWindow:           expirationWindow,
+		},
+		Progress: jobspb.StreamReplicationProgress{
+			Expiration:            expiration,
+			StreamIngestionStatus: status,
+		},
+	}
+}
+
 type producerJobResumer struct {
 	job *jobs.Job
 
@@ -178,6 +204,9 @@ func (p *producerJobResumer) removeJobFromTenantRecord(
 	ctx context.Context, execCfg *sql.ExecutorConfig,
 ) error {
 	tenantID := p.job.Details().(jobspb.StreamReplicationDetails).TenantID
+	if !tenantID.IsSet() {
+		return nil
+	}
 	jobID := p.job.ID()
 	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		tenantRecord, err := sql.GetTenantRecordByID(ctx, txn, tenantID, execCfg.Settings)

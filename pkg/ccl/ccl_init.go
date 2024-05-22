@@ -31,6 +31,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/logical"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
