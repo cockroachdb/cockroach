@@ -2119,3 +2119,40 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN
+
+# Regression test for correctly marking partially streaming aggregation
+# (#124101).
+statement ok
+CREATE TABLE t124101 (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a, b),
+  UNIQUE (a, c)
+);
+SET testing_optimizer_disable_rule_probability = 1.000000;
+
+query T
+EXPLAIN SELECT a, sum_int(c) AS s FROM t124101 GROUP BY a, c ORDER BY a, a, s, c LIMIT 2;
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ count: 2
+│
+└── • sort
+    │ order: +a,+a,+sum_int,+c
+    │ already ordered: +a,+a
+    │
+    └── • group (partial streaming)
+        │ group by: a, c
+        │ ordered: +a,+a
+        │
+        └── • scan
+              missing stats
+              table: t124101@t124101_pkey
+              spans: FULL SCAN
+
+statement ok
+RESET testing_optimizer_disable_rule_probability;
