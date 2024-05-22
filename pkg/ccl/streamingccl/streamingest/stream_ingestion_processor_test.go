@@ -124,6 +124,7 @@ func (m *mockStreamClient) Subscribe(
 	token streamclient.SubscriptionToken,
 	initialScanTime hlc.Timestamp,
 	_ span.Frontier,
+	_ ...streamclient.SubscribeOption,
 ) (streamclient.Subscription, error) {
 	var events []streamingccl.Event
 	var ok bool
@@ -180,6 +181,7 @@ func (m *errorStreamClient) Subscribe(
 	_ streamclient.SubscriptionToken,
 	_ hlc.Timestamp,
 	_ span.Frontier,
+	_ ...streamclient.SubscribeOption,
 ) (streamclient.Subscription, error) {
 	return nil, errors.New("this client always returns an error")
 }
