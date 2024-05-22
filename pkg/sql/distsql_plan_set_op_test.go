@@ -60,7 +60,7 @@ func TestMergeResultTypesForSetOp(t *testing.T) {
 			}
 		}
 	}
-	infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
+	infra := physicalplan.NewPhysicalInfrastructure(uuid.MakeV4(), base.SQLInstanceID(1))
 	var leftPlan, rightPlan PhysicalPlan
 	leftPlan.PhysicalInfrastructure = infra
 	rightPlan.PhysicalInfrastructure = infra

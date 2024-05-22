@@ -721,7 +721,7 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 	// has 67% probability of participating in the plan.
 	makeFlowsToCancel := func(rng *rand.Rand) map[base.SQLInstanceID]*execinfrapb.FlowSpec {
 		res := make(map[base.SQLInstanceID]*execinfrapb.FlowSpec)
-		flowID := execinfrapb.FlowID{UUID: uuid.FastMakeV4()}
+		flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 		for id := 1; id <= numNodes; id++ {
 			if rng.Float64() < 0.33 {
 				// This node wasn't a part of the current plan.

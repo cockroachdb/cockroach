@@ -497,6 +497,16 @@ func TestDropIndex(t *testing.T) {
 				tableDesc.GetID(),
 			},
 		}); err != nil {
+			// If the job is not running, check if it already succeeded.
+			if secondErr := jobutils.VerifySystemJob(t, sqlRun, 2, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+				Username:    username.NodeUserName(),
+				Description: `GC for CREATE INDEX foo ON t.public.kv (v)`,
+				DescriptorIDs: descpb.IDs{
+					tableDesc.GetID(),
+				},
+			}); secondErr == nil {
+				return nil
+			}
 			return err
 		}
 		return nil

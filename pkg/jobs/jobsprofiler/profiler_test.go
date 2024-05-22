@@ -125,7 +125,7 @@ func TestStorePerNodeProcessorProgressFraction(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	randID := uuid.FastMakeV4()
+	randID := uuid.MakeV4()
 	componentID := execinfrapb.ComponentID{
 		FlowID: execinfrapb.FlowID{UUID: randID},
 		Type:   execinfrapb.ComponentID_PROCESSOR,

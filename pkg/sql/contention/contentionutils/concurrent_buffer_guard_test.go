@@ -186,7 +186,7 @@ func randomGeneratedInput() (input []pair, expected map[uuid.UUID]int) {
 
 	p := pair{}
 	for i := 0; i < inputSize; i++ {
-		p.k = uuid.FastMakeV4()
+		p.k = uuid.MakeV4()
 		p.v = rand.Int()
 		input = append(input, p)
 		expected[p.k] = p.v

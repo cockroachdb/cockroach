@@ -27,9 +27,9 @@ func FuzzSessionIDEncoding(f *testing.F) {
 	defer log.Scope(f).Close(f)
 
 	f.Add(string(""))
-	f.Add(string(uuid.FastMakeV4().GetBytes()))
+	f.Add(string(uuid.MakeV4().GetBytes()))
 
-	session, err := slstorage.MakeSessionID(enum.One, uuid.FastMakeV4())
+	session, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
 	require.NoError(f, err)
 	f.Add(string(session))
 

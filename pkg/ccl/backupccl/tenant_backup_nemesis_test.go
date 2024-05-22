@@ -597,7 +597,7 @@ func (r *randomBackupNemesis) runNemesis(ctx context.Context) error {
 }
 
 func (r *randomBackupNemesis) makeRandomBankTable(prefix string) (string, error) {
-	tableName := fmt.Sprintf("%s_%s", prefix, uuid.FastMakeV4().String())
+	tableName := fmt.Sprintf("%s_%s", prefix, uuid.MakeV4().String())
 	if _, err := r.tenantDB.Exec(fmt.Sprintf(`CREATE TABLE "%s" (id INT PRIMARY KEY, n INT, s STRING)`, tableName)); err != nil {
 		return "", err
 	}

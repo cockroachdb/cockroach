@@ -18,8 +18,8 @@ package uuid
 
 import (
 	"bytes"
-	"crypto/rand"
 	"fmt"
+	math_rand "math/rand/v2"
 	"net"
 	"testing"
 	"time"
@@ -38,9 +38,7 @@ func testNewV1(t *testing.T) {
 	t.Run("Basic", testNewV1Basic)
 	t.Run("DifferentAcrossCalls", testNewV1DifferentAcrossCalls)
 	t.Run("StaleEpoch", testNewV1StaleEpoch)
-	t.Run("FaultyRand", testNewV1FaultyRand)
 	t.Run("MissingNetwork", testNewV1MissingNetwork)
-	t.Run("MissingNetworkFaultyRand", testNewV1MissingNetworkFaultyRand)
 }
 
 func TestNewGenWithHWAF(t *testing.T) {
@@ -131,7 +129,7 @@ func testNewV1StaleEpoch(t *testing.T) {
 			return timeutil.Unix(0, 0)
 		},
 		hwAddrFunc: defaultHWAddrFunc,
-		rand:       rand.Reader,
+		randUint64: math_rand.Uint64,
 	}
 	u1, err := g.NewV1()
 	if err != nil {
@@ -146,50 +144,17 @@ func testNewV1StaleEpoch(t *testing.T) {
 	}
 }
 
-func testNewV1FaultyRand(t *testing.T) {
-	g := &Gen{
-		epochFunc:  time.Now,
-		hwAddrFunc: defaultHWAddrFunc,
-		rand: &faultyReader{
-			readToFail: 0, // fail immediately
-		},
-	}
-	u, err := g.NewV1()
-	if err == nil {
-		t.Fatalf("got %v, want error", u)
-	}
-	if u != Nil {
-		t.Fatalf("got %v on error, want Nil", u)
-	}
-}
-
 func testNewV1MissingNetwork(t *testing.T) {
 	g := &Gen{
 		epochFunc: time.Now,
 		hwAddrFunc: func() (net.HardwareAddr, error) {
 			return []byte{}, fmt.Errorf("uuid: no hw address found")
 		},
-		rand: rand.Reader,
+		randUint64: math_rand.Uint64,
 	}
 	_, err := g.NewV1()
 	if err != nil {
 		t.Errorf("did not handle missing network interfaces: %v", err)
-	}
-}
-
-func testNewV1MissingNetworkFaultyRand(t *testing.T) {
-	g := &Gen{
-		epochFunc: time.Now,
-		hwAddrFunc: func() (net.HardwareAddr, error) {
-			return []byte{}, fmt.Errorf("uuid: no hw address found")
-		},
-		rand: &faultyReader{
-			readToFail: 1,
-		},
-	}
-	u, err := g.NewV1()
-	if err == nil {
-		t.Errorf("did not error on faulty reader and missing network, got %v", u)
 	}
 }
 
@@ -245,15 +210,10 @@ func testNewV3DifferentNamespaces(t *testing.T) {
 func testNewV4(t *testing.T) {
 	t.Run("Basic", testNewV4Basic)
 	t.Run("DifferentAcrossCalls", testNewV4DifferentAcrossCalls)
-	t.Run("FaultyRand", testNewV4FaultyRand)
-	t.Run("ShortRandomRead", testNewV4ShortRandomRead)
 }
 
 func testNewV4Basic(t *testing.T) {
-	u, err := NewV4()
-	if err != nil {
-		t.Fatal(err)
-	}
+	u := NewV4()
 	if got, want := u.Version(), V4; got != want {
 		t.Errorf("got version %d, want %d", got, want)
 	}
@@ -263,44 +223,10 @@ func testNewV4Basic(t *testing.T) {
 }
 
 func testNewV4DifferentAcrossCalls(t *testing.T) {
-	u1, err := NewV4()
-	if err != nil {
-		t.Fatal(err)
-	}
-	u2, err := NewV4()
-	if err != nil {
-		t.Fatal(err)
-	}
+	u1 := NewV4()
+	u2 := NewV4()
 	if u1 == u2 {
 		t.Errorf("generated identical UUIDs across calls: %v", u1)
-	}
-}
-
-func testNewV4FaultyRand(t *testing.T) {
-	g := &Gen{
-		epochFunc:  time.Now,
-		hwAddrFunc: defaultHWAddrFunc,
-		rand: &faultyReader{
-			readToFail: 0, // fail immediately
-		},
-	}
-	u, err := g.NewV4()
-	if err == nil {
-		t.Errorf("got %v, nil error", u)
-	}
-}
-
-func testNewV4ShortRandomRead(t *testing.T) {
-	g := &Gen{
-		epochFunc: time.Now,
-		hwAddrFunc: func() (net.HardwareAddr, error) {
-			return []byte{}, fmt.Errorf("uuid: no hw address found")
-		},
-		rand: bytes.NewReader([]byte{42}),
-	}
-	u, err := g.NewV4()
-	if err == nil {
-		t.Errorf("got %v, nil error", u)
 	}
 }
 
@@ -360,12 +286,7 @@ func BenchmarkGenerator(b *testing.B) {
 	})
 	b.Run("V4", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			Must(NewV4())
-		}
-	})
-	b.Run("FastV4", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			FastMakeV4()
+			MakeV4()
 		}
 	})
 	b.Run("V5", func(b *testing.B) {
@@ -373,17 +294,4 @@ func BenchmarkGenerator(b *testing.B) {
 			NewV5(NamespaceDNS, "www.example.com")
 		}
 	})
-}
-
-type faultyReader struct {
-	callsNum   int
-	readToFail int // Read call number to fail
-}
-
-func (r *faultyReader) Read(dest []byte) (int, error) {
-	r.callsNum++
-	if (r.callsNum - 1) == r.readToFail {
-		return 0, fmt.Errorf("io: reader is faulty")
-	}
-	return rand.Read(dest)
 }

@@ -97,7 +97,7 @@ func TestClusterInfoMergeChecksDescriptor(t *testing.T) {
 }
 
 func TestClusterInfoMergeSameClusterID(t *testing.T) {
-	uuid1 := uuid.FastMakeV4()
+	uuid1 := uuid.MakeV4()
 	info1 := ClusterReplicaInfo{
 		ClusterID:   uuid1.String(),
 		Descriptors: []roachpb.RangeDescriptor{{RangeID: 1}},
@@ -125,8 +125,8 @@ func TestClusterInfoMergeSameClusterID(t *testing.T) {
 }
 
 func TestClusterInfoMergeRejectDifferentMetadata(t *testing.T) {
-	uuid1 := uuid.FastMakeV4()
-	uuid2 := uuid.FastMakeV4()
+	uuid1 := uuid.MakeV4()
+	uuid2 := uuid.MakeV4()
 	info1 := ClusterReplicaInfo{
 		ClusterID:   uuid1.String(),
 		Descriptors: []roachpb.RangeDescriptor{{RangeID: 1}},
@@ -167,7 +167,7 @@ func TestClusterInfoMergeRejectDifferentMetadata(t *testing.T) {
 }
 
 func TestClusterInfoInitializeByMerge(t *testing.T) {
-	uuid1 := uuid.FastMakeV4().String()
+	uuid1 := uuid.MakeV4().String()
 	version1 := roachpb.Version{Major: 22, Minor: 2}
 	info := ClusterReplicaInfo{
 		ClusterID:   uuid1,

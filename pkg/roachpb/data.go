@@ -988,7 +988,7 @@ func MakeTransaction(
 	admissionPriority admissionpb.WorkPriority,
 	omitInRangefeeds bool,
 ) Transaction {
-	u := uuid.FastMakeV4()
+	u := uuid.MakeV4()
 	gul := now.Add(maxOffsetNs, 0)
 
 	return Transaction{

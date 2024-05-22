@@ -380,7 +380,7 @@ func TestStageVersionCheck(t *testing.T) {
 	// To avoid crafting real replicas we use StaleLeaseholderNodeIDs to force
 	// node to stage plan for verification.
 	p := loqrecoverypb.ReplicaUpdatePlan{
-		PlanID:                  uuid.FastMakeV4(),
+		PlanID:                  uuid.MakeV4(),
 		Version:                 v,
 		ClusterID:               tc.Server(0).StorageClusterID().String(),
 		DecommissionedNodeIDs:   []roachpb.NodeID{4},

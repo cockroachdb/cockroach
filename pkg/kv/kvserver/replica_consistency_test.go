@@ -51,7 +51,7 @@ func TestReplicaChecksumVersion(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "matchingVersion", func(t *testing.T, matchingVersion bool) {
 		cc := kvserverpb.ComputeChecksum{
-			ChecksumID: uuid.FastMakeV4(),
+			ChecksumID: uuid.MakeV4(),
 			Mode:       kvpb.ChecksumMode_CHECK_FULL,
 		}
 		if matchingVersion {
@@ -190,7 +190,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	}
 
 	// Checksum computation failed to start.
-	id := uuid.FastMakeV4()
+	id := uuid.MakeV4()
 	c, _ := tc.repl.trackReplicaChecksum(id)
 	close(c.started)
 	rc, err := tc.repl.getChecksum(ctx, id)
@@ -198,7 +198,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	require.Nil(t, rc.Checksum)
 
 	// Checksum computation started, but failed.
-	id = uuid.FastMakeV4()
+	id = uuid.MakeV4()
 	c, _ = tc.repl.trackReplicaChecksum(id)
 	var g errgroup.Group
 	g.Go(func() error {
@@ -213,13 +213,13 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	require.NoError(t, g.Wait())
 
 	// The initial wait for the task start expires. This will take 10ms.
-	id = uuid.FastMakeV4()
+	id = uuid.MakeV4()
 	rc, err = tc.repl.getChecksum(ctx, id)
 	require.ErrorContains(t, err, "checksum computation did not start")
 	require.Nil(t, rc.Checksum)
 
 	// The computation has started, but the request context timed out.
-	id = uuid.FastMakeV4()
+	id = uuid.MakeV4()
 	c, _ = tc.repl.trackReplicaChecksum(id)
 	g.Go(func() error {
 		c.started <- func() {}
@@ -232,7 +232,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	require.NoError(t, g.Wait())
 
 	// Context is canceled during the initial waiting.
-	id = uuid.FastMakeV4()
+	id = uuid.MakeV4()
 	ctx, cancel = context.WithCancel(context.Background())
 	cancel()
 	rc, err = tc.repl.getChecksum(ctx, id)
@@ -241,7 +241,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 
 	// The task failed to start because the checksum collection request did not
 	// join. Later, when it joins, it doesn't find any trace and times out.
-	id = uuid.FastMakeV4()
+	id = uuid.MakeV4()
 	c, _ = tc.repl.trackReplicaChecksum(id)
 	require.NoError(t, startChecksumTask(context.Background(), id))
 	// TODO(pavelkalinnikov): Avoid this long wait in the test.
