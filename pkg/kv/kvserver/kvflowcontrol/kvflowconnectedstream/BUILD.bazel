@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "kvflowconnectedstream",
-    srcs = ["stream.go"],
+    srcs = [
+        "store_stream.go",
+        "stream.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream",
     visibility = ["//visibility:public"],
     deps = [
