@@ -185,7 +185,7 @@ func RandDatumWithNullChance(
 		)}
 	case types.UuidFamily:
 		gen := uuid.NewGenWithRand(rng.Uint64)
-		return tree.NewDUuid(tree.DUuid{UUID: uuid.Must(gen.NewV4())})
+		return tree.NewDUuid(tree.DUuid{UUID: gen.NewV4()})
 	case types.INetFamily:
 		ipAddr := ipaddr.RandIPAddr(rng)
 		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
