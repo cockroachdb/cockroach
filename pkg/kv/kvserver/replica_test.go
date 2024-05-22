@@ -603,7 +603,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	start := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-		ProposedTS: &start,
+		ProposedTS: start,
 		Start:      start,
 		Expiration: start.ToTimestamp().Add(10, 0).Clone(),
 		Replica:    secondReplica,
@@ -821,7 +821,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	start := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-		ProposedTS: &start,
+		ProposedTS: start,
 		Start:      start,
 		Expiration: start.ToTimestamp().Add(10, 0).Clone(),
 		Replica:    secondReplica,
@@ -980,7 +980,7 @@ func TestReplicaLease(t *testing.T) {
 	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	now := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-		ProposedTS: &now,
+		ProposedTS: now,
 		Start:      now.ToTimestamp().Add(10, 0).UnsafeToClockTimestamp(),
 		Expiration: now.ToTimestamp().Add(20, 0).Clone(),
 		Replica:    secondReplica,
@@ -1036,7 +1036,7 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	now := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-		ProposedTS: &now,
+		ProposedTS: now,
 		Start:      now,
 		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
 		Replica:    secondReplica,
@@ -1133,7 +1133,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 
 	now := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-		ProposedTS: &now,
+		ProposedTS: now,
 		Start:      now,
 		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
 		Replica: roachpb.ReplicaDescriptor{
@@ -1164,7 +1164,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 
 	// Make lease request fail by requesting overlapping lease from bogus Replica.
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-		ProposedTS: &now,
+		ProposedTS: now,
 		Start:      now,
 		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
 		Replica: roachpb.ReplicaDescriptor{
@@ -1264,7 +1264,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 		propTS := test.start.UnsafeToClockTimestamp()
 		propTS.Logical = int32(i)
 		if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-			ProposedTS: &propTS,
+			ProposedTS: propTS,
 			Start:      test.start.UnsafeToClockTimestamp(),
 			Expiration: test.expiration.Clone(),
 			Replica: roachpb.ReplicaDescriptor{
@@ -7876,8 +7876,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 
 		lease := prevLease
 		lease.Sequence = 0
-		now := tc.Clock().Now().UnsafeToClockTimestamp()
-		lease.ProposedTS = &now
+		lease.ProposedTS = tc.Clock().Now().UnsafeToClockTimestamp()
 
 		ba.Add(&kvpb.RequestLeaseRequest{
 			RequestHeader: kvpb.RequestHeader{

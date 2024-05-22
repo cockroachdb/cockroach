@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/errors"
 )
 
 func newFailedLeaseTrigger(isTransfer bool) result.Result {
@@ -62,10 +61,6 @@ func evalNewLease(
 ) (result.Result, error) {
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
-
-	if lease.ProposedTS == nil {
-		return newFailedLeaseTrigger(isTransfer), errors.AssertionFailedf("ProposedTS must be set")
-	}
 
 	// Ensure either an Epoch is set or Start < Expiration.
 	if (lease.Type() == roachpb.LeaseExpiration && lease.GetExpiration().LessEq(lease.Start.ToTimestamp())) ||
@@ -165,7 +160,7 @@ func evalNewLease(
 	pd.Replicated.State = &kvserverpb.ReplicaState{
 		Lease: &lease,
 	}
-	pd.Replicated.PrevLeaseProposal = prevLease.ProposedTS
+	pd.Replicated.PrevLeaseProposal = &prevLease.ProposedTS
 
 	// If we're setting a new prior read summary, store it to disk & in-memory.
 	if priorReadSum != nil {
