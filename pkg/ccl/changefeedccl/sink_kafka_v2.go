@@ -307,24 +307,24 @@ func makeKafkaSinkV2(ctx context.Context,
 		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
 }
 
-type tracker struct {
-	nextID     int
-	pendingIDs map[int]struct{}
-}
+// type tracker struct {
+// 	nextID     int
+// 	pendingIDs map[int]struct{}
+// }
 
-func (t *tracker) next() int {
-	t.nextID++
-	t.pendingIDs[t.nextID] = struct{}{}
-	return t.nextID
-}
+// func (t *tracker) next() int {
+// 	t.nextID++
+// 	t.pendingIDs[t.nextID] = struct{}{}
+// 	return t.nextID
+// }
 
-func (t *tracker) remove(id int) {
-	if _, ok := t.pendingIDs[id]; !ok {
-		panic(errors.Errorf(`id %d not found in pendingIDs`, id))
-	}
-	delete(t.pendingIDs, id)
-}
+// func (t *tracker) remove(id int) {
+// 	if _, ok := t.pendingIDs[id]; !ok {
+// 		panic(errors.Errorf(`id %d not found in pendingIDs`, id))
+// 	}
+// 	delete(t.pendingIDs, id)
+// }
 
-func (t *tracker) empty() bool {
-	return len(t.pendingIDs) == 0
-}
+// func (t *tracker) empty() bool {
+// 	return len(t.pendingIDs) == 0
+// }
