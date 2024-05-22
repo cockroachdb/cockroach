@@ -1306,7 +1306,7 @@ func TestConnResultsBufferSize(t *testing.T) {
 	{
 		var size string
 		require.NoError(t, db.QueryRow(`SHOW results_buffer_size`).Scan(&size))
-		require.Equal(t, `16384`, size)
+		require.Equal(t, `524288`, size)
 	}
 
 	pgURL, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser))
