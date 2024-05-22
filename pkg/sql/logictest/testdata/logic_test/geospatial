@@ -258,6 +258,37 @@ true  true
 true  true
 true  true
 
+# Regression test for #124175. Allow full precision for encoding JSON instead of the old default limit of 9.
+query FFT nosort
+SELECT
+  st_x(g), st_y(g), to_json(g)
+FROM ( VALUES
+  ('SRID=4326;POINT (-123.45 12.3456)'::GEOMETRY),
+  ('SRID=4326;POINT (-123.45678901234 12.3456789012)'::GEOMETRY),
+  ('SRID=4326;POINT (-123.4567890123456789 12.34567890123456789)'::GEOMETRY)
+) tbl(g)
+----
+-123.45 12.3456 {"coordinates": [-123.45, 12.3456], "type": "Point"}
+-123.45678901234 12.3456789012 {"coordinates": [-123.45678901234, 12.3456789012], "type": "Point"}
+-123.45678901234568 12.345678901234567 {"coordinates": [-123.45678901234568, 12.345678901234567], "type": "Point"}
+
+# st_asgeojson uses a default of 9 decimal digit precision.
+query TTTT nosort
+SELECT
+  st_asgeojson(tbl.*)::JSONB->'geometry'->'coordinates',
+  st_asgeojson(g)::JSONB->'coordinates',
+  st_asgeojson(tbl.*, 'g')::JSONB->'geometry'->'coordinates',
+  st_asgeojson(tbl.*, 'g', 4)::JSONB->'geometry'->'coordinates'
+FROM ( VALUES
+  ('SRID=4326;POINT (-123.45 12.3456)'::GEOMETRY),
+  ('SRID=4326;POINT (-123.45678901234 12.3456789012)'::GEOMETRY),
+  ('SRID=4326;POINT (-123.4567890123456789 12.34567890123456789)'::GEOMETRY)
+) tbl(g)
+----
+[-123.45, 12.3456]              [-123.45, 12.3456]              [-123.45, 12.3456]              [-123.45, 12.3456]
+[-123.456789012, 12.345678901]  [-123.456789012, 12.345678901]  [-123.456789012, 12.345678901]  [-123.4568, 12.3457]
+[-123.456789012, 12.345678901]  [-123.456789012, 12.345678901]  [-123.456789012, 12.345678901]  [-123.4568, 12.3457]
+
 subtest cast_test
 
 query T
