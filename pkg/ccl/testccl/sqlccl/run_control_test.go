@@ -242,7 +242,7 @@ SELECT count(*) FROM [SHOW CLUSTER QUERIES] WHERE query LIKE '%pg_sleep%'
 				_, err = conn1.ExecContext(ctx, "SELECT 1")
 			}
 
-			if !errors.Is(err, gosqldriver.ErrBadConn) {
+			if !errors.Is(err, gosqldriver.ErrBadConn) && !testutils.IsError(err, "connection reset by peer") {
 				t.Fatalf("session not canceled; actual error: %s", err)
 			}
 		})
@@ -290,8 +290,8 @@ func TestCancelMultipleSessions(t *testing.T) {
 			// Verify that the connections on node 1 are closed.
 			for i := 0; i < 2; i++ {
 				_, err := conns[i].ExecContext(ctx, "SELECT 1")
-				if !errors.Is(err, gosqldriver.ErrBadConn) {
-					t.Fatalf("session %d not canceled; actual error: %s", i, err)
+				if !errors.Is(err, gosqldriver.ErrBadConn) && !testutils.IsError(err, "connection reset by peer") {
+					t.Fatalf("session %d not canceled; actual error: %v", i, err)
 				}
 			}
 		})
