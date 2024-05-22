@@ -380,6 +380,12 @@ func NewProcessor(
 		}
 		return NewTTLProcessor(ctx, flowCtx, processorID, *core.Ttl)
 	}
+	if core.LogicalReplicationWriter != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		return NewLogicalReplicationWriterProcessor(ctx, flowCtx, processorID, *core.LogicalReplicationWriter, post)
+	}
 	if core.HashGroupJoiner != nil {
 		if err := checkNumIn(inputs, 2); err != nil {
 			return nil, err
@@ -436,3 +442,5 @@ var NewTTLProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb
 
 // NewGenerativeSplitAndScatterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewGenerativeSplitAndScatterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.GenerativeSplitAndScatterSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
+
+var NewLogicalReplicationWriterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.LogicalReplicationWriterSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)

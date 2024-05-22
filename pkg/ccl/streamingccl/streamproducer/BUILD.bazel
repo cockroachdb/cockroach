@@ -39,6 +39,7 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/resolver",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/clusterunique",
         "//pkg/sql/isql",
