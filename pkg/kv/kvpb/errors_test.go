@@ -385,11 +385,12 @@ func TestNotLeaseholderError(t *testing.T) {
 		err *NotLeaseHolderError
 	}{
 		{
-			exp: `[NotLeaseHolderError] r1: replica not lease holder; current lease is repl=(n1,s1):1 seq=2 start=0.000000001,0 epo=1`,
+			exp: `[NotLeaseHolderError] r1: replica not lease holder; current lease is repl=(n1,s1):1 seq=2 start=0.000000002,0 epo=1 pro=0.000000001,0`,
 			err: &NotLeaseHolderError{
 				RangeID: 1,
 				Lease: &roachpb.Lease{
-					Start:           hlc.ClockTimestamp{WallTime: 1},
+					Start:           hlc.ClockTimestamp{WallTime: 2},
+					ProposedTS:      hlc.ClockTimestamp{WallTime: 1},
 					Replica:         *rd,
 					Epoch:           1,
 					Sequence:        2,

@@ -1852,14 +1852,13 @@ func (l Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.SafeString("<empty>")
 		return
 	}
+	w.Printf("repl=%s seq=%d start=%s", l.Replica, l.Sequence, l.Start)
 	if l.Type() == LeaseExpiration {
-		w.Printf("repl=%s seq=%d start=%s exp=%s", l.Replica, l.Sequence, l.Start, l.Expiration)
+		w.Printf(" exp=%s", l.Expiration)
 	} else {
-		w.Printf("repl=%s seq=%d start=%s epo=%d", l.Replica, l.Sequence, l.Start, l.Epoch)
+		w.Printf(" epo=%d", l.Epoch)
 	}
-	if l.ProposedTS != nil {
-		w.Printf(" pro=%s", l.ProposedTS)
-	}
+	w.Printf(" pro=%s", l.ProposedTS)
 }
 
 // Empty returns true for the Lease zero-value.
@@ -1924,7 +1923,7 @@ func (l Lease) Speculative() bool {
 // reverse is not true.
 func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
-	l.ProposedTS, newL.ProposedTS = nil, nil
+	l.ProposedTS, newL.ProposedTS = hlc.ClockTimestamp{}, hlc.ClockTimestamp{}
 	l.DeprecatedStartStasis, newL.DeprecatedStartStasis = nil, nil
 	// Ignore sequence numbers, they are simply a reflection of
 	// the equivalency of other fields.
