@@ -114,25 +114,36 @@ import (
 
 type RangeControllerOptions struct {
 	// Immutable for the lifetime of the RangeController
-	raftMu    *syncutil.Mutex
-	rangeID   roachpb.RangeID
-	tenantID  roachpb.TenantID
-	replicaID roachpb.ReplicaID
+	RaftMu    *syncutil.Mutex
+	RangeID   roachpb.RangeID
+	TenantID  roachpb.TenantID
+	ReplicaID roachpb.ReplicaID
 
-	StoreStreamsTokenAdjuster
+	StoreStreamsTokenCounter
 	StoreStreamSendTokensWatcher
 	RaftInterface
 	MessageSender
 	Scheduler
-
-	// Initial state at the time of creation. Must include replicaID.
-	replicas    ReplicaSet
-	leaseholder roachpb.ReplicaID
 }
+
+// RangeControllerInitState is the initial state at the time of creation.
+type RangeControllerInitState struct {
+	// Must include RangeControllerOptions.ReplicaID.
+	Replicas ReplicaSet
+	// Leaseholder may be set to NoReplicaID, in which case the leaseholder is
+	// unknown.
+	Leaseholder roachpb.ReplicaID
+}
+
+// NoReplicaID is a special value of roachpb.ReplicaID, which can never be a
+// valid ID.
+const NoReplicaID = 0
 
 type ReplicaSet map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
 
 type RangeController interface {
+	// WaitForEval is called concurrently by all requests wanting to evaluate.
+	WaitForEval(ctx context.Context) error
 	// HandleRaftEvent will be called from handleRaftReadyRaftMuLocked, including
 	// the case of snapshot application.
 	HandleRaftEvent(e RaftEvent) error
@@ -172,7 +183,9 @@ type RangeController interface {
 	// (perhaps wait to force-flush until the non-empty send-queue has existed
 	// for more than a tick).
 	TransportDisconnected(replica roachpb.ReplicaID)
-	// Close the controller, since no longer the leader.
+	// Close the controller, since no longer the leader. Can be called concurrently
+	// with other methods like WaitForEval. WaitForEval should unblock and return
+	// without an error.
 	Close()
 }
 
@@ -274,25 +287,6 @@ type Scheduler interface {
 	ScheduleControllerEvent(rangeID roachpb.RangeID)
 }
 
-// StoreStreamSendTokensWatcher implements a watcher interface that wlll use
-// at most one goroutine per kvflowcontrol.Stream that has no send tokens.
-// Replicas (from different ranges) waiting for those tokens will call
-// NotifyWhenAvailable to queue up for those send tokens. When
-type StoreStreamSendTokensWatcher interface {
-	NotifyWhenAvailable(
-		stream kvflowcontrol.Stream,
-		bytesInQueue int64,
-		priority admissionpb.WorkPriority,
-		tokensGrantedNotification TokensGrantedNotification,
-	) (handle struct{})
-	UpdateHandle(handle struct{}, priority admissionpb.WorkPriority)
-	CancelHandle(handle struct{})
-}
-
-type TokensGrantedNotification interface {
-	Granted(tokens int64)
-}
-
 // MessageSender abstracts Replica.sendRaftMessage. The context used is always
 // Replica.raftCtx, so we do not need to pass it.
 //
@@ -331,23 +325,15 @@ type MessageSender interface {
 		ctx context.Context, priorityOverride admissionpb.WorkPriority, msg raftpb.Message)
 }
 
-// StoreStreamsTokenAdjuster is one per node.
-//
-// TODO: modify kvflowcontroller.Controller to implement this.
-type StoreStreamsTokenAdjuster interface {
-	// deductTokens deducts (without blocking) flow tokens for the given
-	// priority over the given stream.
-	deductEvalTokens(
-		context.Context, kvflowcontrol.Stream, admissionpb.WorkPriority, kvflowcontrol.Tokens)
-	// ReturnTokens returns flow tokens for the given priority and stream.
-	returnEvalTokens(
-		context.Context, kvflowcontrol.Stream, admissionpb.WorkPriority, kvflowcontrol.Tokens)
+type RangeControllerImpl struct {
+	opts        RangeControllerOptions
+	replicas    ReplicaSet
+	leaseholder roachpb.ReplicaID
 
-	deductSendTokens(
-		context.Context, kvflowcontrol.Stream, admissionpb.WorkPriority, kvflowcontrol.Tokens)
-	returnSendTokens(
-		context.Context, kvflowcontrol.Stream, admissionpb.WorkPriority, kvflowcontrol.Tokens)
+	// How do I wait for positive tokens from a quorum.
 }
+
+// var _ RangeController = &RangeControllerImpl{}
 
 // connectedStream is per replica to which we are replicating to. These are contained
 // inside RangeController.

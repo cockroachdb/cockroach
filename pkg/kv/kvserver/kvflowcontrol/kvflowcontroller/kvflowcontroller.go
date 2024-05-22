@@ -150,6 +150,8 @@ func (c *Controller) mode() kvflowcontrol.ModeT {
 // Admit is part of the kvflowcontrol.Controller interface. It blocks until
 // there are flow tokens available for replication over the given stream for
 // work of the given priority.
+//
+// TODO: not used in RACv2.
 func (c *Controller) Admit(
 	ctx context.Context,
 	pri admissionpb.WorkPriority,
