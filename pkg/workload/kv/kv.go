@@ -604,9 +604,11 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		}
 		start := timeutil.Now()
 		readStmt := o.readStmt
+		opName := `read`
 
 		if o.g.rand().Intn(100) < o.config.followerReadPercent {
 			readStmt = o.followerReadStmt
+			opName = `follower-read`
 		}
 		rows, err := readStmt.Query(ctx, args...)
 		if err != nil {
@@ -620,7 +622,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 			o.numEmptyResults.Add(1)
 		}
 		elapsed := timeutil.Since(start)
-		o.hists.Get(`read`).Record(elapsed)
+		o.hists.Get(opName).Record(elapsed)
 		return rows.Err()
 	}
 	// Since we know the statement is not a read, we recalibrate
