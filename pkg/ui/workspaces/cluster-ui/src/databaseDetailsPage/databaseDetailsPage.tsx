@@ -61,6 +61,7 @@ import {
 } from "../api";
 import { checkInfoAvailable } from "../databases";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+import { ViewMode } from "./types";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -177,11 +178,6 @@ export type DatabaseDetailsPageProps = DatabaseDetailsPageData &
   DatabaseDetailsPageActions &
   RouteComponentProps<unknown>;
 
-export enum ViewMode {
-  Tables = "Tables",
-  Grants = "Grants",
-}
-
 interface DatabaseDetailsPageState {
   pagination: ISortedTablePagination;
   filters?: Filters;
@@ -265,7 +261,9 @@ export class DatabaseDetailsPage extends React.Component<
   }
 
   componentDidMount(): void {
-    this.props.refreshNodes();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+    }
     if (!this.props.loaded && !this.props.loading && !this.props.requestError) {
       this.props.refreshDatabaseDetails(
         this.props.name,

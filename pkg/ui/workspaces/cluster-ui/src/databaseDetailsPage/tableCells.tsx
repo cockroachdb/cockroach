@@ -22,7 +22,6 @@ import {
   DatabaseDetailsPageDataTable,
   DatabaseDetailsPageDataTableDetails,
   DatabaseDetailsPageProps,
-  ViewMode,
 } from "./databaseDetailsPage";
 import classNames from "classnames/bind";
 import styles from "./databaseDetailsPage.module.scss";
@@ -34,6 +33,7 @@ import { Breadcrumbs } from "../breadcrumbs";
 import { CaretRight } from "../icon/caretRight";
 import { CockroachCloudContext } from "../contexts";
 import { checkInfoAvailable, getNetworkErrorMessage } from "../databases";
+import { ViewMode } from "./types";
 
 const cx = classNames.bind(styles);
 
