@@ -1733,10 +1733,7 @@ func SendEmptySnapshot(
 		return err
 	}
 
-	snapUUID, err := uuid.NewV4()
-	if err != nil {
-		return err
-	}
+	snapUUID := uuid.NewV4()
 
 	// The snapshot must use a Pebble snapshot, since it requires consistent
 	// iterators.

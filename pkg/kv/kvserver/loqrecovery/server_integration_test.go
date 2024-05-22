@@ -506,7 +506,7 @@ func TestStageRecoveryPlansToWrongCluster(t *testing.T) {
 
 	sk := tc.ScratchRange(t)
 
-	fakeClusterID, _ := uuid.NewV4()
+	fakeClusterID := uuid.NewV4()
 	// Stage plan with id of different cluster and see if error is raised.
 	plan := makeTestRecoveryPlan(ctx, t, adm)
 	plan.ClusterID = fakeClusterID.String()

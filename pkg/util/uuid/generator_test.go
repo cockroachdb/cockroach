@@ -213,10 +213,7 @@ func testNewV4(t *testing.T) {
 }
 
 func testNewV4Basic(t *testing.T) {
-	u, err := NewV4()
-	if err != nil {
-		t.Fatal(err)
-	}
+	u := NewV4()
 	if got, want := u.Version(), V4; got != want {
 		t.Errorf("got version %d, want %d", got, want)
 	}
@@ -226,14 +223,8 @@ func testNewV4Basic(t *testing.T) {
 }
 
 func testNewV4DifferentAcrossCalls(t *testing.T) {
-	u1, err := NewV4()
-	if err != nil {
-		t.Fatal(err)
-	}
-	u2, err := NewV4()
-	if err != nil {
-		t.Fatal(err)
-	}
+	u1 := NewV4()
+	u2 := NewV4()
 	if u1 == u2 {
 		t.Errorf("generated identical UUIDs across calls: %v", u1)
 	}
