@@ -486,11 +486,6 @@ func TestAdminAPITableStats(t *testing.T) {
 	const nodeCount = 3
 	tc := testcluster.StartTestCluster(t, nodeCount, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationAuto,
-		ServerArgs: base.TestServerArgs{
-			ScanInterval:    time.Millisecond,
-			ScanMinIdleTime: time.Millisecond,
-			ScanMaxIdleTime: time.Millisecond,
-		},
 	})
 	defer tc.Stopper().Stop(context.Background())
 
