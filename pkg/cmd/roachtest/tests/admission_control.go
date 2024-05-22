@@ -35,6 +35,7 @@ func registerAdmission(r registry.Registry) {
 	registerMultiStoreOverload(r)
 	registerMultiTenantFairness(r)
 	registerSnapshotOverload(r)
+	registerSnapshotOverloadExcise(r)
 	registerTPCCOverload(r)
 	registerTPCCSevereOverload(r)
 	registerIndexOverload(r)
