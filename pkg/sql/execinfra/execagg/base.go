@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -162,4 +163,23 @@ func GetWindowFunctionInfo(
 	return nil, nil, errors.Errorf(
 		"no builtin aggregate/window function for %s on %v", funcStr, inputTypes,
 	)
+}
+
+// NeedHashAggregator returns whether the given aggregator spec requires hash
+// aggregation.
+func NeedHashAggregator(aggSpec *execinfrapb.AggregatorSpec) (bool, error) {
+	var groupCols, orderedCols intsets.Fast
+	for _, col := range aggSpec.OrderedGroupCols {
+		orderedCols.Add(int(col))
+	}
+	for _, col := range aggSpec.GroupCols {
+		if !orderedCols.Contains(int(col)) {
+			return true, nil
+		}
+		groupCols.Add(int(col))
+	}
+	if !orderedCols.SubsetOf(groupCols) {
+		return false, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
+	}
+	return false, nil
 }

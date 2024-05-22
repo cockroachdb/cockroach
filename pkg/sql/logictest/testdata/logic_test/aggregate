@@ -3998,3 +3998,25 @@ WITH
     bar(b) AS (SELECT array_agg(f) FROM foo, generate_series(1, 3)),
     baz(z) AS (SELECT array_agg(b) FROM bar, generate_series(1, 3))
 SELECT z FROM baz;
+
+# Regression test for incorrectly picking row-by-row ordered aggregator when
+# some optimizer rules are disabled (#124101).
+statement ok
+CREATE TABLE t124101 (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a, b),
+  UNIQUE (a, c)
+);
+INSERT INTO t124101 VALUES (0, 0, 1), (0, 1, 2);
+SET testing_optimizer_disable_rule_probability = 1.000000;
+
+query II
+SELECT a, sum_int(c) AS s FROM t124101 GROUP BY a, c ORDER BY a, a, s, c LIMIT 2;
+----
+0  1
+0  2
+
+statement ok
+RESET testing_optimizer_disable_rule_probability;
