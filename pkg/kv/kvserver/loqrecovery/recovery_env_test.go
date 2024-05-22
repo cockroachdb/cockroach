@@ -403,7 +403,7 @@ func buildReplicaDescriptorFromTestData(
 		Start:           clock.Now().Add(5*time.Minute.Nanoseconds(), 0).UnsafeToClockTimestamp(),
 		Expiration:      nil,
 		Replica:         desc.InternalReplicas[lhIndex],
-		ProposedTS:      nil,
+		ProposedTS:      hlc.ClockTimestamp{},
 		Epoch:           0,
 		Sequence:        0,
 		AcquisitionType: 0,

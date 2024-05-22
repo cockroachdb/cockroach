@@ -152,7 +152,6 @@ func CheckForcedErr(
 		// PrevLeaseProposal is always set. Its nullability dates back to the
 		// migration that introduced it.
 		if raftCmd.ReplicatedEvalResult.PrevLeaseProposal != nil &&
-			// NB: ProposedTS can be nil if the right-hand side is the Range's initial zero Lease.
 			(!raftCmd.ReplicatedEvalResult.PrevLeaseProposal.Equal(replicaState.Lease.ProposedTS)) {
 			leaseMismatch = true
 		}

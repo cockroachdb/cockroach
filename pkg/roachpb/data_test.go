@@ -1097,9 +1097,9 @@ func TestLeaseEquivalence(t *testing.T) {
 	expire2 := Lease{Replica: r1, Start: ts1, Expiration: ts3.ToTimestamp().Clone()}
 	expire2R2TS2 := Lease{Replica: r2, Start: ts2, Expiration: ts3.ToTimestamp().Clone()}
 
-	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: &ts1}
-	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: 2, ProposedTS: &ts1}
-	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: &ts2}
+	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: ts1}
+	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: 2, ProposedTS: ts1}
+	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: ts2}
 
 	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts1.ToTimestamp().Clone()}
 	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts2.ToTimestamp().Clone()}
@@ -1163,7 +1163,7 @@ func TestLeaseEquivalence(t *testing.T) {
 
 		// Similar potential bug triggers, but these were actually handled correctly.
 		DeprecatedStartStasis: new(hlc.Timestamp),
-		ProposedTS:            &hlc.ClockTimestamp{WallTime: 10},
+		ProposedTS:            hlc.ClockTimestamp{WallTime: 10},
 	}
 	postPRLease := prePRLease
 	postPRLease.DeprecatedStartStasis = nil
@@ -1180,7 +1180,7 @@ func TestLeaseEqual(t *testing.T) {
 		Expiration            *hlc.Timestamp
 		Replica               ReplicaDescriptor
 		DeprecatedStartStasis *hlc.Timestamp
-		ProposedTS            *hlc.ClockTimestamp
+		ProposedTS            hlc.ClockTimestamp
 		Epoch                 int64
 		Sequence              LeaseSequence
 		AcquisitionType       LeaseAcquisitionType
@@ -1234,7 +1234,7 @@ func TestLeaseEqual(t *testing.T) {
 		{Start: clockTS},
 		{Expiration: &ts},
 		{Replica: ReplicaDescriptor{NodeID: 1}},
-		{ProposedTS: &clockTS},
+		{ProposedTS: clockTS},
 		{Epoch: 1},
 		{Sequence: 1},
 	}
