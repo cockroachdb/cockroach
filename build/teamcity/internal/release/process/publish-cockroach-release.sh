@@ -21,6 +21,11 @@ if [[ -z "$build_name" ]] ; then
     exit 1
 fi
 
+PUBLISH_LATEST=
+if is_latest "$build_name"; then
+  PUBLISH_LATEST=true
+fi
+
 release_branch=$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+')
 
 if [[ -z "${DRY_RUN}" ]] ; then
