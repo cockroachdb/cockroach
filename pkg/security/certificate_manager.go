@@ -369,9 +369,9 @@ func (cm *CertificateManager) LoadCertificates() error {
 
 	if nodeClientCert == nil && nodeCert != nil {
 		// No client certificate for node, but we have a node certificate. Check that
-		// it contains the required client fields.
-		if err := validateDualPurposeNodeCert(nodeCert); err != nil {
-			return makeErrorf(err, "validating node cert")
+		// if it is a valid certificate and can be used as a client node cert.
+		if nodeCert.Error != nil {
+			return makeErrorf(nodeCert.Error, "validating node cert")
 		}
 	}
 

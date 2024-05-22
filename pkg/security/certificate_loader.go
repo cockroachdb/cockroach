@@ -423,28 +423,3 @@ func parseCertificate(ci *CertInfo) error {
 	ci.ExpirationTime = expires
 	return nil
 }
-
-// validateDualPurposeNodeCert takes a CertInfo and a parsed certificate and checks the
-// values of certain fields.
-// This should only be called on the NodePem CertInfo when there is no specific
-// client certificate for the 'node' user.
-// Fields required for a valid server certificate are already checked.
-func validateDualPurposeNodeCert(ci *CertInfo) error {
-	if ci == nil {
-		return errors.Errorf("no node certificate found")
-	}
-
-	if ci.Error != nil {
-		return ci.Error
-	}
-
-	// The first certificate is used in client auth.
-	cert := ci.ParsedCertificates[0]
-	principals := getCertificatePrincipals(cert)
-	if !Contains(principals, username.NodeUser) {
-		return errors.Errorf("client/server node certificate has principals %q, expected %q",
-			principals, username.NodeUser)
-	}
-
-	return nil
-}
