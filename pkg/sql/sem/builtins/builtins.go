@@ -9065,10 +9065,7 @@ func generateRandomUUID4Impl() builtinDefinition {
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Uuid),
 			Fn: func(_ context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
-				uv, err := uuid.NewV4()
-				if err != nil {
-					return nil, err
-				}
+				uv := uuid.NewV4()
 				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
 			},
 			Info:       "Generates a random version 4 UUID, and returns it as a value of UUID type.",

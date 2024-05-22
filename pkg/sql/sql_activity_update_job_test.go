@@ -642,7 +642,7 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 	// Generate a random app name each time to avoid conflicts
-	appName := "test_status_api" + uuid.FastMakeV4().String()
+	appName := "test_status_api" + uuid.MakeV4().String()
 	db.Exec(t, "SET SESSION application_name = $1", appName)
 
 	// Generate some sql stats data.

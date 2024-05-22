@@ -132,7 +132,7 @@ func TestShowJobsWithExecutionDetails(t *testing.T) {
 		return fakeExecResumer{
 			OnResume: func(ctx context.Context) error {
 				p := sql.PhysicalPlan{}
-				infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
+				infra := physicalplan.NewPhysicalInfrastructure(uuid.MakeV4(), base.SQLInstanceID(1))
 				p.PhysicalInfrastructure = infra
 				jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID())
 				checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), 1)
@@ -183,7 +183,7 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 			return fakeExecResumer{
 				OnResume: func(ctx context.Context) error {
 					p := sql.PhysicalPlan{}
-					infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
+					infra := physicalplan.NewPhysicalInfrastructure(uuid.MakeV4(), base.SQLInstanceID(1))
 					p.PhysicalInfrastructure = infra
 					jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID())
 					checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), 1)
@@ -346,7 +346,7 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 		return fakeExecResumer{
 			OnResume: func(ctx context.Context) error {
 				p := sql.PhysicalPlan{}
-				infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
+				infra := physicalplan.NewPhysicalInfrastructure(uuid.MakeV4(), base.SQLInstanceID(1))
 				p.PhysicalInfrastructure = infra
 				jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID())
 				checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), expectedDiagrams)

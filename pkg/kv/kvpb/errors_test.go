@@ -75,7 +75,7 @@ func TestErrPriority(t *testing.T) {
 	require.Equal(t, ErrorScoreTxnAbort, ErrPriority(unhandledAbort))
 	require.Equal(t, ErrorScoreTxnRestart, ErrPriority(unhandledRetry))
 	{
-		id1 := uuid.Must(uuid.NewV4())
+		id1 := uuid.NewV4()
 		require.Equal(t, ErrorScoreTxnRestart, ErrPriority(&TransactionRetryWithProtoRefreshError{
 			PrevTxnID:       id1,
 			NextTransaction: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: id1}},

@@ -928,13 +928,13 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 			Key: roachpb.Key(rangeKey),
 			TxnMeta: enginepb.TxnMeta{
 				Key: roachpb.Key(rangeKey),
-				ID:  uuid.FastMakeV4(),
+				ID:  uuid.MakeV4(),
 			},
 
 			Duration: 1 * time.Minute,
 		},
 		BlockingTxnFingerprintID: 9001,
-		WaitingTxnID:             uuid.FastMakeV4(),
+		WaitingTxnID:             uuid.MakeV4(),
 		WaitingTxnFingerprintID:  9002,
 		WaitingStmtID:            clusterunique.ID{Uint128: uint128.Uint128{Lo: 9003, Hi: 1004}},
 		WaitingStmtFingerprintID: 9004,

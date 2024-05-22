@@ -367,17 +367,11 @@ func BenchmarkSortUUID(b *testing.B) {
 						// all abbreviated values are the same, then comparing
 						// them is unnecessary work because we must always fall
 						// back to full comparisons.
-						id, err := uuid.NewV4()
-						if err != nil {
-							b.Fatalf("unexpected error: %s", err)
-						}
+						id := uuid.NewV4()
 						constPrefix := id[:8]
 
 						for j := 0; j < coldata.BatchSize(); j++ {
-							id, err := uuid.NewV4()
-							if err != nil {
-								b.Fatalf("unexpected error: %s", err)
-							}
+							id := uuid.NewV4()
 							idBytes := id[:16]
 							// Make the abbreviated bytes constant constAbbrPct% of
 							// the time.

@@ -135,10 +135,7 @@ func PlanReplicas(
 	deadNodeIDs []roachpb.NodeID,
 	uuidGen uuid.Generator,
 ) (loqrecoverypb.ReplicaUpdatePlan, PlanningReport, error) {
-	planID, err := uuidGen.NewV4()
-	if err != nil {
-		return loqrecoverypb.ReplicaUpdatePlan{}, PlanningReport{}, err
-	}
+	planID := uuidGen.NewV4()
 	var replicas []loqrecoverypb.ReplicaInfo
 	for _, node := range clusterInfo.LocalInfo {
 		replicas = append(replicas, node.Replicas...)

@@ -85,7 +85,7 @@ func runTest(t *testing.T, path string, db *gosql.DB, execCfg *sql.ExecutorConfi
 			return sb.String()
 
 		case "schema_telemetry":
-			snapshotID := uuid.FastMakeV4()
+			snapshotID := uuid.MakeV4()
 			maxRecords := 100000
 			// By default, collect the entirety of the system schema.
 			// In that case, the snapshot ID won't matter.

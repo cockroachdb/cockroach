@@ -14,7 +14,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	math_rand "math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
@@ -94,34 +93,10 @@ func (u *UUID) UnmarshalJSON(data []byte) error {
 	return err
 }
 
-// MakeV4 calls Must(NewV4)
+// MakeV4 calls NewV4.
 func MakeV4() UUID {
-	return Must(NewV4())
+	return NewV4()
 }
-
-// FastMakeV4 generates a UUID using a fast but not cryptographically secure
-// source of randomness.
-func FastMakeV4() UUID {
-	u, err := fastGen.NewV4()
-	if err != nil {
-		panic(errors.Wrap(err, "should never happen with math/rand.Rand"))
-	}
-	return u
-}
-
-// mathRandReader is an io.Reader that calls through to "math/rand".Read
-// which is safe for concurrent use.
-type mathRandReader struct{}
-
-func (r mathRandReader) Read(p []byte) (n int, err error) {
-	// https://github.com/cockroachdb/cockroach/issues/110597 tracks this
-	// deprecated usage.
-	//lint:ignore SA1019 deprecated
-	return math_rand.Read(p)
-}
-
-// fastGen is a non-cryptographically secure Generator.
-var fastGen = NewGenWithReader(mathRandReader{})
 
 // NewPopulatedUUID returns a populated UUID.
 func NewPopulatedUUID(r interface {
