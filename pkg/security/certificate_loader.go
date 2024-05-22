@@ -441,9 +441,8 @@ func validateDualPurposeNodeCert(ci *CertInfo) error {
 	// The first certificate is used in client auth.
 	cert := ci.ParsedCertificates[0]
 	principals := getCertificatePrincipals(cert)
-	if !Contains(principals, username.NodeUser) {
-		return errors.Errorf("client/server node certificate has principals %q, expected %q",
-			principals, username.NodeUser)
+	if len(principals) == 0 {
+		return errors.Errorf("client/server node certificate does not have any principals")
 	}
 
 	return nil
