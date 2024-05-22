@@ -192,7 +192,7 @@ func (p *Partitioner) RegisterTestingKnobs(
 			panic("address not mapped, call RegisterNodeAddr before enabling the partition" + addr)
 		}
 		if partitionedServers[id.(roachpb.NodeID)] {
-			return errors.Newf("partitioned from %s, n%d", addr, id)
+			return errors.Newf("rpc error: partitioned from %s, n%d", addr, id)
 		}
 		return nil
 	}
