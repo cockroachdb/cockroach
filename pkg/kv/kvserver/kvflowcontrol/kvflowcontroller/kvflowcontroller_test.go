@@ -176,11 +176,11 @@ func TestBucket(t *testing.T) {
 	stopWaitCh := make(chan struct{}, 1)
 	// No waiting for regular work.
 	state, waited := b.wait(ctx, admissionpb.RegularWorkClass, stopWaitCh)
-	require.Equal(t, waitSuccess, state)
+	require.Equal(t, WaitSuccess, state)
 	require.False(t, waited)
 	// No waiting for elastic work.
 	state, waited = b.wait(ctx, admissionpb.ElasticWorkClass, stopWaitCh)
-	require.Equal(t, waitSuccess, state)
+	require.Equal(t, WaitSuccess, state)
 	require.False(t, waited)
 
 	clock.Advance(10 * time.Second)
@@ -196,22 +196,22 @@ func TestBucket(t *testing.T) {
 	stopWaitCh <- struct{}{}
 	// No waiting for regular work.
 	state, waited = b.wait(ctx, admissionpb.RegularWorkClass, stopWaitCh)
-	require.Equal(t, waitSuccess, state)
+	require.Equal(t, WaitSuccess, state)
 	require.False(t, waited)
 	// Elastic work returns since stopWaitCh has entry.
 	state, waited = b.wait(ctx, admissionpb.ElasticWorkClass, stopWaitCh)
-	require.Equal(t, stopWaitSignaled, state)
+	require.Equal(t, StopWaitSignaled, state)
 	require.True(t, waited)
 
 	canceledCtx, cancelFunc := context.WithCancel(ctx)
 	cancelFunc()
 	// No waiting for regular work.
 	state, waited = b.wait(canceledCtx, admissionpb.RegularWorkClass, stopWaitCh)
-	require.Equal(t, waitSuccess, state)
+	require.Equal(t, WaitSuccess, state)
 	require.False(t, waited)
 	// Elastic work returns since context is canceled.
 	state, waited = b.wait(canceledCtx, admissionpb.ElasticWorkClass, stopWaitCh)
-	require.Equal(t, contextCanceled, state)
+	require.Equal(t, ContextCanceled, state)
 	require.True(t, waited)
 
 	clock.Advance(10 * time.Second)
@@ -231,13 +231,13 @@ func TestBucket(t *testing.T) {
 	workAdmitted := make(chan struct{}, 2)
 	go func() {
 		state, waited := b.wait(ctx, admissionpb.RegularWorkClass, stopWaitCh)
-		require.Equal(t, waitSuccess, state)
+		require.Equal(t, WaitSuccess, state)
 		require.True(t, waited)
 		workAdmitted <- struct{}{}
 	}()
 	go func() {
 		state, waited := b.wait(ctx, admissionpb.RegularWorkClass, stopWaitCh)
-		require.Equal(t, waitSuccess, state)
+		require.Equal(t, WaitSuccess, state)
 		require.True(t, waited)
 		workAdmitted <- struct{}{}
 	}()
