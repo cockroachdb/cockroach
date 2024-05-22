@@ -269,13 +269,6 @@ func TestExplainGist(t *testing.T) {
 						return true
 					}
 				}
-				for _, toSkipSubstring := range []string{
-					"ALTER PRIMARY KEY", // #123017
-				} {
-					if strings.Contains(stmt, toSkipSubstring) {
-						return true
-					}
-				}
 				return false
 			}(); shouldSkip {
 				continue
