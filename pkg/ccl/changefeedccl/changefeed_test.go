@@ -5929,8 +5929,7 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 		}
 	}
 
-	// TODO(#89421): include pubsub once it supports metrics
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless", "pubsub"))
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
 }
 
 func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
@@ -5966,8 +5965,7 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 		verifyLogsWithEmittedBytesAndMessages(t, jobID, beforeClose.UnixNano(), interval.Nanoseconds(), true)
 	}
 
-	// TODO(#89421): include pubsub once it supports metrics
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless", "pubsub"))
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
 }
 
 func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
@@ -6000,8 +5998,7 @@ func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
 		require.NoError(t, foo2.Close())
 	}
 
-	// TODO(#89421): include pubsub once it supports metrics
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless", "pubsub"))
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
 }
 
 func TestChangefeedHandlesDrainingNodes(t *testing.T) {
