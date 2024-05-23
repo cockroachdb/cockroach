@@ -28,6 +28,7 @@ import (
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
@@ -107,6 +108,7 @@ func selectComment(ctx context.Context, p *planner, tableID descpb.ID) (tc *tabl
 // the crdb_internal.create_statements virtual table.
 func ShowCreateView(
 	ctx context.Context,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	tn *tree.TableName,
@@ -145,7 +147,7 @@ func ShowCreateView(
 	cfg.UseTabs = true
 	cfg.LineWidth = 100 - cfg.TabWidth
 	cfg.ValueRedaction = redactableValues
-	q, err := formatViewQueryForDisplay(ctx, semaCtx, sessionData, desc, cfg)
+	q, err := formatViewQueryForDisplay(ctx, evalCtx, semaCtx, sessionData, desc, cfg)
 	if err != nil {
 		return "", err
 	}
@@ -164,6 +166,7 @@ func ShowCreateView(
 // a human-readable output with the correct level of indentation.
 func formatViewQueryForDisplay(
 	ctx context.Context,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	desc catalog.TableDescriptor,
@@ -188,7 +191,7 @@ func formatViewQueryForDisplay(
 		}
 	}()
 
-	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, sessionData, desc)
+	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, evalCtx, semaCtx, sessionData, desc)
 	if err != nil {
 		log.Warningf(ctx, "error deserializing user defined types for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
@@ -281,6 +284,7 @@ func formatQuerySequencesForDisplay(
 // it will deserialize it to display its name.
 func formatViewQueryTypesForDisplay(
 	ctx context.Context,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	desc catalog.TableDescriptor,
@@ -306,7 +310,7 @@ func formatViewQueryTypesForDisplay(
 			return true, expr, nil
 		}
 		formattedExpr, err := schemaexpr.FormatExprForDisplay(
-			ctx, desc, expr.String(), semaCtx, sessionData, tree.FmtParsable,
+			ctx, desc, expr.String(), evalCtx, semaCtx, sessionData, tree.FmtParsable,
 		)
 		if err != nil {
 			return false, expr, err
@@ -340,6 +344,7 @@ func formatViewQueryTypesForDisplay(
 // formatViewQueryTypesForDisplay.
 func formatFunctionQueryTypesForDisplay(
 	ctx context.Context,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	queries string,
@@ -371,7 +376,7 @@ func formatFunctionQueryTypesForDisplay(
 			return true, expr, nil
 		}
 		formattedExpr, err := schemaexpr.FormatExprForDisplay(
-			ctx, nil, expr.String(), semaCtx, sessionData, tree.FmtParsable,
+			ctx, nil, expr.String(), evalCtx, semaCtx, sessionData, tree.FmtParsable,
 		)
 		if err != nil {
 			return false, expr, err
@@ -802,6 +807,7 @@ func ShowCreatePartitioning(
 func showConstraintClause(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	f *tree.FmtCtx,
@@ -829,7 +835,7 @@ func showConstraintClause(
 		}
 		f.WriteString("CHECK (")
 		expr, err := schemaexpr.FormatExprForDisplay(
-			ctx, desc, e.GetExpr(), semaCtx, sessionData, exprFmtFlags,
+			ctx, desc, e.GetExpr(), evalCtx, semaCtx, sessionData, exprFmtFlags,
 		)
 		if err != nil {
 			return err
@@ -857,7 +863,7 @@ func showConstraintClause(
 		if c.IsPartial() {
 			f.WriteString(" WHERE ")
 			pred, err := schemaexpr.FormatExprForDisplay(
-				ctx, desc, c.GetPredicate(), semaCtx, sessionData, exprFmtFlags,
+				ctx, desc, c.GetPredicate(), evalCtx, semaCtx, sessionData, exprFmtFlags,
 			)
 			if err != nil {
 				return err
