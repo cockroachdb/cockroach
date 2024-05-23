@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -34,14 +35,8 @@ import (
 )
 
 const (
-	resourceName    = "instance-configs"
-	resourceVersion = "v1"
-
-	// defaultPrometheusHostUrl for prometheus cluster config
-	defaultPrometheusHostUrl = "https://grafana.testeng.crdb.io/promhelpers"
-	// prometheusHostUrlEnv is the environment variable to override defaultPrometheusHostUrl
-	prometheusHostUrlEnv = "ROACHPROD_PROM_HOST_URL"
-
+	resourceName           = "instance-configs"
+	resourceVersion        = "v1"
 	serviceAccountJson     = "PROM_HELPER_SERVICE_ACCOUNT_JSON"
 	serviceAccountAudience = "PROM_HELPER_SERVICE_ACCOUNT_AUDIENCE"
 )
@@ -49,9 +44,18 @@ const (
 // SupportedPromProjects are the projects supported for prometheus target
 var SupportedPromProjects = map[string]struct{}{gce.DefaultProject(): {}}
 
+// The URL for the Prometheus registration service. An empty string means that the
+// Prometheus integration is disabled. Should be accessed through
+// getPrometheusRegistrationUrl().
+var promRegistrationUrl = config.EnvOrDefaultString("ROACHPROD_PROM_HOST_URL",
+	"https://grafana.testeng.crdb.io/promhelpers")
+
 // PromClient is used to communicate with the prometheus helper service
 // keeping the functions as a variable enables us to override the value for unit testing
 type PromClient struct {
+	promUrl  string
+	disabled bool
+
 	// httpPut is used for http PUT operation.
 	httpPut func(
 		ctx context.Context, url string, h *http.Header, body io.Reader,
@@ -64,13 +68,24 @@ type PromClient struct {
 		oauth2.TokenSource, error)
 }
 
+// DefaultPromClient is the default instance of PromClient. This instance should
+// be used unless custom configuration is needed.
+var DefaultPromClient = NewPromClient()
+
 // NewPromClient returns a new instance of PromClient
 func NewPromClient() *PromClient {
 	return &PromClient{
+		promUrl:        promRegistrationUrl,
+		disabled:       promRegistrationUrl == "",
 		httpPut:        httputil.Put,
 		httpDelete:     httputil.Delete,
 		newTokenSource: idtoken.NewTokenSource,
 	}
+}
+
+func (c *PromClient) setUrl(url string) {
+	c.promUrl = url
+	c.disabled = false
 }
 
 // instanceConfigRequest is the HTTP request received for generating instance config
@@ -89,19 +104,19 @@ func (c *PromClient) UpdatePrometheusTargets(
 	insecure bool,
 	l *logger.Logger,
 ) error {
-	promUrl := defaultPrometheusHostUrl
-	if v, ok := os.LookupEnv(prometheusHostUrlEnv); ok {
-		promUrl = v
+	if c.disabled {
+		l.Printf("Prometheus registration is disabled")
+		return nil
 	}
 	req, err := buildCreateRequest(nodes, insecure)
 	if err != nil {
 		return err
 	}
-	token, err := c.getToken(ctx, promUrl, forceFetchCreds, l)
+	token, err := c.getToken(ctx, forceFetchCreds, l)
 	if err != nil {
 		return err
 	}
-	url := getUrl(promUrl, clusterName)
+	url := getUrl(c.promUrl, clusterName)
 	l.Printf("invoking PUT for URL: %s", url)
 	h := &http.Header{}
 	h.Set("ContentType", "application/json")
@@ -132,15 +147,15 @@ func (c *PromClient) UpdatePrometheusTargets(
 func (c *PromClient) DeleteClusterConfig(
 	ctx context.Context, clusterName string, forceFetchCreds bool, l *logger.Logger,
 ) error {
-	promUrl := defaultPrometheusHostUrl
-	if v, ok := os.LookupEnv(prometheusHostUrlEnv); ok {
-		promUrl = v
+
+	if c.disabled {
+		return nil
 	}
-	token, err := c.getToken(ctx, promUrl, forceFetchCreds, l)
+	token, err := c.getToken(ctx, forceFetchCreds, l)
 	if err != nil {
 		return err
 	}
-	url := getUrl(promUrl, clusterName)
+	url := getUrl(c.promUrl, clusterName)
 	l.Printf("invoking DELETE for URL: %s", url)
 	h := &http.Header{}
 	h.Set("Authorization", token)
@@ -206,9 +221,9 @@ func buildCreateRequest(nodes map[int]*NodeInfo, insecure bool) (io.Reader, erro
 
 // getToken gets the Authorization token for grafana
 func (c *PromClient) getToken(
-	ctx context.Context, promUrl string, forceFetchCreds bool, l *logger.Logger,
+	ctx context.Context, forceFetchCreds bool, l *logger.Logger,
 ) (string, error) {
-	if strings.HasPrefix(promUrl, "http:/") {
+	if strings.HasPrefix(c.promUrl, "http:/") {
 		// no token needed for insecure URL
 		return "", nil
 	}
