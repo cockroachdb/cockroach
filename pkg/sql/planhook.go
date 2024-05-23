@@ -83,10 +83,6 @@ type planHook struct {
 
 var planHooks []planHook
 
-func (p *planner) RunParams(ctx context.Context) runParams {
-	return runParams{ctx, p.ExtendedEvalContext(), p}
-}
-
 // PlanHookState exposes the subset of planner needed by plan hooks.
 // We pass this as one interface, rather than individually passing each field or
 // interface as we find we need them, to avoid churn in the planHookFn sig and
@@ -99,7 +95,6 @@ func (p *planner) RunParams(ctx context.Context) runParams {
 // that gets passed back due to this inversion of roles.
 type PlanHookState interface {
 	resolver.SchemaResolver
-	RunParams(ctx context.Context) runParams
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
