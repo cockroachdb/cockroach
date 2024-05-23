@@ -23,6 +23,13 @@ import (
 	"google.golang.org/api/option"
 )
 
+const (
+	// DefaultPrometheusHostUrl for prometheus cluster config
+	DefaultPrometheusHostUrl = "https://grafana.testeng.crdb.io/promhelpers"
+	// PrometheusHostUrlEnv is the environment variable to override defaultPrometheusHostUrl
+	PrometheusHostUrlEnv = "COCKROACH_PROM_HOST_URL"
+)
+
 var (
 	userHome, _ = os.UserHomeDir()
 	// promCredFile is where the prom helper credentials are stored

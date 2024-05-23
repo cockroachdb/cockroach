@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -442,6 +443,8 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 
 	var destroyedClusters []resourceDescription
 	for _, c := range s.destroy {
+		_ = promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
+			c.Name, false, l)
 		if err := destroyResource(dryrun, func() error {
 			return DestroyCluster(l, c)
 		}); err == nil {

@@ -24,8 +24,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2"
@@ -75,12 +75,13 @@ type instanceConfigRequest struct {
 // UpdatePrometheusTargets updates the cluster config in the promUrl
 func (c *PromClient) UpdatePrometheusTargets(
 	ctx context.Context,
-	promUrl, clusterName string,
+	clusterName string,
 	forceFetchCreds bool,
 	nodes map[int]*NodeInfo,
 	insecure bool,
 	l *logger.Logger,
 ) error {
+	promUrl := envutil.EnvOrDefaultString(PrometheusHostUrlEnv, DefaultPrometheusHostUrl)
 	req, err := buildCreateRequest(nodes, insecure)
 	if err != nil {
 		return err
@@ -104,7 +105,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode == http.StatusUnauthorized && !forceFetchCreds {
 			l.Printf("request failed - this may be due to a stale token. retrying with forceFetchCreds true ...")
-			return c.UpdatePrometheusTargets(ctx, promUrl, clusterName, true, nodes, insecure, l)
+			return c.UpdatePrometheusTargets(ctx, clusterName, true, nodes, insecure, l)
 		}
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
@@ -118,8 +119,9 @@ func (c *PromClient) UpdatePrometheusTargets(
 
 // DeleteClusterConfig deletes the cluster config in the promUrl
 func (c *PromClient) DeleteClusterConfig(
-	ctx context.Context, promUrl, clusterName string, forceFetchCreds bool, l *logger.Logger,
+	ctx context.Context, clusterName string, forceFetchCreds bool, l *logger.Logger,
 ) error {
+	promUrl := envutil.EnvOrDefaultString(PrometheusHostUrlEnv, DefaultPrometheusHostUrl)
 	token, err := c.getToken(ctx, promUrl, forceFetchCreds, l)
 	if err != nil {
 		return err
@@ -135,7 +137,7 @@ func (c *PromClient) DeleteClusterConfig(
 	if response.StatusCode != http.StatusNoContent {
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode == http.StatusUnauthorized && !forceFetchCreds {
-			return c.DeleteClusterConfig(ctx, promUrl, clusterName, true, l)
+			return c.DeleteClusterConfig(ctx, clusterName, true, l)
 		}
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
@@ -169,12 +171,7 @@ func buildCreateRequest(nodes map[int]*NodeInfo, insecure bool) (io.Reader, erro
 	for i, n := range nodes {
 		params := &CCParams{
 			Targets: []string{n.Target},
-			Labels: map[string]string{
-				// default labels
-				"node":   strconv.Itoa(i),
-				"tenant": install.SystemInterfaceName,
-				"job":    "cockroachdb",
-			},
+			Labels:  map[string]string{"node": strconv.Itoa(i)},
 		}
 		// custom labels - this can override the default labels if needed
 		for n, v := range n.CustomLabels {

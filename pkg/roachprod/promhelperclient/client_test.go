@@ -39,6 +39,7 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 	}()
 	ctx := context.Background()
 	promUrl := "http://prom_url.com"
+	_ = os.Setenv(PrometheusHostUrlEnv, promUrl)
 	c := NewPromClient()
 	t.Run("UpdatePrometheusTargets fails with 400", func(t *testing.T) {
 		c.httpPut = func(ctx context.Context, reqUrl string, h *http.Header, body io.Reader) (
@@ -49,7 +50,7 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 				Body:       io.NopCloser(strings.NewReader("failed")),
 			}, nil
 		}
-		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false,
+		err := c.UpdatePrometheusTargets(ctx, "c1", false,
 			map[int]*NodeInfo{1: {Target: "n1"}}, true, l)
 		require.NotNil(t, err)
 		require.Equal(t, "request failed with status 400 and error failed", err.Error())
@@ -72,8 +73,6 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 				nodeID, err := strconv.Atoi(c.Labels["node"])
 				require.NoError(t, err)
 				require.Equal(t, nodeInfos[nodeID].Target, c.Targets[0])
-				require.Equal(t, "system", c.Labels["tenant"])
-				require.Equal(t, "cockroachdb", c.Labels["job"])
 				for k, v := range nodeInfos[nodeID].CustomLabels {
 					require.Equal(t, v, c.Labels[k])
 				}
@@ -82,7 +81,7 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 				StatusCode: 200,
 			}, nil
 		}
-		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, nodeInfos, true, l)
+		err := c.UpdatePrometheusTargets(ctx, "c1", false, nodeInfos, true, l)
 		require.Nil(t, err)
 	})
 }
@@ -97,6 +96,7 @@ func TestDeleteClusterConfig(t *testing.T) {
 	}()
 	ctx := context.Background()
 	promUrl := "http://prom_url.com"
+	_ = os.Setenv(PrometheusHostUrlEnv, promUrl)
 	c := NewPromClient()
 	t.Run("DeleteClusterConfig fails with 400", func(t *testing.T) {
 		c.httpDelete = func(ctx context.Context, url string, h *http.Header) (
@@ -107,7 +107,7 @@ func TestDeleteClusterConfig(t *testing.T) {
 				Body:       io.NopCloser(strings.NewReader("failed")),
 			}, nil
 		}
-		err := c.DeleteClusterConfig(ctx, promUrl, "c1", false, l)
+		err := c.DeleteClusterConfig(ctx, "c1", false, l)
 		require.NotNil(t, err)
 		require.Equal(t, "request failed with status 400 and error failed", err.Error())
 	})
@@ -119,7 +119,7 @@ func TestDeleteClusterConfig(t *testing.T) {
 				StatusCode: 204,
 			}, nil
 		}
-		err := c.DeleteClusterConfig(ctx, promUrl, "c1", false, l)
+		err := c.DeleteClusterConfig(ctx, "c1", false, l)
 		require.Nil(t, err)
 	})
 }
