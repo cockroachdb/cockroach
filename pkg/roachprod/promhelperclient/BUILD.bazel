@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/util/envutil",
         "//pkg/util/httputil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_google_cloud_go_storage//:storage",

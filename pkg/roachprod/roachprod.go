@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/replay"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -58,13 +57,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"golang.org/x/sys/unix"
-)
-
-const (
-	// defaultPrometheusHostUrl for prometheus cluster config
-	defaultPrometheusHostUrl = "https://grafana.testeng.crdb.io/promhelpers"
-	// prometheusHostUrlEnv is the environment variable to override defaultPrometheusHostUrl
-	prometheusHostUrlEnv = "COCKROACH_PROM_HOST_URL"
 )
 
 // MalformedClusterNameError is returned when the cluster name passed to Create is invalid.
@@ -828,8 +820,7 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 	}
 	wg.Wait()
 	if len(nodeIPPorts) > 0 {
-		if err := promhelperclient.NewPromClient().UpdatePrometheusTargets(ctx,
-			envutil.EnvOrDefaultString(prometheusHostUrlEnv, defaultPrometheusHostUrl),
+		if err := promhelperclient.DefaultPromClient.UpdatePrometheusTargets(ctx,
 			c.Name, false, nodeIPPorts, !c.Secure, l); err != nil {
 			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
 		}
@@ -1459,7 +1450,7 @@ func Destroy(
 				// and let the caller retry.
 				cld, _ = cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
 			}
-			return destroyCluster(cld, l, name)
+			return destroyCluster(ctx, cld, l, name)
 		}); err != nil {
 		return err
 	}
@@ -1467,7 +1458,9 @@ func Destroy(
 	return nil
 }
 
-func destroyCluster(cld *cloud.Cloud, l *logger.Logger, clusterName string) error {
+func destroyCluster(
+	ctx context.Context, cld *cloud.Cloud, l *logger.Logger, clusterName string,
+) error {
 	c, ok := cld.Clusters[clusterName]
 	if !ok {
 		return fmt.Errorf("cluster %s does not exist", clusterName)
@@ -1478,7 +1471,7 @@ func destroyCluster(cld *cloud.Cloud, l *logger.Logger, clusterName string) erro
 		l.Printf("Destroying cluster %s with %d nodes", clusterName, len(c.VMs))
 	}
 
-	if err := deleteClusterConfig(clusterName, l); err != nil {
+	if err := deleteClusterConfig(ctx, clusterName, l); err != nil {
 		l.Printf("Failed to delete cluster config: %v", err)
 	}
 
@@ -1486,10 +1479,8 @@ func destroyCluster(cld *cloud.Cloud, l *logger.Logger, clusterName string) erro
 }
 
 // deleteClusterConfig deletes the prometheus instance cluster config. Any error is logged and ignored.
-func deleteClusterConfig(clusterName string, l *logger.Logger) error {
-	return promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
-		envutil.EnvOrDefaultString(prometheusHostUrlEnv, defaultPrometheusHostUrl),
-		clusterName, false, l)
+func deleteClusterConfig(ctx context.Context, clusterName string, l *logger.Logger) error {
+	return promhelperclient.DefaultPromClient.DeleteClusterConfig(ctx, clusterName, false, l)
 }
 
 func destroyLocalCluster(ctx context.Context, l *logger.Logger, clusterName string) error {
