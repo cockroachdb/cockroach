@@ -314,7 +314,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	alterTypeDropValue:                clusterversion.MinSupported,
 	commentOn:                         clusterversion.MinSupported,
 	createIndex:                       clusterversion.MinSupported,
-	createSchema:                      clusterversion.V23_2,
+	createSchema:                      clusterversion.MinSupported,
 	createSequence:                    clusterversion.MinSupported,
 	dropIndex:                         clusterversion.MinSupported,
 	dropSchema:                        clusterversion.MinSupported,

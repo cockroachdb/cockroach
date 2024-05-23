@@ -15,7 +15,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -49,9 +48,6 @@ func alterTableAddColumn(
 	// throw an unsupported error.
 	fallBackIfSubZoneConfigExists(b, t, tbl.TableID)
 	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
-	// Version gates functionally that is implemented after the statement is
-	// publicly published.
-	fallbackIfAddColDropColAlterPKInOneAlterTableStmtBeforeV232(b, tbl.TableID, t)
 
 	// Check column non-existence.
 	{
@@ -252,52 +248,6 @@ func alterTableAddColumn(
 		b.IncrementEnumCounter(sqltelemetry.EnumInTable)
 	default:
 		b.IncrementSchemaChangeAddColumnTypeCounter(spec.colType.Type.TelemetryName())
-	}
-}
-
-// We start to support mixing add column(s), drop column(s), alter PK in one
-// ALTER TABLE stmt from V23_2. Before that, we only support just add column(s),
-// or just drop column(s), or just alter PK in one ALTER TABLE stmt.
-func fallbackIfAddColDropColAlterPKInOneAlterTableStmtBeforeV232(
-	b BuildCtx, tableID catid.DescID, n tree.NodeFormatter,
-) {
-	addingAnyColumn := !b.QueryByID(tableID).
-		Filter(isColumnFilter).
-		Filter(publicTargetFilter).
-		Filter(notReachedTargetYetFilter).
-		IsEmpty()
-
-	droppingAnyColumn := !b.QueryByID(tableID).
-		Filter(isColumnFilter).
-		Filter(absentTargetFilter).
-		Filter(notReachedTargetYetFilter).
-		IsEmpty()
-
-	alteringAnyPK := false
-	currentPrimaryIndexID := mustRetrieveCurrentPrimaryIndexElement(b, tableID).IndexID
-	scpb.ForEachPrimaryIndex(
-		b.QueryByID(tableID).Filter(publicTargetFilter).Filter(notReachedTargetYetFilter), func(
-			current scpb.Status, target scpb.TargetStatus, e *scpb.PrimaryIndex,
-		) {
-			// If any adding primary index has different key columns than current
-			// primary index `old`, then we conclude an ALTER PK happened.
-			if !haveSameIndexColsByKind(b, tableID, currentPrimaryIndexID, e.IndexID, scpb.IndexColumn_KEY) {
-				alteringAnyPK = true
-			}
-		})
-
-	boolToInt := func(b bool) int {
-		if b {
-			return 1
-		}
-		return 0
-	}
-
-	if boolToInt(addingAnyColumn)+boolToInt(droppingAnyColumn)+boolToInt(alteringAnyPK) > 1 {
-		if !b.EvalCtx().Settings.Version.IsActive(b, clusterversion.V23_2) {
-			panic(scerrors.NotImplementedErrorf(n, "mixing ADD COLUMN, DROP COLUMN, "+
-				"and ALTER PRIMARY KEY not supported before V23.2"))
-		}
 	}
 }
 

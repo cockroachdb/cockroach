@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -3544,50 +3543,47 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 	upgraded := false
 	upgradedDueToLicense := false
 	hasLicense := base.CCLDistributionAndEnterpriseEnabled(ex.server.cfg.Settings)
-	allowLevelCustomization := ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2)
 	ret := isolation.Serializable
-	if allowLevelCustomization {
-		switch level {
-		case tree.ReadUncommittedIsolation:
-			// READ UNCOMMITTED is mapped to READ COMMITTED. PostgreSQL also does
-			// this: https://www.postgresql.org/docs/current/transaction-iso.html.
+	switch level {
+	case tree.ReadUncommittedIsolation:
+		// READ UNCOMMITTED is mapped to READ COMMITTED. PostgreSQL also does
+		// this: https://www.postgresql.org/docs/current/transaction-iso.html.
+		upgraded = true
+		fallthrough
+	case tree.ReadCommittedIsolation:
+		// READ COMMITTED is only allowed if the cluster setting is enabled and
+		// the cluster has a license. Otherwise it is mapped to SERIALIZABLE.
+		allowReadCommitted := allowReadCommittedIsolation.Get(&ex.server.cfg.Settings.SV)
+		if allowReadCommitted && hasLicense {
+			ret = isolation.ReadCommitted
+		} else {
 			upgraded = true
-			fallthrough
-		case tree.ReadCommittedIsolation:
-			// READ COMMITTED is only allowed if the cluster setting is enabled and
-			// the cluster has a license. Otherwise it is mapped to SERIALIZABLE.
-			allowReadCommitted := allowReadCommittedIsolation.Get(&ex.server.cfg.Settings.SV)
-			if allowReadCommitted && hasLicense {
-				ret = isolation.ReadCommitted
-			} else {
-				upgraded = true
-				ret = isolation.Serializable
-				if allowReadCommitted && !hasLicense {
-					upgradedDueToLicense = true
-				}
-			}
-		case tree.RepeatableReadIsolation:
-			// REPEATABLE READ is mapped to SNAPSHOT.
-			upgraded = true
-			fallthrough
-		case tree.SnapshotIsolation:
-			// SNAPSHOT is only allowed if the cluster setting is enabled and the
-			// cluster has a license. Otherwise it is mapped to SERIALIZABLE.
-			allowSnapshot := allowSnapshotIsolation.Get(&ex.server.cfg.Settings.SV)
-			if allowSnapshot && hasLicense {
-				ret = isolation.Snapshot
-			} else {
-				upgraded = true
-				ret = isolation.Serializable
-				if allowSnapshot && !hasLicense {
-					upgradedDueToLicense = true
-				}
-			}
-		case tree.SerializableIsolation:
 			ret = isolation.Serializable
-		default:
-			log.Fatalf(context.Background(), "unknown isolation level: %s", level)
+			if allowReadCommitted && !hasLicense {
+				upgradedDueToLicense = true
+			}
 		}
+	case tree.RepeatableReadIsolation:
+		// REPEATABLE READ is mapped to SNAPSHOT.
+		upgraded = true
+		fallthrough
+	case tree.SnapshotIsolation:
+		// SNAPSHOT is only allowed if the cluster setting is enabled and the
+		// cluster has a license. Otherwise it is mapped to SERIALIZABLE.
+		allowSnapshot := allowSnapshotIsolation.Get(&ex.server.cfg.Settings.SV)
+		if allowSnapshot && hasLicense {
+			ret = isolation.Snapshot
+		} else {
+			upgraded = true
+			ret = isolation.Serializable
+			if allowSnapshot && !hasLicense {
+				upgradedDueToLicense = true
+			}
+		}
+	case tree.SerializableIsolation:
+		ret = isolation.Serializable
+	default:
+		log.Fatalf(context.Background(), "unknown isolation level: %s", level)
 	}
 
 	if f := ex.dataMutatorIterator.upgradedIsolationLevel; upgraded && f != nil {

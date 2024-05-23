@@ -11,7 +11,6 @@
 package optbuilder
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -364,17 +363,15 @@ func (item *lockingItem) validate() {
 // guaranteed-durable locking for SELECT FOR UPDATE, SELECT FOR SHARE, or
 // constraint checks.
 func (b *Builder) shouldUseGuaranteedDurability() bool {
-	return b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) &&
-		(b.evalCtx.TxnIsoLevel != isolation.Serializable ||
-			b.evalCtx.SessionData().DurableLockingForSerializable)
+	return b.evalCtx.TxnIsoLevel != isolation.Serializable ||
+		b.evalCtx.SessionData().DurableLockingForSerializable
 }
 
 // shouldBuildLockOp returns whether we should use the Lock operator for SELECT
 // FOR UPDATE or SELECT FOR SHARE.
 func (b *Builder) shouldBuildLockOp() bool {
-	return b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) &&
-		(b.evalCtx.TxnIsoLevel != isolation.Serializable ||
-			b.evalCtx.SessionData().OptimizerUseLockOpForSerializable)
+	return b.evalCtx.TxnIsoLevel != isolation.Serializable ||
+		b.evalCtx.SessionData().OptimizerUseLockOpForSerializable
 }
 
 // buildLocking constructs one Lock operator for each data source that this

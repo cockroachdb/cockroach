@@ -64,7 +64,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, statementTags: []string{tree.DropIndexTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropRoutine)(nil)):         {fn: DropFunction, statementTags: []string{tree.DropFunctionTag, tree.DropProcedureTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {fn: CreateFunction, statementTags: []string{tree.CreateFunctionTag, tree.CreateProcedureTag}, on: true, checks: nil},
-	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, statementTags: []string{tree.CreateSchemaTag}, on: true, checks: isV232Active},
+	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, statementTags: []string{tree.CreateSchemaTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, statementTags: []string{tree.CreateSequenceTag}, on: true, checks: isV241Active},
 	reflect.TypeOf((*tree.CreateDatabase)(nil)):      {fn: CreateDatabase, statementTags: []string{tree.CreateDatabaseTag}, on: true, checks: isV241Active},
 }
@@ -204,10 +204,6 @@ func getDeclarativeSchemaChangerModeForStmt(
 		ret = sessiondatapb.UseNewSchemaChangerUnsafe
 	}
 	return ret
-}
-
-var isV232Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
-	return activeVersion.IsActive(clusterversion.V23_2)
 }
 
 var isV241Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {

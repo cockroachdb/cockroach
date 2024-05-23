@@ -36,9 +36,6 @@ func alterTableDropColumn(
 	fallBackIfRegionalByRowTable(b, n, tbl.TableID)
 	checkSafeUpdatesForDropColumn(b)
 	checkRegionalByRowColumnConflict(b, tbl, n)
-	// Version gates functionally that is implemented after the statement is
-	// publicly published.
-	fallbackIfAddColDropColAlterPKInOneAlterTableStmtBeforeV232(b, tbl.TableID, n)
 
 	col, elts, done := resolveColumnForDropColumn(b, tn, tbl, n)
 	if done {

@@ -174,10 +174,6 @@ func checkOpFunc(el scpb.Element, fn interface{}) (opType scop.Type, _ error) {
 // a descriptor is an added state, and has no data. This can allow us to
 // skip certain operations like backfills / validation.
 func checkIfDescriptorIsWithoutData(id descpb.ID, md *opGenContext) bool {
-	// Older versions did not emit the data element.
-	if !md.ActiveVersion.IsActive(clusterversion.V23_2) {
-		return false
-	}
 	doesDescriptorHaveData := false
 	for idx, t := range md.Targets {
 		// Validate this is the descriptor ID we are
