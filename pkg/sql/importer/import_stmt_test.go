@@ -5365,7 +5365,8 @@ func TestImportWorkerFailure(t *testing.T) {
 		t.Fatalf("%s: query returned before expected: %s", err, query)
 	}
 	var jobID jobspb.JobID
-	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+	sqlDB.QueryRow(t, `SELECT id FROM system.jobs WHERE status = 'running'
+                             AND job_type = 'IMPORT' ORDER BY created DESC LIMIT 1`).Scan(&jobID)
 
 	// Shut down a node.
 	tc.StopServer(1)
@@ -5378,13 +5379,13 @@ func TestImportWorkerFailure(t *testing.T) {
 	// rolled back.
 	if err := <-errCh; err != nil {
 		t.Logf("%s failed, checking that imported data was completely removed: %q", query, err)
-		sqlDB.CheckQueryResults(t, `SELECT * FROM t ORDER BY i`, [][]string{})
+		sqlDB.CheckQueryResultsRetry(t, `SELECT * FROM t ORDER BY i`, [][]string{})
 		return
 	}
 
 	// But the job should be restarted and succeed eventually.
 	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
-	sqlDB.CheckQueryResults(t,
+	sqlDB.CheckQueryResultsRetry(t,
 		`SELECT * FROM t ORDER BY i`,
 		sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
 	)
