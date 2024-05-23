@@ -421,11 +421,6 @@ func notFilter(
 	}
 }
 
-func isColumnFilter(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
-	_, isColumn := e.(*scpb.Column)
-	return isColumn
-}
-
 func publicTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
 	return target == scpb.ToPublic
 }

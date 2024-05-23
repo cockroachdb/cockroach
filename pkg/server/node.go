@@ -2047,9 +2047,6 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 
 			if err == nil {
 				cause := kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED
-				if !n.storeCfg.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
-					cause = kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED
-				}
 				err = kvpb.NewRangeFeedRetryError(cause)
 			}
 

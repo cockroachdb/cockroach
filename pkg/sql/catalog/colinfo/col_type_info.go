@@ -108,7 +108,7 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
 		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily,
-		types.TSQueryFamily, types.TSVectorFamily:
+		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.RefCursorFamily:
 	// These types are OK.
 
 	case types.TupleFamily:
@@ -117,22 +117,6 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 		}
 		if t.TypeMeta.ImplicitRecordType {
 			return unimplemented.NewWithIssue(70099, "cannot use table record type as table column")
-		}
-
-	case types.PGLSNFamily:
-		if !version.IsActive(ctx, clusterversion.V23_2) {
-			return pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"pg_lsn not supported until version 23.2",
-			)
-		}
-
-	case types.RefCursorFamily:
-		if !version.IsActive(ctx, clusterversion.V23_2) {
-			return pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"refcursor not supported until version 23.2",
-			)
 		}
 
 	default:

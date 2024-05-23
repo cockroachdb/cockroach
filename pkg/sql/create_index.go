@@ -199,10 +199,6 @@ func makeIndexDescriptor(
 		return nil, err
 	}
 
-	if !activeVersion.IsActive(clusterversion.V23_2) &&
-		n.Invisibility.Value > 0.0 && n.Invisibility.Value < 1.0 {
-		return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
-	}
 	indexDesc := descpb.IndexDescriptor{
 		Name:              string(n.Name),
 		Unique:            n.Unique,
@@ -326,7 +322,6 @@ func checkIndexColumns(
 	version clusterversion.ClusterVersion,
 ) error {
 	for i, colDef := range columns {
-		lastCol := i == len(columns)-1
 		col, err := catalog.MustFindColumnByTreeName(desc, colDef.Column)
 		if err != nil {
 			return errors.Wrapf(err, "finding column %d", i)
@@ -341,20 +336,6 @@ func checkIndexColumns(
 			return pgerror.New(pgcode.DatatypeMismatch,
 				"operator classes are only allowed for the last column of an inverted index")
 		}
-
-		// Checking if JSON Columns can be forward indexed for a given cluster version.
-		if col.GetType().Family() == types.JsonFamily && (!inverted || !lastCol) && !version.IsActive(clusterversion.V23_2) {
-			return errors.WithHint(
-				pgerror.Newf(
-					pgcode.InvalidTableDefinition,
-					"index element %s of type %s is not indexable in a non-inverted index",
-					col.GetName(),
-					col.GetType().Name(),
-				),
-				"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"),
-			)
-		}
-
 	}
 	for i, colName := range storing {
 		col, err := catalog.MustFindColumnByTreeName(desc, colName)
@@ -560,18 +541,6 @@ func replaceExpressionElemsWithVirtualCols(
 						elem.Expr.String(),
 					),
 					"consider adding a type cast to the expression",
-				)
-			}
-
-			if typ.Family() == types.JsonFamily && !version.IsActive(clusterversion.V23_2) {
-				return errors.WithHint(
-					pgerror.Newf(
-						pgcode.InvalidTableDefinition,
-						"index element %s of type %s is not indexable in a non-inverted index",
-						elem.Expr.String(),
-						typ.Name(),
-					),
-					"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"),
 				)
 			}
 
