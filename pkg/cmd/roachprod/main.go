@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/update"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -1587,9 +1587,9 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "check TeamCity for a new roachprod binary and update if available",
-	Long: "Will attempt to download the latest master branch roachprod binary from teamcity" +
-		" and swap the current roachprod with it. The current roachprod binary will be backed up" +
+	Short: "check gs://cockroach-nightly for a new roachprod binary; update if available",
+	Long: "Attempts to download the latest roachprod binary (on master) from gs://cockroach-nightly. " +
+		" Swaps the current binary with it. The current roachprod binary will be backed up" +
 		" and can be restored via `roachprod update --revert`.",
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		currentBinary, err := os.Executable()
@@ -1597,10 +1597,10 @@ var updateCmd = &cobra.Command{
 			return err
 		}
 
-		if revertUpdate {
-			if upgrade.PromptYesNo("Revert to previous version? Note: this will replace the"+
+		if roachprodUpdateRevert {
+			if update.PromptYesNo("Revert to previous version? Note: this will replace the"+
 				" current roachprod binary with a previous roachprod.bak binary.", true /* defaultYes */) {
-				if err := upgrade.SwapBinary(currentBinary, currentBinary+".bak"); err != nil {
+				if err := update.SwapBinary(currentBinary, currentBinary+".bak"); err != nil {
 					return err
 				}
 				fmt.Println("roachprod successfully reverted, run `roachprod -v` to confirm.")
@@ -1609,12 +1609,12 @@ var updateCmd = &cobra.Command{
 		}
 
 		newBinary := currentBinary + ".new"
-		if err := upgrade.DownloadLatestRoadprod(newBinary); err != nil {
+		if err := update.DownloadLatestRoachprod(newBinary, roachprodUpdateBranch, roachprodUpdateOS, roachprodUpdateArch); err != nil {
 			return err
 		}
 
-		if upgrade.PromptYesNo("Continue with update? This will overwrite any existing roachprod.bak binary.", true /* defaultYes */) {
-			if err := upgrade.SwapBinary(currentBinary, newBinary); err != nil {
+		if update.PromptYesNo("Continue with update? This will overwrite any existing roachprod.bak binary.", true /* defaultYes */) {
+			if err := update.SwapBinary(currentBinary, newBinary); err != nil {
 				return errors.WithDetail(err, "unable to update binary")
 			}
 
@@ -1723,7 +1723,7 @@ var sshKeysRemoveCmd = &cobra.Command{
 			return err
 		}
 
-		if upgrade.PromptYesNo("Are you sure?", false /* defaultYes */) {
+		if update.PromptYesNo("Are you sure?", false /* defaultYes */) {
 			fmt.Printf("Deleting %d keys belonging to %s...\n", len(toBeDeleted), user)
 			return gce.SetUserAuthorizedKeys(newKeys)
 		} else {
@@ -1896,6 +1896,18 @@ Node specification
 	if err := roachprod.LoadClusters(); err != nil {
 		// We don't want to exit as we may be looking at the help message.
 		fmt.Printf("problem loading clusters: %s\n", err)
+	}
+
+	updateTime, sha, err := update.CheckLatest(roachprodUpdateBranch, roachprodUpdateOS, roachprodUpdateArch)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "WARN: failed to check if a more recent 'roachprod' binary exists: %s\n", err)
+	} else {
+		age, err := update.TimeSinceUpdate(updateTime)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: unable to check mtime of 'roachprod' binary: %s\n", err)
+		} else if age.Hours() >= 14*24 {
+			fmt.Fprintf(os.Stderr, "WARN: roachprod binary is >= 2 weeks old (%s); latest sha: %q\nWARN: Consider updating the binary: `roachprod update`\n\n", age, sha)
+		}
 	}
 
 	if err := rootCmd.Execute(); err != nil {
