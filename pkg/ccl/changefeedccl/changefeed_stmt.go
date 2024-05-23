@@ -742,7 +742,7 @@ func validateSettings(ctx context.Context, p sql.PlanHookState) error {
 	// requires the `kv.rangefeed.enabled` setting to be true.
 	if !kvserver.RangefeedEnabled.Get(&p.ExecCfg().Settings.SV) {
 		return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
-			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
+			docs.URL(`create-and-configure-changefeeds.html#enable-rangefeeds`))
 	}
 
 	return nil
