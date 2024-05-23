@@ -400,16 +400,18 @@ func (p *Provider) GetHostErrorVMs(
 	return hostErrorVMs, nil
 }
 
-// GetVMSpecs returns a json list of VM specs, provided by GCE
-func (p *Provider) GetVMSpecs(vms vm.List) ([]map[string]interface{}, error) {
+// GetVMSpecs returns a map from VM.Name to a map of VM attributes, provided by GCE
+func (p *Provider) GetVMSpecs(
+	l *logger.Logger, vms vm.List,
+) (map[string]map[string]interface{}, error) {
 	if p.GetProject() == "" {
 		return nil, errors.New("project name cannot be empty")
 	}
 	if vms == nil {
 		return nil, errors.New("vms cannot be nil")
 	}
-	// Extract the spec of all VMs.
-	var vmSpecs []map[string]interface{}
+	// Extract the spec of all VMs and create a map from VM name to spec.
+	vmSpecs := make(map[string]map[string]interface{})
 	for _, vmInstance := range vms {
 		var vmSpec map[string]interface{}
 		vmFullResourceName := "projects/" + p.GetProject() + "/zones/" + vmInstance.Zone + "/instances/" + vmInstance.Name
@@ -418,7 +420,12 @@ func (p *Provider) GetVMSpecs(vms vm.List) ([]map[string]interface{}, error) {
 		if err := runJSONCommand(args, &vmSpec); err != nil {
 			return nil, errors.Wrapf(err, "error describing instance %s in zone %s", vmInstance.Name, vmInstance.Zone)
 		}
-		vmSpecs = append(vmSpecs, vmSpec)
+		name, ok := vmSpec["name"].(string)
+		if !ok {
+			l.Errorf("failed to create spec files for VM\n%v", vmSpec)
+			continue
+		}
+		vmSpecs[name] = vmSpec
 	}
 	return vmSpecs, nil
 }
