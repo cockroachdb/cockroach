@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -363,7 +364,30 @@ func newCopyMachine(
 	// exceed this due to large dynamic values we will bail early and
 	// insert the rows we have so far. Note once the coldata.Batch is full
 	// we still have all the encoder allocations to make.
-	c.maxRowMem = kvserverbase.MaxCommandSize.Get(c.p.execCfg.SV()) / 3
+	//
+	// We also make the fraction depend on the number of indexes in the table
+	// since each secondary index will require a separate InitPut command for
+	// each input row. We want to pick the fraction to be in [0.1, 0.33] range
+	// so that 0.33 is used with no secondary indexes and 0.1 is used with 16 or
+	// more secondary indexes.
+	// TODO(yuzefovich): the choice of 1/3 as the upper bound with no secondary
+	// indexes was made in #98605 via empirical testing. However, it's possible
+	// that the testing was missing the realization that each secondary index
+	// results in a separate KV and was done on TPCH lineitem table (which has 8
+	// secondary indexes), so 1/3 might be actually too conservative.
+	maxCommandFraction := copyMaxCommandSizeFraction.Get(c.p.execCfg.SV())
+	if maxCommandFraction == 0 {
+		maxCommandFraction = 1.0 / 3.0
+		if numIndexes := len(tableDesc.AllIndexes()); numIndexes > 1 {
+			// Each additional secondary index is "penalized" by reducing the
+			// fraction by 1.5%, until 0.1 which is the lower bound.
+			maxCommandFraction -= 0.015 * float64(numIndexes-1)
+			if maxCommandFraction < 0.1 {
+				maxCommandFraction = 0.1
+			}
+		}
+	}
+	c.maxRowMem = int64(float64(kvserverbase.MaxCommandSize.Get(c.p.execCfg.SV())) * maxCommandFraction)
 
 	if c.canSupportVectorized(tableDesc) {
 		if err := c.initVectorizedCopy(ctx, typs); err != nil {
@@ -377,6 +401,16 @@ func newCopyMachine(
 	}
 	return c, nil
 }
+
+var copyMaxCommandSizeFraction = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.copy.fraction_of_max_command_size",
+	"determines the fraction of kv.raft.command.max_size that is used when "+
+		"sizing batches of rows when processing COPY commands. Use 0 for default "+
+		"adaptive strategy that considers number of secondary indexes",
+	0.0,
+	settings.Fraction,
+)
 
 func (c *copyMachine) canSupportVectorized(table catalog.TableDescriptor) bool {
 	// TODO(cucaroach): support vectorized binary.
