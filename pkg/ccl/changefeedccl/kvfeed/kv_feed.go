@@ -662,7 +662,7 @@ func copyFromSourceToDestUntilTableEvent(
 	// Initially, the only copy boundary is the end time if one is specified.
 	// Once we discover a table event (which is before the end time), that will
 	// become the new boundary.
-	var boundary copyBoundary
+	var  	boundary copyBoundary
 	if endTime.IsSet() {
 		boundary = &errEndTimeReached{
 			endTime: endTime,

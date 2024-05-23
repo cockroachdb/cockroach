@@ -1578,9 +1578,12 @@ func registerCDC(r registry.Registry) {
 			//   - might be able to just do webhook sink -> whx -> python
 			//   - doesnt seem to be triggering it but TODO see if i can make it happen there
 			//   - i think i did make it trigger it! :/
+			//     can parallelio reorder buffers??
 			//   - actually i think it was just my order checker that was not checking properly re dupes :/ back to square 1 ig
 			//   - so either my repro is bad and batching sink is broken, or it's not broken and my code is wrong
-			// can parallelio reorder buffers??
+			//   - even the version with sync producers fails kafka-chaos...
+			//   - does the regular kafka sink pass this? is the test ok? looks like it yea
+			//   - HMM i seem to be able to reproduce it by returning transient errors in whxtest...
 
 			// _, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.sink_io_workers = 1;`)
 			// if err != nil {

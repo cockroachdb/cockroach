@@ -117,8 +117,6 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error 
 			return handleErr(err)
 		}
 
-		// // TODO: this is basically just a sarama.SyncProducer. maybe use that?
-
 		// trk := tracker{pendingIDs: make(map[int]struct{})}
 		// for _, m := range msgs {
 		// 	m.Metadata = map[string]any{`id`: trk.next()}
