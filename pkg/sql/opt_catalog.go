@@ -1795,6 +1795,18 @@ func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool
 			return false, nil
 		}
 	}
+	if stat.HistogramData != nil && len(stat.ColumnIDs) == 1 {
+		if histType := stat.HistogramData.ColumnType; histType != nil {
+			colType := tab.getCol(os.columnOrdinals[0]).GetType()
+			if !histType.Equivalent(colType) {
+				// Column type in the histogram differs from column type in the
+				// table. This is only possible if we somehow keep the same column ID
+				// during an ALTER TABLE ALTER COLUMN TYPE statement, which we should
+				// not. Still, never hurts to be defensive.
+				return false, nil
+			}
+		}
+	}
 
 	return true, nil
 }
