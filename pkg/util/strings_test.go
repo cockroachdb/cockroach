@@ -146,7 +146,7 @@ func TestStringListBuilder(t *testing.T) {
 	expect("[one, two]")
 }
 
-func TestCollapseDupeChar(t *testing.T) {
+func TestCollapseRepeatedChar(t *testing.T) {
 	type StringTest struct {
 		ToTest   string
 		DupeChar rune
@@ -160,11 +160,12 @@ func TestCollapseDupeChar(t *testing.T) {
 		{"%%%test1%%%test2%%%test3%%%", '%', "%test1%test2%test3%"},
 		{"I work on ddddddifferent characters", 'd', "I work on different characters"},
 		{"%%%%%%%%tèʂt%", '%', "%tèʂt%"},
-    {"🐛🐛", '🐛', "🐛"},
+		{"%a%b%%c%%d", '%', "%a%b%c%d"},
+		{"🐛🐛", '🐛', "🐛"},
 	}
 
 	for _, test := range tests {
-		result := CollapseDupeChar(test.ToTest, test.DupeChar)
+		result := CollapseRepeatedChar(test.ToTest, test.DupeChar)
 
 		if result != test.Expected {
 			t.Errorf("expected %s but got %s", test.Expected, result)
@@ -172,7 +173,7 @@ func TestCollapseDupeChar(t *testing.T) {
 	}
 }
 
-func BenchmarkCollapseDupeChar(b *testing.B) {
+func BenchmarkCollapseRepeatedChar(b *testing.B) {
 	for _, runFn := range []func(*testing.B){
 		runBenchmarkNoDupe,
 		runBenchmarkSingleDupe,
@@ -195,7 +196,7 @@ func runBenchmarkNoDupe(b *testing.B) {
 	toTest := "%test%"
 
 	for n := 0; n < b.N; n++ {
-		CollapseDupeChar(toTest, '%')
+		CollapseRepeatedChar(toTest, '%')
 	}
 }
 
@@ -203,7 +204,7 @@ func runBenchmarkSingleDupe(b *testing.B) {
 	toTest := "%test%%%%"
 
 	for n := 0; n < b.N; n++ {
-		CollapseDupeChar(toTest, '%')
+		CollapseRepeatedChar(toTest, '%')
 	}
 }
 
@@ -211,7 +212,7 @@ func runBenchmarkMultipleDupe(b *testing.B) {
 	toTest := "%%%%%test%%%%"
 
 	for n := 0; n < b.N; n++ {
-		CollapseDupeChar(toTest, '%')
+		CollapseRepeatedChar(toTest, '%')
 	}
 }
 
@@ -219,6 +220,6 @@ func runBenchmarkSpacedDupe(b *testing.B) {
 	toTest := "%%%spaced%%%dupe%%%"
 
 	for n := 0; n < b.N; n++ {
-		CollapseDupeChar(toTest, '%')
+		CollapseRepeatedChar(toTest, '%')
 	}
 }

@@ -168,11 +168,11 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 	return string(buf)
 }
 
-// CollapseDupeChar will take the given string and given character
+// CollapseRepeatedChar will take the given string and given character
 // and collapse any repeating instances of this character to a
 // single instance.
-// E.g. CollapseDupeChar("wwwhy hello there", 'w') returns "why hello there"
-func CollapseDupeChar(toCollapse string, collapseChar rune) string {
+// E.g. CollapseRepeatedChar("wwwhy hello there", 'w') returns "why hello there"
+func CollapseRepeatedChar(toCollapse string, collapseChar rune) string {
 	// start and end indices denote the subrange of toCollapse
 	start, end := 0, len(toCollapse)-1
 	hasSuffixCollapseChar, hasPrefixcollapseChar := false, false
@@ -186,7 +186,7 @@ func CollapseDupeChar(toCollapse string, collapseChar rune) string {
 		hasPrefixcollapseChar = true
 	}
 	for end >= start {
-		r, w := utf8.DecodeLastRuneInString(toCollapse[:end])
+		r, w := utf8.DecodeLastRuneInString(toCollapse[:end+1])
 		if r != collapseChar {
 			break
 		}
