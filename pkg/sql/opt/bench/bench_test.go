@@ -455,9 +455,10 @@ var queries = [...]benchQuery{
 		args:  []interface{}{"'abc'"},
 	},
 	{
-		name:  "json-insert",
-		query: "INSERT INTO json_table(k, i, j) VALUES ($1, $2, $3)",
-		args:  []interface{}{1, 10, `'{"a": "foo", "b": "bar", "c": [2, 3, "baz", true, false, null]}'`},
+		name:    "json-insert",
+		query:   `INSERT INTO json_table(k, i, j) VALUES (1, 10, '{"a": "foo", "b": "bar", "c": [2, 3, "baz", true, false, null]}')`,
+		args:    []interface{}{},
+		cleanup: "TRUNCATE TABLE json_table",
 	},
 	{
 		name: "batch-insert-one",
