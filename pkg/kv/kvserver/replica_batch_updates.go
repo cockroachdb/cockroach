@@ -186,23 +186,23 @@ func maybeStripInFlightWrites(ba *kvpb.BatchRequest) (*kvpb.BatchRequest, error)
 // like this because they've already acquired timestamp-aware latches.
 func maybeBumpReadTimestampToWriteTimestamp(
 	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
-) bool {
+) (*kvpb.BatchRequest, bool) {
 	if ba.Txn == nil {
-		return false
+		return ba, false
 	}
 	if !ba.CanForwardReadTimestamp {
-		return false
+		return ba, false
 	}
 	if ba.Txn.ReadTimestamp == ba.Txn.WriteTimestamp {
-		return false
+		return ba, false
 	}
 	arg, ok := ba.GetArg(kvpb.EndTxn)
 	if !ok {
-		return false
+		return ba, false
 	}
 	et := arg.(*kvpb.EndTxnRequest)
 	if batcheval.IsEndTxnExceedingDeadline(ba.Txn.WriteTimestamp, et.Deadline) {
-		return false
+		return ba, false
 	}
 	return tryBumpBatchTimestamp(ctx, ba, g, ba.Txn.WriteTimestamp)
 }
@@ -221,17 +221,18 @@ func maybeBumpReadTimestampToWriteTimestamp(
 // not be bumped.
 func tryBumpBatchTimestamp(
 	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard, ts hlc.Timestamp,
-) bool {
+) (*kvpb.BatchRequest, bool) {
 	if g != nil && !g.IsolatedAtLaterTimestamps() {
-		return false
+		return ba, false
 	}
 	if ts.Less(ba.Timestamp) {
 		log.Fatalf(ctx, "trying to bump to %s <= ba.Timestamp: %s", ts, ba.Timestamp)
 	}
 	if ba.Txn == nil {
 		log.VEventf(ctx, 2, "bumping batch timestamp to %s from %s", ts, ba.Timestamp)
+		ba = ba.ShallowCopy()
 		ba.Timestamp = ts
-		return true
+		return ba, true
 	}
 	if ts.Less(ba.Txn.ReadTimestamp) || ts.Less(ba.Txn.WriteTimestamp) {
 		log.Fatalf(ctx, "trying to bump to %s inconsistent with ba.Txn.ReadTimestamp: %s, "+
@@ -239,8 +240,9 @@ func tryBumpBatchTimestamp(
 	}
 	log.VEventf(ctx, 2, "bumping batch timestamp to: %s from read: %s, write: %s",
 		ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
+	ba = ba.ShallowCopy()
 	ba.Txn = ba.Txn.Clone()
 	ba.Txn.BumpReadTimestamp(ts)
 	ba.Timestamp = ba.Txn.ReadTimestamp // Refresh just updated ReadTimestamp
-	return true
+	return ba, true
 }
