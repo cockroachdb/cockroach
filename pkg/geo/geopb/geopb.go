@@ -26,7 +26,7 @@ func (b *SpatialObject) MemSize() uintptr {
 	if bbox := b.BoundingBox; bbox != nil {
 		bboxSize = unsafe.Sizeof(*bbox)
 	}
-	return unsafe.Sizeof(*b) + bboxSize + uintptr(len(b.EWKB))
+	return unsafe.Sizeof(*b) + bboxSize + uintptr(cap(b.EWKB))
 }
 
 // MultiType returns the corresponding multi-type for a shape type, or unset
