@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-source "$(dirname $0)/roachtest_arch_util.sh"
+source $root/build/teamcity/util/roachtest_arch_util.sh
 
 if [ "$#" -eq 0 ]; then
   echo "Builds all bits needed for roachtests and stages them in bin/ and lib/."
@@ -38,6 +38,7 @@ done
 host_arch=$(get_host_arch)
 echo "Host architecture: $host_arch"
 components+=($os/$host_arch/roachtest)
+components+=($os/$host_arch/roachprod)
 components+=($os/$host_arch/libgeos)
 
 # Prepare the bin/ and lib/ directories.
@@ -50,6 +51,7 @@ for comp in $(printf "%s\n" "${components[@]}" | sort -u); do
 done
 
 cp -p bin/roachtest.$os-$host_arch bin/roachtest
+cp -p bin/roachprod.$os-$host_arch bin/roachprod
 # N.B. geos does not support the architecture suffix (see getLibraryExt() in
 # geos.go).
 cp -p lib/libgeos.$os-$host_arch.so lib/libgeos.so

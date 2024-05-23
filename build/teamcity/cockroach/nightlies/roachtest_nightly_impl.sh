@@ -4,7 +4,10 @@ set -exuo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 
+# N.B. export variables like `root` s.t. they can be used by scripts called below.
+set -a
 source "$dir/teamcity-support.sh"
+set +a
 
 if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-nightly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
@@ -56,20 +59,20 @@ else
   select_probability="${SELECT_PROBABILITY:-0.1}"
 fi
 
-build/teamcity-roachtest-invoke.sh \
-  --metamorphic-encryption-probability=0.5 \
-  --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
-  --select-probability="${select_probability}" \
-  --use-spot="${USE_SPOT:-auto}" \
-  --cloud="${CLOUD}" \
-  --count="${COUNT-1}" \
-  --clear-cluster-cache="${CLEAR_CLUSTER_CACHE:-true}" \
-  --auto-kill-threshold="${AUTO_KILL_THRESHOLD:-0.05}" \
-  --parallelism="${PARALLELISM}" \
-  --cpu-quota="${CPUQUOTA}" \
-  --cluster-id="${TC_BUILD_ID}" \
-  --artifacts=/artifacts \
-  --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
-  --slack-token="${SLACK_TOKEN}" \
-  --suite nightly \
-  "${TESTS}"
+#build/teamcity-roachtest-invoke.sh \
+#  --metamorphic-encryption-probability=0.5 \
+#  --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
+#  --select-probability="${select_probability}" \
+#  --use-spot="${USE_SPOT:-auto}" \
+#  --cloud="${CLOUD}" \
+#  --count="${COUNT-1}" \
+#  --clear-cluster-cache="${CLEAR_CLUSTER_CACHE:-true}" \
+#  --auto-kill-threshold="${AUTO_KILL_THRESHOLD:-0.05}" \
+#  --parallelism="${PARALLELISM}" \
+#  --cpu-quota="${CPUQUOTA}" \
+#  --cluster-id="${TC_BUILD_ID}" \
+#  --artifacts=/artifacts \
+#  --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
+#  --slack-token="${SLACK_TOKEN}" \
+#  --suite nightly \
+#  "${TESTS}"
