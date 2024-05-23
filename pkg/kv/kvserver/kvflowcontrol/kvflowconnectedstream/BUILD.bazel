@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kvflowconnectedstream",
@@ -10,12 +10,20 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontroller",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker",
+        "//pkg/kv/kvserver/kvserverpb",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "//pkg/roachpb",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/syncutil",
     ],
+)
+
+go_test(
+    name = "kvflowconnectedstream_test",
+    srcs = ["stream_test.go"],
+    embed = [":kvflowconnectedstream"],
 )

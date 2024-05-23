@@ -572,7 +572,40 @@ type waitHandle struct {
 	b  *bucket
 }
 
+// Each handle is paired with a stop channel that allows the callee to stop
+// waiting on the handle if stopWaitCh is closed/signaled, when
+// waitForAllNonStoppedHandles is true. This is useful for elastic work that
+// needs a quorum and needs to wait for eval tokens from all connected replica
+// streams.
+type HandleAndStopCh struct {
+	Handle     interface{}
+	StopWaitCh <-chan struct{}
+}
+
+// WaitForHandlesAndChannels ...
+// We always need minNumHandlesToWaitFor, even if the stopWaitCh channels have
+// been closed/signaled. If the replica stream is no longer connected, and
+// then later reconnects, the stopWaitCh will change, but that is ok, since we
+// are simply waiting on the handle.
+//
+// TODO: add identity of leader. We also want a special stopWaitCh across all
+// that is closed if the RangeController is closed, or the leaseholder
+// changes. Also add the identity of the leader or leaseholder since
+// specifically waiting for those eval tokens to be > 0. We will let in a
+// burst if the leaseholder changes, while the local replica is still the
+// leader -- so be it.
 func WaitForHandlesAndChannels(
+	ctx context.Context,
+	stopWaitCh <-chan struct{},
+	minNumHandlesToWaitFor int,
+	waitForAllNonStoppedHandles bool,
+	handleAndStopChSlice []HandleAndStopCh,
+	scratch []reflect.SelectCase,
+) (state WaitEndState, scratch2 []reflect.SelectCase) {
+	return 0, nil
+}
+
+func WaitForHandlesAndChannelsOld(
 	ctx context.Context,
 	stopWaitCh <-chan struct{},
 	numHandlesToWaitFor int,

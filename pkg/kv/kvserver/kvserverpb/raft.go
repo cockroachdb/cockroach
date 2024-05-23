@@ -42,4 +42,4 @@ func (m *SnapshotResponse) Error() (deprecated bool, _ error) {
 	return true, errors.Newf("%s", m.DeprecatedMessage)
 }
 
-const AdmissionPriorityNotOverridden = admissionpb.OneAboveHighPri
+const AdmissionPriorityNotOverridden = admissionpb.UnusedPri
