@@ -2917,7 +2917,7 @@ prepared_statements_cache_size                             0 B                 N
 propagate_input_ordering                                   off                 NULL      NULL        NULL        string
 reorder_joins_limit                                        8                   NULL      NULL        NULL        string
 require_explicit_primary_keys                              off                 NULL      NULL        NULL        string
-results_buffer_size                                        16384               NULL      NULL        NULL        string
+results_buffer_size                                        524288              NULL      NULL        NULL        string
 role                                                       none                NULL      NULL        NULL        string
 row_security                                               off                 NULL      NULL        NULL        string
 search_path                                                "$user", public     NULL      NULL        NULL        string
@@ -3102,7 +3102,7 @@ prepared_statements_cache_size                             0 B                 N
 propagate_input_ordering                                   off                 NULL  user     NULL      off                 off
 reorder_joins_limit                                        8                   NULL  user     NULL      8                   8
 require_explicit_primary_keys                              off                 NULL  user     NULL      off                 off
-results_buffer_size                                        16384               NULL  user     NULL      16384               16384
+results_buffer_size                                        524288              NULL  user     NULL      524288              524288
 role                                                       none                NULL  user     NULL      none                none
 row_security                                               off                 NULL  user     NULL      off                 off
 search_path                                                "$user", public     NULL  user     NULL      "$user", public     "$user", public
