@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -532,7 +533,11 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// Note that spansToRequests below might modify spans, so we need to log the
 	// spans before that.
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "Scan %s", f.spans.BoundedString(1024 /* bytesHint */))
+		lockStr := ""
+		if f.lockStrength != lock.None {
+			lockStr = fmt.Sprintf(" lock %s (%s, %s)", f.lockStrength.String(), f.lockWaitPolicy.String(), f.lockDurability.String())
+		}
+		log.VEventf(ctx, 2, "Scan %s%s", f.spans.BoundedString(1024 /* bytesHint */), lockStr)
 	}
 
 	ba := &kvpb.BatchRequest{}
