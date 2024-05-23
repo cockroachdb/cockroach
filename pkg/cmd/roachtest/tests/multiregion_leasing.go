@@ -230,7 +230,7 @@ func registerSchemaChangeMultiRegionBenchmarkLeasing(r registry.Registry) {
 			spec.GCEZones("us-west1-b,us-east1-b,australia-southeast1-a"),
 			spec.AWSZones("us-east-1a,us-west-2b,ap-southeast-2b"),
 		),
-		CompatibleClouds: registry.AllExceptLocal,
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.AWS),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.DefaultLeases,
 		Timeout:          2 * time.Hour,

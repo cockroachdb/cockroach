@@ -266,3 +266,18 @@ func AWSZones(zones string) Option {
 		spec.AWS.Zones = zones
 	}
 }
+
+// AzureZones is a node option which requests Geo-distributed nodes; only applies
+// when the test runs on Azure.
+//
+// Note that this overrides the --zones flag and is useful for tests that
+// require running on specific zones.
+//
+// TODO(darrylwong): Something is not quite right when creating
+// zones that have overlapping address spaces, i.e. eastus and westus.
+// See: https://github.com/cockroachdb/cockroach/issues/124612
+func AzureZones(zones string) Option {
+	return func(spec *ClusterSpec) {
+		spec.Azure.Zones = zones
+	}
+}
