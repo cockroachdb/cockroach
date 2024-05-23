@@ -12,10 +12,13 @@ package kvflowconnectedstream
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -143,7 +146,7 @@ type ReplicaSet map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
 
 type RangeController interface {
 	// WaitForEval is called concurrently by all requests wanting to evaluate.
-	WaitForEval(ctx context.Context) error
+	WaitForEval(ctx context.Context, pri admissionpb.WorkPriority) error
 	// HandleRaftEvent will be called from handleRaftReadyRaftMuLocked, including
 	// the case of snapshot application.
 	HandleRaftEvent(e RaftEvent) error
@@ -203,14 +206,30 @@ type RaftEvent interface {
 // entries that are already in-flight for that follower, and have been nacked,
 // (b) empty MsgApps to ping the follower. Next is only advanced via pull,
 // which is serviced via RaftInterface. In a sense, there is a NextUpperBound
-// maintained by Raft, that never regresses -- it advances whenever
-// RaftInterface.MakeMsgApp is called. And everything in (Match,
+// maintained by Raft, that never regresses in StateReplicate -- it advances
+// whenever RaftInterface.MakeMsgApp is called. And everything in (Match,
 // NextUpperBound) is the responsibility of Raft to retry. The existing notion
 // of Next is protocol state internal to raft, regarding what to retry
-// sending.
+// sending. NextUpperBound can regress if the replica transitions out of
+// StateReplicate, and back into StateReplicate.
 //
 // The Ready described here is only the subset that is needed by replication
 // AC -- heartbeats, appending to the local log etc. are not relevant.
+//
+// Ready must be called on every tick/ready of Raft since we cannot tolerate
+// state transitions from
+//
+// StateReplicate => {state in all states: state != StateReplicate} =>
+// StateReplicate
+//
+// that is not observed by RangeController. Since outgoing messages are sent
+// in the tick/ready handling and a return from the intermediate state to
+// StateReplicate relies on receiving responses to those outgoing messages, we
+// should not miss any transitions. If stale messages received in a step can
+// cause transitions out and back without observation, we can add a monotonic
+// counter for each follower inside Raft (this is just local state at the
+// leader), which will be incremented on every state transition and expose
+// that via the RaftInterface.
 type Ready interface {
 	// Entries represents the new entries that are being added to the log.
 	// This may be empty.
@@ -266,13 +285,19 @@ type RaftInterface interface {
 	// (a), we plan to remove follower pausing. So the v2 code will be
 	// simplified.
 	FollowerState(replicaID roachpb.ReplicaID) (state tracker.StateType, nextUpperBound uint64)
-	FollowerConnected(storeID roachpb.StoreID) bool
+	FollowerTransportConnected(storeID roachpb.StoreID) bool
 	// HighestEntryIndex is the highest index assigned in the log, and produced
 	// in Ready.Entries(). If there have been no entries produced, since this
 	// replica became the leader, this is the commit index.
 	HighestEntryIndex() uint64
 	// MakeMsgApp is used to construct a MsgApp for entries in [start, end).
 	// REQUIRES: start == nextUpperBound and replicaID is in StateReplicate.
+	// REQUIRES: maxSize > 0.
+	//
+	// If the sum of all entries in [start,end) are <= maxSize, all will be
+	// returned. Else, entries will be returned until, and including, the first
+	// entry that causes maxSize to be equaled or exceeded. This implies at
+	// least one entry will be returned in the MsgApp on success.
 	//
 	// Returns raft.ErrCompacted error if log truncated. If no error,
 	// nextUpperBound is advanced to be equal to end. If raft.ErrCompacted is
@@ -330,16 +355,214 @@ type RangeControllerImpl struct {
 	replicas    ReplicaSet
 	leaseholder roachpb.ReplicaID
 
-	// How do I wait for positive tokens from a quorum.
+	voterSets  []voterSet
+	replicaMap map[roachpb.ReplicaID]*replicaStream
+
+	// Scheduled work.
 }
 
-// var _ RangeController = &RangeControllerImpl{}
+type voterSet []roachpb.ReplicaID
+
+var _ RangeController = &RangeControllerImpl{}
+
+func (rc *RangeControllerImpl) WaitForEval(
+	ctx context.Context, pri admissionpb.WorkPriority,
+) error {
+	// TODO: optimize allocations by having arrays for scratch space that we use
+	// for handles and slices.
+	wc := admissionpb.WorkClassFromPri(pri)
+	waitForAllNonStoppedHandles := false
+	if wc == admissionpb.ElasticWorkClass {
+		waitForAllNonStoppedHandles = true
+	}
+	// Need to gather all voters, even if disconnected.
+	// Also gather the ones that ...
+	for _, vs := range rc.voterSets {
+		quorumCount := (len(vs) + 2) / 2
+		haveEvalTokensCount := 0
+		var handleAndSoftDisconnectedChSlice []kvflowcontroller.HandleAndStopCh
+		for _, r := range vs {
+			rs := rc.replicaMap[r]
+			available, handle := rs.evalTokenCounter.TokensAvailable(wc)
+			if available {
+				haveEvalTokensCount++
+				continue
+			}
+			// Don't have eval tokens, and have a handle.
+			var softDisconnectedCh chan struct{}
+			if rs.replicateStream != nil && rs.replicateStream.isConnected() {
+				softDisconnectedCh = rs.replicateStream.softDisconnectedCh
+			}
+			handleAndSoftDisconnectedChSlice = append(handleAndSoftDisconnectedChSlice, kvflowcontroller.HandleAndStopCh{
+				Handle:     handle,
+				StopWaitCh: softDisconnectedCh,
+			})
+		}
+		remainingForQuorum := quorumCount - haveEvalTokensCount
+		if wc == admissionpb.RegularWorkClass && remainingForQuorum <= 0 {
+			continue
+		}
+		if remainingForQuorum < 0 {
+			remainingForQuorum = 0
+		}
+		waitEndState, _ := kvflowcontroller.WaitForHandlesAndChannels(
+			ctx, nil /*TODO*/, remainingForQuorum, waitForAllNonStoppedHandles, handleAndSoftDisconnectedChSlice, nil)
+		if waitEndState == kvflowcontroller.ContextCanceled {
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
+func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
+	// Refresh the replicaStreams.
+	nextRaftIndex := rc.opts.RaftInterface.HighestEntryIndex() + 1
+	for r, rs := range rc.replicaMap {
+		if rs.replicateStream == nil {
+			state, nextUB := rc.opts.RaftInterface.FollowerState(r)
+			if state == tracker.StateReplicate {
+				// Need to create a replicateStream
+				indexToSend := nextUB
+				rsInitState := replicateStreamInitState{
+					isConnected:   rc.opts.RaftInterface.FollowerTransportConnected(rs.desc.StoreID),
+					indexToSend:   indexToSend,
+					nextRaftIndex: nextRaftIndex,
+					// TODO: these need to be based on some history observed by RangeControllerImpl.
+					approxMaxPriority:   admissionpb.NormalPri,
+					approxMeanSizeBytes: 1000,
+				}
+				rs.replicateStream = newReplicateStream(rsInitState)
+				// TODO: check if send-queue is non-empty and generate some MsgApps if
+				// permitted. Queue up more work, or notification when send tokens are
+				// available.
+				//
+				// TODO: Doing this can cause a transition to StateSnapshot. Need to handle it here.
+			}
+		} else if !rs.replicateStream.isConnected() &&
+			rc.opts.RaftInterface.FollowerTransportConnected(rs.desc.StoreID) {
+			rs.replicateStream.setConnectedState(true, false)
+			// TODO: check if send-queue is non-empty and generate some MsgApps if
+			// permitted. Queue up more work, or notification when send tokens are
+			// available.
+			//
+			// TODO: Doing this can cause a transition to StateSnapshot. Need to handle it here.
+		}
+	}
+	ready := e.Ready()
+	if ready == nil {
+		return nil
+	}
+	// Send the MsgApps we have been asked to send. Note that these may cause
+	// queueing up in Replica.addUnreachableRemoteReplica, but those will be
+	// handed to Raft later, so this act will not cause a transition from
+	// StateReplicate => StateProbe.
+	msgApps := ready.RetransmitMsgApps()
+	for i := range msgApps {
+		rc.opts.SendRaftMessage(
+			context.TODO(), admissionpb.WorkPriority(kvserverpb.AdmissionPriorityNotOverridden), msgApps[i])
+	}
+
+	entries := ready.Entries()
+	if len(entries) == 0 {
+		return nil
+	}
+	// These are the only things we want to handle here. If someone has a
+	// send-queue of existing entries, they are already trying to slowly
+	// eliminate it...
+	for r, rs := range rc.replicaMap {
+		if r == rc.opts.ReplicaID {
+			// Local replica, which is the leader.
+			for i := range entries {
+				entryFCState := getFlowControlState(entries[i])
+				rs.replicateStream.advanceNextRaftIndexAndSent(entryFCState)
+			}
+			continue
+		}
+		if rs.replicateStream == nil {
+			continue
+		}
+		if rs.replicateStream.isEmptySendQueue() {
+			// Consider sending.
+			// If leaseholder just send.
+			isLeaseholder := r == rc.leaseholder
+			from := entries[0].Index
+			// [from, to) is what we will send.
+			to := entries[0].Index
+			toFinalized := false
+			for i := range entries {
+				entryFCState := getFlowControlState(entries[i])
+				wc := admissionpb.WorkClassFromPri(entryFCState.priority)
+				if toFinalized {
+					rs.replicateStream.advanceNextRaftIndexAndQueued(entryFCState)
+					continue
+				}
+				send := false
+				if isLeaseholder {
+					rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
+					send = true
+				} else {
+					tokens := rs.sendTokenCounter.TryDeduct(context.TODO(), wc, entryFCState.tokens)
+					if tokens > 0 {
+						send = true
+						if tokens < entryFCState.tokens {
+							toFinalized = true
+							rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens-tokens)
+						}
+					}
+				}
+				if send {
+					to++
+					rs.replicateStream.advanceNextRaftIndexAndSent(entryFCState)
+				} else {
+					toFinalized = true
+					rs.replicateStream.advanceNextRaftIndexAndQueued(entryFCState)
+				}
+			}
+			if to > from {
+				// Have deducted the send tokens. Proceed to send.
+				msg, err := rc.opts.RaftInterface.MakeMsgApp(r, from, to, math.MaxInt64)
+				if err != nil {
+					panic("in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated")
+				}
+				rc.opts.SendRaftMessage(
+					context.TODO(), admissionpb.WorkPriority(kvserverpb.AdmissionPriorityNotOverridden), msg)
+			}
+		}
+	}
+	return nil
+}
+
+type entryFlowControlState struct {
+	index           uint64
+	usesFlowControl bool
+	priority        admissionpb.WorkPriority
+	tokens          kvflowcontrol.Tokens
+}
+
+func getFlowControlState(entry raftpb.Entry) entryFlowControlState {
+	// TODO:
+	return entryFlowControlState{}
+}
+
+func (rc *RangeControllerImpl) HandleControllerSchedulerEvent() error {
+	return nil
+}
+func (rc *RangeControllerImpl) SetReplicas(replicas ReplicaSet) error {
+	return nil
+}
+func (rc *RangeControllerImpl) SetLeaseholder(replica roachpb.ReplicaID) {
+
+}
+func (rc *RangeControllerImpl) TransportDisconnected(replica roachpb.ReplicaID) {
+
+}
+func (rc *RangeControllerImpl) Close() {
+
+}
 
 // connectedStream is per replica to which we are replicating to. These are contained
 // inside RangeController.
-type connectedStreamOptions struct {
-	// Immutable for the lifetime of the connectedStream.
-
+type replicaStreamOptions struct {
 	// storeStream aggregates across the streams for the same (tenant, store).
 	// This is the identity that is used to deduct tokens or wait for tokens to
 	// be positive.
@@ -349,11 +572,10 @@ type connectedStreamOptions struct {
 	// This will actually be the RangeControllerImpl, since the RangeController
 	// interface is only for external integration.
 	RangeController
-	// isLocal is true for the local replica.
-	isLocal bool
+}
 
-	// Initial state at the time of creation.
-
+type replicateStreamInitState struct {
+	isConnected bool
 	// [indexToSend, nextRaftIndex) are known to the (local) leader and need to be sent
 	// to this replica. This is the initial send-queue.
 	//
@@ -366,14 +588,52 @@ type connectedStreamOptions struct {
 	approxMeanSizeBytes int
 }
 
+type replicaStream struct {
+	evalTokenCounter EvalTokenCounter
+	sendTokenCounter SendTokenCounter
+	desc             roachpb.ReplicaDescriptor
+	replicateStream  *replicateStream
+}
+
+// replicateStream is the state for replicas in StateReplicate. We need to maintain
+// a send-queue for them. We may return some tokens if a connection breaks but
+// still want to keep them in StateReplicate? For elastic work this may not be
+// great? Well, we can close the ch, and replace it with a new channel.
+// We should keep the state of priority etc. in the send-queue. Yes, this is principled.
+//
+// If Entries pop out and we have not checked whether the stream is connected, we may
+// not construct MsgApps, even though the RaftTransport has some buffering. And the
+// RaftTransport may reconnect before the next ready/tick. So it is good to have some
+// buffer. Consider sending until it returns false, even if the transport is closed.
+// Then consider the stream truly disconnected.
+//
+// So this is a replica-stream. Soft-down when disconnect notified. Up when
+// known to be connected. Hard-down if soft-down and send returns false. If we
+// stop evaluating because have to wait for hard-down then we have a problem
+// in that may never feed something to switch to hard-down.
+// So keep feeding until hard-down. And remove from elastic wait when soft-down.
+// If circuit-breaker does not trip too bad. When soft-down, those messages not
+// subject to AC since not tracking them on the sender.
+//
+// **what is the channel situation in soft-down** Close and replace channel.
+//
+// TODO: replicateStream could also encompass StateSnapshot, when transitioned
+// from StateReplicate to StateSnapshot. The problem is that indexToSend can
+// will need to advance. We also want to eventually use the mediation of
+// tracker on when to send snapshot. So overall we should encompass
+// StateSnapshot.
+//
+// "breaker will open in 3-6 seconds after no more TCP packets are flowing. If
+// we assume 6 seconds, then that is ~1600 messages/second."
+//
 // TODO: the fields are incomplete.
-type connectedStream struct {
-	stream       kvflowcontrol.Stream
-	ch           chan struct{}
-	disconnected int32
-	// TODO: since streamOptions is a mix of immutable and mutable state, don't
-	// keep a full copy, since it is error prone.
-	o connectedStreamOptions
+type replicateStream struct {
+
+	// TODO: synchronization.
+	mu syncutil.Mutex
+
+	softDisconnectedCh chan struct{}
+	connectedState     connectedState
 
 	tracker kvflowtokentracker.Tracker
 
@@ -392,6 +652,95 @@ type connectedStream struct {
 	evalTokensDeducted [admissionpb.NumWorkClasses]int64
 	// Initially -1. Set to index of first call to advanceNextRaftIndex.
 	evalIndexDeductedLowerBound int64
+}
+
+func newReplicateStream(initState replicateStreamInitState) *replicateStream {
+	// TODO
+	return nil
+}
+
+func (rc *replicateStream) advanceNextRaftIndexAndSent(state entryFlowControlState) {
+	// Will deduct eval tokens
+	// Account for in tracker.
+	// Deduct send tokens.
+}
+
+func (rc *replicateStream) advanceNextRaftIndexAndQueued(entryFlowControlState) {
+	// Will deduct eval tokens.
+	// If not have an outstanding notification, register one
+}
+
+func (rc *replicateStream) isEmptySendQueue() bool {
+	// TODO
+	return false
+}
+
+type connectedState uint32
+
+// Additional connectivity state in StateReplicate.
+//
+// Local replicas are always in state connected.
+//
+// Initial state for a replicateStream is either connected or
+// softDisconnected, depending on whether FollowerTransportConnected returns
+// true or false. Transport stream closure is immediately notified
+// (TransportDisconnected), but the reconnection is only learnt about when
+// polling FollowerTransportConnected (which happens in a HandleRaftEvent).
+// The transport stream closure transitions connected => softDisconnected.
+// FollowerTransportConnected polling transitions from softDisconnected state
+// to connected. In softDisconnected state, and if the send-queue was already
+// empty, we continue to send MsgApps if send-tokens are available, since
+// there is buffering capacity in the RaftTransport, which allows for some
+// buffering and immediate sending when the RaftTransport reconnects (which
+// may happen before the next HandleRaftEvent), which is desirable.
+// Unfortunately we cannot do any flow token accounting in this state, since
+// those tokens may be lossy. The first false return value from
+// SendRaftMessage in softDisconnected will also trigger a notification to
+// Raft that the replica is unreachable (see Replica.sendRaftMessage calling
+// Replica.addUnreachableRemoteReplica), and that raftpb.MsgUnreachable will
+// cause the transition out of StateReplicate to StateProbe. The false return
+// value happens either when the (generous) RaftTransport buffer is full, or
+// when the circuit breaker opens. The circuit breaker opens 3-6s after no
+// more TCP packets are flowing, so we can send about 6s of messages without
+// flow control accounting, which is considered acceptable.
+//
+// In state softDisconnected, we do not wait on eval tokens for this stream
+// for elastic work. If we waited for eval tokens and the eval tokens are
+// negative due to some other replica, we may not evaluate new work, which
+// means we would not call SendRaftMessage hence never triggering the
+// transition to StateProbe. That would unnecessarily stop elastic work when a
+// node is down.
+//
+// We call this state softDisconnected since MsgApps are still being generated.
+//
+// Initial states: {connected, softDisconnected}
+// State transitions:
+//
+//	connected => softDisconnected
+//	softDisconnected => connected
+//	* => replicateStream closed
+const (
+	connected connectedState = iota
+	softDisconnected
+)
+
+func (rs *replicateStream) isConnected() bool {
+	return rs.connectedState == connected
+}
+
+func (rs *replicateStream) setConnectedState(isConnected bool, init bool) {
+	if isConnected {
+		if init || rs.connectedState != connected {
+			rs.softDisconnectedCh = make(chan struct{})
+			rs.connectedState = connected
+		}
+	} else {
+		if init || rs.connectedState == connected {
+			close(rs.softDisconnectedCh)
+			rs.softDisconnectedCh = nil
+			rs.connectedState = softDisconnected
+		}
+	}
 }
 
 // TODO: will need the Disconnected channel like in kvflowcontrol.ConnectedStream, so
@@ -445,4 +794,36 @@ type cstream interface {
 	snapshotApplied(snapIndex uint64)
 	// The connected-stream is being closed. Return all tokens.
 	close()
+}
+
+func replicaSetToVoterSets(replicaSet ReplicaSet) (voterSets []voterSet) {
+	setCount := 1
+	for _, r := range replicaSet {
+		isOld := r.IsVoterOldConfig()
+		isNew := r.IsVoterNewConfig()
+		if !isOld && !isNew {
+			continue
+		}
+		if !isOld && isNew {
+			setCount++
+			break
+		}
+	}
+	for len(voterSets) < setCount {
+		voterSets = append(voterSets, voterSet{})
+	}
+	for _, r := range replicaSet {
+		isOld := r.IsVoterOldConfig()
+		isNew := r.IsVoterNewConfig()
+		if !isOld && !isNew {
+			continue
+		}
+		if isOld {
+			voterSets[0] = append(voterSets[0], r.ReplicaID)
+		}
+		if isNew && setCount == 2 {
+			voterSets[1] = append(voterSets[1], r.ReplicaID)
+		}
+	}
+	return voterSets
 }

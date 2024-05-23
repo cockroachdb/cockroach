@@ -36,6 +36,7 @@ const (
 	BulkNormalPri WorkPriority = -30
 	// NormalPri is normal priority work.
 	NormalPri WorkPriority = 0
+	UnusedPri WorkPriority = 1
 	// LockingNormalPri is used for user normal priority transactions that are
 	// acquiring locks.
 	LockingNormalPri WorkPriority = 10
