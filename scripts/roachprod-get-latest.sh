@@ -1,31 +1,37 @@
 #!/usr/bin/env bash
 
-#Downloads the latest roachprod binary from teamcity to the specified directory
+# Downloads the _latest_ roachprod binary (on master) from GCS to the specified directory
 # or the current directory if none is specified.
-# This does NOT use the TeamCity REST API, but rather a direct download link for the latest successful build
-# for the current platform.
+# Assumes that you have gsutil installed and authenticated; see [1] for those details.
+#
+# The specified directory, release branch, OS and CPU architecture are optional arguments. They can be overridden by
+# simultaneously specifying _all_ in the described order.
+#
+# [1] https://cockroachlabs.atlassian.net/wiki/spaces/TE/pages/144408811/Roachprod+Tutorial
 
-TC_BASE="https://teamcity.cockroachdb.com/repository/download"
-TC_ARTIFACT_PATH="latest.lastSuccessful/bazel-bin/pkg/cmd/roachprod/roachprod_/roachprod"
+DEFAULT_BRANCH="master"
+DEFAULT_OS=$(uname | tr '[:upper:]' '[:lower:]')
+DEFAULT_ARCH=$(arch | tr '[:upper:]' '[:lower:]')
+BUCKET="cockroach-nightly"
 
-OS=$(uname | tr '[:upper:]' '[:lower:]')
-ARCH=$(arch | tr '[:upper:]' '[:lower:]')
-
-dest_dir=${1:-.}
-dest_file="$dest_dir/roachprod"
+DEST_DIR=${1:-.}
+DEST_FILE="$DEST_DIR/roachprod"
+BRANCH=${2:-$DEFAULT_BRANCH}
+OS=${3:-$DEFAULT_OS}
+ARCH=${4:-$DEFAULT_ARCH}
 
 build_for_plat() {
   plat="$OS-$ARCH"
-  if [ "$plat" = "linux-aarch64" ]; then
-    echo "Cockroach_UnitTests_BazelBuildLinuxArmCross"
-  elif [ "$plat" = "linux-x86_64" ]; then
-    echo "Cockroach_Ci_Builds_BuildLinuxX8664"
+  if [ "$plat" = "linux-aarch64" ] || [ "$plat" = "linux-arm64" ]; then
+    echo "linux/arm64"
+  elif [ "$plat" = "linux-x86_64" ] || [ "$plat" = "linux-amd64" ]; then
+    echo "linux/amd64"
   elif [ "$plat" = "darwin-arm64" ]; then
-    echo "Cockroach_Ci_Builds_BuildMacOSArm64"
+    echo "darwin/arm64"
   elif [ "$plat" = "darwin-x86_64" ]; then
-    echo "Cockroach_UnitTests_BazelBuildMacOSCross"
+    echo "darwin/amd64"
   else
-    echo "No build for $PLAT"
+    echo "No available 'roachprod' binary for your OS/CPU: $PLAT"
     exit 1
   fi
 }
@@ -36,14 +42,26 @@ prompt_to_overwrite() {
   [[ $REPLY =~ ^[Yy]$ ]]
 }
 
-build=$(build_for_plat)
-URL="$TC_BASE/$build/$TC_ARTIFACT_PATH"
+BUILD=$(build_for_plat)
+URL_PREFIX="gs://$BUCKET/binaries/$BRANCH/$BUILD"
+LATEST_SHA=$(gsutil cat "${URL_PREFIX}/latest_sha")
+
+# error out if LASTEST_SHA is empty
+if [ -z "$LATEST_SHA" ]; then
+  echo "No latest SHA found for $BUILD. (Debugging hint: check the GCS bucket at $URL_PREFIX)"
+  exit 1
+fi
+
+URL="${URL_PREFIX}/roachprod.$LATEST_SHA"
+echo "Found latest SHA: $LATEST_SHA"
+
 echo "Download URL: $URL"
-if command -v curl &> /dev/null; then
-  if [[ ! -f "$dest_file" ]] || prompt_to_overwrite; then
-    curl -L -o "$dest_file" -# -u guest: "$URL"
-    chmod +x "$dest_file"
+if command -v gsutil &> /dev/null; then
+  if [[ ! -f "$DEST_FILE" ]] || prompt_to_overwrite; then
+    gsutil cp "$URL" "$DEST_FILE"
+    chmod +x "$DEST_FILE"
   fi
 else
-  echo "curl is not installed. roachprod can be manually downloaded"
+  echo "gsutil is not installed. Consult the wiki: https://cockroachlabs.atlassian.net/wiki/spaces/TE/pages/144408811/Roachprod+Tutorial"
+  exit 1
 fi
