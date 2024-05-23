@@ -2124,3 +2124,14 @@ statement error pgcode 22023 pq: date_trunc\(\): could not parse "No" as time zo
 SELECT date_trunc('day', '4-02-16 20:38:40+00'::timestamptz, 'No');
 
 subtest end
+
+# Regression test for using empty eval.Context in formatting expressions
+# (#97643).
+statement ok
+CREATE TABLE t97643 (c1 STRING, CHECK (parse_time('abc') = parse_time('abc')));
+
+query T rowsort
+SELECT details FROM [SHOW CONSTRAINTS FROM t97643];
+----
+PRIMARY KEY (rowid ASC)
+CHECK ((parse_time('abc'::STRING) = parse_time('abc'::STRING)))

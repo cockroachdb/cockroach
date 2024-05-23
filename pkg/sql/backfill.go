@@ -804,7 +804,7 @@ func (sc *SchemaChanger) validateConstraints(
 				defer func() { collection.ReleaseAll(ctx) }()
 				if ck := c.AsCheck(); ck != nil {
 					if err := validateCheckInTxn(
-						ctx, txn, &semaCtx, evalCtx.SessionData(), desc, ck,
+						ctx, txn, &evalCtx.Context, &semaCtx, evalCtx.SessionData(), desc, ck,
 					); err != nil {
 						return err
 					}
@@ -1555,6 +1555,7 @@ func ValidateConstraint(
 		semaCtx := tree.MakeSemaContext(resolver)
 		semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(txn.Descriptors(), txn.KV())
 		defer func() { txn.Descriptors().ReleaseAll(ctx) }()
+		evalCtx := &eval.Context{}
 
 		switch catalog.GetConstraintType(constraint) {
 		case catconstants.ConstraintTypeCheck:
@@ -1565,8 +1566,10 @@ func ValidateConstraint(
 					if skip, err := canSkipCheckValidation(tableDesc, ck); err != nil || skip {
 						return err
 					}
-					violatingRow, formattedCkExpr, err := validateCheckExpr(ctx, &semaCtx, txn, sessionData, ck.GetExpr(),
-						tableDesc.(*tabledesc.Mutable), indexIDForValidation)
+					violatingRow, formattedCkExpr, err := validateCheckExpr(
+						ctx, evalCtx, &semaCtx, txn, sessionData, ck.GetExpr(),
+						tableDesc.(*tabledesc.Mutable), indexIDForValidation,
+					)
 					if err != nil {
 						return err
 					}
@@ -2578,7 +2581,8 @@ func runSchemaChangesInTxn(
 		if check := c.AsCheck(); check != nil {
 			if check.GetConstraintValidity() == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
-					ctx, planner.InternalSQLTxn(), &planner.semaCtx, planner.SessionData(), tableDesc, check,
+					ctx, planner.InternalSQLTxn(), planner.EvalContext(), &planner.semaCtx,
+					planner.SessionData(), tableDesc, check,
 				); err != nil {
 					return err
 				}
@@ -2675,6 +2679,7 @@ func runSchemaChangesInTxn(
 func validateCheckInTxn(
 	ctx context.Context,
 	txn isql.Txn,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	tableDesc *tabledesc.Mutable,
@@ -2688,8 +2693,10 @@ func validateCheckInTxn(
 	return txn.WithSyntheticDescriptors(
 		syntheticDescs,
 		func() error {
-			violatingRow, formattedCkExpr, err := validateCheckExpr(ctx, semaCtx, txn, sessionData,
-				checkToValidate.GetExpr(), tableDesc, 0 /* indexIDForValidation */)
+			violatingRow, formattedCkExpr, err := validateCheckExpr(
+				ctx, evalCtx, semaCtx, txn, sessionData, checkToValidate.GetExpr(),
+				tableDesc, 0, /* indexIDForValidation */
+			)
 			if err != nil {
 				return err
 			}

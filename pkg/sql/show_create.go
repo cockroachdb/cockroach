@@ -100,7 +100,7 @@ func ShowCreateTable(
 		}
 		f.WriteString("\n\t")
 		colstr, err := schemaexpr.FormatColumnForDisplay(
-			ctx, desc, col, &p.RunParams(ctx).p.semaCtx, p.RunParams(ctx).p.SessionData(),
+			ctx, desc, col, p.EvalContext(), &p.semaCtx, p.SessionData(),
 			displayOptions.RedactableValues,
 		)
 		if err != nil {
@@ -164,8 +164,9 @@ func ShowCreateTable(
 			idx,
 			partitionBuf.String(),
 			fmtFlags,
-			p.RunParams(ctx).p.SemaCtx(),
-			p.RunParams(ctx).p.SessionData(),
+			p.EvalContext(),
+			p.SemaCtx(),
+			p.SessionData(),
 			catformat.IndexDisplayDefOnly,
 		)
 		if err != nil {
@@ -176,7 +177,7 @@ func ShowCreateTable(
 
 	// Create the FAMILY and CONSTRAINTs of the CREATE statement
 	showFamilyClause(desc, f)
-	if err := showConstraintClause(ctx, desc, &p.RunParams(ctx).p.semaCtx, p.RunParams(ctx).p.SessionData(), f); err != nil {
+	if err := showConstraintClause(ctx, desc, p.EvalContext(), &p.semaCtx, p.SessionData(), f); err != nil {
 		return "", err
 	}
 
@@ -238,7 +239,7 @@ func (p *planner) ShowCreate(
 	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.GetName()))
 	if desc.IsView() {
 		return ShowCreateView(
-			ctx, &p.RunParams(ctx).p.semaCtx, p.RunParams(ctx).p.SessionData(), &tn, desc,
+			ctx, p.EvalContext(), &p.semaCtx, p.SessionData(), &tn, desc,
 			displayOptions.RedactableValues,
 		)
 	}

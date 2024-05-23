@@ -3672,7 +3672,7 @@ func createRoutinePopulate(
 			for i := range treeNode.Options {
 				if body, ok := treeNode.Options[i].(tree.RoutineBodyStr); ok {
 					bodyStr := string(body)
-					bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, p.SessionData(), bodyStr, fnDesc.GetLanguage())
+					bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, p.EvalContext(), &p.semaCtx, p.SessionData(), bodyStr, fnDesc.GetLanguage())
 					if err != nil {
 						return err
 					}
@@ -3795,13 +3795,13 @@ CREATE TABLE crdb_internal.create_statements (
 		if table.IsView() {
 			descType = typeView
 			stmt, err = ShowCreateView(
-				ctx, &p.semaCtx, p.SessionData(), &name, table, false, /* redactableValues */
+				ctx, p.EvalContext(), &p.semaCtx, p.SessionData(), &name, table, false, /* redactableValues */
 			)
 			if err != nil {
 				return err
 			}
 			createRedactable, err = ShowCreateView(
-				ctx, &p.semaCtx, p.SessionData(), &name, table, true, /* redactableValues */
+				ctx, p.EvalContext(), &p.semaCtx, p.SessionData(), &name, table, true, /* redactableValues */
 			)
 		} else if table.IsSequence() {
 			descType = typeSequence
@@ -3938,7 +3938,7 @@ CREATE TABLE crdb_internal.table_columns (
 						defStr := tree.DNull
 						if col.HasDefault() {
 							defExpr, err := schemaexpr.FormatExprForDisplay(
-								ctx, table, col.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtParsable,
+								ctx, table, col.GetDefaultExpr(), p.EvalContext(), &p.semaCtx, p.SessionData(), tree.FmtParsable,
 							)
 							if err != nil {
 								return err
@@ -4049,6 +4049,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							idx,
 							partitionBuf.String(),
 							tree.FmtSimple,
+							p.EvalContext(),
 							p.SemaCtx(),
 							p.SessionData(),
 							catformat.IndexDisplayShowCreate,
