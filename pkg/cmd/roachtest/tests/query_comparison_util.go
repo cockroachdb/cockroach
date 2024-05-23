@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/internal/workloadreplay"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -201,21 +202,27 @@ func runOneRoundQueryComparison(
 		var signatures map[string][]string
 
 		for {
-			done := ctx.Done()
-
 			select {
-			case <-done:
+			case <-ctx.Done():
 				return
 			default:
 			}
 
 			t.L().Printf("Choosing Random Query")
-			finalStmt, signatures = workloadreplay.ChooseRandomQuery(ctx, log)
+			finalStmt, signatures, err = workloadreplay.ChooseRandomQuery(ctx, log)
+			if err != nil {
+				// An error here likely denotes an infrastructure issue; i.e., unable to connect to snowflake. Wrapping
+				// it as a transient failure will route the test failure to TestEng, bypassing the (issue) owner.
+				t.Fatal(rperrors.TransientFailure(err, "snowflake connectivity issue"))
+			}
 			if finalStmt == "" {
 				continue
 			}
 			t.L().Printf("Generating Random Data in Snowflake")
-			schemaMap := workloadreplay.CreateRandomDataSnowflake(ctx, signatures, log)
+			schemaMap, err := workloadreplay.CreateRandomDataSnowflake(ctx, signatures, log)
+			if err != nil {
+				t.Fatal(rperrors.TransientFailure(err, "snowflake connectivity issue"))
+			}
 			if schemaMap == nil {
 				continue
 			}
@@ -237,7 +244,7 @@ func runOneRoundQueryComparison(
 				credKey, ok := os.LookupEnv(keyTag)
 				if !ok {
 					t.L().Printf("%s not set\n", keyTag)
-					return
+					t.Fatal(rperrors.TransientFailure(err, "GCE credentials issue"))
 				}
 				encodedKey := b64.StdEncoding.EncodeToString([]byte(credKey))
 				importStr = "IMPORT INTO " + tableName + " (" + schemaInfo[1] + ")\n"
@@ -246,7 +253,7 @@ func runOneRoundQueryComparison(
 				logTest(queryStr, "QUERY_SNOWFLAKE_TO_GCS:")
 				if _, err := conn.Exec(queryStr); err != nil {
 					t.L().Printf("error while inserting rows: %v", err)
-					return
+					t.Fatal(rperrors.TransientFailure(err, "snowflake connectivity issue"))
 				}
 			}
 
