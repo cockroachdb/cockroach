@@ -67,6 +67,9 @@ const (
 	prometheusHostUrlEnv = "COCKROACH_PROM_HOST_URL"
 )
 
+// supportedPromProjects are the projects supported for prometheus target
+var supportedPromProjects = map[string]struct{}{gce.DefaultProject(): {}}
+
 // MalformedClusterNameError is returned when the cluster name passed to Create is invalid.
 type MalformedClusterNameError struct {
 	name        string
@@ -798,7 +801,7 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 	nodeIPPortsMutex := syncutil.RWMutex{}
 	var wg sync.WaitGroup
 	for _, node := range c.Nodes {
-		if c.VMs[node-1].Provider == gce.ProviderName {
+		if _, ok := supportedPromProjects[c.VMs[node-1].Project]; ok && c.VMs[node-1].Provider == gce.ProviderName {
 			wg.Add(1)
 			go func(index int, v vm.VM) {
 				defer wg.Done()
