@@ -1976,6 +1976,23 @@ func (c *clusterImpl) Get(
 	return errors.Wrap(roachprod.Get(ctx, l, c.MakeNodes(opts...), src, dest), "cluster.Get")
 }
 
+// Tail tails files from remote hosts
+func (c *clusterImpl) Tail(
+	ctx context.Context, l *logger.Logger, src string, opts ...option.Option,
+) (stdout io.Reader, stderr io.Reader, err error) {
+	if ctx.Err() != nil {
+		return nil, nil, errors.Wrap(ctx.Err(), "cluster.Get")
+	}
+	c.status(fmt.Sprintf("tailing %v", src))
+	defer c.status("")
+	stdoutRead, stdoutWriter := io.Pipe()
+	stderrRead, stderrWriter := io.Pipe()
+	if err := roachprod.Run(ctx, l, c.MakeNodes(opts...), "", "", false, stdoutWriter, stderrWriter, []string{"tail", "-F", src}, install.RunOptions{}); err != nil {
+		return nil, nil, errors.Wrap(err, "cluster.Tail")
+	}
+	return stdoutRead, stderrRead, nil
+}
+
 // PutString into the specified file on the remote(s).
 func (c *clusterImpl) PutString(
 	ctx context.Context, content, dest string, mode os.FileMode, nodes ...option.Option,

@@ -11,6 +11,7 @@
 package tests
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	cryptorand "crypto/rand"
@@ -59,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -230,8 +232,120 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, webhookPort)
 		m := ct.cluster.NewMonitor(ct.ctx, ct.workloadNode)
 		m.Go(func(ctx context.Context) error {
-			return ct.cluster.RunE(ct.ctx, option.WithNodes(webhookNode), serverExecCmd, rootFolder)
+			var err error
+			for ctx.Done() == nil {
+				if err = ct.cluster.RunE(ct.ctx, option.WithNodes(webhookNode), serverExecCmd, rootFolder); err != nil {
+					ct.t.L().Printf("webhook server died: %v", err)
+				}
+			}
+			return err
 		})
+
+		if args.chaosArgs.validateOrder {
+			m.Go(func(ctx context.Context) error {
+				validators := make(map[string]cdctest.Validator)
+				stdout, _, err := ct.cluster.Tail(ctx, ct.t.L(), fmt.Sprintf("/tmp/webhook-output-%d.jsonl", webhookPort))
+				if err != nil {
+					return err
+				}
+				scanner := bufio.NewScanner(stdout)
+				for scanner.Scan() {
+					type webhookPayload struct {
+						Payload []struct {
+							Key     json.RawMessage `json:"key"`
+							Topic   string          `json:"topic"`
+							Updated string          `json:"updated"`
+						} `json:"payload"`
+						Resolved string `json:"resolved"`
+					}
+					var payload webhookPayload
+					if err := json.Unmarshal(scanner.Bytes(), &payload); err != nil {
+						return err
+					}
+
+					if payload.Resolved != "" {
+						resolved, err := hlc.ParseHLC(payload.Resolved)
+						if err != nil {
+							return err
+						}
+						// TODO: i dont think we can distinguish which topic the resolved is for. should we? idk
+						_ = resolved
+						// validator.NoteResolved("0", resolved)
+						continue
+					}
+					for _, p := range payload.Payload {
+						updated, err := hlc.ParseHLC(p.Updated)
+						if err != nil {
+							return err
+						}
+						if _, ok := validators[p.Topic]; !ok {
+							validators[p.Topic] = cdctest.NewOrderValidator(p.Topic)
+						}
+						validators[p.Topic].NoteRow("0", string(p.Key), scanner.Text(), updated)
+						if len(validators[p.Topic].Failures()) > 0 {
+							return errors.Newf("order validation failed for topic %v: %v", p.Topic, validators[p.Topic].Failures())
+						}
+					}
+				}
+				return scanner.Err()
+			})
+			// for each topic:
+			// start consumer
+			// hook into this guy
+
+		}
+
+		if args.chaosArgs.chaos {
+			ct.mon.Go(func(ctx context.Context) error {
+				period, downTime := 2*time.Minute, 20*time.Second
+				// TODO: pull out into its own think like with kafka
+				stop := func(ctx context.Context) error {
+					deets, err := ct.cluster.RunWithDetails(ctx, ct.logger, option.WithNodes(webhookNode), `bash`, `-c`, `ps aux | grep 'go run webhooks-server' | grep -v grep | awk '{print $2}' | xargs kill`)
+					if err != nil {
+						return err
+					}
+					if len(deets) > 0 {
+						deets[0].Output(true)
+					}
+					return nil
+				}
+				restart := func(ctx context.Context) error { // it will restart on its own actually, as written above
+					return ctx.Err()
+				}
+				return func() error {
+					t := time.NewTicker(period)
+					stopper := ct.doneCh
+					defer t.Stop()
+					for i := 0; ; i++ {
+						select {
+						case <-stopper:
+							return nil
+						case <-ctx.Done():
+							return ctx.Err()
+						case <-t.C:
+						}
+
+						ct.t.L().Printf("webhooks chaos loop iteration %d: stopping", i)
+						if err := stop(ctx); err != nil {
+							return err
+						}
+
+						select {
+						case <-stopper:
+							return nil
+						case <-ctx.Done():
+							return ctx.Err()
+						case <-time.After(downTime):
+						}
+
+						ct.t.L().Printf("webhooks chaos loop iteration %d: restarting", i)
+						if err := restart(ctx); err != nil {
+							return err
+						}
+					}
+				}()
+			})
+		}
 
 		sinkDestHost, err := url.Parse(fmt.Sprintf(`https://%s:%d`, nodeIPs[0], webhookPort))
 		if err != nil {
@@ -248,13 +362,13 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 	case kafkaSink:
 		kafka, _ := setupKafka(ct.ctx, ct.t, ct.cluster, ct.kafkaSinkNode())
 		kafka.mon = ct.mon
-		kafka.validateOrder = args.kafkaArgs.validateOrder
+		kafka.validateOrder = args.chaosArgs.validateOrder
 
 		if err := kafka.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
 			ct.t.Fatal(err)
 		}
 
-		if args.kafkaArgs.kafkaChaos {
+		if args.chaosArgs.chaos {
 			ct.mon.Go(func(ctx context.Context) error {
 				period, downTime := 2*time.Minute, 20*time.Second
 				return kafka.chaosLoop(ctx, period, downTime, ct.doneCh)
@@ -519,14 +633,13 @@ type feedArgs struct {
 	tolerateErrors  bool
 	sinkURIOverride string
 	cdcFeatureFlags
-	kafkaArgs kafkaFeedArgs
+	chaosArgs chaosArgs
 }
 
-// kafkaFeedArgs are args that are specific to kafkaSink changefeeds.
-type kafkaFeedArgs struct {
-	// If kafkaChaos is true, the Kafka cluster will periodically restart
+type chaosArgs struct {
+	// If chaos is true, the Kafka cluster will periodically restart
 	// to simulate unreliability.
-	kafkaChaos bool
+	chaos bool
 	// If validateOrder is set to true, order validators will be created
 	// for each topic to validate the changefeed's ordering guarantees.
 	validateOrder bool
@@ -556,7 +669,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	} else {
 		feedOptions["resolved"] = ""
 	}
-	if args.kafkaArgs.validateOrder {
+	if args.chaosArgs.validateOrder {
 		feedOptions["updated"] = ""
 	}
 
@@ -1377,7 +1490,7 @@ func registerCDC(r registry.Registry) {
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
 				targets:  allTpccTargets,
-				kafkaArgs: kafkaFeedArgs{
+				chaosArgs: chaosArgs{
 					validateOrder: true,
 				},
 				opts: map[string]string{"initial_scan": "'no'"},
@@ -1585,6 +1698,7 @@ func registerCDC(r registry.Registry) {
 			//   - does the regular kafka sink pass this? is the test ok? looks like it yea
 			//   - HMM i seem to be able to reproduce it by returning transient errors in whxtest... implying that batching sink / parallel io have bugs under retry conditions
 			//     - how best to debug that? just output a ton of info about the batches being sent?
+			//     - jk now i can't reproduce it again. fml
 
 			// _, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.sink_io_workers = 1;`)
 			// if err != nil {
@@ -1596,8 +1710,8 @@ func registerCDC(r registry.Registry) {
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
 				targets:  allTpccTargets,
-				kafkaArgs: kafkaFeedArgs{
-					kafkaChaos:    true,
+				chaosArgs: chaosArgs{
+					chaos:         true,
 					validateOrder: true,
 				},
 				opts: map[string]string{"initial_scan": "'no'"},
@@ -1638,8 +1752,8 @@ func registerCDC(r registry.Registry) {
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
 				targets:  []string{"t"},
-				kafkaArgs: kafkaFeedArgs{
-					kafkaChaos:    true,
+				chaosArgs: chaosArgs{
+					chaos:         true,
 					validateOrder: true,
 				},
 				opts: map[string]string{
@@ -1706,7 +1820,7 @@ func registerCDC(r registry.Registry) {
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
 				targets:  allTpccTargets,
-				kafkaArgs: kafkaFeedArgs{
+				chaosArgs: chaosArgs{
 					validateOrder: true,
 				},
 				opts:           map[string]string{"initial_scan": "'no'"},
@@ -1747,7 +1861,7 @@ func registerCDC(r registry.Registry) {
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
 				targets:  allLedgerTargets,
-				kafkaArgs: kafkaFeedArgs{
+				chaosArgs: chaosArgs{
 					validateOrder: true,
 				},
 			})
@@ -1942,6 +2056,55 @@ func registerCDC(r registry.Registry) {
 			ct.waitForWorkload()
 		},
 	})
+
+	r.Add(registry.TestSpec{
+		Name:             "cdc/webhook-chaos",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.ManualOnly,
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			// Consider an installation failure to be a flake which is out of
+			// our control. This should be rare.
+			err := c.Install(ctx, t.L(), ct.webhookSinkNode(), "go")
+			if err != nil {
+				t.Skip(err)
+			}
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+
+			// The deprecated webhook sink is unable to handle the throughput required for 100 warehouses
+			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.new_webhook_sink_enabled = true;"); err != nil {
+				ct.t.Fatal(err)
+			}
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: webhookSink,
+				targets:  allTpccTargets,
+				chaosArgs: chaosArgs{
+					chaos:         true,
+					validateOrder: true,
+				},
+				opts: map[string]string{
+					"metrics_label":       "'webhook'",
+					"webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
+				},
+			})
+
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+			})
+
+			ct.waitForWorkload()
+		},
+	})
+
 	r.Add(registry.TestSpec{
 		Name:             "cdc/kafka-auth",
 		Owner:            `cdc`,
@@ -2347,13 +2510,28 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
+	"runtime"
 )
 
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
+	runtime.GOMAXPROCS(1)
+	out, err := os.Create("/tmp/webhook-output-%d.jsonl")
+	if err != nil {
+		log.Fatalf("failed to create output file")
+	}
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		b := strings.Builder{}
+		if _, err := io.Copy(&b, r.Body); err != nil {
+			log.Fatalf("failed to read request body")
+		}
+		if _, err := out.WriteString(b.String() + "\n"); err != nil {
+			log.Fatalf("failed to write to output file")
+		}
+	})
 	log.Fatal(http.ListenAndServeTLS(":%d",  "/home/ubuntu/cert.pem",  "/home/ubuntu/key.pem", nil))
 }
-`, port)
+`, port, port)
 }
 
 var hydraServerStartScript = `
