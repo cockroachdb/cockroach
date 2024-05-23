@@ -106,6 +106,11 @@ type cacheEntry struct {
 	// forecast is true if stats could contain forecasts.
 	forecast bool
 
+	// userDefinedTypes holds the hydrated user-defined types used in
+	// histograms. A change to one of these types requires evicting the cacheEntry
+	// so that we can re-hydrate them.
+	userDefinedTypes map[descpb.ColumnID]*types.T
+
 	stats []*TableStatistic
 
 	// err is populated if the internal query to retrieve stats hit an error.
@@ -230,7 +235,9 @@ func (sc *TableStatisticsCache) GetTableStats(
 		}
 	}()
 	forecast := forecastAllowed(table, sc.settings)
-	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast)
+	return sc.getTableStatsFromCache(
+		ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(),
+	)
 }
 
 // DisallowedOnSystemTable returns true if this tableID belongs to a special
@@ -315,15 +322,14 @@ func forecastAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Set
 // getTableStatsFromCache is like GetTableStats but assumes that the table ID
 // is safe to fetch statistics for: non-system, non-virtual, non-view, etc.
 func (sc *TableStatisticsCache) getTableStatsFromCache(
-	ctx context.Context, tableID descpb.ID, forecast *bool,
+	ctx context.Context, tableID descpb.ID, forecast *bool, udtCols []catalog.Column,
 ) ([]*TableStatistic, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
 	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
-		if forecast != nil && e.forecast != *forecast {
-			// Forecasting was recently enabled or disabled on this table. Evict the
-			// cache entry and build it again.
+		if e.isStale(forecast, udtCols) {
+			// Evict the cache entry and build it again.
 			sc.mu.cache.Del(tableID)
 		} else {
 			return e.stats, e.err
@@ -331,6 +337,30 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 	}
 
 	return sc.addCacheEntryLocked(ctx, tableID, forecast != nil && *forecast)
+}
+
+// isStale checks whether we need to evict and re-load the cache entry.
+func (e *cacheEntry) isStale(forecast *bool, udtCols []catalog.Column) bool {
+	// Check whether forecast settings have changed.
+	if forecast != nil && e.forecast != *forecast {
+		return true
+	}
+	// Check whether user-defined types have changed (this is similar to
+	// UserDefinedTypeColsHaveSameVersion).
+	for _, col := range udtCols {
+		colType := col.GetType()
+		if histType, ok := e.userDefinedTypes[col.GetID()]; ok {
+			if histType.Oid() != colType.Oid() {
+				// This should never be true, but if it is, we'll catch it in
+				// optTableStat.init and ignore the statistic. For now just skip it.
+				continue
+			}
+			if histType.TypeMeta.Version != colType.TypeMeta.Version {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // lookupStatsLocked retrieves any existing stats for the given table.
@@ -393,17 +423,18 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	sc.mu.cache.Add(tableID, e)
 	sc.mu.numInternalQueries++
 
+	var udts map[descpb.ColumnID]*types.T
 	func() {
 		sc.mu.Unlock()
 		defer sc.mu.Lock()
 
 		log.VEventf(ctx, 1, "reading statistics for table %d", tableID)
-		stats, err = sc.getTableStatsFromDB(ctx, tableID, forecast, sc.settings)
+		stats, udts, err = sc.getTableStatsFromDB(ctx, tableID, forecast, sc.settings)
 		log.VEventf(ctx, 1, "finished reading statistics for table %d", tableID)
 	}()
 
 	e.mustWait = false
-	e.forecast, e.stats, e.err = forecast, stats, err
+	e.forecast, e.userDefinedTypes, e.stats, e.err = forecast, udts, stats, err
 
 	// Wake up any other callers that are waiting on these stats.
 	e.waitCond.Broadcast()
@@ -454,6 +485,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 
 	forecast := e.forecast
 	var stats []*TableStatistic
+	var udts map[descpb.ColumnID]*types.T
 	var err error
 	for {
 		func() {
@@ -463,7 +495,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 
 			log.VEventf(ctx, 1, "refreshing statistics for table %d", tableID)
 			// TODO(radu): pass the timestamp and use AS OF SYSTEM TIME.
-			stats, err = sc.getTableStatsFromDB(ctx, tableID, forecast, sc.settings)
+			stats, udts, err = sc.getTableStatsFromDB(ctx, tableID, forecast, sc.settings)
 			log.VEventf(ctx, 1, "done refreshing statistics for table %d", tableID)
 		}()
 		if e.lastRefreshTimestamp.Equal(ts) {
@@ -473,7 +505,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 		ts = e.lastRefreshTimestamp
 	}
 
-	e.stats, e.err = stats, err
+	e.userDefinedTypes, e.stats, e.err = udts, stats, err
 	e.refreshing = false
 
 	if err != nil {
@@ -604,14 +636,15 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 // need to run a query to get user defined type metadata.
 func (sc *TableStatisticsCache) parseStats(
 	ctx context.Context, datums tree.Datums,
-) (*TableStatistic, error) {
+) (*TableStatistic, *types.T, error) {
 	var tsp *TableStatisticProto
 	var err error
 	tsp, err = NewTableStatisticProto(datums)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	res := &TableStatistic{TableStatisticProto: *tsp}
+	var udt *types.T
 	if res.HistogramData != nil {
 		// hydrate the type in case any user defined types are present.
 		// There are cases where typ is nil, so don't do anything if so.
@@ -632,18 +665,18 @@ func (sc *TableStatisticsCache) parseStats(
 			) error {
 				resolver := descs.NewDistSQLTypeResolver(txn.Descriptors(), txn.KV())
 				var err error
-				res.HistogramData.ColumnType, err = resolver.ResolveTypeByOID(ctx, typ.Oid())
+				udt, err = resolver.ResolveTypeByOID(ctx, typ.Oid())
+				res.HistogramData.ColumnType = udt
 				return err
 			}); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		if err := DecodeHistogramBuckets(res); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-
-	return res, nil
+	return res, udt, nil
 }
 
 // DecodeHistogramBuckets decodes encoded HistogramData in tabStat and writes
@@ -753,7 +786,7 @@ func (tsp *TableStatisticProto) IsAuto() bool {
 // type that doesn't exist) and returns the rest (with no error).
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context, tableID descpb.ID, forecast bool, st *cluster.Settings,
-) ([]*TableStatistic, error) {
+) ([]*TableStatistic, map[descpb.ColumnID]*types.T, error) {
 	getTableStatisticsStmt := `
 SELECT
 	"tableID",
@@ -779,21 +812,37 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 		ctx, "get-table-statistics", nil /* txn */, sessiondata.NodeUserSessionDataOverride, getTableStatisticsStmt, tableID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var statsList []*TableStatistic
+	var udts map[descpb.ColumnID]*types.T
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		stats, err := sc.parseStats(ctx, it.Cur())
+		stats, udt, err := sc.parseStats(ctx, it.Cur())
 		if err != nil {
 			log.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
 			continue
 		}
 		statsList = append(statsList, stats)
+		// Keep track of user-defined types used in histograms.
+		if udt != nil {
+			// TODO(49698): If we ever support multi-column histograms we'll need to
+			// build this mapping in a different way.
+			if len(stats.ColumnIDs) == 1 {
+				colID := stats.ColumnIDs[0]
+				if udts == nil {
+					udts = make(map[descpb.ColumnID]*types.T)
+				}
+				// Keep the first type we see for the column.
+				if _, ok := udts[colID]; !ok {
+					udts[colID] = udt
+				}
+			}
+		}
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// TODO(faizaanmadhani): Wrap merging behind a boolean so
@@ -811,5 +860,5 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 		})
 	}
 
-	return statsList, nil
+	return statsList, udts, nil
 }
