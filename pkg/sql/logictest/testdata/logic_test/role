@@ -1881,3 +1881,29 @@ statement error SUBJECT role option is only supported after v24.1 upgrade is fin
 ALTER ROLE testuser SUBJECT 'foo'
 
 subtest end
+
+# Validates that drop role will be prevented if the role is in use by
+# any schema objects. This is validates and prevents the regression found
+# in #124441
+subtest drop_role_block_validation
+
+statement ok
+CREATE DATABASE block_db;
+USE block_db;
+CREATE TABLE t(n int);
+CREATE TYPE  typ AS ENUM ('open', 'closed', 'inactive');
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE ROLE block_user;
+GRANT ALL ON DATABASE block_db to block_user;
+GRANT ALL ON SCHEMA public to block_user;
+GRANT ALL ON TABLE t to block_user;
+GRANT ALL ON TYPE typ to block_user;
+GRANT ALL ON FUNCTION f to block_user;
+
+statement error pgcode 2BP01 cannot drop role/user block_user: grants still exist on block_db, block_db.public.t, block_db.public, block_db.public.typ, block_db.public.f
+DROP ROLE block_user
+
+statement ok
+USE defaultdb;
+
+subtest end
