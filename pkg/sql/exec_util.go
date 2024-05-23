@@ -1739,6 +1739,9 @@ type TTLTestingKnobs struct {
 	// PreSelectStatement runs before the start of the TTL select-delete
 	// loop.
 	PreSelectStatement string
+	// ExtraStatsQuery is an additional query to run while gathering stats if
+	// the ttl_row_stats_poll_interval is set. It is always run first.
+	ExtraStatsQuery string
 }
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
