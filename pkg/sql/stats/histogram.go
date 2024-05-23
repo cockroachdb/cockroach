@@ -328,6 +328,28 @@ func equiDepthHistogramWithoutAdjustment(
 	return h, nil
 }
 
+// TypeCheck returns an error if the type of the histogram does not match the
+// type of the column.
+func (histogramData *HistogramData) TypeCheck(
+	colType *types.T, table, column, createdAt string,
+) error {
+	if histogramData == nil || histogramData.ColumnType == nil {
+		return nil
+	}
+	// BYTES histograms could be inverted, so they are exempt.
+	if histogramData.ColumnType.Family() == types.BytesFamily {
+		return nil
+	}
+	if !histogramData.ColumnType.Equivalent(colType) {
+		return errors.Newf(
+			"histogram for table %v column %v created_at %v does not match column type %v: %v",
+			table, column, createdAt, colType.SQLStringForError(),
+			histogramData.ColumnType.SQLStringForError(),
+		)
+	}
+	return nil
+}
+
 // histogram is a decoded HistogramData with datums for upper bounds. We use
 // nil buckets for error cases, and non-nil zero-length buckets for histograms
 // on empty tables.
