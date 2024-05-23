@@ -75,7 +75,7 @@ var connResultsBufferSize = settings.RegisterByteSizeSetting(
 		"delay until the client receives the first result row. "+
 		"Updating the setting only affects new connections. "+
 		"Setting to 0 disables any buffering.",
-	16<<10, // 16 KiB
+	512<<10, // 512 KiB
 	settings.WithPublic)
 
 var logConnAuth = settings.RegisterBoolSetting(
