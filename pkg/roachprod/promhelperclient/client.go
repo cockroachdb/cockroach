@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2"
@@ -41,9 +42,18 @@ const (
 	ServiceAccountAudience = "PROM_HELPER_SERVICE_ACCOUNT_AUDIENCE"
 )
 
+// The URL for the Prometheus registration service. An empty string means that the
+// Prometheus integration is disabled. Should be accessed through
+// getPrometheusRegistrationUrl().
+var promRegistrationUrl = envutil.EnvOrDefaultString("COCKROACH_PROM_HOST_URL",
+	"https://grafana.testeng.crdb.io/promhelpers")
+
 // PromClient is used to communicate with the prometheus helper service
 // keeping the functions as a variable enables us to override the value for unit testing
 type PromClient struct {
+	promUrl  string
+	disabled bool
+
 	// httpPut is used for http PUT operation.
 	httpPut func(
 		ctx context.Context, url string, h *http.Header, body io.Reader,
@@ -56,13 +66,24 @@ type PromClient struct {
 		oauth2.TokenSource, error)
 }
 
+// DefaultPromClient is the default instance of PromClient. This instance should
+// be used unless custom configuration is needed.
+var DefaultPromClient = NewPromClient()
+
 // NewPromClient returns a new instance of PromClient
 func NewPromClient() *PromClient {
 	return &PromClient{
+		promUrl:        promRegistrationUrl,
+		disabled:       promRegistrationUrl == "",
 		httpPut:        httputil.Put,
 		httpDelete:     httputil.Delete,
 		newTokenSource: idtoken.NewTokenSource,
 	}
+}
+
+func (c *PromClient) setUrl(url string) {
+	c.promUrl = url
+	c.disabled = false
 }
 
 // instanceConfigRequest is the HTTP request received for generating instance config
@@ -75,21 +96,25 @@ type instanceConfigRequest struct {
 // UpdatePrometheusTargets updates the cluster config in the promUrl
 func (c *PromClient) UpdatePrometheusTargets(
 	ctx context.Context,
-	promUrl, clusterName string,
+	clusterName string,
 	forceFetchCreds bool,
 	nodes map[int]*NodeInfo,
 	insecure bool,
 	l *logger.Logger,
 ) error {
+	if c.disabled {
+		l.Printf("Prometheus registration is disabled")
+		return nil
+	}
 	req, err := buildCreateRequest(nodes, insecure)
 	if err != nil {
 		return err
 	}
-	token, err := c.getToken(ctx, promUrl, forceFetchCreds, l)
+	token, err := c.getToken(ctx, forceFetchCreds, l)
 	if err != nil {
 		return err
 	}
-	url := getUrl(promUrl, clusterName)
+	url := getUrl(c.promUrl, clusterName)
 	l.Printf("invoking PUT for URL: %s", url)
 	h := &http.Header{}
 	h.Set("ContentType", "application/json")
@@ -104,7 +129,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode == http.StatusUnauthorized && !forceFetchCreds {
 			l.Printf("request failed - this may be due to a stale token. retrying with forceFetchCreds true ...")
-			return c.UpdatePrometheusTargets(ctx, promUrl, clusterName, true, nodes, insecure, l)
+			return c.UpdatePrometheusTargets(ctx, clusterName, true, nodes, insecure, l)
 		}
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
@@ -118,13 +143,16 @@ func (c *PromClient) UpdatePrometheusTargets(
 
 // DeleteClusterConfig deletes the cluster config in the promUrl
 func (c *PromClient) DeleteClusterConfig(
-	ctx context.Context, promUrl, clusterName string, forceFetchCreds bool, l *logger.Logger,
+	ctx context.Context, clusterName string, forceFetchCreds bool, l *logger.Logger,
 ) error {
-	token, err := c.getToken(ctx, promUrl, forceFetchCreds, l)
+	if c.disabled {
+		return nil
+	}
+	token, err := c.getToken(ctx, forceFetchCreds, l)
 	if err != nil {
 		return err
 	}
-	url := getUrl(promUrl, clusterName)
+	url := getUrl(c.promUrl, clusterName)
 	l.Printf("invoking DELETE for URL: %s", url)
 	h := &http.Header{}
 	h.Set("Authorization", token)
@@ -135,7 +163,7 @@ func (c *PromClient) DeleteClusterConfig(
 	if response.StatusCode != http.StatusNoContent {
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode == http.StatusUnauthorized && !forceFetchCreds {
-			return c.DeleteClusterConfig(ctx, promUrl, clusterName, true, l)
+			return c.DeleteClusterConfig(ctx, clusterName, true, l)
 		}
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
@@ -195,9 +223,9 @@ func buildCreateRequest(nodes map[int]*NodeInfo, insecure bool) (io.Reader, erro
 
 // getToken gets the Authorization token for grafana
 func (c *PromClient) getToken(
-	ctx context.Context, promUrl string, forceFetchCreds bool, l *logger.Logger,
+	ctx context.Context, forceFetchCreds bool, l *logger.Logger,
 ) (string, error) {
-	if strings.HasPrefix(promUrl, "http:/") {
+	if strings.HasPrefix(c.promUrl, "http:/") {
 		// no token needed for insecure URL
 		return "", nil
 	}
