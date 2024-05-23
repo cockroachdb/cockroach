@@ -603,10 +603,7 @@ func (r *Replica) maybeLogLeaseAcquisition(
 	}
 
 	const slowLeaseApplyWarnThreshold = time.Second
-	var newLeaseAppDelay time.Duration
-	if newLease.ProposedTS != nil { // non-nil in practice, but never migrated
-		newLeaseAppDelay = time.Duration(now.WallTime - newLease.ProposedTS.WallTime)
-	}
+	newLeaseAppDelay := time.Duration(now.WallTime - newLease.ProposedTS.WallTime)
 	if newLeaseAppDelay > slowLeaseApplyWarnThreshold {
 		// If we hold the lease now and the lease was proposed "earlier", there
 		// must have been replication lag, and possibly reads and/or writes were
