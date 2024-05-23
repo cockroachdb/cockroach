@@ -80,7 +80,7 @@ CPut /Table/106/1/4/0 -> /TUPLE/
 query T kvtrace
 UPDATE d SET b='[1]' WHERE a=4
 ----
-Scan /Table/106/1/4/0
+Scan /Table/106/1/4/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/4/0 -> /TUPLE/
 InitPut /Table/106/2/Arr/1/4/0 -> /BYTES/
 
@@ -88,7 +88,7 @@ InitPut /Table/106/2/Arr/1/4/0 -> /BYTES/
 query T kvtrace
 UPDATE d SET b=NULL WHERE a=4
 ----
-Scan /Table/106/1/4/0
+Scan /Table/106/1/4/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/4/0 -> /TUPLE/
 Del /Table/106/2/Arr/1/4/0
 
@@ -224,7 +224,7 @@ CPut /Table/108/1/2/0 -> /TUPLE/
 query T kvtrace
 UPDATE f SET b = ARRAY[0,15,7,10] WHERE a = 0
 ----
-Scan /Table/108/1/0/0
+Scan /Table/108/1/0/0 lock Exclusive (Block, Unreplicated)
 Put /Table/108/1/0/0 -> /TUPLE/
 Del /Table/108/2/1/0/0
 InitPut /Table/108/2/15/0/0 -> /BYTES/
