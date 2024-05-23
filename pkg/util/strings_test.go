@@ -159,6 +159,8 @@ func TestCollapseDupeChar(t *testing.T) {
 		{"%%%test%%%%", '%', "%test%"},
 		{"%%%test1%%%test2%%%test3%%%", '%', "%test1%test2%test3%"},
 		{"I work on ddddddifferent characters", 'd', "I work on different characters"},
+		{"%%%%%%%%tèʂt%", '%', "%tèʂt%"},
+    {"🐛🐛", '🐛', "🐛"},
 	}
 
 	for _, test := range tests {

@@ -173,31 +173,58 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 // single instance.
 // E.g. CollapseDupeChar("wwwhy hello there", 'w') returns "why hello there"
 func CollapseDupeChar(toCollapse string, collapseChar rune) string {
-	var builder strings.Builder
-	hadPrevious := false
-	begIndx := 0
-	for i, r := range toCollapse {
+	// start and end indices denote the subrange of toCollapse
+	start, end := 0, len(toCollapse)-1
+	hasSuffixCollapseChar, hasPrefixcollapseChar := false, false
+	collapseCharWidth := utf8.RuneLen(collapseChar)
+	for start <= end {
+		r, w := utf8.DecodeRuneInString(toCollapse[start:])
 		if r != collapseChar {
-			hadPrevious = false
-			continue
+			break
 		}
-
-		if !hadPrevious {
-			hadPrevious = true
-			continue
+		start += w
+		hasPrefixcollapseChar = true
+	}
+	for end >= start {
+		r, w := utf8.DecodeLastRuneInString(toCollapse[:end])
+		if r != collapseChar {
+			break
 		}
-
-		if begIndx != i {
-			builder.WriteString(toCollapse[begIndx:i])
-		}
-		begIndx = i + 1
+		end -= w
+		hasSuffixCollapseChar = true
 	}
 
-	if begIndx == 0 {
-		return toCollapse
+	// include a single collapseChar on prefix/suffix
+	if hasPrefixcollapseChar {
+		start -= collapseCharWidth
+	}
+	if hasSuffixCollapseChar {
+		end += collapseCharWidth
 	}
 
-	builder.WriteString(toCollapse[begIndx:])
-
+	if !strings.Contains(toCollapse[start:end+1], fmt.Sprintf("%c%c", collapseChar, collapseChar)) {
+		return toCollapse[start : end+1]
+	}
+	var builder strings.Builder
+	builder.Grow(len(toCollapse))
+	for i := start; i <= end; {
+		r, w := utf8.DecodeRuneInString(toCollapse[i:])
+		i += w
+		if r != collapseChar {
+			continue
+		}
+		builder.WriteString(toCollapse[start:i])
+		for {
+			r, w := utf8.DecodeRuneInString(toCollapse[i:])
+			if r != collapseChar {
+				break
+			}
+			i += w
+		}
+		start = i
+	}
+	if !hasSuffixCollapseChar {
+		builder.WriteString(toCollapse[start:])
+	}
 	return builder.String()
 }

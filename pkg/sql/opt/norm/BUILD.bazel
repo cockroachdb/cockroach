@@ -117,6 +117,7 @@ genrule(
     outs = ["factory.og.go"],
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ factory $(locations //pkg/sql/opt:ops) $(locations :rules)
+      echo "$(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ factory $(locations //pkg/sql/opt:ops) $(locations :rules)"
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
     visibility = [
