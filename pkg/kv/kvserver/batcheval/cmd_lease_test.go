@@ -77,7 +77,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	_, err = RequestLease(ctx, nil, cArgs, nil)
 
 	const expForLearner = `cannot replace lease <empty> ` +
-		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 exp=<nil>: ` +
+		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 exp=<nil> pro=0,0: ` +
 		`lease target replica cannot hold lease`
 	require.EqualError(t, err, expForLearner)
 }
@@ -112,8 +112,8 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			}
 			now := clock.NowAsClockTimestamp()
 			nextLease := roachpb.Lease{
-				ProposedTS: &now,
 				Replica:    replicas[1],
+				ProposedTS: now,
 				Start:      now,
 			}
 			if epoch {

@@ -2327,7 +2327,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Start:      now,
 				Expiration: now.ToTimestamp().Add(time.Second.Nanoseconds(), 0).Clone(),
 				Replica:    replDesc,
-				ProposedTS: &now,
+				ProposedTS: now,
 			},
 		}
 

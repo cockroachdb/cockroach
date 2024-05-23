@@ -330,9 +330,9 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		Key: startKey,
 	}
 	reqLease := roachpb.Lease{
-		Start:      status.Now,
 		Replica:    nextLeaseHolder,
-		ProposedTS: &status.Now,
+		Start:      status.Now,
+		ProposedTS: status.Now,
 	}
 
 	var reqLeaseLiveness livenesspb.Liveness
@@ -840,7 +840,7 @@ func (r *Replica) leaseStatus(
 	// may cause, see https://github.com/cockroachdb/cockroach/issues/100101.
 	if expiration.LessEq(now.ToTimestamp()) {
 		status.State = kvserverpb.LeaseState_EXPIRED
-	} else if ownedLocally && lease.ProposedTS != nil && lease.ProposedTS.Less(minProposedTS) {
+	} else if ownedLocally && lease.ProposedTS.Less(minProposedTS) {
 		// If the replica owns the lease, additional verify that the lease's
 		// proposed timestamp is not earlier than the min proposed timestamp.
 		status.State = kvserverpb.LeaseState_PROSCRIBED
