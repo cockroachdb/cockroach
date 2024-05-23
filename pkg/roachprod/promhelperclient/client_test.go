@@ -40,6 +40,7 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 	ctx := context.Background()
 	promUrl := "http://prom_url.com"
 	c := NewPromClient()
+	c.setUrl(promUrl)
 	t.Run("UpdatePrometheusTargets fails with 400", func(t *testing.T) {
 		c.httpPut = func(ctx context.Context, reqUrl string, h *http.Header, body io.Reader) (
 			resp *http.Response, err error) {
@@ -49,7 +50,7 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 				Body:       io.NopCloser(strings.NewReader("failed")),
 			}, nil
 		}
-		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false,
+		err := c.UpdatePrometheusTargets(ctx, "c1", false,
 			map[int]*NodeInfo{1: {Target: "n1"}}, true, l)
 		require.NotNil(t, err)
 		require.Equal(t, "request failed with status 400 and error failed", err.Error())
@@ -82,7 +83,7 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 				StatusCode: 200,
 			}, nil
 		}
-		err := c.UpdatePrometheusTargets(ctx, promUrl, "c1", false, nodeInfos, true, l)
+		err := c.UpdatePrometheusTargets(ctx, "c1", false, nodeInfos, true, l)
 		require.Nil(t, err)
 	})
 }
@@ -98,6 +99,7 @@ func TestDeleteClusterConfig(t *testing.T) {
 	ctx := context.Background()
 	promUrl := "http://prom_url.com"
 	c := NewPromClient()
+	c.setUrl(promUrl)
 	t.Run("DeleteClusterConfig fails with 400", func(t *testing.T) {
 		c.httpDelete = func(ctx context.Context, url string, h *http.Header) (
 			resp *http.Response, err error) {
@@ -107,7 +109,7 @@ func TestDeleteClusterConfig(t *testing.T) {
 				Body:       io.NopCloser(strings.NewReader("failed")),
 			}, nil
 		}
-		err := c.DeleteClusterConfig(ctx, promUrl, "c1", false, l)
+		err := c.DeleteClusterConfig(ctx, "c1", false, l)
 		require.NotNil(t, err)
 		require.Equal(t, "request failed with status 400 and error failed", err.Error())
 	})
@@ -119,7 +121,7 @@ func TestDeleteClusterConfig(t *testing.T) {
 				StatusCode: 204,
 			}, nil
 		}
-		err := c.DeleteClusterConfig(ctx, promUrl, "c1", false, l)
+		err := c.DeleteClusterConfig(ctx, "c1", false, l)
 		require.Nil(t, err)
 	})
 }
@@ -144,7 +146,8 @@ func Test_getToken(t *testing.T) {
 	}()
 	c := NewPromClient()
 	t.Run("insecure url", func(t *testing.T) {
-		token, err := c.getToken(ctx, "http://test.com", false, l)
+		c.setUrl("http://test.com")
+		token, err := c.getToken(ctx, false, l)
 		require.Nil(t, err)
 		require.Empty(t, token)
 	})
@@ -156,7 +159,8 @@ func Test_getToken(t *testing.T) {
 		c.newTokenSource = func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (oauth2.TokenSource, error) {
 			return nil, fmt.Errorf("invalid")
 		}
-		token, err := c.getToken(ctx, "https://test.com", false, l)
+		c.setUrl("https://test.com")
+		token, err := c.getToken(ctx, false, l)
 		require.NotNil(t, err)
 		require.Empty(t, token)
 		require.Equal(t, "error creating GCS oauth token source from specified credential: invalid", err.Error())
@@ -169,7 +173,8 @@ func Test_getToken(t *testing.T) {
 		c.newTokenSource = func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (oauth2.TokenSource, error) {
 			return &mockToken{token: "", err: fmt.Errorf("failed")}, nil
 		}
-		token, err := c.getToken(ctx, "https://test.com", false, l)
+		c.setUrl("https://test.com")
+		token, err := c.getToken(ctx, false, l)
 		require.NotNil(t, err)
 		require.Empty(t, token)
 		require.Equal(t, "error getting identity token: failed", err.Error())
@@ -182,7 +187,8 @@ func Test_getToken(t *testing.T) {
 		c.newTokenSource = func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (oauth2.TokenSource, error) {
 			return &mockToken{token: "token"}, nil
 		}
-		token, err := c.getToken(ctx, "https://test.com", false, l)
+		c.setUrl("https://test.com")
+		token, err := c.getToken(ctx, false, l)
 		require.Nil(t, err)
 		require.Equal(t, "Bearer token", token)
 	})
