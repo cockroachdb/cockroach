@@ -5463,8 +5463,24 @@ func (d *DEnum) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
+
+	if v.EnumTyp.Oid() != d.EnumTyp.Oid() {
+		return 0, makeUnsupportedEnumComparisonMessage(d, v)
+	}
+	if v.EnumTyp.TypeMeta.Version != d.EnumTyp.TypeMeta.Version {
+		return 0, makeUnsupportedEnumComparisonMessage(d, v)
+	}
+
 	res := bytes.Compare(d.PhysicalRep, v.PhysicalRep)
 	return res, nil
+}
+
+func makeUnsupportedEnumComparisonMessage(e1, e2 *DEnum) error {
+	return pgerror.Newf(pgcode.DatatypeMismatch,
+		"unsupported comparison: %s (oid %d version %d) to %s (oid %d version %d)",
+		errors.Safe(e1.EnumTyp), e1.EnumTyp.Oid(), e1.EnumTyp.TypeMeta.Version,
+		errors.Safe(e2.EnumTyp), e2.EnumTyp.Oid(), e2.EnumTyp.TypeMeta.Version,
+	)
 }
 
 // Prev implements the Datum interface.
