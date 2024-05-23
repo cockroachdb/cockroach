@@ -211,6 +211,7 @@ func FormatExprForDisplay(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
 	exprStr string,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	fmtFlags tree.FmtFlags,
@@ -219,6 +220,7 @@ func FormatExprForDisplay(
 		ctx,
 		desc,
 		exprStr,
+		evalCtx,
 		semaCtx,
 		sessionData,
 		fmtFlags,
@@ -234,6 +236,7 @@ func FormatExprForExpressionIndexDisplay(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
 	exprStr string,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	fmtFlags tree.FmtFlags,
@@ -242,6 +245,7 @@ func FormatExprForExpressionIndexDisplay(
 		ctx,
 		desc,
 		exprStr,
+		evalCtx,
 		semaCtx,
 		sessionData,
 		fmtFlags,
@@ -253,12 +257,13 @@ func formatExprForDisplayImpl(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
 	exprStr string,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	fmtFlags tree.FmtFlags,
 	wrapNonFuncExprs bool,
 ) (string, error) {
-	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx, fmtFlags)
+	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, evalCtx, semaCtx, fmtFlags)
 	if err != nil {
 		return "", err
 	}
@@ -287,6 +292,7 @@ func deserializeExprForFormatting(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
 	exprStr string,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
 ) (tree.Expr, error) {
@@ -318,9 +324,7 @@ func deserializeExprForFormatting(
 		// If the expr has no variables and has Immutable, we can evaluate
 		// it and turn it into a constant.
 		if err == nil {
-			// An empty EvalContext is fine here since the expression has
-			// Immutable.
-			d, err := eval.Expr(ctx, &eval.Context{}, sanitizedExpr)
+			d, err := eval.Expr(ctx, evalCtx, sanitizedExpr)
 			if err == nil {
 				return d, nil
 			}

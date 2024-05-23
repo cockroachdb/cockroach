@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -48,6 +49,7 @@ import (
 // reuse an existing kv.Txn safely.
 func validateCheckExpr(
 	ctx context.Context,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	txn isql.Txn,
 	sessionData *sessiondata.SessionData,
@@ -55,7 +57,7 @@ func validateCheckExpr(
 	tableDesc *tabledesc.Mutable,
 	indexIDForValidation descpb.IndexID,
 ) (violatingRow tree.Datums, formattedCkExpr string, err error) {
-	formattedCkExpr, err = schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, sessionData, tree.FmtParsable)
+	formattedCkExpr, err = schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, evalCtx, semaCtx, sessionData, tree.FmtParsable)
 	if err != nil {
 		return nil, formattedCkExpr, err
 	}
@@ -849,6 +851,7 @@ type checkSet = intsets.Fast
 // checkVals for each element in checkSet.
 func checkMutationInput(
 	ctx context.Context,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	tabDesc catalog.TableDescriptor,
@@ -870,7 +873,7 @@ func checkMutationInput(
 		if res, err := tree.GetBool(checkVals[colIdx]); err != nil {
 			return err
 		} else if !res && checkVals[colIdx] != tree.DNull {
-			return row.CheckFailed(ctx, semaCtx, sessionData, tabDesc, checks[i])
+			return row.CheckFailed(ctx, evalCtx, semaCtx, sessionData, tabDesc, checks[i])
 		}
 		colIdx++
 	}

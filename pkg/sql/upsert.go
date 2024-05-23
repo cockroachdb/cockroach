@@ -172,7 +172,8 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 		}
 		checkVals := rowVals[ord:]
 		if err := checkMutationInput(
-			params.ctx, &params.p.semaCtx, params.p.SessionData(), n.run.tw.tableDesc(), n.run.checkOrds, checkVals,
+			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
+			n.run.tw.tableDesc(), n.run.checkOrds, checkVals,
 		); err != nil {
 			return err
 		}
