@@ -489,7 +489,9 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		// retry at a higher timestamp because it is not isolated at higher
 		// timestamps.
 		latchesHeld := g != nil
-		if !latchesHeld || !canDoServersideRetry(ctx, pErr, ba, g, hlc.Timestamp{}) {
+		var serverSideRetryOk bool
+		ba, serverSideRetryOk = canDoServersideRetry(ctx, pErr, ba, g, hlc.Timestamp{})
+		if !latchesHeld || !serverSideRetryOk {
 			// TODO(aayush,arul): These metrics are incorrect at the moment since
 			// hitting this branch does not mean that we won't serverside retry, it
 			// just means that we will have to reacquire latches.

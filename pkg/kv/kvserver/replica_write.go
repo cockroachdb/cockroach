@@ -369,9 +369,9 @@ func (r *Replica) executeWriteBatch(
 // executed as 1PC.
 func (r *Replica) canAttempt1PCEvaluation(
 	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
-) bool {
+) (*kvpb.BatchRequest, bool) {
 	if !isOnePhaseCommit(ba) {
-		return false
+		return ba, false
 	}
 
 	// isOnePhaseCommit ensured that the transaction has a non-skewed read/write
@@ -393,7 +393,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 	// to check for an existing record.
 	ok, _ := r.CanCreateTxnRecord(ctx, ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
 	if !ok {
-		return false
+		return ba, false
 	}
 	minCommitTS := r.MinTxnCommitTS(ctx, ba.Txn.ID, ba.Txn.Key)
 	if ba.Timestamp.Less(minCommitTS) {
@@ -402,7 +402,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 		// timestamp.
 		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba, g)
 	}
-	return true
+	return ba, true
 }
 
 // evaluateWriteBatch evaluates the supplied batch.
@@ -428,11 +428,11 @@ func (r *Replica) evaluateWriteBatch(
 	// timestamp, let's evaluate the batch at the bumped timestamp. This will
 	// allow serializable transactions to commit. It will also allow transactions
 	// with any isolation level to attempt the 1PC code path.
-	maybeBumpReadTimestampToWriteTimestamp(ctx, ba, g)
-
+	ba, _ = maybeBumpReadTimestampToWriteTimestamp(ctx, ba, g)
+	var onePCOk bool
 	// Attempt 1PC execution, if applicable. If not transactional or there are
 	// indications that the batch's txn will require retry, execute as normal.
-	if r.canAttempt1PCEvaluation(ctx, ba, g) {
+	if ba, onePCOk = r.canAttempt1PCEvaluation(ctx, ba, g); onePCOk {
 		res := r.evaluate1PC(ctx, idKey, ba, g, st)
 		switch res.success {
 		case onePCSucceeded:
@@ -707,8 +707,9 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 		if pErr == nil || retries > 0 {
 			break
 		}
+		var serverSideRetryOk bool
 		// If we can retry, set a higher batch timestamp and continue.
-		if !canDoServersideRetry(ctx, pErr, ba, g, deadline) {
+		if ba, serverSideRetryOk = canDoServersideRetry(ctx, pErr, ba, g, deadline); !serverSideRetryOk {
 			r.store.Metrics().WriteEvaluationServerSideRetryFailure.Inc(1)
 			break
 		} else {
