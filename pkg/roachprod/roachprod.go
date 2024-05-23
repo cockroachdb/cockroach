@@ -59,6 +59,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// supportedPromProjects are the projects supported for prometheus target
+var supportedPromProjects = map[string]struct{}{gce.DefaultProject(): {}}
+
 // MalformedClusterNameError is returned when the cluster name passed to Create is invalid.
 type MalformedClusterNameError struct {
 	name        string
@@ -821,7 +824,7 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 	}
 	wg.Wait()
 	if len(nodeIPPorts) > 0 {
-		if err := promhelperclient.NewPromClient().UpdatePrometheusTargets(ctx,
+		if err := promhelperclient.DefaultPromClient.UpdatePrometheusTargets(ctx,
 			c.Name, false, nodeIPPorts, !c.Secure, l); err != nil {
 			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
 		}
@@ -1453,7 +1456,7 @@ func Destroy(
 				// and let the caller retry.
 				cld, _ = cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
 			}
-			return destroyCluster(cld, l, name)
+			return destroyCluster(ctx, cld, l, name)
 		}); err != nil {
 		return err
 	}
@@ -1461,7 +1464,9 @@ func Destroy(
 	return nil
 }
 
-func destroyCluster(cld *cloud.Cloud, l *logger.Logger, clusterName string) error {
+func destroyCluster(
+	ctx context.Context, cld *cloud.Cloud, l *logger.Logger, clusterName string,
+) error {
 	c, ok := cld.Clusters[clusterName]
 	if !ok {
 		return fmt.Errorf("cluster %s does not exist", clusterName)
