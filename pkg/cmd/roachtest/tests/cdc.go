@@ -1583,7 +1583,8 @@ func registerCDC(r registry.Registry) {
 			//   - so either my repro is bad and batching sink is broken, or it's not broken and my code is wrong
 			//   - even the version with sync producers fails kafka-chaos...
 			//   - does the regular kafka sink pass this? is the test ok? looks like it yea
-			//   - HMM i seem to be able to reproduce it by returning transient errors in whxtest...
+			//   - HMM i seem to be able to reproduce it by returning transient errors in whxtest... implying that batching sink / parallel io have bugs under retry conditions
+			//     - how best to debug that? just output a ton of info about the batches being sent?
 
 			// _, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.sink_io_workers = 1;`)
 			// if err != nil {
