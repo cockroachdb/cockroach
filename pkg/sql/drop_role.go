@@ -249,6 +249,19 @@ func (n *DropRoleNode) startExec(params runParams) error {
 					ObjectName: tn.String(),
 				})
 		}
+		for _, u := range typDesc.GetPrivileges().Users {
+			if _, ok := userNames[u.User()]; ok {
+				tn, err := getTypeNameFromTypeDescriptor(lCtx, typDesc)
+				if err != nil {
+					return err
+				}
+				if privilegeObjectFormatter.Len() > 0 {
+					privilegeObjectFormatter.WriteString(", ")
+				}
+				privilegeObjectFormatter.FormatNode(&tn)
+				break
+			}
+		}
 	}
 	for _, fnDesc := range lCtx.fnDescs {
 		if _, ok := userNames[fnDesc.GetPrivileges().Owner()]; ok {
