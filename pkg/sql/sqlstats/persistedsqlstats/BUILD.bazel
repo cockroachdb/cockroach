@@ -5,7 +5,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "persistedsqlstats",
     srcs = [
-        "appStats.go",
         "cluster_settings.go",
         "combined_iterator.go",
         "compaction_exec.go",
@@ -40,7 +39,6 @@ go_library(
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/sqlstats/sslocal",
-        "//pkg/sql/sqlstats/ssmemstorage",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/log",
