@@ -381,7 +381,7 @@ func (c *cdcOptCatalog) ResolveDataSource(
 		return nil, cat.DataSourceName{}, err
 	}
 
-	ds, err := c.newCDCDataSource(desc, c.targetFamilyID)
+	ds, err := c.newCDCDataSource(ctx, desc, c.targetFamilyID)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
@@ -399,7 +399,7 @@ func (c *cdcOptCatalog) ResolveDataSourceByID(
 		return nil, false, err
 	}
 
-	ds, err := c.newCDCDataSource(desc, c.targetFamilyID)
+	ds, err := c.newCDCDataSource(ctx, desc, c.targetFamilyID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -423,13 +423,13 @@ func (c *cdcOptCatalog) ResolveFunction(
 
 // newCDCDataSource builds an optTable for the target cdc table and family.
 func (c *cdcOptCatalog) newCDCDataSource(
-	original catalog.TableDescriptor, familyID catid.FamilyID,
+	ctx context.Context, original catalog.TableDescriptor, familyID catid.FamilyID,
 ) (cat.DataSource, error) {
 	d, err := newFamilyTableDescriptor(original, familyID, c.extraColumns)
 	if err != nil {
 		return nil, err
 	}
-	return newOptTable(d, c.codec(), nil /* stats */, emptyZoneConfig)
+	return newOptTable(ctx, d, c.codec(), nil /* stats */, emptyZoneConfig)
 }
 
 // familyTableDescriptor wraps underlying catalog.TableDescriptor,

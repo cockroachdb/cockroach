@@ -1469,7 +1469,8 @@ func injectTableStats(
 		}
 	}
 
-	// First, delete all statistics for the table.
+	// First, delete all statistics for the table. (We use the current transaction
+	// so that this will rollback on any error.)
 	if _ /* rows */, err := params.p.InternalSQLTxn().Exec(
 		params.ctx,
 		"delete-stats",
@@ -1487,6 +1488,22 @@ StatsLoop:
 		if err != nil {
 			return err
 		}
+
+		// Check that the type matches.
+		// TODO(49698): When we support multi-column histograms this check will need
+		// adjustment.
+		if len(s.Columns) == 1 {
+			col := catalog.FindColumnByName(desc, s.Columns[0])
+			// Ignore dropped columns (they are handled below).
+			if col != nil {
+				if err := h.TypeCheck(
+					col.GetType(), desc.GetName(), s.Columns[0], s.CreatedAt,
+				); err != nil {
+					return pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
+				}
+			}
+		}
+
 		// histogram will be passed to the INSERT statement; we want it to be a
 		// nil interface{} if we don't generate a histogram.
 		var histogram interface{}

@@ -1238,11 +1238,15 @@ EXECUTE rcc('t')
 
 user root
 
-# Regression test for #46217. Histogram type doesn't match column type.
-statement ok
-CREATE TABLE ts (d DATE PRIMARY KEY, x INT);
 
+user root
+
+# Regression test for #46217. Test that we cannot inject a histogram type that
+# doesn't match the column type.
 statement ok
+CREATE TABLE ts (d DATE PRIMARY KEY, x INT)
+
+statement error pq: histogram for table ts column d created_at 2020-03-24 15:34:22\.863634\+00:00 does not match column type DATE: TIMESTAMP
 ALTER TABLE ts INJECT STATISTICS '[
   {
     "columns": ["d"],
@@ -1267,13 +1271,7 @@ ALTER TABLE ts INJECT STATISTICS '[
     "null_count": 0,
     "row_count": 100000
   }
-]';
-
-statement ok
-PREPARE q AS DELETE FROM ts WHERE ts.d <= $1
-
-statement ok
-EXECUTE q ('2020-03-25')
+]'
 
 # Test that if we replace a view the cached plan is invalidated.
 statement ok
