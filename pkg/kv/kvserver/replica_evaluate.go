@@ -543,13 +543,13 @@ func canDoServersideRetry(
 	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	deadline hlc.Timestamp,
-) bool {
+) (*kvpb.BatchRequest, bool) {
 	if pErr == nil {
 		log.Fatalf(ctx, "canDoServersideRetry called without error")
 	}
 	if ba.Txn != nil {
 		if !ba.CanForwardReadTimestamp {
-			return false
+			return ba, false
 		}
 		if !deadline.IsEmpty() {
 			log.Fatal(ctx, "deadline passed for transactional request")
@@ -565,7 +565,7 @@ func canDoServersideRetry(
 		var ok bool
 		ok, newTimestamp = kvpb.TransactionRefreshTimestamp(pErr)
 		if !ok {
-			return false
+			return ba, false
 		}
 	} else {
 		switch tErr := pErr.GetDetail().(type) {
@@ -576,12 +576,12 @@ func canDoServersideRetry(
 			newTimestamp = tErr.RetryTimestamp()
 
 		default:
-			return false
+			return ba, false
 		}
 	}
 
 	if batcheval.IsEndTxnExceedingDeadline(newTimestamp, deadline) {
-		return false
+		return ba, false
 	}
 	return tryBumpBatchTimestamp(ctx, ba, g, newTimestamp)
 }
