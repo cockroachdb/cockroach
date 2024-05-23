@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	accountName  = "qy03275.us-east-1"
+	accountName  = "lt53838.us-central1.gcp"
 	bucketName   = "roachtest-snowflake-costfuzz"
 	keyTag       = "COCKROACH_GOOGLE_EPHEMERAL_CREDENTIALS"
 	sfUser       = "COCKROACH_SFUSER"
@@ -118,7 +118,7 @@ func writeRowsGCS(ctx context.Context, filename string, rows *gosql.Rows) (strin
 	return cName, nil
 }
 
-func ChooseRandomQuery(ctx context.Context, log *os.File) (string, map[string][]string) {
+func ChooseRandomQuery(ctx context.Context, log *os.File) (string, map[string][]string, error) {
 	rndNumber := rand.Float64()
 	var query string
 	// Randomly select between a non join or join query.
@@ -137,14 +137,16 @@ func ChooseRandomQuery(ctx context.Context, log *os.File) (string, map[string][]
 	if err != nil {
 		fmt.Fprint(log, err)
 		fmt.Fprint(log, "\n")
-		return "", nil
+		return "", nil, err
 	}
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		fmt.Fprint(log, "Failure in choosing random query:")
 		fmt.Fprint(log, err)
 		fmt.Fprint(log, "\n")
-		return "", nil
+		// Connection is either invalid or we hit a transient error, so let's close it.
+		db.Close()
+		return "", nil, err
 	}
 
 	signatures := make(map[string][]string)
@@ -175,7 +177,7 @@ func ChooseRandomQuery(ctx context.Context, log *os.File) (string, map[string][]
 		signatures[tablename] = []string{tablesignature, tableschema}
 	}
 
-	return finalStmt, signatures
+	return finalStmt, signatures, nil
 }
 
 // CreateRandomDataSnowflake creates random data in snowflake
@@ -184,11 +186,11 @@ func ChooseRandomQuery(ctx context.Context, log *os.File) (string, map[string][]
 // a mapping of table name to gcs filepath and schema.
 func CreateRandomDataSnowflake(
 	ctx context.Context, signatures map[string][]string, log *os.File,
-) map[string][]string {
+) (map[string][]string, error) {
 	db, err := getConnect("workload_data")
 	if err != nil {
 		fmt.Fprint(log, "COULD NOT CONNECT TO SNOWFLAKE: "+fmt.Sprint(err))
-		return nil
+		return nil, err
 	}
 
 	schemaMap := make(map[string][]string)
@@ -198,7 +200,9 @@ func CreateRandomDataSnowflake(
 		_, err := db.QueryContext(ctx, signatureSchema[0])
 		if err != nil {
 			fmt.Fprint(log, "COULD NOT GENERATE DATASET - signature execution failed:"+signatureSchema[0])
-			return nil
+			// Connection is either invalid or we hit a transient error, so let's close it.
+			db.Close()
+			return nil, err
 		}
 
 		// Get data from snowflake and write to GCS.
@@ -208,18 +212,20 @@ func CreateRandomDataSnowflake(
 			fmt.Fprint(log, "COULD NOT RETRIEVE DATA FROM TABLE:"+tableName+"\n")
 			fmt.Fprint(log, err)
 			fmt.Fprint(log, "\n")
-			return nil
+			// Connection is either invalid or we hit a transient error, so let's close it.
+			db.Close()
+			return nil, err
 		}
 		filename := "roachtest/" + fmt.Sprint(timeutil.Now().Unix()) + "_" + tableName
 		cName, err = writeRowsGCS(ctx, filename, rows)
 		if err != nil {
 			fmt.Fprint(log, err)
 			fmt.Fprint(log, "\n")
-			return nil
+			return nil, err
 		}
 		// Map "table name" to file path of gcs data, column names of data and schema of table.
 		schemaMap[tableName] = []string{filename, cName, signatureSchema[1]}
 	}
 
-	return schemaMap
+	return schemaMap, nil
 }
