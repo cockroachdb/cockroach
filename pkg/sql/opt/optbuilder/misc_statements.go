@@ -148,6 +148,13 @@ func (b *Builder) buildControlSchedules(
 
 func (b *Builder) buildCreateStatistics(n *tree.CreateStats, inScope *scope) (outScope *scope) {
 	outScope = inScope.push()
+
+	// We add AS OF SYSTEM TIME '-1us' to trigger use of inconsistent
+	// scans if left unspecified. This prevents GC TTL errors.
+	if n.Options.AsOf.Expr == nil {
+		n.Options.AsOf.Expr = tree.NewStrVal("-1us")
+	}
+
 	outScope.expr = b.factory.ConstructCreateStatistics(&memo.CreateStatisticsPrivate{
 		Syntax: n,
 	})
