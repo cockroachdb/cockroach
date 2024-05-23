@@ -239,8 +239,11 @@ func tryBumpBatchTimestamp(
 	}
 	log.VEventf(ctx, 2, "bumping batch timestamp to: %s from read: %s, write: %s",
 		ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
-	ba.Txn = ba.Txn.Clone()
-	ba.Txn.BumpReadTimestamp(ts)
-	ba.Timestamp = ba.Txn.ReadTimestamp // Refresh just updated ReadTimestamp
+	txn := ba.Txn.Clone()
+	txn.BumpReadTimestamp(ts)
+	readTs := ba.Txn.ReadTimestamp
+	ba = ba.ShallowCopy()
+	ba.Txn = txn
+	ba.Timestamp = readTs // Refresh just updated ReadTimestamp
 	return true
 }
