@@ -32,11 +32,12 @@ type ProviderOpts struct {
 }
 
 // These default locations support availability zones. At the time of
-// this comment, `westus` did not.
+// this comment, `westus` did not and `westus2` is consistently out of
+// capacity.
 var defaultLocations = []string{
 	"eastus",
 	"canadacentral",
-	"westus2",
+	"westus3",
 }
 
 var defaultZone = "1"
