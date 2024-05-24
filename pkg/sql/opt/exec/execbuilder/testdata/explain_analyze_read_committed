@@ -33,7 +33,7 @@ priority: low
 quality of service: background
 ·
 • scan
-  nodes: <hidden>
+  sql nodes: <hidden>
   regions: <hidden>
   actual row count: 3
   KV time: 0µs
@@ -74,7 +74,7 @@ quality of service: regular
 ·
 • hash join (inner)
 │ columns: (k, v, a, b)
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
 │ vectorized batch count: 0
@@ -86,7 +86,7 @@ quality of service: regular
 │
 ├── • scan
 │     columns: (k, v)
-│     nodes: <hidden>
+│     sql nodes: <hidden>
 │     regions: <hidden>
 │     actual row count: 4
 │     vectorized batch count: 0
@@ -105,7 +105,7 @@ quality of service: regular
 │
 └── • scan
       columns: (a, b)
-      nodes: <hidden>
+      sql nodes: <hidden>
       regions: <hidden>
       actual row count: 3
       vectorized batch count: 0
