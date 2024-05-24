@@ -37,6 +37,7 @@ const (
 )
 
 const (
+	IllegalInstruction        = 132
 	SegmentationFaultExitCode = 139
 )
 
