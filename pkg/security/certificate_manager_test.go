@@ -121,15 +121,8 @@ func TestManagerWithPrincipalMap(t *testing.T) {
 		return ci.Error
 	}
 
+	// at this point certificate need not have principals match node user
 	setCertPrincipalMap("")
-	require.Regexp(t, `node certificate has principals \["node.crdb.io" "foo"\]`, newCertificateManager())
-
-	// We can map the "node.crdb.io" principal to "node".
-	setCertPrincipalMap("node.crdb.io:node")
-	require.NoError(t, newCertificateManager())
-
-	// We can map the "foo" principal to "node".
-	setCertPrincipalMap("foo:node")
 	require.NoError(t, newCertificateManager())
 
 	// Renaming "client.testuser.crt" to "client.foo.crt" allows us to load it
