@@ -65,20 +65,14 @@ type nodeStatus struct {
 }
 
 // Response struct for listNodes.
-//
-// swagger:model nodesResponse
 type nodesResponse struct {
 	// Status of nodes.
-	//
-	// swagger:allOf
 	Nodes []nodeStatus `json:"nodes"`
 	// Continuation offset for the next paginated call, if more values are present.
 	// Specify as the `offset` parameter.
 	Next int `json:"next,omitempty"`
 }
 
-// swagger:operation GET /nodes/ listNodes
-//
 // # List nodes
 //
 // List all nodes on this cluster.
@@ -167,19 +161,14 @@ func parseRangeIDs(input string, w http.ResponseWriter) (ranges []roachpb.RangeI
 }
 
 type nodeRangeResponse struct {
-	// swagger:allOf
 	RangeInfo rangeInfo `json:"range_info"`
 	Error     string    `json:"error,omitempty"`
 }
 
-// swagger:model rangeResponse
 type rangeResponse struct {
-	// swagger:allOf
 	Responses map[string]nodeRangeResponse `json:"responses_by_node_id"`
 }
 
-// swagger:operation GET /ranges/{range_id}/ listRange
-//
 // # Get info about a range
 //
 // Retrieves more information about a specific range.
@@ -291,7 +280,6 @@ func (r *rangeDescriptorInfo) init(rd *roachpb.RangeDescriptor) {
 
 // Info related to a range.
 type rangeInfo struct {
-	// swagger:allOf
 	Desc rangeDescriptorInfo `json:"desc"`
 
 	// Span is the pretty-ified start/end key span for this range.
@@ -334,8 +322,6 @@ func (ri *rangeInfo) init(r serverpb.RangeInfo) {
 }
 
 // Response struct for listNodeRanges.
-//
-// swagger:model nodeRangesResponse
 type nodeRangesResponse struct {
 	// Info about retrieved ranges.
 	Ranges []rangeInfo `json:"ranges"`
@@ -343,8 +329,6 @@ type nodeRangesResponse struct {
 	Next int `json:"next,omitempty"`
 }
 
-// swagger:operation GET /nodes/{node_id}/ranges/ listNodeRanges
-//
 // # List ranges on a node
 //
 // Lists information about ranges on a specified node. If a list of range IDs
@@ -437,8 +421,6 @@ type responseError struct {
 }
 
 // Response struct for listHotRanges.
-//
-// swagger:model hotRangesResponse
 type hotRangesResponse struct {
 	Ranges []hotRangeInfo  `json:"ranges"`
 	Errors []responseError `json:"response_error,omitempty"`
@@ -449,8 +431,6 @@ type hotRangesResponse struct {
 
 // Hot range details struct describes common information about hot range,
 // (ie its range ID, QPS, table name, etc.).
-//
-// swagger:model hotRangeInfo
 type hotRangeInfo struct {
 	RangeID             roachpb.RangeID  `json:"range_id"`
 	NodeID              roachpb.NodeID   `json:"node_id"`
@@ -469,8 +449,6 @@ type hotRangeInfo struct {
 	StoreID             roachpb.StoreID  `json:"store_id"`
 }
 
-// swagger:operation GET /ranges/hot/ listHotRanges
-//
 // # List hot ranges
 //
 // Lists information about hot ranges. If a list of range IDs

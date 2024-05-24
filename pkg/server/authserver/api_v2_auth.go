@@ -83,15 +83,12 @@ func (a *authenticationV2Server) createSessionFor(
 	return value, nil
 }
 
-// swagger:model loginResponse
 type loginResponse struct {
 	// Session string for a valid API session. Specify this in header for any API
 	// requests that require authentication.
 	Session string `json:"session"`
 }
 
-// swagger:operation POST /login/ login
-//
 // # API Login
 //
 // Creates an API session for use with API endpoints that require
@@ -175,14 +172,11 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	apiutil.WriteJSONResponse(r.Context(), w, http.StatusOK, &loginResponse{Session: session})
 }
 
-// swagger:model logoutResponse
 type logoutResponse struct {
 	// Indicates whether logout was successful.
 	LoggedOut bool `json:"logged_out"`
 }
 
-// swagger:operation POST /logout/ logout
-//
 // # API Logout
 //
 // Logs out on a previously-created API session.

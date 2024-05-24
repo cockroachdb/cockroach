@@ -29,8 +29,6 @@
 //	     description: Handle to logged-in REST session. Use `/login/` to
 //	       log in and get a session.
 //	     in: header
-//
-// swagger:meta
 package server
 
 import (
@@ -248,8 +246,6 @@ func (c *callCountDecorator) ServeHTTP(w http.ResponseWriter, req *http.Request)
 }
 
 // Response for listSessions.
-//
-// swagger:model listSessionsResp
 type listSessionsResponse struct {
 	serverpb.ListSessionsResponse
 
@@ -258,8 +254,6 @@ type listSessionsResponse struct {
 	Next string `json:"next,omitempty"`
 }
 
-// swagger:operation GET /sessions/ listSessions
-//
 // # List sessions
 //
 // List all sessions on this cluster. If a username is provided, only
@@ -327,8 +321,6 @@ func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, response)
 }
 
-// swagger:operation GET /health/ health
-//
 // # Check node health
 //
 // Helper endpoint to check for node health. If `ready` is true, it also checks
@@ -391,8 +383,6 @@ func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
 	healthInternal(w, r, a.admin.checkReadinessForHealthCheck)
 }
 
-// swagger:operation GET /rules/ rules
-//
 // # Get metric recording and alerting rule templates
 //
 // Endpoint to export recommended metric recording and alerting rules.
