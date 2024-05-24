@@ -60,7 +60,7 @@ var SkipMergeQueueForExternalBytes = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.range_merge.skip_external_bytes.enabled",
 	"skip the merge queue for external bytes",
-	false,
+	true,
 )
 
 // mergeQueue manages a queue of ranges slated to be merged with their right-
