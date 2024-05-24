@@ -51,7 +51,7 @@ priority: normal
 quality of service: regular
 ·
 • scan
-  nodes: <hidden>
+  sql nodes: <hidden>
   regions: <hidden>
   actual row count: 2,001
   KV time: 0µs
@@ -83,7 +83,7 @@ priority: normal
 quality of service: regular
 ·
 • lookup join (streamer)
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
 │ KV time: 0µs
@@ -97,7 +97,7 @@ quality of service: regular
 │ equality: (b) = (b)
 │
 └── • scan
-      nodes: <hidden>
+      sql nodes: <hidden>
       regions: <hidden>
       actual row count: 2
       KV time: 0µs
@@ -134,7 +134,7 @@ quality of service: regular
 • render
 │
 └── • lookup join
-    │ nodes: <hidden>
+    │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
     │ KV time: 0µs
@@ -148,7 +148,7 @@ quality of service: regular
     │ equality: (b) = (b)
     │
     └── • scan
-          nodes: <hidden>
+          sql nodes: <hidden>
           regions: <hidden>
           actual row count: 2
           KV time: 0µs
@@ -218,7 +218,7 @@ priority: normal
 quality of service: regular
 ·
 • merge join
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
 │ estimated max memory allocated: 0 B
@@ -226,7 +226,7 @@ quality of service: regular
 │ equality: (a) = (b)
 │
 ├── • scan
-│     nodes: <hidden>
+│     sql nodes: <hidden>
 │     regions: <hidden>
 │     actual row count: 2
 │     KV time: 0µs
@@ -241,7 +241,7 @@ quality of service: regular
 │     spans: FULL SCAN
 │
 └── • scan
-      nodes: <hidden>
+      sql nodes: <hidden>
       regions: <hidden>
       actual row count: 2
       KV time: 0µs

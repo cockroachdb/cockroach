@@ -74,14 +74,14 @@ priority: normal
 quality of service: regular
 ·
 • group (streaming)
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
 │ group by: k
 │ ordered: +k
 │
 └── • merge join
-    │ nodes: <hidden>
+    │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 5
     │ estimated max memory allocated: 0 B
@@ -91,7 +91,7 @@ quality of service: regular
     │ right cols are key
     │
     ├── • scan
-    │     nodes: <hidden>
+    │     sql nodes: <hidden>
     │     regions: <hidden>
     │     actual row count: 5
     │     KV time: 0µs
@@ -106,7 +106,7 @@ quality of service: regular
     │     spans: FULL SCAN
     │
     └── • scan
-          nodes: <hidden>
+          sql nodes: <hidden>
           regions: <hidden>
           actual row count: 5
           KV time: 0µs
@@ -139,7 +139,7 @@ priority: normal
 quality of service: regular
 ·
 • sort
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
 │ estimated max memory allocated: 0 B
@@ -147,7 +147,7 @@ quality of service: regular
 │ order: +w
 │
 └── • distinct
-    │ nodes: <hidden>
+    │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 5
     │ estimated max memory allocated: 0 B
@@ -155,7 +155,7 @@ quality of service: regular
     │ distinct on: w
     │
     └── • hash join
-        │ nodes: <hidden>
+        │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 5
         │ estimated max memory allocated: 0 B
@@ -164,7 +164,7 @@ quality of service: regular
         │ left cols are key
         │
         ├── • scan
-        │     nodes: <hidden>
+        │     sql nodes: <hidden>
         │     regions: <hidden>
         │     actual row count: 5
         │     KV time: 0µs
@@ -179,7 +179,7 @@ quality of service: regular
         │     spans: FULL SCAN
         │
         └── • scan
-              nodes: <hidden>
+              sql nodes: <hidden>
               regions: <hidden>
               actual row count: 5
               KV time: 0µs
@@ -212,19 +212,19 @@ priority: normal
 quality of service: regular
 ·
 • cross join
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 25
 │ estimated max memory allocated: 0 B
 │ estimated max sql temp disk usage: 0 B
 │
 ├── • ordinality
-│   │ nodes: <hidden>
+│   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 5
 │   │
 │   └── • scan
-│         nodes: <hidden>
+│         sql nodes: <hidden>
 │         regions: <hidden>
 │         actual row count: 5
 │         KV time: 0µs
@@ -239,12 +239,12 @@ quality of service: regular
 │         spans: FULL SCAN
 │
 └── • ordinality
-    │ nodes: <hidden>
+    │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 5
     │
     └── • scan
-          nodes: <hidden>
+          sql nodes: <hidden>
           regions: <hidden>
           actual row count: 5
           KV time: 0µs
@@ -298,14 +298,14 @@ priority: normal
 quality of service: regular
 ·
 • window
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
 │ estimated max memory allocated: 0 B
 │ estimated max sql temp disk usage: 0 B
 │
 └── • scan
-      nodes: <hidden>
+      sql nodes: <hidden>
       regions: <hidden>
       actual row count: 5
       KV time: 0µs
@@ -338,7 +338,7 @@ priority: normal
 quality of service: regular
 ·
 • scan
-  nodes: <hidden>
+  sql nodes: <hidden>
   regions: <hidden>
   actual row count: 0
   KV time: 0µs
@@ -377,19 +377,19 @@ quality of service: regular
 • root
 │
 ├── • insert
-│   │ nodes: <hidden>
+│   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ into: child(c, p)
 │   │
 │   └── • buffer
-│       │ nodes: <hidden>
+│       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 1
 │       │ label: buffer 1
 │       │
 │       └── • values
-│             nodes: <hidden>
+│             sql nodes: <hidden>
 │             regions: <hidden>
 │             actual row count: 1
 │             size: 2 columns, 1 row
@@ -400,12 +400,12 @@ quality of service: regular
 │   │ exec mode: one row
 │   │
 │   └── • group (scalar)
-│       │ nodes: <hidden>
+│       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 1
 │       │
 │       └── • scan
-│             nodes: <hidden>
+│             sql nodes: <hidden>
 │             regions: <hidden>
 │             actual row count: 1
 │             KV time: 0µs
@@ -423,12 +423,12 @@ quality of service: regular
 └── • constraint-check
     │
     └── • error if rows
-        │ nodes: <hidden>
+        │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
         │
         └── • lookup join (anti)
-            │ nodes: <hidden>
+            │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 0
             │ KV time: 0µs
@@ -443,14 +443,14 @@ quality of service: regular
             │ equality cols are key
             │
             └── • filter
-                │ nodes: <hidden>
+                │ sql nodes: <hidden>
                 │ regions: <hidden>
                 │ actual row count: 1
                 │ estimated row count: 1
                 │ filter: column2 IS NOT NULL
                 │
                 └── • scan buffer
-                      nodes: <hidden>
+                      sql nodes: <hidden>
                       regions: <hidden>
                       actual row count: 1
                       estimated row count: 1
