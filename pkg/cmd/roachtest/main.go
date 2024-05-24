@@ -11,6 +11,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/testselector/roachtestselector"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
 	"github.com/spf13/cobra"
@@ -246,6 +248,17 @@ func testsToRun(
 			msg += "\nTo include tests that are not compatible with this cloud, use --force-cloud-compat."
 		}
 		return nil, errors.Newf("%s", msg)
+	}
+
+	if roachtestflags.SelectiveTests {
+		newSpecs, selectedTests, err := roachtestselector.ReadTestsToRun(context.Background(), specs,
+			roachtestflags.Cloud, roachtestflags.Suite)
+		if err == nil {
+			specs = newSpecs
+		} else {
+			fmt.Printf("running all tests! error selecting tests: %v", err)
+		}
+		fmt.Printf("%d out of %d tests selected for the run!\n", selectedTests, len(specs))
 	}
 
 	var notSkipped []registry.TestSpec
