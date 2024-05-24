@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "testselector_lib",
+    srcs = [
+        "main.go",
+        "selector.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/testselector",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/util/encoding/csv",
+        "@com_github_snowflakedb_gosnowflake//:gosnowflake",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//option",
+    ],
+)
+
+go_binary(
+    name = "testselector",
+    embed = [":testselector_lib"],
+    visibility = ["//visibility:public"],
+)

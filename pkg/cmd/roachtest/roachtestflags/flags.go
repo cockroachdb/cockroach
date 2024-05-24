@@ -88,6 +88,12 @@ var (
 		Usage:     `Run tests locally (equivalent to --cloud=local)`,
 	})
 
+	PredictiveTests = false
+	_               = registerRunFlag(&PredictiveTests, FlagInfo{
+		Name:  "predictive-tests",
+		Usage: `Use Predictive tests selection`,
+	})
+
 	Username string = os.Getenv("ROACHPROD_USER")
 	_               = registerRunFlag(&Username, FlagInfo{
 		Name:      "user",

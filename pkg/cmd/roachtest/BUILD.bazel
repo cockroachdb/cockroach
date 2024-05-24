@@ -68,6 +68,8 @@ go_library(
         "@com_github_prometheus_client_golang//prometheus/promhttp",
         "@com_github_slack_go_slack//:slack",
         "@com_github_spf13_cobra//:cobra",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//option",
         "@org_golang_x_sync//errgroup",
     ],
 )
