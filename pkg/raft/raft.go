@@ -19,6 +19,7 @@ package raft
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -28,6 +29,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -259,6 +261,10 @@ type Config struct {
 	// This behavior will become unconditional in the future. See:
 	// https://github.com/etcd-io/raft/issues/83
 	StepDownOnRemoval bool
+
+	// CRDBVersion gives access to the active version of CockroachDB, which allows
+	// implementing version gates for making backward incompatible changes safely.
+	CRDBVersion clusterversion.Handle
 }
 
 func (c *Config) validate() error {
@@ -404,7 +410,8 @@ type raft struct {
 	tick func()
 	step stepFunc
 
-	logger Logger
+	logger      Logger
+	crdbVersion clusterversion.Handle
 }
 
 func newRaft(c *Config) *raft {
@@ -433,6 +440,7 @@ func newRaft(c *Config) *raft {
 		disableProposalForwarding:   c.DisableProposalForwarding,
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		stepDownOnRemoval:           c.StepDownOnRemoval,
+		crdbVersion:                 c.CRDBVersion,
 	}
 	lastID := r.raftLog.lastEntryID()
 
@@ -663,13 +671,18 @@ func (r *raft) maybeSendSnapshot(to uint64, pr *tracker.Progress) bool {
 // sendHeartbeat sends a heartbeat RPC to the given peer.
 func (r *raft) sendHeartbeat(to uint64) {
 	pr := r.trk.Progress[to]
+	// If all the cluster nodes are on the new version
+	// then we can safely use leader's commit index in heartbeat.
+	commit := r.raftLog.committed
 	// Attach the commit as min(to.matched, r.committed).
 	// When the leader sends out heartbeat message,
 	// the receiver(follower) might not be matched with the leader
 	// or it might not have all the committed entries.
 	// The leader MUST NOT forward the follower's commit to
 	// an unmatched index.
-	commit := min(pr.Match, r.raftLog.committed)
+	if r.crdbVersion != nil && !r.crdbVersion.IsActive(context.Background(), clusterversion.V24_2_DisableRaftCommitIndexCapping) {
+		commit = min(pr.Match, r.raftLog.committed)
+	}
 	r.send(pb.Message{
 		To:     to,
 		Type:   pb.MsgHeartbeat,
