@@ -964,11 +964,11 @@ func (m execNodeTraceMetadata) annotateExplain(
 			var nodeStats exec.ExecutionStats
 
 			incomplete := false
-			var nodes intsets.Fast
+			var sqlInstanceIDs intsets.Fast
 			regionsMap := make(map[string]struct{})
 			for _, c := range components {
 				if c.Type == execinfrapb.ComponentID_PROCESSOR {
-					nodes.Add(int(c.SQLInstanceID))
+					sqlInstanceIDs.Add(int(c.SQLInstanceID))
 					regionsMap[regionsInfo[int64(c.SQLInstanceID)]] = struct{}{}
 				}
 				stats := statsMap[c]
@@ -1006,8 +1006,8 @@ func (m execNodeTraceMetadata) annotateExplain(
 			// incomplete results. In the future, we may consider an incomplete flag
 			// if we want to show them with a warning.
 			if !incomplete {
-				for i, ok := nodes.Next(0); ok; i, ok = nodes.Next(i + 1) {
-					nodeStats.Nodes = append(nodeStats.Nodes, fmt.Sprintf("n%d", i))
+				for i, ok := sqlInstanceIDs.Next(0); ok; i, ok = sqlInstanceIDs.Next(i + 1) {
+					nodeStats.SQLNodes = append(nodeStats.SQLNodes, fmt.Sprintf("n%d", i))
 				}
 				regions := make([]string, 0, len(regionsMap))
 				for r := range regionsMap {
