@@ -83,10 +83,42 @@ type verifyFormatDB struct {
 		syncutil.Mutex
 		// active holds the currently executing statements.
 		active map[string]int
+		// lastStmtBuffer contains the last set of statements executed
+		// within a ring buffer.
+		lastStmtBuffer [200]string
+		// lastStmtBufferPos insertion point for any new statements.
+		lastStmtBufferPos int
+		// lastStatementsDumped indicates if the statements have already been
+		// dumped.
+		lastStatementsDumped bool
 		// lastCompletedStmt tracks the time when the last statement finished
 		// executing, which will be used for resettable timeouts.
 		lastCompletedStmt time.Time
 	}
+}
+
+// dumpLastStatements dumps out diagnostic information of currently active and the past 200 queries
+// that were executed.
+func (db *verifyFormatDB) dumpLastStatements(printFn func(format string, args ...any)) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	// Only dump this information once inside the test.
+	if db.mu.lastStatementsDumped {
+		return
+	}
+	db.mu.lastStatementsDumped = true
+	for i := 0; i < len(db.mu.lastStmtBuffer); i++ {
+		// Assuming a fully populated buffer, start from the insertion
+		// point which will be the oldest statement (if the buffer is fully
+		// filled).
+		targetIdx := (db.mu.lastStmtBufferPos + i) % len(db.mu.lastStmtBuffer)
+		if len(db.mu.lastStmtBuffer[targetIdx]) == 0 {
+			continue
+		}
+		printFn("Last executed (%d): %s", i, db.mu.lastStmtBuffer[targetIdx])
+	}
+	// Next dump the set of active statements.
+	printFn("Currently active statements: %v", db.mu.active)
 }
 
 // Incr records sql in the active map and returns a func to decrement it.
@@ -95,6 +127,8 @@ func (db *verifyFormatDB) Incr(sql string) func() {
 	if db.mu.active == nil {
 		db.mu.active = make(map[string]int)
 	}
+	db.mu.lastStmtBuffer[db.mu.lastStmtBufferPos] = sql
+	db.mu.lastStmtBufferPos = (db.mu.lastStmtBufferPos + 1) % len(db.mu.lastStmtBuffer)
 	db.mu.active[sql]++
 	db.mu.Unlock()
 
@@ -446,7 +480,6 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		// involve schema changes like truncates. In general this should make
 		// this test more resilient as the timeouts are reset as long progress
 		// is made on *some* connection.
-		t.Logf("Running %q", s)
 		return db.execWithResettableTimeout(t, ctx, s, *flagRSGExecTimeout, *flagRSGGoRoutines)
 	})
 }
@@ -831,6 +864,28 @@ func testRandomSyntax(
 	srv, rawDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}
+	// If the test is about to time out, then 5 seconds before
+	// we should log out any active statements and the last 200
+	// previously executed statements.
+	testDeadline, hasTestDeadline := t.Deadline()
+	if hasTestDeadline {
+		if waitTime := time.Until(testDeadline) - time.Second*5; waitTime > 0 {
+			cleanupTimer := time.AfterFunc(waitTime-time.Second*5, func() {
+				db.dumpLastStatements(func(format string, args ...any) {
+					_, _ = fmt.Fprintf(os.Stderr, format+"\n", args...)
+				})
+			})
+			// If the test terminates earlier stop the timer, and prevent
+			// dumping.
+			defer cleanupTimer.Stop()
+		}
+	}
+	// If the test fails we can log the previous set of statements.
+	defer func() {
+		if t.Failed() {
+			db.dumpLastStatements(t.Logf)
+		}
+	}()
 	err := db.exec(t, ctx, "SET CLUSTER SETTING schemachanger.job.max_retry_backoff='1s'")
 	require.NoError(t, err)
 
