@@ -18,6 +18,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -88,6 +90,9 @@ func (ts *httpTestServer) GetUnauthenticatedHTTPClient() (http.Client, error) {
 		RoundTripper: client.Transport,
 		tenantName:   ts.t.tenantName,
 	}
+	if util.RaceEnabled {
+		client.Timeout = 30 * time.Second
+	}
 	return client, nil
 }
 
@@ -96,6 +101,9 @@ func (ts *httpTestServer) GetAdminHTTPClient() (http.Client, error) {
 	httpClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(
 		apiconstants.TestingUserName(), true, serverutils.SingleTenantSession,
 	)
+	if util.RaceEnabled {
+		httpClient.Timeout = 30 * time.Second
+	}
 	return httpClient, err
 }
 
@@ -108,6 +116,9 @@ func (ts *httpTestServer) GetAuthenticatedHTTPClient(
 		authUser = apiconstants.TestingUserNameNoAdmin()
 	}
 	httpClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(authUser, isAdmin, session)
+	if util.RaceEnabled {
+		httpClient.Timeout = 30 * time.Second
+	}
 	return httpClient, err
 }
 
