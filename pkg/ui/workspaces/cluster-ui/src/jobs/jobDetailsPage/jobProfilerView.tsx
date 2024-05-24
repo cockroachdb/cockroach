@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Button, InlineAlert, Icon } from "@cockroachlabs/ui-components";
 import moment from "moment-timezone";
-import { Row, Col } from "antd";
+import { Space } from "antd";
 import classNames from "classnames";
 import long from "long";
 import classnames from "classnames/bind";
@@ -182,55 +182,36 @@ export const JobProfilerView: React.FC<JobProfilerViewProps> = ({
   // seconds. We set `tagfocus` (tf) to only view the samples corresponding to
   // this job's execution.
   const url = `debug/pprof/ui/cpu?node=all&seconds=5&labels=true&tf=job.*${jobID}`;
-  const summaryCardStylesCx = classNames.bind(summaryCardStyles);
   return (
-    <div>
-      <Row gutter={24}>
-        <Col className="gutter-row" span={24}>
-          <SummaryCard className={cardCx("summary-card")}>
-            <SummaryCardItem
-              label="Cluster-wide CPU Profile"
-              value={<a href={url}>Profile</a>}
-            />
-            <InlineAlert
-              intent="warning"
-              title="This operation buffers profiles in memory for all the nodes in the cluster and can result in increased memory usage."
-            />
-          </SummaryCard>
-        </Col>
-      </Row>
-      <>
-        <p className={summaryCardStylesCx("summary--card__divider--large")} />
-        <Row gutter={24}>
-          <Col className={cx("gutter-row")} span={24}>
-            <Button
-              intent="secondary"
-              onClick={() => {
-                onRequestExecutionDetails(jobID);
-              }}
-            >
-              Request Execution Details
-            </Button>
-          </Col>
-        </Row>
-        <Row gutter={24}>
-          <Col span={24}>
-            <p
-              className={summaryCardStylesCx("summary--card__divider--large")}
-            />
-            <SortedTable
-              data={executionDetailFilesResponse.data?.files}
-              columns={columns}
-              tableWrapperClassName={cx("sorted-table")}
-              sortSetting={sortSetting}
-              onChangeSortSetting={onChangeSortSetting}
-              renderNoResult={
-                <EmptyTable title="No execution detail files found." />
-              }
-            />
-          </Col>
-        </Row>
-      </>
-    </div>
+    <Space direction="vertical" size="middle" className={cx("full-width")}>
+      <SummaryCard className={cardCx("summary-card")}>
+        <SummaryCardItem
+          label="Cluster-wide CPU Profile"
+          value={<a href={url}>Profile</a>}
+        />
+        <InlineAlert
+          intent="warning"
+          title="This operation buffers profiles in memory for all the nodes in the cluster and can result in increased memory usage."
+        />
+      </SummaryCard>
+      <Space direction="vertical" align="end" className={cx("full-width")}>
+        <Button
+          intent="secondary"
+          onClick={() => {
+            onRequestExecutionDetails(jobID);
+          }}
+        >
+          Request Execution Details
+        </Button>
+      </Space>
+      <SortedTable
+        data={executionDetailFilesResponse.data?.files}
+        columns={columns}
+        tableWrapperClassName={cx("sorted-table")}
+        sortSetting={sortSetting}
+        onChangeSortSetting={onChangeSortSetting}
+        renderNoResult={<EmptyTable title="No execution detail files found." />}
+      />
+    </Space>
   );
 };
