@@ -2238,7 +2238,7 @@ priority: normal
 quality of service: regular
 ·
 • values
-  nodes: <hidden>
+  sql nodes: <hidden>
   regions: <hidden>
   actual row count: 1
   size: 1 column, 1 row
