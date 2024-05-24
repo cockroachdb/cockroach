@@ -21,6 +21,12 @@ func (st LeaseStatus) IsValid() bool {
 	return st.State == LeaseState_VALID
 }
 
+// IsExpired returns whether the lease was expired at the time that the
+// lease status was computed.
+func (st LeaseStatus) IsExpired() bool {
+	return st.State == LeaseState_EXPIRED
+}
+
 // OwnedBy returns whether the lease is owned by the given store.
 func (st LeaseStatus) OwnedBy(storeID roachpb.StoreID) bool {
 	return st.Lease.OwnedBy(storeID)
