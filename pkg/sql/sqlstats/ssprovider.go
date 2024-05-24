@@ -178,7 +178,7 @@ type RecordedStmtStats struct {
 	BytesRead            int64
 	RowsRead             int64
 	RowsWritten          int64
-	Nodes                []int64
+	SQLInstanceIDs       []int32
 	KVNodeIDs            []int32
 	StatementType        tree.StatementType
 	Plan                 *appstatspb.ExplainTreePlanNode

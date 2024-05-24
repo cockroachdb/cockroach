@@ -49,7 +49,6 @@ var (
 	_ jsonMarshaler = (*jsonBool)(nil)
 	_ jsonMarshaler = (*jsonInt)(nil)
 	_ jsonMarshaler = (*stmtFingerprintID)(nil)
-	_ jsonMarshaler = (*int64Array)(nil)
 	_ jsonMarshaler = (*int32Array)(nil)
 	_ jsonMarshaler = &latencyInfo{}
 )
@@ -143,39 +142,6 @@ func (s *aggregatedMetadata) jsonAggregatedFields() jsonFields {
 		{"vecCount", (*jsonInt)(&s.VecCount)},
 		{"totalCount", (*jsonInt)(&s.TotalCount)},
 	}
-}
-
-type int64Array []int64
-
-func (a *int64Array) decodeJSON(js json.JSON) error {
-	arrLen := js.Len()
-	for i := 0; i < arrLen; i++ {
-		var value jsonInt
-		valJSON, err := js.FetchValIdx(i)
-		if err != nil {
-			return err
-		}
-		if err := value.decodeJSON(valJSON); err != nil {
-			return err
-		}
-		*a = append(*a, int64(value))
-	}
-
-	return nil
-}
-
-func (a *int64Array) encodeJSON() (json.JSON, error) {
-	builder := json.NewArrayBuilder(len(*a))
-
-	for _, value := range *a {
-		jsVal, err := (*jsonInt)(&value).encodeJSON()
-		if err != nil {
-			return nil, err
-		}
-		builder.Add(jsVal)
-	}
-
-	return builder.Build(), nil
 }
 
 type int32Array []int32
@@ -340,7 +306,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"bytesRead", (*numericStats)(&s.BytesRead)},
 		{"rowsRead", (*numericStats)(&s.RowsRead)},
 		{"rowsWritten", (*numericStats)(&s.RowsWritten)},
-		{"nodes", (*int64Array)(&s.Nodes)},
+		{"sqlInstanceIds", (*int32Array)(&s.SQLInstanceIDs)},
 		{"kvNodeIds", (*int32Array)(&s.KVNodeIDs)},
 		{"regions", (*stringArray)(&s.Regions)},
 		{"planGists", (*stringArray)(&s.PlanGists)},
