@@ -504,6 +504,9 @@ message LocalOnlySessionData {
   // huge cost should be assigned to plans that have full scans of virtual
   // tables when DisallowFullTableScans is set.
   bool optimizer_apply_full_scan_penalty_to_virtual_tables = 131;
+  // OptimizerPushOffsetIntoIndexJoin, when true, indicates that the optimizer
+  // should push offset expressions into index joins.
+  bool optimizer_push_offset_into_index_join = 132;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
