@@ -39,8 +39,6 @@ import (
 // the serverccl package.
 var SQLAPIClock timeutil.TimeSource = timeutil.DefaultTimeSource{}
 
-// swagger:operation POST /sql/ execSQL
-//
 // # Execute one or more SQL statements
 //
 // Executes one or more SQL statements.

@@ -34,7 +34,6 @@ type PrometheusRuleNode struct {
 }
 
 // PrometheusRuleGroup is a list of recording and alerting rules.
-// swagger:model PrometheusRuleGroup
 type PrometheusRuleGroup struct {
 	Rules []PrometheusRuleNode `yaml:"rules"`
 }
