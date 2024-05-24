@@ -282,7 +282,7 @@ function makeStats(): Required<StatementStatistics> {
       seconds: Long.fromInt(1599670292),
       nanos: 111613000,
     },
-    nodes: [Long.fromInt(1), Long.fromInt(2), Long.fromInt(3)],
+    sql_instance_ids: [1, 2, 3],
     regions: ["gcp-us-east1"],
     plan_gists: ["Ais="],
     index_recommendations: [],

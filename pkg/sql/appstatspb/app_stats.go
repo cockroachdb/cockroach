@@ -177,7 +177,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
 	s.RowsWritten.Add(other.RowsWritten, s.Count, other.Count)
-	s.Nodes = util.CombineUnique(s.Nodes, other.Nodes)
+	s.SQLInstanceIDs = util.CombineUnique(s.SQLInstanceIDs, other.SQLInstanceIDs)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
 	s.PlanGists = util.CombineUnique(s.PlanGists, other.PlanGists)
 	s.Indexes = util.CombineUnique(s.Indexes, other.Indexes)

@@ -1826,7 +1826,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   full_scan           BOOL NOT NULL,
   sample_plan         JSONB,
   database_name       STRING NOT NULL,
-  exec_node_ids       INT[] NOT NULL,
+  sql_instance_ids    INT[] NOT NULL,
   txn_fingerprint_id  STRING,
   index_recommendations STRING[] NOT NULL,
   latency_seconds_min FLOAT,
@@ -1874,9 +1874,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 			samplePlan := sqlstatsutil.ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription)
 
-			execNodeIDs := tree.NewDArray(types.Int)
-			for _, nodeID := range stats.Stats.Nodes {
-				if err := execNodeIDs.Append(alloc.NewDInt(tree.DInt(nodeID))); err != nil {
+			sqlInstanceIDs := tree.NewDArray(types.Int)
+			for _, sqlInstanceID := range stats.Stats.SQLInstanceIDs {
+				if err := sqlInstanceIDs.Append(alloc.NewDInt(tree.DInt(sqlInstanceID))); err != nil {
 					return err
 				}
 			}
@@ -1968,7 +1968,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				tree.MakeDBool(tree.DBool(stats.Key.FullScan)),                                                                           // full_scan
 				alloc.NewDJSON(tree.DJSON{JSON: samplePlan}),                                                                             // sample_plan
 				alloc.NewDString(tree.DString(stats.Key.Database)),                                                                       // database_name
-				execNodeIDs,          // exec_node_ids
+				sqlInstanceIDs,       // sql_instance_ids
 				txnFingerprintID,     // txn_fingerprint_id
 				indexRecommendations, // index_recommendations
 				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.Min)), // latency_seconds_min
@@ -8382,7 +8382,7 @@ CREATE TABLE crdb_internal.%s (
 	priority                   STRING NOT NULL,
 	retries                    INT8 NOT NULL,
 	last_retry_reason          STRING,
-	exec_node_ids              INT[] NOT NULL,
+	sql_instance_ids           INT[] NOT NULL,
 	contention                 INTERVAL,
 	index_recommendations      STRING[] NOT NULL,
 	implicit_txn               BOOL NOT NULL,
@@ -8463,9 +8463,9 @@ func populateStmtInsights(
 				return err
 			}
 
-			execNodeIDs := tree.NewDArray(types.Int)
-			for _, nodeID := range s.Nodes {
-				if err = execNodeIDs.Append(tree.NewDInt(tree.DInt(nodeID))); err != nil {
+			sqlInstanceIDs := tree.NewDArray(types.Int)
+			for _, sqlInstanceID := range s.SQLInstanceIDs {
+				if err = sqlInstanceIDs.Append(tree.NewDInt(tree.DInt(sqlInstanceID))); err != nil {
 					return err
 				}
 			}
@@ -8523,7 +8523,7 @@ func populateStmtInsights(
 				tree.NewDString(insight.Transaction.UserPriority),
 				tree.NewDInt(tree.DInt(s.Retries)),
 				autoRetryReason,
-				execNodeIDs,
+				sqlInstanceIDs,
 				contentionTime,
 				indexRecommendations,
 				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),

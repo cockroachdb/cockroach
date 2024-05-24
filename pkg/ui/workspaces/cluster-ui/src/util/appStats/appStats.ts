@@ -12,7 +12,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { TimestampToNumber, DurationToNumber } from "src/util/convert";
 
 import { FixLong } from "src/util/fixLong";
-import { uniqueLong, unique } from "src/util/arrays";
+import { unique } from "src/util/arrays";
 import Long from "long";
 
 export type StatementStatistics = cockroach.sql.IStatementStatistics;
@@ -252,7 +252,7 @@ export function addStatementStats(
       a.last_exec_timestamp.seconds > b.last_exec_timestamp.seconds
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
-    nodes: uniqueLong([...a.nodes, ...b.nodes]),
+    sql_instance_ids: unique([...a.sql_instance_ids, ...b.sql_instance_ids]),
     regions: regions,
     plan_gists: planGists,
     index_recommendations: indexRec,

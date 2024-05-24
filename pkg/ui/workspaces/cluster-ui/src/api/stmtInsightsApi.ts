@@ -55,7 +55,7 @@ export type StmtInsightsResponseRow = {
   rows_written: number;
   priority: string;
   retries: number;
-  exec_node_ids: number[];
+  sql_instance_ids: number[];
   contention: string; // interval
   contention_events: ContentionDetails[];
   last_retry_reason?: string;
@@ -87,7 +87,7 @@ rows_read,
 rows_written,
 priority,
 retries,
-exec_node_ids,
+sql_instance_ids,
 contention,
 last_retry_reason,
 causes,

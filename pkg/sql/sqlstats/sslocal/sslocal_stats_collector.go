@@ -245,7 +245,7 @@ func (s *StatsCollector) ObserveStatement(
 		AutoRetryReason:      autoRetryReason,
 		RowsRead:             value.RowsRead,
 		RowsWritten:          value.RowsWritten,
-		Nodes:                value.Nodes,
+		SQLInstanceIDs:       value.SQLInstanceIDs,
 		Contention:           contention,
 		IndexRecommendations: value.IndexRecommendations,
 		Database:             value.Database,
