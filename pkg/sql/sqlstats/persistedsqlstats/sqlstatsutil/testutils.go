@@ -29,7 +29,6 @@ type randomData struct {
 	String      string
 	Int64       int64
 	Float       float64
-	IntArray    []int64
 	Int32Array  []int32
 	StringArray []string
 	Time        time.Time
@@ -64,10 +63,8 @@ func GenRandomData() randomData {
 	r.Float = rand.Float64()
 
 	// Generate a randomized array of length 5.
-	r.IntArray = make([]int64, arrLen)
 	r.Int32Array = make([]int32, arrLen)
 	for i := 0; i < arrLen; i++ {
-		r.IntArray[i] = rand.Int63()
 		r.Int32Array[i] = rand.Int31()
 	}
 
@@ -76,13 +73,6 @@ func GenRandomData() randomData {
 }
 
 func fillTemplate(t *testing.T, tmplStr string, data randomData) string {
-	joinInts := func(arr []int64) string {
-		strArr := make([]string, len(arr))
-		for i, val := range arr {
-			strArr[i] = strconv.FormatInt(val, 10)
-		}
-		return strings.Join(strArr, ",")
-	}
 	joinInt32s := func(arr []int32) string {
 		strArr := make([]string, len(arr))
 		for i, val := range arr {
@@ -105,7 +95,6 @@ func fillTemplate(t *testing.T, tmplStr string, data randomData) string {
 	tmpl, err := template.
 		New("").
 		Funcs(template.FuncMap{
-			"joinInts":      joinInts,
 			"joinInt32s":    joinInt32s,
 			"joinStrings":   joinStrings,
 			"stringifyTime": stringifyTime,
@@ -157,10 +146,6 @@ func FillObject(t *testing.T, val reflect.Value, data *randomData) {
 		case "[]string":
 			for _, randString := range data.StringArray {
 				val.Set(reflect.Append(val, reflect.ValueOf(randString)))
-			}
-		case "[]int64":
-			for _, randInt := range data.IntArray {
-				val.Set(reflect.Append(val, reflect.ValueOf(randInt)))
 			}
 		case "[]int32":
 			for _, randInt32 := range data.Int32Array {

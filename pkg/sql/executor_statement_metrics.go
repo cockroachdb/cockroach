@@ -175,13 +175,9 @@ func (ex *connExecutor) recordStatementSummary(
 	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecs)
 	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
 
-	var sqlInstanceIDs []int64
-	var kvNodeIDs []int32
+	var sqlInstanceIDs, kvNodeIDs []int32
 	if queryLevelStatsOk {
-		sqlInstanceIDs = make([]int64, 0, len(queryLevelStats.SQLInstanceIDs))
-		for _, sqlInstanceID := range queryLevelStats.SQLInstanceIDs {
-			sqlInstanceIDs = append(sqlInstanceIDs, int64(sqlInstanceID))
-		}
+		sqlInstanceIDs = queryLevelStats.SQLInstanceIDs
 		kvNodeIDs = queryLevelStats.KVNodeIDs
 	}
 
@@ -201,7 +197,7 @@ func (ex *connExecutor) recordStatementSummary(
 		BytesRead:            stats.bytesRead,
 		RowsRead:             stats.rowsRead,
 		RowsWritten:          stats.rowsWritten,
-		Nodes:                sqlInstanceIDs,
+		SQLInstanceIDs:       sqlInstanceIDs,
 		KVNodeIDs:            kvNodeIDs,
 		StatementType:        stmt.AST.StatementType(),
 		Plan:                 planner.instrumentation.PlanForStats(ctx),

@@ -88,7 +88,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       stats: {
         count: Long.fromInt(557),
         failure_count: Long.fromInt(0),
-        nodes: [Long.fromNumber(1), Long.fromNumber(2)],
+        sql_instance_ids: [1, 2],
         regions: ["gcp-us-east1"],
         first_attempt_count: Long.fromInt(557),
         max_retries: Long.fromInt(0),
@@ -168,7 +168,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       stats: {
         count: Long.fromInt(70),
         failure_count: Long.fromInt(3),
-        nodes: [Long.fromNumber(1), Long.fromNumber(3)],
+        sql_instance_ids: [1, 3],
         regions: ["gcp-us-east1", "gcp-us-west1"],
         first_attempt_count: Long.fromInt(70),
         max_retries: Long.fromInt(0),
@@ -235,7 +235,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       stats: {
         count: Long.fromInt(1),
         failure_count: Long.fromInt(17),
-        nodes: [Long.fromNumber(1), Long.fromNumber(3)],
+        sql_instance_ids: [1, 3],
         regions: ["gcp-us-east1", "gcp-us-west1"],
         first_attempt_count: Long.fromInt(1),
         max_retries: Long.fromInt(0),
@@ -293,7 +293,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       stats: {
         count: Long.fromInt(280),
         failure_count: Long.fromInt(4),
-        nodes: [Long.fromNumber(3), Long.fromNumber(4)],
+        sql_instance_ids: [3, 4],
         regions: ["gcp-us-west1", "gcp-europe-west1"],
         first_attempt_count: Long.fromInt(280),
         max_retries: Long.fromInt(0),
@@ -395,7 +395,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       stats: {
         count: Long.fromInt(1),
         failure_count: Long.fromInt(0),
-        nodes: [Long.fromNumber(2), Long.fromNumber(4)],
+        sql_instance_ids: [2, 4],
         regions: ["gcp-us-east1", "gcp-europe-west1"],
         first_attempt_count: Long.fromInt(1),
         max_retries: Long.fromInt(0),
@@ -447,7 +447,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       stats: {
         count: Long.fromInt(1),
         failure_count: Long.fromInt(3),
-        nodes: [Long.fromNumber(1)],
+        sql_instance_ids: [1],
         regions: ["gcp-us-east1"],
         first_attempt_count: Long.fromInt(1),
         max_retries: Long.fromInt(0),
@@ -488,7 +488,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       stats: {
         count: Long.fromInt(1),
         failure_count: Long.fromInt(7),
-        nodes: [Long.fromNumber(3), Long.fromNumber(4)],
+        sql_instance_ids: [3, 4],
         regions: ["gcp-us-west1", "gcp-europe-west1"],
         first_attempt_count: Long.fromInt(1),
         max_retries: Long.fromInt(0),
@@ -540,7 +540,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       stats: {
         count: Long.fromInt(24),
         failure_count: Long.fromInt(0),
-        nodes: [Long.fromNumber(2), Long.fromNumber(3)],
+        sql_instance_ids: [2, 3],
         regions: ["gcp-us-east1", "gcp-us-west1"],
         first_attempt_count: Long.fromInt(24),
         max_retries: Long.fromInt(0),
@@ -630,7 +630,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       stats: {
         count: Long.fromInt(141),
         failure_count: Long.fromInt(9),
-        nodes: [Long.fromNumber(1), Long.fromNumber(2), Long.fromNumber(3)],
+        sql_instance_ids: [1, 2, 3],
         regions: ["gcp-us-east1", "gcp-us-west1"],
         first_attempt_count: Long.fromInt(141),
         max_retries: Long.fromInt(0),
@@ -744,12 +744,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       stats: {
         count: Long.fromInt(1),
         failure_count: Long.fromInt(1),
-        nodes: [
-          Long.fromNumber(1),
-          Long.fromNumber(2),
-          Long.fromNumber(3),
-          Long.fromNumber(4),
-        ],
+        sql_instance_ids: [1, 2, 3, 4],
         regions: ["gcp-us-east1", "gcp-us-west1", "gcp-europe-west1"],
         first_attempt_count: Long.fromInt(1),
         max_retries: Long.fromInt(0),

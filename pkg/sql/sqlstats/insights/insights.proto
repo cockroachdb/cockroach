@@ -123,8 +123,7 @@ message Statement {
   int64 rows_written = 14;
   int64 retries = 15;
   string auto_retry_reason = 16;
-  // Nodes is the ordered list of nodes ids on which the statement was executed.
-  repeated int64 nodes = 17;
+  reserved 17; // previously nodes as []int64
   google.protobuf.Duration contention = 18 [(gogoproto.stdduration) = true];
   repeated string index_recommendations = 19;
   reserved 20; // previously contention_events
@@ -138,6 +137,9 @@ message Statement {
   // KVNodeIDs is the ordered list of KV node ids which were used to evaluate KV
   // read requests.
   repeated int32 kv_node_ids = 26 [(gogoproto.customname) = "KVNodeIDs"];
+  // SQLInstanceIDs is the ordered list of SQL instance ids on which the
+  // statement was executed.
+  repeated int32 sql_instance_ids = 27 [(gogoproto.customname) = "SQLInstanceIDs"];
 }
 
 
