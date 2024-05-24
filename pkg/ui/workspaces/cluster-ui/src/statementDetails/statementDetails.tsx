@@ -578,14 +578,14 @@ export class StatementDetails extends React.Component<
     const { statement_statistics_per_aggregated_ts } =
       this.props.statementDetails;
 
-    const nodes: string[] = unique(
-      (stats.nodes || []).map(node => node.toString()),
+    const sqlInstanceIds: string[] = unique(
+      (stats.sql_instance_ids || []).map(node => node.toString()),
     ).sort();
     // TODO(yuzefovich): use kv_node_ids to show KV regions.
     const regions = unique(
       isTenant
         ? stats.regions || []
-        : nodes.map(node => nodeRegions[node]).filter(r => r), // Remove undefined / unknown regions.
+        : sqlInstanceIds.map(node => nodeRegions[node]).filter(r => r), // Remove undefined / unknown regions.
     ).sort();
 
     const lastExec = stats.last_exec_timestamp && (
@@ -743,7 +743,7 @@ export class StatementDetails extends React.Component<
                   <SummaryCardItem
                     label="Nodes"
                     value={intersperse<ReactNode>(
-                      nodes.map(n => <NodeLink node={n} key={n} />),
+                      sqlInstanceIds.map(n => <NodeLink node={n} key={n} />),
                       ", ",
                     )}
                   />
