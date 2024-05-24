@@ -24,8 +24,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -3871,6 +3873,10 @@ func SetRandomizedElectionTimeout(r *RawNode, v int) {
 }
 
 func newTestConfig(id uint64, election, heartbeat int, storage Storage) *Config {
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.Latest.Version(),
+		clusterversion.MinSupported.Version(),
+		true)
 	return &Config{
 		ID:              id,
 		ElectionTick:    election,
@@ -3878,6 +3884,7 @@ func newTestConfig(id uint64, election, heartbeat int, storage Storage) *Config 
 		Storage:         storage,
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
+		CRDBVersion:     settings.Version,
 	}
 }
 
