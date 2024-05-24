@@ -216,7 +216,7 @@ func (s *storeStreamSendTokensWatcher) watchTokens(
 
 			available, handle := stc.TokensAvailable(wc)
 			if !available {
-				state, _ := kvflowcontroller.WaitForHandlesAndChannels(ctx,
+				state, _ := kvflowcontroller.WaitForHandlesAndChannelsOld(ctx,
 					s.stopper.ShouldQuiesce(),
 					1, /* numHandles */
 					[]interface{}{handle},

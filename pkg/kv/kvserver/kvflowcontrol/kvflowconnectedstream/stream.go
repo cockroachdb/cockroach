@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -356,9 +355,9 @@ type RangeControllerImpl struct {
 	leaseholder roachpb.ReplicaID
 
 	voterSets  []voterSet
-	replicaMap map[roachpb.ReplicaID]*replicaStream
+	replicaMap map[roachpb.ReplicaID]*replicaState
 
-	// Scheduled work.
+	scheduledReplicas map[roachpb.ReplicaID]struct{}
 }
 
 type voterSet []roachpb.ReplicaID
@@ -390,8 +389,8 @@ func (rc *RangeControllerImpl) WaitForEval(
 			}
 			// Don't have eval tokens, and have a handle.
 			var softDisconnectedCh chan struct{}
-			if rs.replicateStream != nil && rs.replicateStream.isConnected() {
-				softDisconnectedCh = rs.replicateStream.softDisconnectedCh
+			if rs.replicateStream != nil && rs.replicateStream.connectedState == replicateConnected {
+				// softDisconnectedCh = rs.replicateStream.softDisconnectedCh
 			}
 			handleAndSoftDisconnectedChSlice = append(handleAndSoftDisconnectedChSlice, kvflowcontroller.HandleAndStopCh{
 				Handle:     handle,
@@ -421,9 +420,9 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		if rs.replicateStream == nil {
 			state, nextUB := rc.opts.RaftInterface.FollowerState(r)
 			if state == tracker.StateReplicate {
-				// Need to create a replicateStream
+				// Need to create a replicaSendStream
 				indexToSend := nextUB
-				rsInitState := replicateStreamInitState{
+				rsInitState := replicaSendStreamInitState{
 					isConnected:   rc.opts.RaftInterface.FollowerTransportConnected(rs.desc.StoreID),
 					indexToSend:   indexToSend,
 					nextRaftIndex: nextRaftIndex,
@@ -431,16 +430,16 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 					approxMaxPriority:   admissionpb.NormalPri,
 					approxMeanSizeBytes: 1000,
 				}
-				rs.replicateStream = newReplicateStream(rsInitState)
+				rs.replicateStream = newReplicaSendStream(rs, rsInitState)
 				// TODO: check if send-queue is non-empty and generate some MsgApps if
 				// permitted. Queue up more work, or notification when send tokens are
 				// available.
 				//
 				// TODO: Doing this can cause a transition to StateSnapshot. Need to handle it here.
 			}
-		} else if !rs.replicateStream.isConnected() &&
+		} else if rs.replicateStream.connectedState == replicateSoftDisconnected &&
 			rc.opts.RaftInterface.FollowerTransportConnected(rs.desc.StoreID) {
-			rs.replicateStream.setConnectedState(true, false)
+			rs.replicateStream.changeConnectedStateInStateReplicate(true)
 			// TODO: check if send-queue is non-empty and generate some MsgApps if
 			// permitted. Queue up more work, or notification when send tokens are
 			// available.
@@ -481,7 +480,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		if rs.replicateStream == nil {
 			continue
 		}
-		if rs.replicateStream.isEmptySendQueue() {
+		if rs.replicateStream.connectedState != snapshot && rs.replicateStream.isEmptySendQueue() {
 			// Consider sending.
 			// If leaseholder just send.
 			isLeaseholder := r == rc.leaseholder
@@ -527,6 +526,8 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 				rc.opts.SendRaftMessage(
 					context.TODO(), admissionpb.WorkPriority(kvserverpb.AdmissionPriorityNotOverridden), msg)
 			}
+		} else {
+
 		}
 	}
 	return nil
@@ -547,12 +548,14 @@ func getFlowControlState(entry raftpb.Entry) entryFlowControlState {
 func (rc *RangeControllerImpl) HandleControllerSchedulerEvent() error {
 	return nil
 }
+
 func (rc *RangeControllerImpl) SetReplicas(replicas ReplicaSet) error {
 	return nil
 }
 func (rc *RangeControllerImpl) SetLeaseholder(replica roachpb.ReplicaID) {
 
 }
+
 func (rc *RangeControllerImpl) TransportDisconnected(replica roachpb.ReplicaID) {
 
 }
@@ -574,28 +577,17 @@ type replicaStreamOptions struct {
 	RangeController
 }
 
-type replicateStreamInitState struct {
-	isConnected bool
-	// [indexToSend, nextRaftIndex) are known to the (local) leader and need to be sent
-	// to this replica. This is the initial send-queue.
-	//
-	// INVARIANT: isLocal => indexToSend == nextRaftIndex.
-	indexToSend   uint64
-	nextRaftIndex uint64
-
-	// Approximate stats for the initial send-queue.
-	approxMaxPriority   admissionpb.WorkPriority
-	approxMeanSizeBytes int
-}
-
-type replicaStream struct {
+type replicaState struct {
+	stream           kvflowcontrol.Stream
 	evalTokenCounter EvalTokenCounter
 	sendTokenCounter SendTokenCounter
 	desc             roachpb.ReplicaDescriptor
-	replicateStream  *replicateStream
+	replicateStream  *replicaSendStream
 }
 
-// replicateStream is the state for replicas in StateReplicate. We need to maintain
+// TODO: update.
+//
+// replicaSendStream is the state for replicas in StateReplicate. We need to maintain
 // a send-queue for them. We may return some tokens if a connection breaks but
 // still want to keep them in StateReplicate? For elastic work this may not be
 // great? Well, we can close the ch, and replace it with a new channel.
@@ -617,7 +609,7 @@ type replicaStream struct {
 //
 // **what is the channel situation in soft-down** Close and replace channel.
 //
-// TODO: replicateStream could also encompass StateSnapshot, when transitioned
+// TODO: replicaSendStream could also encompass StateSnapshot, when transitioned
 // from StateReplicate to StateSnapshot. The problem is that indexToSend can
 // will need to advance. We also want to eventually use the mediation of
 // tracker on when to send snapshot. So overall we should encompass
@@ -625,54 +617,194 @@ type replicaStream struct {
 //
 // "breaker will open in 3-6 seconds after no more TCP packets are flowing. If
 // we assume 6 seconds, then that is ~1600 messages/second."
-//
-// TODO: the fields are incomplete.
-type replicateStream struct {
-
+type replicaSendStream struct {
+	parent *replicaState
 	// TODO: synchronization.
 	mu syncutil.Mutex
 
-	softDisconnectedCh chan struct{}
-	connectedState     connectedState
+	// softDisconnectedCh chan struct{}
+	connectedState connectedState
 
-	tracker kvflowtokentracker.Tracker
+	// indexToSendInitial is the indexToSend when this transitioned to
+	// StateReplicate. Only indices >= indexToSendInitial are tracked.
+	indexToSendInitial uint64
+	tracker            Tracker
 
-	// State of send-queue.
+	// nextRaftIndexInitial is the value of nextRaftIndex when this transitioned
+	// to StateReplicate.
+	nextRaftIndexInitial uint64
+
+	sendQueue struct {
+		// State of send-queue. [indexToSend, nextRaftIndex) have not been sent.
+		indexToSend   uint64
+		nextRaftIndex uint64
+
+		// Approximate stats for send-queue. For indices < nextRaftIndexInitial.
+		approxMaxPriority   admissionpb.WorkPriority
+		approxMeanSizeBytes int64
+
+		// Precise stats for send-queue. For indices >= nextRaftIndexInitial.
+		priorityCount map[admissionpb.WorkPriority]int64
+		sizeSum       int64
+	}
+	// Eval state.
+	eval struct {
+		// Only for indices >= nextRaftIndexInitial. These are either in the
+		// send-queue, or in the tracker.
+		tokensDeducted [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
+	}
+	// Only relevant when connectedState != snapshot.
+	forceFlushScheduled bool
+}
+
+// Initial state provided to constructor of replicaSendStream.
+type replicaSendStreamInitState struct {
+	isConnected bool
+	// [indexToSend, nextRaftIndex) are known to the (local) leader and need to
+	// be sent to this replica. This is the initial send-queue.
+	//
+	// INVARIANT: is-local-replica => indexToSend == nextRaftIndex, i.e., no
+	// send-queue.
 	indexToSend   uint64
 	nextRaftIndex uint64
 
-	// Stats for send-queue.
+	// Approximate stats for the initial send-queue.
 	approxMaxPriority   admissionpb.WorkPriority
-	approxMeanSizeBytes int
-	// The approx stats are only for index < approxLimitIndex. This is
-	// initialized to streamOptions.nextRaftIndex.
-	approxLimitIndex uint64
-
-	// Eval state
-	evalTokensDeducted [admissionpb.NumWorkClasses]int64
-	// Initially -1. Set to index of first call to advanceNextRaftIndex.
-	evalIndexDeductedLowerBound int64
+	approxMeanSizeBytes int64
 }
 
-func newReplicateStream(initState replicateStreamInitState) *replicateStream {
-	// TODO
-	return nil
+func newReplicaSendStream(
+	parent *replicaState, init replicaSendStreamInitState,
+) *replicaSendStream {
+	// Must be in StateReplicate on creation.
+	connectedState := replicateConnected
+	if !init.isConnected {
+		connectedState = replicateSoftDisconnected
+	}
+	rss := &replicaSendStream{
+		parent:               parent,
+		connectedState:       connectedState,
+		indexToSendInitial:   init.indexToSend,
+		nextRaftIndexInitial: init.nextRaftIndex,
+	}
+	rss.tracker.Init(parent.stream)
+	rss.sendQueue.indexToSend = init.indexToSend
+	rss.sendQueue.nextRaftIndex = init.nextRaftIndex
+	rss.sendQueue.approxMaxPriority = init.approxMaxPriority
+	rss.sendQueue.approxMeanSizeBytes = init.approxMeanSizeBytes
+	return rss
 }
 
-func (rc *replicateStream) advanceNextRaftIndexAndSent(state entryFlowControlState) {
+func (rss *replicaSendStream) advanceNextRaftIndexAndSent(state entryFlowControlState) {
+	// TODO:
+	if rss.connectedState == snapshot {
+		panic("")
+	}
 	// Will deduct eval tokens
 	// Account for in tracker.
 	// Deduct send tokens.
 }
 
-func (rc *replicateStream) advanceNextRaftIndexAndQueued(entryFlowControlState) {
+func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entryFlowControlState) {
+	// TODO:
 	// Will deduct eval tokens.
 	// If not have an outstanding notification, register one
 }
 
-func (rc *replicateStream) isEmptySendQueue() bool {
-	// TODO
-	return false
+func (rss *replicaSendStream) isEmptySendQueue() bool {
+	return rss.sendQueue.indexToSend == rss.sendQueue.nextRaftIndex
+}
+
+func (rss *replicaSendStream) changeConnectedStateInStateReplicate(isConnected bool) {
+	if isConnected {
+		if rss.connectedState != replicateSoftDisconnected {
+			panic("")
+		}
+		rss.connectedState = replicateConnected
+	}
+	if !isConnected {
+		if rss.connectedState != replicateConnected {
+			panic("")
+		}
+		rss.connectedState = replicateSoftDisconnected
+	}
+}
+
+func (rss *replicaSendStream) changeToStateSnapshot() {
+	rss.connectedState = snapshot
+}
+
+func (rss *replicaSendStream) changeToStateReplicate(isConnected bool, indexToSend uint64) {
+	if rss.sendQueue.nextRaftIndex < indexToSend {
+		panic("")
+	}
+	if rss.sendQueue.indexToSend > indexToSend {
+		panic("")
+	}
+	if rss.connectedState != snapshot {
+		panic("")
+	}
+	state := replicateConnected
+	if !isConnected {
+		state = replicateSoftDisconnected
+	}
+	rss.connectedState = state
+	// INVARIANT: rss.sendQueue.indexToSend <= indexToSend <=
+	// rss.sendQueue.nextRaftIndex. Typically, both will be <, since we
+	// transitioned to StateSnapshot since rss.sendQueue.indexToSend was
+	// truncated, and there have likely been some proposed entries since the
+	// snapshot was applied. So we will start off with some entries in the
+	// send-queue.
+
+	// The tracker must only contain entries in < rss.sendQueue.indexToSend.
+	// These may not have been received by the replica and will not get resent
+	// by Raft, so we have no guarantee those tokens will be returned. So return
+	// all tokens in the tracker.
+	rss.tracker.UntrackAll(context.TODO(), func(pri admissionpb.WorkPriority, tokens kvflowcontrol.Tokens) {
+		rss.parent.sendTokenCounter.Return(context.TODO(), admissionpb.WorkClassFromPri(pri), tokens)
+	})
+	rss.indexToSendInitial = indexToSend
+	// Return all eval tokens deducted. We have partially or fully emptied the
+	// send-queue and we don't want to iterate over the remaining members to
+	// precisely figure out what to deduct, since that may require reading from
+	// storage.
+	for wc := range rss.eval.tokensDeducted {
+		if rss.eval.tokensDeducted[wc] > 0 {
+			rss.parent.evalTokenCounter.Return(context.TODO(), admissionpb.WorkClass(wc), rss.eval.tokensDeducted[wc])
+			rss.eval.tokensDeducted[wc] = 0
+		}
+	}
+	rss.sendQueue.indexToSend = indexToSend
+	totalCount := int64(0)
+	var maxPri admissionpb.WorkPriority
+	for pri, count := range rss.sendQueue.priorityCount {
+		if count > 0 {
+			if totalCount == 0 || pri > maxPri {
+				maxPri = pri
+			}
+			totalCount += count
+			rss.sendQueue.priorityCount[pri] = 0
+		}
+	}
+	meanSizeBytes := int64(0)
+	if totalCount > 0 {
+		meanSizeBytes = rss.sendQueue.sizeSum / totalCount
+	}
+	if rss.nextRaftIndexInitial > rss.sendQueue.indexToSend {
+		// The approx stats are still relevant.
+		if rss.sendQueue.approxMaxPriority > maxPri {
+			maxPri = rss.sendQueue.approxMaxPriority
+		}
+		if totalCount == 0 {
+			meanSizeBytes = rss.sendQueue.approxMeanSizeBytes
+		} else {
+			meanSizeBytes = int64(0.9*float64(meanSizeBytes) + 0.1*float64(rss.sendQueue.approxMeanSizeBytes))
+		}
+	}
+	rss.sendQueue.approxMaxPriority = maxPri
+	rss.sendQueue.approxMeanSizeBytes = meanSizeBytes
+	rss.sendQueue.sizeSum = 0
+	rss.nextRaftIndexInitial = rss.sendQueue.nextRaftIndex
 }
 
 type connectedState uint32
@@ -681,7 +813,7 @@ type connectedState uint32
 //
 // Local replicas are always in state connected.
 //
-// Initial state for a replicateStream is either connected or
+// Initial state for a replicaSendStream is either connected or
 // softDisconnected, depending on whether FollowerTransportConnected returns
 // true or false. Transport stream closure is immediately notified
 // (TransportDisconnected), but the reconnection is only learnt about when
@@ -718,30 +850,12 @@ type connectedState uint32
 //
 //	connected => softDisconnected
 //	softDisconnected => connected
-//	* => replicateStream closed
+//	* => replicaSendStream closed
 const (
-	connected connectedState = iota
-	softDisconnected
+	replicateConnected connectedState = iota
+	replicateSoftDisconnected
+	snapshot
 )
-
-func (rs *replicateStream) isConnected() bool {
-	return rs.connectedState == connected
-}
-
-func (rs *replicateStream) setConnectedState(isConnected bool, init bool) {
-	if isConnected {
-		if init || rs.connectedState != connected {
-			rs.softDisconnectedCh = make(chan struct{})
-			rs.connectedState = connected
-		}
-	} else {
-		if init || rs.connectedState == connected {
-			close(rs.softDisconnectedCh)
-			rs.softDisconnectedCh = nil
-			rs.connectedState = softDisconnected
-		}
-	}
-}
 
 // TODO: will need the Disconnected channel like in kvflowcontrol.ConnectedStream, so
 // that waiting for eval tokens can unblock.
