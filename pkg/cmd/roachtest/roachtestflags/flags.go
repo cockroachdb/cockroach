@@ -64,6 +64,12 @@ var (
 		Usage: `List only benchmarks`,
 	})
 
+	PredictiveTests = false
+	_               = registerListFlag(&PredictiveTests, FlagInfo{
+		Name:  "predictive-tests",
+		Usage: `Use Predictive tests selection`,
+	})
+
 	ForceCloudCompat bool
 	_                = registerRunFlag(&ForceCloudCompat, FlagInfo{
 		Name:  "force-cloud-compat",

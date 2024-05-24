@@ -11,8 +11,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"os"
@@ -24,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -41,6 +45,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
+	"google.golang.org/api/option"
 )
 
 type testResult int
@@ -51,6 +56,13 @@ const (
 	testResultFailure testResult = iota
 	testResultSuccess
 	testResultSkip
+
+	// bucket and secretsLocation are for fetching the creds from store
+	bucket            = "roachtest-data"
+	secretsLocation   = "secrets/sfcreds"
+	testsFileLocation = "tests/selected"
+	testsCsvExtension = "csv"
+	project           = "cockroach-ephemeral"
 )
 
 type ddEventType int
@@ -124,6 +136,12 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	specs, err := testsToRun(r, filter, roachtestflags.RunSkipped, roachtestflags.SelectProbability, true)
 	if err != nil {
 		return err
+	}
+
+	if roachtestflags.PredictiveTests {
+		selectedTests := 0
+		specs, selectedTests = predictTestsToRun(context.Background(), specs, roachtestflags.Cloud, roachtestflags.Suite)
+		fmt.Printf("%d out of %d tests selected from predictive test selection!\n", selectedTests, len(specs))
 	}
 
 	n := len(specs)
@@ -207,6 +225,75 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	}
 
 	return err
+}
+
+// predictTestsToRun filters the tests to run based on certain criteria:
+// 1. the number of time a test has been successfully running
+// 2. the test is new
+// 3. the test has not been run for a while
+// 4. a subset of the successful tests
+func predictTestsToRun(
+	ctx context.Context, tests []registry.TestSpec, cloud, suite string,
+) ([]registry.TestSpec, int) {
+	options := []option.ClientOption{option.WithScopes(storage.ScopeReadOnly)}
+	cj := os.Getenv("GOOGLE_EPHEMERAL_CREDENTIALS")
+	if len(cj) != 0 {
+		options = append(options, option.WithCredentialsJSON([]byte(cj)))
+	} else {
+		fmt.Printf("GOOGLE_EPHEMERAL_CREDENTIALS env is not set.\n")
+	}
+	client, err := storage.NewClient(ctx, options...)
+	if err != nil {
+		fmt.Printf("connection to GCS failed: %v", err)
+		return tests, len(tests)
+	}
+	defer func() { _ = client.Close() }()
+
+	object := fmt.Sprintf("%s-%s-%s.%s", testsFileLocation, suite, cloud, testsCsvExtension)
+	r, err := client.Bucket(bucket).Object(object).NewReader(ctx)
+	if err != nil {
+		fmt.Printf("failed to get the object %s in bucket %s : %v\n", object, bucket, err)
+		return tests, len(tests)
+	}
+	body, err := io.ReadAll(r)
+	if err != nil {
+		fmt.Printf("failed to read CSV from GCS: %v", err)
+		return tests, len(tests)
+	}
+	if err = r.Close(); err != nil {
+		fmt.Printf("failed to close GCS writer: %v", err)
+		return tests, len(tests)
+	}
+	cr := csv.NewReader(bytes.NewReader(body))
+	data, err := cr.ReadAll()
+	if err != nil {
+		fmt.Printf("failed to read CSV data: %v", err)
+		return tests, len(tests)
+	}
+	testNamesToRun := make(map[string]string)
+	if len(data) <= 1 {
+		// the file has just the header
+		return tests, len(tests)
+	}
+	for _, d := range data[1:] {
+		testNamesToRun[d[0]] = d[1]
+	}
+	selectedTestsCount := 0
+	for i := range tests {
+		if testShouldBeSkipped(testNamesToRun, tests[i]) {
+			tests[i].Skip = "stable test"
+			tests[i].SkipDetails = "test is stable. So, it is ignored."
+		} else {
+			selectedTestsCount++
+		}
+	}
+	return tests, selectedTestsCount
+}
+
+// testShouldBeSkipped decides whether a test should be skipped based on testNamesToRun
+func testShouldBeSkipped(testNamesToRun map[string]string, test registry.TestSpec) bool {
+	toRun, ok := testNamesToRun[test.Name]
+	return ok && test.Skip == "" && toRun == "no"
 }
 
 // This diverts all the default non-fatal logging to a file in `baseDir`. This is particularly
