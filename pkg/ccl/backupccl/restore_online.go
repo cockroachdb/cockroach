@@ -184,11 +184,19 @@ func sendAddRemoteSSTs(
 		return 0, 0, err
 	}
 
+	if err := job.NoTxn().RunningStatus(ctx, "Splitting and distributing spans"); err != nil {
+		return 0, 0, err
+	}
+
 	if err := splitAndScatter(ctx, execCtx, genSpan, *kr, fromSystemTenant, targetRangeSize); err != nil {
 		return 0, 0, errors.Wrap(err, "failed to split and scatter spans")
 	}
 
 	if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("restore.before_link"); err != nil {
+		return 0, 0, err
+	}
+
+	if err := job.NoTxn().RunningStatus(ctx, ""); err != nil {
 		return 0, 0, err
 	}
 
