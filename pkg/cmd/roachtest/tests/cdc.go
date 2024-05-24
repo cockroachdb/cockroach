@@ -2136,14 +2136,12 @@ func registerCDC(r registry.Registry) {
 					chaos:         true,
 					validateOrder: true,
 				},
-				opts: map[string]string{
-					"metrics_label":       "'webhook'",
-					"webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
-				},
+				opts: map[string]string{"initial_scan": "'no'"},
 			})
 
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 30 * time.Minute,
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      5 * time.Minute,
 			})
 
 			ct.waitForWorkload()
@@ -2563,7 +2561,7 @@ import (
 
 func main() {
 	runtime.GOMAXPROCS(1)
-	out, err := os.OpenFile("/mnt/data2/webhook-output-%d.jsonl", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	out, err := os.OpenFile("/mnt/data2/webhook-output-%d.jsonl", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatalf("failed to create output file")
 	}
