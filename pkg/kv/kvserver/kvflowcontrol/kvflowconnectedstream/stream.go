@@ -534,7 +534,11 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 }
 
 type entryFlowControlState struct {
-	index           uint64
+	index uint64
+	// usesFlowControl can be false for entries that don't use flow control.
+	// This can also happen if RAC is partly disabled e.g. disabled for regular
+	// work. In that case the send-queue will also be disabled (i.e., equivalent
+	// to RACv1).
 	usesFlowControl bool
 	priority        admissionpb.WorkPriority
 	tokens          kvflowcontrol.Tokens
@@ -578,6 +582,7 @@ type replicaStreamOptions struct {
 }
 
 type replicaState struct {
+	parent           *RangeControllerImpl
 	stream           kvflowcontrol.Stream
 	evalTokenCounter EvalTokenCounter
 	sendTokenCounter SendTokenCounter
@@ -641,11 +646,14 @@ type replicaSendStream struct {
 
 		// Approximate stats for send-queue. For indices < nextRaftIndexInitial.
 		approxMaxPriority   admissionpb.WorkPriority
-		approxMeanSizeBytes int64
+		approxMeanSizeBytes kvflowcontrol.Tokens
 
 		// Precise stats for send-queue. For indices >= nextRaftIndexInitial.
 		priorityCount map[admissionpb.WorkPriority]int64
-		sizeSum       int64
+		sizeSum       kvflowcontrol.Tokens
+
+		// Valid iff send-queue is non-empty and connectedState != snapshot.
+		watcherHandleID StoreStreamSendTokenHandleID
 	}
 	// Eval state.
 	eval struct {
@@ -670,7 +678,7 @@ type replicaSendStreamInitState struct {
 
 	// Approximate stats for the initial send-queue.
 	approxMaxPriority   admissionpb.WorkPriority
-	approxMeanSizeBytes int64
+	approxMeanSizeBytes kvflowcontrol.Tokens
 }
 
 func newReplicaSendStream(
@@ -705,14 +713,77 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndSent(state entryFlowControl
 	// Deduct send tokens.
 }
 
-func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entryFlowControlState) {
-	// TODO:
-	// Will deduct eval tokens.
-	// If not have an outstanding notification, register one
+// TODO: cannot deduct in StateSnapshot. Should return all tokens when transitioned to snapshot!
+// and not when transition back to StateReplicate.
+func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowControlState) {
+	if entry.index != rss.sendQueue.nextRaftIndex {
+		panic("")
+	}
+	wasEmpty := rss.isEmptySendQueue()
+	rss.sendQueue.nextRaftIndex++
+	rss.sendQueue.sizeSum += entry.tokens
+	if entry.usesFlowControl {
+		var priority admissionpb.WorkPriority
+		if rss.connectedState != snapshot {
+			priority = rss.queuePriority()
+		}
+		rss.sendQueue.priorityCount[entry.priority]++
+		if rss.connectedState == snapshot {
+			return
+		}
+		priorityChanged := false
+		if entry.priority > priority {
+			priority = entry.priority
+			priorityChanged = true
+		}
+		wc := admissionpb.WorkClassFromPri(entry.priority)
+		rss.eval.tokensDeducted[wc] += entry.tokens
+		rss.parent.evalTokenCounter.Deduct(context.TODO(), wc, entry.tokens)
+		if wasEmpty {
+			// Register notification.
+			rss.sendQueue.watcherHandleID = rss.parent.parent.opts.StoreStreamSendTokensWatcher.NotifyWhenAvailable(
+				rss.parent.sendTokenCounter, wc, rss)
+		} else if priorityChanged {
+			// Update notification
+			rss.parent.parent.opts.UpdateHandle(rss.sendQueue.watcherHandleID, wc)
+		}
+	}
 }
 
+// Notify implements TokenAvailableNotification.
+func (rss *replicaSendStream) Notify() {
+	// TODO:
+	// Nothing is locked. Want to deduct some and schedule on raftScheduler.
+}
 func (rss *replicaSendStream) isEmptySendQueue() bool {
 	return rss.sendQueue.indexToSend == rss.sendQueue.nextRaftIndex
+}
+
+// REQUIRES: send-queue is not empty.
+func (rss *replicaSendStream) queuePriority() admissionpb.WorkPriority {
+	initialized := false
+	var maxPri admissionpb.WorkPriority
+	if rss.sendQueue.indexToSend < rss.nextRaftIndexInitial {
+		maxPri = rss.sendQueue.approxMaxPriority
+		initialized = true
+	}
+	for pri, count := range rss.sendQueue.priorityCount {
+		if count > 0 && (!initialized || pri > maxPri) {
+			maxPri = pri
+		}
+	}
+	return maxPri
+}
+
+// REQUIRES: send-queue is not empty.
+func (rss *replicaSendStream) queueSize() kvflowcontrol.Tokens {
+	var size kvflowcontrol.Tokens
+	countWithApproxStats := rss.nextRaftIndexInitial - rss.sendQueue.indexToSend
+	if countWithApproxStats > 0 {
+		size = kvflowcontrol.Tokens(countWithApproxStats) * rss.sendQueue.approxMeanSizeBytes
+	}
+	size += rss.sendQueue.sizeSum
+	return size
 }
 
 func (rss *replicaSendStream) changeConnectedStateInStateReplicate(isConnected bool) {
@@ -786,9 +857,9 @@ func (rss *replicaSendStream) changeToStateReplicate(isConnected bool, indexToSe
 			rss.sendQueue.priorityCount[pri] = 0
 		}
 	}
-	meanSizeBytes := int64(0)
+	meanSizeBytes := kvflowcontrol.Tokens(0)
 	if totalCount > 0 {
-		meanSizeBytes = rss.sendQueue.sizeSum / totalCount
+		meanSizeBytes = rss.sendQueue.sizeSum / kvflowcontrol.Tokens(totalCount)
 	}
 	if rss.nextRaftIndexInitial > rss.sendQueue.indexToSend {
 		// The approx stats are still relevant.
@@ -798,7 +869,7 @@ func (rss *replicaSendStream) changeToStateReplicate(isConnected bool, indexToSe
 		if totalCount == 0 {
 			meanSizeBytes = rss.sendQueue.approxMeanSizeBytes
 		} else {
-			meanSizeBytes = int64(0.9*float64(meanSizeBytes) + 0.1*float64(rss.sendQueue.approxMeanSizeBytes))
+			meanSizeBytes = kvflowcontrol.Tokens(0.9*float64(meanSizeBytes) + 0.1*float64(rss.sendQueue.approxMeanSizeBytes))
 		}
 	}
 	rss.sendQueue.approxMaxPriority = maxPri
