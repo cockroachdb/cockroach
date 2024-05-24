@@ -271,26 +271,9 @@ func sendAddRemoteSSTWorker(
 	approxDataSize *int64,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
-		var toAdd []execinfrapb.RestoreFileSpec
-		var batchSize int64
-		const targetBatchSize = 440 << 20
-
-		flush := func(elidedPrefixType execinfrapb.ElidePrefix) error {
-			if len(toAdd) == 0 {
-				return nil
-			}
-
-			for _, file := range toAdd {
-				if err := sendRemoteAddSSTable(ctx, execCtx, file, elidedPrefixType, fromSystemTenant); err != nil {
-					return err
-				}
-			}
-			toAdd = nil
-			batchSize = 0
-			return nil
-		}
-
 		for entry := range restoreSpanEntriesCh {
+			log.Infof(ctx, "starting restore of backed up span %s containing %d files", entry.Span, len(entry.Files))
+
 			if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
 				return err
 			}
@@ -308,40 +291,24 @@ func sendAddRemoteSSTWorker(
 						entry.Span,
 					)
 				}
+
+				// TODO(dt): remove when pebble supports empty (virtual) files.
 				if !file.BackupFileEntrySpan.Equal(restoringSubspan) {
 					return errors.AssertionFailedf("file span %s at path %s is not contained in restore span %s", file.BackupFileEntrySpan, file.Path, entry.Span)
 				}
-				// Clone the key because rewriteSpan could modify the keys in place, but
-				// we reuse backup files across restore span entries.
+
 				restoringSubspan, err := rewriteSpan(&kr, restoringSubspan.Clone(), entry.ElidedPrefix)
 				if err != nil {
 					return err
 				}
-				log.Infof(ctx, "experimental restore: sending span %s of file %s (file span: %s) as part of restore span (old key space) %s",
-					restoringSubspan, file.Path, file.BackupFileEntrySpan, entry.Span)
+
+				log.Infof(ctx, "restoring span %s of file %s (file span: %s)", restoringSubspan, file.Path, file.BackupFileEntrySpan)
 				file.BackupFileEntrySpan = restoringSubspan
-
-				// If we've queued up a batch size of files, split before the next one
-				// then flush the ones we queued. We do this accumulate-into-batch, then
-				// split, then flush so that when we split we are splitting an empty
-				// span rather than one we have added to, since we add with estimated
-				// stats and splitting a span with estimated stats is slow.
-				if batchSize+file.BackupFileEntryCounts.DataSize > targetBatchSize {
-					log.Infof(ctx, "flushing %s batch of %d SSTs due to size limit. split at %s in span (old keyspace) %s", sz(batchSize), len(toAdd), file.BackupFileEntrySpan.Key, entry.Span)
-					if err := flush(entry.ElidedPrefix); err != nil {
-						return err
-					}
+				if err := sendRemoteAddSSTable(ctx, execCtx, file, entry.ElidedPrefix, fromSystemTenant); err != nil {
+					return err
 				}
-
-				// Add this file to the batch to flush after we put a split to its RHS.
-				toAdd = append(toAdd, file)
-				batchSize += file.BackupFileEntryCounts.DataSize
 			}
 
-			log.Infof(ctx, "flushing %s batch of %d SSTs at end of restore span entry %s", sz(batchSize), len(toAdd), entry.Span)
-			if err := flush(entry.ElidedPrefix); err != nil {
-				return err
-			}
 			var rows, dataSize int64
 			for _, file := range entry.Files {
 				rows += file.BackupFileEntryCounts.Rows
