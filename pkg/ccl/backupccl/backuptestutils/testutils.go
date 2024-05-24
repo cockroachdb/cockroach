@@ -62,10 +62,11 @@ type bankWorkloadArgs struct {
 }
 
 type backupTestOptions struct {
-	bankArgs        *bankWorkloadArgs
-	dataDir         string
-	testClusterArgs base.TestClusterArgs
-	initFunc        func(*testcluster.TestCluster)
+	bankArgs                   *bankWorkloadArgs
+	dataDir                    string
+	testClusterArgs            base.TestClusterArgs
+	initFunc                   func(*testcluster.TestCluster)
+	skipInvalidDescriptorCheck bool
 }
 
 func WithParams(p base.TestClusterArgs) BackupTestArg {
@@ -91,6 +92,12 @@ func WithInitFunc(f func(*testcluster.TestCluster)) BackupTestArg {
 func WithTempDir(dir string) BackupTestArg {
 	return func(o *backupTestOptions) {
 		o.dataDir = dir
+	}
+}
+
+func WithSkipInvalidDescriptorCheck() BackupTestArg {
+	return func(o *backupTestOptions) {
+		o.skipInvalidDescriptorCheck = true
 	}
 }
 
@@ -158,7 +165,9 @@ func StartBackupRestoreTestCluster(
 	}
 
 	return tc, sqlDB, opts.dataDir, func() {
-		CheckForInvalidDescriptors(t, tc.Conns[0])
+		if !opts.skipInvalidDescriptorCheck {
+			CheckForInvalidDescriptors(t, tc.Conns[0])
+		}
 		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
 		dirCleanupFunc()
 	}
