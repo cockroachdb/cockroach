@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "leases",
+    srcs = ["build.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "leases_test",
+    srcs = ["build_test.go"],
+    embed = [":leases"],
+    deps = [
+        "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "@com_github_stretchr_testify//require",
+    ],
+)

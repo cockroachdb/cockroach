@@ -48,10 +48,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
@@ -283,99 +285,42 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			nextLeaseHolder.ReplicaID, nextLease.Replica.ReplicaID))
 	}
 
-	// Who owns the previous and next lease?
-	prevLocal := status.Lease.OwnedBy(p.repl.store.StoreID())
-	nextLocal := nextLeaseHolder.StoreID == p.repl.store.StoreID()
-
-	// Assert that the lease acquisition, extension, or transfer is valid.
-	acquisition := !prevLocal && nextLocal
-	extension := prevLocal && nextLocal
-	transfer := prevLocal && !nextLocal
-	remote := !prevLocal && !nextLocal
-	_ = extension // not used, just documentation
-
-	if remote {
-		log.Fatalf(ctx, "cannot acquire/extend lease for remote replica: %v -> %v", status, nextLeaseHolder)
-	}
-	if acquisition {
-		// If this is a non-cooperative lease change (i.e. an acquisition), it
-		// is up to us to ensure that Lease.Start is greater than the end time
-		// of the previous lease. This means that if status refers to an expired
-		// epoch lease, we must increment the liveness epoch of the previous
-		// leaseholder *using status.Liveness*, which we know to be expired *at
-		// status.Timestamp*, before we can propose this lease. If this
-		// increment fails, we cannot propose this new lease (see handling of
-		// ErrEpochAlreadyIncremented in requestLeaseAsync).
-		//
-		// Note that the request evaluation may decrease our proposed start time
-		// if it decides that it is safe to do so (for example, this happens
-		// when renewing an expiration-based lease), but it will never increase
-		// it (and a start timestamp that is too low is unsafe because it
-		// results in incorrect initialization of the timestamp cache on the new
-		// leaseholder). For expiration-based leases, we have a safeguard during
-		// evaluation - we simply check that the new lease starts after the old
-		// lease ends and throw an error if now. But for epoch-based leases, we
-		// don't have the benefit of such a safeguard during evaluation because
-		// the expiration is indirectly stored in the referenced liveness record
-		// and not in the lease itself. So for epoch-based leases, enforcing
-		// this safety condition is truly up to us.
-		if status.State != kvserverpb.LeaseState_EXPIRED {
-			log.Fatalf(ctx, "cannot acquire lease from another node before it has expired: %v", status)
-		}
-	}
-
 	// No request in progress. Let's propose a Lease command asynchronously.
 	llHandle := p.newHandle()
-	reqHeader := kvpb.RequestHeader{
-		Key: startKey,
-	}
-	reqLease := roachpb.Lease{
-		Replica:    nextLeaseHolder,
-		Start:      status.Now,
-		ProposedTS: status.Now,
-	}
 
-	var reqLeaseLiveness livenesspb.Liveness
-	if p.repl.shouldUseExpirationLeaseRLocked() ||
-		(transfer &&
-			TransferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV)) {
-		// In addition to ranges that should be using expiration-based leases
-		// (typically the meta and liveness ranges), we also use them during lease
-		// transfers for all other ranges. After acquiring these expiration based
-		// leases, the leaseholders are expected to upgrade them to the more
-		// efficient epoch-based ones. But by transferring an expiration-based
-		// lease, we can limit the effect of an ill-advised lease transfer since the
-		// incoming leaseholder needs to recognize itself as such within a few
-		// seconds; if it doesn't (we accidentally sent the lease to a replica in
-		// need of a snapshot or far behind on its log), the lease is up for grabs.
-		// If we simply transferred epoch based leases, it's possible for the new
-		// leaseholder that's delayed in applying the lease transfer to maintain its
-		// lease (assuming the node it's on is able to heartbeat its liveness
-		// record).
-		reqLease.Expiration = &hlc.Timestamp{}
-		*reqLease.Expiration = status.Now.ToTimestamp().Add(int64(p.repl.store.cfg.RangeLeaseDuration), 0)
-	} else {
-		// Get the liveness for the next lease holder and set the epoch in the lease request.
-		l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
-		if !ok || l.Epoch == 0 {
-			llHandle.resolve(kvpb.NewError(&kvpb.LeaseRejectedError{
-				Existing:  status.Lease,
-				Requested: reqLease,
-				Message:   fmt.Sprintf("couldn't request lease for %+v: %v", nextLeaseHolder, liveness.ErrRecordCacheMiss),
-			}))
-			return llHandle
-		}
-		reqLease.Epoch = l.Epoch
-		reqLeaseLiveness = l.Liveness
+	// Construct the next lease.
+	st := leases.Settings{
+		UseExpirationLeases:      p.repl.shouldUseExpirationLeaseRLocked(),
+		TransferExpirationLeases: TransferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV),
+		ExpToEpochEquiv:          p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start),
+		RangeLeaseDuration:       p.repl.store.cfg.RangeLeaseDuration,
+	}
+	nl := p.repl.store.cfg.NodeLiveness
+	in := leases.Input{
+		LocalStoreID:          p.repl.StoreID(),
+		Now:                   status.Now,
+		MinLeaseProposedTS:    p.repl.mu.minLeaseProposedTS,
+		PrevLease:             status.Lease,
+		PrevLeaseNodeLiveness: status.Liveness,
+		PrevLeaseExpired:      status.IsExpired(),
+		NextLeaseHolder:       nextLeaseHolder,
+	}
+	out, err := leases.Build(st, nl, in)
+	if err != nil {
+		llHandle.resolve(kvpb.NewError(err))
+		return llHandle
 	}
 
 	var leaseReq kvpb.Request
-	if transfer {
+	leaseReqHeader := kvpb.RequestHeader{
+		Key: startKey,
+	}
+	if in.Transfer() {
 		leaseReq = &kvpb.TransferLeaseRequest{
-			RequestHeader:      reqHeader,
-			Lease:              reqLease,
-			PrevLease:          status.Lease,
+			RequestHeader:      leaseReqHeader,
+			PrevLease:          in.PrevLease,
 			BypassSafetyChecks: bypassSafetyChecks,
+			Lease:              out.NextLease,
 		}
 	} else {
 		if bypassSafetyChecks {
@@ -385,19 +330,14 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			// knob.
 			log.Fatal(ctx, "bypassSafetyChecks not supported for RequestLeaseRequest")
 		}
-		minProposedTS := p.repl.mu.minLeaseProposedTS
 		leaseReq = &kvpb.RequestLeaseRequest{
-			RequestHeader: reqHeader,
-			Lease:         reqLease,
-			// PrevLease must match for our lease to be accepted. If another
-			// lease is applied between our previous call to leaseStatus and
-			// our lease request applying, it will be rejected.
-			PrevLease:     status.Lease,
-			MinProposedTS: &minProposedTS,
+			RequestHeader: leaseReqHeader,
+			PrevLease:     in.PrevLease,
+			Lease:         out.NextLease,
 		}
 	}
 
-	err := p.requestLeaseAsync(ctx, status, reqLease, reqLeaseLiveness, leaseReq, limiter)
+	err = p.requestLeaseAsync(ctx, leaseReq, out, limiter)
 	if err != nil {
 		if errors.Is(err, stop.ErrThrottled) {
 			llHandle.resolve(kvpb.NewError(err))
@@ -417,7 +357,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	// adding our new channel to p.llHandles below and requestLeaseAsync sending results
 	// on all channels in p.llHandles. The same logic applies to p.nextLease.
 	p.llHandles[llHandle] = struct{}{}
-	p.nextLease = reqLease
+	p.nextLease = out.NextLease
 	return llHandle
 }
 
@@ -425,18 +365,10 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 // replica. The request is sent in an async task. If limiter is non-nil, it is
 // used to bound the number of goroutines spawned, returning ErrThrottled when
 // exceeded.
-//
-// The status argument is used as the expected value for liveness operations.
-// leaseReq must be consistent with the LeaseStatus.
-//
-// The reqLeaseLiveness argument is provided when reqLease is an epoch-based
-// lease.
 func (p *pendingLeaseRequest) requestLeaseAsync(
 	parentCtx context.Context,
-	status kvserverpb.LeaseStatus,
-	reqLease roachpb.Lease,
-	reqLeaseLiveness livenesspb.Liveness,
 	leaseReq kvpb.Request,
+	leaseReqInfo leases.Output,
 	limiter *quotapool.IntPool,
 ) error {
 	// Create a new context. We run the request to completion even if all callers
@@ -471,7 +403,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// RPC, but here we submit the request directly to the local replica.
 			growstack.Grow()
 
-			err := p.requestLease(ctx, status, reqLease, reqLeaseLiveness, leaseReq)
+			err := p.requestLease(ctx, leaseReq, leaseReqInfo)
 			// Error will be handled below.
 
 			// We reset our state below regardless of whether we've gotten an error or
@@ -511,34 +443,17 @@ var logFailedHeartbeatOwnLiveness = log.Every(10 * time.Second)
 // requestLease sends a synchronous transfer lease or lease request to the
 // specified replica. It is only meant to be called from requestLeaseAsync,
 // since it does not coordinate with other in-flight lease requests.
-//
-// The reqLeaseLiveness argument is provided when reqLease is an epoch-based
-// lease.
 func (p *pendingLeaseRequest) requestLease(
-	ctx context.Context,
-	status kvserverpb.LeaseStatus,
-	reqLease roachpb.Lease,
-	reqLeaseLiveness livenesspb.Liveness,
-	leaseReq kvpb.Request,
+	ctx context.Context, leaseReq kvpb.Request, leaseReqInfo leases.Output,
 ) error {
 	started := timeutil.Now()
 	defer func() {
 		p.repl.store.metrics.LeaseRequestLatency.RecordValue(timeutil.Since(started).Nanoseconds())
 	}()
 
-	nextLeaseHolder := reqLease.Replica
-	extension := status.OwnedBy(nextLeaseHolder.StoreID)
-
-	// If we are promoting an expiration-based lease to an epoch-based lease, we
-	// must make sure the expiration does not regress. We do this here because the
-	// expiration is stored directly in the lease for expiration-based leases but
-	// indirectly in liveness record for epoch-based leases. To ensure this, we
-	// manually heartbeat our liveness record if necessary. This is expected to
-	// work because the liveness record interval and the expiration-based lease
-	// interval are the same.
-	expToEpochPromo := extension && status.Lease.Type() == roachpb.LeaseExpiration && reqLease.Type() == roachpb.LeaseEpoch
-	if expToEpochPromo && reqLeaseLiveness.Expiration.ToTimestamp().Less(status.Lease.GetExpiration()) {
-		curLiveness := reqLeaseLiveness
+	nl := leaseReqInfo.NodeLivenessManipulation
+	if nl.Heartbeat != nil {
+		curLiveness := *nl.Heartbeat
 		for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 			err := p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, curLiveness)
 			if err != nil {
@@ -552,79 +467,74 @@ func (p *pendingLeaseRequest) requestLease(
 			// expiration of the lease we're promoting. If not, we may have raced with
 			// another liveness heartbeat which did not extend the liveness expiration
 			// far enough and we should try again.
-			l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(reqLeaseLiveness.NodeID)
+			l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(curLiveness.NodeID)
 			if !ok {
 				return errors.NewAssertionErrorWithWrappedErrf(liveness.ErrRecordCacheMiss, "after heartbeat")
 			}
-			if l.Expiration.ToTimestamp().Less(status.Lease.GetExpiration()) {
+			if l.Expiration.ToTimestamp().Less(nl.HeartbeatMinExpiration) {
 				log.Infof(ctx, "expiration of liveness record %s is not greater than "+
-					"expiration of the previous lease %s after liveness heartbeat, retrying...", l, status.Lease)
+					"expiration of the previous lease after liveness heartbeat, retrying...", l)
 				curLiveness = l.Liveness
 				continue
 			}
 			break
 		}
 	}
-
-	// If we're replacing an expired epoch-based lease, we must increment the
-	// epoch of the prior owner to invalidate its leases. If we were the owner,
-	// then we instead heartbeat to become live.
-	if status.Lease.Type() == roachpb.LeaseEpoch && status.State == kvserverpb.LeaseState_EXPIRED {
+	if nl.Increment != nil {
+		// If not owner, increment epoch if necessary to invalidate lease.
+		// If we fail to increment the epoch for any reason, we return an
+		// error and do not acquire the lease.
+		//
+		// However, we only even attempt to increment the epoch if the next
+		// leaseholder is considered live at this time. If not, there's no
+		// sense in incrementing the expired leaseholder's epoch. Instead,
+		// we just return an error and do not acquire the lease.
 		var err error
-		// If this replica is previous & next lease holder, manually heartbeat to become live.
-		if extension {
-			if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil && logFailedHeartbeatOwnLiveness.ShouldLog() {
-				log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
-			}
-		} else if status.Liveness.Epoch == status.Lease.Epoch {
-			// If not owner, increment epoch if necessary to invalidate lease.
-			// However, we only do so in the event that the next leaseholder is
-			// considered live at this time. If not, there's no sense in
-			// incrementing the expired leaseholder's epoch.
-			if !p.repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(nextLeaseHolder.NodeID).IsLive(livenesspb.EpochLease) {
-				err = errors.Errorf("not incrementing epoch on n%d because next leaseholder (n%d) not live",
-					status.Liveness.NodeID, nextLeaseHolder.NodeID)
-				log.VEventf(ctx, 1, "%v", err)
-			} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
-				// If we get ErrEpochAlreadyIncremented, someone else beat
-				// us to it. This proves that the target node is truly
-				// dead *now*, but it doesn't prove that it was dead at
-				// status.Timestamp (which we've encoded into our lease
-				// request). It's possible that the node was temporarily
-				// considered dead but revived without having its epoch
-				// incremented, i.e. that it was in fact live at
-				// status.Timestamp.
-				//
-				// It would be incorrect to simply proceed to sending our
-				// lease request since our lease.Start may precede the
-				// effective end timestamp of the predecessor lease (the
-				// expiration of the last successful heartbeat before the
-				// epoch increment), and so under this lease this node's
-				// timestamp cache would not necessarily reflect all reads
-				// served by the prior leaseholder.
-				//
-				// It would be correct to bump the timestamp in the lease
-				// request and proceed, but that just sets up another race
-				// between this node and the one that already incremented
-				// the epoch. They're probably going to beat us this time
-				// too, so just return the NotLeaseHolderError here
-				// instead of trying to fix up the timestamps and submit
-				// the lease request.
-				//
-				// ErrEpochAlreadyIncremented is not an unusual situation,
-				// so we don't log it as an error.
-				//
-				// https://github.com/cockroachdb/cockroach/issues/35986
-				if errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
-					// ignore
-				} else if errors.HasType(err, &liveness.ErrEpochCondFailed{}) {
-					// ErrEpochCondFailed indicates that someone else changed the liveness
-					// record while we were incrementing it. The node could still be
-					// alive, or someone else updated it. Don't log this as an error.
-					log.Infof(ctx, "failed to increment leaseholder's epoch: %s", err)
-				} else {
-					log.Errorf(ctx, "failed to increment leaseholder's epoch: %s", err)
-				}
+		nextLeaseNodeID := leaseReqInfo.NextLease.Replica.NodeID
+		if !p.repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(nextLeaseNodeID).IsLive(livenesspb.EpochLease) {
+			err = errors.Errorf("not incrementing epoch on n%d because next leaseholder (n%d) not live",
+				nl.Increment.NodeID, nextLeaseNodeID)
+			log.VEventf(ctx, 1, "%v", err)
+		} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, *nl.Increment); err != nil {
+			// If we get ErrEpochAlreadyIncremented, someone else beat
+			// us to it. This proves that the target node is truly
+			// dead *now*, but it doesn't prove that it was dead at
+			// status.Timestamp (which we've encoded into our lease
+			// request). It's possible that the node was temporarily
+			// considered dead but revived without having its epoch
+			// incremented, i.e. that it was in fact live at the
+			// LeaseStatus.Now which was used to construct this lease
+			// request.
+			//
+			// It would be incorrect to simply proceed to sending our
+			// lease request since our lease.Start may precede the
+			// effective end timestamp of the predecessor lease (the
+			// expiration of the last successful heartbeat before the
+			// epoch increment), and so under this lease this node's
+			// timestamp cache would not necessarily reflect all reads
+			// served by the prior leaseholder.
+			//
+			// It would be correct to bump the timestamp in the lease
+			// request and proceed, but that just sets up another race
+			// between this node and the one that already incremented
+			// the epoch. They're probably going to beat us this time
+			// too, so just return the NotLeaseHolderError here
+			// instead of trying to fix up the timestamps and submit
+			// the lease request.
+			//
+			// ErrEpochAlreadyIncremented is not an unusual situation,
+			// so we don't log it as an error.
+			//
+			// https://github.com/cockroachdb/cockroach/issues/35986
+			if errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
+				// ignore
+			} else if errors.HasType(err, &liveness.ErrEpochCondFailed{}) {
+				// ErrEpochCondFailed indicates that someone else changed the liveness
+				// record while we were incrementing it. The node could still be
+				// alive, or someone else updated it. Don't log this as an error.
+				log.Infof(ctx, "failed to increment leaseholder's epoch: %s", err)
+			} else {
+				log.Errorf(ctx, "failed to increment leaseholder's epoch: %s", err)
 			}
 		}
 		if err != nil {
