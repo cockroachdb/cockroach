@@ -30,6 +30,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 	const nodes = 6
 	gceGeoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
 	awsGeoZones := []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
+	azureGeoZones := []string{"eastus", "westus2", "westeurope"}
 	r.Add(registry.TestSpec{
 		Name:      fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
 		Owner:     registry.OwnerKV,
@@ -40,15 +41,23 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 			spec.Geo(),
 			spec.GCEZones(strings.Join(gceGeoZones, ",")),
 			spec.AWSZones(strings.Join(awsGeoZones, ",")),
+			spec.AzureLocations(strings.Join(azureGeoZones, ",")),
 		),
 		// TODO(radu): enable this test on AWS.
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			firstAZ := gceGeoZones[0]
-			if c.Cloud() == spec.AWS {
+			var firstAZ string
+			switch c.Cloud() {
+			case spec.GCE:
+				firstAZ = gceGeoZones[0]
+			case spec.AWS:
 				firstAZ = awsGeoZones[0]
+			case spec.Azure:
+				firstAZ = azureGeoZones[0]
+			default:
+				t.Fatalf("unsupported cloud %s", c.Cloud())
 			}
 			roachNodes := c.Range(1, nodes)
 			gatewayNodes := c.Range(1, nodes/3)
