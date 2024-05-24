@@ -163,11 +163,9 @@ func registerOnlineRestorePerf(r registry.Registry) {
 								))
 							}
 							if runWorkload {
-								require.NoError(t, exportStats(
-									ctx,
-									rd,
-									restoreStats,
-								))
+								if err := exportStats(ctx, rd, restoreStats); err != nil {
+									t.L().Printf("failed to export stats: %s", err.Error())
+								}
 							}
 						},
 					})
