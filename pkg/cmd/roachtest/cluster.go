@@ -2990,7 +2990,8 @@ func (c *clusterImpl) WipeForReuse(
 
 	// Clear DNS records for the cluster.
 	if err := c.DestroyDNS(ctx, l); err != nil {
-		return err
+		// Log and swallow the error.
+		l.PrintfCtx(ctx, "failed to destroy DNS records for cluster %s: %v", c.name, err)
 	}
 	// Overwrite the spec of the cluster with the one coming from the test. In
 	// particular, this overwrites the reuse policy to reflect what the test
