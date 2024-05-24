@@ -1673,6 +1673,16 @@ func (s *Smither) makeOrderByWithAllCols(refs colRefs) tree.OrderBy {
 		if s.postgres && ref.typ.Family() == types.Box2DFamily {
 			continue
 		}
+		if ref.typ.Family() == types.CollatedStringFamily {
+			// Some collated strings are equal, yet they differ when comparing
+			// them directly as strings (e.g. e'\x00':::STRING COLLATE en_US
+			// vs e'\x01':::STRING COLLATE en_US), which makes some queries
+			// produce non-deterministic results even with all columns in the
+			// ORDER BY clause. Fixing how we check the expected output is not
+			// easy, so we simply reject stmts that require collated strings to
+			// be in the ORDER BY clause.
+			return nil, false
+		}
 		ob = append(ob, &tree.Order{
 			Expr:       ref.item,
 			Direction:  s.randDirection(),
