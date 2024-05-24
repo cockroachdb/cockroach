@@ -123,8 +123,7 @@ message Statement {
   int64 rows_written = 14;
   int64 retries = 15;
   string auto_retry_reason = 16;
-  // Nodes is the ordered list of nodes ids on which the statement was executed.
-  repeated int64 nodes = 17;
+  reserved 17; // previously nodes as []int64
   google.protobuf.Duration contention = 18 [(gogoproto.stdduration) = true];
   repeated string index_recommendations = 19;
   reserved 20; // previously contention_events
@@ -135,6 +134,9 @@ message Statement {
   string error_code = 24;
   // The most recent error experienced by this statement.
   string error_msg = 25 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+  // SQLInstanceIDs is the ordered list of SQL instance ids on which the
+  // statement was executed.
+  repeated int32 sql_instance_ids = 26 [(gogoproto.customname) = "SQLInstanceIDs"];
 }
 
 

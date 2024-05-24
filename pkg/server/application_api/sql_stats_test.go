@@ -1586,14 +1586,14 @@ func generateStatement() appstatspb.CollectedStatementStatistics {
 		},
 
 		Stats: appstatspb.StatementStatistics{
-			Count:         10,
-			Indexes:       []string{"15@4"},
-			LastErrorCode: "",
-			MaxRetries:    0,
-			Nodes:         []int64{1},
-			PlanGists:     []string{"AgEeCADnAwIAAAMHEgUUIR4AAA=="},
-			Regions:       []string{"us-east1"},
-			SQLType:       "TypeDDL",
+			Count:          10,
+			Indexes:        []string{"15@4"},
+			LastErrorCode:  "",
+			MaxRetries:     0,
+			SQLInstanceIDs: []int32{1},
+			PlanGists:      []string{"AgEeCADnAwIAAAMHEgUUIR4AAA=="},
+			Regions:        []string{"us-east1"},
+			SQLType:        "TypeDDL",
 		},
 	}
 }
@@ -1649,7 +1649,7 @@ func generateStatisticsColumn(
 		LastErrorCode   string                 `json:"lastErrorCode"`
 		LastExecAt      time.Time              `json:"lastExecAt"`
 		MaxRetries      int                    `json:"maxRetries"`
-		Nodes           []int64                `json:"nodes"`
+		SQLInstanceIDs  []int32                `json:"sqlInstanceIds"`
 		NumRows         appstatspb.NumericStat `json:"numRows"`
 		OvhLat          appstatspb.NumericStat `json:"ovhLat"`
 		ParseLat        appstatspb.NumericStat `json:"parseLat"`
@@ -1671,11 +1671,11 @@ func generateStatisticsColumn(
 			Mean:         0,
 			SquaredDiffs: 0,
 		},
-		Indexes:       statement.Stats.Indexes,
-		LastErrorCode: statement.Stats.LastErrorCode,
-		LastExecAt:    statement.AggregatedTs.Add(time.Minute * 10),
-		MaxRetries:    0,
-		Nodes:         statement.Stats.Nodes,
+		Indexes:        statement.Stats.Indexes,
+		LastErrorCode:  statement.Stats.LastErrorCode,
+		LastExecAt:     statement.AggregatedTs.Add(time.Minute * 10),
+		MaxRetries:     0,
+		SQLInstanceIDs: statement.Stats.SQLInstanceIDs,
 		NumRows: appstatspb.NumericStat{
 			Mean:         0,
 			SquaredDiffs: 0,

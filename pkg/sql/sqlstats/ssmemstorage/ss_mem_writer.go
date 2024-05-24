@@ -128,7 +128,7 @@ func (s *Container) RecordStatement(
 	stats.mu.data.RowsRead.Record(stats.mu.data.Count, float64(value.RowsRead))
 	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
 	stats.mu.data.LastExecTimestamp = s.getTimeNow()
-	stats.mu.data.Nodes = util.CombineUnique(stats.mu.data.Nodes, value.Nodes)
+	stats.mu.data.SQLInstanceIDs = util.CombineUnique(stats.mu.data.SQLInstanceIDs, value.SQLInstanceIDs)
 	if value.ExecStats != nil {
 		stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.ExecStats.Regions)
 	}

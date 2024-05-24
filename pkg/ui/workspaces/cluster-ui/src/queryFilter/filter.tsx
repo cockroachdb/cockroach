@@ -74,6 +74,7 @@ export interface Filters extends Record<string, string | boolean> {
   sqlType?: string;
   fullScan?: boolean;
   regions?: string;
+  // TODO: should this be renamed?
   nodes?: string;
   username?: string;
   sessionStatus?: string;

@@ -92,7 +92,7 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //		    "node_ids": {
 //		      "type": "array",
 //		      "items": {
-//		        "type": "int",
+//		        "type": "int32",
 //		      },
 //		    },
 //		    "regions": {
@@ -176,7 +176,7 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //		        "rowsRead":          { "$ref": "#/definitions/numeric_stats" },
 //		        "firstExecAt":       { "type": "string" },
 //		        "lastExecAt":        { "type": "string" },
-//		        "nodes":             { "type": "node_ids" },
+//		        "sqlInstanceIds":    { "type": "node_ids" },
 //		        "regions":           { "type": "regions" },
 //		        "indexes":           { "type": "indexes" },
 //		        "lastErrorCode":     { "type": "string" },
@@ -193,7 +193,7 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //		        "ovhLat",
 //		        "bytesRead",
 //		        "rowsRead",
-//		        "nodes",
+//		        "sqlInstanceIds",
 //		        "regions",
 //		        "indexes
 //		      ]
