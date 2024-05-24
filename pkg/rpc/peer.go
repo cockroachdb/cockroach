@@ -162,15 +162,17 @@ func (rpcCtx *Context) newPeer(k peerKey) *peer {
 	// Connect method needs to do the short-circuiting (if a Connection is created
 	// while the breaker is tripped, we want to block in Connect only once we've
 	// seen the first heartbeat succeed).
+	metrics := rpcCtx.metrics.acquire(k)
 	p := &peer{
-		peerMetrics:        rpcCtx.metrics.acquire(k),
+		peerMetrics:        metrics,
 		logDisconnectEvery: log.Every(time.Minute),
 		k:                  k,
 		remoteClocks:       rpcCtx.RemoteClocks,
 		opts:               &rpcCtx.ContextOptions,
 		peers:              &rpcCtx.peers,
 		dial: func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error) {
-			return rpcCtx.grpcDialRaw(ctx, target, class, rpcCtx.testingDialOpts...)
+			opts := append(rpcCtx.testingDialOpts, grpc.WithStatsHandler(&statsTracker{bytesSent: metrics.ConnectionBytesSent}))
+			return rpcCtx.grpcDialRaw(ctx, target, class, opts...)
 		},
 		heartbeatInterval: rpcCtx.RPCHeartbeatInterval,
 		heartbeatTimeout:  rpcCtx.RPCHeartbeatTimeout,
