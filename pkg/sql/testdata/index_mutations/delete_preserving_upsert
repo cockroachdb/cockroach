@@ -21,7 +21,7 @@ INSERT INTO ti VALUES (1, 2, 100), (2, 3, 200), (3, 4, 300)
 kvtrace
 UPSERT INTO ti VALUES (1, 3, 101)
 ----
-Scan /Table/106/1/1/0
+Scan /Table/106/1/1/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/101
 Put (delete) /Table/106/2/2/100/1/0
 Put /Table/106/2/3/101/1/0 -> /BYTES/0x0a0103
@@ -50,14 +50,14 @@ INSERT INTO tpi VALUES (1, 2, 'bar'), (2, 3, 'bar'), (3, 4, 'foo')
 kvtrace
 UPSERT INTO tpi VALUES (1, 3, 'bar')
 ----
-Scan /Table/107/1/1/0
+Scan /Table/107/1/1/0 lock Exclusive (Block, Unreplicated)
 Put /Table/107/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/bar
 
 # Upsert a row that didn't match the partial index before but matches after.
 kvtrace
 UPSERT INTO tpi VALUES (3, 2, 'foo')
 ----
-Scan /Table/107/1/3/0
+Scan /Table/107/1/3/0 lock Exclusive (Block, Unreplicated)
 Put /Table/107/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foo
 Put /Table/107/2/"foo"/3/0 -> /BYTES/0x0a0103
 
@@ -67,7 +67,7 @@ Put /Table/107/2/"foo"/3/0 -> /BYTES/0x0a0103
 kvtrace
 UPSERT INTO tpi VALUES (3, 1, 'foo')
 ----
-Scan /Table/107/1/3/0
+Scan /Table/107/1/3/0 lock Exclusive (Block, Unreplicated)
 Put /Table/107/1/3/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/foo
 Put /Table/107/2/"foo"/3/0 -> /BYTES/0x0a0103
 
@@ -76,7 +76,7 @@ Put /Table/107/2/"foo"/3/0 -> /BYTES/0x0a0103
 kvtrace
 UPSERT INTO tpi VALUES (3, 2, 'foobar')
 ----
-Scan /Table/107/1/3/0
+Scan /Table/107/1/3/0 lock Exclusive (Block, Unreplicated)
 Put /Table/107/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foobar
 Put (delete) /Table/107/2/"foo"/3/0
 Put /Table/107/2/"foobar"/3/0 -> /BYTES/0x0a0103
@@ -85,7 +85,7 @@ Put /Table/107/2/"foobar"/3/0 -> /BYTES/0x0a0103
 kvtrace
 UPSERT INTO tpi VALUES (3, 1, 'baz')
 ----
-Scan /Table/107/1/3/0
+Scan /Table/107/1/3/0 lock Exclusive (Block, Unreplicated)
 Put /Table/107/1/3/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/baz
 Put (delete) /Table/107/2/"foobar"/3/0
 
@@ -159,7 +159,7 @@ INSERT INTO tii VALUES (1, ARRAY[1, 2, 3, 2, 2, NULL, 3])
 kvtrace
 UPSERT INTO tii VALUES (1, ARRAY[1, 2, 2, NULL, 4, 4])
 ----
-Scan /Table/109/1/1/0
+Scan /Table/109/1/1/0 lock Exclusive (Block, Unreplicated)
 Put /Table/109/1/1/0 -> /TUPLE/
 Put (delete) /Table/109/2/NULL/1/0
 Put (delete) /Table/109/2/1/1/0
@@ -193,7 +193,7 @@ INSERT INTO tmi VALUES (1, 2, '{"a": "foo", "b": "bar"}'::json)
 kvtrace
 UPSERT INTO tmi VALUES (1, 3, '{"a": "foobar", "c": "baz"}'::json)
 ----
-Scan /Table/110/1/1/0
+Scan /Table/110/1/1/0 lock Exclusive (Block, Unreplicated)
 Put /Table/110/1/1/0 -> /TUPLE/2:2:Int/3/
 Put (delete) /Table/110/2/2/"a"/"foo"/1/0
 Put (delete) /Table/110/2/2/"b"/"bar"/1/0
@@ -227,7 +227,7 @@ DELETE FROM tui WHERE a = 2
 kvtrace
 UPSERT INTO tui VALUES (1, 3, 200)
 ----
-Scan /Table/111/1/1/0
+Scan /Table/111/1/1/0 lock Exclusive (Block, Unreplicated)
 Put /Table/111/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/200
 Put (delete) /Table/111/2/2/100/0
 Put /Table/111/2/3/200/0 -> /BYTES/0x0a020389
@@ -257,7 +257,7 @@ INSERT INTO mcf VALUES (1, 2, 'bar'), (2, 3, 'bar'), (3, 4, 'foo')
 kvtrace
 UPSERT INTO mcf VALUES (1, 1, 'baz')
 ----
-Scan /Table/112/1/{1-2}
+Scan /Table/112/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/1/0 -> /TUPLE/2:2:Int/1
 Put /Table/112/1/1/1/1 -> /BYTES/baz
 Put (delete) /Table/112/2/2/1/0
@@ -267,7 +267,7 @@ Put /Table/112/2/1/1/0 -> /BYTES/0x0a0103
 kvtrace
 UPSERT INTO mcf VALUES (1, 1, 'bat')
 ----
-Scan /Table/112/1/{1-2}
+Scan /Table/112/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/1/0 -> /TUPLE/2:2:Int/1
 Put /Table/112/1/1/1/1 -> /BYTES/bat
 Put /Table/112/2/1/1/0 -> /BYTES/0x0a0103
