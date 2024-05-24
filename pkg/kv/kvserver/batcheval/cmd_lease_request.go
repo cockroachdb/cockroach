@@ -59,91 +59,21 @@ func RequestLease(
 	prevLease := args.PrevLease
 	newLease := args.Lease
 
-	rErr := &kvpb.LeaseRejectedError{
-		Existing:  prevLease,
-		Requested: newLease,
-	}
-
-	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed
-	// before the StartStasis field was introduced.
-	// TODO(nvanbenschoten): remove in #124057 when clusterversion.MinSupported
-	// is v24.1 or greater.
-	if newLease.DeprecatedStartStasis == nil {
-		newLease.DeprecatedStartStasis = newLease.Expiration
-	}
-
-	isExtension := prevLease.Replica.StoreID == newLease.Replica.StoreID
-	effectiveStart := newLease.Start
-
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
-	wasLastLeaseholder := isExtension
+	wasLastLeaseholder := prevLease.Replica.StoreID == newLease.Replica.StoreID
 	if err := roachpb.CheckCanReceiveLease(
 		newLease.Replica, cArgs.EvalCtx.Desc().Replicas(), wasLastLeaseholder,
 	); err != nil {
-		rErr.Message = err.Error()
+		rErr := &kvpb.LeaseRejectedError{
+			Existing:  prevLease,
+			Requested: newLease,
+			Message:   err.Error(),
+		}
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
-
-	// Wind the start timestamp back as far towards the previous lease as we
-	// can. That'll make sure that when multiple leases are requested out of
-	// order at the same replica (after all, they use the request timestamp,
-	// which isn't straight out of our local clock), they all succeed unless
-	// they have a "real" issue with a previous lease. Example: Assuming no
-	// previous lease, one request for [5, 15) followed by one for [0, 15)
-	// would fail without this optimization. With it, the first request
-	// effectively gets the lease for [0, 15), which the second one can commit
-	// again (even extending your own lease is possible; see below).
-	//
-	// If this is our lease (or no prior lease exists), we effectively absorb
-	// the old lease. This allows multiple requests from the same replica to
-	// merge without ticking away from the minimal common start timestamp. It
-	// also has the positive side-effect of fixing #3561, which was caused by
-	// the absence of replay protection.
-	if prevLease.Replica.StoreID == 0 || isExtension {
-		effectiveStart.Backward(prevLease.Start)
-		// If the lease holder promised to not propose any commands below
-		// MinProposedTS, it must also not be allowed to extend a lease before that
-		// timestamp. We make sure that when a node restarts, its earlier in-flight
-		// commands (which are not tracked by the spanlatch manager post restart)
-		// receive an error under the new lease by making sure the sequence number
-		// of that lease is higher. This in turn is achieved by forwarding its start
-		// time here, which makes it not Equivalent() to the preceding lease for the
-		// same store.
-		//
-		// Note also that leasePostApply makes sure to update the timestamp cache in
-		// this case: even though the lease holder does not change, the sequence
-		// number does and this triggers a low water mark bump.
-		//
-		// The bug prevented with this is unlikely to occur in practice
-		// since earlier commands usually apply before this lease will.
-		if ts := args.MinProposedTS; isExtension && ts != nil {
-			effectiveStart.Forward(*ts)
-		}
-
-	} else if prevLease.Type() == roachpb.LeaseExpiration {
-		effectiveStart.BackwardWithTimestamp(prevLease.Expiration.Next())
-	}
-
-	if isExtension {
-		if effectiveStart.Less(prevLease.Start) {
-			rErr.Message = "extension moved start timestamp backwards"
-			return newFailedLeaseTrigger(false /* isTransfer */), rErr
-		}
-		if newLease.Type() == roachpb.LeaseExpiration {
-			// NB: Avoid mutating pointers in the argument which might be shared with
-			// the caller.
-			t := *newLease.Expiration
-			newLease.Expiration = &t
-			newLease.Expiration.Forward(prevLease.GetExpiration())
-		}
-	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.ToTimestamp().Less(prevLease.GetExpiration()) {
-		rErr.Message = "requested lease overlaps previous lease"
-		return newFailedLeaseTrigger(false /* isTransfer */), rErr
-	}
-	newLease.Start = effectiveStart
 
 	log.VEventf(ctx, 2, "lease request: prev lease: %+v, new lease: %+v", prevLease, newLease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
-		newLease, prevLease, isExtension, false /* isTransfer */)
+		newLease, prevLease, false /* isTransfer */)
 }

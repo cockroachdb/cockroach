@@ -2057,8 +2057,8 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 			if val := injectLeaseTransferError.Load(); val != nil && val.(bool) {
 				// Note that we can't just return an error here as we only
 				// end up counting failures in the metrics if the command
-				// makes it through to being executed. So use a fake store ID.
-				args.Lease.Replica.StoreID = roachpb.StoreID(1000)
+				// makes it through to being executed. So use a fake replica ID.
+				args.Lease.Replica.ReplicaID = 1000
 			}
 		}
 		return nil
@@ -2337,6 +2337,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				t.Fatal(err)
 			}
 			leaseReq.PrevLease = leaseInfo.CurrentOrProspective()
+			leaseReq.Lease.Sequence = leaseReq.PrevLease.Sequence + 1
 
 			_, pErr := kv.SendWrapped(ctx, s.DB().NonTransactionalSender(), &leaseReq)
 			if _, ok := pErr.GetDetail().(*kvpb.AmbiguousResultError); ok {

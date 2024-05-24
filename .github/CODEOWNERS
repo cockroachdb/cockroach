@@ -313,6 +313,7 @@
 /pkg/kv/kvserver/kvserverbase/          @cockroachdb/kv-prs
 /pkg/kv/kvserver/kvserverpb/            @cockroachdb/kv-prs
 /pkg/kv/kvserver/kvstorage/             @cockroachdb/repl-prs
+/pkg/kv/kvserver/leases/                @cockroachdb/kv-prs
 /pkg/kv/kvserver/liveness/              @cockroachdb/kv-prs
 /pkg/kv/kvserver/load/                  @cockroachdb/kv-prs
 /pkg/kv/kvserver/lockspanset/           @cockroachdb/kv-prs
