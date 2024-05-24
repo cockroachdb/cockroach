@@ -35,7 +35,7 @@ priority: normal
 quality of service: regular
 ·
 • sort
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
 │ estimated max memory allocated: 0 B
@@ -43,13 +43,13 @@ quality of service: regular
 │ order: +k
 │
 └── • filter
-    │ nodes: <hidden>
+    │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join (streamer)
-        │ nodes: <hidden>
+        │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
         │ KV time: 0µs
@@ -63,7 +63,7 @@ quality of service: regular
         │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
-            │ nodes: <hidden>
+            │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
             │ estimated max memory allocated: 0 B
@@ -72,7 +72,7 @@ quality of service: regular
             │ num spans: 31
             │
             └── • scan
-                  nodes: <hidden>
+                  sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 4
                   KV time: 0µs
@@ -127,7 +127,7 @@ priority: normal
 quality of service: regular
 ·
 • sort
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
 │ estimated max memory allocated: 0 B
@@ -135,13 +135,13 @@ quality of service: regular
 │ order: +k
 │
 └── • filter
-    │ nodes: <hidden>
+    │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join (streamer)
-        │ nodes: <hidden>
+        │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
         │ KV time: 0µs
@@ -155,7 +155,7 @@ quality of service: regular
         │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
-            │ nodes: <hidden>
+            │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
             │ estimated max memory allocated: 0 B
@@ -164,7 +164,7 @@ quality of service: regular
             │ num spans: 31
             │
             └── • scan
-                  nodes: <hidden>
+                  sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
                   KV time: 0µs
@@ -203,7 +203,7 @@ priority: normal
 quality of service: regular
 ·
 • sort
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
 │ estimated max memory allocated: 0 B
@@ -211,13 +211,13 @@ quality of service: regular
 │ order: +k
 │
 └── • filter
-    │ nodes: <hidden>
+    │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join (streamer)
-        │ nodes: <hidden>
+        │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
         │ KV time: 0µs
@@ -231,7 +231,7 @@ quality of service: regular
         │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
-            │ nodes: <hidden>
+            │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
             │ estimated max memory allocated: 0 B
@@ -240,7 +240,7 @@ quality of service: regular
             │ num spans: 31
             │
             └── • scan
-                  nodes: <hidden>
+                  sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
                   KV time: 0µs

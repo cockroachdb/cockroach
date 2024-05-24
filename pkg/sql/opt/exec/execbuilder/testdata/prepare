@@ -124,7 +124,7 @@ priority: normal
 quality of service: regular
 ·
 • scan
-  nodes: <hidden>
+  sql nodes: <hidden>
   regions: <hidden>
   actual row count: 1
   KV time: 0µs
@@ -153,7 +153,7 @@ priority: normal
 quality of service: regular
 ·
 • scan
-  nodes: <hidden>
+  sql nodes: <hidden>
   regions: <hidden>
   actual row count: 0
   KV time: 0µs

@@ -65,12 +65,12 @@ priority: normal
 quality of service: regular
 ·
 • group (scalar)
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
 │
 └── • scan
-      nodes: <hidden>
+      sql nodes: <hidden>
       regions: <hidden>
       actual row count: 5
       KV time: 0µs
@@ -102,7 +102,7 @@ priority: normal
 quality of service: regular
 ·
 • merge join
-│ nodes: <hidden>
+│ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
 │ estimated max memory allocated: 0 B
@@ -112,7 +112,7 @@ quality of service: regular
 │ right cols are key
 │
 ├── • scan
-│     nodes: <hidden>
+│     sql nodes: <hidden>
 │     regions: <hidden>
 │     actual row count: 5
 │     KV time: 0µs
@@ -127,7 +127,7 @@ quality of service: regular
 │     spans: FULL SCAN
 │
 └── • scan
-      nodes: <hidden>
+      sql nodes: <hidden>
       regions: <hidden>
       actual row count: 5
       KV time: 0µs

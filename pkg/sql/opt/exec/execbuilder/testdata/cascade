@@ -1058,19 +1058,19 @@ quality of service: regular
 • root
 │
 ├── • delete
-│   │ nodes: <hidden>
+│   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ from: loop_a
 │   │
 │   └── • buffer
-│       │ nodes: <hidden>
+│       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 1
 │       │ label: buffer 1
 │       │
 │       └── • scan
-│             nodes: <hidden>
+│             sql nodes: <hidden>
 │             regions: <hidden>
 │             actual row count: 1
 │             KV time: 0µs
@@ -1090,19 +1090,19 @@ quality of service: regular
     └── • root
         │
         ├── • delete
-        │   │ nodes: <hidden>
+        │   │ sql nodes: <hidden>
         │   │ regions: <hidden>
         │   │ actual row count: 0
         │   │ from: loop_b
         │   │
         │   └── • buffer
-        │       │ nodes: <hidden>
+        │       │ sql nodes: <hidden>
         │       │ regions: <hidden>
         │       │ actual row count: 1
         │       │ label: buffer 1
         │       │
         │       └── • hash join (semi)
-        │           │ nodes: <hidden>
+        │           │ sql nodes: <hidden>
         │           │ regions: <hidden>
         │           │ actual row count: 1
         │           │ estimated max memory allocated: 0 B
@@ -1110,7 +1110,7 @@ quality of service: regular
         │           │ equality: (cascade_delete) = (id)
         │           │
         │           ├── • scan
-        │           │     nodes: <hidden>
+        │           │     sql nodes: <hidden>
         │           │     regions: <hidden>
         │           │     actual row count: 3
         │           │     KV time: 0µs
@@ -1125,7 +1125,7 @@ quality of service: regular
         │           │     spans: FULL SCAN
         │           │
         │           └── • scan buffer
-        │                 nodes: <hidden>
+        │                 sql nodes: <hidden>
         │                 regions: <hidden>
         │                 actual row count: 1
         │                 estimated row count: 1
@@ -1137,19 +1137,19 @@ quality of service: regular
             └── • root
                 │
                 ├── • delete
-                │   │ nodes: <hidden>
+                │   │ sql nodes: <hidden>
                 │   │ regions: <hidden>
                 │   │ actual row count: 0
                 │   │ from: loop_a
                 │   │
                 │   └── • buffer
-                │       │ nodes: <hidden>
+                │       │ sql nodes: <hidden>
                 │       │ regions: <hidden>
                 │       │ actual row count: 1
                 │       │ label: buffer 1
                 │       │
                 │       └── • lookup join
-                │           │ nodes: <hidden>
+                │           │ sql nodes: <hidden>
                 │           │ regions: <hidden>
                 │           │ actual row count: 1
                 │           │ KV time: 0µs
@@ -1163,7 +1163,7 @@ quality of service: regular
                 │           │ equality: (id) = (cascade_delete)
                 │           │
                 │           └── • distinct
-                │               │ nodes: <hidden>
+                │               │ sql nodes: <hidden>
                 │               │ regions: <hidden>
                 │               │ actual row count: 1
                 │               │ estimated max memory allocated: 0 B
@@ -1172,7 +1172,7 @@ quality of service: regular
                 │               │ distinct on: id
                 │               │
                 │               └── • scan buffer
-                │                     nodes: <hidden>
+                │                     sql nodes: <hidden>
                 │                     regions: <hidden>
                 │                     actual row count: 1
                 │                     estimated row count: 1

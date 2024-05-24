@@ -616,13 +616,13 @@ quality of service: regular
 • root
 │
 ├── • insert
-│   │ nodes: <hidden>
+│   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ into: uniq_fk_parent(a, b, c, rowid)
 │   │
 │   └── • buffer
-│       │ nodes: <hidden>
+│       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 2
 │       │ label: buffer 1
@@ -630,7 +630,7 @@ quality of service: regular
 │       └── • render
 │           │
 │           └── • values
-│                 nodes: <hidden>
+│                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
 │                 size: 3 columns, 2 rows
@@ -638,12 +638,12 @@ quality of service: regular
 ├── • constraint-check
 │   │
 │   └── • error if rows
-│       │ nodes: <hidden>
+│       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
 │       │
 │       └── • hash join (right semi)
-│           │ nodes: <hidden>
+│           │ sql nodes: <hidden>
 │           │ regions: <hidden>
 │           │ actual row count: 0
 │           │ estimated max memory allocated: 0 B
@@ -652,7 +652,7 @@ quality of service: regular
 │           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan
-│           │     nodes: <hidden>
+│           │     sql nodes: <hidden>
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
@@ -667,7 +667,7 @@ quality of service: regular
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
-│                 nodes: <hidden>
+│                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
 │                 estimated row count: 2
@@ -676,12 +676,12 @@ quality of service: regular
 └── • constraint-check
     │
     └── • error if rows
-        │ nodes: <hidden>
+        │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
         │
         └── • hash join (right semi)
-            │ nodes: <hidden>
+            │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 0
             │ estimated max memory allocated: 0 B
@@ -690,7 +690,7 @@ quality of service: regular
             │ pred: rowid_default != rowid
             │
             ├── • scan
-            │     nodes: <hidden>
+            │     sql nodes: <hidden>
             │     regions: <hidden>
             │     actual row count: 2
             │     KV time: 0µs
@@ -705,7 +705,7 @@ quality of service: regular
             │     spans: FULL SCAN
             │
             └── • scan buffer
-                  nodes: <hidden>
+                  sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
                   estimated row count: 2
@@ -731,13 +731,13 @@ quality of service: regular
 • root
 │
 ├── • insert
-│   │ nodes: <hidden>
+│   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ into: uniq_fk_child(a, b, c, rowid)
 │   │
 │   └── • buffer
-│       │ nodes: <hidden>
+│       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 2
 │       │ label: buffer 1
@@ -745,7 +745,7 @@ quality of service: regular
 │       └── • render
 │           │
 │           └── • values
-│                 nodes: <hidden>
+│                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
 │                 size: 3 columns, 2 rows
@@ -753,12 +753,12 @@ quality of service: regular
 ├── • constraint-check
 │   │
 │   └── • error if rows
-│       │ nodes: <hidden>
+│       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
 │       │
 │       └── • hash join (right semi)
-│           │ nodes: <hidden>
+│           │ sql nodes: <hidden>
 │           │ regions: <hidden>
 │           │ actual row count: 0
 │           │ estimated max memory allocated: 0 B
@@ -767,7 +767,7 @@ quality of service: regular
 │           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan
-│           │     nodes: <hidden>
+│           │     sql nodes: <hidden>
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
@@ -782,7 +782,7 @@ quality of service: regular
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
-│                 nodes: <hidden>
+│                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
 │                 estimated row count: 2
@@ -791,12 +791,12 @@ quality of service: regular
 ├── • constraint-check
 │   │
 │   └── • error if rows
-│       │ nodes: <hidden>
+│       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
 │       │
 │       └── • hash join (right anti)
-│           │ nodes: <hidden>
+│           │ sql nodes: <hidden>
 │           │ regions: <hidden>
 │           │ actual row count: 0
 │           │ estimated max memory allocated: 0 B
@@ -804,7 +804,7 @@ quality of service: regular
 │           │ equality: (b, c) = (column2, column3)
 │           │
 │           ├── • scan
-│           │     nodes: <hidden>
+│           │     sql nodes: <hidden>
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
@@ -819,7 +819,7 @@ quality of service: regular
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
-│                 nodes: <hidden>
+│                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
 │                 estimated row count: 2
@@ -828,12 +828,12 @@ quality of service: regular
 └── • constraint-check
     │
     └── • error if rows
-        │ nodes: <hidden>
+        │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
         │
         └── • hash join (right anti)
-            │ nodes: <hidden>
+            │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 0
             │ estimated max memory allocated: 0 B
@@ -841,7 +841,7 @@ quality of service: regular
             │ equality: (a) = (column1)
             │
             ├── • scan
-            │     nodes: <hidden>
+            │     sql nodes: <hidden>
             │     regions: <hidden>
             │     actual row count: 2
             │     KV time: 0µs
@@ -856,7 +856,7 @@ quality of service: regular
             │     spans: FULL SCAN
             │
             └── • scan buffer
-                  nodes: <hidden>
+                  sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
                   estimated row count: 2
@@ -2613,14 +2613,14 @@ quality of service: regular
 • root
 │
 ├── • update
-│   │ nodes: <hidden>
+│   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ table: uniq_fk_parent
 │   │ set: c
 │   │
 │   └── • buffer
-│       │ nodes: <hidden>
+│       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 2
 │       │ label: buffer 1
@@ -2628,7 +2628,7 @@ quality of service: regular
 │       └── • render
 │           │
 │           └── • scan
-│                 nodes: <hidden>
+│                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
 │                 KV time: 0µs
@@ -2649,20 +2649,20 @@ quality of service: regular
 │   └── • root
 │       │
 │       ├── • update
-│       │   │ nodes: <hidden>
+│       │   │ sql nodes: <hidden>
 │       │   │ regions: <hidden>
 │       │   │ actual row count: 0
 │       │   │ table: uniq_fk_child
 │       │   │ set: b, c
 │       │   │
 │       │   └── • buffer
-│       │       │ nodes: <hidden>
+│       │       │ sql nodes: <hidden>
 │       │       │ regions: <hidden>
 │       │       │ actual row count: 2
 │       │       │ label: buffer 1
 │       │       │
 │       │       └── • hash join
-│       │           │ nodes: <hidden>
+│       │           │ sql nodes: <hidden>
 │       │           │ regions: <hidden>
 │       │           │ actual row count: 2
 │       │           │ estimated max memory allocated: 0 B
@@ -2670,7 +2670,7 @@ quality of service: regular
 │       │           │ equality: (b, c) = (b, c)
 │       │           │
 │       │           ├── • scan
-│       │           │     nodes: <hidden>
+│       │           │     sql nodes: <hidden>
 │       │           │     regions: <hidden>
 │       │           │     actual row count: 2
 │       │           │     KV time: 0µs
@@ -2685,14 +2685,14 @@ quality of service: regular
 │       │           │     spans: FULL SCAN
 │       │           │
 │       │           └── • filter
-│       │               │ nodes: <hidden>
+│       │               │ sql nodes: <hidden>
 │       │               │ regions: <hidden>
 │       │               │ actual row count: 2
 │       │               │ estimated row count: 1
 │       │               │ filter: (b IS DISTINCT FROM b) OR (c IS DISTINCT FROM c_new)
 │       │               │
 │       │               └── • scan buffer
-│       │                     nodes: <hidden>
+│       │                     sql nodes: <hidden>
 │       │                     regions: <hidden>
 │       │                     actual row count: 2
 │       │                     estimated row count: 2
@@ -2701,12 +2701,12 @@ quality of service: regular
 │       ├── • constraint-check
 │       │   │
 │       │   └── • error if rows
-│       │       │ nodes: <hidden>
+│       │       │ sql nodes: <hidden>
 │       │       │ regions: <hidden>
 │       │       │ actual row count: 0
 │       │       │
 │       │       └── • hash join (right semi)
-│       │           │ nodes: <hidden>
+│       │           │ sql nodes: <hidden>
 │       │           │ regions: <hidden>
 │       │           │ actual row count: 0
 │       │           │ estimated max memory allocated: 0 B
@@ -2715,7 +2715,7 @@ quality of service: regular
 │       │           │ pred: rowid != rowid
 │       │           │
 │       │           ├── • scan
-│       │           │     nodes: <hidden>
+│       │           │     sql nodes: <hidden>
 │       │           │     regions: <hidden>
 │       │           │     actual row count: 2
 │       │           │     KV time: 0µs
@@ -2730,7 +2730,7 @@ quality of service: regular
 │       │           │     spans: FULL SCAN
 │       │           │
 │       │           └── • scan buffer
-│       │                 nodes: <hidden>
+│       │                 sql nodes: <hidden>
 │       │                 regions: <hidden>
 │       │                 actual row count: 2
 │       │                 label: buffer 1
@@ -2738,12 +2738,12 @@ quality of service: regular
 │       └── • constraint-check
 │           │
 │           └── • error if rows
-│               │ nodes: <hidden>
+│               │ sql nodes: <hidden>
 │               │ regions: <hidden>
 │               │ actual row count: 0
 │               │
 │               └── • hash join (right anti)
-│                   │ nodes: <hidden>
+│                   │ sql nodes: <hidden>
 │                   │ regions: <hidden>
 │                   │ actual row count: 0
 │                   │ estimated max memory allocated: 0 B
@@ -2751,7 +2751,7 @@ quality of service: regular
 │                   │ equality: (b, c) = (b, c_new)
 │                   │
 │                   ├── • scan
-│                   │     nodes: <hidden>
+│                   │     sql nodes: <hidden>
 │                   │     regions: <hidden>
 │                   │     actual row count: 2
 │                   │     KV time: 0µs
@@ -2766,13 +2766,13 @@ quality of service: regular
 │                   │     spans: FULL SCAN
 │                   │
 │                   └── • filter
-│                       │ nodes: <hidden>
+│                       │ sql nodes: <hidden>
 │                       │ regions: <hidden>
 │                       │ actual row count: 2
 │                       │ filter: (b IS NOT NULL) AND (c_new IS NOT NULL)
 │                       │
 │                       └── • scan buffer
-│                             nodes: <hidden>
+│                             sql nodes: <hidden>
 │                             regions: <hidden>
 │                             actual row count: 2
 │                             label: buffer 1
@@ -2780,12 +2780,12 @@ quality of service: regular
 └── • constraint-check
     │
     └── • error if rows
-        │ nodes: <hidden>
+        │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
         │
         └── • hash join (semi)
-            │ nodes: <hidden>
+            │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 0
             │ estimated max memory allocated: 0 B
@@ -2794,13 +2794,13 @@ quality of service: regular
             │ pred: rowid != rowid
             │
             ├── • scan buffer
-            │     nodes: <hidden>
+            │     sql nodes: <hidden>
             │     regions: <hidden>
             │     actual row count: 2
             │     label: buffer 1
             │
             └── • scan
-                  nodes: <hidden>
+                  sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
                   KV time: 0µs

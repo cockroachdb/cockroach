@@ -439,8 +439,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	var hasActualRowCount bool
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
 		s := stats.(*exec.ExecutionStats)
-		if len(s.Nodes) > 0 {
-			e.ob.AddFlakyField(DeflakeNodes, "nodes", strings.Join(s.Nodes, ", "))
+		if len(s.SQLNodes) > 0 {
+			e.ob.AddFlakyField(DeflakeNodes, "sql nodes", strings.Join(s.SQLNodes, ", "))
 		}
 		if len(s.Regions) > 0 {
 			e.ob.AddFlakyField(DeflakeNodes, "regions", strings.Join(s.Regions, ", "))
