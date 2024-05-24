@@ -168,7 +168,7 @@ INSERT INTO t.test VALUES (3);
 		// Check that the stats were flushed into the statement stats system table.
 		// Verify that the number of statistics for node 1 are non-zero.
 		sqlDB.CheckQueryResults(t,
-			`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 0 AND statistics -> 'statistics' ->> 'nodes' = '[1]'`,
+			`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 0 AND statistics -> 'statistics' ->> 'sqlInstanceIds' = '[1]'`,
 			[][]string{{"true"}},
 		)
 	}

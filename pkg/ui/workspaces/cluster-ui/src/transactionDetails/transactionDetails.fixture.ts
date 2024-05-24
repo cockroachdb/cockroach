@@ -232,7 +232,7 @@ export const transactionDetailsData: StatementsResponse = {
           seconds: new Long(1650591005),
           nanos: 677408609,
         },
-        nodes: [new Long(2)],
+        sql_instance_ids: [2],
         kv_node_ids: [2],
         rows_written: {
           mean: 0,
@@ -337,7 +337,7 @@ export const transactionDetailsData: StatementsResponse = {
           seconds: new Long(1650591005),
           nanos: 801046328,
         },
-        nodes: [new Long(2)],
+        sql_instance_ids: [2],
         kv_node_ids: [2],
         rows_written: {
           mean: 0,
@@ -456,7 +456,7 @@ export const transactionDetailsData: StatementsResponse = {
           seconds: new Long(1650591014),
           nanos: 178832951,
         },
-        nodes: [new Long(2)],
+        sql_instance_ids: [2],
         kv_node_ids: [2],
         rows_written: {
           mean: 0,

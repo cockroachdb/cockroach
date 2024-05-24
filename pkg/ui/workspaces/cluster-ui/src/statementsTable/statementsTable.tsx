@@ -415,8 +415,8 @@ export function populateRegionNodeForStatements(
     const regions: { [region: string]: Set<number> } = {};
     // For each region, populate a list of all nodes where the statement was executed.
     // E.g. {"gcp-us-east1" : [1,3,4]}
-    if (stmt.stats.nodes) {
-      stmt.stats.nodes.forEach(node => {
+    if (stmt.stats.sql_instance_ids) {
+      stmt.stats.sql_instance_ids.forEach(node => {
         const region = nodeRegions[node.toString()];
         if (region) {
           if (Object.keys(regions).includes(region)) {

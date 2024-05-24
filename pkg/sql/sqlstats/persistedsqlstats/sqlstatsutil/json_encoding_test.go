@@ -101,6 +101,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "sqDiff": {{.Float}}
          },
          "nodes": [{{joinInts .IntArray}}],
+         "sqlInstanceIds": [{{joinInt32s .Int32Array}}],
          "kvNodeIds": [{{joinInt32s .Int32Array}}],
          "regions": [{{joinStrings .StringArray}}],
          "planGists": [{{joinStrings .StringArray}}],
@@ -289,6 +290,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "sqDiff": {{.Float}}
          },
          "nodes": [{{joinInts .IntArray}}],
+         "sqlInstanceIds": [{{joinInt32s .Int32Array}}],
          "kvNodeIds": [{{joinInt32s .Int32Array}}],
          "planGists": [{{joinStrings .StringArray}}],
          "latencyInfo": {
