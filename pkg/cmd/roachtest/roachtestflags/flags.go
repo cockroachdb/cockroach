@@ -88,6 +88,12 @@ var (
 		Usage:     `Run tests locally (equivalent to --cloud=local)`,
 	})
 
+	SelectiveTests = false
+	_              = registerRunFlag(&SelectiveTests, FlagInfo{
+		Name:  "selective-tests",
+		Usage: `Use selective tests to run based on previous test execution`,
+	})
+
 	Username string = os.Getenv("ROACHPROD_USER")
 	_               = registerRunFlag(&Username, FlagInfo{
 		Name:      "user",
