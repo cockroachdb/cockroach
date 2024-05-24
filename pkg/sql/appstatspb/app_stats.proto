@@ -109,6 +109,10 @@ message StatementStatistics {
   // statement was executed.
   repeated int32 sql_instance_ids = 34 [(gogoproto.customname) = "SQLInstanceIDs"];
 
+  // KVNodeIDs is the ordered list of KV node ids which were used to evaluate KV
+  // read requests.
+  repeated int32 kv_node_ids = 35 [(gogoproto.customname) = "KVNodeIDs"];
+
   // Regions is the ordered list of regions on which the statement was executed.
   repeated string regions = 29;
 

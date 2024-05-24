@@ -1650,6 +1650,7 @@ func generateStatisticsColumn(
 		LastExecAt      time.Time              `json:"lastExecAt"`
 		MaxRetries      int                    `json:"maxRetries"`
 		SQLInstanceIDs  []int32                `json:"sqlInstanceIds"`
+		KVNodeIDs       []int32                `json:"kvNodeIds"`
 		NumRows         appstatspb.NumericStat `json:"numRows"`
 		OvhLat          appstatspb.NumericStat `json:"ovhLat"`
 		ParseLat        appstatspb.NumericStat `json:"parseLat"`
@@ -1676,6 +1677,7 @@ func generateStatisticsColumn(
 		LastExecAt:     statement.AggregatedTs.Add(time.Minute * 10),
 		MaxRetries:     0,
 		SQLInstanceIDs: statement.Stats.SQLInstanceIDs,
+		KVNodeIDs:      statement.Stats.KVNodeIDs,
 		NumRows: appstatspb.NumericStat{
 			Mean:         0,
 			SquaredDiffs: 0,

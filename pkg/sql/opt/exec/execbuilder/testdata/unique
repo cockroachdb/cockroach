@@ -653,6 +653,7 @@ quality of service: regular
 │           │
 │           ├── • scan
 │           │     sql nodes: <hidden>
+│           │     kv nodes: <hidden>
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
@@ -691,6 +692,7 @@ quality of service: regular
             │
             ├── • scan
             │     sql nodes: <hidden>
+            │     kv nodes: <hidden>
             │     regions: <hidden>
             │     actual row count: 2
             │     KV time: 0µs
@@ -768,6 +770,7 @@ quality of service: regular
 │           │
 │           ├── • scan
 │           │     sql nodes: <hidden>
+│           │     kv nodes: <hidden>
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
@@ -805,6 +808,7 @@ quality of service: regular
 │           │
 │           ├── • scan
 │           │     sql nodes: <hidden>
+│           │     kv nodes: <hidden>
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
@@ -842,6 +846,7 @@ quality of service: regular
             │
             ├── • scan
             │     sql nodes: <hidden>
+            │     kv nodes: <hidden>
             │     regions: <hidden>
             │     actual row count: 2
             │     KV time: 0µs
@@ -2629,6 +2634,7 @@ quality of service: regular
 │           │
 │           └── • scan
 │                 sql nodes: <hidden>
+│                 kv nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
 │                 KV time: 0µs
@@ -2671,6 +2677,7 @@ quality of service: regular
 │       │           │
 │       │           ├── • scan
 │       │           │     sql nodes: <hidden>
+│       │           │     kv nodes: <hidden>
 │       │           │     regions: <hidden>
 │       │           │     actual row count: 2
 │       │           │     KV time: 0µs
@@ -2716,6 +2723,7 @@ quality of service: regular
 │       │           │
 │       │           ├── • scan
 │       │           │     sql nodes: <hidden>
+│       │           │     kv nodes: <hidden>
 │       │           │     regions: <hidden>
 │       │           │     actual row count: 2
 │       │           │     KV time: 0µs
@@ -2752,6 +2760,7 @@ quality of service: regular
 │                   │
 │                   ├── • scan
 │                   │     sql nodes: <hidden>
+│                   │     kv nodes: <hidden>
 │                   │     regions: <hidden>
 │                   │     actual row count: 2
 │                   │     KV time: 0µs
@@ -2801,6 +2810,7 @@ quality of service: regular
             │
             └── • scan
                   sql nodes: <hidden>
+                  kv nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
                   KV time: 0µs

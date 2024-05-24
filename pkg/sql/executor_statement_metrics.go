@@ -175,9 +175,10 @@ func (ex *connExecutor) recordStatementSummary(
 	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecs)
 	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
 
-	var sqlInstanceIDs []int32
+	var sqlInstanceIDs, kvNodeIDs []int32
 	if queryLevelStatsOk {
 		sqlInstanceIDs = queryLevelStats.SQLInstanceIDs
+		kvNodeIDs = queryLevelStats.KVNodeIDs
 	}
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{
@@ -197,6 +198,7 @@ func (ex *connExecutor) recordStatementSummary(
 		RowsRead:             stats.rowsRead,
 		RowsWritten:          stats.rowsWritten,
 		SQLInstanceIDs:       sqlInstanceIDs,
+		KVNodeIDs:            kvNodeIDs,
 		StatementType:        stmt.AST.StatementType(),
 		Plan:                 planner.instrumentation.PlanForStats(ctx),
 		PlanGist:             planner.instrumentation.planGist.String(),
