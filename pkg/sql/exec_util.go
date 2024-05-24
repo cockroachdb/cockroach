@@ -3812,6 +3812,10 @@ func (m *sessionDataMutator) SetOptimizerProveImplicationWithVirtualComputedColu
 	m.data.OptimizerProveImplicationWithVirtualComputedColumns = val
 }
 
+func (m *sessionDataMutator) SetOptimizerPushOffsetIntoIndexJoin(val bool) {
+	m.data.OptimizerPushOffsetIntoIndexJoin = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
