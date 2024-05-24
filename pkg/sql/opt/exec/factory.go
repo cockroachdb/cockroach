@@ -501,8 +501,8 @@ type ExecutionStats struct {
 	MaxAllocatedDisk optional.Uint
 	SQLCPUTime       optional.Duration
 
-	// Nodes on which this operator was executed.
-	Nodes []string
+	// SQLNodes on which this operator was executed.
+	SQLNodes []string
 
 	// Regions on which this operator was executed.
 	// Only being generated on EXPLAIN ANALYZE.

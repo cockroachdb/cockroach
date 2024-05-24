@@ -92,12 +92,12 @@ quality of service: regular
 │ count: 1
 │
 └── • union all
-    │ nodes: <hidden>
+    │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 1
     │
     ├── • index join (streamer)
-    │   │ nodes: <hidden>
+    │   │ sql nodes: <hidden>
     │   │ regions: <hidden>
     │   │ actual row count: 1
     │   │ KV time: 0µs
@@ -111,7 +111,7 @@ quality of service: regular
     │   │ table: a@a_pkey
     │   │
     │   └── • scan
-    │         nodes: <hidden>
+    │         sql nodes: <hidden>
     │         regions: <hidden>
     │         actual row count: 1
     │         KV time: 0µs
@@ -126,7 +126,7 @@ quality of service: regular
     │         spans: [/1 - /1]
     │
     └── • index join (streamer)
-        │ nodes: <hidden>
+        │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
         │ KV time: 0µs
@@ -139,7 +139,7 @@ quality of service: regular
         │ table: a@a_pkey
         │
         └── • scan
-              nodes: <hidden>
+              sql nodes: <hidden>
               regions: <hidden>
               actual row count: 0
               KV time: 0µs
@@ -176,12 +176,12 @@ quality of service: regular
 │ count: 1
 │
 └── • union all
-    │ nodes: <hidden>
+    │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 1
     │
     ├── • index join (streamer)
-    │   │ nodes: <hidden>
+    │   │ sql nodes: <hidden>
     │   │ regions: <hidden>
     │   │ actual row count: 1
     │   │ KV time: 0µs
@@ -194,7 +194,7 @@ quality of service: regular
     │   │ table: a@a_pkey
     │   │
     │   └── • scan
-    │         nodes: <hidden>
+    │         sql nodes: <hidden>
     │         regions: <hidden>
     │         actual row count: 1
     │         KV time: 0µs
@@ -208,7 +208,7 @@ quality of service: regular
     │         spans: [/1 - /1]
     │
     └── • index join (streamer)
-        │ nodes: <hidden>
+        │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
         │ KV time: 0µs
@@ -220,7 +220,7 @@ quality of service: regular
         │ table: a@a_pkey
         │
         └── • scan
-              nodes: <hidden>
+              sql nodes: <hidden>
               regions: <hidden>
               actual row count: 0
               KV time: 0µs
@@ -333,7 +333,7 @@ quality of service: regular
 │ count: 1
 │
 └── • lookup join (streamer)
-    │ nodes: <hidden>
+    │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 1
     │ KV time: 0µs
@@ -348,7 +348,7 @@ quality of service: regular
     │ equality cols are key
     │
     └── • scan
-          nodes: <hidden>
+          sql nodes: <hidden>
           regions: <hidden>
           actual row count: 1
           KV time: 0µs
@@ -428,7 +428,7 @@ quality of service: regular
 │ count: 2
 │
 └── • lookup join (streamer)
-    │ nodes: <hidden>
+    │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
     │ KV time: 0µs
@@ -443,7 +443,7 @@ quality of service: regular
     │ equality: (x) = (x)
     │
     └── • scan
-          nodes: <hidden>
+          sql nodes: <hidden>
           regions: <hidden>
           actual row count: 2
           KV time: 0µs
