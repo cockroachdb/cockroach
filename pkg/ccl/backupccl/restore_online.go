@@ -51,6 +51,94 @@ var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
 	settings.PositiveInt,
 )
 
+// splitAndScatter runs through all entries produced by genSpans splitting and
+// scattering the key-space designated by the passed rewriter such that if all
+// files in the entries in those spans were ingested the amount ingested between
+// splits would be about targetRangeSize.
+func splitAndScatter(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	genSpans func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
+	kr KeyRewriter,
+	fromSystemTenant bool,
+	targetRangeSize int64,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupccl.spitAndScatter")
+	defer sp.Finish()
+
+	log.Infof(ctx, "splitting and scattering spans")
+
+	workers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
+	toScatter := make(chan execinfrapb.RestoreSpanEntry, 4)
+	toSplit := make(chan execinfrapb.RestoreSpanEntry, workers)
+
+	scatterer := func(ctx context.Context) error {
+		defer close(toSplit)
+
+		var lastSplit roachpb.Key
+		for entry := range toScatter {
+			sp, err := rewriteSpan(&kr, entry.Span.Clone(), entry.ElidedPrefix)
+			if err != nil {
+				return err
+			}
+
+			// Split at start of the first chunk if it isn't the RHS of last chunk
+			// which was just split in the previous iteration.
+			if !lastSplit.Equal(sp.Key) {
+				if err := sendSplitAt(ctx, execCtx, sp.Key); err != nil {
+					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+				}
+			}
+			// Split at the end of the chunk so that anything which happens to the
+			// right of this chunk's span, including splitting other chunks, does not
+			// interact with this span's scatter, ingests or additional splits.
+			if err := sendSplitAt(ctx, execCtx, sp.EndKey); err != nil {
+				log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+			}
+			lastSplit = append(lastSplit[:0], sp.EndKey...)
+
+			// Scatter the chunk's span now that it is is split at both sides.
+			if err := sendAdminScatter(ctx, execCtx, sp.Key); err != nil {
+				log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
+			}
+
+			toSplit <- entry
+		}
+		return nil
+	}
+
+	splitter := func(ctx context.Context) error {
+		for entry := range toSplit {
+			var buffered int64
+
+			for _, file := range entry.Files {
+				fileStart := file.BackupFileEntrySpan.Intersect(entry.Span).Key
+				start, ok, err := kr.RewriteKey(fileStart.Clone(), 0)
+				if !ok || err != nil {
+					return errors.Wrapf(err, "span start key %s was not rewritten", fileStart)
+				}
+				if buffered+file.BackupFileEntryCounts.DataSize > targetRangeSize {
+					if err := sendSplitAt(ctx, execCtx, start); err != nil {
+						log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+					}
+					buffered = 0
+				}
+				buffered += file.BackupFileEntryCounts.DataSize
+			}
+		}
+		return nil
+	}
+
+	grp := ctxgroup.WithContext(ctx)
+	grp.GoCtx(func(ctx context.Context) error { return genSpans(ctx, toScatter) })
+	grp.GoCtx(scatterer)
+	for i := 0; i < workers; i++ {
+		grp.GoCtx(splitter)
+	}
+
+	return grp.Wait()
+}
+
 // sendAddRemoteSSTs is a stubbed out, very simplistic version of restore used
 // to test out ingesting "remote" SSTs. It will be replaced with a real distsql
 // plan and processors in the future.
@@ -66,7 +154,6 @@ func sendAddRemoteSSTs(
 	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 ) (approxRows int64, approxDataSize int64, err error) {
-	defer close(requestFinishedCh)
 	defer close(tracingAggCh)
 
 	if encryption != nil {
@@ -76,12 +163,7 @@ func sendAddRemoteSSTs(
 		return 0, 0, errors.AssertionFailedf("online restore can only restore data from a full backup")
 	}
 
-	restoreSpanEntriesCh := make(chan execinfrapb.RestoreSpanEntry, 1)
-
-	grp := ctxgroup.WithContext(ctx)
-	grp.GoCtx(func(ctx context.Context) error {
-		return genSpan(ctx, restoreSpanEntriesCh)
-	})
+	const targetSpanSize = 440 << 20
 
 	kr, err := MakeKeyRewriterFromRekeys(execCtx.ExecCfg().Codec, dataToRestore.getRekeys(), dataToRestore.getTenantRekeys(),
 		false /* restoreTenantFromStream */)
@@ -91,15 +173,14 @@ func sendAddRemoteSSTs(
 
 	fromSystemTenant := isFromSystemTenant(dataToRestore.getTenantRekeys())
 
-	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
-	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, *kr, fromSystemTenant, &approxRows, &approxDataSize))
+	if err := splitAndScatter(ctx, execCtx, genSpan, *kr, fromSystemTenant, targetSpanSize); err != nil {
+		return 0, 0, errors.Wrap(err, "failed to split and scatter spans")
 	}
 
-	if err := grp.Wait(); err != nil {
-		return 0, 0, errors.Wrap(err, "failed to generate and send remote file spans")
-	}
-	return approxRows, approxDataSize, nil
+	approxRows, approxDataSize, err = linkExternalFiles(
+		ctx, execCtx, genSpan, *kr, fromSystemTenant, requestFinishedCh,
+	)
+	return approxRows, approxDataSize, errors.Wrap(err, "failed to ingest into remote files")
 }
 
 func assertCommonPrefix(span roachpb.Span, elidedPrefixType execinfrapb.ElidePrefix) error {
@@ -140,6 +221,39 @@ func rewriteSpan(
 	return span, nil
 }
 
+// linkExternalFiles runs through all entries produced by genSpans and links in
+// all files in the entries rewritten using the passed rewriter. It assumes that
+// the target spans have already been split and scattered.
+func linkExternalFiles(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	genSpans func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
+	kr KeyRewriter,
+	fromSystemTenant bool,
+	requestFinishedCh chan<- struct{},
+) (approxRows int64, approxDataSize int64, err error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupccl.linkExternalFiles")
+	defer sp.Finish()
+	defer close(requestFinishedCh)
+
+	log.Infof(ctx, "ingesting remote files")
+
+	workers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
+
+	grp := ctxgroup.WithContext(ctx)
+	ch := make(chan execinfrapb.RestoreSpanEntry, 4)
+	grp.GoCtx(func(ctx context.Context) error { return genSpans(ctx, ch) })
+	for i := 0; i < workers; i++ {
+		grp.GoCtx(sendAddRemoteSSTWorker(
+			execCtx, ch, requestFinishedCh, kr, fromSystemTenant, &approxRows, &approxDataSize,
+		))
+	}
+	if err := grp.Wait(); err != nil {
+		return 0, 0, err
+	}
+	return approxRows, approxDataSize, nil
+}
+
 func sendAddRemoteSSTWorker(
 	execCtx sql.JobExecContext,
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
@@ -154,15 +268,9 @@ func sendAddRemoteSSTWorker(
 		var batchSize int64
 		const targetBatchSize = 440 << 20
 
-		flush := func(splitAt roachpb.Key, elidedPrefixType execinfrapb.ElidePrefix) error {
+		flush := func(elidedPrefixType execinfrapb.ElidePrefix) error {
 			if len(toAdd) == 0 {
 				return nil
-			}
-
-			if len(splitAt) > 0 {
-				if err := sendSplitAt(ctx, execCtx, splitAt); err != nil {
-					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
-				}
 			}
 
 			for _, file := range toAdd {
@@ -178,31 +286,6 @@ func sendAddRemoteSSTWorker(
 		for entry := range restoreSpanEntriesCh {
 			if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
 				return err
-			}
-
-			// Split off the start of the chunk.
-			start, ok, err := kr.RewriteKey(entry.Span.Key.Clone(), 0)
-			if !ok || err != nil {
-				return errors.Newf("start key %s could not be rewritten", entry.Span.Key)
-			}
-			if err := sendSplitAt(ctx, execCtx, start); err != nil {
-				log.Warningf(ctx, "failed to split during experimental restore: %v", err)
-			}
-
-			// Split the end to bookend the span in which we'll be operating, so we do
-			// not race when we scatter the chunk with another worker splitting their
-			// span that is to our right.
-			end, ok, err := kr.RewriteKey(entry.Span.EndKey.Clone(), 0)
-			if !ok || err != nil {
-				return errors.Newf("end key %s could not be rewritten", entry.Span.EndKey)
-			}
-			if err := sendSplitAt(ctx, execCtx, end); err != nil {
-				log.Warningf(ctx, "failed to split during experimental restore: %v", err)
-			}
-
-			// Now we're ready to scatter our chunk (and only our chunk).
-			if err := sendAdminScatter(ctx, execCtx, start); err != nil {
-				log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
 			}
 
 			for _, file := range entry.Files {
@@ -223,7 +306,7 @@ func sendAddRemoteSSTWorker(
 				}
 				// Clone the key because rewriteSpan could modify the keys in place, but
 				// we reuse backup files across restore span entries.
-				restoringSubspan, err = rewriteSpan(&kr, restoringSubspan.Clone(), entry.ElidedPrefix)
+				restoringSubspan, err := rewriteSpan(&kr, restoringSubspan.Clone(), entry.ElidedPrefix)
 				if err != nil {
 					return err
 				}
@@ -238,7 +321,7 @@ func sendAddRemoteSSTWorker(
 				// stats and splitting a span with estimated stats is slow.
 				if batchSize+file.BackupFileEntryCounts.DataSize > targetBatchSize {
 					log.Infof(ctx, "flushing %s batch of %d SSTs due to size limit. split at %s in span (old keyspace) %s", sz(batchSize), len(toAdd), file.BackupFileEntrySpan.Key, entry.Span)
-					if err := flush(file.BackupFileEntrySpan.Key, entry.ElidedPrefix); err != nil {
+					if err := flush(entry.ElidedPrefix); err != nil {
 						return err
 					}
 				}
@@ -249,7 +332,7 @@ func sendAddRemoteSSTWorker(
 			}
 
 			log.Infof(ctx, "flushing %s batch of %d SSTs at end of restore span entry %s", sz(batchSize), len(toAdd), entry.Span)
-			if err := flush(nil, entry.ElidedPrefix); err != nil {
+			if err := flush(entry.ElidedPrefix); err != nil {
 				return err
 			}
 			var rows, dataSize int64
