@@ -462,6 +462,9 @@ func sortRowsWithFloatComp(rowMatrix1, rowMatrix2 [][]string, colTypes []string)
 // to rowMatrix2 and outputs a diff or message related to the comparison. If a
 // string comparison of the rows fails, and they contain floats or decimals, it
 // performs an approximate comparison of the values.
+// TODO(yuzefovich): if we extend this logic to handle COLLATED STRINGs in a
+// special way (i.e. using DB connection), then we can remove some code
+// introduced in #124677.
 func unsortedMatricesDiffWithFloatComp(
 	rowMatrix1, rowMatrix2 [][]string, colTypes []string,
 ) (string, error) {
@@ -518,6 +521,9 @@ func unsortedMatricesDiffWithFloatComp(
 }
 
 // unsortedMatricesDiff sorts and compares rows of data.
+// TODO(yuzefovich): if we extend this logic to handle COLLATED STRINGs in a
+// special way (i.e. using DB connection), then we can remove some code
+// introduced in #124677.
 func unsortedMatricesDiff(rowMatrix1, rowMatrix2 [][]string) string {
 	var rows1 []string
 	for _, row := range rowMatrix1 {
