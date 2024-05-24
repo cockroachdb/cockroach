@@ -33,9 +33,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/raft/rafttest",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/raft",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
+        "//pkg/settings/cluster",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
