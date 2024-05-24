@@ -180,8 +180,16 @@ func sendAddRemoteSSTs(
 
 	fromSystemTenant := isFromSystemTenant(dataToRestore.getTenantRekeys())
 
+	if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("restore.before_split"); err != nil {
+		return 0, 0, err
+	}
+
 	if err := splitAndScatter(ctx, execCtx, genSpan, *kr, fromSystemTenant, targetRangeSize); err != nil {
 		return 0, 0, errors.Wrap(err, "failed to split and scatter spans")
+	}
+
+	if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("restore.before_link"); err != nil {
+		return 0, 0, err
 	}
 
 	approxRows, approxDataSize, err = linkExternalFiles(
