@@ -33,7 +33,7 @@ const (
 	// doctorStatusVersion is the current "version" of the status checks
 	// performed by `dev doctor``. Increasing it will force doctor to be re-run
 	// before other dev commands can be run.
-	doctorStatusVersion = 8
+	doctorStatusVersion = 9
 
 	noCacheFlag     = "no-cache"
 	interactiveFlag = "interactive"
@@ -292,15 +292,18 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 			if err != nil {
 				return err.Error()
 			}
-			msg, err := d.checkPresenceInBazelRc(bazelRcLine)
-			if err != nil {
-				return err.Error()
+			found := d.checkPresenceInBazelRc(bazelRcLine)
+			if found {
+				return fmt.Sprintf("Found line `%s` in ~/.bazelrc; should instead be in .bazelrc.user", bazelRcLine)
 			}
-			return msg
+			if d.checkLinePresenceInBazelRcUser(cfg.workspace, bazelRcLine) {
+				return ""
+			}
+			return fmt.Sprintf("Please add the string `%s` to your .bazelrc.user", bazelRcLine)
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
 			if !cfg.haveAutofixPermission && cfg.interactive {
-				response := promptInteractiveInput("Do you want me to update your ~/.bazelrc for you to configure the loopback cache?", "y")
+				response := promptInteractiveInput("Do you want me to update your .bazelrc.user for you to configure the loopback cache? I will also update ~/.bazelrc if necessary.", "y")
 				canAutofix, ok := toBoolFuzzy(response)
 				if ok && canAutofix {
 					cfg.haveAutofixPermission = true
@@ -313,20 +316,30 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 			if err != nil {
 				return err
 			}
-			homeDir, err := os.UserHomeDir()
-			if err != nil {
-				return err
+			found := d.checkPresenceInBazelRc(bazelRcLine)
+			if found {
+				homeDir, err := os.UserHomeDir()
+				if err != nil {
+					return err
+				}
+				bazelrcUserFile := filepath.Join(homeDir, ".bazelrc")
+				contents, err := d.os.ReadFile(bazelrcUserFile)
+				if err != nil && !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+				if len(contents) > 0 && contents[len(contents)-1] != '\n' {
+					contents = contents + "\n"
+				}
+				contents = strings.ReplaceAll(contents, bazelRcLine, "")
+				err = d.os.WriteFile(bazelrcUserFile, contents)
+				if err != nil {
+					return err
+				}
 			}
-			bazelrcUserFile := filepath.Join(homeDir, ".bazelrc")
-			contents, err := d.os.ReadFile(bazelrcUserFile)
-			if err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
+			if d.checkLinePresenceInBazelRcUser(cfg.workspace, bazelRcLine) {
+				return nil
 			}
-			if len(contents) > 0 && contents[len(contents)-1] != '\n' {
-				contents = contents + "\n"
-			}
-			contents = contents + bazelRcLine + "\n"
-			return d.os.WriteFile(bazelrcUserFile, contents)
+			return d.addLineToBazelRcUser(cfg.workspace, bazelRcLine)
 		},
 		requirePreviousSuccesses: true,
 	},
@@ -539,23 +552,16 @@ func (d *dev) doctor(cmd *cobra.Command, _ []string) error {
 }
 
 // checkPresenceInBazelRc checks whether the given line is in ~/.bazelrc.
-// If it is, this function returns an empty string and a nil error.
-// If it isn't, this function returns a non-empty human-readable string describing
-// what the user should do to solve the issue and a nil error.
-// In other failure cases the function returns an empty string and a non-nil error.
-func (d *dev) checkPresenceInBazelRc(expectedBazelRcLine string) (string, error) {
+// If it is, this function returns true. Otherwise, it returns false.
+// Errors opening the file (e.g. if it doesn't exist) are ignored.
+func (d *dev) checkPresenceInBazelRc(expectedBazelRcLine string) bool {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return "", err
+		return false
 	}
-	errString := fmt.Sprintf("Please add the string `%s` to your ~/.bazelrc:\n", expectedBazelRcLine)
-	errString = errString + fmt.Sprintf("    echo \"%s\" >> ~/.bazelrc", expectedBazelRcLine)
-
 	bazelRcContents, err := d.os.ReadFile(filepath.Join(homeDir, ".bazelrc"))
 	if err != nil {
-		// The file may not exist; that's OK, but the line definitely is
-		// not in the file.
-		return errString, nil //nolint:returnerrcheck
+		return false
 	}
 	found := false
 	for _, line := range strings.Split(bazelRcContents, "\n") {
@@ -567,10 +573,7 @@ func (d *dev) checkPresenceInBazelRc(expectedBazelRcLine string) (string, error)
 		}
 		found = true
 	}
-	if found {
-		return "", nil
-	}
-	return errString, nil
+	return found
 }
 
 // checkLinePresenceInBazelRcUser checks whether the .bazelrc.user file

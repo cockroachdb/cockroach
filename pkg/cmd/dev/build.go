@@ -153,16 +153,9 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	// testing knob.
 	skipCacheCheck := d.knobs.skipCacheCheckDuringBuild || d.os.Getenv("DEV_NO_REMOTE_CACHE") != ""
 	if !skipCacheCheck {
-		bazelRcLine, err := d.setUpCache(ctx)
+		_, err := d.setUpCache(ctx)
 		if err != nil {
-			log.Println(err)
-		}
-		msg, err := d.checkPresenceInBazelRc(bazelRcLine)
-		if err != nil {
-			log.Printf("error while checking .bazel.rc: %v\n", err)
-		}
-		if msg != "" {
-			log.Println(msg)
+			return err
 		}
 	}
 
