@@ -14,9 +14,11 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -214,4 +216,24 @@ func getSessionID(
 	}
 	sessionID := strings.Split(cookie, ";")[0]
 	return sessionID, nil
+}
+
+// Download downloads the file at the given url and saves it to filename.
+func (r *RoachtestHTTPClient) Download(ctx context.Context, url string, filename string) error {
+	out, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	resp, err := r.Get(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		return err
+	}
+	return nil
 }
