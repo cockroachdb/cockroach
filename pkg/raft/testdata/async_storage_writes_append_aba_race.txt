@@ -378,16 +378,16 @@ process-ready 4
 ----
 Ready MustSync=false:
 Messages:
-4->1 MsgHeartbeat Term:3 Log:0/0
-4->2 MsgHeartbeat Term:3 Log:0/0
-4->3 MsgHeartbeat Term:3 Log:0/0
-4->5 MsgHeartbeat Term:3 Log:0/0
-4->6 MsgHeartbeat Term:3 Log:0/0
-4->7 MsgHeartbeat Term:3 Log:0/0
+4->1 MsgHeartbeat Term:3 Log:0/0 Commit:11
+4->2 MsgHeartbeat Term:3 Log:0/0 Commit:11
+4->3 MsgHeartbeat Term:3 Log:0/0 Commit:11
+4->5 MsgHeartbeat Term:3 Log:0/0 Commit:11
+4->6 MsgHeartbeat Term:3 Log:0/0 Commit:11
+4->7 MsgHeartbeat Term:3 Log:0/0 Commit:11
 
 deliver-msgs 1
 ----
-4->1 MsgHeartbeat Term:3 Log:0/0
+4->1 MsgHeartbeat Term:3 Log:0/0 Commit:11
 INFO 1 [term: 2] received a MsgHeartbeat message with higher term from 4 [term: 3]
 INFO 1 became follower at term 3
 

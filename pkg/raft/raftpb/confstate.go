@@ -42,3 +42,10 @@ func (cs ConfState) Equivalent(cs2 ConfState) error {
 	}
 	return nil
 }
+
+func DescribeConfState(state ConfState) string {
+	return fmt.Sprintf(
+		"Voters:%v VotersOutgoing:%v Learners:%v LearnersNext:%v AutoLeave:%v",
+		state.Voters, state.VotersOutgoing, state.Learners, state.LearnersNext, state.AutoLeave,
+	)
+}
