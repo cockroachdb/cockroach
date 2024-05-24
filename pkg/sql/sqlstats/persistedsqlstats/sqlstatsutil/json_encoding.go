@@ -177,6 +177,7 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //		        "firstExecAt":       { "type": "string" },
 //		        "lastExecAt":        { "type": "string" },
 //		        "sqlInstanceIds":    { "type": "node_ids" },
+//		        "kvNodeIds":         { "type": "node_ids" },
 //		        "regions":           { "type": "regions" },
 //		        "indexes":           { "type": "indexes" },
 //		        "lastErrorCode":     { "type": "string" },
@@ -194,6 +195,7 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //		        "bytesRead",
 //		        "rowsRead",
 //		        "sqlInstanceIds",
+//		        "kvNodeIds",
 //		        "regions",
 //		        "indexes
 //		      ]

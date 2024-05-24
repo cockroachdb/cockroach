@@ -581,6 +581,7 @@ export class StatementDetails extends React.Component<
     const sqlInstanceIds: string[] = unique(
       (stats.sql_instance_ids || []).map(node => node.toString()),
     ).sort();
+    // TODO: kv_node_ids?
     const regions = unique(
       isTenant
         ? stats.regions || []

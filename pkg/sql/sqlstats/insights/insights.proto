@@ -137,6 +137,9 @@ message Statement {
   // SQLInstanceIDs is the ordered list of SQL instance ids on which the
   // statement was executed.
   repeated int32 sql_instance_ids = 26 [(gogoproto.customname) = "SQLInstanceIDs"];
+  // KVNodeIDs is the ordered list of KV node ids which were used to evaluate KV
+  // read requests.
+  repeated int32 kv_node_ids = 27 [(gogoproto.customname) = "KVNodeIDs"];
 }
 
 

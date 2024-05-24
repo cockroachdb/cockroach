@@ -12,6 +12,7 @@ package execstats
 
 import (
 	"context"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -93,6 +94,9 @@ func (l *ScanStatsListener) Notify(event tracing.Structured) tracing.EventConsum
 	l.mu.ScanStats.numGets += ss.NumGets
 	l.mu.ScanStats.numScans += ss.NumScans
 	l.mu.ScanStats.numReverseScans += ss.NumReverseScans
+	if idx, found := slices.BinarySearch(l.mu.ScanStats.nodeIDs, int32(ss.NodeID)); !found {
+		l.mu.ScanStats.nodeIDs = slices.Insert(l.mu.ScanStats.nodeIDs, idx, int32(ss.NodeID))
+	}
 	return tracing.EventConsumed
 }
 
@@ -161,6 +165,9 @@ type ScanStats struct {
 	numGets                         uint64
 	numScans                        uint64
 	numReverseScans                 uint64
+	// nodeIDs stores the ordered list of all KV nodes that were used to
+	// evaluate the KV requests.
+	nodeIDs []int32
 }
 
 // PopulateKVMVCCStats adds data from the input ScanStats to the input KVStats.
@@ -181,4 +188,5 @@ func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
 	kvStats.NumGets = optional.MakeUint(ss.numGets)
 	kvStats.NumScans = optional.MakeUint(ss.numScans)
 	kvStats.NumReverseScans = optional.MakeUint(ss.numReverseScans)
+	kvStats.NodeIDs = ss.nodeIDs
 }
