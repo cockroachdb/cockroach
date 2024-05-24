@@ -75,17 +75,6 @@ func evalNewLease(
 			}
 	}
 
-	// Verify that requesting replica is part of the current replica set.
-	desc := rec.Desc()
-	if _, ok := desc.GetReplicaDescriptor(lease.Replica.StoreID); !ok {
-		return newFailedLeaseTrigger(isTransfer),
-			&kvpb.LeaseRejectedError{
-				Existing:  prevLease,
-				Requested: lease,
-				Message:   "replica not found",
-			}
-	}
-
 	// Requests should not set the sequence number themselves. Set the sequence
 	// number here based on whether the lease is equivalent to the one it's
 	// succeeding.
