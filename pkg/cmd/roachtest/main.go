@@ -11,6 +11,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest-selector/sfselector"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -246,6 +248,15 @@ func testsToRun(
 			msg += "\nTo include tests that are not compatible with this cloud, use --force-cloud-compat."
 		}
 		return nil, errors.Newf("%s", msg)
+	}
+
+	if roachtestflags.SelectiveTests {
+		selectedTests, err := sfselector.ReadTestsToRun(context.Background(), specs,
+			roachtestflags.Cloud, roachtestflags.Suite)
+		if err != nil {
+			fmt.Printf("running all tests! error selecting tests: %v", err)
+		}
+		fmt.Printf("%d out of %d tests selected for the run!\n", selectedTests, len(specs))
 	}
 
 	var notSkipped []registry.TestSpec
