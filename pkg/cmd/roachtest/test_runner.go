@@ -1277,7 +1277,7 @@ func (r *testRunner) runTest(
 
 		// We still want to run the post-test assertions even if the test timed out as it
 		// might provide useful information about the health of the nodes. Any assertion failures
-		// will will be recorded against, and eventually fail, the test.
+		// will be recorded against, and eventually fail, the test.
 		if err := r.postTestAssertions(ctx, t, c, 10*time.Minute); err != nil {
 			l.Printf("error during post test assertions: %v; see test-post-assertions.log for details", err)
 		}

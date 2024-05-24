@@ -164,7 +164,8 @@ func sortedClusters() []string {
 
 // newCluster initializes a SyncedCluster for the given cluster name.
 //
-// The cluster name can include a node selector (e.g. "foo:1-3").
+// The cluster name can include a node selector (e.g. "foo:1-3"). If the
+// selector is missing, the returned cluster includes all the machines.
 func newCluster(
 	l *logger.Logger, name string, opts ...install.ClusterSettingOption,
 ) (*install.SyncedCluster, error) {
@@ -969,6 +970,8 @@ sudo chmod 777 /mnt/data1
 }
 
 // Install installs third party software.
+//
+// The cluster name can include a node selector (e.g. "foo:1-3").
 func Install(ctx context.Context, l *logger.Logger, clusterName string, software []string) error {
 	c, err := getClusterFromCache(l, clusterName)
 	if err != nil {
@@ -2312,7 +2315,7 @@ func StartFluentBit(
 	return fluentbit.Install(ctx, l, c, config)
 }
 
-// Stop stops Fluent Bit on the cluster identified by clusterName.
+// StopFluentBit stops Fluent Bit on the cluster identified by clusterName.
 func StopFluentBit(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
@@ -2671,6 +2674,8 @@ func Deploy(
 
 // getClusterFromCache finds and returns a SyncedCluster from
 // the local cluster cache.
+//
+// The cluster name can include a node selector (e.g. "foo:1-3").
 func getClusterFromCache(
 	l *logger.Logger, clusterName string, opts ...install.ClusterSettingOption,
 ) (*install.SyncedCluster, error) {
