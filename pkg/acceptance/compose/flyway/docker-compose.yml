@@ -10,7 +10,7 @@ services:
   flyway:
     depends_on:
       - cockroach
-    image: flyway/flyway:9.3
+    image: us-east1-docker.pkg.dev/crl-docker-sync/docker-io/flyway/flyway:9.3
     volumes:
       - ./sql:/sql
     command: migrate -user=root -url=jdbc:postgresql://cockroach:26257/defaultdb -locations=filesystem:/sql

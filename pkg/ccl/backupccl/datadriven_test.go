@@ -212,6 +212,11 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	opts := []backuptestutils.BackupTestArg{
 		backuptestutils.WithParams(params),
 		backuptestutils.WithTempDir(cfg.iodir),
+		// We can skip the check for invalid descriptors because we do it in
+		// datadrivenTestState.cleanup explicitly, and having it in the cleanup
+		// function returned by StartBackupRestoreTestCluster fails anyway since
+		// we stop the first node before executing cleanupFns.
+		backuptestutils.WithSkipInvalidDescriptorCheck(),
 	}
 	if cfg.iodir == "" {
 		opts = append(opts, backuptestutils.WithBank(cfg.splits))
