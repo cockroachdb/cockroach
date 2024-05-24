@@ -109,7 +109,6 @@ var buildTargetMapping = map[string]string{
 	"smithtest":            "//pkg/cmd/smithtest:smithtest",
 	"sql-bootstrap-data":   "//pkg/cmd/sql-bootstrap-data:sql-bootstrap-data",
 	"staticcheck":          "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
-	"swagger":              "@com_github_go_swagger_go_swagger//cmd/swagger:swagger",
 	"tests":                "//pkg:all_tests",
 	"workload":             "//pkg/cmd/workload:workload",
 }
