@@ -233,24 +233,67 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		m := ct.cluster.NewMonitor(ct.ctx, ct.workloadNode)
 		m.Go(func(ctx context.Context) error {
 			var err error
-			for ctx.Done() == nil {
+			for ctx.Err() == nil {
+				ct.t.L().Printf("starting webhook server %v", webhookPort)
 				if err = ct.cluster.RunE(ct.ctx, option.WithNodes(webhookNode), serverExecCmd, rootFolder); err != nil {
+					fmt.Printf("webhook server died: %v\n", err)
 					ct.t.L().Printf("webhook server died: %v", err)
 				}
 			}
 			return err
 		})
 
+		var stdout, stderr io.ReadCloser
+		stdoutReady := make(chan struct{})
+		tail := func(ctx context.Context) (err error) {
+			stdout, stderr, _, err = ct.cluster.Tail(ctx, ct.t.L(), fmt.Sprintf("/mnt/data2/webhook-output-%d.jsonl", webhookPort), webhookNode)
+			if err != nil {
+				ct.t.L().Printf("error tailing webhook output: %v", err)
+				return err
+			}
+			ct.t.L().Printf("webhook tail started")
+			close(stdoutReady)
+
+			return nil
+		}
+
+		// discard stderr
+		m.Go(func(ctx context.Context) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-stdoutReady:
+			}
+			defer ct.t.L().Printf("webhook stderr discard finished")
+			_, _ = io.Copy(io.Discard, stderr)
+			return nil
+		})
+
 		if args.chaosArgs.validateOrder {
-			m.Go(func(ctx context.Context) error {
-				validators := make(map[string]cdctest.Validator)
-				stdout, _, err := ct.cluster.Tail(ctx, ct.t.L(), fmt.Sprintf("/tmp/webhook-output-%d.jsonl", webhookPort))
-				if err != nil {
+			// start the tail
+			m.Go(func(ctx context.Context) (err error) {
+				defer ct.t.L().Printf("tail finished with %v", err)
+				if err = tail(ctx); err != nil {
 					return err
 				}
+				return nil
+			})
+
+			m.Go(func(ctx context.Context) error {
+				ct.t.L().Printf("waiting for webhook tail to be ready")
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-stdoutReady:
+				}
+				ct.t.L().Printf("starting webhook order validator")
+				validators := make(map[string]cdctest.Validator)
 				scanner := bufio.NewScanner(stdout)
+				buf := make([]byte, 0, 64*1024)
+				scanner.Buffer(buf, 10*1024*1024) // set max token size to 10MiB
+				var i int
+				// TODO: why does this just stop after we restart the webhook server the first time?
 				for scanner.Scan() {
-					fmt.Printf("got line: %v\n", scanner.Text())
 					type webhookPayload struct {
 						Payload []struct {
 							Key     json.RawMessage `json:"key"`
@@ -282,18 +325,19 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 						if _, ok := validators[p.Topic]; !ok {
 							validators[p.Topic] = cdctest.NewOrderValidator(p.Topic)
 						}
-						validators[p.Topic].NoteRow("0", string(p.Key), scanner.Text(), updated)
+						validators[p.Topic].NoteRow("0", string(p.Key), "value doesnt matter", updated)
 						if len(validators[p.Topic].Failures()) > 0 {
 							return errors.Newf("order validation failed for topic %v: %v", p.Topic, validators[p.Topic].Failures())
 						}
+						if i%100_000 == 0 {
+							ct.t.L().Printf("validated %d rows on %d topics", i, len(validators))
+						}
+						i++
 					}
 				}
+				ct.t.L().Printf("validation completed with %d (%v)", i, scanner.Err())
 				return scanner.Err()
 			})
-			// for each topic:
-			// start consumer
-			// hook into this guy
-
 		}
 
 		if args.chaosArgs.chaos {
@@ -301,7 +345,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 				period, downTime := 2*time.Minute, 20*time.Second
 				// TODO: pull out into its own think like with kafka
 				stop := func(ctx context.Context) error {
-					deets, err := ct.cluster.RunWithDetails(ctx, ct.logger, option.WithNodes(webhookNode), `bash`, `-c`, `ps aux | grep 'go run webhooks-server' | grep -v grep | awk '{print $2}' | xargs kill`)
+					deets, err := ct.cluster.RunWithDetails(ctx, ct.logger, option.WithNodes(webhookNode), `bash`, `-c`, `set -eo pipefail; ps aux | grep 'webhook-server' | grep -v grep | awk '{print $2}' | xargs kill`)
 					if err != nil {
 						return err
 					}
@@ -310,8 +354,8 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 					}
 					return nil
 				}
-				restart := func(ctx context.Context) error { // it will restart on its own actually, as written above
-					return ctx.Err()
+				restart := func(ctx context.Context) error {
+					return nil // it restarts on its own?
 				}
 				return func() error {
 					t := time.NewTicker(period)
@@ -2519,7 +2563,7 @@ import (
 
 func main() {
 	runtime.GOMAXPROCS(1)
-	out, err := os.Create("/tmp/webhook-output-%d.jsonl")
+	out, err := os.OpenFile("/mnt/data2/webhook-output-%d.jsonl", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		log.Fatalf("failed to create output file")
 	}
