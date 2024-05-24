@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -87,7 +88,11 @@ func (f *txnKVStreamer) SetupNextFetch(
 	}
 	f.reset(ctx)
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "Scan %s", spans.BoundedString(1024 /* bytesHint */))
+		lockStr := ""
+		if f.lockStrength != lock.None {
+			lockStr = fmt.Sprintf(" lock %s (%s)", f.lockStrength.String(), f.lockDurability.String())
+		}
+		log.VEventf(ctx, 2, "Scan %s%s", spans.BoundedString(1024 /* bytesHint */), lockStr)
 	}
 	// Make sure to nil out the requests past the length that will be used in
 	// spansToRequests so that we lose references to the underlying Get and Scan

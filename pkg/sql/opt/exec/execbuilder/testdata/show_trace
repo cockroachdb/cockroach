@@ -139,7 +139,7 @@ SET tracing = off
 query TT
 $trace_query
 ----
-colbatchscan  Scan /Table/109/{1-2}
+colbatchscan  Scan /Table/109/{1-2} lock Exclusive (Block, Unreplicated)
 colbatchscan  fetched: /kv2/kv2_pkey/-9222809086901354496/k/v -> /1/2
 count         Put /Table/109/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
 count         fast path completed
