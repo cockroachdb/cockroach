@@ -594,6 +594,16 @@ type HandleAndStopCh struct {
 // specifically waiting for those eval tokens to be > 0. We will let in a
 // burst if the leaseholder changes, while the local replica is still the
 // leader -- so be it.
+//
+// NO! The above is all wrong. We want to internalize this implementation in
+// RangeController. RangeController will get a list of all the voters, and
+// which ones are required (leader, leaseholder, and for elastic traffic, all
+// the ones in StateReplicate). There will also be a refresh channel for the waiter
+// which it will notify if it needs to refresh. Then the waiter will wait.
+// If leaseholder, leader change, or for elastic the ones in StateReplica are
+// no longer in StateReplicate, or the sets of voter change, refresh will be
+// signalled. All this state will either need to be copy-on-write or read locked
+// since there are many waiting requests for eval.
 func WaitForHandlesAndChannels(
 	ctx context.Context,
 	stopWaitCh <-chan struct{},
