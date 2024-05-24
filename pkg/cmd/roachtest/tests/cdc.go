@@ -250,6 +250,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 				}
 				scanner := bufio.NewScanner(stdout)
 				for scanner.Scan() {
+					fmt.Printf("got line: %v\n", scanner.Text())
 					type webhookPayload struct {
 						Payload []struct {
 							Key     json.RawMessage `json:"key"`
@@ -2509,6 +2510,8 @@ package main
 
 import (
 	"log"
+	"strings"
+	"io"
 	"net/http"
 	"os"
 	"runtime"
