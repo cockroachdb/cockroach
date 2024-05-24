@@ -19,6 +19,7 @@ quality of service: regular
 ·
 • scan
   sql nodes: <hidden>
+  kv nodes: <hidden>
   regions: <hidden>
   actual row count: 0
   KV time: 0µs
@@ -51,6 +52,7 @@ quality of service: regular
 ·
 • scan
   sql nodes: <hidden>
+  kv nodes: <hidden>
   regions: <hidden>
   actual row count: 3
   KV time: 0µs

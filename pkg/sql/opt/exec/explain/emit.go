@@ -442,6 +442,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if len(s.SQLNodes) > 0 {
 			e.ob.AddFlakyField(DeflakeNodes, "sql nodes", strings.Join(s.SQLNodes, ", "))
 		}
+		if len(s.KVNodes) > 0 {
+			e.ob.AddFlakyField(DeflakeNodes, "kv nodes", strings.Join(s.KVNodes, ", "))
+		}
 		if len(s.Regions) > 0 {
 			e.ob.AddFlakyField(DeflakeNodes, "regions", strings.Join(s.Regions, ", "))
 		}

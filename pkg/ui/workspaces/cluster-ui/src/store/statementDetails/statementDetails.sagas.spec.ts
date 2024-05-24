@@ -161,6 +161,7 @@ describe("SQLDetailsStats sagas", () => {
             nanos: 111613000,
           },
           nodes: [new Long(1)],
+          kv_node_ids: [2],
           plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
           failure_count: new Long(2),
         },
@@ -255,6 +256,7 @@ describe("SQLDetailsStats sagas", () => {
               nanos: 111613000,
             },
             nodes: [new Long(1)],
+            kv_node_ids: [2],
             plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
           },
           aggregated_ts: {
@@ -351,6 +353,7 @@ describe("SQLDetailsStats sagas", () => {
               nanos: 111613000,
             },
             nodes: [new Long(1)],
+            kv_node_ids: [2],
             plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
           },
           aggregated_ts: {
@@ -447,6 +450,7 @@ describe("SQLDetailsStats sagas", () => {
               nanos: 111613000,
             },
             nodes: [new Long(1)],
+            kv_node_ids: [2],
             plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
           },
           aggregated_ts: {
@@ -543,6 +547,7 @@ describe("SQLDetailsStats sagas", () => {
               nanos: 111613000,
             },
             nodes: [new Long(1)],
+            kv_node_ids: [2],
             plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
           },
           aggregated_ts: {
@@ -641,6 +646,7 @@ describe("SQLDetailsStats sagas", () => {
               nanos: 111613000,
             },
             nodes: [new Long(1)],
+            kv_node_ids: [2],
             plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
           },
           explain_plan: "• virtual table\n  table: @primary",

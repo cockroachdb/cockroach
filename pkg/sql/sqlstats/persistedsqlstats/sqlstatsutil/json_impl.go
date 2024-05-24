@@ -50,6 +50,7 @@ var (
 	_ jsonMarshaler = (*jsonInt)(nil)
 	_ jsonMarshaler = (*stmtFingerprintID)(nil)
 	_ jsonMarshaler = (*int64Array)(nil)
+	_ jsonMarshaler = (*int32Array)(nil)
 	_ jsonMarshaler = &latencyInfo{}
 )
 
@@ -174,6 +175,32 @@ func (a *int64Array) encodeJSON() (json.JSON, error) {
 		builder.Add(jsVal)
 	}
 
+	return builder.Build(), nil
+}
+
+type int32Array []int32
+
+func (a *int32Array) decodeJSON(js json.JSON) error {
+	arrLen := js.Len()
+	for i := 0; i < arrLen; i++ {
+		var value jsonInt
+		valJSON, err := js.FetchValIdx(i)
+		if err != nil {
+			return err
+		}
+		if err := value.decodeJSON(valJSON); err != nil {
+			return err
+		}
+		*a = append(*a, int32(value))
+	}
+	return nil
+}
+
+func (a *int32Array) encodeJSON() (json.JSON, error) {
+	builder := json.NewArrayBuilder(len(*a))
+	for _, value := range *a {
+		builder.Add(json.FromInt64(int64(value)))
+	}
 	return builder.Build(), nil
 }
 
@@ -314,6 +341,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"rowsRead", (*numericStats)(&s.RowsRead)},
 		{"rowsWritten", (*numericStats)(&s.RowsWritten)},
 		{"nodes", (*int64Array)(&s.Nodes)},
+		{"kvNodeIds", (*int32Array)(&s.KVNodeIDs)},
 		{"regions", (*stringArray)(&s.Regions)},
 		{"planGists", (*stringArray)(&s.PlanGists)},
 		{"indexes", (*stringArray)(&s.Indexes)},
