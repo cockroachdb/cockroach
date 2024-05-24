@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/testselector/sfselector"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -124,6 +125,13 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	specs, err := testsToRun(r, filter, roachtestflags.RunSkipped, roachtestflags.SelectProbability, true)
 	if err != nil {
 		return err
+	}
+
+	if roachtestflags.SelectiveTests {
+		selectedTests := 0
+		specs, selectedTests = sfselector.ReadTestsToRun(context.Background(), specs,
+			roachtestflags.Cloud, roachtestflags.Suite)
+		fmt.Printf("%d out of %d tests selected for the run!\n", selectedTests, len(specs))
 	}
 
 	n := len(specs)

@@ -135,6 +135,17 @@ type TestSpec struct {
 	// If one is not specified, the default behavior is to upload
 	// a binary with the crdb_test flag randomly enabled or disabled.
 	CockroachBinary ClusterCockroachBinary
+
+	// TestSelectionOptOutSuites is the list of test suites that determines
+	// whether a specific test should be considered for test selection or not.
+	// Tha value is a list of strings which corresponds to the available
+	// suites. This specific test will not be considered for test selection
+	// for the suites and the test will always run.
+	// e.g. if  SuitesToOptOutForTestSelection = []string{Nightly, Weekly}, the test
+	// will always run for Nightly and Weekly.
+	// Note that this flag needs to be set with a specific reason in the comment
+	// explaining why the test has been chosen for opting out of test selection.
+	TestSelectionOptOutSuites []string
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.

@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sfselector",
+    srcs = [
+        "consumer.go",
+        "selector.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/testselector/sfselector",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/registry",
+        "//pkg/util/encoding/csv",
+        "@com_github_snowflakedb_gosnowflake//:gosnowflake",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//option",
+    ],
+)
