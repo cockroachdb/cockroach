@@ -69,6 +69,8 @@ type StoreStreamSendTokensWatcher interface {
 	CancelHandle(handle StoreStreamSendTokenHandleID)
 }
 
+const InvalidStoreStreamSendTokenHandleID StoreStreamSendTokenHandleID = 0
+
 type TokenAvailableNotification interface {
 	// Notify is called when tokens are available to be granted.
 	Notify()
@@ -87,6 +89,7 @@ type StoreStreamSendTokenHandle struct {
 func NewStoreStreamSendTokensWatcher(stopper *stop.Stopper) *storeStreamSendTokensWatcher {
 	ssstw := &storeStreamSendTokensWatcher{stopper: stopper}
 	ssstw.mu.watchers = make(map[SendTokenCounter]*tokenWatcher)
+	ssstw.mu.idSeq = 1
 	return ssstw
 }
 

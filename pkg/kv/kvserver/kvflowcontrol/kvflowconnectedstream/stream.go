@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // TODO(sumeer): go through all recent slack threads and ensure they are
@@ -121,11 +123,11 @@ type RangeControllerOptions struct {
 	TenantID  roachpb.TenantID
 	ReplicaID roachpb.ReplicaID
 
-	StoreStreamsTokenCounter
-	StoreStreamSendTokensWatcher
-	RaftInterface
-	MessageSender
-	Scheduler
+	SSTokenCounter    StoreStreamsTokenCounter
+	SendTokensWatcher StoreStreamSendTokensWatcher
+	RaftInterface     RaftInterface
+	MessageSender     MessageSender
+	Scheduler         Scheduler
 }
 
 // RangeControllerInitState is the initial state at the time of creation.
@@ -417,9 +419,13 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 	// Refresh the replicaStreams.
 	nextRaftIndex := rc.opts.RaftInterface.HighestEntryIndex() + 1
 	for r, rs := range rc.replicaMap {
-		if rs.replicateStream == nil {
+		if rs.replicateStream != nil && rs.replicateStream.connectedState == replicateConnected {
+			continue
+		}
+		if rs.replicateStream == nil || rs.replicateStream.connectedState == snapshot {
 			state, nextUB := rc.opts.RaftInterface.FollowerState(r)
 			if state == tracker.StateReplicate {
+				// TODO: state may already exist.
 				// Need to create a replicaSendStream
 				indexToSend := nextUB
 				rsInitState := replicaSendStreamInitState{
@@ -431,6 +437,10 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 					approxMeanSizeBytes: 1000,
 				}
 				rs.replicateStream = newReplicaSendStream(rs, rsInitState)
+				if !rs.replicateStream.isEmptySendQueue() {
+					// TODO: if tokens available for overridden priority, send some.
+					// TODO: if more ava
+				}
 				// TODO: check if send-queue is non-empty and generate some MsgApps if
 				// permitted. Queue up more work, or notification when send tokens are
 				// available.
@@ -457,7 +467,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 	// StateReplicate => StateProbe.
 	msgApps := ready.RetransmitMsgApps()
 	for i := range msgApps {
-		rc.opts.SendRaftMessage(
+		rc.opts.MessageSender.SendRaftMessage(
 			context.TODO(), admissionpb.WorkPriority(kvserverpb.AdmissionPriorityNotOverridden), msgApps[i])
 	}
 
@@ -473,6 +483,11 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 			// Local replica, which is the leader.
 			for i := range entries {
 				entryFCState := getFlowControlState(entries[i])
+				if !entryFCState.usesFlowControl {
+					continue
+				}
+				wc := admissionpb.WorkClassFromPri(entryFCState.priority)
+				rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
 				rs.replicateStream.advanceNextRaftIndexAndSent(entryFCState)
 			}
 			continue
@@ -492,21 +507,31 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 				entryFCState := getFlowControlState(entries[i])
 				wc := admissionpb.WorkClassFromPri(entryFCState.priority)
 				if toFinalized {
-					rs.replicateStream.advanceNextRaftIndexAndQueued(entryFCState)
+					if entries[i].Index == to && !entryFCState.usesFlowControl {
+						to++
+					} else {
+						rs.replicateStream.advanceNextRaftIndexAndQueued(entryFCState)
+					}
 					continue
 				}
 				send := false
 				if isLeaseholder {
-					rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
+					if entryFCState.usesFlowControl {
+						rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
+					}
 					send = true
 				} else {
-					tokens := rs.sendTokenCounter.TryDeduct(context.TODO(), wc, entryFCState.tokens)
-					if tokens > 0 {
-						send = true
-						if tokens < entryFCState.tokens {
-							toFinalized = true
-							rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens-tokens)
+					if entryFCState.usesFlowControl {
+						tokens := rs.sendTokenCounter.TryDeduct(context.TODO(), wc, entryFCState.tokens)
+						if tokens > 0 {
+							send = true
+							if tokens < entryFCState.tokens {
+								toFinalized = true
+								rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens-tokens)
+							}
 						}
+					} else {
+						send = true
 					}
 				}
 				if send {
@@ -523,7 +548,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 				if err != nil {
 					panic("in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated")
 				}
-				rc.opts.SendRaftMessage(
+				rc.opts.MessageSender.SendRaftMessage(
 					context.TODO(), admissionpb.WorkPriority(kvserverpb.AdmissionPriorityNotOverridden), msg)
 			}
 		} else {
@@ -652,8 +677,22 @@ type replicaSendStream struct {
 		priorityCount map[admissionpb.WorkPriority]int64
 		sizeSum       kvflowcontrol.Tokens
 
-		// Valid iff send-queue is non-empty and connectedState != snapshot.
-		watcherHandleID StoreStreamSendTokenHandleID
+		// If send-queue is non-empty and connectedState != snapshot, exactly one
+		// of the following will be true, else none will be true:
+		//
+		// - forceFlushScheduled
+		// - watcherHandleID != InvalidStoreStreamSendTokenHandleID, i.e., we have
+		//   registered a handle to watch for send tokens to become available.
+		// - deductedForScheduler.tokens > 0, i.e., we have successfully deducted
+		//   some send tokens and are waiting to be scheduled in the raftScheduler
+		//   to do the sending.
+		watcherHandleID      StoreStreamSendTokenHandleID
+		deductedForScheduler struct {
+			pri    admissionpb.WorkPriority
+			tokens kvflowcontrol.Tokens
+		}
+		// Only relevant when connectedState != snapshot.
+		forceFlushScheduled bool
 	}
 	// Eval state.
 	eval struct {
@@ -661,8 +700,8 @@ type replicaSendStream struct {
 		// send-queue, or in the tracker.
 		tokensDeducted [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
 	}
-	// Only relevant when connectedState != snapshot.
-	forceFlushScheduled bool
+
+	closed bool
 }
 
 // Initial state provided to constructor of replicaSendStream.
@@ -700,7 +739,16 @@ func newReplicaSendStream(
 	rss.sendQueue.nextRaftIndex = init.nextRaftIndex
 	rss.sendQueue.approxMaxPriority = init.approxMaxPriority
 	rss.sendQueue.approxMeanSizeBytes = init.approxMeanSizeBytes
+	rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
 	return rss
+}
+
+func (rss *replicaSendStream) close() {
+	if rss.connectedState != snapshot {
+		// Will cause all tokens to be returned etc.
+		rss.changeToStateSnapshot()
+	}
+	rss.closed = true
 }
 
 func (rss *replicaSendStream) advanceNextRaftIndexAndSent(state entryFlowControlState) {
@@ -710,11 +758,112 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndSent(state entryFlowControl
 	}
 	// Will deduct eval tokens
 	// Account for in tracker.
-	// Deduct send tokens.
+	// TODO: some callers have already deducted.
 }
 
-// TODO: cannot deduct in StateSnapshot. Should return all tokens when transitioned to snapshot!
-// and not when transition back to StateReplicate.
+func (rss *replicaSendStream) scheduled() {
+	// 5MB.
+	const MaxBytesToSend = 5 << 20
+	if rss.sendQueue.forceFlushScheduled {
+		// Send some things, regardless of tokens.
+		msg, err := rss.parent.parent.opts.RaftInterface.MakeMsgApp(
+			rss.parent.desc.ReplicaID, rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex, MaxBytesToSend)
+		if err != nil {
+			if !errors.Is(err, raft.ErrCompacted) {
+				panic(err)
+			}
+			rss.changeToStateSnapshot()
+			return
+		}
+		rss.dequeueFromQueueAndSend(msg, 0, admissionpb.UnusedPri)
+		if rss.isEmptySendQueue() {
+			rss.sendQueue.forceFlushScheduled = false
+		} else {
+			// TODO: tell RangeController to schedule rss on raftScheduler.
+		}
+		return
+	}
+	if rss.sendQueue.deductedForScheduler.tokens > 0 {
+		msg, err := rss.parent.parent.opts.RaftInterface.MakeMsgApp(
+			rss.parent.desc.ReplicaID, rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex,
+			int64(rss.sendQueue.deductedForScheduler.tokens))
+		if err != nil {
+			if !errors.Is(err, raft.ErrCompacted) {
+				panic(err)
+			}
+			rss.changeToStateSnapshot()
+			return
+		}
+		rss.dequeueFromQueueAndSend(msg, rss.sendQueue.deductedForScheduler.tokens,
+			rss.sendQueue.deductedForScheduler.pri)
+		rss.sendQueue.deductedForScheduler.tokens = 0
+		rss.sendQueue.deductedForScheduler.pri = admissionpb.UnusedPri
+		if !rss.isEmptySendQueue() {
+			pri := rss.queuePriority()
+			rss.sendQueue.watcherHandleID = rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
+				rss.parent.sendTokenCounter, admissionpb.WorkClassFromPri(pri), rss)
+		}
+		// Else nothing more to do.
+	}
+}
+
+func (rss *replicaSendStream) dequeueFromQueueAndSend(
+	msg raftpb.Message,
+	sendTokensAlreadyDeducted kvflowcontrol.Tokens,
+	priAlreadyDeducted admissionpb.WorkPriority,
+) {
+	// TODO: it is possible that the Notify raced with an enqueue and the
+	// send-queue has some normal work now, and the tokens were elastic. In this
+	// case we don't want to apply a priority override on the message. Actually,
+	// should the priority override just be local? We have decided to deduct
+	// from a different bucket than the expected one, so we need to return to
+	// that bucket. Why should we even tell the other side of the change in
+	// priority. It should admit as usual based on original priority. The
+	// priority override was just a local deduction mechanism. Well, if we have
+	// deducted from normal bucket for elastic work, we should tell the other
+	// side since we want the admission to happen as normal too.
+	//
+	// If we send normal work as elastic to the other side, harmless. It will
+	// delay logical admission. That is all.
+	//
+	// TODO: cleanup the above comment.
+	remainingTokens := sendTokensAlreadyDeducted
+	noRemainingTokens := false
+	if remainingTokens == 0 {
+		noRemainingTokens = true
+	}
+	wcAlreadyDeducted := admissionpb.WorkClassFromPri(priAlreadyDeducted)
+	for _, entry := range msg.Entries {
+		if rss.sendQueue.indexToSend != entry.Index {
+			panic("")
+		}
+		rss.sendQueue.indexToSend++
+		entryFCState := getFlowControlState(entry)
+		if !entryFCState.usesFlowControl {
+			continue
+		}
+		rss.sendQueue.sizeSum -= entryFCState.tokens
+		rss.sendQueue.priorityCount[entryFCState.priority]--
+		wc := wcAlreadyDeducted
+		if priAlreadyDeducted == admissionpb.UnusedPri {
+			admissionpb.WorkClassFromPri(entryFCState.priority)
+		}
+		if noRemainingTokens {
+			rss.parent.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
+		} else {
+			remainingTokens -= entryFCState.tokens
+			if remainingTokens <= 0 {
+				noRemainingTokens = true
+				rss.parent.sendTokenCounter.Deduct(context.TODO(), wc, -remainingTokens)
+			}
+		}
+		// TODO: Also track priAlreadyDeducted as the override.
+		rss.tracker.Track(context.TODO(), entryFCState.priority, entryFCState.tokens,
+			kvflowcontrolpb.RaftLogPosition{Term: entry.Term, Index: entry.Index})
+	}
+	rss.parent.parent.opts.MessageSender.SendRaftMessage(context.TODO(), priAlreadyDeducted, msg)
+}
+
 func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowControlState) {
 	if entry.index != rss.sendQueue.nextRaftIndex {
 		panic("")
@@ -724,37 +873,59 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowContr
 	rss.sendQueue.sizeSum += entry.tokens
 	if entry.usesFlowControl {
 		var priority admissionpb.WorkPriority
-		if rss.connectedState != snapshot {
+		if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
+			// May need to update it.
 			priority = rss.queuePriority()
 		}
 		rss.sendQueue.priorityCount[entry.priority]++
 		if rss.connectedState == snapshot {
+			// Do not deduct eval-tokens in StateSnapshot, since there is no
+			// guarantee these will be returned.
 			return
 		}
-		priorityChanged := false
-		if entry.priority > priority {
-			priority = entry.priority
-			priorityChanged = true
+		wcChanged := false
+		entryWC := admissionpb.WorkClassFromPri(entry.priority)
+		if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID &&
+			entry.priority > priority {
+			existingWC := admissionpb.WorkClassFromPri(priority)
+			if existingWC != entryWC {
+				wcChanged = true
+			}
 		}
-		wc := admissionpb.WorkClassFromPri(entry.priority)
-		rss.eval.tokensDeducted[wc] += entry.tokens
-		rss.parent.evalTokenCounter.Deduct(context.TODO(), wc, entry.tokens)
+		rss.eval.tokensDeducted[entryWC] += entry.tokens
+		rss.parent.evalTokenCounter.Deduct(context.TODO(), entryWC, entry.tokens)
 		if wasEmpty {
 			// Register notification.
-			rss.sendQueue.watcherHandleID = rss.parent.parent.opts.StoreStreamSendTokensWatcher.NotifyWhenAvailable(
-				rss.parent.sendTokenCounter, wc, rss)
-		} else if priorityChanged {
+			rss.sendQueue.watcherHandleID = rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
+				rss.parent.sendTokenCounter, entryWC, rss)
+		} else if wcChanged {
 			// Update notification
-			rss.parent.parent.opts.UpdateHandle(rss.sendQueue.watcherHandleID, wc)
+			rss.parent.parent.opts.SendTokensWatcher.UpdateHandle(rss.sendQueue.watcherHandleID, entryWC)
 		}
 	}
 }
 
 // Notify implements TokenAvailableNotification.
 func (rss *replicaSendStream) Notify() {
-	// TODO:
-	// Nothing is locked. Want to deduct some and schedule on raftScheduler.
+	// TODO: concurrency. raftMu is not held, and not being called from raftScheduler.
+	if rss.closed || rss.connectedState == snapshot {
+		// Must have canceled the handle and the cancellation raced with the
+		// notification.
+		return
+	}
+	pri := rss.queuePriority()
+	wc := admissionpb.WorkClassFromPri(pri)
+	queueSize := rss.queueSize()
+	tokens := rss.parent.sendTokenCounter.TryDeduct(context.TODO(), wc, queueSize)
+	if tokens > 0 {
+		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
+		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
+	}
+	rss.sendQueue.deductedForScheduler.pri = pri
+	rss.sendQueue.deductedForScheduler.tokens = tokens
+	// TODO: tell RangeController to schedule rss on raftScheduler.
 }
+
 func (rss *replicaSendStream) isEmptySendQueue() bool {
 	return rss.sendQueue.indexToSend == rss.sendQueue.nextRaftIndex
 }
@@ -803,6 +974,30 @@ func (rss *replicaSendStream) changeConnectedStateInStateReplicate(isConnected b
 
 func (rss *replicaSendStream) changeToStateSnapshot() {
 	rss.connectedState = snapshot
+	// The tracker must only contain entries in < rss.sendQueue.indexToSend.
+	// These may not have been received by the replica and will not get resent
+	// by Raft, so we have no guarantee those tokens will be returned. So return
+	// all tokens in the tracker.
+	rss.tracker.UntrackAll(context.TODO(), func(pri admissionpb.WorkPriority, tokens kvflowcontrol.Tokens) {
+		rss.parent.sendTokenCounter.Return(context.TODO(), admissionpb.WorkClassFromPri(pri), tokens)
+	})
+	// For the same reason, return all eval tokens deducted.
+	for wc := range rss.eval.tokensDeducted {
+		if rss.eval.tokensDeducted[wc] > 0 {
+			rss.parent.evalTokenCounter.Return(context.TODO(), admissionpb.WorkClass(wc), rss.eval.tokensDeducted[wc])
+			rss.eval.tokensDeducted[wc] = 0
+		}
+	}
+	if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
+		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
+		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
+	}
+	if rss.sendQueue.deductedForScheduler.tokens > 0 {
+		wc := admissionpb.WorkClassFromPri(rss.sendQueue.deductedForScheduler.pri)
+		rss.parent.sendTokenCounter.Return(context.TODO(), wc, rss.sendQueue.deductedForScheduler.tokens)
+		rss.sendQueue.deductedForScheduler.tokens = 0
+	}
+	rss.sendQueue.forceFlushScheduled = false
 }
 
 func (rss *replicaSendStream) changeToStateReplicate(isConnected bool, indexToSend uint64) {
@@ -827,24 +1022,13 @@ func (rss *replicaSendStream) changeToStateReplicate(isConnected bool, indexToSe
 	// snapshot was applied. So we will start off with some entries in the
 	// send-queue.
 
-	// The tracker must only contain entries in < rss.sendQueue.indexToSend.
-	// These may not have been received by the replica and will not get resent
-	// by Raft, so we have no guarantee those tokens will be returned. So return
-	// all tokens in the tracker.
-	rss.tracker.UntrackAll(context.TODO(), func(pri admissionpb.WorkPriority, tokens kvflowcontrol.Tokens) {
-		rss.parent.sendTokenCounter.Return(context.TODO(), admissionpb.WorkClassFromPri(pri), tokens)
-	})
+	// NB: the tracker entries have already been returned in
+	// changeToStateSnapshot. And so have the eval tokens. We have partially or
+	// fully emptied the send-queue and we don't want to iterate over the
+	// remaining members to precisely figure out what to deduct from
+	// eval-tokens, since that may require reading from storage.
+
 	rss.indexToSendInitial = indexToSend
-	// Return all eval tokens deducted. We have partially or fully emptied the
-	// send-queue and we don't want to iterate over the remaining members to
-	// precisely figure out what to deduct, since that may require reading from
-	// storage.
-	for wc := range rss.eval.tokensDeducted {
-		if rss.eval.tokensDeducted[wc] > 0 {
-			rss.parent.evalTokenCounter.Return(context.TODO(), admissionpb.WorkClass(wc), rss.eval.tokensDeducted[wc])
-			rss.eval.tokensDeducted[wc] = 0
-		}
-	}
 	rss.sendQueue.indexToSend = indexToSend
 	totalCount := int64(0)
 	var maxPri admissionpb.WorkPriority
@@ -876,6 +1060,22 @@ func (rss *replicaSendStream) changeToStateReplicate(isConnected bool, indexToSe
 	rss.sendQueue.approxMeanSizeBytes = meanSizeBytes
 	rss.sendQueue.sizeSum = 0
 	rss.nextRaftIndexInitial = rss.sendQueue.nextRaftIndex
+	if !rss.isEmptySendQueue() {
+		rss.Notify()
+		if rss.sendQueue.deductedForScheduler.tokens == 0 {
+			// Weren't able to deduct any tokens.
+			// TODO: register for watcher
+		} else {
+			for {
+				rss.scheduled()
+				if rss.sendQueue.deductedForScheduler.tokens == 0 {
+					// TODO: register for watcher if send-queue is non-empty.
+				} else {
+					// TODO: actually schedule.
+				}
+			}
+		}
+	}
 }
 
 type connectedState uint32

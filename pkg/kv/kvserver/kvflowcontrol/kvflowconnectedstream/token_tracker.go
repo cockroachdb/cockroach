@@ -41,7 +41,8 @@ type Tracker struct {
 // raft log position (typically where the proposed command is expected to end
 // up).
 type tracked struct {
-	tokens   kvflowcontrol.Tokens
+	tokens kvflowcontrol.Tokens
+	// TODO: why do we care about the term?
 	position kvflowcontrolpb.RaftLogPosition
 }
 
@@ -56,6 +57,8 @@ func (dt *Tracker) Init(stream kvflowcontrol.Stream) {
 
 // Track token deductions of the given priority with the given raft log
 // position.
+//
+// TODO: add overridden priority.
 func (dt *Tracker) Track(
 	ctx context.Context,
 	pri admissionpb.WorkPriority,
