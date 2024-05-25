@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
@@ -176,16 +175,12 @@ func (ex *connExecutor) recordStatementSummary(
 	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecs)
 	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
 
-	var sqlInstanceIds []int64
+	var sqlInstanceIDs []int64
 	if queryLevelStatsOk {
-		sqlInstanceIds = make([]int64, 0, len(queryLevelStats.SqlInstanceIds))
-		for sqlInstanceId := range queryLevelStats.SqlInstanceIds {
-			sqlInstanceIds = append(sqlInstanceIds, int64(sqlInstanceId))
+		sqlInstanceIDs = make([]int64, 0, len(queryLevelStats.SQLInstanceIDs))
+		for _, sqlInstanceID := range queryLevelStats.SQLInstanceIDs {
+			sqlInstanceIDs = append(sqlInstanceIDs, int64(sqlInstanceID))
 		}
-
-		sort.Slice(sqlInstanceIds, func(i, j int) bool {
-			return sqlInstanceIds[i] < sqlInstanceIds[j]
-		})
 	}
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{
@@ -204,7 +199,7 @@ func (ex *connExecutor) recordStatementSummary(
 		BytesRead:            stats.bytesRead,
 		RowsRead:             stats.rowsRead,
 		RowsWritten:          stats.rowsWritten,
-		Nodes:                sqlInstanceIds,
+		Nodes:                sqlInstanceIDs,
 		StatementType:        stmt.AST.StatementType(),
 		Plan:                 planner.instrumentation.PlanForStats(ctx),
 		PlanGist:             planner.instrumentation.planGist.String(),
