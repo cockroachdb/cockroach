@@ -120,6 +120,15 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool(
 		"storage.ingest_as_flushable.enabled", true))
 
+// MinCapacityForBulkIngest is the fraction of remaining store capacity
+// under which bulk ingestion requests are rejected.
+var MinCapacityForBulkIngest = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.bulk_io_write.min_capacity_remaining_fraction",
+	"remaining store capacity fraction below which bulk ingestion requests are rejected",
+	0.05,
+)
+
 const (
 	compressionAlgorithmSnappy int64 = 1
 	compressionAlgorithmZstd   int64 = 2

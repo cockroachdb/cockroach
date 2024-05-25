@@ -106,15 +106,6 @@ var AddSSTableRequireAtRequestTimestamp = settings.RegisterBoolSetting(
 	false,
 )
 
-// addSSTableCapacityRemainingLimit is the fraction of remaining store capacity
-// under which addsstable requests are rejected.
-var addSSTableCapacityRemainingLimit = settings.RegisterFloatSetting(
-	settings.SystemOnly,
-	"kv.bulk_io_write.min_capacity_remaining_fraction",
-	"remaining store capacity fraction below which an addsstable request is rejected",
-	0.05,
-)
-
 // prefixSeekCollisionCheckRatio specifies the minimum engine:sst byte ratio at
 // which we do prefix seeks in CheckSSTCollisions instead of regular seeks.
 // Prefix seeks make more sense if the inbound SST is wide relative to the engine
@@ -154,7 +145,7 @@ func EvalAddSSTable(
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
 
-	if min := addSSTableCapacityRemainingLimit.Get(&cArgs.EvalCtx.ClusterSettings().SV); min > 0 {
+	if min := storage.MinCapacityForBulkIngest.Get(&cArgs.EvalCtx.ClusterSettings().SV); min > 0 {
 		cap, err := cArgs.EvalCtx.GetEngineCapacity()
 		if err != nil {
 			return result.Result{}, err
