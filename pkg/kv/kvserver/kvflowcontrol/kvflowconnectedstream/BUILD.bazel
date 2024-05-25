@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontroller",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "//pkg/roachpb",
@@ -21,6 +22,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
