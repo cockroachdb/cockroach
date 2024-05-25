@@ -288,7 +288,7 @@ func sendAddRemoteSSTWorker(
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		for entry := range restoreSpanEntriesCh {
-			log.Infof(ctx, "starting restore of backed up span %s containing %d files", entry.Span, len(entry.Files))
+			log.VInfof(ctx, 1, "starting restore of backed up span %s containing %d files", entry.Span, len(entry.Files))
 
 			if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
 				return err
@@ -318,7 +318,7 @@ func sendAddRemoteSSTWorker(
 					return err
 				}
 
-				log.Infof(ctx, "restoring span %s of file %s (file span: %s)", restoringSubspan, file.Path, file.BackupFileEntrySpan)
+				log.VInfof(ctx, 1, "restoring span %s of file %s (file span: %s)", restoringSubspan, file.Path, file.BackupFileEntrySpan)
 				file.BackupFileEntrySpan = restoringSubspan
 				if err := sendRemoteAddSSTable(ctx, execCtx, file, entry.ElidedPrefix, fromSystemTenant); err != nil {
 					return err
@@ -506,6 +506,9 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 		}
 		total += remainingForSpan
 	}
+
+	log.Infof(ctx, "total download size (across all stores) to complete restore: %s", sz(total))
+
 	if total == 0 {
 		return total, nil
 	}
@@ -559,7 +562,7 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 	ctx, sp := tracing.ChildSpan(ctx, "backupccl.sendDownloadSpan")
 	defer sp.Finish()
 
-	log.Infof(ctx, "sending download request for %d spans", len(spans))
+	log.VInfof(ctx, 1, "sending download request for %d spans", len(spans))
 	resp, err := execCtx.ExecCfg().TenantStatusServer.DownloadSpan(ctx, &serverpb.DownloadSpanRequest{
 		Spans:                  spans,
 		ViaBackingFileDownload: useCopy,
@@ -567,7 +570,7 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 	if err != nil {
 		return err
 	}
-	log.Infof(ctx, "finished sending download requests for %d spans, %d errors", len(spans), len(resp.ErrorsByNodeID))
+	log.VInfof(ctx, 1, "finished sending download requests for %d spans, %d errors", len(spans), len(resp.ErrorsByNodeID))
 	for n, err := range resp.ErrorsByNodeID {
 		return errors.Newf("failed to download spans on %d nodes; n%d returned %v", len(resp.ErrorsByNodeID), n, err)
 	}
@@ -681,7 +684,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		}
 
 		fractionComplete := float32(total-remaining) / float32(total)
-		log.Infof(ctx, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
+		log.VInfof(ctx, 1, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
 			sz(total-remaining), sz(remaining), sz(total), fractionComplete,
 		)
 
