@@ -12,7 +12,9 @@ package server
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -87,15 +89,43 @@ func (s *systemStatusServer) localDownloadSpan(
 ) error {
 	return s.stores.VisitStores(func(store *kvserver.Store) error {
 		downloadSpansCh := make(chan roachpb.Span)
+		stopDiskMonCh := make(chan struct{})
+		e := store.StateEngine()
 		return ctxgroup.GoAndWait(ctx,
-			// Download until downloadSpansCh closes, then close stopTuningCh.
+			// Download until downloadSpansCh closes, then close stopMonCh.
 			func(ctx context.Context) error {
-				return downloadSpans(ctx, store.StateEngine(), downloadSpansCh, req.ViaBackingFileDownload)
+				defer close(stopDiskMonCh)
+				return downloadSpans(ctx, e, downloadSpansCh, req.ViaBackingFileDownload)
 			},
 			// Send spans to downloadSpansCh.
 			func(ctx context.Context) error {
 				defer close(downloadSpansCh)
 				return sendDownloadSpans(ctx, req.Spans, downloadSpansCh)
+			},
+			func(ctx context.Context) error {
+				tick := time.NewTicker(time.Second * 15)
+				defer tick.Stop()
+
+				for {
+					select {
+					case <-stopDiskMonCh:
+						return nil
+					case <-ctx.Done():
+						return nil
+					case <-tick.C:
+						if min := storage.MinCapacityForBulkIngest.Get(&s.st.SV); min > 0 {
+							cap, err := e.Capacity()
+							if err != nil {
+								return err
+							}
+							if 1-cap.FractionUsed() < min {
+								return &kvpb.InsufficientSpaceError{
+									StoreID: store.StoreID(), Op: "ingest data", Available: cap.Available, Capacity: cap.Capacity, Required: min,
+								}
+							}
+						}
+					}
+				}
 			},
 		)
 	})
