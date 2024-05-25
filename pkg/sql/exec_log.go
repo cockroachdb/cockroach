@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"sort"
 	"strings"
 	"time"
 
@@ -345,17 +344,6 @@ func (p *planner) maybeLogStatementInternal(
 		// overhead latency: txn/retry management, error checking, etc
 		execOverheadNanos := svcLatNanos - processingLatNanos
 
-		var sqlInstanceIDs []int32
-		if len(queryLevelStats.SqlInstanceIds) > 0 {
-			sqlInstanceIDs = make([]int32, 0, len(queryLevelStats.SqlInstanceIds))
-			for sqlId := range queryLevelStats.SqlInstanceIds {
-				sqlInstanceIDs = append(sqlInstanceIDs, int32(sqlId))
-			}
-			sort.Slice(sqlInstanceIDs, func(i, j int) bool {
-				return sqlInstanceIDs[i] < sqlInstanceIDs[j]
-			})
-		}
-
 		sampledQuery := getSampledQuery()
 		defer releaseSampledQuery(sampledQuery)
 
@@ -395,7 +383,7 @@ func (p *planner) maybeLogStatementInternal(
 			ZigZagJoinCount:                       int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
 			ContentionNanos:                       queryLevelStats.ContentionTime.Nanoseconds(),
 			Regions:                               queryLevelStats.Regions,
-			SQLInstanceIDs:                        sqlInstanceIDs,
+			SQLInstanceIDs:                        queryLevelStats.SQLInstanceIDs,
 			NetworkBytesSent:                      queryLevelStats.NetworkBytesSent,
 			MaxMemUsage:                           queryLevelStats.MaxMemUsage,
 			MaxDiskUsage:                          queryLevelStats.MaxDiskUsage,
