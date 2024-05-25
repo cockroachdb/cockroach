@@ -744,6 +744,9 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 	})
 
 	if err := grp.Wait(); err != nil {
+		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
+			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+		}
 		return errors.Wrap(err, "failed to generate and send download spans")
 	}
 	return r.cleanupAfterDownload(ctx, details)
