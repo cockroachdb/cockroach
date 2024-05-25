@@ -53,7 +53,7 @@ var skipConsitencyQueueForExternalBytes = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"server.consistency_check.skip_external_bytes.enabled",
 	"skip the consistency queue for external bytes",
-	false,
+	true,
 )
 
 // consistencyCheckRateBurstFactor we use this to set the burst parameter on the
