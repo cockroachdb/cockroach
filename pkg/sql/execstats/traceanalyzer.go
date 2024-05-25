@@ -11,7 +11,6 @@
 package execstats
 
 import (
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -97,39 +96,6 @@ func NewFlowsMetadata(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec) *Flows
 	return a
 }
 
-// NodeLevelStats returns all the flow level stats that correspond to the given
-// traces and flow metadata.
-// TODO(asubiotto): Flatten this struct, we're currently allocating a map per
-//
-//	stat.
-type NodeLevelStats struct {
-	NetworkBytesSentGroupedByNode                   map[base.SQLInstanceID]int64
-	MaxMemoryUsageGroupedByNode                     map[base.SQLInstanceID]int64
-	MaxDiskUsageGroupedByNode                       map[base.SQLInstanceID]int64
-	KVBytesReadGroupedByNode                        map[base.SQLInstanceID]int64
-	KVPairsReadGroupedByNode                        map[base.SQLInstanceID]int64
-	KVRowsReadGroupedByNode                         map[base.SQLInstanceID]int64
-	KVBatchRequestsIssuedGroupedByNode              map[base.SQLInstanceID]int64
-	KVTimeGroupedByNode                             map[base.SQLInstanceID]time.Duration
-	MvccStepsGroupedByNode                          map[base.SQLInstanceID]int64
-	MvccStepsInternalGroupedByNode                  map[base.SQLInstanceID]int64
-	MvccSeeksGroupedByNode                          map[base.SQLInstanceID]int64
-	MvccSeeksInternalGroupedByNode                  map[base.SQLInstanceID]int64
-	MvccBlockBytesGroupedByNode                     map[base.SQLInstanceID]int64
-	MvccBlockBytesInCacheGroupedByNode              map[base.SQLInstanceID]int64
-	MvccKeyBytesGroupedByNode                       map[base.SQLInstanceID]int64
-	MvccValueBytesGroupedByNode                     map[base.SQLInstanceID]int64
-	MvccPointCountGroupedByNode                     map[base.SQLInstanceID]int64
-	MvccPointsCoveredByRangeTombstonesGroupedByNode map[base.SQLInstanceID]int64
-	MvccRangeKeyCountGroupedByNode                  map[base.SQLInstanceID]int64
-	MvccRangeKeyContainedPointsGroupedByNode        map[base.SQLInstanceID]int64
-	MvccRangeKeySkippedPointsGroupedByNode          map[base.SQLInstanceID]int64
-	NetworkMessagesGroupedByNode                    map[base.SQLInstanceID]int64
-	ContentionTimeGroupedByNode                     map[base.SQLInstanceID]time.Duration
-	RUEstimateGroupedByNode                         map[base.SQLInstanceID]float64
-	CPUTimeGroupedByNode                            map[base.SQLInstanceID]time.Duration
-}
-
 // QueryLevelStats returns all the query level stats that correspond to the
 // given traces and flow metadata.
 // NOTE: When adding fields to this struct, be sure to update Accumulate.
@@ -160,9 +126,13 @@ type QueryLevelStats struct {
 	ContentionEvents                   []kvpb.ContentionEvent
 	RUEstimate                         float64
 	CPUTime                            time.Duration
-	SqlInstanceIds                     map[base.SQLInstanceID]struct{}
-	Regions                            []string
-	ClientTime                         time.Duration
+	// SQLInstanceIDs is an ordered list of SQL instances that were involved in
+	// query processing.
+	SQLInstanceIDs []int32
+	// Regions is an ordered list of regions in which SQL instances involved in
+	// query processing reside.
+	Regions    []string
+	ClientTime time.Duration
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -213,13 +183,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
 	s.RUEstimate += other.RUEstimate
 	s.CPUTime += other.CPUTime
-	if len(s.SqlInstanceIds) == 0 && len(other.SqlInstanceIds) > 0 {
-		s.SqlInstanceIds = other.SqlInstanceIds
-	} else if len(other.SqlInstanceIds) > 0 && len(s.SqlInstanceIds) > 0 {
-		for id := range other.SqlInstanceIds {
-			s.SqlInstanceIds[id] = struct{}{}
-		}
-	}
+	s.SQLInstanceIDs = util.CombineUnique(s.SQLInstanceIDs, other.SQLInstanceIDs)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
 	s.ClientTime += other.ClientTime
 }
@@ -228,7 +192,6 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 // flow metadata and an accompanying trace of the flows' execution.
 type TraceAnalyzer struct {
 	*FlowsMetadata
-	nodeLevelStats  NodeLevelStats
 	queryLevelStats QueryLevelStats
 }
 
@@ -281,68 +244,37 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterminist
 	return nil
 }
 
-// ProcessStats calculates node level and query level stats for the trace and
-// stores them in TraceAnalyzer. If errors occur while calculating stats,
-// ProcessStats returns the combined errors to the caller but continues
-// calculating other stats.
-func (a *TraceAnalyzer) ProcessStats() error {
-	// Process node level stats.
-	a.nodeLevelStats = NodeLevelStats{
-		NetworkBytesSentGroupedByNode:                   make(map[base.SQLInstanceID]int64),
-		MaxMemoryUsageGroupedByNode:                     make(map[base.SQLInstanceID]int64),
-		MaxDiskUsageGroupedByNode:                       make(map[base.SQLInstanceID]int64),
-		KVBytesReadGroupedByNode:                        make(map[base.SQLInstanceID]int64),
-		KVPairsReadGroupedByNode:                        make(map[base.SQLInstanceID]int64),
-		KVRowsReadGroupedByNode:                         make(map[base.SQLInstanceID]int64),
-		KVBatchRequestsIssuedGroupedByNode:              make(map[base.SQLInstanceID]int64),
-		KVTimeGroupedByNode:                             make(map[base.SQLInstanceID]time.Duration),
-		MvccStepsGroupedByNode:                          make(map[base.SQLInstanceID]int64),
-		MvccStepsInternalGroupedByNode:                  make(map[base.SQLInstanceID]int64),
-		MvccSeeksGroupedByNode:                          make(map[base.SQLInstanceID]int64),
-		MvccSeeksInternalGroupedByNode:                  make(map[base.SQLInstanceID]int64),
-		MvccBlockBytesGroupedByNode:                     make(map[base.SQLInstanceID]int64),
-		MvccBlockBytesInCacheGroupedByNode:              make(map[base.SQLInstanceID]int64),
-		MvccKeyBytesGroupedByNode:                       make(map[base.SQLInstanceID]int64),
-		MvccValueBytesGroupedByNode:                     make(map[base.SQLInstanceID]int64),
-		MvccPointCountGroupedByNode:                     make(map[base.SQLInstanceID]int64),
-		MvccPointsCoveredByRangeTombstonesGroupedByNode: make(map[base.SQLInstanceID]int64),
-		MvccRangeKeyCountGroupedByNode:                  make(map[base.SQLInstanceID]int64),
-		MvccRangeKeyContainedPointsGroupedByNode:        make(map[base.SQLInstanceID]int64),
-		MvccRangeKeySkippedPointsGroupedByNode:          make(map[base.SQLInstanceID]int64),
-		NetworkMessagesGroupedByNode:                    make(map[base.SQLInstanceID]int64),
-		ContentionTimeGroupedByNode:                     make(map[base.SQLInstanceID]time.Duration),
-		RUEstimateGroupedByNode:                         make(map[base.SQLInstanceID]float64),
-		CPUTimeGroupedByNode:                            make(map[base.SQLInstanceID]time.Duration),
-	}
-	var errs error
+// ProcessStats calculates query level stats for the trace and stores them in
+// TraceAnalyzer.
+func (a *TraceAnalyzer) ProcessStats() {
+	s := &a.queryLevelStats
 
 	// Process processorStats.
 	for _, stats := range a.processorStats {
 		if stats == nil {
 			continue
 		}
-		instanceID := stats.Component.SQLInstanceID
-		a.nodeLevelStats.KVBytesReadGroupedByNode[instanceID] += int64(stats.KV.BytesRead.Value())
-		a.nodeLevelStats.KVPairsReadGroupedByNode[instanceID] += int64(stats.KV.KVPairsRead.Value())
-		a.nodeLevelStats.KVRowsReadGroupedByNode[instanceID] += int64(stats.KV.TuplesRead.Value())
-		a.nodeLevelStats.KVBatchRequestsIssuedGroupedByNode[instanceID] += int64(stats.KV.BatchRequestsIssued.Value())
-		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.KV.KVTime.Value()
-		a.nodeLevelStats.MvccStepsGroupedByNode[instanceID] += int64(stats.KV.NumInterfaceSteps.Value())
-		a.nodeLevelStats.MvccStepsInternalGroupedByNode[instanceID] += int64(stats.KV.NumInternalSteps.Value())
-		a.nodeLevelStats.MvccSeeksGroupedByNode[instanceID] += int64(stats.KV.NumInterfaceSeeks.Value())
-		a.nodeLevelStats.MvccSeeksInternalGroupedByNode[instanceID] += int64(stats.KV.NumInternalSeeks.Value())
-		a.nodeLevelStats.MvccBlockBytesGroupedByNode[instanceID] += int64(stats.KV.BlockBytes.Value())
-		a.nodeLevelStats.MvccBlockBytesInCacheGroupedByNode[instanceID] += int64(stats.KV.BlockBytesInCache.Value())
-		a.nodeLevelStats.MvccKeyBytesGroupedByNode[instanceID] += int64(stats.KV.BlockBytesInCache.Value())
-		a.nodeLevelStats.MvccValueBytesGroupedByNode[instanceID] += int64(stats.KV.ValueBytes.Value())
-		a.nodeLevelStats.MvccPointCountGroupedByNode[instanceID] += int64(stats.KV.PointCount.Value())
-		a.nodeLevelStats.MvccPointsCoveredByRangeTombstonesGroupedByNode[instanceID] += int64(stats.KV.PointsCoveredByRangeTombstones.Value())
-		a.nodeLevelStats.MvccRangeKeyCountGroupedByNode[instanceID] += int64(stats.KV.RangeKeyCount.Value())
-		a.nodeLevelStats.MvccRangeKeyContainedPointsGroupedByNode[instanceID] += int64(stats.KV.RangeKeyContainedPoints.Value())
-		a.nodeLevelStats.MvccRangeKeySkippedPointsGroupedByNode[instanceID] += int64(stats.KV.RangeKeySkippedPoints.Value())
-		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.KV.ContentionTime.Value()
-		a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += float64(stats.Exec.ConsumedRU.Value())
-		a.nodeLevelStats.CPUTimeGroupedByNode[instanceID] += stats.Exec.CPUTime.Value()
+		s.KVBytesRead += int64(stats.KV.BytesRead.Value())
+		s.KVPairsRead += int64(stats.KV.KVPairsRead.Value())
+		s.KVRowsRead += int64(stats.KV.TuplesRead.Value())
+		s.KVBatchRequestsIssued += int64(stats.KV.BatchRequestsIssued.Value())
+		s.KVTime += stats.KV.KVTime.Value()
+		s.MvccSteps += int64(stats.KV.NumInterfaceSteps.Value())
+		s.MvccStepsInternal += int64(stats.KV.NumInternalSteps.Value())
+		s.MvccSeeks += int64(stats.KV.NumInterfaceSeeks.Value())
+		s.MvccSeeksInternal += int64(stats.KV.NumInternalSeeks.Value())
+		s.MvccBlockBytes += int64(stats.KV.BlockBytes.Value())
+		s.MvccBlockBytesInCache += int64(stats.KV.BlockBytesInCache.Value())
+		s.MvccKeyBytes += int64(stats.KV.BlockBytesInCache.Value())
+		s.MvccValueBytes += int64(stats.KV.ValueBytes.Value())
+		s.MvccPointCount += int64(stats.KV.PointCount.Value())
+		s.MvccPointsCoveredByRangeTombstones += int64(stats.KV.PointsCoveredByRangeTombstones.Value())
+		s.MvccRangeKeyCount += int64(stats.KV.RangeKeyCount.Value())
+		s.MvccRangeKeyContainedPoints += int64(stats.KV.RangeKeyContainedPoints.Value())
+		s.MvccRangeKeySkippedPoints += int64(stats.KV.RangeKeySkippedPoints.Value())
+		s.ContentionTime += stats.KV.ContentionTime.Value()
+		s.RUEstimate += float64(stats.Exec.ConsumedRU.Value())
+		s.CPUTime += stats.Exec.CPUTime.Value()
 	}
 
 	// Process streamStats.
@@ -350,214 +282,81 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if stats.stats == nil {
 			continue
 		}
-		originInstanceID := stats.originSQLInstanceID
-
-		// Set networkBytesSentGroupedByNode.
-		bytes, err := getNetworkBytesFromComponentStats(stats.stats)
-		if err != nil {
-			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating network bytes sent"))
-		} else {
-			a.nodeLevelStats.NetworkBytesSentGroupedByNode[originInstanceID] += bytes
-		}
-
-		numMessages, err := getNumNetworkMessagesFromComponentsStats(stats.stats)
-		if err != nil {
-			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating number of network messages"))
-		} else {
-			a.nodeLevelStats.NetworkMessagesGroupedByNode[originInstanceID] += numMessages
-		}
+		s.NetworkBytesSent += getNetworkBytesFromComponentStats(stats.stats)
+		s.NetworkMessages += getNumNetworkMessagesFromComponentsStats(stats.stats)
 	}
-
-	instanceIds := make(map[base.SQLInstanceID]struct{}, len(a.flowStats))
-	// Default to 1 since most queries only use a single region.
-	regions := make([]string, 0, 1)
 
 	// Process flowStats.
 	for instanceID, stats := range a.flowStats {
 		if stats.stats == nil {
 			continue
 		}
-
-		instanceIds[instanceID] = struct{}{}
+		s.SQLInstanceIDs = util.InsertUnique(s.SQLInstanceIDs, int32(instanceID))
 		for _, v := range stats.stats {
 			// Avoid duplicates and empty string.
 			if v.Component.Region != "" {
-				regions = util.CombineUnique(regions, []string{v.Component.Region})
+				s.Regions = util.InsertUnique(s.Regions, v.Component.Region)
 			}
 
 			if v.FlowStats.MaxMemUsage.HasValue() {
-				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[instanceID] {
-					a.nodeLevelStats.MaxMemoryUsageGroupedByNode[instanceID] = memUsage
+				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.queryLevelStats.MaxMemUsage {
+					a.queryLevelStats.MaxMemUsage = memUsage
 				}
 			}
 			if v.FlowStats.MaxDiskUsage.HasValue() {
-				if diskUsage := int64(v.FlowStats.MaxDiskUsage.Value()); diskUsage > a.nodeLevelStats.MaxDiskUsageGroupedByNode[instanceID] {
-					a.nodeLevelStats.MaxDiskUsageGroupedByNode[instanceID] = diskUsage
+				if diskUsage := int64(v.FlowStats.MaxDiskUsage.Value()); diskUsage > a.queryLevelStats.MaxDiskUsage {
+					a.queryLevelStats.MaxDiskUsage = diskUsage
 				}
 			}
 			if v.FlowStats.ConsumedRU.HasValue() {
-				a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += float64(v.FlowStats.ConsumedRU.Value())
+				s.RUEstimate += float64(v.FlowStats.ConsumedRU.Value())
 			}
 		}
 	}
-
-	// Process query level stats.
-	a.queryLevelStats = QueryLevelStats{}
-	a.queryLevelStats.SqlInstanceIds = instanceIds
-	sort.Strings(regions)
-
-	a.queryLevelStats.Regions = regions
-	for _, bytesSentByNode := range a.nodeLevelStats.NetworkBytesSentGroupedByNode {
-		a.queryLevelStats.NetworkBytesSent += bytesSentByNode
-	}
-
-	for _, maxMemUsage := range a.nodeLevelStats.MaxMemoryUsageGroupedByNode {
-		if maxMemUsage > a.queryLevelStats.MaxMemUsage {
-			a.queryLevelStats.MaxMemUsage = maxMemUsage
-		}
-	}
-
-	for _, maxDiskUsage := range a.nodeLevelStats.MaxDiskUsageGroupedByNode {
-		if maxDiskUsage > a.queryLevelStats.MaxDiskUsage {
-			a.queryLevelStats.MaxDiskUsage = maxDiskUsage
-		}
-	}
-
-	for _, kvBytesRead := range a.nodeLevelStats.KVBytesReadGroupedByNode {
-		a.queryLevelStats.KVBytesRead += kvBytesRead
-	}
-
-	for _, kvPairsRead := range a.nodeLevelStats.KVPairsReadGroupedByNode {
-		a.queryLevelStats.KVPairsRead += kvPairsRead
-	}
-
-	for _, kvRowsRead := range a.nodeLevelStats.KVRowsReadGroupedByNode {
-		a.queryLevelStats.KVRowsRead += kvRowsRead
-	}
-
-	for _, kvBatchRequestsIssued := range a.nodeLevelStats.KVBatchRequestsIssuedGroupedByNode {
-		a.queryLevelStats.KVBatchRequestsIssued += kvBatchRequestsIssued
-	}
-
-	for _, kvTime := range a.nodeLevelStats.KVTimeGroupedByNode {
-		a.queryLevelStats.KVTime += kvTime
-	}
-
-	for _, MvccSteps := range a.nodeLevelStats.MvccStepsGroupedByNode {
-		a.queryLevelStats.MvccSteps += MvccSteps
-	}
-
-	for _, MvccStepsInternal := range a.nodeLevelStats.MvccStepsInternalGroupedByNode {
-		a.queryLevelStats.MvccStepsInternal += MvccStepsInternal
-	}
-
-	for _, MvccSeeks := range a.nodeLevelStats.MvccSeeksGroupedByNode {
-		a.queryLevelStats.MvccSeeks += MvccSeeks
-	}
-
-	for _, MvccSeeksInternal := range a.nodeLevelStats.MvccSeeksInternalGroupedByNode {
-		a.queryLevelStats.MvccSeeksInternal += MvccSeeksInternal
-	}
-
-	for _, MvccBlockBytes := range a.nodeLevelStats.MvccBlockBytesGroupedByNode {
-		a.queryLevelStats.MvccBlockBytes += MvccBlockBytes
-	}
-
-	for _, MvccBlockBytesInCache := range a.nodeLevelStats.MvccBlockBytesInCacheGroupedByNode {
-		a.queryLevelStats.MvccBlockBytesInCache += MvccBlockBytesInCache
-	}
-
-	for _, MvccKeyBytes := range a.nodeLevelStats.MvccKeyBytesGroupedByNode {
-		a.queryLevelStats.MvccKeyBytes += MvccKeyBytes
-	}
-
-	for _, MvccValueBytes := range a.nodeLevelStats.MvccValueBytesGroupedByNode {
-		a.queryLevelStats.MvccValueBytes += MvccValueBytes
-	}
-
-	for _, MvccPointCount := range a.nodeLevelStats.MvccPointCountGroupedByNode {
-		a.queryLevelStats.MvccPointCount += MvccPointCount
-	}
-
-	for _, MvccPointsCoveredByRangeTombstones := range a.nodeLevelStats.MvccPointsCoveredByRangeTombstonesGroupedByNode {
-		a.queryLevelStats.MvccPointsCoveredByRangeTombstones += MvccPointsCoveredByRangeTombstones
-	}
-
-	for _, MvccRangeKeyCount := range a.nodeLevelStats.MvccRangeKeyCountGroupedByNode {
-		a.queryLevelStats.MvccRangeKeyCount += MvccRangeKeyCount
-	}
-
-	for _, MvccRangeKeyContainedPoints := range a.nodeLevelStats.MvccRangeKeyContainedPointsGroupedByNode {
-		a.queryLevelStats.MvccRangeKeyContainedPoints += MvccRangeKeyContainedPoints
-	}
-
-	for _, MvccRangeKeySkippedPoints := range a.nodeLevelStats.MvccRangeKeySkippedPointsGroupedByNode {
-		a.queryLevelStats.MvccRangeKeySkippedPoints += MvccRangeKeySkippedPoints
-	}
-
-	for _, networkMessages := range a.nodeLevelStats.NetworkMessagesGroupedByNode {
-		a.queryLevelStats.NetworkMessages += networkMessages
-	}
-
-	for _, contentionTime := range a.nodeLevelStats.ContentionTimeGroupedByNode {
-		a.queryLevelStats.ContentionTime += contentionTime
-	}
-
-	for _, estimatedRU := range a.nodeLevelStats.RUEstimateGroupedByNode {
-		a.queryLevelStats.RUEstimate += estimatedRU
-	}
-
-	for _, cpuTime := range a.nodeLevelStats.CPUTimeGroupedByNode {
-		a.queryLevelStats.CPUTime += cpuTime
-	}
-
-	return errs
 }
 
-func getNetworkBytesFromComponentStats(v *execinfrapb.ComponentStats) (int64, error) {
+func getNetworkBytesFromComponentStats(v *execinfrapb.ComponentStats) int64 {
 	// We expect exactly one of BytesReceived and BytesSent to be set. It may
 	// seem like we are double-counting everything (from both the send and the
 	// receive side) but in practice only one side of each stream presents
 	// statistics (specifically the sending side in the row engine, and the
 	// receiving side in the vectorized engine).
 	if v.NetRx.BytesReceived.HasValue() {
-		if v.NetTx.BytesSent.HasValue() {
-			return 0, errors.Errorf("could not get network bytes; both BytesReceived and BytesSent are set")
+		if buildutil.CrdbTestBuild {
+			if v.NetTx.BytesSent.HasValue() {
+				panic(errors.AssertionFailedf("could not get network bytes; both BytesReceived and BytesSent are set"))
+			}
 		}
-		return int64(v.NetRx.BytesReceived.Value()), nil
+		return int64(v.NetRx.BytesReceived.Value())
 	}
 	if v.NetTx.BytesSent.HasValue() {
-		return int64(v.NetTx.BytesSent.Value()), nil
+		return int64(v.NetTx.BytesSent.Value())
 	}
 	// If neither BytesReceived or BytesSent is set, this ComponentStat belongs to
 	// a local component, e.g. a local hashrouter output.
-	return 0, nil
+	return 0
 }
 
-func getNumNetworkMessagesFromComponentsStats(v *execinfrapb.ComponentStats) (int64, error) {
+func getNumNetworkMessagesFromComponentsStats(v *execinfrapb.ComponentStats) int64 {
 	// We expect exactly one of MessagesReceived and MessagesSent to be set. It
 	// may seem like we are double-counting everything (from both the send and
 	// the receive side) but in practice only one side of each stream presents
 	// statistics (specifically the sending side in the row engine, and the
 	// receiving side in the vectorized engine).
 	if v.NetRx.MessagesReceived.HasValue() {
-		if v.NetTx.MessagesSent.HasValue() {
-			return 0, errors.Errorf("could not get network messages; both MessagesReceived and MessagesSent are set")
+		if buildutil.CrdbTestBuild {
+			if v.NetTx.MessagesSent.HasValue() {
+				panic(errors.AssertionFailedf("could not get network messages; both MessagesReceived and MessagesSent are set"))
+			}
 		}
-		return int64(v.NetRx.MessagesReceived.Value()), nil
+		return int64(v.NetRx.MessagesReceived.Value())
 	}
 	if v.NetTx.MessagesSent.HasValue() {
-		return int64(v.NetTx.MessagesSent.Value()), nil
+		return int64(v.NetTx.MessagesSent.Value())
 	}
 	// If neither BytesReceived or BytesSent is set, this ComponentStat belongs to
 	// a local component, e.g. a local hashrouter output.
-	return 0, nil
-}
-
-// GetNodeLevelStats returns the node level stats calculated and stored in the
-// TraceAnalyzer.
-func (a *TraceAnalyzer) GetNodeLevelStats() NodeLevelStats {
-	return a.nodeLevelStats
+	return 0
 }
 
 // GetQueryLevelStats returns the query level stats calculated and stored in
@@ -601,10 +400,7 @@ func GetQueryLevelStats(
 			continue
 		}
 
-		if err := analyzer.ProcessStats(); err != nil {
-			errs = errors.CombineErrors(errs, err)
-			continue
-		}
+		analyzer.ProcessStats()
 		queryLevelStats.Accumulate(analyzer.GetQueryLevelStats())
 	}
 	queryLevelStats.ContentionEvents = getAllContentionEvents(trace)
