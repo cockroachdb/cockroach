@@ -141,6 +141,10 @@ func (p *Provider) GetHostErrorVMs(
 	return nil, nil
 }
 
+func (p *Provider) GetVMSpecs(vms vm.List) ([]map[string]interface{}, error) {
+	return nil, nil
+}
+
 func (p *Provider) CreateVolumeSnapshot(
 	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
 ) (vm.VolumeSnapshot, error) {
