@@ -32,6 +32,9 @@ SELECT '0/0'::pg_lsn + 'Inf'
 statement error cannot add NaN to pg_lsn
 SELECT '0/0'::pg_lsn + 'NaN'
 
+statement error cannot subtract NaN from pg_lsn
+SELECT '0/0'::pg_lsn - 'NaN'::numeric
+
 statement error pg_lsn out of range
 SELECT '0/0'::pg_lsn - 50
 
