@@ -1567,13 +1567,13 @@ func init() {
 func (e *evaluator) EvalPlusDecimalPGLSNOp(
 	ctx context.Context, _ *tree.PlusDecimalPGLSNOp, left, right tree.Datum,
 ) (tree.Datum, error) {
-	return decimalPGLSNEval(left, right, lsnMathCtx.Add)
+	return decimalPGLSNEval(left, right, lsnMathCtx.Add, false /* subtraction */)
 }
 
 func (e *evaluator) EvalPlusPGLSNDecimalOp(
 	ctx context.Context, _ *tree.PlusPGLSNDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
-	return decimalPGLSNEval(right, left, lsnMathCtx.Add)
+	return decimalPGLSNEval(right, left, lsnMathCtx.Add, false /* subtraction */)
 }
 
 func (e *evaluator) EvalMinusPGLSNOp(
@@ -1601,11 +1601,14 @@ func (e *evaluator) EvalMinusPGLSNOp(
 func (e *evaluator) EvalMinusPGLSNDecimalOp(
 	ctx context.Context, _ *tree.MinusPGLSNDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
-	return decimalPGLSNEval(right, left, lsnMathCtx.Sub)
+	return decimalPGLSNEval(right, left, lsnMathCtx.Sub, true /* subtraction */)
 }
 
 func decimalPGLSNEval(
-	decDatum tree.Datum, lsnDatum tree.Datum, op func(d, x, y *apd.Decimal) (apd.Condition, error),
+	decDatum tree.Datum,
+	lsnDatum tree.Datum,
+	op func(d, x, y *apd.Decimal) (apd.Condition, error),
+	subtraction bool,
 ) (tree.Datum, error) {
 	n := tree.MustBeDDecimal(decDatum)
 	lsnVal := tree.MustBeDPGLSN(lsnDatum)
@@ -1614,6 +1617,9 @@ func decimalPGLSNEval(
 	case apd.Infinite:
 		return nil, pgerror.New(pgcode.NumericValueOutOfRange, "cannot convert infinity to pg_lsn")
 	case apd.NaN, apd.NaNSignaling:
+		if subtraction {
+			return nil, pgerror.New(pgcode.NumericValueOutOfRange, "cannot subtract NaN from pg_lsn")
+		}
 		return nil, pgerror.New(pgcode.NumericValueOutOfRange, "cannot add NaN to pg_lsn")
 	case apd.Finite:
 		// ok
