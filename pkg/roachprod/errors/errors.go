@@ -90,6 +90,10 @@ func (te TransientError) Is(other error) bool {
 	return errors.Is(te.Err, other)
 }
 
+func (te TransientError) Unwrap() error {
+	return te.Err
+}
+
 func (te TransientError) ExitCode() int {
 	return transientExitCode
 }
