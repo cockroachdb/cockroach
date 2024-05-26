@@ -1564,16 +1564,23 @@ func init() {
 	}
 }
 
+// namedLSNMathOp contains an LSN math operation and its name to clarify
+// error messages (GH issue #115136).
+type namedLSNMathOp struct {
+	f    func(d, x, y *apd.Decimal) (apd.Condition, error)
+	name string
+}
+
 func (e *evaluator) EvalPlusDecimalPGLSNOp(
 	ctx context.Context, _ *tree.PlusDecimalPGLSNOp, left, right tree.Datum,
 ) (tree.Datum, error) {
-	return decimalPGLSNEval(left, right, lsnMathCtx.Add)
+	return decimalPGLSNEval(left, right, namedLSNMathOp{f: lsnMathCtx.Add, name: "add"})
 }
 
 func (e *evaluator) EvalPlusPGLSNDecimalOp(
 	ctx context.Context, _ *tree.PlusPGLSNDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
-	return decimalPGLSNEval(right, left, lsnMathCtx.Add)
+	return decimalPGLSNEval(right, left, namedLSNMathOp{f: lsnMathCtx.Add, name: "add"})
 }
 
 func (e *evaluator) EvalMinusPGLSNOp(
@@ -1601,11 +1608,11 @@ func (e *evaluator) EvalMinusPGLSNOp(
 func (e *evaluator) EvalMinusPGLSNDecimalOp(
 	ctx context.Context, _ *tree.MinusPGLSNDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
-	return decimalPGLSNEval(right, left, lsnMathCtx.Sub)
+	return decimalPGLSNEval(right, left, namedLSNMathOp{f: lsnMathCtx.Sub, name: "subtract"})
 }
 
 func decimalPGLSNEval(
-	decDatum tree.Datum, lsnDatum tree.Datum, op func(d, x, y *apd.Decimal) (apd.Condition, error),
+	decDatum tree.Datum, lsnDatum tree.Datum, op namedLSNMathOp,
 ) (tree.Datum, error) {
 	n := tree.MustBeDDecimal(decDatum)
 	lsnVal := tree.MustBeDPGLSN(lsnDatum)
@@ -1614,7 +1621,7 @@ func decimalPGLSNEval(
 	case apd.Infinite:
 		return nil, pgerror.New(pgcode.NumericValueOutOfRange, "cannot convert infinity to pg_lsn")
 	case apd.NaN, apd.NaNSignaling:
-		return nil, pgerror.New(pgcode.NumericValueOutOfRange, "cannot add NaN to pg_lsn")
+		return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "cannot %s NaN to pg_lsn", op.name)
 	case apd.Finite:
 		// ok
 	default:
@@ -1626,7 +1633,7 @@ func decimalPGLSNEval(
 		return nil, err
 	}
 	var resultDecimal apd.Decimal
-	if _, err := op(&resultDecimal, lsnAsDecimal, &n.Decimal); err != nil {
+	if _, err := op.f(&resultDecimal, lsnAsDecimal, &n.Decimal); err != nil {
 		return nil, err
 	}
 	if resultDecimal.Cmp(maxLSNDecimal) > 0 || resultDecimal.Cmp(minLSNDecimal) < 0 {
