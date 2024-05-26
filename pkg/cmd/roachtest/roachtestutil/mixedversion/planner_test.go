@@ -82,7 +82,10 @@ func TestTestPlanner(t *testing.T) {
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "planner"), func(t *testing.T, path string) {
 		resetMutators()
-		mvt := newTest()
+		// Unless specified, treat every test as a non-UA deployment
+		// test. Tests can use the deployment-mode option in the
+		// mixed-version-test directive to change the deployment mode.
+		mvt := newTest(EnabledDeploymentModes(SystemOnlyDeployment))
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			if d.Cmd == "plan" {
@@ -204,7 +207,7 @@ func TestDeterministicHookSeeds(t *testing.T) {
 		plan, err := mvt.plan()
 		require.NoError(t, err)
 
-		upgradeStep := plan.Steps()[3].(sequentialRunStep)
+		upgradeStep := plan.Steps()[2].(sequentialRunStep)
 
 		// We can hardcode these paths since we are using a fixed seed in
 		// these tests.
@@ -441,7 +444,7 @@ func Test_stepSelectorFilter(t *testing.T) {
 			name:                   "no filter",
 			predicate:              func(*singleStep) bool { return true },
 			expectedAllSteps:       true,
-			expectedRandomStepType: runHookStep{},
+			expectedRandomStepType: restartWithNewBinaryStep{},
 		},
 		{
 			name: "filter eliminates all steps",
