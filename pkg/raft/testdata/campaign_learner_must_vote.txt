@@ -97,6 +97,7 @@ stabilize 2 3
 > 2 handling Ready
   Ready MustSync=true:
   Lead:2 State:StateLeader
+  HardState Term:2 Vote:2 Commit:4
   Entries:
   2/5 EntryNormal ""
   Messages:

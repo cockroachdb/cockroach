@@ -965,9 +965,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 			snap := *msgStorageAppend.Snapshot
 			hs := raftpb.HardState{
-				Term:   msgStorageAppend.Term,
-				Vote:   msgStorageAppend.Vote,
-				Commit: msgStorageAppend.Commit,
+				Term:    msgStorageAppend.Term,
+				Vote:    msgStorageAppend.Vote,
+				Commit:  msgStorageAppend.Commit,
+				AccTerm: msgStorageAppend.LogTerm,
 			}
 			if len(msgStorageAppend.Entries) != 0 {
 				log.Fatalf(ctx, "found Entries in MsgStorageAppend with non-empty Snapshot")

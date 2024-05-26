@@ -3569,9 +3569,10 @@ func TestFastLogRejection(t *testing.T) {
 			s2.snapshot.Metadata.ConfState = pb.ConfState{Voters: []uint64{1, 2, 3}}
 			s2.Append(test.followerLog)
 			s2.SetHardState(pb.HardState{
-				Term:   last.Term,
-				Vote:   1,
-				Commit: 0,
+				Term:    last.Term,
+				Vote:    1,
+				Commit:  0,
+				AccTerm: last.Term,
 			})
 			n2 := newTestRaft(2, 10, 1, s2)
 			if test.followerCompact != 0 {

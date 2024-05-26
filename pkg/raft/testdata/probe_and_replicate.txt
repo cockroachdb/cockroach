@@ -470,6 +470,7 @@ stabilize 1
 > 1 handling Ready
   Ready MustSync=true:
   Lead:1 State:StateLeader
+  HardState Term:8 Vote:1 Commit:18
   Entries:
   8/21 EntryNormal ""
   Messages:
@@ -506,6 +507,7 @@ stabilize 1 2
   ]
 > 2 handling Ready
   Ready MustSync=true:
+  HardState Term:8 Vote:1 Commit:18
   Entries:
   6/20 EntryNormal "prop_6_20"
   8/21 EntryNormal ""
@@ -577,6 +579,7 @@ stabilize 1 4
 > 4 handling Ready
   Ready MustSync=true:
   Lead:1 State:StateFollower
+  HardState Term:8 Commit:18
   Entries:
   8/21 EntryNormal ""
   Messages:

@@ -199,9 +199,10 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	}
 
 	hs := raftpb.HardState{
-		Term:   m.Term,
-		Vote:   m.Vote,
-		Commit: m.Commit,
+		Term:    m.Term,
+		Vote:    m.Vote,
+		Commit:  m.Commit,
+		AccTerm: m.LogTerm,
 	}
 	if !raft.IsEmptyHardState(hs) {
 		// NB: Note that without additional safeguards, it's incorrect to write

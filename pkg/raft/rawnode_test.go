@@ -76,7 +76,7 @@ func TestRawNodeStep(t *testing.T) {
 	for i, msgn := range pb.MessageType_name {
 		t.Run(msgn, func(t *testing.T) {
 			s := NewMemoryStorage()
-			s.SetHardState(pb.HardState{Term: 1, Commit: 1})
+			s.SetHardState(pb.HardState{Term: 1, Commit: 1, AccTerm: 1})
 			s.Append([]pb.Entry{{Term: 1, Index: 1}})
 			require.NoError(t, s.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{
 				ConfState: pb.ConfState{
@@ -521,7 +521,7 @@ func TestRawNodeStart(t *testing.T) {
 	}
 	want := Ready{
 		SoftState:        &SoftState{Lead: 1, RaftState: StateLeader},
-		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1},
+		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1, AccTerm: 1},
 		Entries:          nil, // emitted & checked in intermediate Ready cycle
 		CommittedEntries: entries,
 		MustSync:         false, // since we're only applying, not appending
@@ -610,7 +610,7 @@ func TestRawNodeRestart(t *testing.T) {
 		{Term: 1, Index: 1},
 		{Term: 1, Index: 2, Data: []byte("foo")},
 	}
-	st := pb.HardState{Term: 1, Commit: 1}
+	st := pb.HardState{Term: 1, Commit: 1, AccTerm: 1}
 
 	want := Ready{
 		HardState: emptyState,
@@ -641,7 +641,7 @@ func TestRawNodeRestartFromSnapshot(t *testing.T) {
 	entries := []pb.Entry{
 		{Term: 1, Index: 3, Data: []byte("foo")},
 	}
-	st := pb.HardState{Term: 1, Commit: 3}
+	st := pb.HardState{Term: 1, Commit: 3, AccTerm: 1}
 
 	want := Ready{
 		HardState: emptyState,
@@ -707,9 +707,10 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 		MemoryStorage: newTestMemoryStorage(withPeers(1)),
 	}
 	persistedHardState := pb.HardState{
-		Term:   1,
-		Vote:   1,
-		Commit: 10,
+		Term:    1,
+		Vote:    1,
+		Commit:  10,
+		AccTerm: 1,
 	}
 
 	s.hardState = persistedHardState
@@ -775,9 +776,10 @@ func TestRawNodePersistenceRegression(t *testing.T) {
 		s := newTestMemoryStorage(withPeers(1, 2))
 		require.NoError(t, s.Append(index(1).terms(1, 2, 5)))
 		require.NoError(t, s.SetHardState(pb.HardState{
-			Term:   5,
-			Vote:   1,
-			Commit: 3,
+			Term:    5,
+			Vote:    1,
+			Commit:  3,
+			AccTerm: 5,
 		}))
 		return newTestRawNode(nodeID, 10, 1, s)
 	}
