@@ -696,7 +696,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 			return
 		}
 		if hasExternal {
-			log.Infof(ctx, "skipping %s for %s because it has external bytes", bq.name, realRepl)
+			log.VInfof(ctx, 1, "skipping %s for %s because it has external bytes", bq.name, realRepl)
 			return
 		}
 	}

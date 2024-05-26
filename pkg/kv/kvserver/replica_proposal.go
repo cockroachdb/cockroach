@@ -710,15 +710,15 @@ func linkExternalSStablePreApply(
 	index kvpb.RaftIndex,
 	sst kvserverpb.ReplicatedEvalResult_LinkExternalSSTable,
 ) {
-	log.Infof(ctx,
-		"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s (size %d) at rewrite ts %s, synth prefix %s",
+	log.VInfof(ctx, 1,
+		"linking external sstable %s (size %d, span %s) from %s (size %d) at rewrite ts %s, synth prefix %s",
 		sst.RemoteFilePath,
 		sst.ApproximatePhysicalSize,
 		sst.Span,
 		sst.RemoteFileLoc,
 		sst.BackingFileSize,
 		sst.RemoteRewriteTimestamp,
-		sst.RemoteSyntheticPrefix,
+		roachpb.Key(sst.RemoteSyntheticPrefix),
 	)
 
 	start := storage.EngineKey{Key: sst.Span.Key}
