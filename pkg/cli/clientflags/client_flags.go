@@ -81,6 +81,8 @@ func AddSQLFlags(
 
 	// --user/-u
 	cliflagcfg.StringFlagDepth(1, f, &clientOpts.User, cliflags.User)
+	// --format
+	cliflagcfg.VarFlagDepth(1, f, &sqlCfg.ExecCtx.TableDisplayFormat, cliflags.TableDisplayFormat)
 
 	if isShell || isDemo {
 		// --database/-d

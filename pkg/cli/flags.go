@@ -784,20 +784,15 @@ func init() {
 	}
 
 	// Commands that print tables.
-	tableOutputCommands := append(
-		[]*cobra.Command{
-			sqlShellCmd,
-			genSettingsListCmd,
-			genMetricListCmd,
-			demoCmd,
-			statementBundleRecreateCmd,
-			debugListFilesCmd,
-			debugJobTraceFromClusterCmd,
-			debugZipCmd,
-		},
-		demoCmd.Commands()...)
-	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
-	tableOutputCommands = append(tableOutputCommands, authCmds...)
+	tableOutputCommands := []*cobra.Command{
+		genSettingsListCmd,
+		genMetricListCmd,
+		debugListFilesCmd,
+		debugZipCmd,
+		decommissionNodeCmd,
+		recommissionNodeCmd,
+		drainNodeCmd,
+	}
 
 	// By default, these commands print their output as pretty-formatted
 	// tables on terminals, and TSV when redirected to a file. The user
