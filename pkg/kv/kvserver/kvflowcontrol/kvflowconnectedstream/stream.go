@@ -15,7 +15,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
@@ -27,10 +26,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(sumeer): go through all recent slack threads and ensure they are
-// incorporated.
-// TODO(sumeer): undo random things.
-
 // TODO: kvflowcontrol and the packages it contains are sliced and diced quite
 // fine, with the benefit of multiple code iterations to get to that final
 // structure. We don't yet have that benefit, so we just lump things together
@@ -41,6 +36,16 @@ import (
 // TODO: many of the comments here are to guide the implementation. They will
 // need to be cleaned up.
 
+// TODO: we don't want force-flush entries to usually use up tokens since we
+// don't want logical AC on the other side since it could cause an OOM.
+// Check what we do now when we encode something with AC encoding and send it
+// over -- it happens regardless of who we are sending too and whether we
+// deducted tokens or not. So will do logical admission even for a node that
+// has come back up. Got lucky with no OOM?
+//
+// TODO: two kinds of priority in the second byte. No logical admission and no
+// priority override Keep these two fields separate in RaftMessageRequest.
+//
 // A RangeController exists when a local replica of the range is the raft
 // leader. It does not have a goroutine of its own and reacts to events. No
 // mutex inside RangeController should be ordered before Replica.raftMu, since
@@ -77,7 +82,7 @@ import (
 //
 // - ReplicaDisconnected: raftMu is not held. Informs that a replica has
 //   its RaftTransport disconnected. This is necessary to prevent lossiness of
-//   tokens. The aforementioned map under Replica.muu will be used to
+//   tokens. The aforementioned map under Replica.mu will be used to
 //   ensure consistency. TODO: make it a narrower data-structure
 //   mutex in Replica, so that Raft.mu is not held when calling RangeController.
 //
@@ -109,44 +114,18 @@ import (
 // transient connection break and reestablishment. This is good since transitions
 // to StateProbe can result in force flush of some other replica.
 // ======================================================================
-// Reproposal handling: We will no longer do any special handling of reproposals.
+// Reproposal handling: We no longer do any special handling of reproposals.
 // v1 was accounting before an entry emerged in Ready, so there was a higher chance
 // of lossiness (it may never emerge). With v2, there is lossiness too, but less,
 // and since both the proposal and reproposal are going to be persisted in the raft
 // log we count them both.
 // ======================================================================
 
-type RangeControllerOptions struct {
-	// Immutable for the lifetime of the RangeController
-	RaftMu    *syncutil.Mutex
-	RangeID   roachpb.RangeID
-	TenantID  roachpb.TenantID
-	ReplicaID roachpb.ReplicaID
-
-	SSTokenCounter    StoreStreamsTokenCounter
-	SendTokensWatcher StoreStreamSendTokensWatcher
-	RaftInterface     RaftInterface
-	MessageSender     MessageSender
-	Scheduler         Scheduler
-}
-
-// RangeControllerInitState is the initial state at the time of creation.
-type RangeControllerInitState struct {
-	// Must include RangeControllerOptions.ReplicaID.
-	Replicas ReplicaSet
-	// Leaseholder may be set to NoReplicaID, in which case the leaseholder is
-	// unknown.
-	Leaseholder roachpb.ReplicaID
-}
-
-// NoReplicaID is a special value of roachpb.ReplicaID, which can never be a
-// valid ID.
-const NoReplicaID = 0
-
-type ReplicaSet map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
-
 type RangeController interface {
 	// WaitForEval is called concurrently by all requests wanting to evaluate.
+	//
+	// TODO: Needs high concurrency. Use a copy-on-write scheme for whatever
+	// data-structures are needed.
 	WaitForEval(ctx context.Context, pri admissionpb.WorkPriority) error
 	// HandleRaftEvent will be called from handleRaftReadyRaftMuLocked, including
 	// the case of snapshot application.
@@ -186,6 +165,8 @@ type RangeController interface {
 	// quorum with an empty send-queue -- figure out a reasonable heuristic
 	// (perhaps wait to force-flush until the non-empty send-queue has existed
 	// for more than a tick).
+	//
+	// TODO: this is what motivates having a mutex in RangeController.
 	TransportDisconnected(replica roachpb.ReplicaID)
 	// Close the controller, since no longer the leader. Can be called concurrently
 	// with other methods like WaitForEval. WaitForEval should unblock and return
@@ -351,67 +332,202 @@ type MessageSender interface {
 		ctx context.Context, priorityOverride admissionpb.WorkPriority, msg raftpb.Message)
 }
 
+type RangeControllerOptions struct {
+	// TODO: synchronization.
+	// RaftMu    *syncutil.Mutex
+	RangeID  roachpb.RangeID
+	TenantID roachpb.TenantID
+	// LocalReplicaID is the ReplicaID of the local replica, which is the
+	// leader.
+	LocalReplicaID roachpb.ReplicaID
+
+	SSTokenCounter    StoreStreamsTokenCounter
+	SendTokensWatcher StoreStreamSendTokensWatcher
+	RaftInterface     RaftInterface
+	MessageSender     MessageSender
+	Scheduler         Scheduler
+}
+
+// RangeControllerInitState is the initial state at the time of creation.
+type RangeControllerInitState struct {
+	// Must include RangeControllerOptions.ReplicaID.
+	ReplicaSet ReplicaSet
+	// Leaseholder may be set to NoReplicaID, in which case the leaseholder is
+	// unknown.
+	Leaseholder roachpb.ReplicaID
+}
+
+// NoReplicaID is a special value of roachpb.ReplicaID, which can never be a
+// valid ID.
+const NoReplicaID roachpb.ReplicaID = 0
+
+type ReplicaSet map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
+
 type RangeControllerImpl struct {
 	opts        RangeControllerOptions
-	replicas    ReplicaSet
+	replicaSet  ReplicaSet
 	leaseholder roachpb.ReplicaID
 
-	voterSets  []voterSet
+	// State for waiters. When anything in voterSets changes, voterSetRefreshCh
+	// is closed, and replaced with a new channel. The voterSets is
+	// copy-on-write, so waiters make a shallow copy.
+	voterSets         []voterSet
+	voterSetRefreshCh chan struct{}
+
 	replicaMap map[roachpb.ReplicaID]*replicaState
 
 	scheduledReplicas map[roachpb.ReplicaID]struct{}
 }
 
-type voterSet []roachpb.ReplicaID
+type voterSet []voterStateForWaiters
+
+type voterStateForWaiters struct {
+	replicaID        roachpb.ReplicaID
+	isLeader         bool
+	isLeaseHolder    bool
+	isStateReplicate bool
+	evalTokenCounter EvalTokenCounter
+}
 
 var _ RangeController = &RangeControllerImpl{}
+
+func NewRangeControllerImpl(
+	o RangeControllerOptions, init RangeControllerInitState,
+) *RangeControllerImpl {
+	rc := &RangeControllerImpl{
+		opts:              o,
+		replicaSet:        ReplicaSet{},
+		leaseholder:       init.Leaseholder,
+		replicaMap:        map[roachpb.ReplicaID]*replicaState{},
+		scheduledReplicas: make(map[roachpb.ReplicaID]struct{}),
+	}
+	rc.updateReplicaSetAndMap(init.ReplicaSet)
+	rc.updateVoterSets()
+	return rc
+}
+
+func (rc *RangeControllerImpl) updateReplicaSetAndMap(newSet ReplicaSet) {
+	prevSet := rc.replicaSet
+	for r := range prevSet {
+		desc, ok := newSet[r]
+		if !ok {
+			rs := rc.replicaMap[r]
+			rs.close()
+			delete(rc.replicaMap, r)
+		} else {
+			// It does not matter if the replica has changed from voter to non-voter
+			// or vice-versa, in that we still need to replicate to it.
+			rs := rc.replicaMap[r]
+			rs.desc = desc
+		}
+	}
+	for r, desc := range newSet {
+		_, ok := prevSet[r]
+		if ok {
+			// Already handled above.
+			continue
+		}
+		rc.replicaMap[r] = NewReplicaState(rc, desc)
+	}
+}
+
+// replicaSet and replicaMap are up-to-date.
+func (rc *RangeControllerImpl) updateVoterSets() {
+	// TODO: some callers of updateVoterSets should first figure out if anything
+	// has changed in the voters.
+
+	setCount := 1
+	for _, r := range rc.replicaSet {
+		isOld := r.IsVoterOldConfig()
+		isNew := r.IsVoterNewConfig()
+		if !isOld && !isNew {
+			continue
+		}
+		if !isOld && isNew {
+			setCount++
+			break
+		}
+	}
+	var voterSets []voterSet
+	for len(voterSets) < setCount {
+		voterSets = append(voterSets, voterSet{})
+	}
+	for _, r := range rc.replicaSet {
+		isOld := r.IsVoterOldConfig()
+		isNew := r.IsVoterNewConfig()
+		if !isOld && !isNew {
+			continue
+		}
+		// Is a voter.
+		rs := rc.replicaMap[r.ReplicaID]
+		vsfw := voterStateForWaiters{
+			replicaID:        r.ReplicaID,
+			isLeader:         r.ReplicaID == rc.opts.LocalReplicaID,
+			isLeaseHolder:    r.ReplicaID == rc.leaseholder,
+			isStateReplicate: rs.replicaSendStream != nil && rs.replicaSendStream.connectedState.isStateReplicate(),
+			evalTokenCounter: rs.evalTokenCounter,
+		}
+		if isOld {
+			voterSets[0] = append(voterSets[0], vsfw)
+		}
+		if isNew && setCount == 2 {
+			voterSets[1] = append(voterSets[1], vsfw)
+		}
+	}
+	rc.voterSets = voterSets
+	close(rc.voterSetRefreshCh)
+	rc.voterSetRefreshCh = make(chan struct{})
+}
 
 func (rc *RangeControllerImpl) WaitForEval(
 	ctx context.Context, pri admissionpb.WorkPriority,
 ) error {
-	// TODO: optimize allocations by having arrays for scratch space that we use
-	// for handles and slices.
-	wc := admissionpb.WorkClassFromPri(pri)
-	waitForAllNonStoppedHandles := false
-	if wc == admissionpb.ElasticWorkClass {
-		waitForAllNonStoppedHandles = true
-	}
-	// Need to gather all voters, even if disconnected.
-	// Also gather the ones that ...
-	for _, vs := range rc.voterSets {
-		quorumCount := (len(vs) + 2) / 2
-		haveEvalTokensCount := 0
-		var handleAndSoftDisconnectedChSlice []kvflowcontroller.HandleAndStopCh
-		for _, r := range vs {
-			rs := rc.replicaMap[r]
-			available, handle := rs.evalTokenCounter.TokensAvailable(wc)
-			if available {
-				haveEvalTokensCount++
+	// TODO: redo. **resume here**
+	/*
+		// TODO: optimize allocations by having arrays for scratch space that we use
+		// for handles and slices.
+		wc := admissionpb.WorkClassFromPri(pri)
+		waitForAllNonStoppedHandles := false
+		if wc == admissionpb.ElasticWorkClass {
+			waitForAllNonStoppedHandles = true
+		}
+		// Need to gather all voters, even if disconnected.
+		// Also gather the ones that ...
+		for _, vs := range rc.voterSets {
+			quorumCount := (len(vs) + 2) / 2
+			haveEvalTokensCount := 0
+			var handleAndSoftDisconnectedChSlice []kvflowcontroller.HandleAndStopCh
+			for _, r := range vs {
+				rs := rc.replicaMap[r]
+				available, handle := rs.evalTokenCounter.TokensAvailable(wc)
+				if available {
+					haveEvalTokensCount++
+					continue
+				}
+				// Don't have eval tokens, and have a handle.
+				var softDisconnectedCh chan struct{}
+				if rs.replicaSendStream != nil && rs.replicaSendStream.connectedState == replicateConnected {
+					// softDisconnectedCh = rs.replicaSendStream.softDisconnectedCh
+				}
+				handleAndSoftDisconnectedChSlice = append(handleAndSoftDisconnectedChSlice, kvflowcontroller.HandleAndStopCh{
+					Handle:     handle,
+					StopWaitCh: softDisconnectedCh,
+				})
+			}
+			remainingForQuorum := quorumCount - haveEvalTokensCount
+			if wc == admissionpb.RegularWorkClass && remainingForQuorum <= 0 {
 				continue
 			}
-			// Don't have eval tokens, and have a handle.
-			var softDisconnectedCh chan struct{}
-			if rs.replicateStream != nil && rs.replicateStream.connectedState == replicateConnected {
-				// softDisconnectedCh = rs.replicateStream.softDisconnectedCh
+			if remainingForQuorum < 0 {
+				remainingForQuorum = 0
 			}
-			handleAndSoftDisconnectedChSlice = append(handleAndSoftDisconnectedChSlice, kvflowcontroller.HandleAndStopCh{
-				Handle:     handle,
-				StopWaitCh: softDisconnectedCh,
-			})
+			waitEndState, _ := kvflowcontroller.WaitForHandlesAndChannels(
+				ctx, nil, remainingForQuorum, waitForAllNonStoppedHandles, handleAndSoftDisconnectedChSlice, nil)
+			if waitEndState == kvflowcontroller.ContextCanceled {
+				return ctx.Err()
+			}
 		}
-		remainingForQuorum := quorumCount - haveEvalTokensCount
-		if wc == admissionpb.RegularWorkClass && remainingForQuorum <= 0 {
-			continue
-		}
-		if remainingForQuorum < 0 {
-			remainingForQuorum = 0
-		}
-		waitEndState, _ := kvflowcontroller.WaitForHandlesAndChannels(
-			ctx, nil /*TODO*/, remainingForQuorum, waitForAllNonStoppedHandles, handleAndSoftDisconnectedChSlice, nil)
-		if waitEndState == kvflowcontroller.ContextCanceled {
-			return ctx.Err()
-		}
-	}
+	*/
 	return nil
 }
 
@@ -419,10 +535,10 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 	// Refresh the replicaStreams.
 	nextRaftIndex := rc.opts.RaftInterface.HighestEntryIndex() + 1
 	for r, rs := range rc.replicaMap {
-		if rs.replicateStream != nil && rs.replicateStream.connectedState == replicateConnected {
+		if rs.replicaSendStream != nil && rs.replicaSendStream.connectedState == replicateConnected {
 			continue
 		}
-		if rs.replicateStream == nil || rs.replicateStream.connectedState == snapshot {
+		if rs.replicaSendStream == nil || rs.replicaSendStream.connectedState == snapshot {
 			state, nextUB := rc.opts.RaftInterface.FollowerState(r)
 			if state == tracker.StateReplicate {
 				// TODO: state may already exist.
@@ -436,8 +552,8 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 					approxMaxPriority:   admissionpb.NormalPri,
 					approxMeanSizeBytes: 1000,
 				}
-				rs.replicateStream = newReplicaSendStream(rs, rsInitState)
-				if !rs.replicateStream.isEmptySendQueue() {
+				rs.replicaSendStream = newReplicaSendStream(rs, rsInitState)
+				if !rs.replicaSendStream.isEmptySendQueue() {
 					// TODO: if tokens available for overridden priority, send some.
 					// TODO: if more ava
 				}
@@ -447,9 +563,9 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 				//
 				// TODO: Doing this can cause a transition to StateSnapshot. Need to handle it here.
 			}
-		} else if rs.replicateStream.connectedState == replicateSoftDisconnected &&
+		} else if rs.replicaSendStream.connectedState == replicateSoftDisconnected &&
 			rc.opts.RaftInterface.FollowerTransportConnected(rs.desc.StoreID) {
-			rs.replicateStream.changeConnectedStateInStateReplicate(true)
+			rs.replicaSendStream.changeConnectedStateInStateReplicate(true)
 			// TODO: check if send-queue is non-empty and generate some MsgApps if
 			// permitted. Queue up more work, or notification when send tokens are
 			// available.
@@ -479,7 +595,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 	// send-queue of existing entries, they are already trying to slowly
 	// eliminate it...
 	for r, rs := range rc.replicaMap {
-		if r == rc.opts.ReplicaID {
+		if r == rc.opts.LocalReplicaID {
 			// Local replica, which is the leader.
 			for i := range entries {
 				entryFCState := getFlowControlState(entries[i])
@@ -488,14 +604,14 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 				}
 				wc := admissionpb.WorkClassFromPri(entryFCState.priority)
 				rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
-				rs.replicateStream.advanceNextRaftIndexAndSent(entryFCState)
+				rs.replicaSendStream.advanceNextRaftIndexAndSent(entryFCState)
 			}
 			continue
 		}
-		if rs.replicateStream == nil {
+		if rs.replicaSendStream == nil {
 			continue
 		}
-		if rs.replicateStream.connectedState != snapshot && rs.replicateStream.isEmptySendQueue() {
+		if rs.replicaSendStream.connectedState != snapshot && rs.replicaSendStream.isEmptySendQueue() {
 			// Consider sending.
 			// If leaseholder just send.
 			isLeaseholder := r == rc.leaseholder
@@ -510,7 +626,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 					if entries[i].Index == to && !entryFCState.usesFlowControl {
 						to++
 					} else {
-						rs.replicateStream.advanceNextRaftIndexAndQueued(entryFCState)
+						rs.replicaSendStream.advanceNextRaftIndexAndQueued(entryFCState)
 					}
 					continue
 				}
@@ -536,10 +652,10 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 				}
 				if send {
 					to++
-					rs.replicateStream.advanceNextRaftIndexAndSent(entryFCState)
+					rs.replicaSendStream.advanceNextRaftIndexAndSent(entryFCState)
 				} else {
 					toFinalized = true
-					rs.replicateStream.advanceNextRaftIndexAndQueued(entryFCState)
+					rs.replicaSendStream.advanceNextRaftIndexAndQueued(entryFCState)
 				}
 			}
 			if to > from {
@@ -607,12 +723,42 @@ type replicaStreamOptions struct {
 }
 
 type replicaState struct {
-	parent           *RangeControllerImpl
-	stream           kvflowcontrol.Stream
-	evalTokenCounter EvalTokenCounter
-	sendTokenCounter SendTokenCounter
-	desc             roachpb.ReplicaDescriptor
-	replicateStream  *replicaSendStream
+	parent            *RangeControllerImpl
+	stream            kvflowcontrol.Stream
+	evalTokenCounter  EvalTokenCounter
+	sendTokenCounter  SendTokenCounter
+	desc              roachpb.ReplicaDescriptor
+	replicaSendStream *replicaSendStream
+}
+
+func NewReplicaState(parent *RangeControllerImpl, desc roachpb.ReplicaDescriptor) *replicaState {
+	stream := kvflowcontrol.Stream{TenantID: parent.opts.TenantID, StoreID: desc.StoreID}
+	rs := &replicaState{
+		parent:            parent,
+		stream:            stream,
+		evalTokenCounter:  parent.opts.SSTokenCounter.EvalTokenCounterForStream(stream),
+		sendTokenCounter:  parent.opts.SSTokenCounter.SendTokenCounterForStream(stream),
+		desc:              desc,
+		replicaSendStream: nil,
+	}
+	state, nextUB := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
+	if state == tracker.StateReplicate {
+		isConnected := parent.opts.RaftInterface.FollowerTransportConnected(desc.StoreID)
+		rss := newReplicaSendStream(rs, replicaSendStreamInitState{
+			isConnected:   isConnected,
+			indexToSend:   nextUB,
+			nextRaftIndex: parent.opts.RaftInterface.HighestEntryIndex() + 1,
+			// TODO: these need to be based on some history observed by RangeControllerImpl.
+			approxMaxPriority:   admissionpb.NormalPri,
+			approxMeanSizeBytes: 1000,
+		})
+		rs.replicaSendStream = rss
+	}
+	return rs
+}
+
+func (rs *replicaState) close() {
+	// TODO:
 }
 
 // TODO: update.
@@ -1128,6 +1274,10 @@ const (
 	snapshot
 )
 
+func (cs connectedState) isStateReplicate() bool {
+	return cs == replicateConnected || cs == replicateSoftDisconnected
+}
+
 // TODO: will need the Disconnected channel like in kvflowcontrol.ConnectedStream, so
 // that waiting for eval tokens can unblock.
 
@@ -1179,36 +1329,4 @@ type cstream interface {
 	snapshotApplied(snapIndex uint64)
 	// The connected-stream is being closed. Return all tokens.
 	close()
-}
-
-func replicaSetToVoterSets(replicaSet ReplicaSet) (voterSets []voterSet) {
-	setCount := 1
-	for _, r := range replicaSet {
-		isOld := r.IsVoterOldConfig()
-		isNew := r.IsVoterNewConfig()
-		if !isOld && !isNew {
-			continue
-		}
-		if !isOld && isNew {
-			setCount++
-			break
-		}
-	}
-	for len(voterSets) < setCount {
-		voterSets = append(voterSets, voterSet{})
-	}
-	for _, r := range replicaSet {
-		isOld := r.IsVoterOldConfig()
-		isNew := r.IsVoterNewConfig()
-		if !isOld && !isNew {
-			continue
-		}
-		if isOld {
-			voterSets[0] = append(voterSets[0], r.ReplicaID)
-		}
-		if isNew && setCount == 2 {
-			voterSets[1] = append(voterSets[1], r.ReplicaID)
-		}
-	}
-	return voterSets
 }
