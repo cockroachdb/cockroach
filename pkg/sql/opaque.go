@@ -159,6 +159,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CommentOnIndex(ctx, n)
 	case *tree.CommentOnTable:
 		return p.CommentOnTable(ctx, n)
+	case *tree.CommentOnType:
+		return p.CommentOnType(ctx, n)
 	case *tree.CopyTo:
 		// COPY TO does not actually get prepared in any meaningful way. This means
 		// it can't have placeholder arguments, and the execution can use the same
@@ -337,6 +339,7 @@ func init() {
 		&tree.CloseCursor{},
 		&tree.CommentOnColumn{},
 		&tree.CommentOnDatabase{},
+		&tree.CommentOnType{},
 		&tree.CommentOnSchema{},
 		&tree.CommentOnIndex{},
 		&tree.CommentOnConstraint{},

@@ -33,6 +33,10 @@ type CommentGetter interface {
 	// comment actually exists or not.
 	GetTableComment(tableID catid.DescID) (comment string, ok bool)
 
+	// GetTypeComment returns comment for a Type. `ok` returned indicates if the
+	// comment actually exists or not.
+	GetTypeComment(TypeID catid.DescID) (comment string, ok bool)
+
 	// GetColumnComment returns comment for a column. `ok` returned indicates if
 	// the comment actually exists or not.
 	GetColumnComment(tableID catid.DescID, pgAttrNum catid.PGAttributeNum) (comment string, ok bool)

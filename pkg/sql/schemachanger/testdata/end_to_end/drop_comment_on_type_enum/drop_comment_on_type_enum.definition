@@ -1,0 +1,8 @@
+setup
+CREATE TYPE roach_dwellings AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+COMMENT ON TYPE roach_dwellings IS 'First CRDB comment on types';
+----
+
+test
+COMMENT ON TYPE roach_dwellings IS NULL;
+----

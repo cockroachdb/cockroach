@@ -672,6 +672,19 @@ type RemoveTableComment struct {
 	TableID descpb.ID
 }
 
+// UpsertTypeComment is used to add a comment to a Type.
+type UpsertTypeComment struct {
+	immediateMutationOp
+	TypeID  descpb.ID
+	Comment string
+}
+
+// RemoveTypeComment is used to delete a comment associated with a Type.
+type RemoveTypeComment struct {
+	immediateMutationOp
+	TypeID descpb.ID
+}
+
 // UpsertDatabaseComment is used to add a comment to a database.
 type UpsertDatabaseComment struct {
 	immediateMutationOp

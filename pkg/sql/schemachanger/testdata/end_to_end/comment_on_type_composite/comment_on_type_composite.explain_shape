@@ -1,0 +1,8 @@
+/* setup */
+CREATE TYPE roach_legs AS (legs INT);
+
+/* test */
+EXPLAIN (DDL, SHAPE) COMMENT ON TYPE roach_legs IS 'Second-CRDB-comment-on-types';
+----
+Schema change plan for COMMENT ON TYPE ‹defaultdb›.‹public›.‹roach_legs› IS 'Second-CRDB-comment-on-types';
+ └── execute 1 system table mutations transaction

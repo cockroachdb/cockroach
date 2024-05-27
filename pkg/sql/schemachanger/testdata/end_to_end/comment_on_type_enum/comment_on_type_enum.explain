@@ -1,0 +1,24 @@
+/* setup */
+CREATE TYPE roach_dwellings AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+
+/* test */
+EXPLAIN (DDL) COMMENT ON TYPE roach_dwellings IS 'First CRDB comment on types';
+----
+Schema change plan for COMMENT ON TYPE ‹defaultdb›.‹public›.‹roach_dwellings› IS 'First CRDB comment on types';
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC TypeComment:{DescID: 104 (roach_dwellings), Comment: "First CRDB comment on types"}
+ │         └── 1 Mutation operation
+ │              └── UpsertTypeComment {"Comment":"First CRDB comme...","TypeID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── PUBLIC → ABSENT TypeComment:{DescID: 104 (roach_dwellings), Comment: "First CRDB comment on types"}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── ABSENT → PUBLIC TypeComment:{DescID: 104 (roach_dwellings), Comment: "First CRDB comment on types"}
+           └── 1 Mutation operation
+                └── UpsertTypeComment {"Comment":"First CRDB comme...","TypeID":104}
