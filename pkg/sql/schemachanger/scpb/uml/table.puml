@@ -369,6 +369,11 @@ TemporaryIndex :  Index
 TemporaryIndex :  IsUsingSecondaryEncoding
 TemporaryIndex :  Expr
 
+object TypeComment
+
+TypeComment :  TypeID
+TypeComment :  Comment
+
 object UniqueWithoutIndexConstraint
 
 UniqueWithoutIndexConstraint :  TableID
@@ -492,6 +497,7 @@ Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
 Table <|-- TemporaryIndex
 View <|-- TemporaryIndex
+CompositeType,EnumType,AliasType <|-- TypeComment
 Table <|-- UniqueWithoutIndexConstraint
 Table <|-- UniqueWithoutIndexConstraintUnvalidated
 Table <|-- UserPrivileges

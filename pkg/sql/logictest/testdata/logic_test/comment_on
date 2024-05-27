@@ -273,3 +273,46 @@ SELECT * FROM pg_catalog.pg_description WHERE objoid = 't'::regclass::OID;
 
 statement ok
 DELETE FROM system.comments WHERE type = 4294967122
+
+statement ok
+COMMENT ON SCHEMA sc IS NULL
+
+statement ok
+CREATE TYPE roach_dwellings AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+CREATE TYPE roach_legs AS (legs INT);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.2
+statement ok
+COMMENT ON TYPE roach_dwellings IS 'First-CRDB-comment-on-types';
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.2
+statement ok
+COMMENT ON TYPE roach_legs IS 'Second-CRDB-comment-on-types';
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.2
+query IIIT colnames,rowsort
+SELECT * FROM SYSTEM.COMMENTS;
+----
+type  object_id  sub_id  comment
+7     111        0       First-CRDB-comment-on-types
+7     113        0       Second-CRDB-comment-on-types
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.2
+statement ok
+COMMENT ON TYPE roach_dwellings IS NULL;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.2
+statement ok
+COMMENT ON TYPE roach_legs IS NULL;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.2
+query IIIT colnames
+SELECT * FROM SYSTEM.COMMENTS;
+----
+type  object_id  sub_id  comment

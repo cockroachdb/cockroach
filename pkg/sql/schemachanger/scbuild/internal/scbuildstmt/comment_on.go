@@ -70,6 +70,17 @@ func CommentOnTable(b BuildCtx, statement *tree.CommentOnTable) {
 	}
 }
 
+// CommentOnType implements COMMENT ON TYPE xxx IS xxx statement.
+func CommentOnType(b BuildCtx, n *tree.CommentOnType) {
+	typeElements := b.ResolveUserDefinedTypeType(n.Name, commentResolveParams)
+
+	if n.Comment == nil {
+		dropComment(b, typeElements)
+	} else {
+		addComment(b, typeElements, &scpb.TypeComment{Comment: *n.Comment})
+	}
+}
+
 // CommentOnColumn implements COMMENT ON COLUMN xxx IS xxx statement.
 func CommentOnColumn(b BuildCtx, statement *tree.CommentOnColumn) {
 	if statement.ColumnItem.TableName == nil {
@@ -122,7 +133,7 @@ func dropComment(b BuildCtx, elements ElementResultSet) {
 	elements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch e.(type) {
 		case *scpb.DatabaseComment, *scpb.SchemaComment, *scpb.IndexComment,
-			*scpb.ConstraintComment, *scpb.ColumnComment, *scpb.TableComment:
+			*scpb.ConstraintComment, *scpb.ColumnComment, *scpb.TableComment, *scpb.TypeComment:
 			b.Drop(e)
 			b.LogEventForExistingTarget(e)
 		}
@@ -141,6 +152,10 @@ func addComment(b BuildCtx, elements ElementResultSet, comment scpb.Element) {
 			setConstraintID(comment, object)
 		case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint:
 			setConstraintID(comment, object)
+		case *scpb.EnumType:
+			comment.(*scpb.TypeComment).TypeID = object.TypeID
+		case *scpb.CompositeType:
+			comment.(*scpb.TypeComment).TypeID = object.TypeID
 		case *scpb.Table:
 			comment.(*scpb.TableComment).TableID = object.TableID
 		case *scpb.Column:

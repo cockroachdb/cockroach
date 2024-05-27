@@ -87,3 +87,19 @@ COMMENT ON TABLE foo IS NULL
 COMMENT ON TABLE foo IS NULL -- fully parenthesized
 COMMENT ON TABLE foo IS NULL -- literals removed
 COMMENT ON TABLE _ IS NULL -- identifiers removed
+
+parse
+COMMENT ON TYPE foo IS 'a'
+----
+COMMENT ON TYPE foo IS 'a'
+COMMENT ON TYPE foo IS 'a' -- fully parenthesized
+COMMENT ON TYPE foo IS '_' -- literals removed
+COMMENT ON TYPE _ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON TYPE foo IS NULL
+----
+COMMENT ON TYPE foo IS NULL
+COMMENT ON TYPE foo IS NULL -- fully parenthesized
+COMMENT ON TYPE foo IS NULL -- literals removed
+COMMENT ON TYPE _ IS NULL -- identifiers removed
