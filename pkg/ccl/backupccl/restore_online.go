@@ -46,8 +46,8 @@ import (
 var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"backup.restore.online_worker_count",
-	"workers to use for online restore worker phase",
-	8,
+	"workers to use for online restore link phase",
+	32,
 	settings.PositiveInt,
 )
 
