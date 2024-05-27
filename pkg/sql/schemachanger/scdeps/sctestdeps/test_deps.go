@@ -1354,6 +1354,11 @@ func (s *TestState) GetTableComment(tableID catid.DescID) (comment string, ok bo
 	return s.get(tableID, 0, catalogkeys.TableCommentType)
 }
 
+// GetTypeComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetTypeComment(typeID catid.DescID) (comment string, ok bool) {
+	return s.get(typeID, 0, catalogkeys.TypeCommentType)
+}
+
 // GetColumnComment implements the scdecomp.CommentGetter interface.
 func (s *TestState) GetColumnComment(
 	tableID catid.DescID, pgAttrNum catid.PGAttributeNum,

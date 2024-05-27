@@ -108,6 +108,47 @@ func CommentOnTable(b BuildCtx, n *tree.CommentOnTable) {
 	}
 }
 
+// CommentOnType implements COMMENT ON TYPE xxx IS xxx statement.
+func CommentOnType(b BuildCtx, n *tree.CommentOnType) {
+	typeElements := b.ResolveUserDefinedTypeType(n.Name, commentResolveParams)
+	_, _, enumType := scpb.FindEnumType(typeElements)
+	_, _, compositeType := scpb.FindCompositeType(typeElements)
+
+	typeName := n.Name.ToTableName()
+
+	if enumType == nil && compositeType == nil {
+		b.MarkNameAsNonExistent(&typeName)
+		return
+	}
+
+	var typeObject scpb.Element
+	var typeID catid.DescID
+
+	if enumType != nil {
+		typeObject = enumType
+		typeID = enumType.TypeID
+	} else if compositeType != nil {
+		typeObject = compositeType
+		typeID = compositeType.TypeID
+	}
+
+	typeName.ObjectNamePrefix = b.NamePrefix(typeObject)
+	n.Name = typeName.ToUnresolvedObjectName()
+
+	if n.Comment == nil {
+		_, _, typeComment := scpb.FindTypeComment(typeElements)
+		if typeComment != nil {
+			b.Drop(typeComment)
+			b.LogEventForExistingTarget(typeComment)
+		}
+		return
+	}
+
+	typeComment := &scpb.TypeComment{Comment: *n.Comment, TypeID: typeID}
+	b.Add(typeComment)
+	b.LogEventForExistingTarget(typeComment)
+}
+
 // CommentOnColumn implements COMMENT ON COLUMN xxx IS xxx statement.
 func CommentOnColumn(b BuildCtx, n *tree.CommentOnColumn) {
 	if n.ColumnItem.TableName == nil {

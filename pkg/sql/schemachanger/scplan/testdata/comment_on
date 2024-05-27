@@ -306,3 +306,105 @@ PreCommitPhase stage 2 of 2 with 1 MutationType op
     *scop.RemoveConstraintComment
       ConstraintID: 2
       TableID: 107
+
+setup
+CREATE TYPE roach_dwellings AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+CREATE TYPE roach_legs AS (legs INT);
+----
+
+ops
+COMMENT ON TYPE roach_dwellings IS 'First CRDB comment on types';
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertTypeComment
+      Comment: First CRDB comment on types
+      TypeID: 108
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertTypeComment
+      Comment: First CRDB comment on types
+      TypeID: 108
+
+ops
+COMMENT ON TYPE roach_legs IS 'Second CRDB comment on types';
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertTypeComment
+      Comment: Second CRDB comment on types
+      TypeID: 110
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertTypeComment
+      Comment: Second CRDB comment on types
+      TypeID: 110
+
+setup
+COMMENT ON TYPE roach_dwellings IS 'First CRDB comment on types';
+COMMENT ON TYPE roach_legs IS 'Second CRDB comment on types';
+----
+
+ops
+COMMENT ON TYPE roach_dwellings IS NULL;
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.RemoveTypeComment
+      TypeID: 108
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, ABSENT], ABSENT] -> PUBLIC
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.RemoveTypeComment
+      TypeID: 108
+
+ops
+COMMENT ON TYPE roach_legs IS NULL;
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.RemoveTypeComment
+      TypeID: 110
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, ABSENT], ABSENT] -> PUBLIC
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.RemoveTypeComment
+      TypeID: 110

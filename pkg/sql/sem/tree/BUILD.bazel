@@ -32,6 +32,7 @@ go_library(
         "comment_on_index.go",
         "comment_on_schema.go",
         "comment_on_table.go",
+        "comment_on_type.go",
         "compare.go",
         "constant.go",
         "constant_eval.go",
