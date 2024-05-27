@@ -58,6 +58,18 @@ func (mc *MutableCatalog) ensureForID(id descpb.ID) *byIDEntry {
 	return newEntry
 }
 
+// ensureForWithEntry upserts the entry and returns either the current entry or
+// the one that has replaced.
+func (mc *MutableCatalog) ensureForIDWithEntry(newEntry *byIDEntry) *byIDEntry {
+	mc.maybeInitialize()
+	if replaced := mc.byID.upsert(newEntry); replaced != nil {
+		return replaced.(*byIDEntry)
+	} else {
+		mc.byteSize += newEntry.ByteSize()
+	}
+	return newEntry
+}
+
 func (mc *MutableCatalog) maybeGetByID(id descpb.ID) *byIDEntry {
 	if !mc.IsInitialized() {
 		return nil
@@ -75,6 +87,18 @@ func (mc *MutableCatalog) ensureForName(key catalog.NameKey) *byNameEntry {
 	}
 	if replaced := mc.byName.upsert(newEntry); replaced != nil {
 		*newEntry = *(replaced.(*byNameEntry))
+	} else {
+		mc.byteSize += newEntry.ByteSize()
+	}
+	return newEntry
+}
+
+// ensureForNameWithEntry upserts the entry and returns either the current entry or
+// the one that has replaced.
+func (mc *MutableCatalog) ensureForNameWithEntry(newEntry *byNameEntry) *byNameEntry {
+	mc.maybeInitialize()
+	if replaced := mc.byName.upsert(newEntry); replaced != nil {
+		return replaced.(*byNameEntry)
 	} else {
 		mc.byteSize += newEntry.ByteSize()
 	}
@@ -197,17 +221,21 @@ func (mc *MutableCatalog) AddAll(c Catalog) {
 		return
 	}
 	_ = c.byName.ascend(func(entry catalog.NameEntry) error {
-		e := mc.ensureForName(entry)
-		mc.byteSize -= e.ByteSize()
-		*e = *(entry.(*byNameEntry))
-		mc.byteSize += e.ByteSize()
+		ne := entry.(*byNameEntry)
+		e := mc.ensureForNameWithEntry(ne)
+		if e != ne {
+			mc.byteSize -= e.ByteSize()
+			mc.byteSize += ne.ByteSize()
+		}
 		return nil
 	})
 	_ = c.byID.ascend(func(entry catalog.NameEntry) error {
-		e := mc.ensureForID(entry.GetID())
-		mc.byteSize -= e.ByteSize()
-		*e = *(entry.(*byIDEntry))
-		mc.byteSize += e.ByteSize()
+		ne := entry.(*byIDEntry)
+		e := mc.ensureForIDWithEntry(ne)
+		if e != ne {
+			mc.byteSize -= e.ByteSize()
+			mc.byteSize += ne.ByteSize()
+		}
 		return nil
 	})
 }
