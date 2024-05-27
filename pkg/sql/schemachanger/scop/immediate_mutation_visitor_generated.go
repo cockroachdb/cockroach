@@ -103,6 +103,8 @@ type ImmediateMutationVisitor interface {
 	SetJobStateOnDescriptor(context.Context, SetJobStateOnDescriptor) error
 	UpsertTableComment(context.Context, UpsertTableComment) error
 	RemoveTableComment(context.Context, RemoveTableComment) error
+	UpsertTypeComment(context.Context, UpsertTypeComment) error
+	RemoveTypeComment(context.Context, RemoveTypeComment) error
 	UpsertDatabaseComment(context.Context, UpsertDatabaseComment) error
 	RemoveDatabaseComment(context.Context, RemoveDatabaseComment) error
 	UpsertSchemaComment(context.Context, UpsertSchemaComment) error
@@ -537,6 +539,16 @@ func (op UpsertTableComment) Visit(ctx context.Context, v ImmediateMutationVisit
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveTableComment) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveTableComment(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UpsertTypeComment) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpsertTypeComment(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveTypeComment) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveTypeComment(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
