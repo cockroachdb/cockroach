@@ -59,6 +59,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, statementTags: []string{tree.CommentOnDatabaseTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, statementTags: []string{tree.CommentOnSchemaTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, statementTags: []string{tree.CommentOnTableTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.CommentOnType)(nil)):       {fn: CommentOnType, statementTags: []string{tree.CommentOnTypeTag}, on: true, checks: isV242Active},
 	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, statementTags: []string{tree.CommentOnColumnTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, statementTags: []string{tree.CommentOnIndexTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, statementTags: []string{tree.DropIndexTag}, on: true, checks: nil},
@@ -208,4 +209,8 @@ func getDeclarativeSchemaChangerModeForStmt(
 
 var isV241Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
 	return activeVersion.IsActive(clusterversion.V24_1)
+}
+
+var isV242Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
+	return activeVersion.IsActive(clusterversion.V24_2)
 }
