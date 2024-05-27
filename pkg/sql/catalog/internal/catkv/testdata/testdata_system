@@ -128,6 +128,7 @@ trace:
 - Scan /Table/24/1/4/108
 - Scan /Table/24/1/5/108
 - Scan /Table/24/1/6/108
+- Scan /Table/24/1/7/108
 - Get /Table/5/1/108/2/1
 
 # Zone config, but no descriptor should be present.
@@ -145,6 +146,7 @@ trace:
 - Scan /Table/24/1/4/0
 - Scan /Table/24/1/5/0
 - Scan /Table/24/1/6/0
+- Scan /Table/24/1/7/0
 - Get /Table/5/1/0/2/1
 
 get_by_ids id=104 id=105 id=106 id=107
@@ -169,6 +171,7 @@ trace:
 - Scan Range /Table/24/1/4/104 /Table/24/1/4/108
 - Scan Range /Table/24/1/5/104 /Table/24/1/5/108
 - Scan Range /Table/24/1/6/104 /Table/24/1/6/108
+- Scan Range /Table/24/1/7/104 /Table/24/1/7/108
 - Scan Range /Table/5/1/104/2/1 /Table/5/1/108/2/1
 
 is_id_in_cache id=107
@@ -465,6 +468,7 @@ trace:
 - Scan /Table/24/1/4/456
 - Scan /Table/24/1/5/456
 - Scan /Table/24/1/6/456
+- Scan /Table/24/1/7/456
 - Get /Table/5/1/456/2/1
 cached:
 - Get /Table/3/1/456/2/1
@@ -475,6 +479,7 @@ cached:
 - Scan /Table/24/1/4/456
 - Scan /Table/24/1/5/456
 - Scan /Table/24/1/6/456
+- Scan /Table/24/1/7/456
 - Get /Table/5/1/456/2/1
 
 get_by_names name_key=(123,456,foo)

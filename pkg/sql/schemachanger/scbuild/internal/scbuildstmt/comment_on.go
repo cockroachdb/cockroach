@@ -70,6 +70,28 @@ func CommentOnTable(b BuildCtx, statement *tree.CommentOnTable) {
 	}
 }
 
+// CommentOnType implements COMMENT ON TYPE xxx IS xxx statement.
+func CommentOnType(b BuildCtx, statement *tree.CommentOnType) {
+	typeElements := b.ResolveUserDefinedTypeType(statement.Name, commentResolveParams)
+	name := statement.Name.ToTypeName()
+
+	if _, _, enumType := scpb.FindEnumType(typeElements); enumType != nil {
+		name.ObjectNamePrefix = b.NamePrefix(enumType)
+	} else if _, _, compositeType := scpb.FindCompositeType(typeElements); compositeType != nil {
+		name.ObjectNamePrefix = b.NamePrefix(compositeType)
+	} else {
+		panic(pgerror.New(pgcode.Syntax, "did not find composite type or enumerated type"))
+	}
+
+	statement.Name = name.ToUnresolvedObjectName()
+
+	if statement.Comment == nil {
+		dropComment(b, typeElements)
+	} else {
+		addComment(b, typeElements, &scpb.TypeComment{Comment: *statement.Comment})
+	}
+}
+
 // CommentOnColumn implements COMMENT ON COLUMN xxx IS xxx statement.
 func CommentOnColumn(b BuildCtx, statement *tree.CommentOnColumn) {
 	if statement.ColumnItem.TableName == nil {
@@ -115,7 +137,7 @@ func dropComment(b BuildCtx, elements ElementResultSet) {
 	elements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch e.(type) {
 		case *scpb.DatabaseComment, *scpb.SchemaComment, *scpb.IndexComment,
-			*scpb.ConstraintComment, *scpb.ColumnComment, *scpb.TableComment:
+			*scpb.ConstraintComment, *scpb.ColumnComment, *scpb.TableComment, *scpb.TypeComment:
 			b.Drop(e)
 			b.LogEventForExistingTarget(e)
 		}
@@ -134,11 +156,16 @@ func addComment(b BuildCtx, elements ElementResultSet, comment scpb.Element) {
 			setConstraintID(comment, object)
 		case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint:
 			setConstraintID(comment, object)
+		case *scpb.EnumType:
+			comment.(*scpb.TypeComment).TypeID = object.TypeID
+		case *scpb.CompositeType:
+			comment.(*scpb.TypeComment).TypeID = object.TypeID
 		case *scpb.Table:
 			comment.(*scpb.TableComment).TableID = object.TableID
 		case *scpb.Column:
 			if reflect.TypeOf(comment) == reflect.TypeOf(&scpb.ColumnComment{}) {
 				comment.(*scpb.ColumnComment).ColumnID = object.ColumnID
+				comment.(*scpb.ColumnComment).PgAttributeNum = object.PgAttributeNum
 			}
 		}
 	})
