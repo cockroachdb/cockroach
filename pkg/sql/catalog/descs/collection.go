@@ -1210,6 +1210,11 @@ func (tc *Collection) GetTableComment(tableID descpb.ID) (comment string, ok boo
 	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), 0, catalogkeys.TableCommentType))
 }
 
+// GetTypeComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetTypeComment(typeID descpb.ID) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(typeID), 0, catalogkeys.TypeCommentType))
+}
+
 // GetColumnComment implements the scdecomp.CommentGetter interface.
 func (tc *Collection) GetColumnComment(
 	tableID descpb.ID, pgAttrNum catid.PGAttributeNum,
