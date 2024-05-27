@@ -215,6 +215,14 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 		ChildObjectID: typ.GetID(),
 		SchemaID:      typ.GetParentSchemaID(),
 	})
+	{
+		if comment, ok := w.commentReader.GetTypeComment(typ.GetID()); ok {
+			w.ev(scpb.Status_PUBLIC, &scpb.TypeComment{
+				TypeID:  typ.GetID(),
+				Comment: comment,
+			})
+		}
+	}
 	for i := 0; i < typ.NumReferencingDescriptors(); i++ {
 		w.backRefs.Add(typ.GetReferencingDescriptorID(i))
 	}

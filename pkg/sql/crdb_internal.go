@@ -5927,6 +5927,10 @@ var crdbInternalCatalogCommentsTable = virtualSchemaTable{
 				classOid = tree.NewDOid(catconstants.PgCatalogNamespaceTableID)
 				objOid = tree.NewDOid(oid.Oid(key.ObjectID))
 
+			case catalogkeys.TypeCommentType:
+				classOid = tree.NewDOid(catconstants.PgCatalogTypeTableID)
+				objOid = tree.NewDOid(oid.Oid(key.ObjectID))
+
 			case catalogkeys.ColumnCommentType, catalogkeys.TableCommentType:
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
 				objOid = tree.NewDOid(oid.Oid(key.ObjectID))

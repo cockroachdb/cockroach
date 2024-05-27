@@ -251,6 +251,18 @@ message CommentOnTable {
   bool null_comment = 6  [(gogoproto.jsontag) = ",omitempty"];
 }
 
+// CommentOnType is recorded when a type is commented.
+message CommentOnType {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected type.
+  string type_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  // The new comment.
+  string comment = 4  [(gogoproto.jsontag) = ",omitempty"];
+  // Set to true if the comment was removed entirely.
+  bool null_comment = 6  [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // CommentOnIndex is recorded when an index is commented.
 message CommentOnIndex {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
