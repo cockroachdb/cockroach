@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -247,4 +249,86 @@ func getMeanOverLastN(n int, items []float64) float64 {
 		i++
 	}
 	return sum / float64(count)
+}
+
+// profileTopStatements enables profile collection on the top statements from
+// the cluster that exceed 10ms latency. Top statements are defined as ones that
+// have executed frequently enough to matter.
+// minDuration is the minimum duration a statement to be included in profiling. Typically
+// set this close to the 99.9 percentile for good results.
+func profileTopStatements(
+	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, minDuration time.Duration,
+) error {
+	db := cluster.Conn(ctx, logger, 1)
+	defer db.Close()
+
+	// Enable continuous statement diagnostics rather than just the first one.
+	sql := "SET CLUSTER SETTING sql.stmt_diagnostics.collect_continuously.enabled=true"
+	if _, err := db.Exec(sql); err != nil {
+		return err
+	}
+
+	// The probability that a statement will be included in the profile.
+	probabilityToInclude := .001
+
+	// The minimum number of times the statement must be executed to be
+	// included. By using a count here it removes the need to explicitly list
+	// out all the statements we need to capture.
+	minNumExpectedStmts := 1000
+
+	sql = fmt.Sprintf(`
+SELECT
+    crdb_internal.request_statement_bundle(statement, %f, '%s'::INTERVAL, '12h'::INTERVAL )
+FROM (
+	SELECT DISTINCT statement FROM (
+		SELECT metadata->>'query' AS statement, 
+			CAST(statistics->'execution_statistics'->>'cnt' AS int) AS cnt 
+			FROM crdb_internal.statement_statistics
+		) 
+	WHERE cnt > %d
+)`, probabilityToInclude, minDuration, minNumExpectedStmts)
+	if _, err := db.Exec(sql); err != nil {
+		return err
+	}
+	return nil
+}
+
+// downloadProfiles downloads all profiles from the cluster and saves them to
+// the given artifacts directory to the stmtbundle sub-directory.
+func downloadProfiles(
+	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, outputDir string,
+) error {
+	stmtDir := filepath.Join(outputDir, "stmtbundle")
+	if err := os.MkdirAll(stmtDir, os.ModePerm); err != nil {
+		return err
+	}
+	query := "SELECT id, collected_at FROM system.statement_diagnostics"
+	db := cluster.Conn(ctx, logger, 1)
+	defer db.Close()
+	idRow, err := db.Query(query)
+	if err != nil {
+		return err
+	}
+	adminUIAddrs, err := cluster.ExternalAdminUIAddr(ctx, logger, cluster.Node(1))
+	if err != nil {
+		return err
+	}
+
+	client := roachtestutil.DefaultHTTPClient(cluster, logger)
+	urlPrefix := `https://` + adminUIAddrs[0] + `/_admin/v1/stmtbundle/`
+
+	var diagID string
+	var collectedAt time.Time
+	for idRow.Next() {
+		if err := idRow.Scan(&diagID, &collectedAt); err != nil {
+			return err
+		}
+		url := urlPrefix + diagID
+		filename := fmt.Sprintf("%s-%s.zip", collectedAt.Format("2006-01-02T15_04_05Z07:00"), diagID)
+		logger.Printf("downloading profile %s", filename)
+		if err := client.Download(ctx, url, filepath.Join(stmtDir, filename)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
