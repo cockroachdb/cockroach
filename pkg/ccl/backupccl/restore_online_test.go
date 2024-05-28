@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -38,6 +39,8 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	rng, _ := randutil.NewTestRand()
 
 	ctx := context.Background()
 
@@ -56,6 +59,12 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	createStmtRes := sqlDB.QueryStr(t, createStmt)
 
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
+
+	if rng.Float64() < 0.5 {
+		sqlDB.Exec(t, "SET sql_safe_updates = false;")
+		sqlDB.Exec(t, "UPDATE data.bank SET balance = balance+123;")
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN'%s'", externalStorage))
+	}
 
 	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 	defer cleanupFnRestored()
@@ -217,6 +226,8 @@ func TestOnlineRestoreTenant(t *testing.T) {
 
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
+	rng, _ := randutil.NewPseudoRand()
+
 	externalStorage := "nodelocal://1/backup"
 
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
@@ -247,6 +258,12 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	tenant10.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`)
 
 	systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO '%s'`, externalStorage))
+
+	if rng.Float64() < 0.5 {
+		tenant10.Exec(t, "SET sql_safe_updates = false;")
+		tenant10.Exec(t, "INSERT INTO foo.bar VALUES (111), (211)")
+		systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO LATEST IN'%s'`, externalStorage))
+	}
 
 	restoreTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 	defer cleanupFnRestored()
@@ -318,16 +335,8 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	var (
 		fullBackup                = "nodelocal://1/full-backup"
 		fullBackupWithRevs        = "nodelocal://1/full-backup-with-revs"
-		incrementalBackup         = "nodelocal://1/incremental-backup"
 		incrementalBackupWithRevs = "nodelocal://1/incremental-backup-with-revs"
 	)
-
-	t.Run("incremental backups are unsupported", func(t *testing.T) {
-		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", incrementalBackup))
-		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN '%s'", incrementalBackup))
-		rSQLDB.ExpectErr(t, "incremental backup not supported",
-			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackup))
-	})
 	t.Run("full backups with revision history are unsupported", func(t *testing.T) {
 		var systemTime string
 		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&systemTime)

@@ -166,9 +166,6 @@ func sendAddRemoteSSTs(
 	if encryption != nil {
 		return 0, 0, errors.AssertionFailedf("encryption not supported with online restore")
 	}
-	if len(uris) > 1 {
-		return 0, 0, errors.AssertionFailedf("online restore can only restore data from a full backup")
-	}
 
 	const targetRangeSize = 440 << 20
 
@@ -294,7 +291,15 @@ func sendAddRemoteSSTWorker(
 				return err
 			}
 
+			var currentLayer int32
 			for _, file := range entry.Files {
+				if file.Layer < currentLayer {
+					return errors.AssertionFailedf("files not sorted by layer")
+				}
+				currentLayer = file.Layer
+				if file.HasRangeKeys {
+					return errors.Newf("online restore of range keys not supported")
+				}
 				if err := assertCommonPrefix(file.BackupFileEntrySpan, entry.ElidedPrefix); err != nil {
 					return err
 				}
@@ -427,10 +432,6 @@ func checkManifestsForOnlineCompat(ctx context.Context, manifests []backuppb.Bac
 	if len(manifests) < 1 {
 		return errors.AssertionFailedf("expected at least 1 backup manifest")
 	}
-	// TODO(online-restore): Remove once we support layer ordering.
-	if len(manifests) > 1 {
-		return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: restoring from an incremental backup not supported")
-	}
 
 	// TODO(online-restore): Remove once we support layer ordering and have tested some reasonable number of layers.
 	const layerLimit = 16
@@ -439,7 +440,7 @@ func checkManifestsForOnlineCompat(ctx context.Context, manifests []backuppb.Bac
 	}
 
 	for _, manifest := range manifests {
-		if !manifest.RevisionStartTime.IsEmpty() || !manifest.StartTime.IsEmpty() || manifest.MVCCFilter == backuppb.MVCCFilter_All {
+		if !manifest.RevisionStartTime.IsEmpty() || manifest.MVCCFilter == backuppb.MVCCFilter_All {
 			return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: restoring from a revision history backup not supported")
 		}
 	}
