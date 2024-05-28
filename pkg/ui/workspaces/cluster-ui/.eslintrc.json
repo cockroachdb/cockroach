@@ -1,17 +1,96 @@
 {
   "root": true,
-  "extends": "@cockroachlabs/eslint-config",
-  "plugins": ["@cockroachlabs/eslint-plugin-crdb"],
+  "extends": [
+    "@cockroachlabs/eslint-config",
+    "plugin:import/recommended",
+    "plugin:import/typescript"
+  ],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "project": "./tsconfig.json"
+  },
+  "plugins": [
+    "local-rules"
+  ],
   "env": {
     "browser": true,
     "node": true
   },
   "rules": {
+    // Don't allow stray items within compound components.
+    "local-rules/restricted-compound-components": "error",
+    // Don't allow stray `debugger` statements in frontend code.
+    "no-debugger": "error",
+    // Disabled for tracking because we only link to internal sites/docs.
+    "react/jsx-no-target-blank": "off",
+    // This rule errors for imports using a webpack alias.
+    "import/no-unresolved": "off",
+    "import/no-extraneous-dependencies": [
+      "error",
+      {
+        "devDependencies": [
+          "**/*.test.tsx",
+          "**/*.test.ts",
+          "**/*.spec.tsx",
+          "**/*.spec.ts",
+          "**/*.stories.tsx",
+          "src/storybook/**"
+        ],
+        "optionalDependencies": false,
+        "peerDependencies": false
+      }
+    ],
+    "import/order": [
+      "error",
+      {
+        "newlines-between": "always",
+        "groups": [
+          "builtin",
+          "external",
+          "internal",
+          "parent",
+          "sibling",
+          "index",
+          "type"
+        ],
+        "pathGroups": [
+          {
+            // Webpack aliases look like external imports, so we need to explicitly mark them as internal.
+            "pattern": "src/**",
+            "group": "internal"
+          }
+        ],
+        "pathGroupsExcludedImportTypes": [
+          "src"
+        ]
+      }
+    ],
+    // Allow for variables prefixed with _ to be unused.
+    // Note: https://stackoverflow.com/questions/64052318/how-to-disable-warn-about-some-unused-params-but-keep-typescript-eslint-no-un
+    "no-unused-vars": "off",
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+    "@typescript-eslint/no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "lodash",
+            "message": "Use 'import foo from \"lodash/foo\";' instead of 'import _ from \"lodash\"' or 'import { foo } from \"lodash\"'.",
+            "allowTypeImports": true
+          }
+        ]
+      }
+    ],
     "@typescript-eslint/interface-name-prefix": "off",
     "@typescript-eslint/no-explicit-any": "warn",
     "@typescript-eslint/no-namespace": "off",
-    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
-    "@cockroachlabs/crdb/require-antd-style-import": "error",
     // Instead of using console log methods directly, cluster-ui code should
     // call the getLogger() method to provide the appropriate logger.
     "no-console": "error",
