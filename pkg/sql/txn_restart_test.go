@@ -1530,6 +1530,16 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
+	defer sqlDB.Close()
+
+	// Tests rely on a smaller buffer size. The setting only affects newly created
+	// connections, so we take care to create new connections for each test using
+	// the Conn() method.
+	ctx := context.Background()
+	sqlConn, err := sqlDB.Conn(ctx)
+	require.NoError(t, err)
+	_, err = sqlConn.ExecContext(ctx, "SET CLUSTER SETTING sql.defaults.results_buffer.size = '16KiB'")
+	require.NoError(t, err)
 
 	tests := []struct {
 		name                              string
@@ -1555,22 +1565,8 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Cleanup the connection state after each test so the next one can run
-			// statements.
-			// TODO(andrei): Once we're on go 1.9, this test should use the new
-			// db.Conn() method to tie each test to a connection; then this cleanup
-			// wouldn't be necessary. Also, the test is currently technically
-			// incorrect, as there's no guarantee that the state check at the end will
-			// happen on the right connection.
-			defer func(autoCommit bool) {
-				if autoCommit {
-					// No cleanup necessary.
-					return
-				}
-				if _, err := sqlDB.Exec("ROLLBACK"); err != nil {
-					t.Fatal(err)
-				}
-			}(tc.autoCommit)
+			sqlConn, err := sqlDB.Conn(ctx)
+			require.NoError(t, err)
 
 			var savepoint string
 			if tc.clientDirectedRetry {
@@ -1597,12 +1593,12 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
         FROM generate_series(1, 10000) AS t(x);
 				%s`,
 				prefix, suffix)
-			_, err := sqlDB.Exec(sql)
+			_, err = sqlConn.ExecContext(ctx, sql)
 			if !isRetryableErr(err) {
 				t.Fatalf("expected retriable error, got: %v", err)
 			}
 			var state string
-			if err := sqlDB.QueryRow("SHOW TRANSACTION STATUS").Scan(&state); err != nil {
+			if err := sqlConn.QueryRowContext(ctx, "SHOW TRANSACTION STATUS").Scan(&state); err != nil {
 				t.Fatal(err)
 			}
 			if expStateStr := tc.expectedTxnStateAfterRetriableErr; state != expStateStr {

@@ -740,11 +740,13 @@ func TestZipRetries(t *testing.T) {
 			}
 		}()
 
+		// Lower the buffer size so that an error is returned when running the
+		// generate_series query.
 		sqlURL := url.URL{
 			Scheme:   "postgres",
 			User:     url.User(username.RootUser),
 			Host:     s.AdvSQLAddr(),
-			RawQuery: "sslmode=disable",
+			RawQuery: "sslmode=disable&results_buffer_size=16KiB",
 		}
 		sqlConn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, sqlURL.String())
 		defer func() {
