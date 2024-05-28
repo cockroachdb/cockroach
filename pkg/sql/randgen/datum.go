@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
+	"github.com/twpayne/go-geom"
 )
 
 // RandDatum generates a random Datum of the given type.
@@ -143,13 +144,47 @@ func RandDatumWithNullChance(
 		if srid == 0 {
 			srid = geopb.DefaultGeographySRID
 		}
-		return tree.NewDGeography(geogen.RandomGeography(rng, srid))
+		// Limit the maximum geometry size to 16 megabytes.
+		const maxSize = uintptr(1024 * 1024 * 16)
+		maxRetries := 5
+		// Retry until we get a geography below the target size.
+		for maxRetries > 0 {
+			newGeo := tree.NewDGeography(geogen.RandomGeography(rng, srid))
+			if newGeo.Size() < maxSize {
+				return newGeo
+			}
+			maxRetries -= 1
+		}
+		// Otherwise, pick a simple random polygon.
+		geog, err := geo.MakeGeographyFromGeomT(geogen.RandomPolygon(rng, geogen.MakeRandomGeomBoundsForGeography(), gm.SRID, geom.NoLayout))
+		if err != nil {
+			panic(err)
+		}
+		dgm := tree.NewDGeography(geog)
+		return dgm
 	case types.GeometryFamily:
 		gm, err := typ.GeoMetadata()
 		if err != nil {
 			panic(err)
 		}
-		return tree.NewDGeometry(geogen.RandomGeometry(rng, gm.SRID))
+		// Limit the maximum geometry size to 16 megabytes.
+		const maxSize = uintptr(1024 * 1024 * 16)
+		maxRetries := 5
+		// Retry until we get a geography below the target size.
+		for maxRetries > 0 {
+			newGeom := tree.NewDGeometry(geogen.RandomGeometry(rng, gm.SRID))
+			if newGeom.Size() < maxSize {
+				return newGeom
+			}
+			maxRetries -= 1
+		}
+		// Otherwise, pick a simple random polygon.
+		geom, err := geo.MakeGeometryFromGeomT(geogen.RandomPolygon(rng, geogen.MakeRandomGeomBounds(), gm.SRID, geom.NoLayout))
+		if err != nil {
+			panic(err)
+		}
+		dgm := tree.NewDGeometry(geom)
+		return dgm
 	case types.DecimalFamily:
 		d := &tree.DDecimal{}
 		// int64(rng.Uint64()) to get negative numbers, too
