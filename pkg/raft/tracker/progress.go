@@ -96,13 +96,13 @@ type Progress struct {
 	// This is always true on the leader.
 	RecentActive bool
 
-	// MsgAppFlowPaused is used when the MsgApp flow to a node is throttled. This
+	// MsgAppProbesPaused is used when the MsgApp flow to a node is throttled. This
 	// happens in StateProbe, or StateReplicate with saturated Inflights. In both
 	// cases, we need to continue sending MsgApp once in a while to guarantee
-	// progress, but we only do so when MsgAppFlowPaused is false (it is reset on
+	// progress, but we only do so when MsgAppProbesPaused is false (it is reset on
 	// receiving a heartbeat response), to not overflow the receiver. See
-	// IsPaused().
-	MsgAppFlowPaused bool
+	// IsPaused() and ShouldSendMsgApp().
+	MsgAppProbesPaused bool
 
 	// Inflights is a sliding window for the inflight messages.
 	// Each inflight message contains one or more log entries.
@@ -122,10 +122,10 @@ type Progress struct {
 	IsLearner bool
 }
 
-// ResetState moves the Progress into the specified State, resetting MsgAppFlowPaused,
+// ResetState moves the Progress into the specified State, resetting MsgAppProbesPaused,
 // PendingSnapshot, and Inflights.
 func (pr *Progress) ResetState(state StateType) {
-	pr.MsgAppFlowPaused = false
+	pr.MsgAppProbesPaused = false
 	pr.PendingSnapshot = 0
 	pr.State = state
 	pr.Inflights.reset()
@@ -173,7 +173,7 @@ func (pr *Progress) SentEntries(entries int, bytes uint64) {
 		pr.Next += uint64(entries)
 		pr.Inflights.Add(pr.Next-1, bytes)
 	}
-	pr.MsgAppFlowPaused = true
+	pr.MsgAppProbesPaused = true
 }
 
 // CanSendEntries returns true if the flow control state allows sending at least
@@ -248,7 +248,7 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 	pr.Next = max(min(rejected, matchHint+1), pr.Match+1)
 	// Regress the sentCommit since it unlikely has been applied.
 	pr.sentCommit = min(pr.sentCommit, pr.Next-1)
-	pr.MsgAppFlowPaused = false
+	pr.MsgAppProbesPaused = false
 	return true
 }
 
@@ -261,9 +261,9 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 func (pr *Progress) IsPaused() bool {
 	switch pr.State {
 	case StateProbe:
-		return pr.MsgAppFlowPaused
+		return pr.MsgAppProbesPaused
 	case StateReplicate:
-		return pr.MsgAppFlowPaused && pr.Inflights.Full()
+		return pr.MsgAppProbesPaused && pr.Inflights.Full()
 	case StateSnapshot:
 		return true
 	default:
@@ -293,7 +293,7 @@ func (pr *Progress) IsPaused() bool {
 func (pr *Progress) ShouldSendMsgApp(last, commit uint64) bool {
 	switch pr.State {
 	case StateProbe:
-		return !pr.MsgAppFlowPaused
+		return !pr.MsgAppProbesPaused
 
 	case StateReplicate:
 		// Send a MsgApp containing the latest commit index if:
@@ -307,14 +307,14 @@ func (pr *Progress) ShouldSendMsgApp(last, commit uint64) bool {
 			return false
 		}
 		// Don't send a MsgApp if we are in a throttled replication state, i.e.
-		// pr.Inflights.Full() && pr.MsgAppFlowPaused.
+		// pr.Inflights.Full() && pr.MsgAppProbesPaused.
 		if pr.IsPaused() {
 			return false
 		}
 		// We are here if the follower's log is not up-to-date, and the flow is not
 		// paused. We can always send a MsgApp, except when everything is already
 		// in-flight, and the last MsgApp was recent.
-		return pr.Next <= last || !pr.MsgAppFlowPaused
+		return pr.Next <= last || !pr.MsgAppProbesPaused
 
 	case StateSnapshot:
 		return false

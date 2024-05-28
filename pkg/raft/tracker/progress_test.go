@@ -24,14 +24,14 @@ func TestProgressString(t *testing.T) {
 	ins := NewInflights(1, 0)
 	ins.Add(123, 1)
 	pr := &Progress{
-		Match:            1,
-		Next:             2,
-		State:            StateSnapshot,
-		PendingSnapshot:  123,
-		RecentActive:     false,
-		MsgAppFlowPaused: true,
-		IsLearner:        true,
-		Inflights:        ins,
+		Match:              1,
+		Next:               2,
+		State:              StateSnapshot,
+		PendingSnapshot:    123,
+		RecentActive:       false,
+		MsgAppProbesPaused: true,
+		IsLearner:          true,
+		Inflights:          ins,
 	}
 	const exp = `StateSnapshot match=1 next=2 learner paused pendingSnap=123 inactive inflight=1[full]`
 	assert.Equal(t, exp, pr.String())
@@ -53,29 +53,29 @@ func TestProgressIsPaused(t *testing.T) {
 	}
 	for i, tt := range tests {
 		p := &Progress{
-			State:            tt.state,
-			MsgAppFlowPaused: tt.paused,
-			Inflights:        NewInflights(256, 0),
+			State:              tt.state,
+			MsgAppProbesPaused: tt.paused,
+			Inflights:          NewInflights(256, 0),
 		}
 		assert.Equal(t, tt.w, p.IsPaused(), i)
 	}
 }
 
-// TestProgressResume ensures that MaybeDecrTo resets MsgAppFlowPaused, and
+// TestProgressResume ensures that MaybeDecrTo resets MsgAppProbesPaused, and
 // MaybeUpdate does not.
 //
 // TODO(pav-kv): there is little sense in testing these micro-behaviours in the
 // struct. We should test the visible behaviour instead.
 func TestProgressResume(t *testing.T) {
 	p := &Progress{
-		Next:             2,
-		MsgAppFlowPaused: true,
+		Next:               2,
+		MsgAppProbesPaused: true,
 	}
 	p.MaybeDecrTo(1, 1)
-	assert.False(t, p.MsgAppFlowPaused)
-	p.MsgAppFlowPaused = true
+	assert.False(t, p.MsgAppProbesPaused)
+	p.MsgAppProbesPaused = true
 	p.MaybeUpdate(2)
-	assert.True(t, p.MsgAppFlowPaused)
+	assert.True(t, p.MsgAppProbesPaused)
 }
 
 func TestProgressBecomeProbe(t *testing.T) {
