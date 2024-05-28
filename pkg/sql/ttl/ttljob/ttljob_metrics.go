@@ -197,24 +197,41 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 		return err
 	}
 
-	for _, c := range []struct {
+	type statsQuery struct {
 		opName string
 		query  string
 		args   []interface{}
 		gauge  *aggmetric.Gauge
-	}{
-		{
+	}
+	var statsQueries []statsQuery
+	if ttlKnobs := execCfg.TTLTestingKnobs; ttlKnobs != nil && ttlKnobs.ExtraStatsQuery != "" {
+		statsQueries = append(statsQueries, statsQuery{
+			opName: fmt.Sprintf("ttl extra stats query %s", relationName),
+			query:  ttlKnobs.ExtraStatsQuery,
+		},
+		)
+	}
+	statsQueries = append(statsQueries,
+		statsQuery{
 			opName: fmt.Sprintf("ttl num rows stats %s", relationName),
-			query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
-			gauge:  m.TotalRows,
+			query: fmt.Sprintf(
+				`SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
+				details.TableID, aost.String(),
+			),
+			gauge: m.TotalRows,
 		},
-		{
+		statsQuery{
 			opName: fmt.Sprintf("ttl num expired rows stats %s", relationName),
-			query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE (` + string(ttlExpr) + `) < $1`,
-			args:   []interface{}{details.Cutoff},
-			gauge:  m.TotalExpiredRows,
+			query: fmt.Sprintf(
+				`SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE (`+string(ttlExpr)+`) < $1`,
+				details.TableID, aost.String(),
+			),
+			args:  []interface{}{details.Cutoff},
+			gauge: m.TotalExpiredRows,
 		},
-	} {
+	)
+
+	for _, c := range statsQueries {
 		// User a super low quality of service (lower than TTL low), as we don't
 		// really care if statistics gets left behind and prefer the TTL job to
 		// have priority.
@@ -224,7 +241,7 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 			c.opName,
 			nil,
 			getInternalExecutorOverride(qosLevel),
-			fmt.Sprintf(c.query, details.TableID, aost.String()),
+			c.query,
 			c.args...,
 		)
 		if err != nil {
