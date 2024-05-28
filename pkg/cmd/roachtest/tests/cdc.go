@@ -231,6 +231,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		// Start the server in its own monitor to not block ct.mon.Wait()
 		serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, webhookPort)
 		m := ct.cluster.NewMonitor(ct.ctx, ct.workloadNode)
+		restartSink := make(chan struct{}, 1)
 		m.Go(func(ctx context.Context) error {
 			var err error
 			for ctx.Err() == nil {
@@ -239,6 +240,13 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 					fmt.Printf("webhook server died: %v\n", err)
 					ct.t.L().Printf("webhook server died: %v", err)
 				}
+				// Wait to be told to restart.
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-restartSink:
+				}
+				// TODO: maybe sleep
 			}
 			return err
 		})
@@ -355,7 +363,8 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 					return nil
 				}
 				restart := func(ctx context.Context) error {
-					return nil // it restarts on its own?
+					restartSink <- struct{}{}
+					return nil
 				}
 				return func() error {
 					t := time.NewTicker(period)
