@@ -1491,11 +1491,12 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 			},
 		},
 		{
-			desc:  "results_buffer_size is not configurable from options",
-			query: "user=root&options=-c%20results_buffer_size=42",
+			desc:  "results_buffer_size is configurable from options",
+			query: "user=root&options=-c%20results_buffer_size=512kb",
 			assert: func(t *testing.T, args sql.SessionArgs, err error) {
-				require.Error(t, err)
-				require.Regexp(t, "options: parameter \"results_buffer_size\" cannot be changed", err)
+				require.NoError(t, err)
+				require.Equal(t, "root", args.User.Normalized())
+				require.EqualValues(t, 512000, args.ConnResultsBufferSize)
 			},
 		},
 		{
