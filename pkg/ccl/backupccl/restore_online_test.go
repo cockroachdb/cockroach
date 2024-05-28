@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -50,38 +51,49 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	}
 	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
+
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
+	defer cleanupFnRestored()
+
 	externalStorage := "nodelocal://1/backup"
 
 	createStmt := `SELECT create_statement FROM [SHOW CREATE TABLE data.bank]`
 	createStmtRes := sqlDB.QueryStr(t, createStmt)
 
-	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
+	testutils.RunTrueAndFalse(t, "incremental", func(t *testing.T, incremental bool) {
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
 
-	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
-	defer cleanupFnRestored()
-	var preRestoreTs float64
-	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
+		if incremental {
+			sqlDB.Exec(t, "UPDATE data.bank SET balance = balance+123 where true;")
+			sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+		}
 
-	bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage)
+		var preRestoreTs float64
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
 
-	fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, tc.Conns[0], "data", fingerprintutils.Stripped())
-	require.NoError(t, err)
-	fpDst, err := fingerprintutils.FingerprintDatabase(ctx, rtc.Conns[0], "data", fingerprintutils.Stripped())
-	require.NoError(t, err)
-	require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+		bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage)
 
-	assertMVCCOnlineRestore(t, rSQLDB, preRestoreTs)
-	assertOnlineRestoreWithRekeying(t, sqlDB, rSQLDB)
+		fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, tc.Conns[0], "data", fingerprintutils.Stripped())
+		require.NoError(t, err)
+		fpDst, err := fingerprintutils.FingerprintDatabase(ctx, rtc.Conns[0], "data", fingerprintutils.Stripped())
+		require.NoError(t, err)
+		require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
 
-	// Wait for the download job to complete.
-	var downloadJobID jobspb.JobID
-	rSQLDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
-	jobutils.WaitForJobToSucceed(t, rSQLDB, downloadJobID)
+		assertMVCCOnlineRestore(t, rSQLDB, preRestoreTs)
+		assertOnlineRestoreWithRekeying(t, sqlDB, rSQLDB)
 
-	rSQLDB.CheckQueryResults(t, createStmt, createStmtRes)
-	sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+		// Wait for the download job to complete.
+		var downloadJobID jobspb.JobID
+		rSQLDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
+		jobutils.WaitForJobToSucceed(t, rSQLDB, downloadJobID)
+
+		rSQLDB.CheckQueryResults(t, createStmt, createStmtRes)
+		sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+
+		rSQLDB.Exec(t, "DROP DATABASE data CASCADE")
+	})
+
 }
-
 func TestOnlineRestorePartitioned(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -246,56 +258,68 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	tenant10 := sqlutils.MakeSQLRunner(conn10)
 	tenant10.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`)
 
-	systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO '%s'`, externalStorage))
+	testutils.RunTrueAndFalse(t, "incremental", func(t *testing.T, incremental bool) {
 
-	restoreTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
-	defer cleanupFnRestored()
+		systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO '%s'`, externalStorage))
 
-	var preRestoreTs float64
-	tenant10.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
+		if incremental {
+			tenant10.Exec(t, "INSERT INTO foo.bar VALUES (111), (211)")
+			systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO LATEST IN'%s'`, externalStorage))
+		}
 
-	// Restore the tenant twice: once below and once above the old ID, to show
-	// that we can rewrite it in either direction.
-	rSQLDB.Exec(t, fmt.Sprintf("RESTORE TENANT 10 FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, TENANT_NAME = 'below', TENANT = '2'", externalStorage))
-	rSQLDB.Exec(t, fmt.Sprintf("RESTORE TENANT 10 FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, TENANT_NAME = 'above', TENANT = '20'", externalStorage))
-	rSQLDB.Exec(t, "ALTER TENANT below STOP SERVICE")
-	rSQLDB.Exec(t, "ALTER TENANT above STOP SERVICE")
-	rSQLDB.CheckQueryResults(t, "SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT below]",
-		rSQLDB.QueryStr(t, `SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT above]`))
+		restoreTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
+		defer cleanupFnRestored()
 
-	secondaryStopper := stop.NewStopper()
-	_, cBelow := serverutils.StartTenant(
-		t, restoreTC.Server(0), base.TestTenantArgs{
-			TenantName: "below",
-			TenantID:   roachpb.MustMakeTenantID(2),
-			Stopper:    secondaryStopper,
-		})
-	_, cAbove := serverutils.StartTenant(
-		t, restoreTC.Server(0), base.TestTenantArgs{
-			TenantName: "above",
-			TenantID:   roachpb.MustMakeTenantID(20),
-			Stopper:    secondaryStopper,
-		})
+		var preRestoreTs float64
+		tenant10.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
 
-	defer func() {
-		cBelow.Close()
-		cAbove.Close()
-		secondaryStopper.Stop(context.Background())
-	}()
-	dbBelow, dbAbove := sqlutils.MakeSQLRunner(cBelow), sqlutils.MakeSQLRunner(cAbove)
-	dbBelow.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
-	dbAbove.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
+		// Restore the tenant twice: once below and once above the old ID, to show
+		// that we can rewrite it in either direction.
+		rSQLDB.Exec(t, fmt.Sprintf("RESTORE TENANT 10 FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, TENANT_NAME = 'below', TENANT = '2'", externalStorage))
+		rSQLDB.Exec(t, fmt.Sprintf("RESTORE TENANT 10 FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, TENANT_NAME = 'above', TENANT = '20'", externalStorage))
+		rSQLDB.Exec(t, "ALTER TENANT below STOP SERVICE")
+		rSQLDB.Exec(t, "ALTER TENANT above STOP SERVICE")
+		rSQLDB.CheckQueryResults(t, "SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT below]",
+			rSQLDB.QueryStr(t, `SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT above]`))
 
-	// Ensure the restore of a tenant was not mvcc
-	var maxRestoreMVCCTimestamp float64
-	dbBelow.QueryRow(t, "SELECT max(crdb_internal_mvcc_timestamp) FROM foo.bar").Scan(&maxRestoreMVCCTimestamp)
-	require.Greater(t, preRestoreTs, maxRestoreMVCCTimestamp)
-	dbAbove.QueryRow(t, "SELECT max(crdb_internal_mvcc_timestamp) FROM foo.bar").Scan(&maxRestoreMVCCTimestamp)
-	require.Greater(t, preRestoreTs, maxRestoreMVCCTimestamp)
+		secondaryStopper := stop.NewStopper()
+		_, cBelow := serverutils.StartTenant(
+			t, restoreTC.Server(0), base.TestTenantArgs{
+				TenantName: "below",
+				TenantID:   roachpb.MustMakeTenantID(2),
+				Stopper:    secondaryStopper,
+			})
+		_, cAbove := serverutils.StartTenant(
+			t, restoreTC.Server(0), base.TestTenantArgs{
+				TenantName: "above",
+				TenantID:   roachpb.MustMakeTenantID(20),
+				Stopper:    secondaryStopper,
+			})
 
-	dbAbove.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
-	dbBelow.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
-	rSQLDB.CheckQueryResults(t, jobutils.GetExternalBytesTenantKeySpace, [][]string{{"0"}})
+		defer func() {
+			cBelow.Close()
+			cAbove.Close()
+			secondaryStopper.Stop(context.Background())
+		}()
+		dbBelow, dbAbove := sqlutils.MakeSQLRunner(cBelow), sqlutils.MakeSQLRunner(cAbove)
+		dbBelow.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
+		dbAbove.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
+
+		// Ensure the restore of a tenant was not mvcc
+		var maxRestoreMVCCTimestamp float64
+		dbBelow.QueryRow(t, "SELECT max(crdb_internal_mvcc_timestamp) FROM foo.bar").Scan(&maxRestoreMVCCTimestamp)
+		require.Greater(t, preRestoreTs, maxRestoreMVCCTimestamp)
+		dbAbove.QueryRow(t, "SELECT max(crdb_internal_mvcc_timestamp) FROM foo.bar").Scan(&maxRestoreMVCCTimestamp)
+		require.Greater(t, preRestoreTs, maxRestoreMVCCTimestamp)
+
+		dbAbove.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+		dbBelow.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+		rSQLDB.CheckQueryResults(t, jobutils.GetExternalBytesTenantKeySpace, [][]string{{"0"}})
+		rSQLDB.Exec(t, "ALTER TENANT below STOP SERVICE")
+		rSQLDB.Exec(t, "ALTER TENANT above STOP SERVICE")
+		rSQLDB.Exec(t, "DROP TENANT above")
+		rSQLDB.Exec(t, "DROP TENANT below")
+	})
 }
 
 func TestOnlineRestoreErrors(t *testing.T) {
@@ -318,16 +342,8 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	var (
 		fullBackup                = "nodelocal://1/full-backup"
 		fullBackupWithRevs        = "nodelocal://1/full-backup-with-revs"
-		incrementalBackup         = "nodelocal://1/incremental-backup"
 		incrementalBackupWithRevs = "nodelocal://1/incremental-backup-with-revs"
 	)
-
-	t.Run("incremental backups are unsupported", func(t *testing.T) {
-		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", incrementalBackup))
-		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN '%s'", incrementalBackup))
-		rSQLDB.ExpectErr(t, "incremental backup not supported",
-			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackup))
-	})
 	t.Run("full backups with revision history are unsupported", func(t *testing.T) {
 		var systemTime string
 		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&systemTime)
@@ -338,7 +354,7 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	t.Run("incremental backups with revision history are unsupported", func(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s' WITH revision_history", incrementalBackupWithRevs))
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN '%s' WITH revision_history", incrementalBackupWithRevs))
-		rSQLDB.ExpectErr(t, "incremental backup not supported",
+		rSQLDB.ExpectErr(t, "revision history backup not supported",
 			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackupWithRevs))
 	})
 	t.Run("external storage locations that don't support early boot are unsupported", func(t *testing.T) {
@@ -358,7 +374,7 @@ func bankOnlineRestore(
 	t *testing.T, sqlDB *sqlutils.SQLRunner, numAccounts int, externalStorage string,
 ) {
 	// Create a table in the default database to force table id rewriting.
-	sqlDB.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY, s STRING);")
+	sqlDB.Exec(t, "CREATE TABLE IF NOT EXISTS foo (i INT PRIMARY KEY, s STRING);")
 
 	sqlDB.Exec(t, "CREATE DATABASE data")
 	sqlDB.Exec(t, fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage))
@@ -382,8 +398,9 @@ func assertMVCCOnlineRestore(t *testing.T, sqlDB *sqlutils.SQLRunner, preRestore
 	// Check that we can write on top of OR data
 	var maxRestoreMVCCTimestamp float64
 	sqlDB.QueryRow(t, "SELECT max(crdb_internal_mvcc_timestamp) FROM data.bank").Scan(&maxRestoreMVCCTimestamp)
-	sqlDB.Exec(t, "SET sql_safe_updates = false;")
-	sqlDB.Exec(t, "UPDATE data.bank SET balance = balance+1;")
+
+	// The where true conditional avoids the need to set sql_updates to true.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = balance+1 where true;")
 
 	var updateMVCCTimestamp float64
 	sqlDB.QueryRow(t, "SELECT min(crdb_internal_mvcc_timestamp) FROM data.bank").Scan(&updateMVCCTimestamp)
