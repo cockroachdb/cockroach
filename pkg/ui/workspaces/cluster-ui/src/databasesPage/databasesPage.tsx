@@ -14,7 +14,6 @@ import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
 import classnames from "classnames/bind";
-
 import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
 import { Pagination } from "src/pagination";
@@ -27,10 +26,13 @@ import {
   SortedTable,
   SortSetting,
 } from "src/sortedtable";
-import styles from "./databasesPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { syncHistory, tableStatsClusterSetting, unique } from "src/util";
+import { merge } from "lodash";
+import { UIConfigState } from "src/store";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
@@ -42,14 +44,7 @@ import {
   Filters,
   handleFiltersFromQueryString,
 } from "../queryFilter";
-import { merge } from "lodash";
-import { UIConfigState } from "src/store";
 import { TableStatistics } from "../tableStatistics";
-import {
-  DatabaseNameCell,
-  IndexRecCell,
-  DiskSizeCell,
-} from "./databaseTableCells";
 import {
   DatabaseSpanStatsRow,
   DatabaseTablesResponse,
@@ -57,8 +52,14 @@ import {
   SqlApiQueryResponse,
   SqlExecutionErrorMessage,
 } from "../api";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 import { checkInfoAvailable } from "../databases";
+
+import {
+  DatabaseNameCell,
+  IndexRecCell,
+  DiskSizeCell,
+} from "./databaseTableCells";
+import styles from "./databasesPage.module.scss";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);

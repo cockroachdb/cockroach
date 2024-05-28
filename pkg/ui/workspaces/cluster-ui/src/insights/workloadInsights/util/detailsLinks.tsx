@@ -8,10 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { StmtInsightEvent } from "../../types";
 import React from "react";
-import { HexStringToInt64String } from "../../../util";
 import { Link } from "react-router-dom";
+
+import { StmtInsightEvent } from "../../types";
+import { HexStringToInt64String } from "../../../util";
 import { StatementLinkTarget } from "../../../statementsTable";
 import { TransactionLinkTarget } from "../../../transactionsTable";
 

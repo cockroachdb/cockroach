@@ -8,8 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { fetchDataJSON } from "./fetchData";
 import { getLogger } from "../util";
+
+import { fetchDataJSON } from "./fetchData";
 
 export type SqlExecutionRequest = {
   statements: SqlStatement[];

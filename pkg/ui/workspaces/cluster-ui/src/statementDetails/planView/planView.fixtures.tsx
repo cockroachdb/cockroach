@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { GlobalPropertiesType } from "./planView";
 
 type IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;

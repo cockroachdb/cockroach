@@ -14,11 +14,10 @@ import "antd/lib/row/style";
 import classNames from "classnames/bind";
 import React from "react";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-
 import { ContendedExecution, ExecutionType } from "src/activeExecutions";
-import { capitalize, Duration, NO_SAMPLES_FOUND } from "../util";
-
 import { Heading } from "@cockroachlabs/ui-components";
+
+import { capitalize, Duration, NO_SAMPLES_FOUND } from "../util";
 import { ExecutionContentionTable } from "../activeExecutions/activeTransactionsTable/execContentionTable";
 import styles from "../statementDetails/statementDetails.module.scss";
 

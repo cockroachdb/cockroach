@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+
 import {
   DatabaseDetailsReqParams,
   DatabaseDetailsResponse,
@@ -16,7 +18,6 @@ import {
   ErrorWithKey,
   SqlApiResponse,
 } from "../../api";
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 
 type DatabaseDetailsWithKey = {

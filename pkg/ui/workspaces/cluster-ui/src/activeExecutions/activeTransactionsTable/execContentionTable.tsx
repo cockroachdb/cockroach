@@ -9,13 +9,14 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { Link } from "react-router-dom";
+import { Tooltip } from "@cockroachlabs/ui-components";
+
 import { ColumnDescriptor, SortedTable } from "../../sortedtable";
 import { ContendedExecution, ExecutionType } from "../types";
-import { Link } from "react-router-dom";
 import { StatusIcon } from "../statusIcon";
 import { executionsTableTitles } from "../execTableCommon";
 import { DATE_FORMAT_24_TZ, Duration, limitText } from "../../util";
-import { Tooltip } from "@cockroachlabs/ui-components";
 import { Timestamp } from "../../timestamp";
 
 const getID = (item: ContendedExecution, execType: ExecutionType) =>

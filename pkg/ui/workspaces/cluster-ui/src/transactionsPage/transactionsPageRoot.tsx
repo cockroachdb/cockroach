@@ -9,17 +9,20 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { TransactionViewType } from "./transactionsPageTypes";
 import { Option } from "src/selectWithDescription/selectWithDescription";
 import { SQLActivityRootControls } from "src/sqlActivityRootControls/sqlActivityRootControls";
-import { TransactionsPageProps } from "./transactionsPage";
-import { TransactionsPage } from ".";
+import { Anchor } from "src/anchor";
+
 import { statementsSql } from "../util/docs";
+
+import { TransactionViewType } from "./transactionsPageTypes";
+import { TransactionsPageProps } from "./transactionsPage";
 import {
   ActiveTransactionsView,
   ActiveTransactionsViewProps,
 } from "./activeTransactionsView";
-import { Anchor } from "src/anchor";
+
+import { TransactionsPage } from ".";
 
 export type TransactionsPageRootProps = {
   fingerprintsPageProps: TransactionsPageProps;

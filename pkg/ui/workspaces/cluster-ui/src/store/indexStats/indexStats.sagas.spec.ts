@@ -10,21 +10,22 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { PayloadAction } from "@reduxjs/toolkit";
-import { generateTableID } from "../../util";
 import Long from "long";
-import RecommendationType = cockroach.sql.IndexRecommendation.RecommendationType;
 import {
   EffectProviders,
   StaticProvider,
   throwError,
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
+import { expectSaga } from "redux-saga-test-plan";
+
 import {
   getIndexStats,
   resetIndexStats,
   TableIndexStatsRequest,
 } from "../../api/indexDetailsApi";
-import { expectSaga } from "redux-saga-test-plan";
+import { generateTableID } from "../../util";
+
 import {
   refreshIndexStatsSaga,
   requestIndexStatsSaga,
@@ -36,6 +37,8 @@ import {
   reducer,
   ResetIndexUsageStatsPayload,
 } from "./indexStats.reducer";
+
+import RecommendationType = cockroach.sql.IndexRecommendation.RecommendationType;
 
 describe("IndexStats sagas", () => {
   const database = "test_db";

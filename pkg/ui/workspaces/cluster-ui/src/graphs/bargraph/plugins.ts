@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 
 import uPlot, { Plugin } from "uplot";
+import moment from "moment-timezone";
+
 import { AxisUnits } from "../utils/domain";
 import {
   Bytes,
@@ -18,7 +20,6 @@ import {
   FormatWithTimezone,
   DATE_WITH_SECONDS_FORMAT_24_TZ,
 } from "../../util";
-import moment from "moment-timezone";
 
 // Fallback color for series stroke if one is not defined.
 const DEFAULT_STROKE = "#7e89a9";

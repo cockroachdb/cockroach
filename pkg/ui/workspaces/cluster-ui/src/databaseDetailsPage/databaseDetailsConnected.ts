@@ -13,6 +13,7 @@ import { withRouter, RouteComponentProps } from "react-router-dom";
 import { Dispatch } from "redux";
 import { databaseNameCCAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
+
 import { AppState } from "../store";
 import { databaseDetailsReducer } from "../store/databaseDetails";
 const databaseDetailsActions = databaseDetailsReducer.actions;
@@ -21,12 +22,6 @@ import {
   LocalStorageKeys,
 } from "../store/localStorage";
 import { actions as tableDetailsActions } from "../store/databaseTableDetails";
-import {
-  DatabaseDetailsPage,
-  DatabaseDetailsPageActions,
-  DatabaseDetailsPageData,
-  ViewMode,
-} from "./databaseDetailsPage";
 import { actions as analyticsActions } from "../store/analytics";
 import { Filters } from "../queryFilter";
 import { nodeRegionsByIDSelector } from "../store/nodes";
@@ -44,6 +39,13 @@ import {
   selectIndexRecommendationsEnabled,
 } from "../store/clusterSettings/clusterSettings.selectors";
 import { actions as nodesActions } from "../store/nodes/nodes.reducer";
+
+import {
+  DatabaseDetailsPage,
+  DatabaseDetailsPageActions,
+  DatabaseDetailsPageData,
+  ViewMode,
+} from "./databaseDetailsPage";
 
 const mapStateToProps = (
   state: AppState,

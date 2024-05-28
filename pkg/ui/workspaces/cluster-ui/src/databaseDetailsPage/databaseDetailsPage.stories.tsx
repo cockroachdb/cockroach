@@ -11,24 +11,23 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import _ from "lodash";
-
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import {
   randomName,
   randomRole,
   randomTablePrivilege,
 } from "src/storybook/fixtures";
+import * as H from "history";
+import moment from "moment-timezone";
+import { defaultFilters } from "src/queryFilter";
+import { indexUnusedDuration } from "src/util/constants";
+
 import {
   DatabaseDetailsPage,
   DatabaseDetailsPageDataTable,
   DatabaseDetailsPageProps,
   ViewMode,
 } from "./databaseDetailsPage";
-
-import * as H from "history";
-import moment from "moment-timezone";
-import { defaultFilters } from "src/queryFilter";
-import { indexUnusedDuration } from "src/util/constants";
 const history = H.createHashHistory();
 
 const withLoadingIndicator: DatabaseDetailsPageProps = {

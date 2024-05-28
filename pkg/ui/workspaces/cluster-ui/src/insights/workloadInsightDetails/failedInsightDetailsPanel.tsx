@@ -10,10 +10,11 @@
 
 import React from "react";
 import { Col, Row } from "antd";
-import { ContentionDetails } from "../types";
-import { SummaryCard, SummaryCardItem } from "../../summaryCard";
 import { Heading } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
+
+import { ContentionDetails } from "../types";
+import { SummaryCard, SummaryCardItem } from "../../summaryCard";
 
 // TODO (xinhaoz) we should organize these common page details styles into its own file.
 import styles from "../../statementDetails/statementDetails.module.scss";

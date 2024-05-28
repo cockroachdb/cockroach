@@ -9,15 +9,16 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeLatest, takeEvery } from "redux-saga/effects";
-
-import { actions } from "./transactionInsightDetails.reducer";
 import { PayloadAction } from "@reduxjs/toolkit";
 import { ErrorWithKey, SqlApiResponse } from "src/api";
+
 import {
   getTxnInsightDetailsApi,
   TxnInsightDetailsRequest,
   TxnInsightDetailsResponse,
 } from "../../../api/txnInsightDetailsApi";
+
+import { actions } from "./transactionInsightDetails.reducer";
 
 export function* refreshTransactionInsightDetailsSaga(
   action: PayloadAction<TxnInsightDetailsRequest>,

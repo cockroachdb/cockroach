@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 export type INodeStatus = cockroach.server.status.statuspb.INodeStatus;

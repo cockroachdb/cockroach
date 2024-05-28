@@ -13,6 +13,7 @@ import { CircleFilled } from "src/icon";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
+
 import styles from "./booleanSetting.module.scss";
 
 const cx = classNames.bind(styles);

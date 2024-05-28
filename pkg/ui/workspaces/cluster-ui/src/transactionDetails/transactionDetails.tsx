@@ -15,6 +15,24 @@ import _ from "lodash";
 import { RouteComponentProps } from "react-router-dom";
 import { Helmet } from "react-helmet";
 import moment from "moment-timezone";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import {
+  InlineAlert,
+  Tooltip,
+  Text,
+  Heading,
+} from "@cockroachlabs/ui-components";
+import {
+  Bytes,
+  calculateTotalWorkload,
+  FixFingerprintHexValue,
+  Duration,
+  formatNumberForDisplay,
+  queryByName,
+  appNamesAttr,
+  unset,
+} from "src/util";
+import { Col, Row } from "antd";
 
 import statementsStyles from "../statementsPage/statementsPage.module.scss";
 import {
@@ -22,8 +40,6 @@ import {
   ISortedTablePagination,
   SortSetting,
 } from "../sortedtable";
-import { PageConfig, PageConfigItem } from "src/pageConfig";
-import { InlineAlert, Tooltip } from "@cockroachlabs/ui-components";
 import { Pagination } from "../pagination";
 import { TableStatistics } from "../tableStatistics";
 import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses";
@@ -33,25 +49,16 @@ import { SqlBox } from "../sql";
 import { aggregateStatements } from "../transactionsPage/utils";
 import { Loading } from "../loading";
 import { SummaryCard, SummaryCardItem } from "../summaryCard";
-import {
-  Bytes,
-  calculateTotalWorkload,
-  FixFingerprintHexValue,
-  Duration,
-  formatNumberForDisplay,
-  queryByName,
-  appNamesAttr,
-} from "src/util";
 import { UIConfigState } from "../store";
 import LoadingError from "../sqlActivity/errorComponent";
-
 import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
+
 import transactionDetailsStyles from "./transactionDetails.modules.scss";
-import { Col, Row } from "antd";
+
 import "antd/lib/col/style";
 import "antd/lib/row/style";
-import { Text, Heading } from "@cockroachlabs/ui-components";
 import { formatTwoPlaces } from "../barCharts";
+
 import { ArrowLeft } from "@cockroachlabs/icons";
 import {
   populateRegionNodeForStatements,
@@ -59,6 +66,7 @@ import {
 } from "src/statementsTable/statementsTable";
 import { Transaction } from "src/transactionsTable";
 import Long from "long";
+
 import {
   createCombinedStmtsRequest,
   InsightRecommendation,
@@ -80,7 +88,6 @@ import {
   timeScaleRangeToObj,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
-
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import insightTableStyles from "../insightsTable/insightsTable.module.scss";
 import {
@@ -88,18 +95,20 @@ import {
   makeInsightsColumns,
 } from "../insightsTable/insightsTable";
 import { CockroachCloudContext } from "../contexts";
+
 import { SqlStatsSortType } from "src/api/statementsApi";
+
 import {
   getStatementsForTransaction,
   getTxnFromSqlStatsMemoized,
   getTxnQueryString,
 } from "./transactionDetailsUtils";
+
 import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 const insightsTableCx = classNames.bind(insightTableStyles);
-import { unset } from "src/util";
 
 type Statement =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;

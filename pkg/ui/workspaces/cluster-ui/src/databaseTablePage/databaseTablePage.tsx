@@ -18,7 +18,6 @@ import classNames from "classnames/bind";
 import classnames from "classnames/bind";
 import "antd/lib/tooltip/style";
 import { Heading } from "@cockroachlabs/ui-components";
-
 import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
 import { SqlBox } from "src/sql";
@@ -37,11 +36,10 @@ import {
   tabAttr,
   tableStatsClusterSetting,
 } from "src/util";
-
-import styles from "./databaseTablePage.module.scss";
 import { commonStyles } from "src/common";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { Moment } from "moment-timezone";
+
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CockroachCloudContext } from "../contexts";
 import { RecommendationType } from "../indexDetailsPage";
@@ -49,16 +47,6 @@ import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
 import { UIConfigState } from "../store";
 import { Timestamp, Timezone } from "../timestamp";
-import {
-  ActionCell,
-  DbTablesBreadcrumbs,
-  FormatMVCCInfo,
-  getCreateStmt,
-  IndexRecCell,
-  LastReset,
-  LastUsed,
-  NameCell,
-} from "./helperComponents";
 import {
   SqlApiQueryResponse,
   SqlExecutionErrorMessage,
@@ -69,6 +57,18 @@ import {
   TableSpanStatsRow,
 } from "../api";
 import { checkInfoAvailable } from "../databases";
+
+import {
+  ActionCell,
+  DbTablesBreadcrumbs,
+  FormatMVCCInfo,
+  getCreateStmt,
+  IndexRecCell,
+  LastReset,
+  LastUsed,
+  NameCell,
+} from "./helperComponents";
+import styles from "./databaseTablePage.module.scss";
 
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);

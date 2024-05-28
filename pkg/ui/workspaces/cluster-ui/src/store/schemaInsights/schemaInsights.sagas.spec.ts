@@ -16,7 +16,10 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import moment from "moment-timezone";
+
 import { getSchemaInsights, SqlApiResponse } from "../../api";
+import { InsightRecommendation } from "../../insights";
+
 import {
   refreshSchemaInsightsSaga,
   requestSchemaInsightsSaga,
@@ -26,7 +29,6 @@ import {
   reducer,
   SchemaInsightsState,
 } from "./schemaInsights.reducer";
-import { InsightRecommendation } from "../../insights";
 
 const lastUpdated = moment();
 

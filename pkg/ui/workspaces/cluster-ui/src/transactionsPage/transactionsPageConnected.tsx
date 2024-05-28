@@ -11,22 +11,12 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
-
 import { AppState, uiConfigActions } from "src/store";
 import { actions as nodesActions } from "src/store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as txnStatsActions } from "src/store/transactionStats";
-import {
-  TransactionsPageStateProps,
-  TransactionsPageDispatchProps,
-} from "./transactionsPage";
-import {
-  selectTxnColumns,
-  selectSortSetting,
-  selectFilters,
-  selectSearch,
-  selectRequestTime,
-} from "./transactionsPage.selectors";
+import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
+
 import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import {
@@ -34,7 +24,6 @@ import {
   selectTxnsPageReqSort,
   selectTimeScale,
 } from "../store/utils/selectors";
-import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
 import {
   actions as localStorageActions,
   updateTxnsPageLimitAction,
@@ -43,6 +32,18 @@ import {
 import { Filters } from "../queryFilter";
 import { actions as analyticsActions } from "../store/analytics";
 import { TimeScale } from "../timeScaleDropdown";
+
+import {
+  selectTxnColumns,
+  selectSortSetting,
+  selectFilters,
+  selectSearch,
+  selectRequestTime,
+} from "./transactionsPage.selectors";
+import {
+  TransactionsPageStateProps,
+  TransactionsPageDispatchProps,
+} from "./transactionsPage";
 import {
   TransactionsPageRoot,
   TransactionsPageRootProps,
