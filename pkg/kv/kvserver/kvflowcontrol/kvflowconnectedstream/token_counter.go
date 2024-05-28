@@ -304,6 +304,7 @@ func WaitForEval(
 	ctx context.Context,
 	refreshWaitCh <-chan struct{},
 	handles []tokenWaitingHandleInfo,
+	quorumCount int,
 	scratch []reflect.SelectCase,
 ) (state WaitEndState, scratch2 []reflect.SelectCase) {
 	// TODO: implement.
