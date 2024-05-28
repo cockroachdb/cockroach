@@ -236,7 +236,9 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			var err error
 			for ctx.Err() == nil {
 				ct.t.L().Printf("starting webhook server %v", webhookPort)
-				if err = ct.cluster.RunE(ct.ctx, option.WithNodes(webhookNode), serverExecCmd, rootFolder); err != nil {
+				opts := option.WithNodes(webhookNode)
+				opts.RetryOptions.MaxRetries = 0
+				if err = ct.cluster.RunE(ct.ctx, opts, serverExecCmd, rootFolder); err != nil {
 					fmt.Printf("webhook server died: %v\n", err)
 					ct.t.L().Printf("webhook server died: %v", err)
 				}
@@ -357,13 +359,15 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 					if err != nil {
 						return err
 					}
+					ct.t.L().Printf("webhooks chaos loop: killed server")
 					if len(deets) > 0 {
-						deets[0].Output(true)
+						ct.t.L().Printf("output: %v", deets[0].Output(true))
 					}
 					return nil
 				}
 				restart := func(ctx context.Context) error {
 					restartSink <- struct{}{}
+					ct.t.L().Printf("webhooks chaos loop: restarting server")
 					return nil
 				}
 				return func() error {
