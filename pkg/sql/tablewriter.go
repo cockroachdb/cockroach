@@ -192,6 +192,7 @@ func (tb *tableWriterBase) setRowsWrittenLimit(sd *sessiondata.SessionData) {
 // flushAndStartNewBatch shares the common flushAndStartNewBatch() code between
 // tableWriters.
 func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
+	log.VEventf(ctx, 2, "writing batch with %d requests", len(tb.b.Requests()))
 	if err := tb.txn.Run(ctx, tb.b); err != nil {
 		return row.ConvertBatchError(ctx, tb.desc, tb.b)
 	}
@@ -221,11 +222,13 @@ func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 		// before committing.
 		!tb.txn.DeadlineLikelySufficient() {
 		log.Event(ctx, "autocommit enabled")
+		log.VEventf(ctx, 2, "writing batch with %d requests and committing", len(tb.b.Requests()))
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
 		err = tb.txn.CommitInBatch(ctx, tb.b)
 	} else {
+		log.VEventf(ctx, 2, "writing batch with %d requests", len(tb.b.Requests()))
 		err = tb.txn.Run(ctx, tb.b)
 	}
 	tb.lastBatchSize = tb.currentBatchSize

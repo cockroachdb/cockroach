@@ -304,6 +304,7 @@ func (n *insertFastPathNode) runUniqChecks(params runParams) error {
 
 	// Run the uniqueness checks batch.
 	ba := n.run.uniqBatch.ShallowCopy()
+	log.VEventf(params.ctx, 2, "uniqueness check: sending a batch with %d requests", len(ba.Requests))
 	br, err := params.p.txn.Send(params.ctx, ba)
 	if err != nil {
 		return err.GoError()
@@ -331,6 +332,7 @@ func (n *insertFastPathNode) runFKChecks(params runParams) error {
 
 	// Run the FK checks batch.
 	ba := n.run.fkBatch.ShallowCopy()
+	log.VEventf(params.ctx, 2, "fk check: sending a batch with %d requests", len(ba.Requests))
 	br, err := params.p.txn.Send(params.ctx, ba)
 	if err != nil {
 		return err.GoError()
@@ -362,6 +364,7 @@ func (n *insertFastPathNode) runFKUniqChecks(params runParams) error {
 
 	// Run the combined uniqueness and FK checks batch.
 	ba := n.run.uniqBatch.ShallowCopy()
+	log.VEventf(params.ctx, 2, "fk / uniqueness check: sending a batch with %d requests", len(ba.Requests))
 	br, err := params.p.txn.Send(params.ctx, ba)
 	if err != nil {
 		return err.GoError()
