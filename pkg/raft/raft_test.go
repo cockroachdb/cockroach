@@ -125,16 +125,16 @@ func TestProgressResumeByHeartbeatResp(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 
-	r.trk.Progress[2].MsgAppFlowPaused = true
+	r.trk.Progress[2].MsgAppProbesPaused = true
 
 	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
-	assert.True(t, r.trk.Progress[2].MsgAppFlowPaused)
+	assert.True(t, r.trk.Progress[2].MsgAppProbesPaused)
 
 	r.trk.Progress[2].BecomeReplicate()
-	assert.False(t, r.trk.Progress[2].MsgAppFlowPaused)
-	r.trk.Progress[2].MsgAppFlowPaused = true
+	assert.False(t, r.trk.Progress[2].MsgAppProbesPaused)
+	r.trk.Progress[2].MsgAppProbesPaused = true
 	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
-	assert.True(t, r.trk.Progress[2].MsgAppFlowPaused)
+	assert.True(t, r.trk.Progress[2].MsgAppProbesPaused)
 }
 
 func TestProgressPaused(t *testing.T) {
@@ -2076,7 +2076,7 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 			assert.Zero(t, msg[0].Index)
 		}
 
-		assert.True(t, r.trk.Progress[2].MsgAppFlowPaused)
+		assert.True(t, r.trk.Progress[2].MsgAppProbesPaused)
 		for j := 0; j < 10; j++ {
 			mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
 			r.maybeSendAppend(2)
@@ -2087,7 +2087,7 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 		for j := 0; j < r.heartbeatTimeout; j++ {
 			r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
 		}
-		assert.True(t, r.trk.Progress[2].MsgAppFlowPaused)
+		assert.True(t, r.trk.Progress[2].MsgAppProbesPaused)
 
 		// consume the heartbeat
 		msg := r.readMessages()
@@ -2100,7 +2100,7 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 	msg := r.readMessages()
 	assert.Len(t, msg, 1)
 	assert.Zero(t, msg[0].Index)
-	assert.True(t, r.trk.Progress[2].MsgAppFlowPaused)
+	assert.True(t, r.trk.Progress[2].MsgAppProbesPaused)
 }
 
 func TestSendAppendForProgressReplicate(t *testing.T) {

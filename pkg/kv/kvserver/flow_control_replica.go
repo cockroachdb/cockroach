@@ -85,7 +85,7 @@ func (rf *replicaFlowControl) getBehindFollowers() map[roachpb.ReplicaID]struct{
 		// time for it to catch up and then later return those tokens to us.
 		// This is I3a again; do it as part of #95563.
 		_ = progress.RecentActive
-		_ = progress.MsgAppFlowPaused
+		_ = progress.MsgAppProbesPaused
 		_ = progress.Match
 	})
 	return behindFollowers
