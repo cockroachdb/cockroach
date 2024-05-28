@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -331,4 +333,24 @@ func downloadProfiles(
 		}
 	}
 	return nil
+}
+
+type IP struct {
+	Query string
+}
+
+// getListenAddr returns the public IP address of the machine running the test.
+func getListenAddr(ctx context.Context) (string, error) {
+	req, err := httputil.Get(ctx, "http://ip-api.com/json/")
+	if err != nil {
+		return "", err
+	}
+	defer req.Body.Close()
+
+	var ip IP
+	if err := json.NewDecoder(req.Body).Decode(&ip); err != nil {
+		return "", err
+	}
+
+	return ip.Query, nil
 }
