@@ -19,13 +19,12 @@ import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { SortSetting } from "src/sortedtable";
 import { syncHistory } from "src/util";
-
-import { ScheduleTable } from "./scheduleTable";
-
 import { commonStyles } from "src/common";
-import styles from "../schedules.module.scss";
 import classNames from "classnames/bind";
 
+import styles from "../schedules.module.scss";
+
+import { ScheduleTable } from "./scheduleTable";
 import { statusOptions, showOptions } from "./scheduleOptions";
 
 const cx = classNames.bind(styles);

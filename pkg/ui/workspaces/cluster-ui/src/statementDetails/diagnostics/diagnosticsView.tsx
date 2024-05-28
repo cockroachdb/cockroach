@@ -19,22 +19,24 @@ import {
   DiagnosticStatusBadge,
 } from "src/statementsDiagnostics";
 import emptyListResultsImg from "src/assets/emptyState/empty-list-results.svg";
-import { filterByTimeScale, getDiagnosticsStatus } from "./diagnosticsUtils";
 import { EmptyTable } from "src/empty";
-import styles from "./diagnosticsView.module.scss";
-import { StatementDiagnosticsReport, withBasePath } from "../../api";
 import {
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
 } from "src/timeScaleDropdown";
 import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
-import { DATE_FORMAT_24_TZ } from "../../util";
-import { Timestamp } from "../../timestamp";
 import moment from "moment-timezone";
-import { FormattedTimescale } from "../../timeScaleDropdown/formattedTimeScale";
 import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
 import classNames from "classnames/bind";
+
+import { DATE_FORMAT_24_TZ } from "../../util";
+import { Timestamp } from "../../timestamp";
+import { FormattedTimescale } from "../../timeScaleDropdown/formattedTimeScale";
+import { StatementDiagnosticsReport, withBasePath } from "../../api";
+
+import styles from "./diagnosticsView.module.scss";
+import { filterByTimeScale, getDiagnosticsStatus } from "./diagnosticsUtils";
 
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 

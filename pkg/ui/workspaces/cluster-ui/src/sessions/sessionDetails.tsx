@@ -12,52 +12,49 @@ import React from "react";
 import { getMatchParamByName } from "src/util/query";
 import { sessionAttr } from "src/util/constants";
 import { Helmet } from "react-helmet";
-import { Loading } from "../loading";
 import _ from "lodash";
 import { RouteComponentProps } from "react-router-dom";
-
-import {
-  getStatusClassname,
-  getStatusString,
-  SessionInfo,
-} from "./sessionsTable";
-
-import { SummaryCard, SummaryCardItem } from "../summaryCard";
-import LoadingError from "../sqlActivity/errorComponent";
-
 import { DurationToMomentDuration, TimestampToMoment } from "src/util/convert";
 import { Bytes, DATE_FORMAT_24_TZ, Count } from "src/util/format";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
 
-import TerminateSessionModal, {
-  TerminateSessionModalRef,
-} from "./terminateSessionModal";
-import TerminateQueryModal, {
-  TerminateQueryModalRef,
-} from "./terminateQueryModal";
-import { Button } from "../button";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import { Text, TextTypes } from "../text";
 import { SqlBox, SqlBoxSize } from "src/sql/box";
 import { NodeLink } from "src/statementsTable/statementsTableContent";
-
 import {
   ICancelQueryRequest,
   ICancelSessionRequest,
 } from "src/store/terminateQuery";
 import { UIConfigState } from "src/store";
-
 import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
-import styles from "./sessionDetails.module.scss";
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
-import { CircleFilled } from "../icon";
+
 import { createTimeScaleFromDateRange, TimeScale } from "src/timeScaleDropdown";
 import moment from "moment-timezone";
+import { CircleFilled } from "../icon";
+import { Text, TextTypes } from "../text";
+import { Button } from "../button";
+import { SummaryCard, SummaryCardItem } from "../summaryCard";
+import LoadingError from "../sqlActivity/errorComponent";
+import { Loading } from "../loading";
 import { Timestamp } from "../timestamp";
 import { FixLong } from "../util";
+
+import styles from "./sessionDetails.module.scss";
+import TerminateQueryModal, {
+  TerminateQueryModalRef,
+} from "./terminateQueryModal";
+import TerminateSessionModal, {
+  TerminateSessionModalRef,
+} from "./terminateSessionModal";
+import {
+  getStatusClassname,
+  getStatusString,
+  SessionInfo,
+} from "./sessionsTable";
 
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);

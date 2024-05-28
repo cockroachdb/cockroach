@@ -8,8 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { createContext, useContext } from "react";
+import React, { createContext, useContext } from "react";
 
 export const CoordinatedUniversalTime = "Etc/UTC";
 export const TimezoneContext = createContext<string>(CoordinatedUniversalTime);

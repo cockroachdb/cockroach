@@ -9,6 +9,13 @@
 // licenses/APL.txt.
 
 import {
+  InsightRecommendation,
+  InsightType,
+  recommendDropUnusedIndex,
+} from "../insights";
+import { HexStringToInt64String, indexUnusedDuration } from "../util";
+
+import {
   SqlExecutionRequest,
   SqlTxnResult,
   executeInternalSql,
@@ -18,12 +25,6 @@ import {
   SqlApiResponse,
   formatApiResult,
 } from "./sqlApi";
-import {
-  InsightRecommendation,
-  InsightType,
-  recommendDropUnusedIndex,
-} from "../insights";
-import { HexStringToInt64String, indexUnusedDuration } from "../util";
 import { QuoteIdentifier } from "./safesql";
 
 // Export for db-console import from clusterUiApi.

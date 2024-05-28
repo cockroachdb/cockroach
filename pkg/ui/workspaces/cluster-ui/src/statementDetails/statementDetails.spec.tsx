@@ -13,6 +13,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { assert } from "chai";
 import { createSandbox } from "sinon";
 import { MemoryRouter as Router } from "react-router-dom";
+
 import { StatementDetails, StatementDetailsProps } from "./statementDetails";
 import { getStatementDetailsPropsFixture } from "./statementDetails.fixture";
 

@@ -10,31 +10,25 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import styles from "../statementsPage/statementsPage.module.scss";
 import { RouteComponentProps } from "react-router-dom";
-import {
-  makeTransactionsColumns,
-  TransactionInfo,
-  TransactionsTable,
-} from "../transactionsTable";
-import {
-  handleSortSettingFromQueryString,
-  ISortedTablePagination,
-  SortSetting,
-  updateSortSettingQueryParamsOnTab,
-} from "../sortedtable";
-import { Pagination, ResultsPerPageLabel } from "../pagination";
-import { statisticsClasses } from "./transactionsPageClasses";
-import {
-  generateRegion,
-  generateRegionNode,
-  getTrxAppFilterOptions,
-  searchTransactionsData,
-  filterTransactions,
-} from "./utils";
 import { flatMap, merge } from "lodash";
 import { Timestamp, TimestampToMoment, syncHistory, unique } from "src/util";
-import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
+import {
+  SqlStatsSortType,
+  createCombinedStmtsRequest,
+  StatementsRequest,
+  SqlStatsSortOptions,
+  SqlStatsResponse,
+} from "src/api/statementsApi";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
+import {
+  STATS_LONG_LOADING_DURATION,
+  getSortLabel,
+  getSortColumn,
+  getSubsetWarning,
+  getReqSortColumn,
+} from "src/util/sqlActivityConstants";
 import { Loading } from "../loading";
 import { Delayed } from "../delayed";
 import { PageConfig, PageConfigItem } from "../pageConfig";
@@ -48,13 +42,6 @@ import {
   SelectedFilters,
 } from "../queryFilter";
 import { UIConfigState } from "../store";
-import {
-  SqlStatsSortType,
-  createCombinedStmtsRequest,
-  StatementsRequest,
-  SqlStatsSortOptions,
-  SqlStatsResponse,
-} from "src/api/statementsApi";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
 import {
@@ -70,21 +57,42 @@ import {
   getValidOption,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
-import { InlineAlert } from "@cockroachlabs/ui-components";
-import { TransactionViewType } from "./transactionsPageTypes";
+
+
 import { isSelectedColumn } from "../columnsSelector/utils";
-import {
-  STATS_LONG_LOADING_DURATION,
-  getSortLabel,
-  getSortColumn,
-  getSubsetWarning,
-  getReqSortColumn,
-} from "src/util/sqlActivityConstants";
-import { SearchCriteria } from "src/searchCriteria/searchCriteria";
+
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
+import { TransactionViewType } from "./transactionsPageTypes";
+import { SearchCriteria } from "src/searchCriteria/searchCriteria";
+
 import { RequestState } from "../api";
+
 import moment from "moment-timezone";
 import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
+
+import { Pagination, ResultsPerPageLabel } from "../pagination";
+import {
+  handleSortSettingFromQueryString,
+  ISortedTablePagination,
+  SortSetting,
+  updateSortSettingQueryParamsOnTab,
+} from "../sortedtable";
+import {
+  makeTransactionsColumns,
+  TransactionInfo,
+  TransactionsTable,
+} from "../transactionsTable";
+import styles from "../statementsPage/statementsPage.module.scss";
+
+import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
+import {
+  generateRegion,
+  generateRegionNode,
+  getTrxAppFilterOptions,
+  searchTransactionsData,
+  filterTransactions,
+} from "./utils";
+import { statisticsClasses } from "./transactionsPageClasses";
 
 const cx = classNames.bind(styles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);

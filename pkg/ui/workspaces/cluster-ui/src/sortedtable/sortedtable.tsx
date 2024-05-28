@@ -14,15 +14,16 @@ import * as Long from "long";
 import { History } from "history";
 import { Moment } from "moment-timezone";
 import { createSelector } from "reselect";
-
 import times from "lodash/times";
-import { EmptyPanel, EmptyPanelProps } from "../empty";
-import styles from "./sortedtable.module.scss";
 import classNames from "classnames/bind";
+import { Tooltip } from "@cockroachlabs/ui-components";
+
+import { EmptyPanel, EmptyPanelProps } from "../empty";
+
+import styles from "./sortedtable.module.scss";
 import { TableSpinner } from "./tableSpinner";
 import { TableHead } from "./tableHead";
 import { TableRow } from "./tableRow";
-import { Tooltip } from "@cockroachlabs/ui-components";
 
 export interface ISortedTablePagination {
   current: number;

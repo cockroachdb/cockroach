@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
+
 import { Search } from "../search";
 import { filterLabel } from "../queryFilter/filterClasses";
 

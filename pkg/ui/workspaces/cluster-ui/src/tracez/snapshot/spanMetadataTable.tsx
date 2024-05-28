@@ -13,12 +13,13 @@ import { Nodes } from "@cockroachlabs/icons";
 import { NamedOperationMetadata } from "src/api/tracezApi";
 import { EmptyTable } from "src/empty";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
-
-import styles from "../snapshot.module.scss";
 import classNames from "classnames/bind";
 import { CircleFilled } from "src/icon";
-import { formatDurationHours } from "./spanTable";
 import { Tooltip } from "antd";
+
+import styles from "../snapshot.module.scss";
+
+import { formatDurationHours } from "./spanTable";
 import "antd/lib/tooltip/style";
 const cx = classNames.bind(styles);
 

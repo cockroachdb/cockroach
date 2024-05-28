@@ -11,11 +11,13 @@
 import React from "react";
 import classNames from "classnames/bind";
 import { Modal as AntModal } from "antd";
+
 import "antd/lib/modal/style";
 import { Button } from "../button";
 import { Text, TextTypes } from "../text";
-import styles from "./modal.module.scss";
 import SpinIcon from "../icon/spin";
+
+import styles from "./modal.module.scss";
 
 export interface ModalProps {
   title?: string;

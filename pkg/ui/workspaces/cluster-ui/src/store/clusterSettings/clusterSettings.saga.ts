@@ -9,13 +9,14 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
-
-import { actions } from "./clusterSettings.reducer";
 import { PayloadAction } from "@reduxjs/toolkit";
+
 import {
   getClusterSettings,
   SettingsRequestMessage,
 } from "../../api/clusterSettingsApi";
+
+import { actions } from "./clusterSettings.reducer";
 
 export function* refreshClusterSettingsSaga(
   action: PayloadAction<SettingsRequestMessage>,

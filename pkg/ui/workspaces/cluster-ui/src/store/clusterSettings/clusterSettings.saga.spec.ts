@@ -17,15 +17,17 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { expectSaga } from "redux-saga-test-plan";
+
+import {
+  getClusterSettings,
+  SettingsRequestMessage,
+} from "../../api/clusterSettingsApi";
+
 import {
   actions,
   ClusterSettingsState,
   reducer,
 } from "./clusterSettings.reducer";
-import {
-  getClusterSettings,
-  SettingsRequestMessage,
-} from "../../api/clusterSettingsApi";
 import {
   refreshClusterSettingsSaga,
   requestClusterSettingsSaga,

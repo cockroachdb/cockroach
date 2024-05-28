@@ -8,8 +8,22 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { DatabasesListResponse } from "../api";
+import { createSelector } from "@reduxjs/toolkit";
+import { DatabaseDetailsPageDataTable } from "src/databaseDetailsPage";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import {
+  DatabaseDetailsSpanStatsState,
+  DatabaseDetailsState,
+} from "../store/databaseDetails";
+import { TableDetailsState } from "../store/databaseTableDetails";
+import { generateTableID, longToInt, TimestampToMoment } from "../util";
+import { DatabaseTablePageDataDetails, IndexStat } from "../databaseTablePage";
+import { IndexStatsState } from "../store/indexStats";
 import { DatabasesPageDataDatabase } from "../databasesPage";
+import { DatabasesListResponse } from "../api";
+import { RecommendationType as RecType } from "../indexDetailsPage";
+
 import {
   Nodes,
   Stores,
@@ -19,18 +33,6 @@ import {
   normalizePrivileges,
   normalizeRoles,
 } from "./util";
-import {
-  DatabaseDetailsSpanStatsState,
-  DatabaseDetailsState,
-} from "../store/databaseDetails";
-import { createSelector } from "@reduxjs/toolkit";
-import { TableDetailsState } from "../store/databaseTableDetails";
-import { generateTableID, longToInt, TimestampToMoment } from "../util";
-import { DatabaseDetailsPageDataTable } from "src/databaseDetailsPage";
-import { DatabaseTablePageDataDetails, IndexStat } from "../databaseTablePage";
-import { IndexStatsState } from "../store/indexStats";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { RecommendationType as RecType } from "../indexDetailsPage";
 type IndexUsageStatistic =
   cockroach.server.serverpb.TableIndexStatsResponse.IExtendedCollectedIndexUsageStatistics;
 const { RecommendationType } = cockroach.sql.IndexRecommendation;

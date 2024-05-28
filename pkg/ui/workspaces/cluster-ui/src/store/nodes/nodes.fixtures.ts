@@ -8,9 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { INodeStatus } from "../../util";
 import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import { INodeStatus } from "../../util";
 
 type INodesResponse = cockroach.server.serverpb.INodesResponse;
 

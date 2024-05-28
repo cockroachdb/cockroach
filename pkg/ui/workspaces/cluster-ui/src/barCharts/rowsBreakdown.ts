@@ -10,8 +10,9 @@
 
 import { scaleLinear } from "d3-scale";
 import { stdDevLong } from "src/util";
-import { formatTwoPlaces, normalizeClosedDomain } from "./utils";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+
+import { formatTwoPlaces, normalizeClosedDomain } from "./utils";
 
 type StatementStatistics =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;

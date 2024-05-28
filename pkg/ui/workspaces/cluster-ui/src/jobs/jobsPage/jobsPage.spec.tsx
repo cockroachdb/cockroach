@@ -10,13 +10,15 @@
 
 import moment from "moment-timezone";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { JobsPage, JobsPageProps } from "./jobsPage";
-import { formatDuration } from "../util/duration";
-import { allJobsFixture, earliestRetainedTime } from "./jobsPage.fixture";
 import { render } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
 import * as H from "history";
+
+import { formatDuration } from "../util/duration";
+
+import { allJobsFixture, earliestRetainedTime } from "./jobsPage.fixture";
+import { JobsPage, JobsPageProps } from "./jobsPage";
 
 import Job = cockroach.server.serverpb.IJobResponse;
 

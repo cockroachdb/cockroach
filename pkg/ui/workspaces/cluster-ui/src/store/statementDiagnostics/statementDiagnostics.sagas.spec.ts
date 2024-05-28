@@ -16,8 +16,9 @@ import {
   requestStatementsDiagnosticsSaga,
   cancelDiagnosticsReportSaga,
   StatementDiagnosticsState,
+  actions,
+  reducer,
 } from "src/store/statementDiagnostics";
-import { actions, reducer } from "src/store/statementDiagnostics";
 import {
   createStatementDiagnosticsReport,
   cancelStatementDiagnosticsReport,

@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 import React from "react";
 import { shallow } from "enzyme";
+
 import { ScheduleTable, ScheduleTableProps } from "./scheduleTable";
 import { allSchedulesFixture } from "./schedulesPage.fixture";
 

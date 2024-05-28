@@ -22,12 +22,14 @@ import {
   JobRequest,
   JobResponseWithKey,
 } from "src/api/jobsApi";
-import { refreshJobSaga, requestJobSaga } from "./job.sagas";
-import { actions, reducer, JobDetailsReducerState } from "./job.reducer";
-import { succeededJobFixture } from "../../jobs/jobsPage/jobsPage.fixture";
 import Long from "long";
 import { PayloadAction } from "@reduxjs/toolkit";
 import moment from "moment-timezone";
+
+import { succeededJobFixture } from "../../jobs/jobsPage/jobsPage.fixture";
+
+import { actions, reducer, JobDetailsReducerState } from "./job.reducer";
+import { refreshJobSaga, requestJobSaga } from "./job.sagas";
 
 describe("job sagas", () => {
   const payload = new cockroach.server.serverpb.JobRequest({

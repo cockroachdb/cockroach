@@ -9,13 +9,14 @@
 // licenses/APL.txt.
 
 import { PayloadAction } from "@reduxjs/toolkit";
-import { actions } from "./jobProfiler.reducer";
 import { call, put, all, takeEvery } from "redux-saga/effects";
 import {
   ListJobProfilerExecutionDetailsRequest,
   collectExecutionDetails,
   listExecutionDetailFiles,
 } from "src/api";
+
+import { actions } from "./jobProfiler.reducer";
 
 export function* refreshJobProfilerSaga(
   action: PayloadAction<ListJobProfilerExecutionDetailsRequest>,
