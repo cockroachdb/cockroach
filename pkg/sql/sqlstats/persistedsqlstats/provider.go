@@ -283,9 +283,5 @@ func (s *PersistedSQLStats) jitterInterval(interval time.Duration) time.Duration
 func (s *PersistedSQLStats) GetApplicationStats(
 	appName string, internal bool,
 ) sqlstats.ApplicationStats {
-	appStats := s.SQLStats.GetApplicationStats(appName, internal)
-	return &ApplicationStats{
-		ApplicationStats:     appStats,
-		memoryPressureSignal: s.memoryPressureSignal,
-	}
+	return s.SQLStats.GetApplicationStats(appName, internal)
 }
