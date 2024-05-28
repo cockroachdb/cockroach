@@ -15,6 +15,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -2230,7 +2231,7 @@ func isSetOrResetSchemaLocked(n *tree.AlterTable) bool {
 				return true
 			}
 		case *tree.AlterTableResetStorageParams:
-			if cmd.Params.Contains("schema_locked") {
+			if slices.Contains(cmd.Params, "schema_locked") {
 				return true
 			}
 		}

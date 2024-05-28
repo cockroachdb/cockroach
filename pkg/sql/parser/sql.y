@@ -402,8 +402,8 @@ func (u *sqlSymUnion) storageParams() []tree.StorageParam {
     }
     return nil
 }
-func (u *sqlSymUnion) storageParamKeys() []tree.Name {
-    if params, ok := u.val.([]tree.Name); ok {
+func (u *sqlSymUnion) storageParamKeys() []string {
+    if params, ok := u.val.([]string); ok {
         return params
     }
     return nil
@@ -1365,7 +1365,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
-%type <tree.NameList> storage_parameter_key_list
+%type <[]string> storage_parameter_key_list
 %type <tree.StorageParam> storage_parameter
 %type <[]tree.StorageParam> storage_parameter_list opt_table_with opt_with_storage_parameter_list
 
@@ -9882,17 +9882,17 @@ storage_parameter_key:
 storage_parameter_key_list:
   storage_parameter_key
   {
-    $$.val = []tree.Name{tree.Name($1)}
+    $$.val = []string{$1}
   }
 | storage_parameter_key_list ',' storage_parameter_key
   {
-    $$.val = append($1.storageParamKeys(), tree.Name($3))
+    $$.val = append($1.storageParamKeys(), $3)
   }
 
 storage_parameter:
   storage_parameter_key '=' var_value
   {
-    $$.val = tree.StorageParam{Key: tree.Name($1), Value: $3.expr()}
+    $$.val = tree.StorageParam{Key: $1, Value: $3.expr()}
   }
 
 storage_parameter_list:

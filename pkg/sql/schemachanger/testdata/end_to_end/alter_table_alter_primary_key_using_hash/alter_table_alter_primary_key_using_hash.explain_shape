@@ -4,7 +4,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
 /* test */
 EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count=3);
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›);
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH ('bucket_count' = ‹3›);
  ├── execute 2 system table mutations transactions
  ├── backfill using primary index t_pkey- in relation t
  │    └── into t_pkey+ (j, crdb_internal_j_shard_3+; i)

@@ -207,10 +207,10 @@ CREATE UNIQUE INVERTED INDEX _ ON _ (_) -- identifiers removed
 parse
 CREATE INDEX a ON b (c) WITH (fillfactor = 100, y_bounds = 50)
 ----
-CREATE INDEX a ON b (c) WITH (fillfactor = 100, y_bounds = 50)
-CREATE INDEX a ON b (c) WITH (fillfactor = (100), y_bounds = (50)) -- fully parenthesized
-CREATE INDEX a ON b (c) WITH (fillfactor = _, y_bounds = _) -- literals removed
-CREATE INDEX _ ON _ (_) WITH (_ = 100, _ = 50) -- identifiers removed
+CREATE INDEX a ON b (c) WITH ('fillfactor' = 100, 'y_bounds' = 50) -- normalized!
+CREATE INDEX a ON b (c) WITH ('fillfactor' = (100), 'y_bounds' = (50)) -- fully parenthesized
+CREATE INDEX a ON b (c) WITH ('fillfactor' = _, 'y_bounds' = _) -- literals removed
+CREATE INDEX _ ON _ (_) WITH ('fillfactor' = 100, 'y_bounds' = 50) -- identifiers removed
 
 parse
 CREATE INDEX ON a ((a + b))
@@ -416,10 +416,10 @@ CREATE INDEX ON _ ((ARRAY[_, _])) STORING (_, _) NOT VISIBLE -- identifiers remo
 parse
 CREATE INDEX a ON b (c) WITH (fillfactor = 100, y_bounds = 50) NOT VISIBLE
 ----
-CREATE INDEX a ON b (c) WITH (fillfactor = 100, y_bounds = 50) NOT VISIBLE
-CREATE INDEX a ON b (c) WITH (fillfactor = (100), y_bounds = (50)) NOT VISIBLE -- fully parenthesized
-CREATE INDEX a ON b (c) WITH (fillfactor = _, y_bounds = _) NOT VISIBLE -- literals removed
-CREATE INDEX _ ON _ (_) WITH (_ = 100, _ = 50) NOT VISIBLE -- identifiers removed
+CREATE INDEX a ON b (c) WITH ('fillfactor' = 100, 'y_bounds' = 50) NOT VISIBLE -- normalized!
+CREATE INDEX a ON b (c) WITH ('fillfactor' = (100), 'y_bounds' = (50)) NOT VISIBLE -- fully parenthesized
+CREATE INDEX a ON b (c) WITH ('fillfactor' = _, 'y_bounds' = _) NOT VISIBLE -- literals removed
+CREATE INDEX _ ON _ (_) WITH ('fillfactor' = 100, 'y_bounds' = 50) NOT VISIBLE -- identifiers removed
 
 parse
 CREATE UNIQUE INDEX idx ON a (((lower(a) || ' ') || lower(b))) NOT VISIBLE
@@ -440,10 +440,10 @@ CREATE INVERTED INDEX IF NOT EXISTS _ ON _ (_) WHERE _ > 3 -- identifiers remove
 parse
 CREATE INDEX geom_idx_2 ON some_spatial_table USING GIST(geom) WITH (s2_max_cells = 20, s2_max_level = 12, s2_level_mod = 3) NOT VISIBLE
 ----
-CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH (s2_max_cells = 20, s2_max_level = 12, s2_level_mod = 3) NOT VISIBLE -- normalized!
-CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH (s2_max_cells = (20), s2_max_level = (12), s2_level_mod = (3)) NOT VISIBLE -- fully parenthesized
-CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH (s2_max_cells = _, s2_max_level = _, s2_level_mod = _) NOT VISIBLE -- literals removed
-CREATE INVERTED INDEX _ ON _ (_) WITH (_ = 20, _ = 12, _ = 3) NOT VISIBLE -- identifiers removed
+CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH ('s2_max_cells' = 20, 's2_max_level' = 12, 's2_level_mod' = 3) NOT VISIBLE -- normalized!
+CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH ('s2_max_cells' = (20), 's2_max_level' = (12), 's2_level_mod' = (3)) NOT VISIBLE -- fully parenthesized
+CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH ('s2_max_cells' = _, 's2_max_level' = _, 's2_level_mod' = _) NOT VISIBLE -- literals removed
+CREATE INVERTED INDEX _ ON _ (_) WITH ('s2_max_cells' = 20, 's2_max_level' = 12, 's2_level_mod' = 3) NOT VISIBLE -- identifiers removed
 
 parse
 CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE d > 3 NOT VISIBLE
