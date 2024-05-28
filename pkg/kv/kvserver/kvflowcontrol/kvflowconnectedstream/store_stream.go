@@ -245,12 +245,17 @@ func (s *storeStreamSendTokensWatcher) watchTokens(
 			// If there are no tokens available, we wait here on the handle's wait
 			// channel, or until cancelled.
 			if !available {
-				select {
-				case <-ctx.Done():
-					return
-				case <-s.stopper.ShouldQuiesce():
-					return
-				case <-handle.WaitChannel():
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-s.stopper.ShouldQuiesce():
+						return
+					case <-handle.WaitChannel():
+						if _, haveTokens := handle.TryDeductAndUnblockNextWaiter(0 /* tokens */); haveTokens {
+							break
+						}
+					}
 				}
 			}
 
