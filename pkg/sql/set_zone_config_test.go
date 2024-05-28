@@ -58,7 +58,7 @@ func TestValidateNoRepeatKeysInZone(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = validateNoRepeatKeysInZone(&zone)
+		err = zonepb.ValidateNoRepeatKeysInZone(&zone)
 		if err != nil && expectSuccess {
 			t.Errorf("expected success for %q; got %v", constraint, err)
 		} else if err == nil && !expectSuccess {

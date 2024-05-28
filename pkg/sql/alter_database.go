@@ -2413,7 +2413,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		}
 
 		// Validate that there are no conflicts in the zone setup.
-		if err := validateNoRepeatKeysInZone(newZone); err != nil {
+		if err := zonepb.ValidateNoRepeatKeysInZone(newZone); err != nil {
 			return err
 		}
 
