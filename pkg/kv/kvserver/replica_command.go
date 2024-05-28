@@ -4156,8 +4156,12 @@ func (r *Replica) adminScatter(
 			ctx, r, desc, conf, true /* scatter */, false, /* dryRun */
 		)
 		if err != nil {
-			// TODO(tbg): can this use IsRetriableReplicationError?
-			if isSnapshotError(err) {
+			// If the error is expected to be transient, retry processing the range.
+			// This is most likely to occur when concurrent split and scatters are
+			// issued, in which case the scatter may fail due to the range split
+			// updating the descriptor while processing.
+			if IsRetriableReplicationChangeError(err) {
+				log.VEventf(ctx, 1, "retrying scatter process after retryable error: %v", err)
 				continue
 			}
 			break

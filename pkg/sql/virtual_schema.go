@@ -17,14 +17,17 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -409,6 +412,7 @@ type VirtualSchemaHolder struct {
 	defsByID      map[descpb.ID]*virtualDefEntry
 	orderedNames  []string
 
+	catalogCache nstree.MutableCatalog
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 	// Remove in v23.2.
 	st *cluster.Settings
@@ -452,7 +456,13 @@ func (vs *VirtualSchemaHolder) Visit(fn func(desc catalog.Descriptor, comment st
 	return nil
 }
 
+// GetCatalog makes VirtualSchemaHolder implement descs.VirtualCatalogHolder.
+func (vs *VirtualSchemaHolder) GetCatalog() nstree.Catalog {
+	return vs.catalogCache.Catalog
+}
+
 var _ catalog.VirtualSchemas = (*VirtualSchemaHolder)(nil)
+var _ descs.VirtualCatalogHolder = (*VirtualSchemaHolder)(nil)
 
 type virtualSchemaEntry struct {
 	desc            catalog.SchemaDescriptor
@@ -969,6 +979,33 @@ func NewVirtualSchemaHolder(
 		order++
 	}
 	sort.Strings(vs.orderedNames)
+
+	// Setup the catalog cache inside the virtual schema holder.
+	err := vs.Visit(func(vd catalog.Descriptor, comment string) error {
+		vs.catalogCache.UpsertDescriptor(vd)
+		if vd.GetID() != keys.PublicSchemaID && !vd.Dropped() && !vd.SkipNamespace() {
+			vs.catalogCache.UpsertNamespaceEntry(vd, vd.GetID(), hlc.Timestamp{})
+		}
+		if comment == "" {
+			return nil
+		}
+		ck := catalogkeys.CommentKey{ObjectID: uint32(vd.GetID())}
+		switch vd.DescriptorType() {
+		case catalog.Database:
+			ck.CommentType = catalogkeys.DatabaseCommentType
+		case catalog.Schema:
+			ck.CommentType = catalogkeys.SchemaCommentType
+		case catalog.Table:
+			ck.CommentType = catalogkeys.TableCommentType
+		default:
+			return errors.AssertionFailedf("unsupported descriptor type for comment: %s", vd.DescriptorType())
+		}
+		return vs.catalogCache.UpsertComment(ck, comment)
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return vs, nil
 }
 
