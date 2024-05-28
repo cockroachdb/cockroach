@@ -3,6 +3,9 @@
 
 # disabled to run within tenants because the kv request cmd only works on system tenants
 
+reset test-nodelocal
+----
+
 new-cluster name=s1 disable-tenant
 ----
 
@@ -33,6 +36,7 @@ BACKUP INTO 'nodelocal://1/test-root/';
 exec-sql
 RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' with new_db_name='orig1';
 ----
+
 
 query-sql
 SELECT count(*) from orig1.foo;
@@ -71,6 +75,11 @@ BACKUP INTO LATEST IN 'nodelocal://1/test-root/';
 exec-sql
 RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' with new_db_name='orig1';
 ----
+
+exec-sql expect-error-regex=(failed to ingest into remote files: online restore of range keys not supported)
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' with new_db_name='orig2', experimental deferred copy;
+----
+regex matches error
 
 query-sql
 SELECT count(*) from orig1.foo
