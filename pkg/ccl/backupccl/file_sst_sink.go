@@ -266,6 +266,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 	if err != nil {
 		return nil, err
 	}
+	hasRangeKeys := maxRange != nil
 
 	// extend determines if the new span should be added to the last span. This
 	// will occur if the previous span ended mid row, or if the new span is a
@@ -299,11 +300,13 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 		s.flushedFiles[l].Span.EndKey = span.EndKey
 		s.flushedFiles[l].EntryCounts.Add(resp.metadata.EntryCounts)
 		s.flushedFiles[l].ApproximatePhysicalSize += resp.metadata.ApproximatePhysicalSize
+		s.flushedFiles[l].HasRangeKeys = s.flushedFiles[l].HasRangeKeys || hasRangeKeys
 		s.stats.spanGrows++
 	} else {
 		f := resp.metadata
 		f.Path = s.outName
 		f.Span.EndKey = span.EndKey
+		f.HasRangeKeys = hasRangeKeys
 		s.flushedFiles = append(s.flushedFiles, f)
 	}
 
@@ -446,6 +449,8 @@ func (s *fileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) (roachp
 	return iter.UnsafeKey().Key.Clone(), nil
 }
 
+// copyRangeKeys copies all range keys from the dataSST into the buffer and
+// returns the max range key observed.
 func (s *fileSSTSink) copyRangeKeys(dataSST []byte) (roachpb.Key, error) {
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
