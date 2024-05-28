@@ -12,12 +12,14 @@ import { Switch } from "antd";
 import "antd/lib/switch/style";
 import React from "react";
 import classNames from "classnames/bind";
-import styles from "./refreshControl.module.scss";
 import RefreshIcon from "src/icon/refreshIcon";
 import { Timestamp } from "src/timestamp";
 import { Moment } from "moment-timezone";
 import { DATE_WITH_SECONDS_FORMAT_24_TZ, capitalize } from "src/util";
+
 import { ExecutionType } from "../types";
+
+import styles from "./refreshControl.module.scss";
 
 const cx = classNames.bind(styles);
 

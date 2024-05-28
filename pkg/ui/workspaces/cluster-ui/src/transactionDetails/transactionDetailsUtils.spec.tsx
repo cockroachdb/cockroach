@@ -8,15 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { shuffle } from "lodash";
+import Long from "long";
+
+import { mockTxnStats, Txn, Stmt, mockStmtStats } from "../api/testUtils";
+import { unset } from "../util";
+
 import {
   getStatementsForTransaction,
   getTxnFromSqlStatsTxns,
   getTxnQueryString,
 } from "./transactionDetailsUtils";
-import { mockTxnStats, Txn, Stmt, mockStmtStats } from "../api/testUtils";
-import { shuffle } from "lodash";
-import Long from "long";
-import { unset } from "../util";
 
 describe("getTxnFromSqlStatsTxns", () => {
   // Each transaction will be mocked with an exec count of 1.

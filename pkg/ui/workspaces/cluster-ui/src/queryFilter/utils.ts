@@ -8,16 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Filters, defaultFilters } from ".";
 import { Location } from "history";
 import {
   ActiveStatementFilters,
   ActiveTransactionFilters,
 } from "src/activeExecutions/types";
+
 import {
   WorkloadInsightEventFilters,
   SchemaInsightEventFilters,
 } from "../insights";
+
+import { Filters, defaultFilters } from ".";
 
 // This function returns a Filters object populated with values from the URL, or null
 // if there were no filters set.

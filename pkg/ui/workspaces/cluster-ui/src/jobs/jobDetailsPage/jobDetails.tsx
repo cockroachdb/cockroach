@@ -28,17 +28,17 @@ import {
   getMatchParamByName,
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
 } from "src/util";
-
 import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
 import { JobStatusCell } from "src/jobs/util/jobStatusCell";
-import { isTerminalState } from "../util/jobOptions";
-
 import { commonStyles } from "src/common";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import jobStyles from "src/jobs/jobs.module.scss";
-
 import classNames from "classnames/bind";
-import { Timestamp } from "../../timestamp";
+import moment from "moment-timezone";
+import { CockroachCloudContext } from "src/contexts";
+import long from "long";
+import { UIConfigState } from "src/store";
+
 import {
   GetJobProfilerExecutionDetailRequest,
   GetJobProfilerExecutionDetailResponse,
@@ -46,11 +46,10 @@ import {
   ListJobProfilerExecutionDetailsResponse,
   RequestState,
 } from "../../api";
-import moment from "moment-timezone";
-import { CockroachCloudContext } from "src/contexts";
+import { Timestamp } from "../../timestamp";
+import { isTerminalState } from "../util/jobOptions";
+
 import { JobProfilerView } from "./jobProfilerView";
-import long from "long";
-import { UIConfigState } from "src/store";
 
 const { TabPane } = Tabs;
 

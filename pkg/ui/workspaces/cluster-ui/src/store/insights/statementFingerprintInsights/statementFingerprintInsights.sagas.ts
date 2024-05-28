@@ -9,18 +9,19 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
-
-import {
-  actions,
-  FingerprintInsightResponseWithKey,
-} from "./statementFingerprintInsights.reducer";
 import { PayloadAction } from "@reduxjs/toolkit";
+
 import {
   ErrorWithKey,
   StmtInsightsReq,
   getStmtInsightsApi,
 } from "../../../api";
 import { HexStringToInt64String } from "../../../util";
+
+import {
+  actions,
+  FingerprintInsightResponseWithKey,
+} from "./statementFingerprintInsights.reducer";
 
 export function* refreshStatementFingerprintInsightsSaga(
   action: PayloadAction<StmtInsightsReq>,

@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { RequestError } from "../util";
 import moment from "moment-timezone";
 import { createMemoryHistory } from "history";
 import Long from "long";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { TimeScale } from "../timeScaleDropdown";
 import { StatementsResponse } from "src/store/sqlStats/sqlStats.reducer";
+
+import { TimeScale } from "../timeScaleDropdown";
+import { RequestError } from "../util";
 
 const history = createMemoryHistory({ initialEntries: ["/transactions"] });
 const timestamp = new protos.google.protobuf.Timestamp({

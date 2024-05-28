@@ -11,10 +11,10 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { noop } from "lodash";
-
-import { Dropdown, DropdownOption } from "./dropdown";
 import { Button } from "src/button";
 import { Download } from "@cockroachlabs/icons";
+
+import { Dropdown, DropdownOption } from "./dropdown";
 
 const items: DropdownOption[] = [
   { name: "A", value: "a" },

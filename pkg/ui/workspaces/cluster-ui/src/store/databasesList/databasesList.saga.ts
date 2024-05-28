@@ -9,10 +9,10 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
-
-import { actions } from "./databasesList.reducers";
 import { getDatabasesList } from "src/api";
 import moment from "moment-timezone";
+
+import { actions } from "./databasesList.reducers";
 
 export function* refreshDatabasesListSaga() {
   yield put(actions.request());

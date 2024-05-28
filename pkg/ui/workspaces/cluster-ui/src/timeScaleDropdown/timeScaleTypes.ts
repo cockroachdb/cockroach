@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import moment from "moment-timezone";
+
 import { defaultTimeScaleOptions } from "./utils";
 
 /**

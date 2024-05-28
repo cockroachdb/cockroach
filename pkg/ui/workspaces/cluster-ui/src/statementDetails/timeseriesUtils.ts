@@ -10,6 +10,7 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { AlignedData } from "uplot";
+
 import { longToInt, TimestampToNumber } from "../util";
 
 type statementStatisticsPerAggregatedTs =

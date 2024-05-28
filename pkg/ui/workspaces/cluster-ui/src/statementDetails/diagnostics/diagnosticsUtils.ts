@@ -10,8 +10,9 @@
 
 import { TimeScale, toDateRange } from "src/timeScaleDropdown";
 import { DiagnosticStatuses } from "src/statementsDiagnostics";
-import { StatementDiagnosticsReport } from "../../api";
 import moment from "moment-timezone";
+
+import { StatementDiagnosticsReport } from "../../api";
 
 export function getDiagnosticsStatus(
   diagnosticsRequest: StatementDiagnosticsReport,

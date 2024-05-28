@@ -25,6 +25,7 @@ import {
   createStore,
   Store,
 } from "redux";
+
 import { AppState, rootReducer, sagas } from "../store";
 
 const history = createMemoryHistory();

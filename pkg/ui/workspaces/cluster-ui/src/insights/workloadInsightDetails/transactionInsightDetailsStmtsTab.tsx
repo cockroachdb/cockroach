@@ -11,14 +11,15 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable";
-import { StmtInsightEvent } from "../types";
-import { InsightCell } from "../workloadInsights/util/insightCell";
 import {
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
   Duration,
   limitText,
 } from "src/util";
 import { Loading } from "src/loading";
+
+import { StmtInsightEvent } from "../types";
+import { InsightCell } from "../workloadInsights/util/insightCell";
 import { InsightsError } from "../insightsErrorComponent";
 import { Timestamp, Timezone } from "../../timestamp";
 

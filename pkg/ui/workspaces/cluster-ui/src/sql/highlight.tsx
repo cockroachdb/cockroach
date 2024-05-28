@@ -12,6 +12,7 @@ import hljs from "highlight.js/lib/core";
 import sqlLangSyntax from "highlight.js/lib/languages/pgsql";
 import React from "react";
 import classNames from "classnames/bind";
+
 import styles from "./sqlhighlight.module.scss";
 import { SqlBoxProps } from "./box";
 

@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import moment, { Moment } from "moment-timezone";
-import { Filters } from "../queryFilter";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import { Filters } from "../queryFilter";
 
 const ContentionTypeEnum = cockroach.sql.contentionpb.ContentionType;
 

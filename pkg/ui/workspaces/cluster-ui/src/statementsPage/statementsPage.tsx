@@ -22,46 +22,20 @@ import {
 } from "src/sortedtable";
 import { Search } from "src/search";
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
-import {
-  calculateActiveFilters,
-  defaultFilters,
-  Filter,
-  Filters,
-  handleFiltersFromQueryString,
-  SelectedFilters,
-  updateFiltersQueryParamsOnTab,
-} from "../queryFilter";
-
 import { Timestamp, TimestampToMoment, syncHistory, unique } from "src/util";
-import {
-  AggregateStatistics,
-  makeStatementsColumns,
-  populateRegionNodeForStatements,
-  StatementsSortedTable,
-} from "../statementsTable";
-import {
-  getLabel,
-  StatisticTableColumnKeys,
-} from "../statsTableUtil/statsTableUtil";
 import {
   ActivateDiagnosticsModalRef,
   ActivateStatementDiagnosticsModal,
 } from "src/statementsDiagnostics";
-import { ISortedTablePagination } from "../sortedtable";
-import styles from "./statementsPage.module.scss";
-import { EmptyStatementsPlaceholder } from "./emptyStatementsPlaceholder";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import ColumnsSelector from "../columnsSelector/columnsSelector";
-import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
-import { UIConfigState } from "../store";
 import {
   SqlStatsSortType,
   StatementsRequest,
   createCombinedStmtsRequest,
   SqlStatsSortOptions,
 } from "src/api/statementsApi";
-import ClearStats from "../sqlActivity/clearStats";
+
 import LoadingError from "../sqlActivity/errorComponent";
 import {
   getValidOption,
@@ -96,6 +70,33 @@ import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import { RequestState } from "src/api/types";
 import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
+import ClearStats from "../sqlActivity/clearStats";
+import { UIConfigState } from "../store";
+import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
+import ColumnsSelector from "../columnsSelector/columnsSelector";
+import { ISortedTablePagination } from "../sortedtable";
+import {
+  getLabel,
+  StatisticTableColumnKeys,
+} from "../statsTableUtil/statsTableUtil";
+import {
+  AggregateStatistics,
+  makeStatementsColumns,
+  populateRegionNodeForStatements,
+  StatementsSortedTable,
+} from "../statementsTable";
+import {
+  calculateActiveFilters,
+  defaultFilters,
+  Filter,
+  Filters,
+  handleFiltersFromQueryString,
+  SelectedFilters,
+  updateFiltersQueryParamsOnTab,
+} from "../queryFilter";
+
+import { EmptyStatementsPlaceholder } from "./emptyStatementsPlaceholder";
+import styles from "./statementsPage.module.scss";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);

@@ -12,17 +12,20 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import { Dispatch } from "redux";
 import { actions as sessionsActions } from "src/store/sessions";
-import { AppState } from "../store";
-import {
-  ActiveStatementDetails,
-  ActiveStatementDetailsDispatchProps,
-} from "./activeStatementDetails";
-import { ActiveStatementDetailsStateProps } from ".";
 import {
   selecteActiveStatement,
   selectContentionDetailsForStatement,
 } from "src/selectors/activeExecutions.selectors";
 import { selectHasAdminRole } from "src/store/uiConfig";
+
+import { AppState } from "../store";
+
+import {
+  ActiveStatementDetails,
+  ActiveStatementDetailsDispatchProps,
+} from "./activeStatementDetails";
+
+import { ActiveStatementDetailsStateProps } from ".";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.

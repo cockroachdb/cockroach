@@ -19,26 +19,29 @@ import {
   Count,
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
 } from "src/util/format";
-import { StmtInsightEvent } from "../types";
 import classNames from "classnames/bind";
-import { CockroachCloudContext } from "../../contexts";
 
 // Styles
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
+
 import "antd/lib/col/style";
 import "antd/lib/row/style";
+import { Heading } from "@cockroachlabs/ui-components";
+
+import { WaitTimeInsightsLabels } from "../../detailsPanels/waitTimeInsightsPanel";
+import { getStmtInsightRecommendations } from "../utils";
 import {
   StatementDetailsLink,
   TransactionDetailsLink,
 } from "../workloadInsights/util";
-import { getStmtInsightRecommendations } from "../utils";
-import { ContentionStatementDetailsTable } from "./insightDetailsTables";
-import { WaitTimeInsightsLabels } from "../../detailsPanels/waitTimeInsightsPanel";
-import { Heading } from "@cockroachlabs/ui-components";
+import { CockroachCloudContext } from "../../contexts";
+import { StmtInsightEvent } from "../types";
 import { SortSetting } from "../../sortedtable";
 import { Timestamp } from "../../timestamp";
+
+import { ContentionStatementDetailsTable } from "./insightDetailsTables";
 
 const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);

@@ -10,7 +10,9 @@
 
 import { merge } from "lodash";
 import uPlot, { Options, Band, AlignedData } from "uplot";
+
 import { AxisUnits, AxisDomain } from "../utils/domain";
+
 import { barTooltipPlugin } from "./plugins";
 
 const seriesPalette = [

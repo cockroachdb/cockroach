@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { indexUnusedDuration } from "src/util/constants";
+
 import { SchemaInsightsViewProps } from "./schemaInsightsView";
 
 export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {

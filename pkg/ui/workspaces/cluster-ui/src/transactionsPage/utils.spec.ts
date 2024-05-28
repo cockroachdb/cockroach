@@ -9,16 +9,18 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
+import Long from "long";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
+
+import { Filters } from "../queryFilter";
+
 import {
   filterTransactions,
   generateRegion,
   getStatementsByFingerprintId,
   statementFingerprintIdsToText,
 } from "./utils";
-import { Filters } from "../queryFilter";
 import { data, nodeRegions } from "./transactions.fixture";
-import Long from "long";
-import * as protos from "@cockroachlabs/crdb-protobuf-client";
 
 type Statement =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;

@@ -21,12 +21,11 @@ import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { DATE_FORMAT_24_TZ, idAttr, getMatchParamByName } from "src/util";
-
 import { commonStyles } from "src/common";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import scheduleStyles from "src/schedules/schedules.module.scss";
-
 import classNames from "classnames/bind";
+
 import { Timestamp } from "../../timestamp";
 
 const cardCx = classNames.bind(summaryCardStyles);

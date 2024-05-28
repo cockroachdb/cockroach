@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
-import { propsToQueryString, queryByName } from "./query";
 import { Location } from "history";
+
+import { propsToQueryString, queryByName } from "./query";
 
 const location: Location = {
   pathname: "/debug/chart",

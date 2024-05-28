@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+
 import { AppState } from "../reducers";
 
 export const selectUIConfig = createSelector(

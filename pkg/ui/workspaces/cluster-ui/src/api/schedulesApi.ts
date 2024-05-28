@@ -10,12 +10,14 @@
 
 import Long from "long";
 import moment from "moment-timezone";
+
+import { RequestError } from "../util";
+
 import {
   executeInternalSql,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
 } from "./sqlApi";
-import { RequestError } from "../util";
 
 type ScheduleColumns = {
   id: string;

@@ -16,25 +16,27 @@ import { commonStyles } from "src/common";
 import classNames from "classnames/bind";
 import { useHistory, match } from "react-router-dom";
 import { Col, Row, Tabs } from "antd";
-import { ActiveStatementDetailsOverviewTab } from "./activeStatementDetailsOverviewTab";
 import { SqlBox, SqlBoxSize } from "src/sql/box";
-import { getExplainPlanFromGist } from "../api/decodePlanGistApi";
 import { getMatchParamByName } from "src/util/query";
-import { executionIdAttr } from "../util";
 import {
   ActiveStatement,
   ExecutionContentionDetails,
 } from "src/activeExecutions";
 
+import { executionIdAttr } from "../util";
+import { getExplainPlanFromGist } from "../api/decodePlanGistApi";
+
 import "antd/lib/tabs/style";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
-import styles from "./statementDetails.module.scss";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
-import { Insights } from "./planDetails";
 import { getIdxRecommendationsFromExecution } from "../api/idxRecForStatementApi";
 import { SortSetting } from "../sortedtable";
+
+import { Insights } from "./planDetails";
+import styles from "./statementDetails.module.scss";
+import { ActiveStatementDetailsOverviewTab } from "./activeStatementDetailsOverviewTab";
 const cx = classNames.bind(styles);
 
 export type ActiveStatementDetailsStateProps = {

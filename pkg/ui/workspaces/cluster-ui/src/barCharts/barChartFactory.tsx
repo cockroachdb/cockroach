@@ -14,6 +14,7 @@ import _ from "lodash";
 import React from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
+
 import styles from "./barCharts.module.scss";
 import { NumericStatLegend } from "./numericStatLegend";
 import { normalizeClosedDomain } from "./utils";

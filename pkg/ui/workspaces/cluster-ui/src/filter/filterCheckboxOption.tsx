@@ -11,9 +11,10 @@
 import React from "react";
 import Select, { Props, OptionsType } from "react-select";
 import { noop } from "lodash";
+import { StylesConfig } from "react-select/src/styles";
+
 import { CheckboxOption } from "../multiSelectCheckbox/multiSelectCheckbox";
 import { filterLabel } from "../queryFilter/filterClasses";
-import { StylesConfig } from "react-select/src/styles";
 
 export type FilterCheckboxOptionItem = { label: string; value: string };
 export type FilterCheckboxOptionsType = OptionsType<FilterCheckboxOptionItem>;

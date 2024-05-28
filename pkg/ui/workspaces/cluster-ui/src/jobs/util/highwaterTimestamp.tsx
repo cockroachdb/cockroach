@@ -12,6 +12,7 @@ import { Tooltip } from "@cockroachlabs/ui-components";
 import moment from "moment-timezone";
 import React from "react";
 import { DATE_FORMAT_24_TZ } from "src/util/format";
+
 import { Timestamp } from "../../timestamp";
 
 type ITimestamp = google.protobuf.ITimestamp;

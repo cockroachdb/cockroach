@@ -16,20 +16,20 @@ import {
   SortedTable,
   SortSetting,
 } from "src/sortedtable";
-
-import styles from "./indexDetailsPage.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
-import { CaretRight } from "../icon/caretRight";
-import { BreadcrumbItem, Breadcrumbs } from "../breadcrumbs";
 import { Caution, Search as IndexIcon } from "@cockroachlabs/icons";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { Col, Row, Tooltip } from "antd";
+import moment, { Moment } from "moment-timezone";
+import { Heading } from "@cockroachlabs/ui-components";
+
+import { CaretRight } from "../icon/caretRight";
+import { BreadcrumbItem, Breadcrumbs } from "../breadcrumbs";
+
 import "antd/lib/col/style";
 import "antd/lib/row/style";
 import "antd/lib/tooltip/style";
 import { SummaryCard } from "../summaryCard";
-import moment, { Moment } from "moment-timezone";
-import { Heading } from "@cockroachlabs/ui-components";
 import { Anchor } from "../anchor";
 import {
   calculateTotalWorkload,
@@ -58,7 +58,9 @@ import { Pagination } from "../pagination";
 import { TableStatistics } from "../tableStatistics";
 import { EmptyStatementsPlaceholder } from "../statementsPage/emptyStatementsPlaceholder";
 import { StatementViewType } from "../statementsPage/statementPageTypes";
+
 import { PageConfig, PageConfigItem } from "src/pageConfig";
+
 import {
   TimeScale,
   timeScale1hMinOptions,
@@ -72,10 +74,16 @@ import {
   Filters,
 } from "../queryFilter";
 import { commonStyles } from "../common";
+
 import { Loading, Timestamp } from "src";
+
 import LoadingError from "../sqlActivity/errorComponent";
+
 import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
+
 import { filterStatementsData } from "../sqlActivity/util";
+
+import styles from "./indexDetailsPage.module.scss";
 
 const cx = classNames.bind(styles);
 const stmtCx = classNames.bind(statementsStyles);

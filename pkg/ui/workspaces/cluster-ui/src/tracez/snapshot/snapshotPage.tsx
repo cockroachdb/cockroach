@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { join } from "path";
+
 import React, { useCallback, useEffect } from "react";
 import { RouteComponentProps } from "react-router-dom";
 import {
@@ -20,15 +22,13 @@ import {
 } from "src/api/tracezApi";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { SortSetting } from "src/sortedtable";
-import { join } from "path";
-import { getMatchParamByName } from "src/util";
-import { syncHistory } from "src/util";
+import { getMatchParamByName, syncHistory } from "src/util";
+import Long from "long";
+import { Breadcrumbs } from "src/breadcrumbs";
 
 import { SnapshotComponent } from "./snapshotComponent";
-import Long from "long";
 import { SpanComponent } from "./spanComponent";
 import { RawTraceComponent } from "./rawTraceComponent";
-import { Breadcrumbs } from "src/breadcrumbs";
 
 // This component does some manual route management and navigation.
 // This is because the data model doesn't match the ideal route form.

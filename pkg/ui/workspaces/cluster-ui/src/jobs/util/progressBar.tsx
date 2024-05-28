@@ -11,11 +11,11 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Line } from "rc-progress";
 import React from "react";
 import { Badge } from "src/badge";
-
-import { jobStatusToBadgeStatus } from "./jobOptions";
+import classNames from "classnames/bind";
 
 import styles from "../jobs.module.scss";
-import classNames from "classnames/bind";
+
+import { jobStatusToBadgeStatus } from "./jobOptions";
 
 const cx = classNames.bind(styles);
 

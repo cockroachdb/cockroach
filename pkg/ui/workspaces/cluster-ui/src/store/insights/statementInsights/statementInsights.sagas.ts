@@ -9,10 +9,10 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
-
-import { actions } from "./statementInsights.reducer";
 import { StmtInsightsReq, getStmtInsightsApi } from "src/api/stmtInsightsApi";
 import { PayloadAction } from "@reduxjs/toolkit";
+
+import { actions } from "./statementInsights.reducer";
 
 export function* refreshStatementInsightsSaga(
   action?: PayloadAction<StmtInsightsReq>,

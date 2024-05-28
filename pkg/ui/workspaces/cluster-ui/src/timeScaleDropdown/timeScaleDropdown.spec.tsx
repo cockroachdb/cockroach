@@ -10,6 +10,14 @@
 
 import React, { useState } from "react";
 import { mount } from "enzyme";
+import moment from "moment-timezone";
+import { MemoryRouter } from "react-router";
+import { assert } from "chai";
+import { render } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+import { timeFormat as customMenuTimeFormat } from "../dateRangeMenu";
+
 import {
   formatRangeSelectSelected,
   generateDisabledArrows,
@@ -19,15 +27,9 @@ import {
   TimeScaleDropdown,
 } from "./timeScaleDropdown";
 import * as timescale from "./timeScaleTypes";
-import moment from "moment-timezone";
-import { MemoryRouter } from "react-router";
 import TimeFrameControls from "./timeFrameControls";
 import RangeSelect from "./rangeSelect";
-import { timeFormat as customMenuTimeFormat } from "../dateRangeMenu";
-import { assert } from "chai";
 import { TimeWindow, ArrowDirection, TimeScale } from "./timeScaleTypes";
-import { render } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 
 /**
  * This wrapper holds the time scale state to allow tests to render a stateful, functional component,

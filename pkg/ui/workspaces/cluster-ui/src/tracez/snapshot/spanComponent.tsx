@@ -13,9 +13,7 @@ import moment from "moment-timezone";
 import { Helmet } from "react-helmet";
 import { commonStyles } from "src/common";
 import classNames from "classnames/bind";
-import styles from "../snapshot.module.scss";
 import { Loading } from "src/loading";
-import { SpanTable, formatDurationHours, TagCell } from "./spanTable";
 import { TimestampToMoment } from "src/util";
 import { SortSetting } from "src/sortedtable";
 import {
@@ -25,12 +23,18 @@ import {
 } from "src/api";
 import { CircleFilled } from "src/icon";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import RecordingMode = cockroach.util.tracing.tracingpb.RecordingMode;
+
 import { Switch } from "antd";
 import "antd/lib/switch/style";
 import Long from "long";
 import { Button } from "src/button";
 import { useHistory } from "react-router-dom";
+
+import styles from "../snapshot.module.scss";
+
+import { SpanTable, formatDurationHours, TagCell } from "./spanTable";
 import { SpanMetadataTable } from "./spanMetadataTable";
 
 const cx = classNames.bind(styles);

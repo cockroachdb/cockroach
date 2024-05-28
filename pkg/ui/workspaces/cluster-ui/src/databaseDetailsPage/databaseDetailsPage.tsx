@@ -25,15 +25,8 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import { DATE_FORMAT, EncodeDatabaseTableUri } from "src/util/format";
-import { mvccGarbage, syncHistory, unique } from "../util";
-
-import styles from "./databaseDetailsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
-import { Anchor } from "../anchor";
-import LoadingError from "../sqlActivity/errorComponent";
-import { Loading } from "../loading";
-import { Search } from "../search";
 import {
   calculateActiveFilters,
   defaultFilters,
@@ -42,14 +35,8 @@ import {
 } from "src/queryFilter";
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "src/tableStatistics";
-import { Timestamp, Timezone } from "../timestamp";
-import {
-  DbDetailsBreadcrumbs,
-  DiskSizeCell,
-  IndexesCell,
-  MVCCInfoCell,
-  TableNameCell,
-} from "./tableCells";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import {
   isMaxSizeError,
   SqlApiQueryResponse,
@@ -60,8 +47,22 @@ import {
   TableSpanStatsRow,
 } from "../api";
 import { checkInfoAvailable } from "../databases";
-import { InlineAlert } from "@cockroachlabs/ui-components";
+import { Timestamp, Timezone } from "../timestamp";
+import { Search } from "../search";
+import { Loading } from "../loading";
+import LoadingError from "../sqlActivity/errorComponent";
+import { Anchor } from "../anchor";
+import { mvccGarbage, syncHistory, unique } from "../util";
+
+import {
+  DbDetailsBreadcrumbs,
+  DiskSizeCell,
+  IndexesCell,
+  MVCCInfoCell,
+  TableNameCell,
+} from "./tableCells";
 import { ViewMode } from "./types";
+import styles from "./databaseDetailsPage.module.scss";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);

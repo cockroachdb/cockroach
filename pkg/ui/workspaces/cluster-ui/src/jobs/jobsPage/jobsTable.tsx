@@ -27,13 +27,13 @@ import {
   resumeJob,
 } from "src/util/docs";
 import { DATE_WITH_SECONDS_FORMAT } from "src/util/format";
+import classNames from "classnames/bind";
 
 import { HighwaterTimestamp, JobStatusCell } from "../util";
-import { JobDescriptionCell } from "./jobDescriptionCell";
-
 import styles from "../jobs.module.scss";
-import classNames from "classnames/bind";
 import { Timestamp, Timezone } from "../../timestamp";
+
+import { JobDescriptionCell } from "./jobDescriptionCell";
 const cx = classNames.bind(styles);
 
 type Job = cockroach.server.serverpb.IJobResponse;

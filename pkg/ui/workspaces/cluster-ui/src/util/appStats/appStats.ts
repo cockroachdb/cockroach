@@ -10,7 +10,6 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { TimestampToNumber, DurationToNumber } from "src/util/convert";
-
 import { FixLong } from "src/util/fixLong";
 import { uniqueLong, unique } from "src/util/arrays";
 import Long from "long";

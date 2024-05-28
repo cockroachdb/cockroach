@@ -17,6 +17,7 @@ import { mockStmtStats, Stmt } from "src/api/testUtils";
 import { Filters } from "src/queryFilter/filter";
 import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { INTERNAL_APP_NAME_PREFIX, unset } from "../util";
 
 describe("filterStatementsData", () => {

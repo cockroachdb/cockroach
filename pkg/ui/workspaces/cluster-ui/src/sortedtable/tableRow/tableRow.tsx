@@ -10,8 +10,10 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import styles from "./tableRow.module.scss";
+
 import { ExpandableConfig, SortableColumn } from "../sortedtable";
+
+import styles from "./tableRow.module.scss";
 import { RowCell } from "./rowCell";
 
 const cx = classNames.bind(styles);

@@ -21,6 +21,7 @@ import {
   StatementRawFormat,
 } from "src/api";
 import moment from "moment-timezone";
+
 import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
 import { AggregateStatistics } from "../statementsTable";
 import { INTERNAL_APP_NAME_PREFIX } from "../activeExecutions/activeStatementUtils";

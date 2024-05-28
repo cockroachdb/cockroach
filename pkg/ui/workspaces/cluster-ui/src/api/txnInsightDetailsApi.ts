@@ -9,17 +9,19 @@
 // licenses/APL.txt.
 
 import moment from "moment-timezone";
+
+import {
+  InsightNameEnum,
+  StmtFailureCodesStr,
+  TxnInsightDetails,
+} from "../insights";
+
 import {
   executeInternalSql,
   isMaxSizeError,
   sqlApiErrorMessage,
   SqlApiResponse,
 } from "./sqlApi";
-import {
-  InsightNameEnum,
-  StmtFailureCodesStr,
-  TxnInsightDetails,
-} from "../insights";
 import {
   formatStmtInsights,
   stmtInsightsByTxnExecutionQuery,

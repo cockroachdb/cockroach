@@ -11,8 +11,12 @@
 import React, { useCallback, useState } from "react";
 import copy from "copy-to-clipboard";
 import { message, Icon } from "antd";
+
 import "antd/lib/message/style";
 import "antd/lib/icon/style";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
+
 import { Modal } from "../modal";
 import { Text, TextTypes } from "../text";
 import { Button } from "../button";
@@ -27,8 +31,7 @@ import {
   onlineSchemaChanges,
 } from "../util";
 import { Anchor } from "../anchor";
-import { InlineAlert } from "@cockroachlabs/ui-components";
-import classNames from "classnames/bind";
+
 import styles from "./indexActionBtn.module.scss";
 import { InsightType } from "./types";
 

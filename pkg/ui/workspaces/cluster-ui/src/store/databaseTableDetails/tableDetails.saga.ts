@@ -9,12 +9,13 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeEvery } from "redux-saga/effects";
-
-import { actions } from "./tableDetails.reducer";
 import { ErrorWithKey, getTableDetails, TableDetailsReqParams } from "src/api";
 import moment from "moment";
 import { PayloadAction } from "@reduxjs/toolkit";
+
 import { generateTableID } from "../../util";
+
+import { actions } from "./tableDetails.reducer";
 
 export function* refreshTableDetailsSaga(
   action: PayloadAction<TableDetailsReqParams>,

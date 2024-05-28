@@ -11,6 +11,7 @@
 import React from "react";
 import { Spinner } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
+
 import styles from "./tableSpinner.module.scss";
 
 const cx = classNames.bind(styles);

@@ -12,6 +12,7 @@ import React from "react";
 import classNames from "classnames/bind";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { Insight } from "src/insights";
+
 import styles from "./workloadInsights.module.scss";
 
 const cx = classNames.bind(styles);

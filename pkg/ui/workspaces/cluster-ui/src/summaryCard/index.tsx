@@ -10,10 +10,12 @@
 
 import React from "react";
 import classnames from "classnames/bind";
-import styles from "./summaryCard.module.scss";
-import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CircleFilled } from "src/icon";
 import { Tooltip } from "antd";
+
+import booleanSettingStyles from "../settings/booleanSetting.module.scss";
+
+import styles from "./summaryCard.module.scss";
 import "antd/lib/tooltip/style";
 
 interface ISummaryCardProps {

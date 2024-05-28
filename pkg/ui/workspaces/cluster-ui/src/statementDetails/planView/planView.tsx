@@ -13,6 +13,7 @@ import _ from "lodash";
 import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
+
 import {
   getAttributeTooltip,
   getOperatorTooltip,

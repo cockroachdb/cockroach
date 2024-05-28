@@ -20,18 +20,20 @@ import ColumnsSelector, {
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { EmptyTransactionsPlaceholder } from "src/transactionsPage/emptyTransactionsPlaceholder";
 import { TableStatistics } from "src/tableStatistics";
-import {
-  ISortedTablePagination,
-  SortSetting,
-} from "../sortedtable/sortedtable";
-import {
-  makeActiveTransactionsColumns,
-  getColumnOptions,
-} from "./activeTransactionsTable";
 import { TransactionViewType } from "src/transactionsPage/transactionsPageTypes";
 import { calculateActiveFilters } from "src/queryFilter/filter";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { SortedTable } from "src/sortedtable";
+
+import {
+  ISortedTablePagination,
+  SortSetting,
+} from "../sortedtable/sortedtable";
+
+import {
+  makeActiveTransactionsColumns,
+  getColumnOptions,
+} from "./activeTransactionsTable";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
 

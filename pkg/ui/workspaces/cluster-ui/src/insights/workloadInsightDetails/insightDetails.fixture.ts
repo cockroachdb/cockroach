@@ -11,7 +11,7 @@
 import moment from "moment-timezone";
 import { createMemoryHistory } from "history";
 import { noop } from "lodash";
-import { StatementInsightDetailsProps } from "./statementInsightDetails";
+
 import {
   InsightEventBase,
   InsightExecEnum,
@@ -19,6 +19,8 @@ import {
   StatementStatus,
   StmtInsightEvent,
 } from "../types";
+
+import { StatementInsightDetailsProps } from "./statementInsightDetails";
 
 const insightEventBaseFixture: InsightEventBase = {
   application: "app",

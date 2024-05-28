@@ -18,11 +18,9 @@ import {
   takeEvery,
 } from "redux-saga/effects";
 import { ErrorWithKey } from "src/api/statementsApi";
-import {
-  actions as indexStatsActions,
-  ResetIndexUsageStatsPayload,
-} from "./indexStats.reducer";
 import { CACHE_INVALIDATION_PERIOD } from "src/store/utils";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { generateTableID } from "../../util";
 import {
   getIndexStats,
@@ -30,7 +28,11 @@ import {
   TableIndexStatsRequest,
   TableIndexStatsResponseWithKey,
 } from "../../api/indexDetailsApi";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import {
+  actions as indexStatsActions,
+  ResetIndexUsageStatsPayload,
+} from "./indexStats.reducer";
 
 export function* refreshIndexStatsSaga(
   action: PayloadAction<TableIndexStatsRequest>,

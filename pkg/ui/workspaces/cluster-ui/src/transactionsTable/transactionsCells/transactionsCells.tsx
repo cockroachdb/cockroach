@@ -14,9 +14,11 @@ import { getHighlightedText } from "src/highlightedText";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { limitText } from "src/util";
 import classNames from "classnames/bind";
+
 import statementsStyles from "../../statementsTable/statementsTableContent.module.scss";
-import transactionsCellsStyles from "./transactionsCells.module.scss";
 import { TransactionLinkTarget } from "../transactionsTable";
+
+import transactionsCellsStyles from "./transactionsCells.module.scss";
 
 const statementsCx = classNames.bind(statementsStyles);
 const ownCellStyles = classNames.bind(transactionsCellsStyles);

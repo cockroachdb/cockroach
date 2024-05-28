@@ -11,9 +11,6 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { createMemoryHistory } from "history";
-
-import { StatementDetails } from "./statementDetails";
-import { getStatementDetailsPropsFixture } from "./statementDetails.fixture";
 import {
   ConnectedRouter,
   connectRouter,
@@ -26,8 +23,12 @@ import {
   createStore,
   Store,
 } from "redux";
-import { AppState, rootReducer } from "../store";
 import { Provider } from "react-redux";
+
+import { AppState, rootReducer } from "../store";
+
+import { getStatementDetailsPropsFixture } from "./statementDetails.fixture";
+import { StatementDetails } from "./statementDetails";
 
 const history = createMemoryHistory();
 const routerReducer = connectRouter(history);

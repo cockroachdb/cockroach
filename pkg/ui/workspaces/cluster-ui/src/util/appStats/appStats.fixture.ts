@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import Long from "long";
+
 import { CollectedStatementStatistics } from ".";
 
 export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistics[] =

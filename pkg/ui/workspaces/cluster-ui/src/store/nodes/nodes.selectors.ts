@@ -10,11 +10,12 @@
 
 import { createSelector } from "@reduxjs/toolkit";
 import _ from "lodash";
+import { accumulateMetrics } from "src/util/proto";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { AppState } from "../reducers";
 import { getDisplayName } from "../../nodes";
 import { livenessStatusByNodeIDSelector } from "../liveness";
-import { accumulateMetrics } from "src/util/proto";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 type ILocality = cockroach.roachpb.ILocality;
 
 export const nodeStatusesSelector = (state: AppState) =>

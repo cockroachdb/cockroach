@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { RequestError } from "../util";
+
 import { withBasePath } from "./basePath";
 
 interface ProtoBuilder<

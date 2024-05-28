@@ -10,11 +10,13 @@
 
 import React, { useContext } from "react";
 import moment from "moment-timezone";
-import { dateFormat, timeFormat } from "./timeScaleDropdown";
+import { Timezone } from "src/timestamp";
+
 import { TimezoneContext } from "../contexts";
+
+import { dateFormat, timeFormat } from "./timeScaleDropdown";
 import { toRoundedDateRange } from "./utils";
 import { TimeScale } from "./timeScaleTypes";
-import { Timezone } from "src/timestamp";
 
 export const FormattedTimescale = (props: {
   ts: TimeScale;

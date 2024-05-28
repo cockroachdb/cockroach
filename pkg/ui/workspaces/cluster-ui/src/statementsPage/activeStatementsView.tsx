@@ -26,6 +26,12 @@ import {
 } from "src/activeExecutions";
 import { Filter } from "src/queryFilter";
 import LoadingError from "src/sqlActivity/errorComponent";
+import { queryByName, syncHistory } from "src/util/query";
+import { getActiveStatementFiltersFromURL } from "src/queryFilter/utils";
+import { Pagination } from "src/pagination";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import RefreshControl from "src/activeExecutions/refreshControl/refreshControl";
+
 import {
   ACTIVE_STATEMENT_SEARCH_PARAM,
   getAppsFromActiveExecutions,
@@ -37,14 +43,9 @@ import {
   getFullFiltersAsStringRecord,
 } from "../queryFilter";
 import { ActiveStatementsSection } from "../activeExecutions/activeStatementsSection";
-import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "../sortedtable/getTableSortFromURL";
-import { getActiveStatementFiltersFromURL } from "src/queryFilter/utils";
-import { Pagination } from "src/pagination";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 
 import styles from "./statementsPage.module.scss";
-import RefreshControl from "src/activeExecutions/refreshControl/refreshControl";
 
 const cx = classNames.bind(styles);
 const PAGE_SIZE = 20;
