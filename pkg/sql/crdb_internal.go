@@ -6180,6 +6180,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 			doError(catalog.ValidateRolesInDescriptor(descriptor, func(username username.SQLUsername) (bool, error) {
 				if username.IsRootUser() ||
 					username.IsAdminRole() ||
+					username.IsNodeUser() ||
 					username.IsPublicRole() {
 					return true, nil
 				}
