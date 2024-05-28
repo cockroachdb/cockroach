@@ -646,6 +646,7 @@ func (rf *Fetcher) StartInconsistentScan(
 			}
 		}
 
+		log.VEventf(ctx, 2, "inconsistent scan: sending a batch with %d requests", len(ba.Requests))
 		res, err := txn.Send(ctx, ba)
 		if err != nil {
 			return nil, err.GoError()
