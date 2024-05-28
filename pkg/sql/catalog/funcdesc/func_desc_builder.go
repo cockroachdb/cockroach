@@ -156,6 +156,12 @@ func (fdb *functionDescriptorBuilder) StripDanglingBackReferences(
 func (fdb *functionDescriptorBuilder) StripNonExistentRoles(
 	roleExists func(role username.SQLUsername) bool,
 ) error {
+	// If the owner doesn't exist, change the owner to admin.
+	if !roleExists(fdb.maybeModified.GetPrivileges().Owner()) {
+		fdb.maybeModified.Privileges.OwnerProto = username.AdminRoleName().EncodeProto()
+		fdb.changes.Add(catalog.StrippedNonExistentRoles)
+	}
+	// Remove any non-existent roles from the privileges.
 	newPrivs := make([]catpb.UserPrivileges, 0, len(fdb.maybeModified.Privileges.Users))
 	for _, priv := range fdb.maybeModified.Privileges.Users {
 		exists := roleExists(priv.UserProto.Decode())
