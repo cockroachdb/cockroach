@@ -1744,6 +1744,7 @@ func registerCDC(r registry.Registry) {
 			//   - HMM i seem to be able to reproduce it by returning transient errors in whxtest... implying that batching sink / parallel io have bugs under retry conditions
 			//     - how best to debug that? just output a ton of info about the batches being sent?
 			//     - jk now i can't reproduce it again. fml
+			//   - current status: webhooks chaos test with order validation seems to pass. sooo
 
 			// _, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.sink_io_workers = 1;`)
 			// if err != nil {
