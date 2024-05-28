@@ -18,21 +18,21 @@ import "antd/lib/tabs/style";
 import { Button } from "src/button";
 import { getMatchParamByName } from "src/util/query";
 import { TxnInsightDetailsRequest, TxnInsightDetailsReqErrs } from "src/api";
+import { commonStyles } from "src/common";
+import { idAttr, insights } from "src/util";
+import { timeScaleRangeToObj } from "src/timeScaleDropdown/utils";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import { Anchor } from "src/anchor";
+
+import { TimeScale } from "../../timeScaleDropdown";
 import {
   InsightNameEnum,
   StmtFailureCodesStr,
   TxnInsightDetails,
 } from "../types";
 
-import { commonStyles } from "src/common";
-import { TimeScale } from "../../timeScaleDropdown";
-import { idAttr } from "src/util";
-import { TransactionInsightDetailsOverviewTab } from "./transactionInsightDetailsOverviewTab";
 import { TransactionInsightsDetailsStmtsTab } from "./transactionInsightDetailsStmtsTab";
-import { timeScaleRangeToObj } from "src/timeScaleDropdown/utils";
-import { InlineAlert } from "@cockroachlabs/ui-components";
-import { insights } from "src/util";
-import { Anchor } from "src/anchor";
+import { TransactionInsightDetailsOverviewTab } from "./transactionInsightDetailsOverviewTab";
 
 export interface TransactionInsightDetailsStateProps {
   insightDetails: TxnInsightDetails;

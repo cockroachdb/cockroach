@@ -12,7 +12,9 @@ import React, { useState } from "react";
 import { viewAttr } from "src/util";
 import { useHistory, useLocation } from "react-router-dom";
 import { queryByName } from "src/util/query";
+
 import { InsightExecEnum, InsightExecOptions } from "../types";
+
 import { DropDownSelect } from "./util";
 import {
   TransactionInsightsView,

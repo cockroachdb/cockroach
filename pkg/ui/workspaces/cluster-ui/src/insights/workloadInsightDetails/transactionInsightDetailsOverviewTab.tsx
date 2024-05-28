@@ -26,7 +26,12 @@ import {
   InsightsSortedTable,
   makeInsightsColumns,
 } from "src/insightsTable/insightsTable";
-import { WaitTimeDetailsTable } from "./insightDetailsTables";
+import classNames from "classnames/bind";
+import { TxnInsightDetailsReqErrs } from "src/api";
+import { Loading } from "src/loading";
+import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
+import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
+
 import {
   ContentionDetails,
   ContentionEvent,
@@ -35,20 +40,15 @@ import {
   StmtInsightEvent,
   TxnInsightEvent,
 } from "../types";
-
-import classNames from "classnames/bind";
 import { CockroachCloudContext } from "../../contexts";
 import { TransactionDetailsLink } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
 import { getTxnInsightRecommendations } from "../utils";
 import { SortSetting } from "../../sortedtable";
-import { TxnInsightDetailsReqErrs } from "src/api";
-import { Loading } from "src/loading";
-
-import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
-import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
 import { InsightsError } from "../insightsErrorComponent";
 import { Timestamp } from "../../timestamp";
+
+import { WaitTimeDetailsTable } from "./insightDetailsTables";
 import { FailedInsightDetailsPanel } from "./failedInsightDetailsPanel";
 
 const cx = classNames.bind(insightsDetailsStyles);

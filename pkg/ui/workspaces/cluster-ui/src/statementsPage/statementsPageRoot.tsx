@@ -9,19 +9,20 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { StatementViewType } from "./statementPageTypes";
 import { Option } from "src/selectWithDescription/selectWithDescription";
 import { SQLActivityRootControls } from "src/sqlActivityRootControls/sqlActivityRootControls";
 import {
   StatementsPage,
   StatementsPageProps,
 } from "src/statementsPage/statementsPage";
+import { statementsSql } from "src/util/docs";
+import { Anchor } from "src/anchor";
+
 import {
   ActiveStatementsView,
   ActiveStatementsViewProps,
 } from "./activeStatementsView";
-import { statementsSql } from "src/util/docs";
-import { Anchor } from "src/anchor";
+import { StatementViewType } from "./statementPageTypes";
 
 export type StatementsPageRootProps = {
   fingerprintsPageProps: StatementsPageProps;

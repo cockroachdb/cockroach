@@ -10,8 +10,8 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
+
 import { SessionsPage } from "./sessionsPage";
 import {
   sessionsPagePropsEmptyFixture,

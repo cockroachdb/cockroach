@@ -11,7 +11,9 @@
 import moment from "moment-timezone";
 import { byteArrayToUuid } from "src/sessions";
 import { TimestampToMoment, unset } from "src/util";
-import { ActiveTransaction } from ".";
+import { ClusterLocksResponse, ClusterLockState } from "src/api";
+import { DurationToMomentDuration } from "src/util/convert";
+
 import {
   SessionsResponse,
   ActiveStatementPhase,
@@ -22,10 +24,11 @@ import {
   ActiveExecutions,
   ExecutionContentionDetails,
   ActiveExecution,
+  ActiveStatement,
+  ActiveStatementFilters,
 } from "./types";
-import { ActiveStatement, ActiveStatementFilters } from "./types";
-import { ClusterLocksResponse, ClusterLockState } from "src/api";
-import { DurationToMomentDuration } from "src/util/convert";
+
+import { ActiveTransaction } from ".";
 
 export const ACTIVE_STATEMENT_SEARCH_PARAM = "q";
 export const INTERNAL_APP_NAME_PREFIX = "$ internal";

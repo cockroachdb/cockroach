@@ -11,10 +11,10 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import React from "react";
 import { Link } from "react-router-dom";
-
-import jobStyles from "../jobs.module.scss";
 import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 import classNames from "classnames/bind";
+
+import jobStyles from "../jobs.module.scss";
 
 const jobCx = classNames.bind(jobStyles);
 const tableCx = classNames.bind(sortedTableStyles);

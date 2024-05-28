@@ -10,13 +10,14 @@
 
 import React, { useContext } from "react";
 import { Tooltip } from "antd";
+
 import "antd/lib/tooltip/style";
-import { CircleFilled } from "../icon";
-import { DatabasesPageDataDatabase } from "./databasesPage";
 import classNames from "classnames/bind";
-import styles from "./databasesPage.module.scss";
-import { EncodeDatabaseUri } from "../util";
 import { Link } from "react-router-dom";
+import { Caution } from "@cockroachlabs/icons";
+
+import { CircleFilled } from "../icon";
+import { EncodeDatabaseUri } from "../util";
 import { StackIcon } from "../icon/stackIcon";
 import { CockroachCloudContext } from "../contexts";
 import {
@@ -25,7 +26,9 @@ import {
   getQueryErrorMessage,
 } from "../databases";
 import * as format from "../util/format";
-import { Caution } from "@cockroachlabs/icons";
+
+import styles from "./databasesPage.module.scss";
+import { DatabasesPageDataDatabase } from "./databasesPage";
 
 const cx = classNames.bind(styles);
 

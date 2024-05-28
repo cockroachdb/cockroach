@@ -10,8 +10,10 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import styles from "./tableHead.module.scss";
+
 import { ExpandableConfig, SortableColumn, SortSetting } from "../sortedtable";
+
+import styles from "./tableHead.module.scss";
 
 const cx = classNames.bind(styles);
 

@@ -9,13 +9,14 @@
 // licenses/APL.txt.
 
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
+
 import {
   Filters,
   getTimeValueInSeconds,
   calculateActiveFilters,
 } from "../queryFilter";
 import { AggregateStatistics } from "../statementsTable";
-import Long from "long";
 import {
   longToInt,
   addStatementStats,

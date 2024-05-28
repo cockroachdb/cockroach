@@ -10,6 +10,7 @@
 
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { AggregateStatistics } from "src/statementsTable";
+
 import { longToInt } from "./fixLong";
 
 type Statement =

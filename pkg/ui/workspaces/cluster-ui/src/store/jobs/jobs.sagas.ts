@@ -9,10 +9,10 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeEvery } from "redux-saga/effects";
-
-import { actions } from "./jobs.reducer";
 import { getJobs, JobsRequest } from "src/api/jobsApi";
 import { PayloadAction } from "@reduxjs/toolkit";
+
+import { actions } from "./jobs.reducer";
 
 export function* refreshJobsSaga(action: PayloadAction<JobsRequest>) {
   yield put(actions.request(action.payload));

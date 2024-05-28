@@ -11,22 +11,18 @@
 import React, { useContext, useState } from "react";
 import { Helmet } from "react-helmet";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import {
-  PlansSortedTable,
-  makeExplainPlanColumns,
-  PlanHashStats,
-} from "./plansTable";
+import { Col, Row } from "antd";
+import classNames from "classnames/bind";
+
 import { Button } from "../../button";
 import { SqlBox, SqlBoxSize } from "../../sql";
 import { SortSetting } from "../../sortedtable";
-import { Col, Row } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
 import {
   InsightsSortedTable,
   makeInsightsColumns,
 } from "../../insightsTable/insightsTable";
-import classNames from "classnames/bind";
 import styles from "../statementDetails.module.scss";
 import { CockroachCloudContext } from "../../contexts";
 import { InsightRecommendation, InsightType } from "../../insights";
@@ -40,8 +36,14 @@ import {
   RenderCount,
   TimestampToMoment,
 } from "../../util";
-import { formatIndexes } from "./plansTable";
 import { Timestamp } from "../../timestamp";
+
+import {
+  formatIndexes,
+  PlansSortedTable,
+  makeExplainPlanColumns,
+  PlanHashStats,
+} from "./plansTable";
 
 const cx = classNames.bind(styles);
 

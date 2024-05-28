@@ -8,13 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
+
+import { ClusterIndexUsageStatistic } from "../../api";
+
 import {
   formatMomentDuration,
   indexNeverUsedReason,
   recommendDropUnusedIndex,
 } from "./indexUsageStatsRec";
-import { ClusterIndexUsageStatistic } from "../../api";
-import moment from "moment-timezone";
 
 describe("recommendDropUnusedIndex", () => {
   const mockCurrentTime = moment();

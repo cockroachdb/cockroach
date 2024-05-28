@@ -12,16 +12,18 @@ import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { createSandbox } from "sinon";
 import { MemoryRouter as Router } from "react-router-dom";
-import {
-  StatementInsightDetails,
-  StatementInsightDetailsProps,
-} from "./statementInsightDetails";
-import { getStatementInsightPropsFixture } from "./insightDetails.fixture";
+
 import * as sqlApi from "../../api/sqlApi";
 import * as stmtInsightsApi from "../../api/stmtInsightsApi";
 import { SqlApiResponse } from "../../api/sqlApi";
 import { StmtInsightEvent } from "../types";
 import { CollapseWhitespace, MockSqlResponse } from "../../util/testing";
+
+import { getStatementInsightPropsFixture } from "./insightDetails.fixture";
+import {
+  StatementInsightDetails,
+  StatementInsightDetailsProps,
+} from "./statementInsightDetails";
 
 const sandbox = createSandbox();
 

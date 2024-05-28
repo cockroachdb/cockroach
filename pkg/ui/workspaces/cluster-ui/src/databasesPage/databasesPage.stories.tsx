@@ -11,14 +11,13 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import _ from "lodash";
-
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import { randomName } from "src/storybook/fixtures";
-import { DatabasesPage, DatabasesPageProps } from "./databasesPage";
-
 import * as H from "history";
 import { defaultFilters } from "src/queryFilter";
 import { indexUnusedDuration } from "src/util/constants";
+
+import { DatabasesPage, DatabasesPageProps } from "./databasesPage";
 const history = H.createHashHistory();
 
 const withLoadingIndicator: DatabasesPageProps = {

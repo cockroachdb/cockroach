@@ -9,17 +9,19 @@
 // licenses/APL.txt.
 
 /* eslint-disable prettier/prettier */
-import { StatementsPageProps } from "./statementsPage";
 import moment from "moment-timezone";
 import { createMemoryHistory } from "history";
 import Long from "long";
 import { noop } from "lodash";
 import { RequestError } from "src/util";
-import { StatementDiagnosticsReport } from "../api";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DEFAULT_STATS_REQ_OPTIONS } from "src/api/statementsApi";
 import { mockStmtStats } from "src/api/testUtils";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+
+import { StatementDiagnosticsReport } from "../api";
+
+import { StatementsPageProps } from "./statementsPage";
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
 const timestamp = new protos.google.protobuf.Timestamp({

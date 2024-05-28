@@ -19,6 +19,8 @@ import {
 import * as matchers from "redux-saga-test-plan/matchers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { getStatementDetails } from "src/api/statementsApi";
+import moment from "moment-timezone";
+
 import {
   refreshSQLDetailsStatsSaga,
   requestSQLDetailsStatsSaga,
@@ -28,8 +30,6 @@ import {
   reducer,
   SQLDetailsStatsReducerState,
 } from "./statementDetails.reducer";
-
-import moment from "moment-timezone";
 
 const lastUpdated = moment();
 

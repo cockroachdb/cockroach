@@ -24,7 +24,10 @@ import styles from "src/sortabletable/sortabletable.module.scss";
 const cx = classNames.bind(styles);
 
 class TestRow {
-  constructor(public name: string, public value: number) {}
+  constructor(
+    public name: string,
+    public value: number,
+  ) {}
 }
 
 const columns: ColumnDescriptor<TestRow>[] = [

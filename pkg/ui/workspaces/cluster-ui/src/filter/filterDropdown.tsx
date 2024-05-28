@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 
 import React from "react";
+import classnames from "classnames/bind";
+
 import { DropdownButton } from "../dropdown";
 import { OutsideEventHandler } from "../outsideEventHandler";
-import classnames from "classnames/bind";
 import styles from "../dropdown/dropdown.module.scss";
 import { applyBtn } from "../queryFilter/filterClasses";
 import { Button } from "../button";
