@@ -12,6 +12,9 @@ import React from "react";
 import { storiesOf } from "@storybook/react";
 import { MemoryRouter } from "react-router-dom";
 import { noop } from "lodash";
+import moment from "moment-timezone";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import {
   nodeRegions,
   requestTime,
@@ -22,8 +25,7 @@ import {
 } from "./transactionDetails.fixture";
 
 import { TransactionDetails } from ".";
-import moment from "moment-timezone";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import StatsSortOptions = cockroach.server.serverpb.StatsSortOptions;
 
 storiesOf("Transactions Details", module)

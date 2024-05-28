@@ -10,7 +10,9 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { DOMAIN_NAME, noopReducer } from "../utils";
+
 import { ICancelQueryRequest, ICancelSessionRequest } from ".";
 
 type CancelQueryResponse = cockroach.server.serverpb.CancelQueryResponse;

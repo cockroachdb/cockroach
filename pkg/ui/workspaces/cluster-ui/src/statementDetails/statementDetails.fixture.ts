@@ -12,8 +12,10 @@ import moment from "moment-timezone";
 import Long from "long";
 import { createMemoryHistory } from "history";
 import { noop } from "lodash";
-import { StatementDetailsProps } from "./statementDetails";
+
 import { StatementDetailsResponse } from "../api";
+
+import { StatementDetailsProps } from "./statementDetails";
 
 const lastUpdated = moment("Nov 28 2022 01:30:00 GMT");
 

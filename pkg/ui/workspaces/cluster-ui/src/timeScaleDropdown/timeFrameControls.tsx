@@ -14,8 +14,8 @@ import { Button, Tooltip } from "antd";
 import "antd/lib/button/style";
 import "antd/lib/tooltip/style";
 import { CaretLeft, CaretRight } from "@cockroachlabs/icons";
-import { ArrowDirection } from "./timeScaleTypes";
 
+import { ArrowDirection } from "./timeScaleTypes";
 import styles from "./timeFrameControls.module.scss";
 
 const cx = classNames.bind(styles);

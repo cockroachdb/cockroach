@@ -9,6 +9,13 @@
 // licenses/APL.txt.
 
 import { createSelector } from "@reduxjs/toolkit";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { match } from "react-router";
+import { Location } from "history";
+import { cloneDeep } from "lodash";
+
+import { statementFingerprintIdsToText } from "../transactionsPage/utils";
+import { SqlStatsResponse } from "../api";
 import {
   addExecStats,
   aggregateNumericStats,
@@ -17,12 +24,6 @@ import {
   txnFingerprintIdAttr,
   unset,
 } from "../util";
-import { SqlStatsResponse } from "../api";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { match } from "react-router";
-import { Location } from "history";
-import { statementFingerprintIdsToText } from "../transactionsPage/utils";
-import { cloneDeep } from "lodash";
 
 type Transaction =
   cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;

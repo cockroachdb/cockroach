@@ -21,9 +21,11 @@ import { Anchor } from "src/anchor";
 import { Text } from "src/text";
 import { statementDiagnostics, statementsSql } from "src/util";
 import classNames from "classnames/bind";
-import styles from "./activateStatementDiagnosticsModal.scss";
-import { InsertStmtDiagnosticRequest } from "../api";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+
+import { InsertStmtDiagnosticRequest } from "../api";
+
+import styles from "./activateStatementDiagnosticsModal.scss";
 
 const cx = classNames.bind(styles);
 const { Option } = Select;

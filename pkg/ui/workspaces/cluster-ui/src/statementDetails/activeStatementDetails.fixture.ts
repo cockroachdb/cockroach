@@ -9,9 +9,11 @@
 // licenses/APL.txt.
 
 import moment from "moment-timezone";
-import { ActiveStatementDetailsProps } from "./activeStatementDetails";
 import { noop } from "lodash";
+
 import { ExecutionStatus } from "../activeExecutions";
+
+import { ActiveStatementDetailsProps } from "./activeStatementDetails";
 
 export const getActiveStatementDetailsPropsFixture =
   (): ActiveStatementDetailsProps => {

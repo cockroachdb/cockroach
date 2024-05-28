@@ -23,10 +23,7 @@ import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
-import { BarGraphTimeSeries, XScale } from "../graphs/bargraph";
-import { AxisUnits } from "../graphs";
 import { AlignedData, Options } from "uplot";
-
 import {
   appAttr,
   appNamesAttr,
@@ -46,16 +43,15 @@ import {
 import { getValidErrorsList, Loading } from "src/loading";
 import { Button } from "src/button";
 import { SqlBox, SqlBoxSize } from "src/sql";
-import { PlanDetails } from "./planDetails";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { DiagnosticsView } from "./diagnostics/diagnosticsView";
-import insightTableStyles from "../insightsTable/insightsTable.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
-import styles from "./statementDetails.module.scss";
 import { commonStyles } from "src/common";
-import { UIConfigState } from "../store";
 import { StatementDetailsRequest } from "src/api/statementsApi";
+import moment from "moment-timezone";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
+
+import { UIConfigState } from "../store";
 import {
   getValidOption,
   TimeScale,
@@ -68,17 +64,9 @@ import {
   ActivateDiagnosticsModalRef,
   ActivateStatementDiagnosticsModal,
 } from "../statementsDiagnostics";
-import {
-  generateContentionTimeseries,
-  generateExecCountTimeseries,
-  generateExecRetriesTimeseries,
-  generateExecuteAndPlanningTimeseries,
-  generateRowsProcessedTimeseries,
-  generateCPUTimeseries,
-  generateClientWaitTimeseries,
-} from "./timeseriesUtils";
 import { Delayed } from "../delayed";
-import moment from "moment-timezone";
+
+
 import {
   InsertStmtDiagnosticRequest,
   InsightRecommendation,
@@ -95,10 +83,29 @@ import {
   makeInsightsColumns,
 } from "../insightsTable/insightsTable";
 import { CockroachCloudContext } from "../contexts";
+
 import { filterByTimeScale } from "./diagnostics/diagnosticsUtils";
+
 import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 import { Timestamp } from "../timestamp";
-import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
+
+
+import insightTableStyles from "../insightsTable/insightsTable.module.scss";
+import { AxisUnits } from "../graphs";
+import { BarGraphTimeSeries, XScale } from "../graphs/bargraph";
+import {
+  generateContentionTimeseries,
+  generateExecCountTimeseries,
+  generateExecRetriesTimeseries,
+  generateExecuteAndPlanningTimeseries,
+  generateRowsProcessedTimeseries,
+  generateCPUTimeseries,
+  generateClientWaitTimeseries,
+} from "./timeseriesUtils";
+
+import styles from "./statementDetails.module.scss";
+import { DiagnosticsView } from "./diagnostics/diagnosticsView";
+import { PlanDetails } from "./planDetails";
 
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
@@ -616,8 +623,8 @@ export class StatementDetails extends React.Component<
         a.aggregated_ts.seconds < b.aggregated_ts.seconds
           ? -1
           : a.aggregated_ts.seconds > b.aggregated_ts.seconds
-          ? 1
-          : 0,
+            ? 1
+            : 0,
     );
 
     const executionAndPlanningTimeseries: AlignedData =

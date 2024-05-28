@@ -16,12 +16,14 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { expectSaga } from "redux-saga-test-plan";
+
 import {
   DatabaseDetailsSpanStatsReqParams,
   DatabaseDetailsSpanStatsResponse,
   getDatabaseDetailsSpanStats,
   SqlApiResponse,
 } from "../../api";
+
 import {
   databaseDetailsSpanStatsReducer,
   KeyedDatabaseDetailsSpanStatsState,

@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
-
 import { intersperse } from "src/util/intersperse";
 
 describe("intersperse", () => {

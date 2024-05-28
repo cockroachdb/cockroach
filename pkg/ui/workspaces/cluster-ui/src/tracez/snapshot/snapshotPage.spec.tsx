@@ -9,19 +9,23 @@
 // licenses/APL.txt.
 
 import { ROUTE_PREFIX, SnapshotPage, SnapshotPageProps } from "./snapshotPage";
+
 import { render } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
 import * as H from "history";
 
 import { SortSetting } from "../../sortedtable";
+
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import {
   RecordingMode,
   SetTraceRecordingTypeResponse,
   TakeTracingSnapshotResponse,
 } from "src/api/tracezApi";
+
 import GetTracingSnapshotResponse = cockroach.server.serverpb.GetTracingSnapshotResponse;
+
 import Long from "long";
 
 const getMockSnapshotPageProps = (): SnapshotPageProps => {

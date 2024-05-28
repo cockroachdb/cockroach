@@ -27,16 +27,17 @@ import {
   StatementStatus,
   StmtInsightEvent,
 } from "src/insights";
+import { Tooltip } from "@cockroachlabs/ui-components";
+import { Link } from "react-router-dom";
+import classNames from "classnames/bind";
+import { Badge } from "src/badge";
+
+import styles from "../util/workloadInsights.module.scss";
 import {
   InsightCell,
   insightsTableTitles,
   StatementDetailsLink,
 } from "../util";
-import { Tooltip } from "@cockroachlabs/ui-components";
-import { Link } from "react-router-dom";
-import classNames from "classnames/bind";
-import styles from "../util/workloadInsights.module.scss";
-import { Badge } from "src/badge";
 import { Timestamp } from "../../../timestamp";
 
 const cx = classNames.bind(styles);

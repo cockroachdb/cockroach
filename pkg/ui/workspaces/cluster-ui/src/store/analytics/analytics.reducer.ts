@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createAction } from "@reduxjs/toolkit";
+
 import { DOMAIN_NAME } from "../utils";
 
 type Page =

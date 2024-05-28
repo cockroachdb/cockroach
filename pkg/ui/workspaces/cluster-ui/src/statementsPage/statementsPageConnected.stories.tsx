@@ -25,8 +25,9 @@ import {
   createStore,
   Store,
 } from "redux";
-import { ConnectedStatementsPage } from "./statementsPageConnected";
 import { AppState, rootReducer, sagas } from "src/store";
+
+import { ConnectedStatementsPage } from "./statementsPageConnected";
 
 const history = createMemoryHistory();
 const routerReducer = connectRouter(history);

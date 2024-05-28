@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { SchedulesPage, SchedulesPageProps } from "./schedulesPage";
-import { allSchedulesFixture } from "./schedulesPage.fixture";
 import { render } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
 import * as H from "history";
 import { Schedule } from "src/api/schedulesApi";
+
+import { allSchedulesFixture } from "./schedulesPage.fixture";
+import { SchedulesPage, SchedulesPageProps } from "./schedulesPage";
 
 const getMockSchedulesPageProps = (
   schedules: Array<Schedule>,

@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { useScheduleFunction } from "./hooks";
 import {
   render,
   cleanup,
@@ -18,6 +17,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import moment from "moment-timezone";
+
+import { useScheduleFunction } from "./hooks";
 
 describe("useScheduleFunction", () => {
   let mockFn: jest.Mock;

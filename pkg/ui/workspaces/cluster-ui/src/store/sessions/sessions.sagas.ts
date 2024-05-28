@@ -18,11 +18,12 @@ import {
   SelectEffect,
   select,
 } from "redux-saga/effects";
+import { getSessions } from "src/api/sessionsApi";
+
+import { actions as clusterLockActions } from "../clusterLocks/clusterLocks.reducer";
+import { selectIsTenant } from "../uiConfig";
 
 import { actions } from "./sessions.reducer";
-import { actions as clusterLockActions } from "../clusterLocks/clusterLocks.reducer";
-import { getSessions } from "src/api/sessionsApi";
-import { selectIsTenant } from "../uiConfig";
 
 export function* refreshSessionsAndClusterLocksSaga(): Generator<
   AllEffect<PutEffect> | SelectEffect | PutEffect

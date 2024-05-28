@@ -11,6 +11,7 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { noop } from "lodash";
+
 import { FilterDropdown } from "./filterDropdown";
 import { FilterCheckboxOption } from "./filterCheckboxOption";
 import { FilterSearchOption } from "./filterSearchOption";

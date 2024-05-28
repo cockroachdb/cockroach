@@ -10,6 +10,7 @@
 
 import { assert } from "chai";
 import { createStore } from "redux";
+
 import { rootReducer } from "./reducers";
 import { actions as sqlStatsActions } from "./sqlStats";
 import { rootActions } from "./rootActions";

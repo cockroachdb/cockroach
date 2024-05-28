@@ -9,15 +9,16 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME } from "../utils";
 import {
   ErrorWithKey,
   StatementDetailsRequest,
   StatementDetailsResponse,
   StatementDetailsResponseWithKey,
 } from "src/api/statementsApi";
-import { generateStmtDetailsToID } from "../../util";
 import moment from "moment-timezone";
+
+import { DOMAIN_NAME } from "../utils";
+import { generateStmtDetailsToID } from "../../util";
 
 export type SQLDetailsStatsState = {
   data: StatementDetailsResponse;

@@ -11,18 +11,20 @@
 import Select, { components, OptionsType } from "react-select";
 import React from "react";
 import classNames from "classnames/bind";
-import styles from "./columnsSelector.module.scss";
+import { Gear } from "@cockroachlabs/icons";
+import {
+  DeselectOptionActionMeta,
+  SelectOptionActionMeta,
+} from "react-select/src/types";
+
 import { Button } from "../button";
 import {
   dropdown,
   dropdownContentWrapper,
   hidden,
 } from "../queryFilter/filterClasses";
-import { Gear } from "@cockroachlabs/icons";
-import {
-  DeselectOptionActionMeta,
-  SelectOptionActionMeta,
-} from "react-select/src/types";
+
+import styles from "./columnsSelector.module.scss";
 
 const cx = classNames.bind(styles);
 

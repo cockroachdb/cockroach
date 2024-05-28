@@ -16,9 +16,9 @@ import {
   put,
   takeLatest,
 } from "redux-saga/effects";
+import { getClusterLocksState } from "src/api/clusterLocksApi";
 
 import { actions } from "./clusterLocks.reducer";
-import { getClusterLocksState } from "src/api/clusterLocksApi";
 
 export function* requestClusterLocksSaga(): any {
   try {

@@ -10,9 +10,10 @@
 
 import { createSelector } from "reselect";
 import { chain, orderBy } from "lodash";
+import moment from "moment-timezone";
+
 import { AppState } from "../reducers";
 import { StatementDiagnosticsReport } from "../../api";
-import moment from "moment-timezone";
 
 export const statementDiagnostics = createSelector(
   (state: AppState) => state.adminUI,

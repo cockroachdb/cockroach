@@ -18,8 +18,10 @@ import {
   InlineAlertIntent,
 } from "@cockroachlabs/ui-components";
 import { adminUIAccess, getLogger, isForbiddenRequestError } from "src/util";
-import styles from "./loading.module.scss";
+
 import { Anchor } from "../anchor";
+
+import styles from "./loading.module.scss";
 
 interface LoadingProps {
   loading: boolean;

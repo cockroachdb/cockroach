@@ -11,6 +11,7 @@
 /* eslint-disable no-useless-escape */
 import React from "react";
 import classNames from "classnames/bind";
+
 import styles from "./highlightedText.module.scss";
 
 const cx = classNames.bind(styles);

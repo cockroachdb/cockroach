@@ -22,7 +22,6 @@ import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import long from "long";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import classnames from "classnames/bind";
-import styles from "./jobProfilerView.module.scss";
 import { EmptyTable } from "src/empty";
 import { useScheduleFunction } from "src/util/hooks";
 import { DownloadFile, DownloadFileRef } from "src/downloadFile";
@@ -32,6 +31,8 @@ import {
   ListJobProfilerExecutionDetailsRequest,
   ListJobProfilerExecutionDetailsResponse,
 } from "src/api/jobProfilerApi";
+
+import styles from "./jobProfilerView.module.scss";
 
 const cardCx = classNames.bind(summaryCardStyles);
 const cx = classnames.bind(styles);

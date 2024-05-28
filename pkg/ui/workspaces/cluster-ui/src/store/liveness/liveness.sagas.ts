@@ -10,11 +10,11 @@
 
 import { all, call, put, delay, takeLatest } from "redux-saga/effects";
 import { getLiveness } from "src/api/livenessApi";
-import { actions } from "./liveness.reducer";
-
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 
 import { rootActions } from "../rootActions";
+
+import { actions } from "./liveness.reducer";
 
 export function* refreshLivenessSaga() {
   yield put(actions.request());

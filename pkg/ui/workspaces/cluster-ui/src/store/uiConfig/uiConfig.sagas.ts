@@ -9,12 +9,14 @@
 // licenses/APL.txt.
 
 import { all, call, delay, put, takeLatest } from "redux-saga/effects";
-import { actions } from "./uiConfig.reducer";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { getUserSQLRoles } from "../../api/userApi";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { getLogger } from "../../util";
 import { rootActions } from "../rootActions";
+
+import { actions } from "./uiConfig.reducer";
 
 export function* refreshUserSQLRolesSaga(): any {
   yield put(actions.requestUserSQLRoles());
@@ -22,9 +24,8 @@ export function* refreshUserSQLRolesSaga(): any {
 
 export function* requestUserSQLRolesSaga(): any {
   try {
-    const result: cockroach.server.serverpb.UserSQLRolesResponse = yield call(
-      getUserSQLRoles,
-    );
+    const result: cockroach.server.serverpb.UserSQLRolesResponse =
+      yield call(getUserSQLRoles);
     yield put(actions.receivedUserSQLRoles(result.roles));
   } catch (e) {
     getLogger().warn(e.message, /* additional context */ undefined, e);

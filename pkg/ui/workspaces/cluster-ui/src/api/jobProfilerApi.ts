@@ -9,13 +9,15 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import { propsToQueryString } from "../util";
+
 import { fetchData } from "./fetchData";
 import {
   SqlExecutionRequest,
   executeInternalSql,
   LONG_TIMEOUT,
 } from "./sqlApi";
-import { propsToQueryString } from "../util";
 
 const JOB_PROFILER_PATH = "_status/job_profiler_execution_details";
 

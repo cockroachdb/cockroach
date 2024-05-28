@@ -21,10 +21,11 @@ import {
   createStatementDiagnosticsReport,
   getStatementDiagnosticsReports,
 } from "src/api/statementDiagnosticsApi";
-import { actions } from "./statementDiagnostics.reducer";
-import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
 
+import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
 import { rootActions } from "../rootActions";
+
+import { actions } from "./statementDiagnostics.reducer";
 
 export function* createDiagnosticsReportSaga(
   action: ReturnType<typeof actions.createReport>,

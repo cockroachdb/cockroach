@@ -20,7 +20,6 @@ import { getHighlightedText } from "src/highlightedText";
 import { AggregateStatistics } from "src/statementsTable";
 import { Dropdown } from "src/dropdown";
 import { Button } from "src/button";
-
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {
   propsToQueryString,
@@ -28,11 +27,12 @@ import {
   appNamesAttr,
   unset,
 } from "src/util";
-import styles from "./statementsTableContent.module.scss";
 import { EllipsisVertical } from "@cockroachlabs/icons";
 import { withBasePath } from "src/api/basePath";
 import { StatementDiagnosticsReport } from "src/api/statementDiagnosticsApi";
 import moment from "moment-timezone";
+
+import styles from "./statementsTableContent.module.scss";
 
 export type NodeNames = { [nodeId: string]: string };
 const cx = classNames.bind(styles);
@@ -44,25 +44,24 @@ export const StatementTableCell = {
       selectedApp?: string[],
       onStatementClick?: (statement: string) => void,
     ) =>
-    (stmt: AggregateStatistics): React.ReactElement =>
-      (
-        <StatementLink
-          statementFingerprintID={stmt.aggregatedFingerprintID}
-          statement={stmt.label}
-          statementSummary={stmt.summary}
-          aggregatedTs={stmt.aggregatedTs}
-          appNames={[
-            stmt.applicationName != null
+    (stmt: AggregateStatistics): React.ReactElement => (
+      <StatementLink
+        statementFingerprintID={stmt.aggregatedFingerprintID}
+        statement={stmt.label}
+        statementSummary={stmt.summary}
+        aggregatedTs={stmt.aggregatedTs}
+        appNames={[
+          stmt.applicationName != null
+            ? stmt.applicationName
               ? stmt.applicationName
-                ? stmt.applicationName
-                : unset
-              : null,
-          ]}
-          implicitTxn={stmt.implicitTxn}
-          search={search}
-          onClick={onStatementClick}
-        />
-      ),
+              : unset
+            : null,
+        ]}
+        implicitTxn={stmt.implicitTxn}
+        search={search}
+        onClick={onStatementClick}
+      />
+    ),
   diagnostics:
     (
       activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>,

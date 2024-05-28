@@ -10,6 +10,7 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
+
 import { PlanView } from "./planView";
 import { logicalPlan, globalProperties } from "./planView.fixtures";
 

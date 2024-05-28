@@ -12,6 +12,7 @@ import React from "react";
 import { EmptyTable, EmptyTableProps } from "src/empty";
 import magnifyingGlassImg from "src/assets/emptyState/magnifying-glass.svg";
 import emptyTableResultsImg from "src/assets/emptyState/empty-table-results.svg";
+
 import { Anchor } from "../../anchor";
 import { insights } from "../../util";
 

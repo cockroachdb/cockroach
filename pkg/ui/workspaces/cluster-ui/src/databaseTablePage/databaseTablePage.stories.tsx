@@ -11,17 +11,17 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import _ from "lodash";
-
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import {
   randomName,
   randomRole,
   randomTablePrivilege,
 } from "src/storybook/fixtures";
-import { DatabaseTablePage, DatabaseTablePageProps } from "./databaseTablePage";
 import moment from "moment-timezone";
 import * as H from "history";
 import { indexUnusedDuration } from "src/util/constants";
+
+import { DatabaseTablePage, DatabaseTablePageProps } from "./databaseTablePage";
 const history = H.createHashHistory();
 
 const withLoadingIndicator: DatabaseTablePageProps = {

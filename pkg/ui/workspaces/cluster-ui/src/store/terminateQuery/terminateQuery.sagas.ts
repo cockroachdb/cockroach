@@ -10,12 +10,11 @@
 
 import { PayloadAction } from "@reduxjs/toolkit";
 import { all, call, put, takeEvery } from "redux-saga/effects";
-
 import { terminateQuery, terminateSession } from "src/api/terminateQueryApi";
 import { actions as sessionsActions } from "src/store/sessions";
-import { actions as terminateQueryActions } from "./terminateQuery.reducer";
-
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import { actions as terminateQueryActions } from "./terminateQuery.reducer";
 
 const CancelSessionRequest = cockroach.server.serverpb.CancelSessionRequest;
 const CancelQueryRequest = cockroach.server.serverpb.CancelQueryRequest;

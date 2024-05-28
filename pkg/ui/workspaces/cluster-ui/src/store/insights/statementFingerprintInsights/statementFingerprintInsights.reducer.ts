@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME } from "../../utils";
 import moment, { Moment } from "moment-timezone";
 import { SqlApiResponse, ErrorWithKey, StmtInsightsReq } from "src/api";
+
+import { DOMAIN_NAME } from "../../utils";
 import { StmtInsightEvent } from "../../../insights";
 
 export type StatementFingerprintInsightsState = {

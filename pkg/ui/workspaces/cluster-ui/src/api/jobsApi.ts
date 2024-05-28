@@ -9,8 +9,10 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { fetchData } from "./fetchData";
+
 import { propsToQueryString } from "../util";
+
+import { fetchData } from "./fetchData";
 
 const JOBS_PATH = "_admin/v1/jobs";
 

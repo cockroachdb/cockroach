@@ -12,16 +12,19 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import { Dispatch } from "redux";
 import { actions as sessionsActions } from "src/store/sessions";
-import { AppState } from "../store";
-import {
-  ActiveTransactionDetails,
-  ActiveTransactionDetailsDispatchProps,
-} from "./activeTransactionDetails";
-import { ActiveTransactionDetailsStateProps } from ".";
 import {
   selectActiveTransaction,
   selectContentionDetailsForTransaction,
 } from "src/selectors/activeExecutions.selectors";
+
+import { AppState } from "../store";
+
+import {
+  ActiveTransactionDetails,
+  ActiveTransactionDetailsDispatchProps,
+} from "./activeTransactionDetails";
+
+import { ActiveTransactionDetailsStateProps } from ".";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.

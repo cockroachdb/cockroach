@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { MetricConstants } from "../util/proto";
 
 type INodeStatus = cockroach.server.status.statuspb.INodeStatus;

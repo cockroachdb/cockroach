@@ -19,17 +19,19 @@ import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { getMatchParamByName, idAttr } from "src/util";
-import { StmtInsightEvent } from "../types";
 import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
-import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";
-import { TimeScale, toDateRange } from "../../timeScaleDropdown";
 import { getStmtInsightsApi } from "src/api/stmtInsightsApi";
-import { InsightsError } from "../insightsErrorComponent";
 
 // Styles
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
+
+import { InsightsError } from "../insightsErrorComponent";
+import { TimeScale, toDateRange } from "../../timeScaleDropdown";
+import { StmtInsightEvent } from "../types";
+
+import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";
 
 const cx = classNames.bind(insightsDetailsStyles);
 

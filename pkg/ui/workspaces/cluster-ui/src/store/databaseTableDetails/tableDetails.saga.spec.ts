@@ -17,25 +17,28 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { expectSaga } from "redux-saga-test-plan";
-import ZoneConfig = cockroach.config.zonepb.ZoneConfig;
-import ZoneConfigurationLevel = cockroach.server.serverpb.ZoneConfigurationLevel;
+import moment from "moment";
+
+import { generateTableID, indexUnusedDuration } from "../../util";
 import {
   TableDetailsResponse,
   getTableDetails,
   SqlApiResponse,
   TableDetailsReqParams,
 } from "../../api";
-import {
-  refreshTableDetailsSaga,
-  requestTableDetailsSaga,
-} from "./tableDetails.saga";
+
 import {
   actions,
   KeyedTableDetailsState,
   reducer,
 } from "./tableDetails.reducer";
-import moment from "moment";
-import { generateTableID, indexUnusedDuration } from "../../util";
+import {
+  refreshTableDetailsSaga,
+  requestTableDetailsSaga,
+} from "./tableDetails.saga";
+
+import ZoneConfig = cockroach.config.zonepb.ZoneConfig;
+import ZoneConfigurationLevel = cockroach.server.serverpb.ZoneConfigurationLevel;
 
 describe("TableDetails sagas", () => {
   const database = "test_db";

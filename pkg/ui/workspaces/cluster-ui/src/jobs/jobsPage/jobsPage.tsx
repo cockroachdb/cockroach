@@ -26,7 +26,11 @@ import ColumnsSelector, {
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { DATE_FORMAT_24_TZ, syncHistory, TimestampToMoment } from "src/util";
-import { jobsColumnLabels, JobsTable, makeJobsColumns } from "./jobsTable";
+import { commonStyles } from "src/common";
+import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import classNames from "classnames/bind";
+
+import styles from "../jobs.module.scss";
 import {
   showOptions,
   statusOptions,
@@ -35,12 +39,9 @@ import {
   defaultRequestOptions,
   isValidJobType,
 } from "../util";
-
-import { commonStyles } from "src/common";
-import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import styles from "../jobs.module.scss";
-import classNames from "classnames/bind";
 import { Timestamp } from "../../timestamp";
+
+import { jobsColumnLabels, JobsTable, makeJobsColumns } from "./jobsTable";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);

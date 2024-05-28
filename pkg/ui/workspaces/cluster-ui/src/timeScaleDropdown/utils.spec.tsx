@@ -8,15 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { TimeScale } from "./timeScaleTypes";
 import moment from "moment-timezone";
+import { assert } from "chai";
+
+import { TimeScale } from "./timeScaleTypes";
 import {
   defaultTimeScaleOptions,
   findClosestTimeScale,
   toDateRange,
   toRoundedDateRange,
 } from "./utils";
-import { assert } from "chai";
 
 describe("timescale utils", (): void => {
   describe("toDateRange", () => {

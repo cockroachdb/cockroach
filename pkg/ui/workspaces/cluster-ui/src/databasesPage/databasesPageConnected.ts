@@ -8,26 +8,29 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { AppState } from "../store";
 import { withRouter } from "react-router-dom";
+
 import {
   DatabasesPage,
   DatabasesPageActions,
   DatabasesPageData,
 } from "./databasesPage";
+
 import { connect } from "react-redux";
+import { Dispatch } from "redux";
+
+import { selectIsTenant } from "../store/uiConfig";
+import {
+  actions as nodesActions,
+  nodeRegionsByIDSelector,
+} from "../store/nodes";
 import {
   databasesListSelector,
   selectDatabasesFilters,
   selectDatabasesSearch,
   selectDatabasesSortSetting,
 } from "../store/databasesList/databasesList.selectors";
-import {
-  actions as nodesActions,
-  nodeRegionsByIDSelector,
-} from "../store/nodes";
-import { selectIsTenant } from "../store/uiConfig";
-import { Dispatch } from "redux";
+import { AppState } from "../store";
 import { actions as clusterSettingsActions } from "../store/clusterSettings";
 import { actions as databasesListActions } from "../store/databasesList";
 import {

@@ -8,18 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { AppState, uiConfigActions } from "../store";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
-import {
-  IndexDetailPageActions,
-  IndexDetailsPage,
-  IndexDetailsPageData,
-  RecommendationType as RecType,
-} from "./indexDetailsPage";
 import { connect } from "react-redux";
 import { actions as indexStatsActions } from "src/store/indexStats/indexStats.reducer";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import { AppState, uiConfigActions } from "../store";
 import {
   actions as nodesActions,
   nodeRegionsByIDSelector,
@@ -44,6 +39,14 @@ import {
   selectIsTenant,
 } from "../store/uiConfig";
 import { selectTimeScale } from "../store/utils/selectors";
+
+import {
+  IndexDetailPageActions,
+  IndexDetailsPage,
+  IndexDetailsPageData,
+  RecommendationType as RecType,
+} from "./indexDetailsPage";
+
 import RecommendationType = cockroach.sql.IndexRecommendation.RecommendationType;
 
 // Note: if the managed-service routes to the index detail or the previous

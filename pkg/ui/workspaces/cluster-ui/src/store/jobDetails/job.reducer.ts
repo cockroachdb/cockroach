@@ -15,9 +15,10 @@ import {
   JobResponse,
   JobResponseWithKey,
 } from "src/api/jobsApi";
+import moment from "moment-timezone";
+
 import { DOMAIN_NAME } from "../utils";
 import { RequestState } from "../../api";
-import moment from "moment-timezone";
 
 export type JobState = RequestState<JobResponse>;
 

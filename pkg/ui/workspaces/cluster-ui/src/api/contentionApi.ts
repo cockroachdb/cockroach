@@ -9,6 +9,17 @@
 // licenses/APL.txt.
 
 import {
+  ContentionDetails,
+  ContentionTypeKey,
+  InsightExecEnum,
+  InsightNameEnum,
+  TxnContentionInsightDetails,
+} from "src/insights/types";
+import moment from "moment-timezone";
+
+import { FixFingerprintHexValue, getLogger } from "../util";
+
+import {
   executeInternalSql,
   formatApiResult,
   INTERNAL_SQL_API_APP,
@@ -20,15 +31,6 @@ import {
   SqlExecutionResponse,
   sqlResultsAreEmpty,
 } from "./sqlApi";
-import {
-  ContentionDetails,
-  ContentionTypeKey,
-  InsightExecEnum,
-  InsightNameEnum,
-  TxnContentionInsightDetails,
-} from "src/insights/types";
-import moment from "moment-timezone";
-import { FixFingerprintHexValue, getLogger } from "../util";
 import { TxnInsightDetailsRequest } from "./txnInsightDetailsApi";
 import { makeInsightsSqlRequest } from "./txnInsightsUtils";
 import {

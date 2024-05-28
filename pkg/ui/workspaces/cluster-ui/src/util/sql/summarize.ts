@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
+
 import { shortStatement } from "../../statementsTable";
 
 export interface StatementSummary {
