@@ -237,7 +237,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			for ctx.Err() == nil {
 				ct.t.L().Printf("starting webhook server %v", webhookPort)
 				opts := option.WithNodes(webhookNode)
-				opts.RetryOptions.MaxRetries = 0
+				opts.ShouldRetryFn = func(*install.RunResultDetails) bool { return false }
 				if err = ct.cluster.RunE(ct.ctx, opts, serverExecCmd, rootFolder); err != nil {
 					fmt.Printf("webhook server died: %v\n", err)
 					ct.t.L().Printf("webhook server died: %v", err)
