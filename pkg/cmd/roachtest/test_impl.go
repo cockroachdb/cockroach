@@ -667,7 +667,10 @@ type workerStatus struct {
 
 		ttr testToRunRes
 		t   *testImpl
-		c   *clusterImpl
+		// The cluster that the worker is currently operating on. If the worker is
+		// currently running a test, the test is using this cluster. Nil if the
+		// worker does not currently have a cluster.
+		c *clusterImpl
 	}
 }
 

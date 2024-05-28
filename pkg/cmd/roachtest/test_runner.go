@@ -752,6 +752,8 @@ func (r *testRunner) runWorker(
 			c.Save(ctx, "cluster saved since --debug-always set", l)
 		}
 
+		wStatus.SetCluster(c)
+
 		// Prepare the test's logger. Always set this up with real files, using a
 		// temp dir if necessary. This simplifies testing.
 		artifactsRootDir := lopt.artifactsDir
@@ -874,7 +876,6 @@ func (r *testRunner) runWorker(
 
 				c.goCoverDir = t.GoCoverArtifactsDir()
 
-				wStatus.SetCluster(c)
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
 
