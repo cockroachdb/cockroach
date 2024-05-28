@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -156,22 +157,26 @@ func (bwc *tokenCounterPerWorkClass) getAndResetStats(now time.Time) deltaStats 
 // kvflowcontrol.Stream. It's used to synchronize handoff between threads
 // returning and waiting for flow tokens.
 type tokenCounter struct {
+	clock *hlc.Clock
+
 	mu struct {
 		syncutil.RWMutex
+
+		limit    tokensPerWorkClass
 		counters [admissionpb.NumWorkClasses]tokenCounterPerWorkClass
 	}
 }
 
-// TODO: implement TokenCounter and uncomment.
+var _ TokenCounter = &tokenCounter{}
 
-// var _ TokenCounter = &tokenCounter{}
-
-func newTokenCounter(tokensPerWorkClass tokensPerWorkClass, now time.Time) *tokenCounter {
-	b := tokenCounter{}
+func newTokenCounter(tokensPerWorkClass tokensPerWorkClass, clock *hlc.Clock) *tokenCounter {
+	b := tokenCounter{clock: clock}
+	now := clock.PhysicalTime()
 	b.mu.counters[admissionpb.RegularWorkClass] = makeTokenCounterPerWorkClass(
 		admissionpb.RegularWorkClass, tokensPerWorkClass.regular, now)
 	b.mu.counters[admissionpb.ElasticWorkClass] = makeTokenCounterPerWorkClass(
 		admissionpb.ElasticWorkClass, tokensPerWorkClass.elastic, now)
+	b.mu.limit = tokensPerWorkClass
 	return &b
 }
 
@@ -185,25 +190,49 @@ func (b *tokenCounter) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Toke
 	return b.mu.counters[wc].tokens
 }
 
-// TokensAvailable is ...
-//
-// We considered an alternative implementation where the caller provides a
-// channel, and all the queued caller channels are signaled when tokens become
-// positive. This has the advantage that the caller can pull a quorum count of
-// entries from the channel, if it is waiting for a quorum, instead of the
-// WaitForHandlesAndChannels logic below. We chose not to, since that does not
-// provide the natural throttling to reduce over-admission that is provided by
-// the signalCh being signaled by the waiter that gets to run.
+// TokensAvailable returns true if tokens are available. If false, it returns a
+// handle to use for waiting using kvflowcontroller.WaitForHandlesAndChannels.
+// This is for waiting pre-evaluation.
 func (b *tokenCounter) TokensAvailable(
 	wc admissionpb.WorkClass,
-) (available bool, handle interface{}) {
-	b.mu.RLock()
-	tokens := b.tokensLocked(wc)
-	b.mu.RUnlock()
-	if tokens > 0 {
+) (available bool, handle TokenWaitingHandle) {
+	if b.tokens(wc) > 0 {
 		return true, nil
 	}
 	return false, waitHandle{wc: wc, b: b}
+}
+
+func (b *tokenCounter) TryDeduct(
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+) kvflowcontrol.Tokens {
+	tokensAvailable := b.tokens(wc)
+
+	if tokensAvailable <= 0 {
+		return 0
+	}
+
+	// TODO(kvoli): Calculating the number of tokens to deduct and actually
+	// deducting them is not atomic here.
+	adjust := -min(tokensAvailable, tokens)
+	b.adjust(ctx, wc, adjust, false /* admin */, b.clock.PhysicalTime())
+	// TODO: Should we instead be using the adjusted return value here? It is
+	// split across both elastic and regular classes, so perhaps its the minimum
+	// of the two for regular and otherwise the elastic value
+	return -adjust
+}
+
+// Deduct deducts (without blocking) flow tokens for the given priority.
+func (b *tokenCounter) Deduct(
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+) {
+	b.adjust(ctx, wc, -tokens, false /* admin */, b.clock.PhysicalTime())
+}
+
+// Return returns flow tokens for the given priority.
+func (b *tokenCounter) Return(
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+) {
+	b.adjust(ctx, wc, tokens, false /* admin */, b.clock.PhysicalTime())
 }
 
 type waitHandle struct {
@@ -211,9 +240,38 @@ type waitHandle struct {
 	b  *tokenCounter
 }
 
-// TODO: implement TokenWaitingHandle and uncomment.
-//
-// var _ TokenWaitingHandle = waitHandle{}
+// TODO(kvoli): implement TokenWaitingHandle methods.
+var _ TokenWaitingHandle = waitHandle{}
+
+// WaitChannel is the channel that will be signaled if tokens are possibly
+// available. If signaled, the caller must call TryDeductAndUnblockNextWaiter.
+func (wh waitHandle) WaitChannel() <-chan struct{} {
+	return wh.b.mu.counters[wh.wc].signalCh
+}
+
+// TryDeductAndUnblockNextWaiter is called to deduct some tokens. The tokens
+// parameter can be zero, when the waiter is only waiting for positive tokens
+// (such as when waiting before eval). granted <= tokens and the tokens that
+// have been deducted. haveTokens is true iff there are tokens available after
+// this grant. When the tokens parameter is zero, granted will be zero, and
+// haveTokens represents whether there were positive tokens. If the caller is
+// unsatisfied with the return values, it can resume waiting using WaitChannel.
+func (wh waitHandle) TryDeductAndUnblockNextWaiter(
+	tokens kvflowcontrol.Tokens,
+) (granted kvflowcontrol.Tokens, haveTokens bool) {
+	defer func() {
+		// Signal the next waiter if we have tokens available upon returning.
+		if haveTokens {
+			wh.b.mu.counters[wh.wc].signal()
+		}
+	}()
+
+	if tokens > 0 {
+		granted = wh.b.TryDeduct(context.Background(), wh.wc, tokens)
+	}
+
+	return granted, wh.b.tokens(wh.wc) > 0
+}
 
 // WaitForEval ...
 // We always need minNumHandlesToWaitFor, even if the stopWaitCh channels have
@@ -317,7 +375,6 @@ func (b *tokenCounter) adjust(
 	ctx context.Context,
 	class admissionpb.WorkClass,
 	delta kvflowcontrol.Tokens,
-	limit tokensPerWorkClass,
 	admin bool,
 	now time.Time,
 ) (adjustment, unaccounted tokensPerWorkClass) {
@@ -357,18 +414,18 @@ func (b *tokenCounter) adjust(
 	case admissionpb.RegularWorkClass:
 		adjustment.regular, unaccounted.regular =
 			b.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(
-				ctx, delta, limit.regular, admin, now)
+				ctx, delta, b.mu.limit.regular, admin, now)
 		if !admin {
 			// Regular {deductions,returns} also affect elastic flow tokens.
 			adjustment.elastic, unaccounted.elastic =
 				b.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(
-					ctx, delta, limit.elastic, admin, now)
+					ctx, delta, b.mu.limit.elastic, admin, now)
 		}
 	case admissionpb.ElasticWorkClass:
 		// Elastic {deductions,returns} only affect elastic flow tokens.
 		adjustment.elastic, unaccounted.elastic =
 			b.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(
-				ctx, delta, limit.elastic, admin, now)
+				ctx, delta, b.mu.limit.elastic, admin, now)
 	}
 	return adjustment, unaccounted
 }

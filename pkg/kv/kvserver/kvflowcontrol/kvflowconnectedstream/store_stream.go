@@ -108,6 +108,7 @@ type StoreStreamSendTokenHandle struct {
 func NewStoreStreamSendTokensWatcher(stopper *stop.Stopper) *storeStreamSendTokensWatcher {
 	ssstw := &storeStreamSendTokensWatcher{stopper: stopper}
 	ssstw.mu.watchers = make(map[TokenCounter]*tokenWatcher)
+	ssstw.mu.handles = make(map[StoreStreamSendTokenHandleID]*StoreStreamSendTokenHandle)
 	ssstw.mu.idSeq = 1
 	return ssstw
 }
@@ -146,7 +147,7 @@ func (s *tokenWatcher) removeHandleLocked(handle StoreStreamSendTokenHandle) {
 // tokens are no longer needed, or when the caller is done.
 func (s *storeStreamSendTokensWatcher) NotifyWhenAvailable(
 	stc TokenCounter, wc admissionpb.WorkClass, tokensGrantedNotification TokenAvailableNotification,
-) StoreStreamSendTokenHandle {
+) StoreStreamSendTokenHandleID {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -168,7 +169,7 @@ func (s *storeStreamSendTokensWatcher) NotifyWhenAvailable(
 		s.watchTokens(context.Background(), handle.stc, wc, watcher)
 	}
 
-	return handle
+	return handle.id
 }
 
 // UpdateHandle updates the given handle to watch the given work class,
@@ -245,6 +246,7 @@ func (s *storeStreamSendTokensWatcher) watchTokens(
 			// If there are no tokens available, we wait here on the handle's wait
 			// channel, or until cancelled.
 			if !available {
+			waiting:
 				for {
 					select {
 					case <-ctx.Done():
@@ -253,7 +255,7 @@ func (s *storeStreamSendTokensWatcher) watchTokens(
 						return
 					case <-handle.WaitChannel():
 						if _, haveTokens := handle.TryDeductAndUnblockNextWaiter(0 /* tokens */); haveTokens {
-							break
+							break waiting
 						}
 					}
 				}
