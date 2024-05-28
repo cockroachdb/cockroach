@@ -214,14 +214,20 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 	statsQueries = append(statsQueries,
 		statsQuery{
 			opName: fmt.Sprintf("ttl num rows stats %s", relationName),
-			query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
-			gauge:  m.TotalRows,
+			query: fmt.Sprintf(
+				`SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
+				details.TableID, aost.String(),
+			),
+			gauge: m.TotalRows,
 		},
 		statsQuery{
 			opName: fmt.Sprintf("ttl num expired rows stats %s", relationName),
-			query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE (` + string(ttlExpr) + `) < $1`,
-			args:   []interface{}{details.Cutoff},
-			gauge:  m.TotalExpiredRows,
+			query: fmt.Sprintf(
+				`SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE (`+string(ttlExpr)+`) < $1`,
+				details.TableID, aost.String(),
+			),
+			args:  []interface{}{details.Cutoff},
+			gauge: m.TotalExpiredRows,
 		},
 	)
 
@@ -235,7 +241,7 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 			c.opName,
 			nil,
 			getInternalExecutorOverride(qosLevel),
-			fmt.Sprintf(c.query, details.TableID, aost.String()),
+			c.query,
 			c.args...,
 		)
 		if err != nil {
