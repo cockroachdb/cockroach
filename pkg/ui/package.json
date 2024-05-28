@@ -35,12 +35,6 @@
           "protobufjs": "6.8.6"
         }
       },
-      "@cockroachlabs/eslint-plugin-crdb@*": {
-        "devDependencies": {
-          "@typescript-eslint/parser": "^5.26.0",
-          "@typescript-eslint/utils": "^5.26.0"
-        }
-      },
       "@cockroachlabs/cluster-ui@*": {
         "devDependencies": {
           "protobufjs": "6.x",
@@ -399,15 +393,13 @@
     "overrides": {
       "@types/react": "16.14.8",
       "@types/react-dom": "16.9.3",
-      "@typescript-eslint/eslint-plugin": "4.29.1",
-      "@typescript-eslint/parser": "4.29.1",
       "aria-query": "5.0.1",
       "chokidar": "3.5.2",
       "antd>core-js": "2.6.12",
       "csstype": "3.0.8",
       "deep-extend": "0.5.1",
       "elliptic": "6.5.4",
-      "es-abstract": "1.20.1",
+      "es-abstract": "1.23.3",
       "esbuild": "0.14.43",
       "extend": "3.0.2",
       "http-proxy": "1.18.1",
