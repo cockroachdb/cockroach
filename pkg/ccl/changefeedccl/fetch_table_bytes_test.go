@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -48,9 +48,10 @@ func TestFetchChangefeedUsageBytesBasic(t *testing.T) {
 	fx := newUsageFx(ctx, t)
 	defer fx.close()
 
-	fx.query("CREATE TABLE testdb.test as SELECT generate_series(1, 1000) AS id")
-	row := fx.query(`CREATE CHANGEFEED FOR TABLE testdb.test INTO 'null://' WITH initial_scan='no';`)
-	feedJobId := int64(tree.MustBeDInt(row[0]))
+	fx.db.Exec(t, "CREATE TABLE testdb.test as SELECT generate_series(1, 1000) AS id")
+	row := fx.db.QueryRow(t, `CREATE CHANGEFEED FOR TABLE testdb.test INTO 'null://' WITH initial_scan='no';`)
+	var feedJobId int64
+	row.Scan(&feedJobId)
 
 	payload, err := fx.getChangefeedPayload(ctx, catpb.JobID(feedJobId))
 	require.NoError(t, err)
@@ -74,17 +75,19 @@ func TestFetchChangefeedUsageBytes(t *testing.T) {
 		usageFx := newUsageFx(ctx, t)
 		t.Cleanup(usageFx.close)
 
-		usageFx.query("CREATE TABLE test as SELECT generate_series(1, 1000) AS id")
-		usageFx.query("CREATE TABLE test2 (id int primary key)")
+		usageFx.db.Exec(t, "CREATE TABLE test as SELECT generate_series(1, 1000) AS id")
+		usageFx.db.Exec(t, "CREATE TABLE test2 (id int primary key)")
 
 		stmt := `CREATE CHANGEFEED FOR TABLE test, test2 INTO 'null://' WITH initial_scan='no';`
 		if createFeed != "" {
 			stmt = createFeed
 		}
-		feedJobId := int64(tree.MustBeDInt(usageFx.query(stmt)[0]))
+		row := usageFx.db.QueryRow(t, stmt)
+		var feedJobId int64
+		row.Scan(&feedJobId)
 
 		for _, alter := range alters {
-			usageFx.query(alter)
+			usageFx.db.Exec(t, alter)
 		}
 
 		ctrl := gomock.NewController(t)
@@ -168,43 +171,45 @@ func TestFetchChangefeedUsageBytesE2E(t *testing.T) {
 	fx := newUsageFx(ctx, t)
 	defer fx.close()
 
-	fx.query("CREATE TABLE test as SELECT generate_series(1, 1000) AS id")
-	fx.query("CREATE TABLE test2 as SELECT generate_series(1, 500) AS id2")
+	fx.db.Exec(t, "CREATE TABLE test as SELECT generate_series(1, 1000) AS id")
+	fx.db.Exec(t, "CREATE TABLE test2 as SELECT generate_series(1, 500) AS id2")
 
-	res := fx.query(`CREATE CHANGEFEED FOR TABLE test INTO 'null://' WITH initial_scan='no';`)
-	feedJobId := int64(tree.MustBeDInt(res[0]))
+	res := fx.db.QueryRow(t, `CREATE CHANGEFEED FOR TABLE test INTO 'null://' WITH initial_scan='no';`)
+	var feedJobId int64
+	res.Scan(&feedJobId)
 
 	// Wait for the first run to complete.
 	fx.tableBytesTracker.WaitForIncrease()
 
 	// Spin up another feed, and see that the metric gets updated.
-	res = fx.query(`CREATE CHANGEFEED FOR TABLE test2 INTO 'null://' WITH initial_scan='no';`)
-	feedJobId2 := int64(tree.MustBeDInt(res[0]))
+	res = fx.db.QueryRow(t, `CREATE CHANGEFEED FOR TABLE test2 INTO 'null://' WITH initial_scan='no';`)
+	var feedJobId2 int64
+	res.Scan(&feedJobId2)
 
 	fx.tableBytesTracker.WaitForIncrease()
 
 	// Pause one of the changefeeds. This should result in the metric reducing again.
-	fx.query(`PAUSE JOB $1`, feedJobId)
+	fx.db.Exec(t, `PAUSE JOB $1`, feedJobId)
 	fx.tableBytesTracker.WaitForDecrease()
 
 	// Shut down the other changefeed. This should result in the metric getting
 	// zeroed out. Note that we can't cancel the job we paused without waiting
 	// for it to actually get paused, else the stmt will error.
-	fx.query(`CANCEL JOB $1`, feedJobId2)
+	fx.db.Exec(t, `CANCEL JOB $1`, feedJobId2)
 	fx.tableBytesTracker.WaitForZero()
 
 	// Unpause the first feed, and see that the metric gets updated again. Need
 	// to wait for it to go from `pause-requested` to `paused` first, otherwise
 	// the RESUME statement errors.
 	fx.waitForPausedJob(feedJobId)
-	fx.query(`RESUME JOB $1`, feedJobId)
+	fx.db.Exec(t, `RESUME JOB $1`, feedJobId)
 	fx.tableBytesTracker.WaitForIncrease()
 
 	// Test that altering feeds doesn't mess things up. Need to pause it first though.
-	fx.query(`PAUSE JOB $1`, feedJobId)
+	fx.db.Exec(t, `PAUSE JOB $1`, feedJobId)
 	fx.waitForPausedJob(feedJobId)
-	fx.query(`ALTER CHANGEFEED $1 ADD test2 WITH initial_scan='yes'`, feedJobId)
-	fx.query(`RESUME JOB $1`, feedJobId)
+	fx.db.Exec(t, `ALTER CHANGEFEED $1 ADD test2 WITH initial_scan='yes'`, feedJobId)
+	fx.db.Exec(t, `RESUME JOB $1`, feedJobId)
 
 	fx.tableBytesTracker.WaitForIncrease()
 
@@ -220,34 +225,35 @@ func TestFetchChangefeedUsageBytesE2EFamilies(t *testing.T) {
 	fx := newUsageFx(ctx, t)
 	defer fx.close()
 
-	fx.query(`CREATE TABLE testfam (id PRIMARY KEY FAMILY ids, value FAMILY values) as SELECT generate_series(1, 100) AS id1, generate_series(101, 200) AS value`)
+	fx.db.Exec(t, `CREATE TABLE testfam (id PRIMARY KEY FAMILY ids, value FAMILY values) as SELECT generate_series(1, 100) AS id1, generate_series(101, 200) AS value`)
 
 	// Create a feed using split_column_families.
-	row := fx.query(`CREATE CHANGEFEED FOR TABLE testfam INTO 'null://' WITH initial_scan='no', split_column_families;`)
-	feedJobId := int64(tree.MustBeDInt(row[0]))
+	row := fx.db.QueryRow(t, `CREATE CHANGEFEED FOR TABLE testfam INTO 'null://' WITH initial_scan='no', split_column_families;`)
+	var feedJobId int64
+	row.Scan(&feedJobId)
 
 	// Wait for the first run to complete.
 	fx.tableBytesTracker.WaitForIncrease()
 
 	// Add another family to the table and see the bytes increase.
-	fx.query(`ALTER TABLE testfam ADD COLUMN name UUID default gen_random_uuid() CREATE IF NOT EXISTS FAMILY uuids`)
+	fx.db.Exec(t, `ALTER TABLE testfam ADD COLUMN name UUID default gen_random_uuid() CREATE IF NOT EXISTS FAMILY uuids`)
 	fx.tableBytesTracker.WaitForIncrease()
 
 	// Cancel this job and wait for shutdown.
-	fx.query(`CANCEL JOB $1`, feedJobId)
+	fx.db.Exec(t, `CANCEL JOB $1`, feedJobId)
 	fx.tableBytesTracker.WaitForZero()
 
 	// Make a new feed, but manually specifying families.
-	row = fx.query(`CREATE CHANGEFEED FOR TABLE testfam FAMILY ids INTO 'null://' WITH initial_scan='no';`)
-	feedJobId = int64(tree.MustBeDInt(row[0]))
+	row = fx.db.QueryRow(t, `CREATE CHANGEFEED FOR TABLE testfam FAMILY ids INTO 'null://' WITH initial_scan='no';`)
+	row.Scan(&feedJobId)
 
 	fx.tableBytesTracker.WaitForIncrease()
 
 	// Pause, add a family to the feed, and resume.
-	fx.query(`PAUSE JOB $1`, feedJobId)
+	fx.db.Exec(t, `PAUSE JOB $1`, feedJobId)
 	fx.waitForPausedJob(feedJobId)
-	fx.query(`ALTER CHANGEFEED $1 ADD testfam FAMILY values`, feedJobId)
-	fx.query(`RESUME JOB $1`, feedJobId)
+	fx.db.Exec(t, `ALTER CHANGEFEED $1 ADD testfam FAMILY values`, feedJobId)
+	fx.db.Exec(t, `RESUME JOB $1`, feedJobId)
 
 	fx.tableBytesTracker.WaitForIncrease()
 
@@ -269,9 +275,9 @@ func TestFetchChangefeedUsageBytesE2EErrorCount(t *testing.T) {
 	fx := newUsageFxWithMockTss(ctx, t, tss)
 	defer fx.close()
 
-	fx.query(`CREATE TABLE test AS SELECT generate_series(1, 1000) AS id`)
+	fx.db.Exec(t, `CREATE TABLE test AS SELECT generate_series(1, 1000) AS id`)
 
-	fx.query(`CREATE CHANGEFEED FOR TABLE test INTO 'null://'`)
+	fx.db.Exec(t, `CREATE CHANGEFEED FOR TABLE test INTO 'null://'`)
 
 	fx.errorCountTracker.WaitForIncrease()
 }
@@ -292,8 +298,8 @@ func TestFetchChangefeedUsageBytesE2EDisabledByDefault(t *testing.T) {
 	changefeedccl.EnableCloudBillingAccounting = false
 	defer func() { changefeedccl.EnableCloudBillingAccounting = true }()
 
-	fx.query(`CREATE TABLE test as SELECT generate_series(1, 1000) AS id`)
-	fx.query(`CREATE CHANGEFEED FOR TABLE test INTO 'null://'`)
+	fx.db.Exec(t, `CREATE TABLE test as SELECT generate_series(1, 1000) AS id`)
+	fx.db.Exec(t, `CREATE CHANGEFEED FOR TABLE test INTO 'null://'`)
 
 	// Give it a chance to make that call. TODO: This isn't a very good test but
 	// I'm not sure of a low-touch way to improve it.
@@ -354,7 +360,7 @@ func (m *metricValueTracker) WaitForDecrease() {
 type UsageFx struct {
 	t       *testing.T
 	execCfg sql.ExecutorConfig
-	query   func(string, ...any) tree.Datums
+	db      *sqlutils.SQLRunner
 	metrics *changefeedccl.JobScopedUsageMetrics
 
 	tableBytesTracker *metricValueTracker
@@ -370,13 +376,15 @@ func newUsageFx(ctx context.Context, t *testing.T) *UsageFx {
 func newUsageFxWithMockTss(ctx context.Context, t *testing.T, mockTss *mocks.MockTenantStatusServer) *UsageFx {
 	changefeedccl.EnableCloudBillingAccounting = true
 
-	params := base.TestServerArgs{
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL:          &execinfra.TestingKnobs{Changefeed: &changefeedccl.TestingKnobs{SkipFirstUsageMetricsReportingWait: true}},
 		},
-	}
-	s := serverutils.StartServerOnly(t, params)
+	})
+
+	rootDB := sqlutils.MakeSQLRunner(db)
 
 	// TODO: this is a data race. how can we do it properly?
 	// TODO: also saw this error, presumably due to this:
@@ -392,24 +400,14 @@ func newUsageFxWithMockTss(ctx context.Context, t *testing.T, mockTss *mocks.Moc
 	// This relies on the fact that we do our first run immediately on startup.
 	changefeedbase.UsageMetricsReportingInterval.Override(ctx, execCfg.SV(), 10*time.Hour)
 
-	stmt := "SET CLUSTER SETTING kv.rangefeed.enabled = true"
-	_, err := s.SystemLayer().ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor().Exec(ctx, "test", nil, stmt)
-	require.NoError(t, err)
-
-	ie := s.InternalExecutor().(*sql.InternalExecutor)
-	sd := sessiondata.InternalExecutorOverride{User: username.NodeUserName()}
-	query := func(stmt string, args ...any) tree.Datums {
-		res, err := ie.QueryRowEx(ctx, "test", nil, sd, stmt, args...)
-		require.NoError(t, err)
-		return res
-	}
-	query("CREATE DATABASE testdb")
-	sd.Database = "testdb"
+	rootDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	rootDB.Exec(t, "CREATE DATABASE testdb")
+	rootDB.Exec(t, "USE testdb")
 
 	return &UsageFx{
 		t:                 t,
 		execCfg:           execCfg,
-		query:             query,
+		db:                rootDB,
 		metrics:           metrics,
 		tableBytesTracker: &metricValueTracker{t: t, name: "table_bytes", observeValue: metrics.UsageTableBytes.Value},
 		errorCountTracker: &metricValueTracker{t: t, name: "error_count", observeValue: metrics.UsageErrorCount.Count},
@@ -461,8 +459,9 @@ func (fx *UsageFx) getChangefeedPayload(ctx context.Context, jobID catpb.JobID) 
 
 func (fx *UsageFx) waitForPausedJob(jobID int64) {
 	require.NoError(fx.t, testutils.SucceedsSoonError(func() error {
-		res := fx.query(`WITH js AS (SHOW CHANGEFEED JOBS) SELECT status FROM js WHERE job_id = $1`, jobID)
-		status := string(tree.MustBeDString(res[0]))
+		res := fx.db.QueryRow(fx.t, `WITH js AS (SHOW CHANGEFEED JOBS) SELECT status FROM js WHERE job_id = $1`, jobID)
+		var status string
+		res.Scan(&status)
 		if status == "paused" {
 			return nil
 		}
