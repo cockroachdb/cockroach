@@ -22,37 +22,30 @@ import (
 
 // StoreStreamsTokenCounter is one per node.
 //
-// TODO: modify kvflowcontroller.Controller to implement this.
+// TODO: use code in kvflowcontroller.Controller to implement this.
 type StoreStreamsTokenCounter interface {
-	EvalTokenCounterForStream(kvflowcontrol.Stream) EvalTokenCounter
-	SendTokenCounterForStream(kvflowcontrol.Stream) SendTokenCounter
+	EvalTokenCounterForStream(kvflowcontrol.Stream) TokenCounter
+	SendTokenCounterForStream(kvflowcontrol.Stream) TokenCounter
 }
 
-// EvalTokenCounter will be implemented by kvflowcontroller.bucket.
-//
-// TODO: rename "bucket" -- it is not a token bucket.
-type EvalTokenCounter interface {
+// TokenCounter will be implemented by tokenCounter.
+type TokenCounter interface {
 	// TokensAvailable returns true if tokens are available. If false, it
 	// returns a handle to use for waiting using
 	// kvflowcontroller.WaitForHandlesAndChannels. This is for waiting
 	// pre-evaluation.
-	TokensAvailable(admissionpb.WorkClass) (available bool, handle interface{})
+	TokensAvailable(admissionpb.WorkClass) (available bool, tokenWaitingHandle TokenWaitingHandle)
+	TryDeduct(
+		context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens) kvflowcontrol.Tokens
 	// Deduct deducts (without blocking) flow tokens for the given priority.
 	Deduct(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
 	// Return returns flow tokens for the given priority.
 	Return(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
 }
 
-// SendTokenCounter will be implemented by kvflowcontroller.bucket.
-type SendTokenCounter interface {
-	TryDeduct(
-		context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens) kvflowcontrol.Tokens
-	Deduct(
-		context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
-	Return(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
-
-	// TokensAvailable is needed for the implementation of
-	TokensAvailable(admissionpb.WorkClass) (available bool, handle interface{})
+type TokenWaitingHandle interface {
+	WaitChannel() <-chan struct{}
+	TryDeductAndUnblockNextWaiter(tokens kvflowcontrol.Tokens) (haveTokens bool)
 }
 
 // StoreStreamSendTokensWatcher implements a watcher interface that will use
@@ -61,7 +54,7 @@ type SendTokenCounter interface {
 // NotifyWhenAvailable to queue up for those send tokens.
 type StoreStreamSendTokensWatcher interface {
 	NotifyWhenAvailable(
-		stc SendTokenCounter,
+		stc TokenCounter,
 		wc admissionpb.WorkClass,
 		tokensGrantedNotification TokenAvailableNotification,
 	) StoreStreamSendTokenHandleID
@@ -81,14 +74,14 @@ type StoreStreamSendTokenHandleID int64
 type StoreStreamSendTokenHandle struct {
 	id           StoreStreamSendTokenHandleID
 	bytesInQueue int64
-	stc          SendTokenCounter
+	stc          TokenCounter
 	wc           admissionpb.WorkClass
 	notification TokenAvailableNotification
 }
 
 func NewStoreStreamSendTokensWatcher(stopper *stop.Stopper) *storeStreamSendTokensWatcher {
 	ssstw := &storeStreamSendTokensWatcher{stopper: stopper}
-	ssstw.mu.watchers = make(map[SendTokenCounter]*tokenWatcher)
+	ssstw.mu.watchers = make(map[TokenCounter]*tokenWatcher)
 	ssstw.mu.idSeq = 1
 	return ssstw
 }
@@ -103,7 +96,7 @@ type storeStreamSendTokensWatcher struct {
 
 		// idSeq is used to generate unique IDs for each handle.
 		idSeq    StoreStreamSendTokenHandleID
-		watchers map[SendTokenCounter]*tokenWatcher
+		watchers map[TokenCounter]*tokenWatcher
 		handles  map[StoreStreamSendTokenHandleID]*StoreStreamSendTokenHandle
 	}
 }
@@ -125,9 +118,7 @@ func (s *tokenWatcher) removeHandleLocked(handle StoreStreamSendTokenHandle) {
 // WorkClass. When tokens are available, tokensGrantedNotification is called
 // with the number of tokens granted.
 func (s *storeStreamSendTokensWatcher) NotifyWhenAvailable(
-	stc SendTokenCounter,
-	wc admissionpb.WorkClass,
-	tokensGrantedNotification TokenAvailableNotification,
+	stc TokenCounter, wc admissionpb.WorkClass, tokensGrantedNotification TokenAvailableNotification,
 ) StoreStreamSendTokenHandle {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -190,7 +181,7 @@ func (s *storeStreamSendTokensWatcher) CancelHandle(handleID StoreStreamSendToke
 }
 
 func (s *storeStreamSendTokensWatcher) getOrCreateTokenWatcherLocked(
-	stc SendTokenCounter, wc admissionpb.WorkClass,
+	stc TokenCounter, wc admissionpb.WorkClass,
 ) *tokenWatcher {
 	watcher, ok := s.mu.watchers[stc]
 	if !ok {
@@ -204,7 +195,7 @@ func (s *storeStreamSendTokensWatcher) getOrCreateTokenWatcherLocked(
 }
 
 func (s *storeStreamSendTokensWatcher) watchTokens(
-	ctx context.Context, stc SendTokenCounter, wc admissionpb.WorkClass, watcher *tokenWatcher,
+	ctx context.Context, stc TokenCounter, wc admissionpb.WorkClass, watcher *tokenWatcher,
 ) {
 	_ = s.stopper.RunAsyncTask(context.Background(), "store-stream-token-watcher", func(ctx context.Context) {
 		for {
