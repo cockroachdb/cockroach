@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -389,6 +390,9 @@ func TestCreateStatsProgress(t *testing.T) {
 	}(rowexec.SamplerProgressInterval)
 	rowexec.SamplerProgressInterval = 10
 
+	skip.UnderRace(t, "the test is too sensitive to overload")
+	skip.UnderDeadlock(t, "the test is too sensitive to overload")
+
 	getLastCreateStatsJobID := func(t testing.TB, db *sqlutils.SQLRunner) jobspb.JobID {
 		var jobID jobspb.JobID
 		db.QueryRow(t, "SELECT id FROM system.jobs WHERE status = 'running' AND "+
@@ -397,24 +401,29 @@ func TestCreateStatsProgress(t *testing.T) {
 	}
 
 	var allowRequest chan struct{}
-	var serverArgs base.TestServerArgs
+	var allowRequestClosed bool
+	// Make sure that we unblock the test server in all scenarios with test
+	// failures.
+	defer func() {
+		if !allowRequestClosed {
+			close(allowRequest)
+		}
+	}()
 	filter, setTableID := createStatsRequestFilter(&allowRequest)
-	params := base.TestClusterArgs{ServerArgs: serverArgs}
-	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+	var params base.TestServerArgs
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: filter,
 	}
-	params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
+	params.Knobs.DistSQL = &execinfra.TestingKnobs{
 		// Force the stats job to iterate through the input rows instead of reading
 		// them all at once.
 		TableReaderBatchBytesLimit: 100,
 	}
 
 	ctx := context.Background()
-	const nodes = 1
-	tc := testcluster.StartTestCluster(t, nodes, params)
-	defer tc.Stopper().Stop(ctx)
-	s := tc.ApplicationLayer(0)
-	conn := s.SQLConn(t)
+	srv, conn, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
@@ -476,6 +485,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	// Allow the job to complete and verify that the client didn't see anything
 	// amiss.
 	close(allowRequest)
+	allowRequestClosed = true
 	if err := <-errCh; err != nil {
 		t.Fatalf("create stats job should have completed: %s", err)
 	}
@@ -490,15 +500,12 @@ func TestCreateStatsProgress(t *testing.T) {
 	}
 
 	// Invalidate the stats cache so that we can be sure to get the latest stats.
-	var tableID descpb.ID
-	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
-	s.ExecutorConfig().(sql.ExecutorConfig).TableStatsCache.InvalidateTableStats(
-		ctx, tableID,
-	)
+	s.ExecutorConfig().(sql.ExecutorConfig).TableStatsCache.InvalidateTableStats(ctx, tID)
 
 	// Start another CREATE STATISTICS run and wait until it has scanned part of
 	// the table.
 	allowRequest = make(chan struct{})
+	allowRequestClosed = false
 	go func() {
 		_, err := conn.Exec(query)
 		errCh <- err
@@ -532,6 +539,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	// Allow the job to complete and verify that the client didn't see anything
 	// amiss.
 	close(allowRequest)
+	allowRequestClosed = true
 	if err := <-errCh; err != nil {
 		t.Fatalf("create stats job should have completed: %s", err)
 	}
