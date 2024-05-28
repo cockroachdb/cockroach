@@ -21,6 +21,7 @@ go_library(
         "//pkg/settings",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
@@ -30,6 +31,19 @@ go_library(
 
 go_test(
     name = "kvflowconnectedstream_test",
-    srcs = ["stream_test.go"],
+    srcs = [
+        "store_stream_test.go",
+        "stream_test.go",
+        "token_counter_test.go",
+    ],
     embed = [":kvflowconnectedstream"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
+    ],
 )
