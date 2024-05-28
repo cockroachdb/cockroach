@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -65,32 +64,47 @@ type TokenWaitingHandle interface {
 // tokens. Replicas (from different ranges) waiting for those tokens will call
 // NotifyWhenAvailable to queue up for those send tokens.
 type StoreStreamSendTokensWatcher interface {
+	// NotifyWhenAvailable queues up for tokens for a given token counter and
+	// work class. When tokens are available, tokensGrantedNotification is
+	// called. It is the caller's responsibility to call CancelHandle() when
+	// tokens are no longer needed, or when the caller is done.
 	NotifyWhenAvailable(
 		stc TokenCounter,
 		wc admissionpb.WorkClass,
 		tokensGrantedNotification TokenAvailableNotification,
 	) StoreStreamSendTokenHandleID
+	// UpdateHandle updates the given handle to watch the given work class,
+	// removing it from watching the existing work class, if the work class is
+	// different.
 	UpdateHandle(handle StoreStreamSendTokenHandleID, wc admissionpb.WorkClass)
+	// CancelHandle cancels the given handle, stopping it from being notified
+	// when tokens are available.
 	CancelHandle(handle StoreStreamSendTokenHandleID)
 }
 
 const InvalidStoreStreamSendTokenHandleID StoreStreamSendTokenHandleID = 0
 
+// TokenAvailableNotification is an interface that is called when tokens are
+// available.
 type TokenAvailableNotification interface {
 	// Notify is called when tokens are available to be granted.
 	Notify()
 }
 
+// StoreStreamSendTokenHandleID is a unique identifier for a handle that is
+// watching store stream send tokens.
 type StoreStreamSendTokenHandleID int64
 
+// StoreStreamSendTokenHandle is a handle that is used to identify and notify
+// the caller when store stream send tokens are available.
 type StoreStreamSendTokenHandle struct {
 	id           StoreStreamSendTokenHandleID
-	bytesInQueue int64
 	stc          TokenCounter
 	wc           admissionpb.WorkClass
 	notification TokenAvailableNotification
 }
 
+// NewStoreStreamSendTokensWatcher creates a new StoreStreamSendTokensWatcher.
 func NewStoreStreamSendTokensWatcher(stopper *stop.Stopper) *storeStreamSendTokensWatcher {
 	ssstw := &storeStreamSendTokensWatcher{stopper: stopper}
 	ssstw.mu.watchers = make(map[TokenCounter]*tokenWatcher)
@@ -126,9 +140,10 @@ func (s *tokenWatcher) removeHandleLocked(handle StoreStreamSendTokenHandle) {
 	}
 }
 
-// NotifyWhenAvailable queues up for tokens for the given SendTokenCounter and
-// WorkClass. When tokens are available, tokensGrantedNotification is called
-// with the number of tokens granted.
+// NotifyWhenAvailable queues up for tokens for a given token counter and
+// work class. When tokens are available, tokensGrantedNotification is
+// called. It is the caller's responsibility to call CancelHandle() when
+// tokens are no longer needed, or when the caller is done.
 func (s *storeStreamSendTokensWatcher) NotifyWhenAvailable(
 	stc TokenCounter, wc admissionpb.WorkClass, tokensGrantedNotification TokenAvailableNotification,
 ) StoreStreamSendTokenHandle {
@@ -147,7 +162,8 @@ func (s *storeStreamSendTokensWatcher) NotifyWhenAvailable(
 	watcher := s.getOrCreateTokenWatcherLocked(stc, wc)
 	watcher.tracked[wc] = append(watcher.tracked[wc], handle.id)
 
-	// This is the first token for the work class, counter pair, start watching.
+	// This is the first token for the work class, token counter pair, start
+	// watching tokens.
 	if len(watcher.tracked[handle.wc]) == 1 {
 		s.watchTokens(context.Background(), handle.stc, wc, watcher)
 	}
@@ -155,9 +171,9 @@ func (s *storeStreamSendTokensWatcher) NotifyWhenAvailable(
 	return handle
 }
 
-// UpdateHandle updates the given handle with the new work class, removing it
-// from the existing work class watcher. Note that the handle must already be
-// being watched.
+// UpdateHandle updates the given handle to watch the given work class,
+// removing it from watching the existing work class, if the work class is
+// different.
 func (s *storeStreamSendTokensWatcher) UpdateHandle(
 	handleID StoreStreamSendTokenHandleID, wc admissionpb.WorkClass,
 ) {
@@ -166,22 +182,25 @@ func (s *storeStreamSendTokensWatcher) UpdateHandle(
 
 	handle := s.mu.handles[handleID]
 	if handle.wc == wc {
-		// Nothing to do
+		// Nothing to do, the work class is the same for the handle.
 		return
 	}
 
+	// Update the work class and move the handle to the new work class watcher.
 	handle.wc = wc
-
 	watcher := s.mu.watchers[handle.stc]
 	watcher.removeHandleLocked(*handle)
 	watcher.tracked[handle.wc] = append(watcher.tracked[handle.wc], handleID)
 
-	// This is the first token for the work class, counter pair, start watching.
+	// This is the first token for the work class, counter pair, launch a new
+	// watcher.
 	if len(watcher.tracked[handle.wc]) == 1 {
 		s.watchTokens(context.Background(), handle.stc, wc, watcher)
 	}
 }
 
+// CancelHandle cancels the given handle, stopping it from being notified
+// when tokens are available.
 func (s *storeStreamSendTokensWatcher) CancelHandle(handleID StoreStreamSendTokenHandleID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -209,8 +228,10 @@ func (s *storeStreamSendTokensWatcher) getOrCreateTokenWatcherLocked(
 func (s *storeStreamSendTokensWatcher) watchTokens(
 	ctx context.Context, stc TokenCounter, wc admissionpb.WorkClass, watcher *tokenWatcher,
 ) {
-	_ = s.stopper.RunAsyncTask(context.Background(), "store-stream-token-watcher", func(ctx context.Context) {
+	_ = s.stopper.RunAsyncTask(ctx, "store-stream-token-watcher", func(ctx context.Context) {
 		for {
+			// Check whether there are no more watchers for the given work class. If
+			// so, there's nothing left to do.
 			if exit := func() bool {
 				s.mu.Lock()
 				defer s.mu.Unlock()
@@ -221,28 +242,39 @@ func (s *storeStreamSendTokensWatcher) watchTokens(
 			}
 
 			available, handle := stc.TokensAvailable(wc)
+			// If there are no tokens available, we wait here on the handle's wait
+			// channel, or until cancelled.
 			if !available {
-				state, _ := kvflowcontroller.WaitForHandlesAndChannelsOld(ctx,
-					s.stopper.ShouldQuiesce(),
-					1, /* numHandles */
-					[]interface{}{handle},
-					nil, /* scratch */
-				)
-				switch state {
-				case kvflowcontroller.ContextCanceled, kvflowcontroller.StopWaitSignaled:
+				select {
+				case <-ctx.Done():
 					return
-				case kvflowcontroller.WaitSuccess:
+				case <-s.stopper.ShouldQuiesce():
+					return
+				case <-handle.WaitChannel():
 				}
 			}
 
-			s.mu.Lock()
-			next := watcher.tracked[wc][0]
-			watcher.tracked[wc] = watcher.tracked[wc][1:]
-			watcher.tracked[wc] = append(watcher.tracked[wc], next)
-			notify := s.mu.handles[next].notification.Notify
-			s.mu.Unlock()
+			if nextNotification := func() TokenAvailableNotification {
+				s.mu.Lock()
+				defer s.mu.Unlock()
 
-			notify()
+				// There are no more watchers for the given work class, so we're done.
+				if len(watcher.tracked[wc]) == 0 {
+					return nil
+				}
+
+				// Move the next handle to the end of the queue, so that we can rotate
+				// through each of the watchers when tokens are available.
+				//
+				// TODO(kvoli): Should we be using a more general purpose queue here
+				// instead of a slice?
+				next := watcher.tracked[wc][0]
+				watcher.tracked[wc] = watcher.tracked[wc][1:]
+				watcher.tracked[wc] = append(watcher.tracked[wc], next)
+				return s.mu.handles[next].notification
+			}(); nextNotification != nil {
+				nextNotification.Notify()
+			}
 		}
 	})
 }
