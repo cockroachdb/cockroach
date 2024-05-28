@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "store_stream.go",
         "stream.go",
+        "token_counter.go",
         "token_tracker.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream",
@@ -18,7 +19,9 @@ go_library(
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",

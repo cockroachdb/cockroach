@@ -43,9 +43,21 @@ type TokenCounter interface {
 	Return(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
 }
 
+// TokenWaitingHandle is the interface for waiting for positive tokens.
 type TokenWaitingHandle interface {
+	// WaitChannel is the channel that will be signaled if tokens are possibly
+	// available. If signaled, the caller must call
+	// TryDeductAndUnblockNextWaiter.
 	WaitChannel() <-chan struct{}
-	TryDeductAndUnblockNextWaiter(tokens kvflowcontrol.Tokens) (haveTokens bool)
+	// TryDeductAndUnblockNextWaiter is called to deduct some tokens. The tokens
+	// parameter can be zero, when the waiter is only waiting for positive
+	// tokens (such as when waiting before eval). granted <= tokens and the
+	// tokens that have been deducted. haveTokens is true iff there are tokens
+	// available after this grant. When the tokens parameter is zero, granted
+	// will be zero, and haveTokens represents whether there were positive
+	// tokens. If the caller is unsatisfied with the return values, it can
+	// resume waiting using WaitChannel.
+	TryDeductAndUnblockNextWaiter(tokens kvflowcontrol.Tokens) (granted kvflowcontrol.Tokens, haveTokens bool)
 }
 
 // StoreStreamSendTokensWatcher implements a watcher interface that will use
