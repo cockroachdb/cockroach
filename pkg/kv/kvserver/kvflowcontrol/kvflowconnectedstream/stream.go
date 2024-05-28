@@ -13,6 +13,7 @@ package kvflowconnectedstream
 import (
 	"context"
 	"math"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
@@ -482,52 +483,57 @@ func (rc *RangeControllerImpl) updateVoterSets() {
 func (rc *RangeControllerImpl) WaitForEval(
 	ctx context.Context, pri admissionpb.WorkPriority,
 ) error {
-	// TODO: redo. **resume here**
-	/*
-		// TODO: optimize allocations by having arrays for scratch space that we use
-		// for handles and slices.
-		wc := admissionpb.WorkClassFromPri(pri)
-		waitForAllNonStoppedHandles := false
-		if wc == admissionpb.ElasticWorkClass {
-			waitForAllNonStoppedHandles = true
-		}
-		// Need to gather all voters, even if disconnected.
-		// Also gather the ones that ...
-		for _, vs := range rc.voterSets {
-			quorumCount := (len(vs) + 2) / 2
-			haveEvalTokensCount := 0
-			var handleAndSoftDisconnectedChSlice []kvflowcontroller.HandleAndStopCh
-			for _, r := range vs {
-				rs := rc.replicaMap[r]
-				available, handle := rs.evalTokenCounter.TokensAvailable(wc)
-				if available {
-					haveEvalTokensCount++
-					continue
-				}
-				// Don't have eval tokens, and have a handle.
-				var softDisconnectedCh chan struct{}
-				if rs.replicaSendStream != nil && rs.replicaSendStream.connectedState == replicateConnected {
-					// softDisconnectedCh = rs.replicaSendStream.softDisconnectedCh
-				}
-				handleAndSoftDisconnectedChSlice = append(handleAndSoftDisconnectedChSlice, kvflowcontroller.HandleAndStopCh{
-					Handle:     handle,
-					StopWaitCh: softDisconnectedCh,
-				})
-			}
-			remainingForQuorum := quorumCount - haveEvalTokensCount
-			if wc == admissionpb.RegularWorkClass && remainingForQuorum <= 0 {
+	wc := admissionpb.WorkClassFromPri(pri)
+	waitForAllReplicateHandles := false
+	if wc == admissionpb.ElasticWorkClass {
+		waitForAllReplicateHandles = true
+	}
+	var handles []tokenWaitingHandleInfo
+	var scratch []reflect.SelectCase
+retry:
+	// Snapshot the voterSets and voterSetRefreshCh.
+	// TODO: synchronization.
+	vss := rc.voterSets
+	vssRefreshCh := rc.voterSetRefreshCh
+	for _, vs := range vss {
+		quorumCount := (len(vs) + 2) / 2
+		haveEvalTokensCount := 0
+		handles := handles[:0]
+		requiredWait := false
+		for _, v := range vs {
+			available, handle := v.evalTokenCounter.TokensAvailable(wc)
+			if available {
+				haveEvalTokensCount++
 				continue
 			}
-			if remainingForQuorum < 0 {
-				remainingForQuorum = 0
+			// Don't have eval tokens, and have a handle.
+			handleInfo := tokenWaitingHandleInfo{
+				handle: handle,
+				requiredWait: v.isLeader || v.isLeaseHolder ||
+					(waitForAllReplicateHandles && v.isStateReplicate),
 			}
-			waitEndState, _ := kvflowcontroller.WaitForHandlesAndChannels(
-				ctx, nil, remainingForQuorum, waitForAllNonStoppedHandles, handleAndSoftDisconnectedChSlice, nil)
-			if waitEndState == kvflowcontroller.ContextCanceled {
-				return ctx.Err()
+			handles = append(handles, handleInfo)
+			if !requiredWait && handleInfo.requiredWait {
+				requiredWait = true
 			}
 		}
-	*/
+		remainingForQuorum := quorumCount - haveEvalTokensCount
+		if remainingForQuorum < 0 {
+			remainingForQuorum = 0
+		}
+		if remainingForQuorum > 0 || requiredWait {
+			var state WaitEndState
+			state, scratch = WaitForEval(ctx, vssRefreshCh, handles, remainingForQuorum, scratch)
+			switch state {
+			case WaitSuccess:
+				continue
+			case ContextCanceled:
+				return ctx.Err()
+			case RefreshWaitSignaled:
+				goto retry
+			}
+		}
+	}
 	return nil
 }
 
