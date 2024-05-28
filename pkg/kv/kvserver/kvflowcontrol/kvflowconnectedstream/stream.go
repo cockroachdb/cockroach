@@ -386,7 +386,7 @@ type voterStateForWaiters struct {
 	isLeader         bool
 	isLeaseHolder    bool
 	isStateReplicate bool
-	evalTokenCounter EvalTokenCounter
+	evalTokenCounter TokenCounter
 }
 
 var _ RangeController = &RangeControllerImpl{}
@@ -725,8 +725,8 @@ type replicaStreamOptions struct {
 type replicaState struct {
 	parent            *RangeControllerImpl
 	stream            kvflowcontrol.Stream
-	evalTokenCounter  EvalTokenCounter
-	sendTokenCounter  SendTokenCounter
+	evalTokenCounter  TokenCounter
+	sendTokenCounter  TokenCounter
 	desc              roachpb.ReplicaDescriptor
 	replicaSendStream *replicaSendStream
 }
@@ -962,12 +962,13 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(
 	// send-queue has some normal work now, and the tokens were elastic. In this
 	// case we don't want to apply a priority override on the message. Actually,
 	// should the priority override just be local? We have decided to deduct
-	// from a different bucket than the expected one, so we need to return to
-	// that bucket. Why should we even tell the other side of the change in
-	// priority. It should admit as usual based on original priority. The
-	// priority override was just a local deduction mechanism. Well, if we have
-	// deducted from normal bucket for elastic work, we should tell the other
-	// side since we want the admission to happen as normal too.
+	// from a different tokenCounterPerWorkClass than the expected one, so we
+	// need to return to that tokenCounter. Why should we even tell the other
+	// side of the change in priority. It should admit as usual based on
+	// original priority. The priority override was just a local deduction
+	// mechanism. Well, if we have deducted from normal tokenCounterPerWorkClass
+	// for elastic work, we should tell the other side since we want the
+	// admission to happen as normal too.
 	//
 	// If we send normal work as elastic to the other side, harmless. It will
 	// delay logical admission. That is all.
