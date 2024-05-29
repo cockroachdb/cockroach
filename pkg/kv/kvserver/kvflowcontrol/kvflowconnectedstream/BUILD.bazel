@@ -19,6 +19,7 @@ go_library(
         "//pkg/raft/tracker",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/hlc",
@@ -39,6 +40,7 @@ go_test(
     embed = [":kvflowconnectedstream"],
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

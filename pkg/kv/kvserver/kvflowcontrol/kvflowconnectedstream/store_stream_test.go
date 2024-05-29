@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,6 +33,9 @@ func (t *testingTokenAvailableNotification) Notify() {
 
 var _ TokenAvailableNotification = &testingTokenAvailableNotification{}
 
+// TestStoreStreamSendTokenWatcher tests the basic functionality of
+// StoreStreamSendTokensWatcher implemented by storeStreamSendTokensWatcher
+// using two concurrent notifiers.
 func TestStoreStreamSendTokenWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -45,8 +49,14 @@ func TestStoreStreamSendTokenWatcher(t *testing.T) {
 		regular: 100,
 		elastic: 100,
 	}
+
+	settings := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClockForTesting(hlc.NewHybridManualClock())
-	counter := newTokenCounter(tokensPerWorkClass, clock)
+
+	elasticTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.elastic))
+	regularTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.regular))
+
+	counter := newTokenCounter(settings, clock)
 
 	var handleA, handleB StoreStreamSendTokenHandleID
 	tokenIncrement := kvflowcontrol.Tokens(1)
@@ -57,12 +67,13 @@ func TestStoreStreamSendTokenWatcher(t *testing.T) {
 		t *testing.T,
 		wantTokens *kvflowcontrol.Tokens,
 		handle *StoreStreamSendTokenHandleID,
+		wc admissionpb.WorkClass,
 	) *testingTokenAvailableNotification {
 		return &testingTokenAvailableNotification{t: t, onNotify: func() {
 			// Try deducting all the tokens we are waiting on when notified, we expect
 			// there to be at most tokenIncrement tokens granted, since that is the
 			// number of tokens returned.
-			granted := counter.TryDeduct(ctx, admissionpb.RegularWorkClass, *wantTokens)
+			granted := counter.TryDeduct(ctx, wc, *wantTokens)
 			require.Equal(t, tokenIncrement, granted)
 			*wantTokens -= granted
 
@@ -73,8 +84,8 @@ func TestStoreStreamSendTokenWatcher(t *testing.T) {
 		}}
 	}
 
-	notifyA := makeNotify(t, &wantTokensA, &handleA)
-	notifyB := makeNotify(t, &wantTokensB, &handleB)
+	notifyA := makeNotify(t, &wantTokensA, &handleA, admissionpb.RegularWorkClass)
+	notifyB := makeNotify(t, &wantTokensB, &handleB, admissionpb.RegularWorkClass)
 
 	// Initially, deduct all the tokens so that there are none available.
 	counter.Deduct(ctx, admissionpb.RegularWorkClass, tokensPerWorkClass.regular)
@@ -94,6 +105,25 @@ func TestStoreStreamSendTokenWatcher(t *testing.T) {
 	notifyCountA := notifyA.counter.Load()
 	notifyCountB := notifyB.counter.Load()
 	require.Equal(t, notifyCountA, notifyCountB)
+	require.Equal(t, kvflowcontrol.Tokens(0), counter.tokens(admissionpb.RegularWorkClass))
+	require.Equal(t, kvflowcontrol.Tokens(0), counter.tokens(admissionpb.ElasticWorkClass))
 
-	// TODO(kvoli): Test UpdateHandle.
+	// The handle is cancelled, the watcher should panic trying to find the
+	// handle.
+	require.Panics(t, func() { watcher.UpdateHandle(handleA, admissionpb.ElasticWorkClass) })
+
+	// Create a new handle, then update it to a different work class. The watcher
+	// should notify the handle when the work class is updated and not need to
+	// wait on the original token counter to have available tokens before
+	// swapping the work class.
+	var handleC StoreStreamSendTokenHandleID
+	wantTokensC := tokenIncrement
+	notifyC := makeNotify(t, &wantTokensC, &handleC, admissionpb.ElasticWorkClass)
+	handleC = watcher.NotifyWhenAvailable(counter, admissionpb.RegularWorkClass, notifyC)
+	watcher.UpdateHandle(handleC, admissionpb.ElasticWorkClass)
+	counter.Return(ctx, admissionpb.ElasticWorkClass, tokenIncrement)
+	require.Equal(t, kvflowcontrol.Tokens(1), counter.tokens(admissionpb.ElasticWorkClass))
+
+	time.Sleep(1 * time.Millisecond)
+	require.Equal(t, int32(1), notifyC.counter.Load())
 }

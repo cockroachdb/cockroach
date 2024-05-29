@@ -18,11 +18,35 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+)
+
+// regularTokensPerStream determines the flow tokens available for regular work
+// on a per-stream basis.
+//
+// TODO: Either unify these settings with kvflowcontroller settings, or rationalize the
+// naming.
+var regularTokensPerStream = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_controller_v2.regular_tokens_per_stream",
+	"flow tokens available for regular work on a per-stream basis",
+	16<<20, // 16 MiB
+	validateTokenRange,
+)
+
+// elasticTokensPerStream determines the flow tokens available for elastic work
+// on a per-stream basis.
+var elasticTokensPerStream = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_controller_v2.elastic_tokens_per_stream",
+	"flow tokens available for elastic work on a per-stream basis",
+	8<<20, // 8 MiB
+	validateTokenRange,
 )
 
 // tokenCounterPerWorkClass is a helper struct for implementing tokenCounter.
@@ -157,11 +181,14 @@ func (bwc *tokenCounterPerWorkClass) getAndResetStats(now time.Time) deltaStats 
 // kvflowcontrol.Stream. It's used to synchronize handoff between threads
 // returning and waiting for flow tokens.
 type tokenCounter struct {
-	clock *hlc.Clock
+	clock    *hlc.Clock
+	settings *cluster.Settings
 
 	mu struct {
 		syncutil.RWMutex
 
+		// Token limit per work class, tracking
+		// kvadmission.flow_controller.{regular,elastic}_tokens_per_stream.
 		limit    tokensPerWorkClass
 		counters [admissionpb.NumWorkClasses]tokenCounterPerWorkClass
 	}
@@ -169,15 +196,50 @@ type tokenCounter struct {
 
 var _ TokenCounter = &tokenCounter{}
 
-func newTokenCounter(tokensPerWorkClass tokensPerWorkClass, clock *hlc.Clock) *tokenCounter {
-	b := tokenCounter{clock: clock}
-	now := clock.PhysicalTime()
+func newTokenCounter(settings *cluster.Settings, clock *hlc.Clock) *tokenCounter {
+	b := &tokenCounter{
+		clock:    clock,
+		settings: settings,
+	}
+
+	regularTokens := kvflowcontrol.Tokens(regularTokensPerStream.Get(&settings.SV))
+	elasticTokens := kvflowcontrol.Tokens(elasticTokensPerStream.Get(&settings.SV))
+	b.mu.limit = tokensPerWorkClass{
+		regular: regularTokens,
+		elastic: elasticTokens,
+	}
 	b.mu.counters[admissionpb.RegularWorkClass] = makeTokenCounterPerWorkClass(
-		admissionpb.RegularWorkClass, tokensPerWorkClass.regular, now)
+		admissionpb.RegularWorkClass, b.mu.limit.regular, b.clock.PhysicalTime())
 	b.mu.counters[admissionpb.ElasticWorkClass] = makeTokenCounterPerWorkClass(
-		admissionpb.ElasticWorkClass, tokensPerWorkClass.elastic, now)
-	b.mu.limit = tokensPerWorkClass
-	return &b
+		admissionpb.ElasticWorkClass, b.mu.limit.elastic, b.clock.PhysicalTime())
+
+	onChangeFunc := func(ctx context.Context) {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+
+		b.mu.Lock()
+		defer b.mu.Unlock()
+
+		before := b.mu.limit
+		now := tokensPerWorkClass{
+			regular: kvflowcontrol.Tokens(regularTokensPerStream.Get(&settings.SV)),
+			elastic: kvflowcontrol.Tokens(elasticTokensPerStream.Get(&settings.SV)),
+		}
+		adjustment := tokensPerWorkClass{
+			regular: now.regular - before.regular,
+			elastic: now.elastic - before.elastic,
+		}
+		b.mu.limit = now
+
+		b.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(
+			ctx, adjustment.regular, now.regular, true /* admin */, b.clock.PhysicalTime())
+		b.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(
+			ctx, adjustment.elastic, now.elastic, true /* admin */, b.clock.PhysicalTime())
+	}
+
+	regularTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
+	elasticTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
+	return b
 }
 
 func (b *tokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
