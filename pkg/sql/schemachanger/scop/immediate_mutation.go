@@ -11,6 +11,7 @@
 package scop
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -883,4 +884,12 @@ type InitSequence struct {
 type CreateDatabaseDescriptor struct {
 	immediateMutationOp
 	DatabaseID descpb.ID
+}
+
+// AddDatabaseZoneConfig adds a zone config to a database.
+type AddDatabaseZoneConfig struct {
+	immediateMutationOp
+	DatabaseID descpb.ID
+	ZoneConfig *zonepb.ZoneConfig
+	SeqNum     uint32
 }
