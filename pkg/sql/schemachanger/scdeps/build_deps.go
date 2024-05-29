@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -365,6 +366,11 @@ func (d *buildDeps) SessionData() *sessiondata.SessionData {
 // ClusterSettings implements the scbuild.Dependencies interface.
 func (d *buildDeps) ClusterSettings() *cluster.Settings {
 	return d.settings
+}
+
+// NodesStatusServer implements the scbuild.Dependencies interface.
+func (d *buildDeps) NodesStatusServer() serverpb.OptionalNodesStatusServer {
+	return d.nodesStatusServer
 }
 
 // Statements implements the scbuild.Dependencies interface.
