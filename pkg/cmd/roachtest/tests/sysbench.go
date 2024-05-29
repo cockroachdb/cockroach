@@ -176,7 +176,7 @@ func registerSysbench(r registry.Registry) {
 		const conc = 8 * cpus
 		opts := sysbenchOptions{
 			workload:     w,
-			duration:     10 * time.Minute,
+			duration:     1 * time.Minute,
 			concurrency:  conc,
 			tables:       10,
 			rowsPerTable: 10000000,
