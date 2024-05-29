@@ -1764,6 +1764,11 @@ func registerCDC(r registry.Registry) {
 			// 	t.Fatal("failed to set cluster setting")
 			// }
 
+			// NEXT
+			// - see if the above works
+			// - make sure the stuff is really super separate in the workers sinks
+			// - try and output batch state dumps for debugging
+
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
