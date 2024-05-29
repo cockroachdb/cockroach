@@ -116,6 +116,7 @@ const (
 	DropViewTag            = "DROP VIEW"
 	ImportTag              = "IMPORT"
 	RestoreTag             = "RESTORE"
+	ConfigureZoneTag       = "CONFIGURE ZONE"
 )
 
 // Statements represent a list of statements.
