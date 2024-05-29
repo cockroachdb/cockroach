@@ -10,6 +10,7 @@
 
 import React, { ReactElement } from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
+
 import { InsightExecEnum } from "src/insights/types";
 import { Timezone } from "src/timestamp";
 

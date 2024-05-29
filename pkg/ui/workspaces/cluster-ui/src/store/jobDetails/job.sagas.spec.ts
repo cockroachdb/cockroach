@@ -16,15 +16,16 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
+import { PayloadAction } from "@reduxjs/toolkit";
+import moment from "moment-timezone";
+
 import {
   ErrorWithKey,
   getJob,
   JobRequest,
   JobResponseWithKey,
 } from "src/api/jobsApi";
-import Long from "long";
-import { PayloadAction } from "@reduxjs/toolkit";
-import moment from "moment-timezone";
 
 import { succeededJobFixture } from "../../jobs/jobsPage/jobsPage.fixture";
 

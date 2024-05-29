@@ -9,6 +9,10 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { Tooltip } from "@cockroachlabs/ui-components";
+import { Link } from "react-router-dom";
+import classNames from "classnames/bind";
+
 import {
   ColumnDescriptor,
   ISortedTablePagination,
@@ -27,9 +31,6 @@ import {
   StatementStatus,
   StmtInsightEvent,
 } from "src/insights";
-import { Tooltip } from "@cockroachlabs/ui-components";
-import { Link } from "react-router-dom";
-import classNames from "classnames/bind";
 import { Badge } from "src/badge";
 
 import styles from "../util/workloadInsights.module.scss";

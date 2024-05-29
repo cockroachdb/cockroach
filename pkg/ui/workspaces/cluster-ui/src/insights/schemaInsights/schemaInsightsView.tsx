@@ -9,11 +9,12 @@
 // licenses/APL.txt.
 
 import React, { useContext, useEffect, useState } from "react";
-import styles from "src/statementsPage/statementsPage.module.scss";
-import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+
+import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import styles from "src/statementsPage/statementsPage.module.scss";
 import { insights } from "src/util";
 import { Anchor } from "src/anchor";
 

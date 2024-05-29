@@ -107,15 +107,15 @@ const getDatabaseId: DatabaseDetailsQuery<DatabaseIdRow> = {
     };
   },
   addToDatabaseDetail: (
-    txn_result: SqlTxnResult<DatabaseIdRow>,
+    txnResult: SqlTxnResult<DatabaseIdRow>,
     resp: DatabaseDetailsResponse,
   ) => {
     // Check that txn_result.rows[0].database_id is not null
-    if (!txnResultIsEmpty(txn_result) && txn_result.rows[0].database_id) {
-      resp.idResp.database_id = txn_result.rows[0].database_id;
+    if (!txnResultIsEmpty(txnResult) && txnResult.rows[0].database_id) {
+      resp.idResp.database_id = txnResult.rows[0].database_id;
     }
-    if (txn_result.error) {
-      resp.idResp.error = txn_result.error;
+    if (txnResult.error) {
+      resp.idResp.error = txnResult.error;
     }
   },
   handleMaxSizeError: (_dbName, _response, _dbDetail) => {
@@ -146,13 +146,13 @@ const getDatabaseGrantsQuery: DatabaseDetailsQuery<DatabaseGrantsRow> = {
     };
   },
   addToDatabaseDetail: (
-    txn_result: SqlTxnResult<DatabaseGrantsRow>,
+    txnResult: SqlTxnResult<DatabaseGrantsRow>,
     resp: DatabaseDetailsResponse,
   ) => {
-    if (!txnResultIsEmpty(txn_result)) {
-      resp.grantsResp.grants = txn_result.rows;
-      if (txn_result.error) {
-        resp.grantsResp.error = txn_result.error;
+    if (!txnResultIsEmpty(txnResult)) {
+      resp.grantsResp.grants = txnResult.rows;
+      if (txnResult.error) {
+        resp.grantsResp.error = txnResult.error;
       }
     }
   },
@@ -184,24 +184,24 @@ const getDatabaseTablesQuery: DatabaseDetailsQuery<DatabaseTablesRow> = {
     };
   },
   addToDatabaseDetail: (
-    txn_result: SqlTxnResult<DatabaseTablesRow>,
+    txnResult: SqlTxnResult<DatabaseTablesRow>,
     resp: DatabaseDetailsResponse,
   ) => {
-    if (!txnResultIsEmpty(txn_result)) {
+    if (!txnResultIsEmpty(txnResult)) {
       if (!resp.tablesResp.tables) {
         resp.tablesResp.tables = [];
       }
 
-      txn_result.rows.forEach(row => {
+      txnResult.rows.forEach(row => {
         const escTableName = new QualifiedIdentifier([
           row.table_schema,
           row.table_name,
-        ]).SQLString();
+        ]).sqlString();
         return resp.tablesResp.tables.push(escTableName);
       });
     }
-    if (txn_result.error) {
-      resp.tablesResp.error = txn_result.error;
+    if (txnResult.error) {
+      resp.tablesResp.error = txnResult.error;
     }
   },
   handleMaxSizeError: async (
@@ -268,17 +268,17 @@ const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
     };
   },
   addToDatabaseDetail: (
-    txn_result: SqlTxnResult<DatabaseZoneConfigRow>,
+    txnResult: SqlTxnResult<DatabaseZoneConfigRow>,
     resp: DatabaseDetailsResponse,
   ) => {
     if (
-      !txnResultIsEmpty(txn_result) &&
+      !txnResultIsEmpty(txnResult) &&
       // Check that txn_result.rows[0].zone_config_hex_string is not null
       // and not empty.
-      txn_result.rows[0].zone_config_hex_string &&
-      txn_result.rows[0].zone_config_hex_string.length !== 0
+      txnResult.rows[0].zone_config_hex_string &&
+      txnResult.rows[0].zone_config_hex_string.length !== 0
     ) {
-      const zoneConfigHexString = txn_result.rows[0].zone_config_hex_string;
+      const zoneConfigHexString = txnResult.rows[0].zone_config_hex_string;
       // Try to decode the zone config bytes response.
       try {
         // Parse the bytes from the hex string.
@@ -299,8 +299,8 @@ const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
         resp.zoneConfigResp.zone_config_level = ZoneConfigurationLevel.UNKNOWN;
       }
     }
-    if (txn_result.error) {
-      resp.zoneConfigResp.error = txn_result.error;
+    if (txnResult.error) {
+      resp.zoneConfigResp.error = txnResult.error;
     }
   },
   handleMaxSizeError: (_dbName, _response, _dbDetail) => {
@@ -333,25 +333,25 @@ function formatSpanStatsExecutionResult(
     return out;
   }
 
-  const txn_result = res.execution.txn_results[0];
+  const txnResult = res.execution.txn_results[0];
 
-  if (txn_result && txn_result.error) {
+  if (txnResult && txnResult.error) {
     // Copy the SQLExecutionError and the SqlTransactionResult error.
     out.error = res.error;
-    out.spanStats.error = txn_result.error;
+    out.spanStats.error = txnResult.error;
   }
-  if (txnResultIsEmpty(txn_result)) {
+  if (txnResultIsEmpty(txnResult)) {
     return out;
   }
-  if (txn_result.rows.length === 1) {
-    const row = txn_result.rows[0];
+  if (txnResult.rows.length === 1) {
+    const row = txnResult.rows[0];
     out.spanStats.approximate_disk_bytes = row.approximate_disk_bytes;
     out.spanStats.range_count = row.range_count;
     out.spanStats.live_bytes = row.live_bytes;
     out.spanStats.total_bytes = row.total_bytes;
   } else {
     out.spanStats.error = new Error(
-      `DatabaseDetails - Span Stats, expected 1 row, got ${txn_result.rows.length}`,
+      `DatabaseDetails - Span Stats, expected 1 row, got ${txnResult.rows.length}`,
     );
   }
   return out;
@@ -376,13 +376,13 @@ const getDatabaseReplicasAndRegions: DatabaseDetailsQuery<DatabaseReplicasRegion
       };
     },
     addToDatabaseDetail: (
-      txn_result: SqlTxnResult<DatabaseReplicasRegionsRow>,
+      txnResult: SqlTxnResult<DatabaseReplicasRegionsRow>,
       resp: DatabaseDetailsResponse,
     ) => {
-      if (txn_result.error) {
-        resp.stats.replicaData.error = txn_result.error;
+      if (txnResult.error) {
+        resp.stats.replicaData.error = txnResult.error;
       }
-      resp.stats.replicaData.storeIDs = txn_result?.rows[0]?.store_ids ?? [];
+      resp.stats.replicaData.storeIDs = txnResult?.rows[0]?.store_ids ?? [];
     },
     handleMaxSizeError: (_dbName, _response, _dbDetail) => {
       return Promise.resolve(false);
@@ -416,17 +416,17 @@ const getDatabaseIndexUsageStats: DatabaseDetailsQuery<IndexUsageStatistic> = {
     };
   },
   addToDatabaseDetail: (
-    txn_result: SqlTxnResult<IndexUsageStatistic>,
+    txnResult: SqlTxnResult<IndexUsageStatistic>,
     resp: DatabaseDetailsResponse,
   ) => {
-    txn_result.rows?.forEach(row => {
+    txnResult.rows?.forEach(row => {
       const rec = recommendDropUnusedIndex(row);
       if (rec.recommend) {
         resp.stats.indexStats.num_index_recommendations += 1;
       }
     });
-    if (txn_result.error) {
-      resp.stats.indexStats.error = txn_result.error;
+    if (txnResult.error) {
+      resp.stats.indexStats.error = txnResult.error;
     }
   },
   handleMaxSizeError: (_dbName, _response, _dbDetail) => {
@@ -522,13 +522,13 @@ async function fetchDatabaseDetails(
   const req: SqlExecutionRequest = createDatabaseDetailsReq(params);
   const resp = await executeInternalSql<DatabaseDetailsRow>(req);
   const errs: Error[] = [];
-  resp.execution.txn_results.forEach(txn_result => {
-    if (txn_result.error) {
-      errs.push(txn_result.error);
+  resp.execution.txn_results.forEach(txnResult => {
+    if (txnResult.error) {
+      errs.push(txnResult.error);
     }
     const query: DatabaseDetailsQuery<DatabaseDetailsRow> =
-      databaseDetailQueries[txn_result.statement - 1];
-    query.addToDatabaseDetail(txn_result, detailsResponse);
+      databaseDetailQueries[txnResult.statement - 1];
+    query.addToDatabaseDetail(txnResult, detailsResponse);
   });
   if (resp.error) {
     if (isMaxSizeError(resp.error.message)) {
@@ -562,16 +562,16 @@ async function fetchSeparatelyDatabaseDetails(
     if (sqlResultsAreEmpty(resp)) {
       continue;
     }
-    const txn_result = resp.execution.txn_results[0];
-    if (txn_result.error) {
-      errs.push(txn_result.error);
+    const txnResult = resp.execution.txn_results[0];
+    if (txnResult.error) {
+      errs.push(txnResult.error);
     }
-    databaseDetailQuery.addToDatabaseDetail(txn_result, detailsResponse);
+    databaseDetailQuery.addToDatabaseDetail(txnResult, detailsResponse);
 
     if (resp.error) {
       const handleFailure = await databaseDetailQuery.handleMaxSizeError(
         params.database,
-        txn_result,
+        txnResult,
         detailsResponse,
       );
       if (!handleFailure) {

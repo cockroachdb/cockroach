@@ -10,9 +10,10 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-import { noop } from "lodash";
-import { Button } from "src/button";
+import noop from "lodash/noop";
 import { Download } from "@cockroachlabs/icons";
+
+import { Button } from "src/button";
 
 import { Dropdown, DropdownOption } from "./dropdown";
 

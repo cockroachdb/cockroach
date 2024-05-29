@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+
 import { databasesListSelector } from "src/store/databasesList/databasesList.selectors";
 
 import { localStorageSelector } from "../store/utils/selectors";

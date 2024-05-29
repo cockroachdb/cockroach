@@ -11,7 +11,11 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import classNames from "classnames/bind";
-import { noop } from "lodash";
+import noop from "lodash/noop";
+import { Tooltip } from "@cockroachlabs/ui-components";
+import { EllipsisVertical } from "@cockroachlabs/icons";
+import moment from "moment-timezone";
+
 import {
   ActivateDiagnosticsModalRef,
   DiagnosticStatusBadge,
@@ -20,17 +24,14 @@ import { getHighlightedText } from "src/highlightedText";
 import { AggregateStatistics } from "src/statementsTable";
 import { Dropdown } from "src/dropdown";
 import { Button } from "src/button";
-import { Tooltip } from "@cockroachlabs/ui-components";
 import {
   propsToQueryString,
   computeOrUseStmtSummary,
   appNamesAttr,
   unset,
 } from "src/util";
-import { EllipsisVertical } from "@cockroachlabs/icons";
 import { withBasePath } from "src/api/basePath";
 import { StatementDiagnosticsReport } from "src/api/statementDiagnosticsApi";
-import moment from "moment-timezone";
 
 import styles from "./statementsTableContent.module.scss";
 

@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { JobsRequest, JobsResponse } from "src/api/jobsApi";
 import moment from "moment-timezone";
+
+import { JobsRequest, JobsResponse } from "src/api/jobsApi";
 import { createInitialState, RequestState } from "src/api/types";
 
 import { DOMAIN_NAME } from "../utils";

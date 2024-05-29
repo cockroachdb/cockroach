@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createMemoryHistory } from "history";
+
 import { sessionAttr } from "src/util/constants";
 import {
   CancelSessionRequestMessage,

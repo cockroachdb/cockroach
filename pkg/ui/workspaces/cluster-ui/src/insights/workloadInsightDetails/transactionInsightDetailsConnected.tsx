@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Dispatch } from "redux";
+
 import { AppState, uiConfigActions } from "src/store";
 import {
   selectTransactionInsightDetails,
@@ -16,7 +18,6 @@ import {
   actions,
   selectTransactionInsightDetailsMaxSizeReached,
 } from "src/store/insightDetails/transactionInsightDetails";
-import { Dispatch } from "redux";
 import { TxnInsightDetailsRequest } from "src/api";
 
 import { TimeScale } from "../../timeScaleDropdown";

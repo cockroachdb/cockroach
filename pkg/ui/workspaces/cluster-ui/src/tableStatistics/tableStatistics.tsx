@@ -9,12 +9,13 @@
 // licenses/APL.txt.
 
 import React from "react";
+import classNames from "classnames/bind";
+import moment from "moment-timezone";
+
 import { Button } from "src/button";
 import { ResultsPerPageLabel } from "src/pagination";
-import classNames from "classnames/bind";
 import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 import { TimeScale } from "src/timeScaleDropdown";
-import moment from "moment-timezone";
 
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import { ISortedTablePagination } from "../sortedtable";

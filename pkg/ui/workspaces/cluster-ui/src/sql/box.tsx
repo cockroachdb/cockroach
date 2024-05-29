@@ -10,6 +10,7 @@
 
 import React from "react";
 import classNames from "classnames/bind";
+
 import { FormatQuery } from "src/util";
 
 import { api as clusterUiApi } from "../index";
@@ -18,9 +19,9 @@ import { Highlight } from "./highlight";
 import styles from "./sqlhighlight.module.scss";
 
 export enum SqlBoxSize {
-  small = "small",
-  large = "large",
-  custom = "custom",
+  SMALL = "small",
+  LARGE = "large",
+  CUSTOM = "custom",
 }
 
 export interface SqlBoxProps {

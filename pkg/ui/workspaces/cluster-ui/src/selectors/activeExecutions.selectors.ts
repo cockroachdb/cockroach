@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+
 import { ActiveExecutions } from "src/activeExecutions/types";
 import { AppState } from "src/store";
 import { selectActiveExecutionsCombiner } from "src/selectors/activeExecutionsCommon.selectors";

@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { tabAttr, viewAttr } from "src/util";
 import { Link } from "react-router-dom";
+
+import { tabAttr, viewAttr } from "src/util";
 import { commonStyles } from "src/common";
 
 import { EmptyTable, EmptyTableProps } from "../empty";

@@ -12,7 +12,7 @@ import { createSelector } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { match } from "react-router";
 import { Location } from "history";
-import { cloneDeep } from "lodash";
+import cloneDeep from "lodash/cloneDeep";
 
 import { statementFingerprintIdsToText } from "../transactionsPage/utils";
 import { SqlStatsResponse } from "../api";

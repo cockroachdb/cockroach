@@ -10,8 +10,9 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Line } from "rc-progress";
 import React from "react";
-import { Badge } from "src/badge";
 import classNames from "classnames/bind";
+
+import { Badge } from "src/badge";
 
 import styles from "../jobs.module.scss";
 

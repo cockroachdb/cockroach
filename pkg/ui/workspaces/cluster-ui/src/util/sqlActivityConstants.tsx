@@ -10,8 +10,9 @@
 
 import React from "react";
 import { duration } from "moment-timezone";
-import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
 import classNames from "classnames/bind";
+
+import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
 import styles from "src/sqlActivity/sqlActivity.module.scss";
 
 import {

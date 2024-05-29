@@ -8,14 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import Select, { components, OptionsType } from "react-select";
+import Select, {
+  components,
+  OptionsType,
+  DeselectOptionActionMeta,
+  SelectOptionActionMeta,
+} from "react-select";
 import React from "react";
 import classNames from "classnames/bind";
 import { Gear } from "@cockroachlabs/icons";
-import {
-  DeselectOptionActionMeta,
-  SelectOptionActionMeta,
-} from "react-select/src/types";
 
 import { Button } from "../button";
 import {
@@ -144,7 +145,7 @@ export default class ColumnsSelector extends React.Component<
   outsideClick = () => {
     this.setState({ hide: true });
   };
-  insideClick = (event: any) => {
+  insideClick: React.MouseEventHandler<HTMLDivElement> = event => {
     event.stopPropagation();
   };
 

@@ -11,6 +11,7 @@
 import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
+
 import { actions as localStorageActions } from "src/store/localStorage";
 import { AppState, uiConfigActions } from "src/store";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
@@ -104,6 +105,6 @@ const mapDispatchToProps = (
   },
 });
 
-export const TransactionDetailsPageConnected = withRouter<any, any>(
+export const TransactionDetailsPageConnected = withRouter(
   connect(mapStateToProps, mapDispatchToProps)(TransactionDetails),
 );

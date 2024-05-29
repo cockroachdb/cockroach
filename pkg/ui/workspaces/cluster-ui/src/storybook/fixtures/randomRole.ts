@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import sample from "lodash/sample";
 
 import { randomName } from "./randomName";
 
 export function randomRole(): string {
-  return _.sample(["root", "admin", "public", randomName()]);
+  return sample(["root", "admin", "public", randomName()]);
 }

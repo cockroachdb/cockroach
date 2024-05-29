@@ -68,10 +68,10 @@ export type CollectExecutionDetailsResponse = {
   req_resp: boolean;
 };
 
-export function collectExecutionDetails({
-  job_id,
-}: CollectExecutionDetailsRequest): Promise<CollectExecutionDetailsResponse> {
-  const args: any = [job_id.toString()];
+export function collectExecutionDetails(
+  execDetailsReq: CollectExecutionDetailsRequest,
+): Promise<CollectExecutionDetailsResponse> {
+  const args = [execDetailsReq.job_id.toString()];
 
   const collectExecutionDetails = {
     sql: `SELECT crdb_internal.request_job_execution_details($1::INT) as req_resp`,

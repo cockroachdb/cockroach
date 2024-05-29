@@ -10,8 +10,9 @@
 
 import React from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { limitStringArray } from "src/util";
 import classNames from "classnames/bind";
+
+import { limitStringArray } from "src/util";
 
 import styles from "./workloadInsights.module.scss";
 

@@ -20,6 +20,7 @@ export interface WithTimezoneProps {
 // WithTimezone wraps a class component to provide the
 // context's timezone value as a component prop.
 export function WithTimezone<T>(
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   Component: React.ComponentType<T & WithTimezoneProps>,
 ) {
   return (props: React.PropsWithChildren<T>) => {

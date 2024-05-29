@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
+
 import {
   getInsightsFromProblemsAndCauses,
   InsightExecEnum,
   TransactionStatus,
   TxnInsightEvent,
 } from "src/insights";
-import moment from "moment-timezone";
 
 import { INTERNAL_APP_NAME_PREFIX } from "../util";
 

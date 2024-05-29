@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeEvery } from "redux-saga/effects";
-import { getJobs, JobsRequest } from "src/api/jobsApi";
 import { PayloadAction } from "@reduxjs/toolkit";
+
+import { getJobs, JobsRequest } from "src/api/jobsApi";
 
 import { actions } from "./jobs.reducer";
 

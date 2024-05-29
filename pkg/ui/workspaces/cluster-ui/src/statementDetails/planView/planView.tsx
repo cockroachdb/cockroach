@@ -9,10 +9,11 @@
 // licenses/APL.txt.
 
 import React, { Fragment } from "react";
-import _ from "lodash";
 import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import values from "lodash/values";
+import sortBy from "lodash/sortBy";
 
 import {
   getAttributeTooltip,
@@ -110,8 +111,8 @@ export function flattenAttributes(
       }
     }
   });
-  const flattenedAttrs = _.values(flattenedAttrsMap);
-  return _.sortBy(flattenedAttrs, attr =>
+  const flattenedAttrs = values(flattenedAttrsMap);
+  return sortBy(flattenedAttrs, attr =>
     attr.key === "table" ? "table" : "z" + attr.key,
   );
 }

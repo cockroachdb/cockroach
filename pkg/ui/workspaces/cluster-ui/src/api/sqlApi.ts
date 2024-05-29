@@ -287,15 +287,15 @@ export function combineQueryErrors(
   };
 }
 
-export function txnResultIsEmpty(txn_result: SqlTxnResult<unknown>): boolean {
-  return !txn_result || !txn_result.rows || txn_result.rows?.length === 0;
+export function txnResultIsEmpty(txnResults: SqlTxnResult<unknown>): boolean {
+  return !txnResults || !txnResults.rows || txnResults.rows?.length === 0;
 }
 
 export function txnResultSetIsEmpty(
-  txn_results: SqlTxnResult<unknown>[],
+  txnResults: SqlTxnResult<unknown>[],
 ): boolean {
-  if (!txn_results || txn_results.length === 0) {
+  if (!txnResults || txnResults.length === 0) {
     return true;
   }
-  return txn_results.every(x => txnResultIsEmpty(x));
+  return txnResults.every(x => txnResultIsEmpty(x));
 }

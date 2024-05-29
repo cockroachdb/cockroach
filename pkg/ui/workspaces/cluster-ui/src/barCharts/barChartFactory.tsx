@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import React from "react";
 import { scaleLinear } from "d3-scale";
 import { extent as d3Extent } from "d3-array";
-import _ from "lodash";
-import React from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
+import sum from "lodash/sum";
+import map from "lodash/map";
 
 import styles from "./barCharts.module.scss";
 import { NumericStatLegend } from "./numericStatLegend";
@@ -47,7 +48,7 @@ export function barChartFactory<T>(
   }
 
   return (rows: T[] = [], options: BarChartOptions<T> = {}) => {
-    const getTotal = (d: T) => _.sum(_.map(accessors, ({ value }) => value(d)));
+    const getTotal = (d: T) => sum(map(accessors, ({ value }) => value(d)));
     const getTotalWithStdDev = (d: T) => getTotal(d) + stdDevAccessor.value(d);
 
     const extent = d3Extent(
@@ -83,7 +84,7 @@ export function barChartFactory<T>(
       }
 
       let sum = 0;
-      _.map(accessors, ({ name, value }) => {
+      map(accessors, ({ name, value }) => {
         const v = value(d);
         sum += v;
         return (

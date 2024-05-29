@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import sample from "lodash/sample";
 
 export function randomTablePrivilege(): string {
-  return _.sample([
+  return sample([
     "ALL",
     "CREATE",
     "DROP",

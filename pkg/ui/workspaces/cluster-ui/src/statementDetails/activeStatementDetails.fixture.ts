@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import moment from "moment-timezone";
-import { noop } from "lodash";
+import noop from "lodash/noop";
 
 import { ExecutionStatus } from "../activeExecutions";
 

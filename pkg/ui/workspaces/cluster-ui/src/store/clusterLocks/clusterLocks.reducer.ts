@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+
 import { ClusterLocksResponse, SqlApiResponse } from "src/api";
 
 import { DOMAIN_NAME, noopReducer } from "../utils";

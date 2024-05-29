@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Anchor } from "src/anchor";
 import { Tooltip } from "@cockroachlabs/ui-components";
+
+import { Anchor } from "src/anchor";
 import {
   contentionTime,
   planningExecutionTime,

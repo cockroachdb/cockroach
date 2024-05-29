@@ -11,6 +11,7 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { MemoryRouter } from "react-router-dom";
+
 import statementsPagePropsFixture from "src/statementsPage/statementsPage.fixture";
 import { calculateTotalWorkload } from "src/util";
 

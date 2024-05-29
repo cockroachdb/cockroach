@@ -12,6 +12,7 @@ import moment from "moment-timezone";
 import { createMemoryHistory } from "history";
 import Long from "long";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+
 import { StatementsResponse } from "src/store/sqlStats/sqlStats.reducer";
 
 import { TimeScale } from "../timeScaleDropdown";
@@ -21,7 +22,7 @@ const history = createMemoryHistory({ initialEntries: ["/transactions"] });
 const timestamp = new protos.google.protobuf.Timestamp({
   seconds: new Long(Date.parse("Nov 26 2021 01:00:00 GMT") * 1e-3),
 });
-export const transactionFingerprintId = new Long(3632089240731979669);
+export const transactionFingerprintId = Long.fromString("3632089240731979669");
 
 export const routeProps = {
   history,
@@ -56,8 +57,8 @@ export const error = new RequestError(
 export const transaction = {
   stats_data: {
     statement_fingerprint_ids: [
-      new Long(4176684928840388768),
-      new Long(18377382163116490400),
+      Long.fromString("4176684928840388768"),
+      Long.fromString("18377382163116490400"),
     ],
     app: "$ cockroach sql",
     stats: {
@@ -239,7 +240,7 @@ export const transactionDetailsData: StatementsResponse = {
         },
         plan_gists: ["AgH6////nxoAAA4AAAAGBg=="],
       },
-      id: new Long(4176684928840388768),
+      id: Long.fromString("4176684928840388768"),
     },
     {
       key: {
@@ -252,7 +253,7 @@ export const transactionDetailsData: StatementsResponse = {
           full_scan: false,
           database: "movr",
           plan_hash: new Long(0),
-          transaction_fingerprint_id: new Long(5794495518355343743),
+          transaction_fingerprint_id: Long.fromString("5794495518355343743"),
           query_summary: "SET sql_safe_updates = _",
         },
         aggregated_ts: timestamp,
@@ -344,7 +345,7 @@ export const transactionDetailsData: StatementsResponse = {
         },
         plan_gists: ["Ais="],
       },
-      id: new Long(18377382163116490400),
+      id: Long.fromString("18377382163116490400"),
     },
     {
       key: {
@@ -357,7 +358,7 @@ export const transactionDetailsData: StatementsResponse = {
           full_scan: true,
           database: "movr",
           plan_hash: new Long(0),
-          transaction_fingerprint_id: new Long(13388351560861020642),
+          transaction_fingerprint_id: Long.fromString("13388351560861020642"),
           query_summary: "SELECT * FROM users",
         },
         aggregated_ts: timestamp,
@@ -463,7 +464,7 @@ export const transactionDetailsData: StatementsResponse = {
         },
         plan_gists: ["AgHUAQIAHwAAAAYK"],
       },
-      id: new Long(1634603821603440189),
+      id: Long.fromString("1634603821603440189"),
     },
   ],
   last_reset: {
@@ -475,7 +476,7 @@ export const transactionDetailsData: StatementsResponse = {
     transaction,
     {
       stats_data: {
-        statement_fingerprint_ids: [new Long(1634603821603440189)],
+        statement_fingerprint_ids: [Long.fromString("1634603821603440189")],
         app: "$ cockroach sql",
         stats: {
           count: new Long(2),
@@ -533,7 +534,7 @@ export const transactionDetailsData: StatementsResponse = {
           },
         },
         aggregated_ts: timestamp,
-        transaction_fingerprint_id: new Long(13388351560861020642),
+        transaction_fingerprint_id: Long.fromString("13388351560861020642"),
         aggregation_interval: {
           seconds: new Long(3600),
         },

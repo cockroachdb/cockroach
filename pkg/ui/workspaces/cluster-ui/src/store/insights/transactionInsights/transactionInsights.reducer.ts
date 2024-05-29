@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { TxnInsightEvent } from "src/insights";
 import moment, { Moment } from "moment-timezone";
+
+import { TxnInsightEvent } from "src/insights";
 import { SqlApiResponse, TxnInsightsRequest } from "src/api";
 
 import { DOMAIN_NAME } from "../../utils";

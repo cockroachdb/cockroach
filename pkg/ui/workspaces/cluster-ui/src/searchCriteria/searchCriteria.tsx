@@ -10,6 +10,12 @@
 
 import React from "react";
 import classNames from "classnames/bind";
+import { Menu, Dropdown } from "antd";
+import "antd/lib/menu/style";
+import "antd/lib/dropdown/style";
+import { CaretDown } from "@cockroachlabs/icons";
+import { ClickParam } from "antd/lib/menu";
+
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
@@ -18,13 +24,7 @@ import {
   timeScale1hMinOptions,
   TimeScaleDropdown,
 } from "src/timeScaleDropdown";
-import { Menu, Dropdown } from "antd";
-
-import "antd/lib/menu/style";
-import "antd/lib/dropdown/style";
 import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
-import { CaretDown } from "@cockroachlabs/icons";
-import { ClickParam } from "antd/lib/menu";
 
 import {
   limitOptions,
@@ -38,6 +38,7 @@ import {
 import { applyBtn } from "../queryFilter/filterClasses";
 
 import styles from "./searchCriteria.module.scss";
+
 const cx = classNames.bind(styles);
 const { SubMenu } = Menu;
 

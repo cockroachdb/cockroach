@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { stdDevLong, Duration, Bytes, longToInt } from "src/util";
 import classNames from "classnames/bind";
+
+import { stdDevLong, Duration, Bytes, longToInt } from "src/util";
 import { barChartFactory } from "src/barCharts/barChartFactory";
 import { bar, approximify } from "src/barCharts/utils";
 

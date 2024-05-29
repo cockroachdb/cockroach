@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-import _ from "lodash";
 import * as Long from "long";
 import { History } from "history";
 import { Moment } from "moment-timezone";
@@ -17,6 +16,7 @@ import { createSelector } from "reselect";
 import times from "lodash/times";
 import classNames from "classnames/bind";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import orderBy from "lodash/orderBy";
 
 import { EmptyPanel, EmptyPanelProps } from "../empty";
 
@@ -146,7 +146,7 @@ export interface SortableColumn {
   // Unique key that identifies this column from others, for the purpose of
   // indicating sort order. If not provided, the column is not considered
   // sortable.
-  columnTitle?: any;
+  columnTitle?: string;
   // className is a classname to apply to the td elements
   className?: string;
   titleAlign?: "left" | "right" | "center";
@@ -190,8 +190,8 @@ export class SortedTable<T> extends React.Component<
   SortedTableProps<T>,
   SortedTableState
 > {
-  static defaultProps: Partial<SortedTableProps<any>> = {
-    rowClass: (_obj: any) => "",
+  static defaultProps: Partial<SortedTableProps<unknown>> = {
+    rowClass: (_obj: unknown) => "",
     columns: [],
     sortSetting: {
       ascending: false,
@@ -240,11 +240,7 @@ export class SortedTable<T> extends React.Component<
         return this.paginatedData();
       }
       return this.paginatedData(
-        _.orderBy(
-          data,
-          sortColumn.sort,
-          sortSetting.ascending ? "asc" : "desc",
-        ),
+        orderBy(data, sortColumn.sort, sortSetting.ascending ? "asc" : "desc"),
       );
     },
   );

@@ -10,6 +10,8 @@
 
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Dispatch } from "redux";
+
 import { AppState } from "src/store";
 import {
   selectShowSetting,
@@ -21,7 +23,6 @@ import {
   actions as jobsActions,
 } from "src/store/jobs";
 import { JobsRequest } from "src/api/jobsApi";
-import { Dispatch } from "redux";
 
 import { actions as localStorageActions } from "../../store/localStorage";
 import { SortSetting } from "../../sortedtable";

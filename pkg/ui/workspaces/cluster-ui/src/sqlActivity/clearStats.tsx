@@ -19,12 +19,12 @@ import styles from "./sqlActivity.module.scss";
 
 const cx = classNames.bind(styles);
 
-interface clearStatsProps {
+interface ClearStatsProps {
   resetSQLStats: () => void;
   tooltipType: StatisticType;
 }
 
-const ClearStats = (props: clearStatsProps): React.ReactElement => {
+const ClearStats = (props: ClearStatsProps): React.ReactElement => {
   const [visible, setVisible] = useState(false);
   const onOkHandler = useCallback(() => {
     props.resetSQLStats();

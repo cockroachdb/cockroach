@@ -11,7 +11,11 @@
 import React from "react";
 import classNames from "classnames/bind";
 import { RouteComponentProps } from "react-router-dom";
-import { flatMap, merge } from "lodash";
+import flatMap from "lodash/flatMap";
+import merge from "lodash/merge";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import moment from "moment-timezone";
+
 import { Timestamp, TimestampToMoment, syncHistory, unique } from "src/util";
 import {
   SqlStatsSortType,
@@ -20,8 +24,6 @@ import {
   SqlStatsSortOptions,
   SqlStatsResponse,
 } from "src/api/statementsApi";
-import { InlineAlert } from "@cockroachlabs/ui-components";
-
 import {
   STATS_LONG_LOADING_DURATION,
   getSortLabel,
@@ -29,6 +31,9 @@ import {
   getSubsetWarning,
   getReqSortColumn,
 } from "src/util/sqlActivityConstants";
+import { SearchCriteria } from "src/searchCriteria/searchCriteria";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
+
 import { Loading } from "../loading";
 import { Delayed } from "../delayed";
 import { PageConfig, PageConfigItem } from "../pageConfig";
@@ -57,19 +62,9 @@ import {
   getValidOption,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
-
-
 import { isSelectedColumn } from "../columnsSelector/utils";
-
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
-import { TransactionViewType } from "./transactionsPageTypes";
-import { SearchCriteria } from "src/searchCriteria/searchCriteria";
-
 import { RequestState } from "../api";
-
-import moment from "moment-timezone";
-import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
-
 import { Pagination, ResultsPerPageLabel } from "../pagination";
 import {
   handleSortSettingFromQueryString,
@@ -84,6 +79,7 @@ import {
 } from "../transactionsTable";
 import styles from "../statementsPage/statementsPage.module.scss";
 
+import { TransactionViewType } from "./transactionsPageTypes";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import {
   generateRegion,
@@ -469,7 +465,7 @@ export class TransactionsPage extends React.Component<
     } = this.props;
     const data = this.props.txnsResp.data;
     const { pagination, filters } = this.state;
-    const internal_app_name_prefix = data?.internal_app_name_prefix || "";
+    const internalAppNamePrefix = data?.internal_app_name_prefix || "";
     const statements = data?.statements || [];
 
     // We apply the search filters and app name filters prior to aggregating across Node IDs
@@ -481,7 +477,7 @@ export class TransactionsPage extends React.Component<
       filterTransactions(
         searchTransactionsData(search, data?.transactions || [], statements),
         filters,
-        internal_app_name_prefix,
+        internalAppNamePrefix,
         statements,
         nodeRegions,
         isTenant,
@@ -489,7 +485,7 @@ export class TransactionsPage extends React.Component<
 
     const appNames = getTrxAppFilterOptions(
       data?.transactions || [],
-      internal_app_name_prefix,
+      internalAppNamePrefix,
     );
 
     const transactionsToDisplay: TransactionInfo[] = filteredTransactions.map(

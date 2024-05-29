@@ -9,10 +9,13 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { isNil, merge } from "lodash";
-import { syncHistory } from "src/util/query";
+import isNil from "lodash/isNil";
+import merge from "lodash/merge";
 import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
+import moment from "moment-timezone";
+
+import { syncHistory } from "src/util/query";
 import { Pagination } from "src/pagination";
 import {
   SortSetting,
@@ -27,7 +30,6 @@ import {
 } from "src/store/terminateQuery";
 import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
 import { TimestampToMoment, unset } from "src/util";
-import moment from "moment-timezone";
 
 import ColumnsSelector, {
   SelectOption,

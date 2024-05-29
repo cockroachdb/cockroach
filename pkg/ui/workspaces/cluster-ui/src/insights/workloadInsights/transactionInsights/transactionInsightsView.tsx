@@ -11,6 +11,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import {
   ISortedTablePagination,
   SortSetting,
@@ -40,7 +42,6 @@ import { TxnInsightsRequest } from "src/api";
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { useScheduleFunction } from "src/util/hooks";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 import { insights } from "src/util";
 import { Anchor } from "src/anchor";
 

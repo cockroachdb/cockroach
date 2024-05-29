@@ -13,6 +13,8 @@ import { Heading } from "@cockroachlabs/ui-components";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
+import classNames from "classnames/bind";
+
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import {
@@ -26,7 +28,6 @@ import {
   InsightsSortedTable,
   makeInsightsColumns,
 } from "src/insightsTable/insightsTable";
-import classNames from "classnames/bind";
 import { TxnInsightDetailsReqErrs } from "src/api";
 import { Loading } from "src/loading";
 import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
@@ -125,8 +126,9 @@ the maximum number of statements was reached in the console.`;
 
   const insightRecs = getTxnInsightRecommendations(txnDetails);
   const hasContentionInsights =
-    txnDetails?.insights.find(i => i.name === InsightNameEnum.highContention) !=
-    null;
+    txnDetails?.insights.find(
+      i => i.name === InsightNameEnum.HIGH_CONTENTION,
+    ) != null;
 
   return (
     <div>
@@ -141,7 +143,7 @@ the maximum number of statements was reached in the console.`;
             <Col span={24}>
               <SqlBox
                 value={insightQueries}
-                size={SqlBoxSize.custom}
+                size={SqlBoxSize.CUSTOM}
                 format={true}
               />
             </Col>
@@ -254,7 +256,7 @@ the maximum number of statements was reached in the console.`;
             <Row gutter={24}>
               <Col>
                 <Heading type="h5">
-                  {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
+                  {WaitTimeInsightsLabels.blockedTxnsTableTitle(
                     txnDetails?.transactionExecutionID,
                     InsightExecEnum.TRANSACTION,
                   )}

@@ -9,13 +9,14 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import moment from "moment-timezone";
+
 import {
   ErrorWithKey,
   StatementDetailsRequest,
   StatementDetailsResponse,
   StatementDetailsResponseWithKey,
 } from "src/api/statementsApi";
-import moment from "moment-timezone";
 
 import { DOMAIN_NAME } from "../utils";
 import { generateStmtDetailsToID } from "../../util";
