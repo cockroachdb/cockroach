@@ -18,7 +18,6 @@ PROTOBUF_SRCS = [
     "//pkg/cloud/cloudpb:cloudpb_go_proto",
     "//pkg/cloud/externalconn/connectionpb:connectionpb_go_proto",
     "//pkg/clusterversion:clusterversion_go_proto",
-    "//pkg/cmd/roachprod/upgrade:upgrade_go_proto",
     "//pkg/config/zonepb:zonepb_go_proto",
     "//pkg/config:config_go_proto",
     "//pkg/geo/geopb:geopb_go_proto",

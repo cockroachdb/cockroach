@@ -88,7 +88,10 @@ var (
 	// storageCluster is used for cluster virtualization and multi-tenant functionality.
 	storageCluster string
 
-	revertUpdate bool
+	roachprodUpdateRevert bool
+	roachprodUpdateBranch string
+	roachprodUpdateOS     string
+	roachprodUpdateArch   string
 
 	grafanaTags         []string
 	grafanaDashboardUID string
@@ -373,8 +376,11 @@ func initFlags() {
 			" the provider chosen for the cluster. If no volume type is provided the provider default will be used. "+
 			"Note: This volume will be deleted once the VM is deleted.")
 
-	updateCmd.Flags().BoolVar(&revertUpdate, "revert", false, "restore roachprod to the previous version "+
+	updateCmd.Flags().BoolVar(&roachprodUpdateRevert, "revert", false, "restore roachprod to the previous version "+
 		"which would have been renamed to roachprod.bak during the update process")
+	updateCmd.Flags().StringVarP(&roachprodUpdateBranch, "branch", "b", "master", "git branch")
+	updateCmd.Flags().StringVarP(&roachprodUpdateOS, "os", "o", "linux", "OS")
+	updateCmd.Flags().StringVarP(&roachprodUpdateArch, "arch", "a", "amd64", "CPU architecture")
 
 	for _, cmd := range []*cobra.Command{adminurlCmd, grafanaURLCmd, jaegerURLCmd} {
 		cmd.Flags().BoolVar(&urlOpen, "open", false, "Open the url in a browser")
