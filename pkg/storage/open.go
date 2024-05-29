@@ -235,6 +235,18 @@ func Hook(hookFunc func(*base.StorageConfig) error) ConfigOption {
 	}
 }
 
+// BlockConcurrencyLimitDivisor sets the divisor used to calculate the block
+// load concurrency limit: the current value of the BlockLoadConcurrencyLimit
+// setting divided by the divisor. It should be set to the number of stores.
+//
+// A value of 0 disables the limiter.
+func BlockConcurrencyLimitDivisor(d int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.blockConcurrencyLimitDivisor = d
+		return nil
+	}
+}
+
 // If enables the given option if enable is true.
 func If(enable bool, opt ConfigOption) ConfigOption {
 	if enable {

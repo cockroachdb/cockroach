@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/fifo"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
@@ -158,6 +159,23 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	"set to true to enable lazy ingestion of sstables",
 	util.ConstantWithMetamorphicTestBool(
 		"storage.ingest_as_flushable.enabled", true))
+
+// BlockLoadConcurrencyLimit controls the maximum number of outstanding
+// filesystem read operations for loading sstable blocks. This limit is a
+// last-resort queueing mechanism to avoid memory issues or running against the
+// Go OS system threads limit (see runtime.SetMaxThreads() with default value
+// 10,000).
+//
+// The limit is distributed evenly between all stores (rounding up). This is to
+// provide isolation between the stores - we don't want one bad disk blocking
+// other stores.
+var BlockLoadConcurrencyLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.block_load.node_max_active",
+	"maximum number of outstanding sstable block reads per host",
+	7500,
+	settings.IntInRange(1, 9000),
+)
 
 // DO NOT set storage.single_delete.crash_on_invariant_violation.enabled or
 // storage.single_delete.crash_on_ineffectual.enabled to true.
@@ -842,6 +860,17 @@ type PebbleConfig struct {
 
 	// onClose is a slice of functions to be invoked before the engine is closed.
 	onClose []func(*Pebble)
+
+	// blockConcurrencyLimitDivisor is used to calculate the block load
+	// concurrency limit: it is the current valuer of the
+	// BlockLoadConcurrencyLimit setting divided by this value. It should be set
+	// to the number of stores.
+	//
+	// This is necessary because we want separate limiters per stores (we don't
+	// want one bad disk to block other stores).
+	//
+	// A value of 0 disables the limit.
+	blockConcurrencyLimitDivisor int
 }
 
 // EncryptionStatsHandler provides encryption related stats.
@@ -928,6 +957,8 @@ type Pebble struct {
 	closer io.Closer
 	// onClose is a slice of functions to be invoked before the engine closes.
 	onClose []func(*Pebble)
+
+	loadBlockSema *fifo.Semaphore
 
 	storeIDPebbleLog *base.StoreIDContainer
 	replayer         *replay.WorkloadCollector
@@ -1175,6 +1206,14 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	}
 	ballastPath := base.EmergencyBallastFile(opts.FS.PathJoin, cfg.Dir)
 
+	if d := int64(cfg.blockConcurrencyLimitDivisor); d != 0 {
+		val := (BlockLoadConcurrencyLimit.Get(&cfg.Settings.SV) + d - 1) / d
+		opts.LoadBlockSema = fifo.NewSemaphore(val)
+		BlockLoadConcurrencyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+			opts.LoadBlockSema.UpdateCapacity((BlockLoadConcurrencyLimit.Get(&cfg.Settings.SV) + d - 1) / d)
+		})
+	}
+
 	// For some purposes, we want to always use an unencrypted
 	// filesystem.
 	unencryptedFS := opts.FS
@@ -1239,6 +1278,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		storeIDPebbleLog:  storeIDContainer,
 		closer:            filesystemCloser,
 		onClose:           cfg.onClose,
+		loadBlockSema:     opts.LoadBlockSema,
 		replayer:          replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
 		singleDelLogEvery: log.Every(5 * time.Minute),
 	}
@@ -2085,6 +2125,12 @@ func (p *Pebble) GetMetrics() Metrics {
 		SingleDelIneffectualCount:        atomic.LoadInt64(&p.singleDelIneffectualCount),
 		SharedStorageReadBytes:           atomic.LoadInt64(&p.sharedBytesRead),
 		SharedStorageWriteBytes:          atomic.LoadInt64(&p.sharedBytesWritten),
+	}
+	if sema := p.loadBlockSema; sema != nil {
+		semaStats := sema.Stats()
+		m.BlockLoadConcurrencyLimit = semaStats.Capacity
+		m.BlockLoadsInProgress = semaStats.Outstanding
+		m.BlockLoadsQueued = semaStats.NumHadToWait
 	}
 	p.iterStats.Lock()
 	m.Iterator = p.iterStats.AggregatedIteratorStats
