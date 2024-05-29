@@ -137,8 +137,11 @@ func IsLocalClusterName(clusterName string) bool {
 
 var localClusterRegex = regexp.MustCompile(`^local(|-[a-zA-Z0-9\-]+)$`)
 
+// DefaultPubKeyNames is the list of default public key names that `roachprod`
+// will look for in the SSH directory. The keys will also be passed when
+// establishing a remote session.
 // See https://github.com/openssh/openssh-portable/blob/86bdd385/ssh_config.5#L1123-L1130
-var defaultPubKeyNames = []string{
+var DefaultPubKeyNames = []string{
 	"id_rsa",
 	"id_ecdsa",
 	"id_ecdsa_sk",
@@ -155,7 +158,7 @@ func SSHPublicKeyPath() (string, error) {
 		return "", errors.Wrap(err, "failed to read SSH directory")
 	}
 
-	for _, name := range defaultPubKeyNames {
+	for _, name := range DefaultPubKeyNames {
 		idx := slices.IndexFunc(dirEnts, func(entry fs.DirEntry) bool {
 			return name == entry.Name()
 		})
