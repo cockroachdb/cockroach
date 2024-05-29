@@ -18,7 +18,6 @@
 package confchange
 
 import (
-	"fmt"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -26,6 +25,8 @@ import (
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestConfChangeQuick uses quickcheck to verify that simple and joint config
@@ -51,10 +52,8 @@ func TestConfChangeQuick(t *testing.T) {
 			return err
 		}
 		cfg2a.AutoLeave = false
-		if !reflect.DeepEqual(cfg, cfg2a) || !reflect.DeepEqual(trk, trk2a) {
-			return fmt.Errorf("cfg: %+v\ncfg2a: %+v\ntrk: %+v\ntrk2a: %+v",
-				cfg, cfg2a, trk, trk2a)
-		}
+		assert.Equal(t, cfg, cfg2a)
+		assert.Equal(t, trk, trk2a)
 		c.Tracker.Config = cfg
 		c.Tracker.Progress = trk
 		cfg2b, trk2b, err := c.LeaveJoint()
@@ -68,10 +67,8 @@ func TestConfChangeQuick(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if !reflect.DeepEqual(cfg, cfg2b) || !reflect.DeepEqual(trk, trk2b) {
-			return fmt.Errorf("cfg: %+v\ncfg2b: %+v\ntrk: %+v\ntrk2b: %+v",
-				cfg, cfg2b, trk, trk2b)
-		}
+		assert.Equal(t, cfg, cfg2b)
+		assert.Equal(t, trk, trk2b)
 		c.Tracker.Config = cfg
 		c.Tracker.Progress = trk
 		return nil
@@ -110,9 +107,7 @@ func TestConfChangeQuick(t *testing.T) {
 	var n int
 	f1 := func(setup initialChanges, ccs confChanges) *Changer {
 		c, err := wrapper(runWithSimple)(setup, ccs)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		if n < infoCount {
 			t.Log("initial setup:", Describe(setup...))
 			t.Log("changes:", Describe(ccs...))
@@ -124,9 +119,7 @@ func TestConfChangeQuick(t *testing.T) {
 	}
 	f2 := func(setup initialChanges, ccs confChanges) *Changer {
 		c, err := wrapper(runWithJoint)(setup, ccs)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		return c
 	}
 	err := quick.CheckEqual(f1, f2, cfg)
@@ -134,9 +127,7 @@ func TestConfChangeQuick(t *testing.T) {
 		return
 	}
 	cErr, ok := err.(*quick.CheckEqualError)
-	if !ok {
-		t.Fatal(err)
-	}
+	require.True(t, ok, err)
 
 	t.Error("setup:", Describe(cErr.In[0].([]pb.ConfChangeSingle)...))
 	t.Error("ccs:", Describe(cErr.In[1].([]pb.ConfChangeSingle)...))

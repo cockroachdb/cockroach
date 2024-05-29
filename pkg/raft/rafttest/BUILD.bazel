@@ -53,5 +53,6 @@ go_test(
         "//pkg/raft",
         "//pkg/raft/raftpb",
         "//pkg/testutils/skip",
+        "@com_github_stretchr_testify//assert",
     ],
 )

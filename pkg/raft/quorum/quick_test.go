@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"testing"
 	"testing/quick"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestQuick uses quickcheck to heuristically assert that the main
@@ -37,9 +39,7 @@ func TestQuick(t *testing.T) {
 		fn2 := func(c memberMap, l idxMap) uint64 {
 			return uint64(alternativeMajorityCommittedIndex(MajorityConfig(c), mapAckIndexer(l)))
 		}
-		if err := quick.CheckEqual(fn1, fn2, cfg); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, quick.CheckEqual(fn1, fn2, cfg))
 	})
 }
 

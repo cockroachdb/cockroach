@@ -17,6 +17,7 @@ package tracker
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -203,14 +204,10 @@ func TestInflightsFull(t *testing.T) {
 
 			addUntilFull := func(begin, end int) {
 				for i := begin; i < end; i++ {
-					if in.Full() {
-						t.Fatalf("full at %d, want %d", i, end)
-					}
+					require.False(t, in.Full(), "full at %d, want %d", i, end)
 					in.Add(uint64(i), uint64(100+i))
 				}
-				if !in.Full() {
-					t.Fatalf("not full at %d", end)
-				}
+				require.True(t, in.Full(), "not full at %d", end)
 			}
 
 			addUntilFull(0, tc.fullAt)
@@ -218,9 +215,7 @@ func TestInflightsFull(t *testing.T) {
 			addUntilFull(tc.fullAt, tc.againAt)
 
 			defer func() {
-				if r := recover(); r == nil {
-					t.Errorf("Add() did not panic")
-				}
+				assert.NotNil(t, recover(), "Add() did not panic")
 			}()
 			in.Add(100, 1024)
 		})
