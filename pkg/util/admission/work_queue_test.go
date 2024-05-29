@@ -93,10 +93,9 @@ func (tg *testGranter) continueGrantChain(grantChainID grantChainID) {
 func (tg *testGranter) grant(grantChainID grantChainID) {
 	rv := tg.r.granted(grantChainID)
 	if rv > 0 {
-		// Need deterministic output, and this is racing with the goroutine that
-		// was admitted. Sleep to let it get scheduled. We could do something more
-		// sophisticated like monitoring goroutine states like in
-		// concurrency_manager_test.go.
+		// Need deterministic output, and this is racing with the goroutine that was
+		// admitted. Retry a few times. We could do something more sophisticated
+		// like monitoring goroutine states like in concurrency_manager_test.go.
 		time.Sleep(150 * time.Millisecond)
 	}
 	tg.buf.printf("granted%s: returned %d", tg.name, rv)
@@ -248,8 +247,8 @@ func TestWorkQueueBasic(t *testing.T) {
 					}
 				}(ctx, workInfo, id)
 				// Need deterministic output, and this is racing with the goroutine
-				// which is trying to get admitted. Sleep to let it get scheduled.
-				time.Sleep(50 * time.Millisecond)
+				// which is trying to get admitted.
+				maybeRetryWithWait(d, &buf)
 				return buf.stringAndReset()
 
 			case "set-try-get-return-value":
@@ -276,8 +275,8 @@ func TestWorkQueueBasic(t *testing.T) {
 				}
 				work.cancel()
 				// Need deterministic output, and this is racing with the goroutine
-				// whose work is canceled. Sleep to let it get scheduled.
-				time.Sleep(50 * time.Millisecond)
+				// whose work is canceled.
+				maybeRetryWithWait(d, &buf)
 				return buf.stringAndReset()
 
 			case "work-done":
@@ -343,6 +342,24 @@ func scanTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 	var id int
 	d.ScanArgs(t, "tenant", &id)
 	return roachpb.MustMakeTenantID(uint64(id))
+}
+
+func maybeRetryWithWait(d *datadriven.TestData, buf *builderWithMu) {
+	if d.Rewrite {
+		time.Sleep(time.Second)
+		return
+	}
+	var str string
+	// Retry for at most 500ms.
+	for i := 0; i < 10; i++ {
+		time.Sleep(50 * time.Millisecond)
+		buf.mu.Lock()
+		str = buf.buf.String()
+		buf.mu.Unlock()
+		if str == d.Expected {
+			return
+		}
+	}
 }
 
 // TestWorkQueueTokenResetRace induces racing between tenantInfo.used
