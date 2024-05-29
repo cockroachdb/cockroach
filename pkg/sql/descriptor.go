@@ -291,7 +291,11 @@ func (p *planner) checkRegionIsCurrentlyActive(
 ) error {
 	var liveRegions LiveClusterRegions
 	if !p.execCfg.Codec.ForSystemTenant() && isSystemDatabase {
-		systemRegions, err := p.regionsProvider().GetSystemRegions(ctx)
+		provider := p.regionsProvider()
+		if provider == nil {
+			return errors.AssertionFailedf("no regions provider available")
+		}
+		systemRegions, err := provider.GetSystemRegions(ctx)
 		if err != nil {
 			return err
 		}
