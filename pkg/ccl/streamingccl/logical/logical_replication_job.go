@@ -40,14 +40,27 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// jobCheckpointFrequency controls the frequency of frontier
-// checkpoints into the jobs table.
-var jobCheckpointFrequency = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"logical_replication.consumer.job_checkpoint_frequency",
-	"controls the frequency with which the job updates their progress; if 0, disabled",
-	10*time.Second,
-	settings.NonNegativeDuration,
+var (
+	// jobCheckpointFrequency controls the frequency of frontier
+	// checkpoints into the jobs table.
+	jobCheckpointFrequency = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
+		"logical_replication.consumer.job_checkpoint_frequency",
+		"controls the frequency with which the job updates their progress; if 0, disabled",
+		10*time.Second,
+		settings.NonNegativeDuration)
+
+	// heartbeatFrequency controls frequency the stream replication
+	// destination cluster sends heartbeat to the source cluster to keep
+	// the stream alive.
+	heartbeatFrequency = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
+		"logical_replication.consumer.heartbeat_frequency",
+		"controls frequency the stream replication destination cluster sends heartbeat "+
+			"to the source cluster to keep the stream alive",
+		30*time.Second,
+		settings.NonNegativeDuration,
+	)
 )
 
 type logicalReplicationResumer struct {
@@ -239,13 +252,19 @@ func (r *logicalReplicationResumer) ingest(
 		log.Warningf(ctx, "received unexpected producer meta: %v", meta)
 		return nil
 	}
-
+	// TODO(ssd): Replan
+	heartbeatSender := streamclient.NewHeartbeatSender(ctx, client, streampb.StreamID(streamID),
+		func() time.Duration {
+			return heartbeatFrequency.Get(&execCfg.Settings.SV)
+		})
+	defer func() { _ = heartbeatSender.Stop() }()
 	rh := rowHandler{
 		replicatedTimeAtStart: replicatedTimeAtStart,
 		frontier:              frontier,
 		metrics:               metrics,
 		settings:              &execCfg.Settings.SV,
 		job:                   r.job,
+		frontierUpdates:       heartbeatSender.FrontierUpdates,
 	}
 	rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
 	distSQLReceiver := sql.MakeDistSQLReceiver(
@@ -281,6 +300,7 @@ type rowHandler struct {
 	metrics               *Metrics
 	settings              *settings.Values
 	job                   *jobs.Job
+	frontierUpdates       chan hlc.Timestamp
 
 	lastPartitionUpdate time.Time
 }
@@ -321,8 +341,6 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	})
 	replicatedTime := rh.frontier.Frontier()
 
-	// TODO(ssd): Heartbeat the producer side job.
-	// TODO(ssd): Replan
 	rh.lastPartitionUpdate = timeutil.Now()
 	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
 	if err := rh.job.NoTxn().Update(ctx,
