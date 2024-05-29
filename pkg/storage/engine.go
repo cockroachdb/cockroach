@@ -1197,6 +1197,13 @@ type Metrics struct {
 	// distinguished in the pebble logs.
 	WriteStallCount    int64
 	WriteStallDuration time.Duration
+
+	// BlockLoadsInProgress is the (instantaneous) number of sstable blocks that
+	// are being read from disk.
+	BlockLoadsInProgress int64
+	// BlockLoadsWaiting is the (instantaneous) number of sstable block reads that
+	// are waiting on the BlockLoadConcurrencyLimit.
+	BlockLoadsWaiting int64
 }
 
 // AggregatedIteratorStats holds cumulative stats, collected and summed over all

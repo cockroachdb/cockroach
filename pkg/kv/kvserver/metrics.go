@@ -807,6 +807,18 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaBlockLoadsInProgress = metric.Metadata{
+		Name:        "storage.block-load.in-progress",
+		Help:        "The number of sstable block loads currently in progress",
+		Measurement: "Block loads",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaBlockLoadsWaiting = metric.Metadata{
+		Name:        "storage.block-load.waiting",
+		Help:        "The number of sstable block loads currently waiting to run",
+		Measurement: "Block loads",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaSecondaryCacheSize = metric.Metadata{
 		Name:        "storage.secondary-cache.size",
 		Help:        "The number of sstable bytes stored in the secondary cache",
@@ -2426,6 +2438,8 @@ type StoreMetrics struct {
 	SingleDelIneffectualCount         *metric.Gauge
 	SharedStorageBytesRead            *metric.Gauge
 	SharedStorageBytesWritten         *metric.Gauge
+	BlockLoadsInProgress              *metric.Gauge
+	BlockLoadsWaiting                 *metric.Gauge
 	SecondaryCacheSize                *metric.Gauge
 	SecondaryCacheCount               *metric.Gauge
 	SecondaryCacheTotalReads          *metric.Gauge
@@ -3109,6 +3123,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SingleDelIneffectualCount:         metric.NewGauge(metaStorageSingleDelIneffectualCount),
 		SharedStorageBytesRead:            metric.NewGauge(metaSharedStorageBytesRead),
 		SharedStorageBytesWritten:         metric.NewGauge(metaSharedStorageBytesWritten),
+		BlockLoadsInProgress:              metric.NewGauge(metaBlockLoadsInProgress),
+		BlockLoadsWaiting:                 metric.NewGauge(metaBlockLoadsWaiting),
 		SecondaryCacheSize:                metric.NewGauge(metaSecondaryCacheSize),
 		SecondaryCacheCount:               metric.NewGauge(metaSecondaryCacheCount),
 		SecondaryCacheTotalReads:          metric.NewGauge(metaSecondaryCacheTotalReads),
@@ -3510,6 +3526,8 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.SingleDelIneffectualCount.Update(m.SingleDelIneffectualCount)
 	sm.SharedStorageBytesRead.Update(m.SharedStorageReadBytes)
 	sm.SharedStorageBytesWritten.Update(m.SharedStorageWriteBytes)
+	sm.BlockLoadsInProgress.Update(m.BlockLoadsInProgress)
+	sm.BlockLoadsWaiting.Update(m.BlockLoadsWaiting)
 	sm.SecondaryCacheSize.Update(m.SecondaryCacheMetrics.Size)
 	sm.SecondaryCacheCount.Update(m.SecondaryCacheMetrics.Count)
 	sm.SecondaryCacheTotalReads.Update(m.SecondaryCacheMetrics.TotalReads)
