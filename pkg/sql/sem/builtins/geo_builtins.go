@@ -6751,7 +6751,7 @@ The parent_only boolean is always ignored.`,
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				geo := tree.MustBeDGeometry(args[0])
-				return tree.NewDInt(tree.DInt(geo.Size())), nil
+				return tree.NewDInt(tree.DInt(geo.DeterministicMemSize())), nil
 			},
 			Info:       "Returns the amount of memory space (in bytes) the geometry takes.",
 			Volatility: volatility.Immutable,
