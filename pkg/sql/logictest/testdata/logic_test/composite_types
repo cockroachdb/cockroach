@@ -165,6 +165,9 @@ CREATE TYPE t AS (a tab)
 statement error composite types that reference user-defined types not yet supported
 CREATE TYPE t AS (a pg_catalog.pg_class)
 
+statement ok
+DROP TYPE e
+
 # Test that if an composite type value is being used by a default expression or
 # computed column, we disallow dropping it.
 subtest drop_used_composite_type_values
@@ -252,3 +255,43 @@ ALTER TABLE a DROP CONSTRAINT check_a
 statement ok
 DROP TYPE t;
 DROP TABLE a
+
+subtest show_types
+
+statement ok
+CREATE TYPE ct1 AS (a INT, b TEXT);
+CREATE TYPE et1 AS ENUM ('a', 'b', 'c');
+CREATE SCHEMA sc1;
+CREATE TYPE sc1.ct2 AS (x INT, y INT);
+CREATE TYPE sc1.ct3 AS ();
+
+query TTT nosort
+SHOW TYPES
+----
+public  ct1   root
+public  et1   root
+sc1     ct2   root
+sc1     ct3   root
+
+statement ok
+DROP TYPE sc1.ct3;
+DROP TYPE sc1.ct2;
+DROP SCHEMA sc1;
+DROP TYPE et1;
+DROP TYPE ct1;
+
+statement ok
+CREATE DATABASE "CaseSensitiveDatabase";
+USE "CaseSensitiveDatabase";
+CREATE TYPE ct4 AS (a INT, b TEXT); 
+CREATE TYPE et5 AS ENUM ('a', 'b', 'c');
+
+query TTT nosort
+SHOW TYPES
+----
+public  ct4   root
+public  et5   root
+
+statement ok
+DROP DATABASE "CaseSensitiveDatabase";
+USE test;
