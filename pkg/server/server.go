@@ -832,7 +832,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			uint64(kvserver.EagerLeaseAcquisitionConcurrency.Get(&cfg.Settings.SV)))
 	})
 
-	storeLivenessTransport := storeliveness.NewTransport(clock, kvNodeDialer, grpcServer.Server, stopper)
+	storeLivenessTransport := storeliveness.NewSLTransport(
+		cfg.AmbientCtx,
+		st,
+		cfg.AmbientCtx.Tracer,
+		clock,
+		kvNodeDialer,
+		grpcServer.Server,
+		stopper,
+	)
 
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:            cfg.DefaultZoneConfig.AsSpanConfig(),

@@ -1138,7 +1138,7 @@ type StoreConfig struct {
 	DB                     *kv.DB
 	NodeLiveness           *liveness.NodeLiveness
 	StoreLiveness          storeliveness.Fabric
-	StoreLivenessTransport *storeliveness.Transport
+	StoreLivenessTransport *storeliveness.SLTransport
 	StorePool              *storepool.StorePool
 	Transport              *RaftTransport
 	NodeDialer             *nodedialer.Dialer
@@ -2151,11 +2151,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	storeID := storelivenesspb.StoreIdent{NodeID: s.NodeID(), StoreID: s.StoreID()}
 	options := storeliveness.Options{
-		Clock:             s.cfg.Clock,
-		HeartbeatInterval: 10 * time.Second,
+		Clock:                    s.cfg.Clock,
+		HeartbeatInterval:        10 * time.Second,
+		LivenessInterval:         30 * time.Second,
+		SupportExpiryInterval:    10 * time.Second,
+		ResponseHandlingInterval: 10 * time.Second,
 	}
 	sm := storeliveness.NewSupportManager(storeID, options, stopper, s.cfg.StoreLivenessTransport)
-	s.cfg.StoreLivenessTransport.SetHeartbeatHandler(storeID, sm)
+	s.cfg.StoreLivenessTransport.ListenHeartbeatMessages(storeID.StoreID, sm)
 	s.cfg.StoreLiveness = sm
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
