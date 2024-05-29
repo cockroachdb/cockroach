@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+
 import { defaultFilters, Filters } from "src/queryFilter/";
 import { WorkloadInsightEventFilters } from "src/insights";
 import {

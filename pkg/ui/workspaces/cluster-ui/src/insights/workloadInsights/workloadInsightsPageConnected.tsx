@@ -10,6 +10,8 @@
 
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Dispatch } from "redux";
+
 import { AppState } from "src/store";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sqlActions } from "src/store/sqlStats";
@@ -32,7 +34,6 @@ import {
   selectTransactionInsightsLoading,
   selectTransactionInsightsMaxApiReached,
 } from "src/store/insights/transactionInsights";
-import { Dispatch } from "redux";
 import { StmtInsightsReq, TxnInsightsRequest } from "src/api";
 
 import { TimeScale } from "../../timeScaleDropdown";

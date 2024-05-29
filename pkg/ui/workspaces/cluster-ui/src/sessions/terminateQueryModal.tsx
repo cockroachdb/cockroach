@@ -14,6 +14,7 @@ import React, {
   useImperativeHandle,
   useState,
 } from "react";
+
 import { ICancelQueryRequest } from "src/store/terminateQuery";
 
 import { Modal } from "../modal";

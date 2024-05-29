@@ -10,6 +10,8 @@
 
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Dispatch } from "redux";
+
 import {
   actions,
   selectSchemaInsights,
@@ -22,7 +24,6 @@ import {
 } from "src/store/schemaInsights";
 import { AppState, uiConfigActions } from "src/store";
 import { SortSetting } from "src/sortedtable";
-import { Dispatch } from "redux";
 import { selectDropUnusedIndexDuration } from "src/store/clusterSettings/clusterSettings.selectors";
 
 import { SchemaInsightEventFilters } from "../types";

@@ -8,20 +8,21 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import moment from "moment-timezone";
-import React, { useCallback, useEffect, useState } from "react";
-import { RequestState } from "src/api";
 import { Button, InlineAlert, Icon } from "@cockroachlabs/ui-components";
+import moment from "moment-timezone";
 import { Row, Col } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
-import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import classNames from "classnames";
-import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import long from "long";
-import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import classnames from "classnames/bind";
+
+import { RequestState } from "src/api";
+import { SummaryCard, SummaryCardItem } from "src/summaryCard";
+import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
+import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import { EmptyTable } from "src/empty";
 import { useScheduleFunction } from "src/util/hooks";
 import { DownloadFile, DownloadFileRef } from "src/downloadFile";
@@ -155,10 +156,13 @@ export const JobProfilerView: React.FC<JobProfilerViewProps> = ({
     ascending: true,
     columnTitle: "executionDetailFiles",
   });
-  const req =
-    new cockroach.server.serverpb.ListJobProfilerExecutionDetailsRequest({
-      job_id: jobID,
-    });
+  const req = useMemo(
+    () =>
+      new cockroach.server.serverpb.ListJobProfilerExecutionDetailsRequest({
+        job_id: jobID,
+      }),
+    [jobID],
+  );
   const refresh = useCallback(() => {
     refreshExecutionDetailFiles(req);
   }, [refreshExecutionDetailFiles, req]);

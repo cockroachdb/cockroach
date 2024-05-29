@@ -8,9 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { AppState } from "src/store";
 import { createSelector } from "reselect";
 import { RouteComponentProps } from "react-router-dom";
+
+import { AppState } from "src/store";
 import { SessionsState } from "src/store/sessions";
 import { sessionAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";

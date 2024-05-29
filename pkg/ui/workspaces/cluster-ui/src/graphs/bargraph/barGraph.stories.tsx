@@ -11,9 +11,12 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { AlignedData, Options } from "uplot";
-import { BarGraphTimeSeries } from "./index";
+
 import { AxisUnits } from "../utils/domain";
+
 import { getBarsBuilder } from "./bars";
+
+import { BarGraphTimeSeries } from "./index";
 
 function generateTimestampsMillis(start: number, length: number): number[] {
   return [...Array(length)].map(

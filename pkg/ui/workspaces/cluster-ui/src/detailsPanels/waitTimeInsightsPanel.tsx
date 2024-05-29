@@ -8,14 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import React from "react";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
 import classNames from "classnames/bind";
-import React from "react";
+import { Heading } from "@cockroachlabs/ui-components";
+
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { ContendedExecution, ExecutionType } from "src/activeExecutions";
-import { Heading } from "@cockroachlabs/ui-components";
 
 import { capitalize, Duration, NO_SAMPLES_FOUND } from "../util";
 import { ExecutionContentionTable } from "../activeExecutions/activeTransactionsTable/execContentionTable";
@@ -32,13 +33,13 @@ export const WaitTimeInsightsLabels = {
   BLOCKED_ROW: "Blocked Row",
   CONTENDED_KEY: "Contended Key",
   WAIT_TIME: "Time Spent Waiting",
-  BLOCKING_TXNS_TABLE_TITLE: (id: string, execType: ExecutionType): string =>
+  blockingTxnsTableTitle: (id: string, execType: ExecutionType): string =>
     `${capitalize(execType)} ID: ${id} waiting on`,
-  WAITING_TXNS_TABLE_TITLE: (id: string, execType: ExecutionType): string =>
+  waitingTxnsTableTitle: (id: string, execType: ExecutionType): string =>
     `${capitalize(execType)}s waiting for ID: ${id}`,
-  BLOCKED_TXNS_TABLE_TITLE: (id: string, execType: ExecutionType): string =>
+  blockedTxnsTableTitle: (id: string, execType: ExecutionType): string =>
     `${capitalize(execType)} with ID ${id} waited on`,
-  WAITED_TXNS_TABLE_TITLE: (id: string, execType: ExecutionType): string =>
+  waitedTxnsTablesTitle: (id: string, execType: ExecutionType): string =>
     `${capitalize(execType)}s that waited for ${capitalize(
       execType,
     )}s with ID ${id}`,
@@ -126,7 +127,7 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
           {blockingExecutions.length > 0 && (
             <Row>
               <Heading type="h5" className={cx("margin-header")}>
-                {WaitTimeInsightsLabels.BLOCKING_TXNS_TABLE_TITLE(
+                {WaitTimeInsightsLabels.blockingTxnsTableTitle(
                   executionID,
                   execType,
                 )}
@@ -142,7 +143,7 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
           {waitingExecutions.length > 0 && (
             <Row>
               <Heading type="h5" className={cx("margin-header")}>
-                {WaitTimeInsightsLabels.WAITING_TXNS_TABLE_TITLE(
+                {WaitTimeInsightsLabels.waitingTxnsTableTitle(
                   executionID,
                   execType,
                 )}

@@ -140,7 +140,7 @@ export async function getTxnInsightDetailsApi(
   }
 
   const highContention = txnInsightDetails.txnDetails?.insights?.some(
-    insight => insight.name === InsightNameEnum.highContention,
+    insight => insight.name === InsightNameEnum.HIGH_CONTENTION,
   );
 
   const isRetrySerializableFailure =

@@ -16,12 +16,13 @@ import "antd/lib/checkbox/style";
 import "antd/lib/divider/style";
 import "antd/lib/select/style";
 import React, { useCallback, useImperativeHandle, useState } from "react";
+import classNames from "classnames/bind";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import { Modal } from "src/modal";
 import { Anchor } from "src/anchor";
 import { Text } from "src/text";
 import { statementDiagnostics, statementsSql } from "src/util";
-import classNames from "classnames/bind";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 
 import { InsertStmtDiagnosticRequest } from "../api";
 

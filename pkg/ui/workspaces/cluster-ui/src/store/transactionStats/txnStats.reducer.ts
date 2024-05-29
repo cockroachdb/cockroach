@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { StatementsRequest } from "src/api/statementsApi";
 import moment from "moment-timezone";
+
+import { StatementsRequest } from "src/api/statementsApi";
 import { createInitialState, RequestState } from "src/api/types";
 
 import { StatementsResponse } from "../sqlStats";

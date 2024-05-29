@@ -11,6 +11,9 @@
 import React, { useEffect, useState, useCallback } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
+import moment from "moment-timezone";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import {
   ISortedTablePagination,
   SortSetting,
@@ -39,11 +42,9 @@ import {
   WorkloadInsightEventFilters,
 } from "src/insights";
 import { StmtInsightsReq } from "src/api/stmtInsightsApi";
-import moment from "moment-timezone";
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { useScheduleFunction } from "src/util/hooks";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 import { insights } from "src/util";
 import { Anchor } from "src/anchor";
 

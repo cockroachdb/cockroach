@@ -10,8 +10,9 @@
 
 import React from "react";
 import classnames from "classnames/bind";
-import { CircleFilled } from "src/icon";
 import { Tooltip } from "antd";
+
+import { CircleFilled } from "src/icon";
 
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 

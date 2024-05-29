@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { merge } from "lodash";
+import merge from "lodash/merge";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { DOMAIN_NAME, noopReducer } from "../utils";

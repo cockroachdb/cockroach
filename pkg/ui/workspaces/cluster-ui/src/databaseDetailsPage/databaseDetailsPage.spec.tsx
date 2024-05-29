@@ -10,10 +10,12 @@
 
 import React from "react";
 import { expect } from "chai";
-import { defaultFilters } from "../queryFilter";
-import { indexUnusedDuration } from "../util";
 import * as H from "history";
 import { shallow } from "enzyme";
+
+import { defaultFilters } from "../queryFilter";
+import { indexUnusedDuration } from "../util";
+
 import {
   DatabaseDetailsPage,
   DatabaseDetailsPageProps,

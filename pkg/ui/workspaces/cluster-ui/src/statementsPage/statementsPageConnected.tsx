@@ -11,6 +11,7 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
+
 import { AppState, uiConfigActions } from "src/store";
 import { actions as statementDiagnosticsActions } from "src/store/statementDiagnostics";
 import { actions as analyticsActions } from "src/store/analytics";

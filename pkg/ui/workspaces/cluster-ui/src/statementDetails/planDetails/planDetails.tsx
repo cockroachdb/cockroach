@@ -160,7 +160,7 @@ function ExplainPlan({
       >
         All Plans
       </Button>
-      <SqlBox value={explainPlan} size={SqlBoxSize.custom} />
+      <SqlBox value={explainPlan} size={SqlBoxSize.CUSTOM} />
       <Row gutter={24} className={cx("margin-left-neg", "margin-bottom")}>
         <Col className="gutter-row" span={12}>
           <SummaryCard className={cx("summary-card")}>

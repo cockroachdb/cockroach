@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import classNames from "classnames/bind";
+
 import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
 import statementsTableStyles from "src/statementsTable/statementsTableContent.module.scss";
 import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";

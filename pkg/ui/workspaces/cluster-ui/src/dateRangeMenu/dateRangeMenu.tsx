@@ -17,12 +17,14 @@ import "antd/lib/alert/style";
 import moment, { Moment } from "moment-timezone";
 import classNames from "classnames/bind";
 import { Time as TimeIcon, ErrorCircleFilled } from "@cockroachlabs/icons";
+
 import { Button } from "src/button";
 import { Text, TextTypes } from "src/text";
+import { Timezone } from "src/timestamp";
+
+import { TimezoneContext } from "../contexts";
 
 import styles from "./dateRangeMenu.module.scss";
-import { TimezoneContext } from "../contexts";
-import { Timezone } from "src/timestamp";
 
 const cx = classNames.bind(styles);
 

@@ -9,21 +9,22 @@
 // licenses/APL.txt.
 
 import { Helmet } from "react-helmet";
-import { commonStyles } from "src/common";
-import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { Button, Icon } from "@cockroachlabs/ui-components";
-import { Dropdown } from "src/dropdown";
-import { Loading } from "src/loading";
 import React, { useMemo } from "react";
 import classNames from "classnames/bind";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
+
+import { commonStyles } from "src/common";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { Dropdown } from "src/dropdown";
+import { Loading } from "src/loading";
 import { TimestampToMoment } from "src/util";
 import { SortSetting } from "src/sortedtable";
 import {
   GetTracingSnapshotResponse,
   ListTracingSnapshotsResponse,
 } from "src/api";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import Long from "long";
 
 import styles from "../snapshot.module.scss";
 

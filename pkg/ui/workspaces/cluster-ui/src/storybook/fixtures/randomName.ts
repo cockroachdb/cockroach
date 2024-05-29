@@ -8,7 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import join from "lodash/join";
+import sample from "lodash/sample";
+import random from "lodash/random";
 
 export function randomName(): string {
   // Add more! Have fun.
@@ -51,5 +53,5 @@ export function randomName(): string {
     "turkey",
   ];
 
-  return _.join([_.sample(adjectives), _.sample(nouns), _.random(1, 42)], "_");
+  return join([sample(adjectives), sample(nouns), random(1, 42)], "_");
 }

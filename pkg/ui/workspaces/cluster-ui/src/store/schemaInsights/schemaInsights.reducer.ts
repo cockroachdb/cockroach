@@ -10,6 +10,7 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import moment, { Moment } from "moment-timezone";
+
 import { SchemaInsightReqParams, SqlApiResponse } from "src/api";
 
 import { DOMAIN_NAME } from "../utils";

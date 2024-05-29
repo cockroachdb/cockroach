@@ -13,7 +13,9 @@ import { RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
-import classnames from "classnames/bind";
+import merge from "lodash/merge";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
 import { Pagination } from "src/pagination";
@@ -29,9 +31,7 @@ import {
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { syncHistory, tableStatsClusterSetting, unique } from "src/util";
-import { merge } from "lodash";
 import { UIConfigState } from "src/store";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import LoadingError from "../sqlActivity/errorComponent";
@@ -63,7 +63,7 @@ import styles from "./databasesPage.module.scss";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
-const booleanSettingCx = classnames.bind(booleanSettingStyles);
+const booleanSettingCx = classNames.bind(booleanSettingStyles);
 
 // We break out separate interfaces for some of the nested objects in our data
 // both so that they can be available as SortedTable rows and for making

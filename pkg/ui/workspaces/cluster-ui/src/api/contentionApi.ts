@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
+
 import {
   ContentionDetails,
   ContentionTypeKey,
@@ -15,7 +17,6 @@ import {
   InsightNameEnum,
   TxnContentionInsightDetails,
 } from "src/insights/types";
-import moment from "moment-timezone";
 
 import { FixFingerprintHexValue, getLogger } from "../util";
 
@@ -225,7 +226,7 @@ function formatTxnContentionDetailsResponse(
       row.waitingTxnFingerprintID,
     ),
     blockingContentionDetails: response,
-    insightName: InsightNameEnum.highContention,
+    insightName: InsightNameEnum.HIGH_CONTENTION,
     execType: InsightExecEnum.TRANSACTION,
   };
 }

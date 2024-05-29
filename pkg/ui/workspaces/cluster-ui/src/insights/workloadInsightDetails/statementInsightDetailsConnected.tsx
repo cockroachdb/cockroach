@@ -10,6 +10,7 @@
 import { connect } from "react-redux";
 import { Dispatch } from "redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+
 import { AppState, uiConfigActions } from "src/store";
 import {
   selectStmtInsightDetails,

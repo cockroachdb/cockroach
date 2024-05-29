@@ -11,8 +11,9 @@
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 import { connect } from "react-redux";
-import { actions as indexStatsActions } from "src/store/indexStats/indexStats.reducer";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import { actions as indexStatsActions } from "src/store/indexStats/indexStats.reducer";
 
 import { AppState, uiConfigActions } from "../store";
 import {
@@ -171,6 +172,6 @@ const mapDispatchToProps = (dispatch: Dispatch): IndexDetailPageActions => ({
   },
 });
 
-export const ConnectedIndexDetailsPage = withRouter<any, any>(
+export const ConnectedIndexDetailsPage = withRouter(
   connect(mapStateToProps, mapDispatchToProps)(IndexDetailsPage),
 );
