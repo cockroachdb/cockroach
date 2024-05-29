@@ -18,10 +18,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -35,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -797,6 +801,17 @@ func (s *TestState) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 	return nil
 }
 
+// UpdateZoneConfig implements the scexec.Catalog interface.
+func (s *TestState) UpdateZoneConfig(
+	ctx context.Context, id descpb.ID, zc zonepb.ZoneConfig,
+) error {
+	if s.catalogChanges.zoneConfigsToUpdate == nil {
+		s.catalogChanges.zoneConfigsToUpdate = make(map[descpb.ID]*zonepb.ZoneConfig)
+	}
+	s.catalogChanges.zoneConfigsToUpdate[id] = &zc
+	return nil
+}
+
 // DeleteZoneConfig implements the scexec.Catalog interface.
 func (s *TestState) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
 	s.catalogChanges.zoneConfigsToDelete.Add(id)
@@ -868,6 +883,18 @@ func (s *TestState) Validate(ctx context.Context) error {
 	for _, deletedID := range s.catalogChanges.zoneConfigsToDelete.Ordered() {
 		s.LogSideEffectf("deleting zone config for #%d", deletedID)
 		s.uncommittedInMemory.DeleteZoneConfig(deletedID)
+	}
+	for upsertedID, zc := range s.catalogChanges.zoneConfigsToUpdate {
+		s.LogSideEffectf("upsert zone config for #%d", upsertedID)
+		var val roachpb.Value
+		if err := val.SetProto(zc); err != nil {
+			return err
+		}
+		valBytes, err := val.GetBytes()
+		if err != nil {
+			return err
+		}
+		s.uncommittedInMemory.UpsertZoneConfig(upsertedID, zc, valBytes)
 	}
 	commentKeys := make([]catalogkeys.CommentKey, 0, len(s.catalogChanges.commentsToUpdate))
 	for key := range s.catalogChanges.commentsToUpdate {
@@ -1325,13 +1352,13 @@ func (s *TestState) ResolveFunctionByOID(
 }
 
 // ZoneConfigGetter implements scexec.Dependencies.
-func (s *TestState) ZoneConfigGetter() scbuild.ZoneConfigGetter {
+func (s *TestState) ZoneConfigGetter() scdecomp.ZoneConfigGetter {
 	return s
 }
 
 // GetZoneConfig implements scexec.Dependencies.
 func (s *TestState) GetZoneConfig(ctx context.Context, id descpb.ID) (catalog.ZoneConfig, error) {
-	return s.uncommittedInMemory.LookupZoneConfig(id), nil
+	return s.committed.LookupZoneConfig(id), nil
 }
 
 func (s *TestState) get(
@@ -1432,4 +1459,12 @@ func (s *TestState) InsertTemporarySchema(
 
 func (s *TestState) TemporarySchemaProvider() scbuild.TemporarySchemaProvider {
 	return s
+}
+
+func (s *TestState) NodesStatusServer() *serverpb.OptionalNodesStatusServer {
+	return &serverpb.OptionalNodesStatusServer{}
+}
+
+func (s *TestState) GetRegions() (*serverpb.RegionsResponse, error) {
+	return &serverpb.RegionsResponse{Regions: map[string]*serverpb.RegionsResponse_Region{}}, nil
 }
