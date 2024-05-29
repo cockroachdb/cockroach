@@ -666,6 +666,15 @@ func (p *planner) TemporarySchemaName() string {
 	return temporarySchemaName(p.ExtendedEvalContext().SessionID)
 }
 
+// GetRegions implements scbuildstmt.GetRegions.
+func (p *planner) GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error) {
+	provider := p.regionsProvider()
+	if provider == nil {
+		return nil, errors.AssertionFailedf("no regions provider available")
+	}
+	return provider.GetRegions(ctx)
+}
+
 // DistSQLPlanner returns the DistSQLPlanner
 func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 	return p.extendedEvalCtx.DistSQLPlanner

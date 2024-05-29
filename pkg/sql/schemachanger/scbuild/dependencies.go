@@ -76,7 +76,7 @@ type Dependencies interface {
 	DescriptorCommentGetter() CommentGetter
 
 	// ZoneConfigGetter returns a zone config reader.
-	ZoneConfigGetter() ZoneConfigGetter
+	ZoneConfigGetter() scdecomp.ZoneConfigGetter
 
 	// ClientNoticeSender returns a eval.ClientNoticeSender.
 	ClientNoticeSender() eval.ClientNoticeSender
@@ -217,9 +217,6 @@ type AstFormatter interface {
 	FormatAstAsRedactableString(statement tree.Statement, annotations *tree.Annotations) redact.RedactableString
 }
 
-// ZoneConfigGetter see scdecomp.ZoneConfigGetter.
-type ZoneConfigGetter scdecomp.ZoneConfigGetter
-
 // CommentGetter see scdecomp.CommentGetter.
 type CommentGetter scdecomp.CommentGetter
 
@@ -265,4 +262,6 @@ type (
 	FeatureChecker = scbuildstmt.SchemaFeatureChecker
 
 	TemporarySchemaProvider = scbuildstmt.TemporarySchemaProvider
+	NodesStatusInfo         = scbuildstmt.NodeStatusInfo
+	RegionProvider          = scbuildstmt.RegionProvider
 )

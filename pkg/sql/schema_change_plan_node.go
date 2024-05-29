@@ -114,6 +114,7 @@ func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuil
 		NewReferenceProviderFactory(p),
 		p.EvalContext().DescIDGenerator,
 		p,
+		p.ExecCfg().NodesStatusServer,
 	)
 }
 
