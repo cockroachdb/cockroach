@@ -13,10 +13,8 @@ import React from "react";
 /**
  * Predicate function to determine if a react child is a ReactElement.
  */
-function isReactElement(
-  child: React.ReactNode,
-): child is React.ReactElement<any> {
-  return (child as React.ReactElement<any>).type !== undefined;
+function isReactElement(child: React.ReactNode): child is React.ReactElement {
+  return (child as React.ReactElement).type !== undefined;
 }
 
 /**

@@ -190,6 +190,6 @@ const mapDispatchToProps = (
     ),
 });
 
-export const ConnectedStatementDetailsPage = withRouter<any, any>(
+export const ConnectedStatementDetailsPage = withRouter(
   connect(mapStateToProps, mapDispatchToProps)(StatementDetails),
 );

@@ -225,7 +225,7 @@ function formatTxnContentionDetailsResponse(
       row.waitingTxnFingerprintID,
     ),
     blockingContentionDetails: response,
-    insightName: InsightNameEnum.highContention,
+    insightName: InsightNameEnum.HIGH_CONTENTION,
     execType: InsightExecEnum.TRANSACTION,
   };
 }

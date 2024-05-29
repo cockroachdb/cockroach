@@ -144,7 +144,7 @@ export const retryBarChart = barChartFactory("red", retryBars, approximify);
 
 export function workloadPctBarChart(
   statements: AggregateStatistics[],
-  defaultBarChartOptions: BarChartOptions<any>,
+  defaultBarChartOptions: BarChartOptions<object>,
   totalWorkload: number,
 ) {
   return barChartFactory(

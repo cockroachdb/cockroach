@@ -12,7 +12,7 @@
 import moment from "moment-timezone";
 import { createMemoryHistory } from "history";
 import Long from "long";
-import { noop } from "lodash";
+import noop from "lodash/noop";
 import { RequestError } from "src/util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DEFAULT_STATS_REQ_OPTIONS } from "src/api/statementsApi";

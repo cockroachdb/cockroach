@@ -10,18 +10,16 @@
 
 import React from "react";
 import Select from "react-select";
-
-import { Button } from "../button";
-
+import { History } from "history";
 import { CaretDown, Cancel } from "@cockroachlabs/icons";
 import { Input } from "antd";
 import "antd/lib/input/style";
-import { History } from "history";
-import { isEqual } from "lodash";
+import isEqual from "lodash/isEqual";
 
 import { MultiSelectCheckbox } from "../multiSelectCheckbox/multiSelectCheckbox";
 import { syncHistory } from "../util";
 import { selectCustomStyles } from "../common";
+import { Button } from "../button";
 
 import {
   dropdownButton,

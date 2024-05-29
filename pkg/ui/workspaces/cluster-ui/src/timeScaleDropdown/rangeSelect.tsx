@@ -16,10 +16,10 @@ import moment, { Moment } from "moment-timezone";
 import { DateRangeMenu } from "src/dateRangeMenu";
 import { CaretDown } from "src/icon/caretDown";
 import classNames from "classnames/bind";
+import { Timezone } from "src/timestamp";
 
 import styles from "./rangeSelector.module.scss";
 import { TimeWindow } from "./timeScaleTypes";
-import { Timezone } from "src/timestamp";
 
 const cx = classNames.bind(styles);
 

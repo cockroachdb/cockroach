@@ -94,7 +94,7 @@ export async function getStatementsUsingIndex({
 }: StatementsUsingIndexRequest): Promise<
   SqlApiResponse<AggregateStatistics[]>
 > {
-  const args: any = [`"${table}@${index}"`];
+  const args = [`"${table}@${index}"`];
   let whereClause = "";
   if (start) {
     whereClause = `${whereClause} AND aggregated_ts >= '${start.toISOString()}'`;

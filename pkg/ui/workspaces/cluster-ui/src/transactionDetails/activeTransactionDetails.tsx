@@ -109,7 +109,7 @@ export const ActiveTransactionDetails: React.FC<
           <Col className="gutter-row" span={24}>
             <SqlBox
               value={transaction?.query || RECENT_STATEMENT_NOT_FOUND_MESSAGE}
-              size={SqlBoxSize.custom}
+              size={SqlBoxSize.CUSTOM}
             />
           </Col>
         </Row>

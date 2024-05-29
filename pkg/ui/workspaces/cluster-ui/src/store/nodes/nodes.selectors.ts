@@ -9,9 +9,9 @@
 // licenses/APL.txt.
 
 import { createSelector } from "@reduxjs/toolkit";
-import _ from "lodash";
 import { accumulateMetrics } from "src/util/proto";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import isEmpty from "lodash/isEmpty";
 
 import { AppState } from "../reducers";
 import { getDisplayName } from "../../nodes";
@@ -31,7 +31,7 @@ export const nodeDisplayNameByIDSelector = createSelector(
   livenessStatusByNodeIDSelector,
   (nodeStatuses, livenessStatusByNodeID) => {
     const result: { [key: string]: string } = {};
-    if (!_.isEmpty(nodeStatuses)) {
+    if (!isEmpty(nodeStatuses)) {
       nodeStatuses.forEach(ns => {
         result[ns.desc.node_id] = getDisplayName(
           ns,
@@ -55,7 +55,7 @@ export const nodeRegionsByIDSelector = createSelector(
   nodeStatusesSelector,
   nodeStatuses => {
     const result: { [key: string]: string } = {};
-    if (!_.isEmpty(nodeStatuses)) {
+    if (!isEmpty(nodeStatuses)) {
       nodeStatuses.forEach(ns => {
         result[ns.desc.node_id] = getRegionFromLocality(ns.desc.locality);
       });

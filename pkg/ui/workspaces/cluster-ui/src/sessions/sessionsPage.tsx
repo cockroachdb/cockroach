@@ -9,7 +9,8 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { isNil, merge } from "lodash";
+import isNil from "lodash/isNil";
+import merge from "lodash/merge";
 import { syncHistory } from "src/util/query";
 import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";

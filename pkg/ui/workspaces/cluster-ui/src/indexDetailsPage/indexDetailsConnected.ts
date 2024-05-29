@@ -171,6 +171,6 @@ const mapDispatchToProps = (dispatch: Dispatch): IndexDetailPageActions => ({
   },
 });
 
-export const ConnectedIndexDetailsPage = withRouter<any, any>(
+export const ConnectedIndexDetailsPage = withRouter(
   connect(mapStateToProps, mapDispatchToProps)(IndexDetailsPage),
 );

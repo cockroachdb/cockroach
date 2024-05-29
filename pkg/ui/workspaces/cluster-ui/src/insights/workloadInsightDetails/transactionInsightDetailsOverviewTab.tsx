@@ -125,8 +125,9 @@ the maximum number of statements was reached in the console.`;
 
   const insightRecs = getTxnInsightRecommendations(txnDetails);
   const hasContentionInsights =
-    txnDetails?.insights.find(i => i.name === InsightNameEnum.highContention) !=
-    null;
+    txnDetails?.insights.find(
+      i => i.name === InsightNameEnum.HIGH_CONTENTION,
+    ) != null;
 
   return (
     <div>
@@ -141,7 +142,7 @@ the maximum number of statements was reached in the console.`;
             <Col span={24}>
               <SqlBox
                 value={insightQueries}
-                size={SqlBoxSize.custom}
+                size={SqlBoxSize.CUSTOM}
                 format={true}
               />
             </Col>
@@ -254,7 +255,7 @@ the maximum number of statements was reached in the console.`;
             <Row gutter={24}>
               <Col>
                 <Heading type="h5">
-                  {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
+                  {WaitTimeInsightsLabels.blockedTxnsTableTitle(
                     txnDetails?.transactionExecutionID,
                     InsightExecEnum.TRANSACTION,
                   )}

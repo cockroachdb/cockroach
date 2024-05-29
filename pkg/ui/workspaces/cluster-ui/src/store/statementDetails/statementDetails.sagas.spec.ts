@@ -644,7 +644,7 @@ describe("SQLDetailsStats sagas", () => {
             plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
           },
           explain_plan: "• virtual table\n  table: @primary",
-          plan_hash: new Long(14192395335876201826),
+          plan_hash: Long.fromString("14192395335876201826"),
         },
       ],
       internal_app_name_prefix: "$ internal",

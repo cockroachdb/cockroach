@@ -51,7 +51,7 @@ export interface TransactionInsightDetailsDispatchProps {
 export type TransactionInsightDetailsProps =
   TransactionInsightDetailsStateProps &
     TransactionInsightDetailsDispatchProps &
-    RouteComponentProps<unknown>;
+    RouteComponentProps;
 
 enum TabKeysEnum {
   OVERVIEW = "overview",
@@ -97,7 +97,7 @@ export const TransactionInsightDetails: React.FC<
       contentionInfo != null ||
       (txnDetails != null &&
         txnDetails.insights.find(
-          i => i.name === InsightNameEnum.highContention,
+          i => i.name === InsightNameEnum.HIGH_CONTENTION,
         ) == null &&
         txnDetails.errorCode !== StmtFailureCodesStr.RETRY_SERIALIZABLE);
 

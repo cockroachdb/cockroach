@@ -43,7 +43,7 @@ export interface ScheduleDetailsDispatchProps {
 
 export type ScheduleDetailsProps = ScheduleDetailsStateProps &
   ScheduleDetailsDispatchProps &
-  RouteComponentProps<unknown>;
+  RouteComponentProps;
 
 export const ScheduleDetails: React.FC<ScheduleDetailsProps> = props => {
   const idStr = getMatchParamByName(props.match, idAttr);
@@ -60,7 +60,7 @@ export const ScheduleDetails: React.FC<ScheduleDetailsProps> = props => {
       <>
         <Row gutter={24}>
           <Col className="gutter-row" span={24}>
-            <SqlBox value={schedule.command} size={SqlBoxSize.custom} />
+            <SqlBox value={schedule.command} size={SqlBoxSize.CUSTOM} />
           </Col>
         </Row>
         <Row gutter={24}>

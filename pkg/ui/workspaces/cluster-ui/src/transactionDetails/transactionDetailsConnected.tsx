@@ -104,6 +104,6 @@ const mapDispatchToProps = (
   },
 });
 
-export const TransactionDetailsPageConnected = withRouter<any, any>(
+export const TransactionDetailsPageConnected = withRouter(
   connect(mapStateToProps, mapDispatchToProps)(TransactionDetails),
 );

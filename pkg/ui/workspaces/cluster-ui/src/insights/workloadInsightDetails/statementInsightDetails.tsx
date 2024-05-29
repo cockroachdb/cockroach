@@ -21,7 +21,6 @@ import { SqlBox, SqlBoxSize } from "src/sql";
 import { getMatchParamByName, idAttr } from "src/util";
 import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
 import { getStmtInsightsApi } from "src/api/stmtInsightsApi";
-
 // Styles
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
@@ -53,7 +52,7 @@ export interface StatementInsightDetailsDispatchProps {
 
 export type StatementInsightDetailsProps = StatementInsightDetailsStateProps &
   StatementInsightDetailsDispatchProps &
-  RouteComponentProps<unknown>;
+  RouteComponentProps;
 
 type ExplainPlanState = {
   explainPlan: string;
@@ -162,7 +161,7 @@ export const StatementInsightDetails: React.FC<
             <Row>
               <Col span={24}>
                 <SqlBox
-                  size={SqlBoxSize.custom}
+                  size={SqlBoxSize.CUSTOM}
                   value={details?.query}
                   format={true}
                 />
@@ -197,7 +196,7 @@ export const StatementInsightDetails: React.FC<
                     >
                       <SqlBox
                         value={explainPlanState.explainPlan || "Not available."}
-                        size={SqlBoxSize.custom}
+                        size={SqlBoxSize.CUSTOM}
                       />
                     </Loading>
                   </Col>

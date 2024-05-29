@@ -11,7 +11,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import classNames from "classnames/bind";
-import { noop } from "lodash";
+import noop from "lodash/noop";
 import {
   ActivateDiagnosticsModalRef,
   DiagnosticStatusBadge,

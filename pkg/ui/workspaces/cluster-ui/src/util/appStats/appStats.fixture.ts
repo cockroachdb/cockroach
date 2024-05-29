@@ -121,7 +121,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
           p99: 1.1,
         },
       },
-      id: new Long(8717981371097536892),
+      id: Long.fromString("8717981371097536892"),
     },
     {
       key: {
@@ -239,7 +239,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
           p99: 1.1,
         },
       },
-      id: new Long(8717981371097536892),
+      id: Long.fromString("8717981371097536892"),
     },
     {
       key: {
@@ -360,7 +360,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
           p99: 1.1,
         },
       },
-      id: new Long(8717981371097536892),
+      id: Long.fromString("8717981371097536892"),
     },
     {
       key: {
@@ -472,7 +472,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
           p99: 1.1,
         },
       },
-      id: new Long(8717981371097536892),
+      id: Long.fromString("8717981371097536892"),
     },
     {
       key: {
@@ -584,7 +584,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
           p99: 1.1,
         },
       },
-      id: new Long(8717981371097536892),
+      id: Long.fromString("8717981371097536892"),
     },
     {
       key: {
@@ -705,7 +705,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
           p99: 1.1,
         },
       },
-      id: new Long(8717981371097536892),
+      id: Long.fromString("8717981371097536892"),
     },
     {
       key: {
@@ -826,7 +826,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
           p99: 1.1,
         },
       },
-      id: new Long(8717981371097536892),
+      id: Long.fromString("8717981371097536892"),
     },
     {
       key: {
@@ -950,7 +950,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
           p99: 1.1,
         },
       },
-      id: new Long(8717981371097536892),
+      id: Long.fromString("8717981371097536892"),
     },
     {
       key: {
@@ -1071,6 +1071,6 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
           p99: 1.1,
         },
       },
-      id: new Long(8717981371097536892),
+      id: Long.fromString("8717981371097536892"),
     },
   ];

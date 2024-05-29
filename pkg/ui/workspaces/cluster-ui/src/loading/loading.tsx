@@ -10,7 +10,6 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import { chain } from "lodash";
 import {
   InlineAlert,
   InlineAlertProps,
@@ -18,6 +17,8 @@ import {
   InlineAlertIntent,
 } from "@cockroachlabs/ui-components";
 import { adminUIAccess, getLogger, isForbiddenRequestError } from "src/util";
+import groupBy from "lodash/groupBy";
+import map from "lodash/map";
 
 import { Anchor } from "../anchor";
 
@@ -29,7 +30,7 @@ interface LoadingProps {
   error?: Error | Error[] | null;
   className?: string;
   image?: string;
-  render?: () => any;
+  render?: () => React.ReactElement;
   errorClassName?: string;
   loadingClassName?: string;
   renderError?: () => React.ReactElement;
@@ -64,7 +65,7 @@ export function getValidErrorsList(
  * Loading will display a background image instead of the content if the
  * loading prop is true.
  */
-export const Loading: React.FC<LoadingProps> = props => {
+export const Loading = (props: React.PropsWithChildren<LoadingProps>) => {
   const errors = getValidErrorsList(props.error);
 
   // Check for `error` before `loading`, since tests for `loading` often return
@@ -80,8 +81,9 @@ export const Loading: React.FC<LoadingProps> = props => {
 
     // - map Error to InlineAlert props. RestrictedPermissions handled as "info" message;
     // - group errors by intend to show separate alerts per intent.
-    const errorAlerts = chain(errors)
-      .map<Omit<InlineAlertProps, "title">>(error => {
+    const intentAlertProps = map(
+      errors,
+      (error): Omit<InlineAlertProps, "title"> => {
         if (isForbiddenRequestError(error)) {
           return {
             intent: "info",
@@ -102,11 +104,20 @@ export const Loading: React.FC<LoadingProps> = props => {
             ),
           };
         }
-      })
-      .groupBy(alert => alert.intent)
-      .map((alerts, intent: InlineAlertIntent) => {
+      },
+    );
+    const alertPropsByIntent = groupBy(intentAlertProps, r => r.intent);
+    const errorAlerts = map(
+      alertPropsByIntent,
+      (alerts, intent: InlineAlertIntent) => {
         if (alerts.length === 1) {
-          return <InlineAlert intent={intent} title={alerts[0].description} />;
+          return (
+            <InlineAlert
+              intent={intent}
+              title={alerts[0].description}
+              key={intent}
+            />
+          );
         } else {
           return (
             <InlineAlert
@@ -119,11 +130,12 @@ export const Loading: React.FC<LoadingProps> = props => {
                   ))}
                 </div>
               }
+              key={intent}
             />
           );
         }
-      })
-      .value();
+      },
+    );
 
     return (
       <div className={cx("alerts-container", props.errorClassName)}>
@@ -136,5 +148,8 @@ export const Loading: React.FC<LoadingProps> = props => {
       <Spinner className={cx("loading-indicator", props.loadingClassName)} />
     );
   }
-  return props.children || (props.render && props.render());
+  return (
+    (props.children && <>${props.children}</>) ||
+    (props.render && props.render())
+  );
 };

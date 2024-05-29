@@ -26,7 +26,7 @@ const latencyInfo: Required<ILatencyInfo> = {
 };
 
 const baseStmt: Partial<Stmt> = {
-  id: Long.fromInt(11871906682067483964),
+  id: Long.fromString("11871906682067483964"),
   txn_fingerprint_ids: [Long.fromInt(1)],
   key: {
     key_data: {
@@ -126,7 +126,7 @@ const baseStmt: Partial<Stmt> = {
 
 const baseTxn: Partial<Txn> = {
   stats_data: {
-    statement_fingerprint_ids: [Long.fromInt(18262870370352730905)],
+    statement_fingerprint_ids: [Long.fromString("18262870370352730905")],
     app: "$ cockroach sql",
     stats: {
       count: Long.fromInt(8),
@@ -184,7 +184,7 @@ const baseTxn: Partial<Txn> = {
       },
     },
     aggregated_ts: new google.protobuf.Timestamp(),
-    transaction_fingerprint_id: Long.fromInt(5913510653911377094),
+    transaction_fingerprint_id: Long.fromString("5913510653911377094"),
   },
   node_id: 0,
 };

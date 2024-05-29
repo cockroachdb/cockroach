@@ -176,7 +176,7 @@ export interface DatabaseDetailsPageActions {
 
 export type DatabaseDetailsPageProps = DatabaseDetailsPageData &
   DatabaseDetailsPageActions &
-  RouteComponentProps<unknown>;
+  RouteComponentProps;
 
 export enum ViewMode {
   Tables = "Tables",

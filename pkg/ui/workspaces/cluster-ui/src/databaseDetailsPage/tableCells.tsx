@@ -9,19 +9,7 @@
 // licenses/APL.txt.
 
 import React, { useContext } from "react";
-
-import {
-  EncodeDatabaseTableUri,
-  EncodeDatabaseUri,
-  EncodeUriName,
-  getMatchParamByName,
-  schemaNameAttr,
-} from "../util";
-
 import { Link } from "react-router-dom";
-
-import { DatabaseIcon } from "../icon/databaseIcon";
-
 import classNames from "classnames/bind";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
@@ -32,6 +20,14 @@ import { Breadcrumbs } from "../breadcrumbs";
 import { CaretRight } from "../icon/caretRight";
 import { CockroachCloudContext } from "../contexts";
 import { checkInfoAvailable, getNetworkErrorMessage } from "../databases";
+import { DatabaseIcon } from "../icon/databaseIcon";
+import {
+  EncodeDatabaseTableUri,
+  EncodeDatabaseUri,
+  EncodeUriName,
+  getMatchParamByName,
+  schemaNameAttr,
+} from "../util";
 
 import styles from "./databaseDetailsPage.module.scss";
 import {

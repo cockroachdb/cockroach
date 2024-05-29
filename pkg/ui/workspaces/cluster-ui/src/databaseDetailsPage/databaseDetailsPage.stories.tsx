@@ -10,7 +10,8 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-import _ from "lodash";
+import random from "lodash/random";
+import uniq from "lodash/uniq";
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import {
   randomName,
@@ -103,12 +104,12 @@ const withoutData: DatabaseDetailsPageProps = {
 };
 
 function createTable(): DatabaseDetailsPageDataTable {
-  const roles = _.uniq(new Array(_.random(1, 3)).map(() => randomRole()));
-  const privileges = _.uniq(
-    new Array(_.random(1, 5)).map(() => randomTablePrivilege()),
+  const roles = uniq(new Array(random(1, 3)).map(() => randomRole()));
+  const privileges = uniq(
+    new Array(random(1, 5)).map(() => randomTablePrivilege()),
   );
-  const columns = _.uniq(new Array(_.random(1, 5)).map(() => randomName()));
-  const indexes = _.uniq(new Array(_.random(1, 5)).map(() => randomName()));
+  const columns = uniq(new Array(random(1, 5)).map(() => randomName()));
+  const indexes = uniq(new Array(random(1, 5)).map(() => randomName()));
 
   return {
     loading: false,
@@ -132,11 +133,11 @@ function createTable(): DatabaseDetailsPageDataTable {
         has_index_recommendations: false,
       },
       spanStats: {
-        live_percentage: _.random(0, 100),
-        live_bytes: _.random(0, 10000),
-        total_bytes: _.random(0, 10000),
-        approximate_disk_bytes: _.random(0, 10000),
-        range_count: _.random(0, 10000),
+        live_percentage: random(0, 100),
+        live_bytes: random(0, 10000),
+        total_bytes: random(0, 10000),
+        approximate_disk_bytes: random(0, 10000),
+        range_count: random(0, 10000),
       },
     },
   };

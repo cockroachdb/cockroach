@@ -48,7 +48,7 @@ interface JobsTableProps {
   visibleColumns: ColumnDescriptor<Job>[];
 }
 
-export const jobsColumnLabels: any = {
+export const jobsColumnLabels: { [key: string]: string } = {
   description: "Description",
   status: "Status",
   jobId: "Job ID",
