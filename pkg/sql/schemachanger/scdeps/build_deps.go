@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -56,6 +57,8 @@ func NewBuilderDependencies(
 	referenceProviderFactory scbuild.ReferenceProviderFactory,
 	descIDGenerator eval.DescIDGenerator,
 	temporarySchemaProvider scbuild.TemporarySchemaProvider,
+	nodesStatusInfo scbuild.NodesStatusInfo,
+	regionProvider scbuild.RegionProvider,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:       clusterID,
@@ -76,6 +79,8 @@ func NewBuilderDependencies(
 		descIDGenerator:          descIDGenerator,
 		referenceProviderFactory: referenceProviderFactory,
 		temporarySchemaProvider:  temporarySchemaProvider,
+		nodesStatusInfo:          nodesStatusInfo,
+		regionProvider:           regionProvider,
 	}
 }
 
@@ -96,6 +101,8 @@ type buildDeps struct {
 	referenceProviderFactory scbuild.ReferenceProviderFactory
 	descIDGenerator          eval.DescIDGenerator
 	temporarySchemaProvider  scbuild.TemporarySchemaProvider
+	nodesStatusInfo          scbuild.NodesStatusInfo
+	regionProvider           scbuild.RegionProvider
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -455,7 +462,7 @@ func (d *buildDeps) DescriptorCommentGetter() scbuild.CommentGetter {
 	return d.descsCollection
 }
 
-func (d *buildDeps) ZoneConfigGetter() scbuild.ZoneConfigGetter {
+func (d *buildDeps) ZoneConfigGetter() scdecomp.ZoneConfigGetter {
 	return &zoneConfigGetter{
 		txn:         d.txn,
 		descriptors: d.descsCollection,
@@ -493,4 +500,12 @@ func (d *buildDeps) ReferenceProviderFactory() scbuild.ReferenceProviderFactory 
 
 func (d *buildDeps) TemporarySchemaProvider() scbuild.TemporarySchemaProvider {
 	return d.temporarySchemaProvider
+}
+
+func (d *buildDeps) NodesStatusInfo() scbuild.NodesStatusInfo {
+	return d.nodesStatusInfo
+}
+
+func (d *buildDeps) RegionProvider() scbuild.RegionProvider {
+	return d.regionProvider
 }
