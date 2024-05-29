@@ -1353,32 +1353,6 @@ func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, erro
 	return false, nil
 }
 
-// frontierForSpan returns the lowest timestamp in the frontier within
-// the given subspans. If the subspans are entirely outside the
-// Frontier's tracked span an empty timestamp is returned.
-func frontierForSpans(f span.Frontier, spans ...roachpb.Span) hlc.Timestamp {
-	var (
-		minTimestamp hlc.Timestamp
-		sawEmptyTS   bool
-	)
-
-	for _, spanToCheck := range spans {
-		f.SpanEntries(spanToCheck, func(frontierSpan roachpb.Span, ts hlc.Timestamp) span.OpResult {
-			if ts.IsEmpty() {
-				sawEmptyTS = true
-			}
-			if minTimestamp.IsEmpty() || ts.Less(minTimestamp) {
-				minTimestamp = ts
-			}
-			return span.ContinueMatch
-		})
-	}
-	if sawEmptyTS {
-		return hlc.Timestamp{}
-	}
-	return minTimestamp
-}
-
 func init() {
 	rowexec.NewStreamIngestionDataProcessor = newStreamIngestionDataProcessor
 }
