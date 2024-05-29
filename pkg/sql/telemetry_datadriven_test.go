@@ -20,6 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -147,6 +150,18 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 				txnLogCount := txnsSpy.Count()
 				var stubTimeUnixSecs float64
 				var tracing, useRealTracing bool
+				var stubStatementFingerprintId string
+
+				d.MaybeScanArgs(t, "stubStatementFingerprintId", &stubStatementFingerprintId)
+				if stubStatementFingerprintId != "" {
+					defer testutils.TestingHook(&sslocal.StatementFingerprintID, func(_ *sslocal.StatsCollector) appstatspb.StmtFingerprintID {
+						parseUint, e := strconv.ParseUint(stubStatementFingerprintId, 10, 64)
+						if e != nil {
+							panic(e.Error())
+						}
+						return appstatspb.StmtFingerprintID(parseUint)
+					})()
+				}
 
 				d.MaybeScanArgs(t, "tracing", &tracing)
 				sts.SetTracingStatus(tracing)
@@ -323,4 +338,17 @@ func TestTelemetryLoggingDecision(t *testing.T) {
 		})
 	})
 
+}
+
+func TestConversion(t *testing.T) {
+	var x uint64
+	var y appstatspb.StmtFingerprintID
+	x = 13897981974204410000
+	y = 13897981974204410000
+
+	fmt.Printf("x: %d\n", x)
+	fmt.Printf("x as string %s\n", strconv.FormatUint(uint64(x), 10))
+
+	fmt.Printf("y: %d\n", y)
+	fmt.Printf("y as string %s\n", strconv.FormatUint(uint64(y), 10))
 }

@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -356,7 +357,7 @@ func (p *planner) maybeLogStatementInternal(
 
 		// If the statement was recorded by the stats collector, we can extract
 		// the statement fingerprint ID. Otherwise, we'll need to compute it from the AST.
-		stmtFingerprintID := statsCollector.StatementFingerprintID()
+		stmtFingerprintID := sslocal.StatementFingerprintID(statsCollector)
 		if stmtFingerprintID == 0 {
 			repQuery := p.stmt.StmtNoConstants
 			if repQuery == "" {
@@ -385,7 +386,7 @@ func (p *planner) maybeLogStatementInternal(
 			Database:                              p.CurrentDatabase(),
 			StatementID:                           p.stmt.QueryID.String(),
 			TransactionID:                         txnID,
-			StatementFingerprintID:                uint64(stmtFingerprintID),
+			StatementFingerprintID:                strconv.FormatUint(uint64(stmtFingerprintID), 10),
 			MaxFullScanRowsEstimate:               p.curPlan.instrumentation.maxFullScanRows,
 			TotalScanRowsEstimate:                 p.curPlan.instrumentation.totalScanRows,
 			OutputRowsEstimate:                    p.curPlan.instrumentation.outputRows,
@@ -478,6 +479,10 @@ func (p *planner) logTransaction(
 
 	sampledTxn := getSampledTransaction()
 	defer releaseSampledTransaction(sampledTxn)
+	statementFingerprintIDStrs := make([]string, 0, len(txnStats.StatementFingerprintIDs))
+	for _, id := range txnStats.StatementFingerprintIDs {
+		statementFingerprintIDStrs = append(statementFingerprintIDStrs, strconv.FormatUint(uint64(id), 10))
+	}
 
 	*sampledTxn = eventpb.SampledTransaction{
 		SkippedTransactions:      int64(skippedTransactions),
@@ -486,7 +491,7 @@ func (p *planner) logTransaction(
 		TxnCounter:               uint32(txnCounter),
 		SessionID:                txnStats.SessionID.String(),
 		TransactionID:            txnStats.TransactionID.String(),
-		TransactionFingerprintID: txnFingerprintID,
+		TransactionFingerprintID: strconv.FormatUint(uint64(txnFingerprintID), 10),
 		Committed:                txnStats.Committed,
 		ImplicitTxn:              txnStats.ImplicitTxn,
 		StartTimeUnixNanos:       txnStats.StartTime.UnixNano(),
@@ -496,7 +501,7 @@ func (p *planner) logTransaction(
 		ErrorText:                execErrStr,
 		NumRetries:               txnStats.RetryCount,
 		LastAutoRetryReason:      retryErr,
-		StatementFingerprintIDs:  txnStats.StatementFingerprintIDs,
+		StatementFingerprintIDs:  statementFingerprintIDStrs,
 		NumRows:                  int64(txnStats.RowsAffected),
 		RetryLatNanos:            txnStats.RetryLatency.Nanoseconds(),
 		CommitLatNanos:           txnStats.CommitLatency.Nanoseconds(),

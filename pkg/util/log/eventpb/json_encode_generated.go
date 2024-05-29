@@ -4398,15 +4398,6 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, '"')
 	}
 
-	if m.StatementFingerprintID != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"StatementFingerprintID\":"...)
-		b = strconv.AppendUint(b, uint64(m.StatementFingerprintID), 10)
-	}
-
 	if m.MaxFullScanRowsEstimate != 0 {
 		if printComma {
 			b = append(b, ',')
@@ -5005,6 +4996,16 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, ']')
 	}
 
+	if m.StatementFingerprintID != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StatementFingerprintID\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.StatementFingerprintID)))
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 
@@ -5062,15 +5063,6 @@ func (m *SampledTransaction) AppendJSONFields(printComma bool, b redact.Redactab
 	b = append(b, "\"TransactionID\":\""...)
 	b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TransactionID)))
 	b = append(b, '"')
-
-	if m.TransactionFingerprintID != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"TransactionFingerprintID\":"...)
-		b = strconv.AppendUint(b, uint64(m.TransactionFingerprintID), 10)
-	}
 
 	if printComma {
 		b = append(b, ',')
@@ -5146,21 +5138,6 @@ func (m *SampledTransaction) AppendJSONFields(printComma bool, b redact.Redactab
 		b = append(b, '"')
 	}
 
-	if len(m.StatementFingerprintIDs) > 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"StatementFingerprintIDs\":["...)
-		for i, v := range m.StatementFingerprintIDs {
-			if i > 0 {
-				b = append(b, ',')
-			}
-			b = strconv.AppendUint(b, uint64(v), 10)
-		}
-		b = append(b, ']')
-	}
-
 	if printComma {
 		b = append(b, ',')
 	}
@@ -5230,6 +5207,33 @@ func (m *SampledTransaction) AppendJSONFields(printComma bool, b redact.Redactab
 		printComma = true
 		b = append(b, "\"SkippedTransactions\":"...)
 		b = strconv.AppendInt(b, int64(m.SkippedTransactions), 10)
+	}
+
+	if m.TransactionFingerprintID != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TransactionFingerprintID\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TransactionFingerprintID)))
+		b = append(b, '"')
+	}
+
+	if len(m.StatementFingerprintIDs) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StatementFingerprintIDs\":["...)
+		for i, v := range m.StatementFingerprintIDs {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = append(b, '"')
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), v))
+			b = append(b, '"')
+		}
+		b = append(b, ']')
 	}
 
 	return printComma, b

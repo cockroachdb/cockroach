@@ -86,10 +86,14 @@ func (s *StatsCollector) SetStatementFingerprintID(fingerprintID appstatspb.Stmt
 	s.stmtFingerprintID = fingerprintID
 }
 
-// StatementFingerprintID returns the fingerprint ID for the current statement.
-func (s *StatsCollector) StatementFingerprintID() appstatspb.StmtFingerprintID {
+type statementFingerprintID func(s *StatsCollector) appstatspb.StmtFingerprintID
+
+func (s *StatsCollector) statementFingerprintID() appstatspb.StmtFingerprintID {
 	return s.stmtFingerprintID
 }
+
+// StatementFingerprintID returns the fingerprint ID for the current statement.
+var StatementFingerprintID statementFingerprintID = (*StatsCollector).statementFingerprintID
 
 // PhaseTimes returns the sessionphase.Times that this StatsCollector is
 // currently tracking.
