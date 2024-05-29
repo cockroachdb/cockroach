@@ -146,7 +146,6 @@ go_test(
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/server/telemetry",
-        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigptsreader",

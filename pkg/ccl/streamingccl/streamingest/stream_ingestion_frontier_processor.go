@@ -18,14 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -60,9 +58,10 @@ type streamIngestionFrontier struct {
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
 
+	client streamclient.Client
 	// heartbeatSender sends heartbeats to the source cluster to keep the replication
 	// stream alive.
-	heartbeatSender *heartbeatSender
+	heartbeatSender *streamclient.HeartbeatSender
 
 	// replicatedTimeAtStart is the job's replicated time when
 	// this processor started. It's used in an assertion that we
@@ -107,18 +106,25 @@ func newStreamIngestionFrontierProcessor(
 		}
 	}
 
-	heartbeatSender, err := newHeartbeatSender(ctx, flowCtx, spec)
+	streamID := streampb.StreamID(spec.StreamID)
+	streamClient, err := streamclient.GetFirstActiveClient(ctx,
+		spec.StreamAddresses,
+		flowCtx.Cfg.DB,
+		streamclient.WithStreamID(streamID))
 	if err != nil {
 		return nil, err
 	}
 	sf := &streamIngestionFrontier{
-		flowCtx:                 flowCtx,
-		spec:                    spec,
-		input:                   input,
-		replicatedTimeAtStart:   spec.ReplicatedTimeAtStart,
-		frontier:                frontier,
-		metrics:                 flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
-		heartbeatSender:         heartbeatSender,
+		flowCtx:               flowCtx,
+		spec:                  spec,
+		input:                 input,
+		replicatedTimeAtStart: spec.ReplicatedTimeAtStart,
+		frontier:              frontier,
+		metrics:               flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
+		client:                streamClient,
+		heartbeatSender: streamclient.NewHeartbeatSender(ctx, streamClient, streamID, func() time.Duration {
+			return streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(&flowCtx.EvalCtx.Settings.SV)
+		}),
 		persistedReplicatedTime: spec.ReplicatedTimeAtStart,
 	}
 	if err := sf.Init(
@@ -147,127 +153,12 @@ func (sf *streamIngestionFrontier) MustBeStreaming() bool {
 	return true
 }
 
-type heartbeatSender struct {
-	lastSent        time.Time
-	client          streamclient.Client
-	streamID        streampb.StreamID
-	frontierUpdates chan hlc.Timestamp
-	frontier        hlc.Timestamp
-	sv              *settings.Values
-	// cg runs the heartbeatSender thread.
-	cg ctxgroup.Group
-	// cancel stops heartbeat sender.
-	cancel func()
-	// heartbeatSender closes this channel when it stops.
-	stoppedChan chan struct{}
-}
-
-func newHeartbeatSender(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, spec execinfrapb.StreamIngestionFrontierSpec,
-) (*heartbeatSender, error) {
-
-	streamID := streampb.StreamID(spec.StreamID)
-	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses, flowCtx.Cfg.DB, streamclient.WithStreamID(streamID))
-	if err != nil {
-		return nil, err
-	}
-	return &heartbeatSender{
-		client:          streamClient,
-		streamID:        streamID,
-		sv:              &flowCtx.EvalCtx.Settings.SV,
-		frontierUpdates: make(chan hlc.Timestamp),
-		cancel:          func() {},
-		stoppedChan:     make(chan struct{}),
-	}, nil
-}
-
-func (h *heartbeatSender) maybeHeartbeat(
-	ctx context.Context,
-	ts timeutil.TimeSource,
-	frontier hlc.Timestamp,
-	heartbeatFrequency time.Duration,
-) (bool, streampb.StreamReplicationStatus, error) {
-	if h.lastSent.Add(heartbeatFrequency).After(ts.Now()) {
-		return false, streampb.StreamReplicationStatus{}, nil
-	}
-	h.lastSent = ts.Now()
-	s, err := h.client.Heartbeat(ctx, h.streamID, frontier)
-	return true, s, err
-}
-
-func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context, ts timeutil.TimeSource) {
-	ctx, cancel := context.WithCancel(ctx)
-	h.cancel = cancel
-	h.cg = ctxgroup.WithContext(ctx)
-	h.cg.GoCtx(func(ctx context.Context) error {
-		sendHeartbeats := func() error {
-			// The heartbeat thread send heartbeats when there is a frontier update,
-			// and it has been a while since last time we sent it, or when we need
-			// to heartbeat to keep the stream alive even if the frontier has no update.
-			timer := ts.NewTimer()
-			timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv))
-			defer timer.Stop()
-			unknownStreamStatusRetryErr := log.Every(1 * time.Minute)
-			for {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-timer.Ch():
-					timer.MarkRead()
-					timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv))
-				case frontier := <-h.frontierUpdates:
-					h.frontier.Forward(frontier)
-				}
-				heartbeatFrequency := streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv)
-				sent, streamStatus, err := h.maybeHeartbeat(ctx, ts, h.frontier, heartbeatFrequency)
-				if err != nil {
-					log.Errorf(ctx, "replication stream %d received an error from the producer job: %v", h.streamID, err)
-					continue
-				}
-
-				if !sent || streamStatus.StreamStatus == streampb.StreamReplicationStatus_STREAM_ACTIVE {
-					continue
-				}
-
-				if streamStatus.StreamStatus == streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
-					if unknownStreamStatusRetryErr.ShouldLog() {
-						log.Warningf(ctx, "replication stream %d has unknown stream status error and will retry later", h.streamID)
-					}
-					continue
-				}
-				// The replication stream is either paused or inactive.
-				return streamingccl.NewStreamStatusErr(h.streamID, streamStatus.StreamStatus)
-			}
-		}
-		err := errors.CombineErrors(sendHeartbeats(), h.client.Close(ctx))
-		close(h.stoppedChan)
-		return err
-	})
-}
-
-// Stop the heartbeat loop and returns any error at time of heartbeatSender's exit.
-// Can be called multiple times.
-func (h *heartbeatSender) stop() error {
-	h.cancel()
-	return h.wait()
-}
-
-// Wait for heartbeatSender to be stopped and returns any error.
-func (h *heartbeatSender) wait() error {
-	err := h.cg.Wait()
-	// We expect to see context cancelled when shutting down.
-	if errors.Is(err, context.Canceled) {
-		return nil
-	}
-	return err
-}
-
 // Start is part of the RowSource interface.
 func (sf *streamIngestionFrontier) Start(ctx context.Context) {
 	ctx = sf.StartInternal(ctx, streamIngestionFrontierProcName)
 	sf.metrics.RunningCount.Inc(1)
 	sf.input.Start(ctx)
-	sf.heartbeatSender.startHeartbeatLoop(ctx, timeutil.DefaultTimeSource{})
+	sf.heartbeatSender.Start(ctx, timeutil.DefaultTimeSource{})
 }
 
 // Next is part of the RowSource interface.
@@ -316,11 +207,11 @@ func (sf *streamIngestionFrontier) Next() (
 			// Send the latest persisted replicated time in the heartbeat to the source cluster
 			// as even with retries we will never request an earlier row than it, and
 			// the source cluster is free to clean up earlier data.
-		case sf.heartbeatSender.frontierUpdates <- sf.persistedReplicatedTime:
+		case sf.heartbeatSender.FrontierUpdates <- sf.persistedReplicatedTime:
 			// If heartbeatSender has error, it means remote has error, we want to
 			// stop the processor.
-		case <-sf.heartbeatSender.stoppedChan:
-			err := sf.heartbeatSender.wait()
+		case <-sf.heartbeatSender.StoppedChan:
+			err := sf.heartbeatSender.Wait()
 			if err != nil {
 				log.Errorf(sf.Ctx(), "heartbeat sender exited with error: %s", err)
 			}
@@ -342,8 +233,11 @@ func (sf *streamIngestionFrontier) close() {
 	}
 	defer sf.frontier.Release()
 
-	if err := sf.heartbeatSender.stop(); err != nil {
+	if err := sf.heartbeatSender.Stop(); err != nil {
 		log.Errorf(sf.Ctx(), "heartbeat sender exited with error: %s", err)
+	}
+	if err := sf.client.Close(sf.Ctx()); err != nil {
+		log.Errorf(sf.Ctx(), "client exited with error: %s", err)
 	}
 	if sf.InternalClose() {
 		sf.metrics.RunningCount.Dec(1)
