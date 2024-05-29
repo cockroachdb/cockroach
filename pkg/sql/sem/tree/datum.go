@@ -3549,7 +3549,14 @@ func (d *DGeography) Format(ctx *FmtCtx) {
 
 // Size implements the Datum interface.
 func (d *DGeography) Size() uintptr {
-	return d.Geography.SpatialObjectRef().MemSize()
+	return d.Geography.SpatialObjectRef().MemSize(false /* deterministic */)
+}
+
+// DeterministicMemSize returns size of this DGeography object that will not
+// depend on runtime conditions like pre-allocated slice capacity. This comes at
+// the expense of having less precise information.
+func (d *DGeography) DeterministicMemSize() uintptr {
+	return d.Geography.SpatialObjectRef().MemSize(true /* deterministic */)
 }
 
 // ToJSON converts the DGeography to JSON.
@@ -3676,7 +3683,14 @@ func (d *DGeometry) Format(ctx *FmtCtx) {
 
 // Size implements the Datum interface.
 func (d *DGeometry) Size() uintptr {
-	return d.Geometry.SpatialObjectRef().MemSize()
+	return d.Geometry.SpatialObjectRef().MemSize(false /* deterministic */)
+}
+
+// DeterministicMemSize returns size of this DGeometry object that will not
+// depend on runtime conditions like pre-allocated slice capacity. This comes at
+// the expense of having less precise information.
+func (d *DGeometry) DeterministicMemSize() uintptr {
+	return d.Geometry.SpatialObjectRef().MemSize(true /* deterministic */)
 }
 
 // ToJSON converts the DGeometry to JSON.
