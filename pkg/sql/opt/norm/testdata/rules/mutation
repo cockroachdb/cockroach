@@ -335,3 +335,12 @@ update t106663
            ├── 1 [as=a_new:13]
            ├── false [as=partial_index_put2:14]
            └── false [as=partial_index_del2:15]
+
+norm set=optimizer_use_lock_op_for_serializable=true expect=RemoveZeroCardLock
+SELECT a FROM t WHERE a = 1 AND a = 2 FOR UPDATE;
+----
+values
+ ├── columns: a:2!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(2)
