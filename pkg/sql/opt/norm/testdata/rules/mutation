@@ -335,3 +335,49 @@ update t106663
            ├── 1 [as=a_new:13]
            ├── false [as=partial_index_put2:14]
            └── false [as=partial_index_del2:15]
+
+norm set=optimizer_use_lock_op_for_serializable=true expect=RemoveZeroCardLock
+SELECT a FROM t WHERE a = 1 AND a = 2 FOR UPDATE;
+----
+values
+ ├── columns: a:2!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(2)
+
+norm set=optimizer_use_lock_op_for_serializable=true expect=RemoveZeroCardLock
+SELECT a FROM t WHERE a = 1 AND a = 2 FOR SHARE;
+----
+values
+ ├── columns: a:2!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(2)
+
+norm set=optimizer_use_lock_op_for_serializable=true expect-not=RemoveZeroCardLock
+SELECT a FROM t WHERE a = 1 FOR SHARE;
+----
+lock t
+ ├── columns: a:2!null  [hidden: k:1!null]
+ ├── locking: for-share
+ ├── volatile, mutations
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ └── select
+      ├── columns: k:1!null a:2!null
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan t
+      │    ├── columns: k:1!null a:2
+      │    ├── partial index predicates
+      │    │    ├── t_c_idx: filters
+      │    │    │    └── d:5 > 1 [outer=(5), constraints=(/5: [/2 - ]; tight)]
+      │    │    ├── t_e_idx: filters
+      │    │    │    ├── f:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+      │    │    │    └── g:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
+      │    │    └── t_d_idx: filters
+      │    │         └── c:4 > 1 [outer=(4), constraints=(/4: [/2 - ]; tight)]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── a:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]

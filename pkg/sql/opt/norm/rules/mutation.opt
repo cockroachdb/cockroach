@@ -44,3 +44,9 @@
     $fkChecks
     $simplifiedPrivate
 )
+
+# RemoveZeroCardLock removes lock operations when we know no rows will be locked.
+[RemoveZeroCardLock, Normalize]
+(Lock $rows:* & (HasZeroRows $rows))
+=>
+$rows
