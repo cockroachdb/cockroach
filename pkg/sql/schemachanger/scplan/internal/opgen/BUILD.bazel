@@ -26,6 +26,7 @@ go_library(
         "opgen_database_data.go",
         "opgen_database_region_config.go",
         "opgen_database_role_setting.go",
+        "opgen_database_zone_config.go",
         "opgen_enum_type.go",
         "opgen_enum_type_value.go",
         "opgen_foreign_key_constraint.go",

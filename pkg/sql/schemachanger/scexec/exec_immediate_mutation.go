@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -32,6 +33,7 @@ type immediateState struct {
 	withReset                  bool
 	sequencesToInit            []sequenceToInit
 	temporarySchemasToRegister map[descpb.ID]*temporarySchemaToRegister
+	zoneConfigsToUpdate        []zoneConfigToUpdate
 }
 
 type temporarySchemaToRegister struct {
@@ -49,6 +51,11 @@ type commentToUpdate struct {
 type sequenceToInit struct {
 	id       descpb.ID
 	startVal int64
+}
+
+type zoneConfigToUpdate struct {
+	id descpb.ID
+	zc zonepb.ZoneConfig
 }
 
 var _ scmutationexec.ImmediateMutationStateUpdater = (*immediateState)(nil)
@@ -129,6 +136,14 @@ func (s *immediateState) InitSequence(id descpb.ID, startVal int64) {
 		})
 }
 
+func (s *immediateState) UpdateZoneConfig(id descpb.ID, zc zonepb.ZoneConfig) {
+	s.zoneConfigsToUpdate = append(s.zoneConfigsToUpdate,
+		zoneConfigToUpdate{
+			id: id,
+			zc: zc,
+		})
+}
+
 func (s *immediateState) Reset() {
 	s.withReset = true
 }
@@ -194,6 +209,13 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 	for tempIdxId, tempIdxToRegister := range s.temporarySchemasToRegister {
 		c.InsertTemporarySchema(tempIdxToRegister.schemaName, tempIdxToRegister.parentID, tempIdxId)
 	}
+
+	for _, zc := range s.zoneConfigsToUpdate {
+		if err := c.UpdateZoneConfig(ctx, zc.id, zc.zc); err != nil {
+			return err
+		}
+	}
+
 	return c.Validate(ctx)
 }
 
