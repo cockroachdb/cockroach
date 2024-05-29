@@ -122,6 +122,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 			b.Header.MaxSpanRequestKeys = row.TableTruncateChunkSize
 			b.Header.LockTimeout = params.SessionData().LockTimeout
 			d.deleteSpans(params, b, spans)
+			log.VEventf(ctx, 2, "fast delete: processing %d spans", len(spans))
 			if err := params.p.txn.Run(ctx, b); err != nil {
 				return row.ConvertBatchError(ctx, d.desc, b)
 			}
@@ -143,6 +144,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		b := params.p.txn.NewBatch()
 		b.Header.LockTimeout = params.SessionData().LockTimeout
 		d.deleteSpans(params, b, spans)
+		log.VEventf(ctx, 2, "fast delete: processing %d spans and committing", len(spans))
 		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
 			return row.ConvertBatchError(ctx, d.desc, b)
 		}

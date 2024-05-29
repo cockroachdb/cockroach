@@ -1382,6 +1382,11 @@ func (w *workerCoordinator) performRequestAsync(
 			// unnecessary blocking (due to sequential evaluation of sub-batches
 			// by the DistSender). For the initial implementation it doesn't
 			// seem important though.
+
+			// Note that we don't add a separate log.VEventf here before calling
+			// Send since we create a separate tracing span for each async
+			// request which is sufficient to highlight where the handoff from
+			// SQL occurred.
 			br, pErr := w.txn.Send(ctx, ba)
 			if pErr != nil {
 				// TODO(yuzefovich): if err is
