@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -81,6 +82,9 @@ type ImmediateMutationStateUpdater interface {
 
 	// InitSequence initializes a sequence.
 	InitSequence(id descpb.ID, startVal int64)
+
+	// UpdateZoneConfig updates a zone config.
+	UpdateZoneConfig(id descpb.ID, zc zonepb.ZoneConfig)
 
 	// Reset schedules a reset of the in-txn catalog state
 	// to undo the modifications from earlier stages.

@@ -15,11 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -43,6 +45,8 @@ type BuildCtx interface {
 	TreeAnnotator
 	TreeContextBuilder
 	Telemetry
+	NodeStatusInfo
+	RegionProvider
 
 	// Add adds an absent element to the BuilderState, targeting PUBLIC.
 	Add(element scpb.Element)
@@ -60,6 +64,9 @@ type BuildCtx interface {
 
 	// Codec returns the codec for the current tenant.
 	Codec() keys.SQLCodec
+
+	// ZoneConfigGetter returns the zone config getter.
+	ZoneConfigGetter() scdecomp.ZoneConfigGetter
 }
 
 // ClusterAndSessionInfo provides general cluster and session info.
@@ -442,4 +449,21 @@ type TemporarySchemaProvider interface {
 	// TemporarySchemaName gets the name of the temporary schema for the current
 	// session.
 	TemporarySchemaName() string
+}
+
+// NodeStatusInfo provides access to observe node descriptors.
+type NodeStatusInfo interface {
+
+	// NodesStatusServer gives access to the NodesStatus service and is only
+	// available when running as a system tenant.
+	NodesStatusServer() *serverpb.OptionalNodesStatusServer
+}
+
+// RegionProvider abstracts the lookup of regions. It is used to implement
+// crdb_internal.regions, which ultimately drives `SHOW REGIONS` and the
+// logic in the commands to manipulate multi-region features.
+type RegionProvider interface {
+	// GetRegions provides access to the set of regions available to the
+	// current tenant.
+	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
 }

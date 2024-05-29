@@ -96,6 +96,8 @@ func Build(
 		TreeAnnotator:           an,
 		SchemaFeatureChecker:    dependencies.FeatureChecker(),
 		TemporarySchemaProvider: dependencies.TemporarySchemaProvider(),
+		NodesStatusInfo:         dependencies.NodesStatusInfo(),
+		RegionProvider:          dependencies.RegionProvider(),
 	}
 	scbuildstmt.Process(b, an.GetStatement())
 
@@ -420,6 +422,8 @@ type buildCtx struct {
 	scbuildstmt.TreeAnnotator
 	scbuildstmt.SchemaFeatureChecker
 	TemporarySchemaProvider
+	NodesStatusInfo
+	RegionProvider
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}
