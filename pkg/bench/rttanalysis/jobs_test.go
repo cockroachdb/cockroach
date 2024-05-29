@@ -64,6 +64,8 @@ func init() {
 		`INSERT INTO system.jobs(id, status, created, last_run, num_runs, job_type, claim_instance_id, claim_session_id) VALUES (3002, 'paused', now(), now(), 200, 'IMPORT',
 (SELECT id FROM system.sql_instances WHERE session_id IS NOT NULL ORDER BY id LIMIT 1),
 (SELECT session_id FROM system.sql_instances WHERE session_id IS NOT NULL ORDER BY id LIMIT 1))`,
+		`ANALYZE system.jobs`,
+		`ANALYZE system.job_info`,
 	}
 
 	cleanupQuery := "DELETE FROM system.jobs WHERE id >= 1000 AND id <= 4000; DELETE FROM system.job_info WHERE job_id >= 1000 AND job_id <= 4000"
