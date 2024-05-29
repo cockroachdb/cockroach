@@ -1,0 +1,9 @@
+/* setup */
+CREATE DATABASE db;
+SET CLUSTER SETTING sql.virtual_cluster.allow_declarative_schema_changer.enabled = true;
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 5, gc.ttlseconds = 100000;
+----
+Schema change plan for ALTER DATABASE ‹db› CONFIGURE ZONE USING ‹num_replicas› = ‹5›, ‹"gc.ttlseconds"› = ‹100000›;
+ └── execute 1 system table mutations transaction
