@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -45,19 +44,28 @@ type router interface {
 }
 
 // makeRouter creates a router. The router's init must be called before the
-// router can be started.
+// router can be started. The caller is responsible for creating and stopping
+// the passed in monitors.
 //
 // Pass-through routers are not supported; the higher layer is expected to elide
 // them.
 func makeRouter(
-	spec *execinfrapb.OutputRouterSpec, streams []execinfra.RowReceiver,
+	spec *execinfrapb.OutputRouterSpec,
+	streams []execinfra.RowReceiver,
+	memoryMonitors, diskMonitors []*mon.BytesMonitor,
 ) (router, error) {
 	if len(streams) == 0 {
 		return nil, errors.Errorf("no streams in router")
 	}
+	if len(streams) != len(memoryMonitors) || len(streams) != len(diskMonitors) {
+		return nil, errors.AssertionFailedf(
+			"incorrect number of monitors provided: %d streams, %d memory, %d disk",
+			len(streams), len(memoryMonitors), len(diskMonitors),
+		)
+	}
 
 	var rb routerBase
-	rb.setupStreams(spec, streams)
+	rb.setupStreams(spec, streams, memoryMonitors, diskMonitors)
 
 	switch spec.Type {
 	case execinfrapb.OutputRouterSpec_BY_HASH:
@@ -109,11 +117,8 @@ type routerOutput struct {
 	// memoryMonitor and diskMonitor are mu.rowContainer's monitors.
 	memoryMonitor, diskMonitor *mon.BytesMonitor
 
-	rowAlloc         rowenc.EncDatumRowAlloc
-	rowBufToPushFrom [routerRowBufSize]rowenc.EncDatumRow
-	// rowBufToPushFromMon and rowBufToPushFromAcc are the memory accounting
-	// infrastructure of rowBufToPushFrom.
-	rowBufToPushFromMon *mon.BytesMonitor
+	rowAlloc            rowenc.EncDatumRowAlloc
+	rowBufToPushFrom    [routerRowBufSize]rowenc.EncDatumRow
 	rowBufToPushFromAcc *mon.BoundAccount
 	// rowBufToPushFromRowSize stores the size of the row that we have
 	// accounted for when adding it to rowBufToPushFrom buffer in ith position.
@@ -239,8 +244,12 @@ func (rb *routerBase) aggStatus() execinfra.ConsumerStatus {
 	return execinfra.ConsumerStatus(atomic.LoadUint32(&rb.aggregatedStatus))
 }
 
+// setupStreams sets up all router outputs. The caller is responsible for
+// creating and stopping the passed in monitors.
 func (rb *routerBase) setupStreams(
-	spec *execinfrapb.OutputRouterSpec, streams []execinfra.RowReceiver,
+	spec *execinfrapb.OutputRouterSpec,
+	streams []execinfra.RowReceiver,
+	memoryMonitors, diskMonitors []*mon.BytesMonitor,
 ) {
 	rb.numNonDrainingStreams = int32(len(streams))
 	n := len(streams)
@@ -259,6 +268,8 @@ func (rb *routerBase) setupStreams(
 		ro.streamID = spec.Streams[i].StreamID
 		ro.mu.cond = sync.NewCond(&ro.mu.Mutex)
 		ro.mu.streamStatus = execinfra.NeedMoreRows
+		ro.memoryMonitor = memoryMonitors[i]
+		ro.diskMonitor = diskMonitors[i]
 	}
 }
 
@@ -275,30 +286,14 @@ func (rb *routerBase) init(
 	rb.processorID = processorID
 	rb.types = types
 	for i := range rb.outputs {
+		memAcc := flowCtx.Mon.MakeBoundAccount()
+		rb.outputs[i].rowBufToPushFromAcc = &memAcc
 		// This method must be called before we Start() so we don't need
 		// to take the mutex.
-		evalCtx := flowCtx.NewEvalCtx()
-		rb.outputs[i].memoryMonitor = execinfra.NewLimitedMonitor(
-			ctx, flowCtx.Mon, flowCtx,
-			redact.Sprintf("router-limited-%d", rb.outputs[i].streamID),
-		)
-		rb.outputs[i].diskMonitor = execinfra.NewMonitor(
-			ctx, flowCtx.DiskMonitor,
-			redact.Sprintf("router-disk-%d", rb.outputs[i].streamID),
-		)
-		// Note that the monitor is an unlimited one since we don't know how
-		// to fallback to disk if a memory budget error is encountered when
-		// we're popping rows from the row container into the row buffer.
-		rb.outputs[i].rowBufToPushFromMon = execinfra.NewMonitor(
-			ctx, flowCtx.Mon, redact.Sprintf("router-unlimited-%d", rb.outputs[i].streamID),
-		)
-		memAcc := rb.outputs[i].rowBufToPushFromMon.MakeBoundAccount()
-		rb.outputs[i].rowBufToPushFromAcc = &memAcc
-
 		rb.outputs[i].mu.rowContainer.Init(
 			nil, /* ordering */
 			types,
-			evalCtx,
+			flowCtx.NewEvalCtx(),
 			flowCtx.Cfg.TempStorage,
 			rb.outputs[i].memoryMonitor,
 			rb.outputs[i].diskMonitor,
@@ -406,9 +401,6 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 			ro.mu.Unlock()
 
 			ro.rowBufToPushFromAcc.Close(ctx)
-			ro.memoryMonitor.Stop(ctx)
-			ro.diskMonitor.Stop(ctx)
-			ro.rowBufToPushFromMon.Stop(ctx)
 		}(ctx, rb, &rb.outputs[i])
 	}
 }
