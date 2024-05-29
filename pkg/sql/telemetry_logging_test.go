@@ -538,7 +538,7 @@ func TestTelemetryLogging(t *testing.T) {
 
 					stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(tc.queryNoConstants, true, databaseName)
 
-					require.Equal(t, uint64(stmtFingerprintID), sampledQueryFromLog.StatementFingerprintID)
+					require.Equal(t, stmtFingerprintID.String(), sampledQueryFromLog.StatementFingerprintID)
 
 					maxFullScanRowsRe := regexp.MustCompile("\"MaxFullScanRowsEstimate\":[0-9]*")
 					foundFullScan := maxFullScanRowsRe.MatchString(e.Message)
