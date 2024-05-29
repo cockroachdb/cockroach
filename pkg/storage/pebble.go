@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -158,6 +159,14 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	"set to true to enable lazy ingestion of sstables",
 	util.ConstantWithMetamorphicTestBool(
 		"storage.ingest_as_flushable.enabled", true))
+
+var BlockLoadConcurrencyLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.block_load.concurrency_limit",
+	"maximum number of outstanding sstable block reads per store",
+	1000,
+	settings.IntWithMinimum(1),
+)
 
 // DO NOT set storage.single_delete.crash_on_invariant_violation.enabled or
 // storage.single_delete.crash_on_ineffectual.enabled to true.
@@ -932,6 +941,8 @@ type Pebble struct {
 	storeIDPebbleLog *base.StoreIDContainer
 	replayer         *replay.WorkloadCollector
 
+	blockLoadLimiter *quotapool.IntPool
+
 	singleDelLogEvery log.EveryN
 }
 
@@ -1187,6 +1198,21 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		opts.FS = encryptionEnv.FS
 	}
 
+	blockLoadLimiter := quotapool.NewIntPool("pebble.read-block-limiter", uint64(BlockLoadConcurrencyLimit.Get(&cfg.Settings.SV)))
+	BlockLoadConcurrencyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		blockLoadLimiter.UpdateCapacity(uint64(BlockLoadConcurrencyLimit.Get(&cfg.Settings.SV)))
+	})
+	opts.BeforeReadBlock = func(ctx context.Context) (done func(), _ error) {
+		a, err := blockLoadLimiter.Acquire(ctx, 1)
+		if err != nil {
+			return func() {}, err
+		}
+		// TODO(radu): this probably allocates.
+		return func() {
+			blockLoadLimiter.Release(a)
+		}, nil
+	}
+
 	opts.Logger = nil // Defensive, since LoggerAndTracer will be used.
 	if opts.LoggerAndTracer == nil {
 		opts.LoggerAndTracer = pebbleLogger{
@@ -1240,6 +1266,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		closer:            filesystemCloser,
 		onClose:           cfg.onClose,
 		replayer:          replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
+		blockLoadLimiter:  blockLoadLimiter,
 		singleDelLogEvery: log.Every(5 * time.Minute),
 	}
 	// In test builds, add a layer of VFS middleware that ensures users of an
@@ -1601,6 +1628,7 @@ func (p *Pebble) Close() {
 		handleErr(p.closer.Close())
 	}
 	handleErr(p.fileLock.Close())
+	p.blockLoadLimiter.Close("Pebble.Close")
 }
 
 // aggregateIterStats is propagated to all of an engine's iterators, aggregating
@@ -2085,6 +2113,7 @@ func (p *Pebble) GetMetrics() Metrics {
 		SingleDelIneffectualCount:        atomic.LoadInt64(&p.singleDelIneffectualCount),
 		SharedStorageReadBytes:           atomic.LoadInt64(&p.sharedBytesRead),
 		SharedStorageWriteBytes:          atomic.LoadInt64(&p.sharedBytesWritten),
+		BlockLoadsInProgress:             int64(p.blockLoadLimiter.Capacity() - p.blockLoadLimiter.ApproximateQuota()),
 	}
 	p.iterStats.Lock()
 	m.Iterator = p.iterStats.AggregatedIteratorStats
