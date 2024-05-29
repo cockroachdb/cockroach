@@ -92,6 +92,10 @@ func init() {
 type prRepo struct {
 	owner string
 	repo  string
+	// pushToOrigin tells if the PR branch should be pushed to the origin repo.
+	// This is required for the repos, where auto-merge is enabled in order to
+	// grant proper permissions to the corresponding GitHub Actions.
+	pushToOrigin bool
 	// what branch should be used as the PR base
 	branch         string
 	commitMessage  string
@@ -113,10 +117,15 @@ func (r prRepo) checkoutDir() string {
 }
 
 func (r prRepo) pushURL() string {
-	if token := os.Getenv("GH_TOKEN"); token != "" {
-		return fmt.Sprintf("https://%s:%s@github.com/%s/%s", r.githubUsername, token, r.githubUsername, r.repo)
+	pushOwner := r.githubUsername
+	if r.pushToOrigin {
+		pushOwner = r.owner
 	}
-	return fmt.Sprintf("git@github.com:%s/%s.git", r.githubUsername, r.repo)
+
+	if token := os.Getenv("GH_TOKEN"); token != "" {
+		return fmt.Sprintf("https://%s:%s@github.com/%s/%s", r.githubUsername, token, pushOwner, r.repo)
+	}
+	return fmt.Sprintf("git@github.com:%s/%s.git", pushOwner, r.repo)
 }
 
 func (r prRepo) clone() error {
@@ -455,6 +464,7 @@ func generateRepoList(
 		reposToWorkOn = append(reposToWorkOn, prRepo{
 			owner:          owner,
 			repo:           prefix + "homebrew-tap",
+			pushToOrigin:   true,
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
 			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
@@ -473,6 +483,7 @@ func generateRepoList(
 		reposToWorkOn = append(reposToWorkOn, prRepo{
 			owner:          owner,
 			repo:           prefix + "helm-charts",
+			pushToOrigin:   true,
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
 			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
