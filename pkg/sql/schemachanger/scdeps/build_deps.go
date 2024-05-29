@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -56,6 +58,7 @@ func NewBuilderDependencies(
 	referenceProviderFactory scbuild.ReferenceProviderFactory,
 	descIDGenerator eval.DescIDGenerator,
 	temporarySchemaProvider scbuild.TemporarySchemaProvider,
+	nodesStatusServer serverpb.OptionalNodesStatusServer,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:       clusterID,
@@ -76,6 +79,7 @@ func NewBuilderDependencies(
 		descIDGenerator:          descIDGenerator,
 		referenceProviderFactory: referenceProviderFactory,
 		temporarySchemaProvider:  temporarySchemaProvider,
+		nodesStatusServer:        nodesStatusServer,
 	}
 }
 
@@ -96,6 +100,7 @@ type buildDeps struct {
 	referenceProviderFactory scbuild.ReferenceProviderFactory
 	descIDGenerator          eval.DescIDGenerator
 	temporarySchemaProvider  scbuild.TemporarySchemaProvider
+	nodesStatusServer        serverpb.OptionalNodesStatusServer
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -360,6 +365,11 @@ func (d *buildDeps) ClusterSettings() *cluster.Settings {
 	return d.settings
 }
 
+// NodesStatusServer implements the scbuild.Dependencies interface.
+func (d *buildDeps) NodesStatusServer() serverpb.OptionalNodesStatusServer {
+	return d.nodesStatusServer
+}
+
 // Statements implements the scbuild.Dependencies interface.
 func (d *buildDeps) Statements() []string {
 	return d.statements
@@ -455,7 +465,7 @@ func (d *buildDeps) DescriptorCommentGetter() scbuild.CommentGetter {
 	return d.descsCollection
 }
 
-func (d *buildDeps) ZoneConfigGetter() scbuild.ZoneConfigGetter {
+func (d *buildDeps) ZoneConfigGetter() scdecomp.ZoneConfigGetter {
 	return &zoneConfigGetter{
 		txn:         d.txn,
 		descriptors: d.descsCollection,

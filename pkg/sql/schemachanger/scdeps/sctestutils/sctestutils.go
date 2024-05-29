@@ -102,6 +102,7 @@ func WithBuilderDependenciesFromTestServer(
 		refProviderFactory,
 		descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB()),
 		planner,
+		execCfg.NodesStatusServer,
 	))
 }
 

@@ -420,6 +420,8 @@ type buildCtx struct {
 	scbuildstmt.TreeAnnotator
 	scbuildstmt.SchemaFeatureChecker
 	TemporarySchemaProvider
+	NodesStatusInfo
+	RegionProvider
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}
