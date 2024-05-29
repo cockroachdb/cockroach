@@ -3451,22 +3451,22 @@ Support status: [reserved](#support-status)
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| errors_by_node_id | [DownloadSpanResponse.ErrorsByNodeIdEntry](#cockroach.server.serverpb.DownloadSpanResponse-cockroach.server.serverpb.DownloadSpanResponse.ErrorsByNodeIdEntry) | repeated | ErrorsByNodeID contains any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+| errors | [DownloadSpanResponse.ErrorsEntry](#cockroach.server.serverpb.DownloadSpanResponse-cockroach.server.serverpb.DownloadSpanResponse.ErrorsEntry) | repeated |  | [reserved](#support-status) |
 
 
 
 
 
 
-<a name="cockroach.server.serverpb.DownloadSpanResponse-cockroach.server.serverpb.DownloadSpanResponse.ErrorsByNodeIdEntry"></a>
-#### DownloadSpanResponse.ErrorsByNodeIdEntry
+<a name="cockroach.server.serverpb.DownloadSpanResponse-cockroach.server.serverpb.DownloadSpanResponse.ErrorsEntry"></a>
+#### DownloadSpanResponse.ErrorsEntry
 
 
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | key | [int32](#cockroach.server.serverpb.DownloadSpanResponse-int32) |  |  |  |
-| value | [string](#cockroach.server.serverpb.DownloadSpanResponse-string) |  |  |  |
+| value | [cockroach.errorspb.EncodedError](#cockroach.server.serverpb.DownloadSpanResponse-cockroach.errorspb.EncodedError) |  |  |  |
 
 
 

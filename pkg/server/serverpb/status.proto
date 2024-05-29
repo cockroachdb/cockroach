@@ -626,10 +626,10 @@ message DownloadSpanRequest {
 }
 
 message DownloadSpanResponse {
-  // ErrorsByNodeID contains any errors that occurred during fan-out calls to other nodes.
-  map<int32, string> errors_by_node_id = 1 [
+  reserved 1;
+
+  map<int32, errorspb.EncodedError> errors = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
-    (gogoproto.customname) = "ErrorsByNodeID",
     (gogoproto.nullable) = false
   ];
 }

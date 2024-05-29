@@ -342,6 +342,7 @@ go_library(
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_cmux//:cmux",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errorspb",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//:pebble",
