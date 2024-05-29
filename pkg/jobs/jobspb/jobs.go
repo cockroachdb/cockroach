@@ -44,3 +44,22 @@ func (fes RestoreFrontierEntries) Equal(fes2 RestoreFrontierEntries) bool {
 	}
 	return true
 }
+
+// RestoreFrontierEntries is a slice of RestoreFrontierEntries.
+// TODO(msbutler): use generics and combine with above.
+type ResolvedSpanEntries []ResolvedSpan
+
+func (fes ResolvedSpanEntries) Equal(fes2 ResolvedSpanEntries) bool {
+	if len(fes) != len(fes2) {
+		return false
+	}
+	for i := range fes {
+		if !fes[i].Span.Equal(fes2[i].Span) {
+			return false
+		}
+		if !fes[i].Timestamp.Equal(fes2[i].Timestamp) {
+			return false
+		}
+	}
+	return true
+}
