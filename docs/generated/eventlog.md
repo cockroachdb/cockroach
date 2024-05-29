@@ -2984,7 +2984,6 @@ contains common SQL event/execution details.
 | `Database` | Name of the database that initiated the query. | no |
 | `StatementID` | Statement ID of the query. | no |
 | `TransactionID` | Transaction ID of the query. | no |
-| `StatementFingerprintID` | Statement fingerprint ID of the query. | no |
 | `MaxFullScanRowsEstimate` | Maximum number of rows scanned by a full scan, as estimated by the optimizer. | no |
 | `TotalScanRowsEstimate` | Total number of rows read by all scans in the query, as estimated by the optimizer. | no |
 | `OutputRowsEstimate` | The number of rows output by the query, as estimated by the optimizer. | no |
@@ -3047,7 +3046,9 @@ contains common SQL event/execution details.
 | `MvccRangeKeyContainedPoints` | RangeKeyContainedPoints collects the count of point keys encountered within the bounds of a range key. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
 | `MvccRangeKeySkippedPoints` | RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that were skipped during iteration due to range-key masking. For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
 | `SchemaChangerMode` | SchemaChangerMode is the mode that was used to execute the schema change, if any. | no |
-| `SQLInstanceIDs` | SQLInstanceIDs is a list of all the SQL instance id used in this statements execution. | no |
+| `SQLInstanceIDs` | SQLInstanceIDs is a list of all the SQL instances used in this statement's execution. | no |
+| `KVNodeIDs` | KVNodeIDs is a list of all the KV nodes used in this statement's execution. | no |
+| `StatementFingerprintID` | Statement fingerprint ID of the query. | no |
 
 
 #### Common fields
@@ -3086,7 +3087,6 @@ An event of type `sampled_transaction` is the event logged to telemetry at the e
 | `TxnCounter` | TxnCounter is the sequence number of the SQL transaction inside its session. | no |
 | `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
 | `TransactionID` | TransactionID is the id of the transaction. | no |
-| `TransactionFingerprintID` | TransactionFingerprintID is the fingerprint ID of the transaction. This can be used to find the transaction in the console. | no |
 | `Committed` | Committed indicates if the transaction committed successfully. We want to include this value even if it is false. | no |
 | `ImplicitTxn` | ImplicitTxn indicates if the transaction was an implicit one. We want to include this value even if it is false. | no |
 | `StartTimeUnixNanos` | StartTimeUnixNanos is the time the transaction was started. Expressed as unix time in nanoseconds. | no |
@@ -3096,7 +3096,6 @@ An event of type `sampled_transaction` is the event logged to telemetry at the e
 | `ErrorText` | ErrorText is the text of the error if any. | partially |
 | `NumRetries` | NumRetries is the number of time when the txn was retried automatically by the server. | no |
 | `LastAutoRetryReason` | LastAutoRetryReason is a string containing the reason for the last automatic retry. | partially |
-| `StatementFingerprintIDs` | StatementFingerprintIDs is an array of statement fingerprint IDs belonging to this transaction. | yes |
 | `NumRows` | NumRows is the total number of rows returned across all statements. | no |
 | `RetryLatNanos` | RetryLatNanos is the amount of time spent retrying the transaction. | no |
 | `CommitLatNanos` | CommitLatNanos is the amount of time spent committing the transaction after all statement operations. | no |
@@ -3106,6 +3105,8 @@ An event of type `sampled_transaction` is the event logged to telemetry at the e
 | `RowsWritten` | RowsWritten is the number of rows written to disk. | no |
 | `SampledExecStats` | SampledExecStats is a nested field containing execution statistics. This field will be omitted if the stats were not sampled. | yes |
 | `SkippedTransactions` | SkippedTransactions is the number of transactions that were skipped as part of sampling prior to this one. We only count skipped transactions when telemetry logging is enabled and the sampling mode is set to "transaction". | no |
+| `TransactionFingerprintID` | TransactionFingerprintID is the fingerprint ID of the transaction. This can be used to find the transaction in the console. | no |
+| `StatementFingerprintIDs` | StatementFingerprintIDs is an array of statement fingerprint IDs belonging to this transaction. | no |
 
 
 #### Common fields
