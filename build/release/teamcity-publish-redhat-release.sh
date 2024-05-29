@@ -30,6 +30,12 @@ if [[ -z "$build_name" ]] ; then
     echo "Unsupported version \"${NAME}\". Must be of the format \"vMAJOR.MINOR.PATCH\"."
     exit 0
 fi
+
+PUBLISH_LATEST=
+if is_latest "$build_name"; then
+  PUBLISH_LATEST=true
+fi
+
 # Hard coded release number used only by the RedHat images
 rhel_release=1
 rhel_project_id=5e61ea74fe2231a0c2860382

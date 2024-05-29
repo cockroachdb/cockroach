@@ -14,6 +14,11 @@ if [[ $version == *"-"* ]]; then
   exit 0
 fi
 
+PUBLISH_LATEST=
+if is_latest "$version"; then
+  PUBLISH_LATEST=true
+fi
+
 # Hard coded release number used only by the RedHat images
 rhel_release=1
 rhel_project_id=5e61ea74fe2231a0c2860382

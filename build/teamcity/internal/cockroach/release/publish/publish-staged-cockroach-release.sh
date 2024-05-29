@@ -24,6 +24,11 @@ if ! echo "${version}" | grep -E -o '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9
   exit 1
 fi
 
+PUBLISH_LATEST=
+if is_latest "$version"; then
+  PUBLISH_LATEST=true
+fi
+
 release_branch=$(echo "${version}" | grep -E -o '^v[0-9]+\.[0-9]+')
 
 if [[ -z "${DRY_RUN}" ]] ; then

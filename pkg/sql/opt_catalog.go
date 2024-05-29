@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -572,7 +573,7 @@ func (oc *optCatalog) dataSourceForTable(
 		return ds, nil
 	}
 
-	ds, err := newOptTable(desc, oc.codec(), tableStats, zoneConfig)
+	ds, err := newOptTable(ctx, desc, oc.codec(), tableStats, zoneConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -775,6 +776,7 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
+	ctx context.Context,
 	desc catalog.TableDescriptor,
 	codec keys.SQLCodec,
 	stats []*stats.TableStatistic,
@@ -1083,7 +1085,7 @@ func newOptTable(
 		n := 0
 		for i := range stats {
 			// We skip any stats that have columns that don't exist in the table anymore.
-			if ok, err := ot.stats[n].init(ot, stats[i]); err != nil {
+			if ok, err := ot.stats[n].init(ctx, ot, stats[i]); err != nil {
 				return nil, err
 			} else if ok {
 				n++
@@ -1783,15 +1785,40 @@ type optTableStat struct {
 
 var _ cat.TableStatistic = &optTableStat{}
 
-func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool, _ error) {
+func (os *optTableStat) init(
+	ctx context.Context, tab *optTable, stat *stats.TableStatistic,
+) (ok bool, _ error) {
 	os.stat = stat
 	os.columnOrdinals = make([]int, len(stat.ColumnIDs))
 	for i, c := range stat.ColumnIDs {
 		var ok bool
 		os.columnOrdinals[i], ok = tab.colMap.Get(c)
 		if !ok {
-			// Column not in table (this is possible if the column was removed since
+			// Column not in table (this is expected if the column was removed since
 			// the statistic was calculated).
+			return false, nil
+		}
+	}
+
+	// Verify that histogram column type matches table column type.
+	// TODO(49698): When we support multi-column histograms this check will need
+	// adjustment.
+	if len(os.columnOrdinals) == 1 {
+		col := tab.getCol(os.columnOrdinals[0])
+		createdAt := string(tree.PGWireFormatTimestamp(stat.CreatedAt, nil, nil))
+		if err := stat.HistogramData.TypeCheck(
+			col.GetType(), string(tab.Name()), col.GetName(), createdAt,
+		); err != nil {
+			// Column type in the histogram differs from column type in the
+			// table. This is only possible if we somehow re-used the same column ID
+			// during an ALTER TABLE statement, which we shouldn't.
+			if buildutil.CrdbTestBuild {
+				return false, errors.NewAssertionErrorWithWrappedErrf(
+					err, "type check failed while initializing stat %d", stat.StatisticID,
+				)
+			}
+			// For release builds, skip over the stat and log a warning.
+			log.Warningf(ctx, "skipping stat %d due to failed type check: %v", stat.StatisticID, err)
 			return false, nil
 		}
 	}
