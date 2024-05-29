@@ -59,7 +59,7 @@ granter adjust-tokens=+0B
 print
 ----
 physical-stats: work-count=4 written-bytes=4B ingested-bytes=0B
-[regular work queue]: len(tenant-heap)=2 top-tenant=t2
+[regular work queue]: len(tenant-heap)=2 top-tenant=t1
  tenant=t1 weight=1 fifo-threshold=low-pri used=1B
   [0: pri=normal-pri create-time=1.002µs size=1B range=r1 origin=n1 log-position=4/21]
  tenant=t2 weight=1 fifo-threshold=low-pri used=1B
