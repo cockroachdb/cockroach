@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { createSelector } from "@reduxjs/toolkit";
-import { DatabaseDetailsPageDataTable } from "src/databaseDetailsPage";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import { DatabaseDetailsPageDataTable } from "src/databaseDetailsPage";
 
 import {
   DatabaseDetailsSpanStatsState,

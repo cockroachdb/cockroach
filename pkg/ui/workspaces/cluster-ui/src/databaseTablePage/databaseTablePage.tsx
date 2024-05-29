@@ -13,11 +13,12 @@ import { Col, Row, Tabs, Tooltip } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
 import "antd/lib/tabs/style";
+import "antd/lib/tooltip/style";
 import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
-import classnames from "classnames/bind";
-import "antd/lib/tooltip/style";
 import { Heading } from "@cockroachlabs/ui-components";
+import { Moment } from "moment-timezone";
+
 import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
 import { SqlBox } from "src/sql";
@@ -38,7 +39,6 @@ import {
 } from "src/util";
 import { commonStyles } from "src/common";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
-import { Moment } from "moment-timezone";
 
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CockroachCloudContext } from "../contexts";
@@ -71,7 +71,7 @@ import {
 import styles from "./databaseTablePage.module.scss";
 
 const cx = classNames.bind(styles);
-const booleanSettingCx = classnames.bind(booleanSettingStyles);
+const booleanSettingCx = classNames.bind(booleanSettingStyles);
 
 const { TabPane } = Tabs;
 

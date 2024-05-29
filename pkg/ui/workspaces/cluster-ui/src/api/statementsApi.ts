@@ -9,6 +9,9 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
+import moment from "moment-timezone";
+
 import { fetchData } from "src/api/fetchData";
 import {
   FixFingerprintHexValue,
@@ -17,8 +20,6 @@ import {
   propsToQueryString,
   stringToTimestamp,
 } from "src/util";
-import Long from "long";
-import moment from "moment-timezone";
 
 import { AggregateStatistics } from "../statementsTable";
 const STATEMENTS_PATH = "_status/combinedstmts";

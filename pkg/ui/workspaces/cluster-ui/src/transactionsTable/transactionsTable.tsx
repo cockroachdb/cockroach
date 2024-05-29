@@ -10,6 +10,8 @@
 
 import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import classNames from "classnames/bind";
+
 import {
   FixFingerprintHexValue,
   Count,
@@ -19,7 +21,6 @@ import {
   appNamesAttr,
   propsToQueryString,
 } from "src/util";
-import classNames from "classnames/bind";
 import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
 
 import {

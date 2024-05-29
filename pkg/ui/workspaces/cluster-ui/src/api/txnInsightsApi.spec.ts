@@ -101,7 +101,7 @@ describe("test txn insights api functions", () => {
           },
         ],
         execType: InsightExecEnum.TRANSACTION,
-        insightName: InsightNameEnum.highContention,
+        insightName: InsightNameEnum.HIGH_CONTENTION,
       },
     },
     {
@@ -148,7 +148,7 @@ describe("test txn insights api functions", () => {
           },
         ],
         execType: InsightExecEnum.TRANSACTION,
-        insightName: InsightNameEnum.highContention,
+        insightName: InsightNameEnum.HIGH_CONTENTION,
       },
     },
     {
@@ -204,7 +204,7 @@ describe("test txn insights api functions", () => {
           },
         ],
         execType: InsightExecEnum.TRANSACTION,
-        insightName: InsightNameEnum.highContention,
+        insightName: InsightNameEnum.HIGH_CONTENTION,
       },
     },
   ] as TxnContentionDetailsTests[])(

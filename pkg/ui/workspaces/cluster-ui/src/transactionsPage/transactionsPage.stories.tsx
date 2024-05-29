@@ -11,7 +11,9 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { MemoryRouter } from "react-router-dom";
-import { cloneDeep, extend, noop } from "lodash";
+import cloneDeep from "lodash/cloneDeep";
+import extend from "lodash/extend";
+import noop from "lodash/noop";
 
 import { RequestError } from "../util";
 import { RequestState, SqlStatsResponse, SqlStatsSortOptions } from "../api";

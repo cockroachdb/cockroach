@@ -12,6 +12,9 @@ import React from "react";
 import { Link } from "react-router-dom";
 import classnames from "classnames/bind";
 import { Button, Icon, InlineAlert } from "@cockroachlabs/ui-components";
+import moment from "moment-timezone";
+import classNames from "classnames/bind";
+
 import { Button as CancelButton } from "src/button";
 import { SummaryCard } from "src/summaryCard";
 import {
@@ -26,9 +29,7 @@ import {
   TimeScaleDropdown,
 } from "src/timeScaleDropdown";
 import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
-import moment from "moment-timezone";
 import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
-import classNames from "classnames/bind";
 
 import { DATE_FORMAT_24_TZ } from "../../util";
 import { Timestamp } from "../../timestamp";

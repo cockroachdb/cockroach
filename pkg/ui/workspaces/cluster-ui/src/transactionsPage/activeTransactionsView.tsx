@@ -11,6 +11,9 @@
 import React, { useEffect, useState } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import moment, { Moment } from "moment-timezone";
+
 import {
   ISortedTablePagination,
   SortSetting,
@@ -30,9 +33,7 @@ import { Pagination } from "src/pagination";
 import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { getActiveTransactionFiltersFromURL } from "src/queryFilter/utils";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 import { RefreshControl } from "src/activeExecutions/refreshControl";
-import moment, { Moment } from "moment-timezone";
 
 import {
   filterActiveTransactions,

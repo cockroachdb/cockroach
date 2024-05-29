@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { chain, orderBy } from "lodash";
+import orderBy from "lodash/orderBy";
+import groupBy from "lodash/groupBy";
+import mapValues from "lodash/mapValues";
 import moment from "moment-timezone";
 
 import { AppState } from "../reducers";
@@ -33,14 +35,15 @@ export const selectDiagnosticsReportsPerStatement = createSelector(
   selectStatementDiagnosticsReports,
   (
     diagnosticsReports: StatementDiagnosticsReport[],
-  ): StatementDiagnosticsDictionary =>
-    chain(diagnosticsReports)
-      .groupBy(diagnosticsReport => diagnosticsReport.statement_fingerprint)
-      // Perform DESC sorting to get latest report on top
-      .mapValues(diagnostics =>
-        orderBy(diagnostics, [d => moment(d.requested_at).unix()], ["desc"]),
-      )
-      .value(),
+  ): StatementDiagnosticsDictionary => {
+    const diagnosticsPerFingerprint = groupBy(
+      diagnosticsReports,
+      diagnosticsReport => diagnosticsReport.statement_fingerprint,
+    );
+    return mapValues(diagnosticsPerFingerprint, diagnostics =>
+      orderBy(diagnostics, [d => moment(d.requested_at).unix()], ["desc"]),
+    );
+  },
 );
 
 export const selectDiagnosticsReportsByStatementFingerprint = createSelector(

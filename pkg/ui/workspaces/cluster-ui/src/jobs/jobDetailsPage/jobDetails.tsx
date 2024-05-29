@@ -17,6 +17,9 @@ import "antd/lib/tabs/style";
 import Long from "long";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
+import classNames from "classnames/bind";
+import moment from "moment-timezone";
+
 import { JobRequest, JobResponse } from "src/api/jobsApi";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
@@ -33,10 +36,7 @@ import { JobStatusCell } from "src/jobs/util/jobStatusCell";
 import { commonStyles } from "src/common";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import jobStyles from "src/jobs/jobs.module.scss";
-import classNames from "classnames/bind";
-import moment from "moment-timezone";
 import { CockroachCloudContext } from "src/contexts";
-import long from "long";
 import { UIConfigState } from "src/store";
 
 import {
@@ -77,7 +77,7 @@ export interface JobDetailsDispatchProps {
   refreshExecutionDetailFiles: (
     req: ListJobProfilerExecutionDetailsRequest,
   ) => void;
-  onRequestExecutionDetails: (jobID: long) => void;
+  onRequestExecutionDetails: (jobID: Long) => void;
   refreshUserSQLRoles: () => void;
 }
 
@@ -87,7 +87,7 @@ export interface JobDetailsState {
 
 export type JobDetailsProps = JobDetailsStateProps &
   JobDetailsDispatchProps &
-  RouteComponentProps<unknown>;
+  RouteComponentProps;
 
 export class JobDetails extends React.Component<
   JobDetailsProps,
@@ -299,7 +299,7 @@ export class JobDetails extends React.Component<
                     <Col className="gutter-row" span={24}>
                       <SqlBox
                         value={job?.description ?? "Job not found."}
-                        size={SqlBoxSize.custom}
+                        size={SqlBoxSize.CUSTOM}
                         format={true}
                       />
                     </Col>

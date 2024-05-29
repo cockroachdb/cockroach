@@ -10,6 +10,7 @@
 
 import { createAction } from "@reduxjs/toolkit";
 import { all, put, takeEvery } from "redux-saga/effects";
+
 import { actions as terminateQueryActions } from "src/store/terminateQuery/terminateQuery.reducer";
 
 export const notificationAction = createAction(

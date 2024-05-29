@@ -10,8 +10,9 @@
 
 import React from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { ColumnDescriptor } from "src/sortedtable";
 import { Link } from "react-router-dom";
+
+import { ColumnDescriptor } from "src/sortedtable";
 import { capitalize, DATE_FORMAT, Duration } from "src/util";
 
 import { Timestamp, Timezone } from "../timestamp";

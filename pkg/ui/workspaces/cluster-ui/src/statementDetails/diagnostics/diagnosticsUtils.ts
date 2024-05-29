@@ -8,9 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
+
 import { TimeScale, toDateRange } from "src/timeScaleDropdown";
 import { DiagnosticStatuses } from "src/statementsDiagnostics";
-import moment from "moment-timezone";
 
 import { StatementDiagnosticsReport } from "../../api";
 

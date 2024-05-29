@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
-import { StmtInsightsReq, getStmtInsightsApi } from "src/api/stmtInsightsApi";
 import { PayloadAction } from "@reduxjs/toolkit";
+
+import { StmtInsightsReq, getStmtInsightsApi } from "src/api/stmtInsightsApi";
 
 import { actions } from "./statementInsights.reducer";
 

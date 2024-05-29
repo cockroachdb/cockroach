@@ -13,8 +13,9 @@ import { assert } from "chai";
 import { mount, ReactWrapper } from "enzyme";
 import { MemoryRouter } from "react-router-dom";
 import { Button } from "@cockroachlabs/ui-components";
-import { TestStoreProvider } from "src/test-utils";
 import moment from "moment-timezone";
+
+import { TestStoreProvider } from "src/test-utils";
 import { SortedTable } from "src/sortedtable";
 import { TimeScale } from "src/timeScaleDropdown";
 

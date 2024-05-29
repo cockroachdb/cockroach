@@ -13,13 +13,14 @@ import { Button, Dropdown } from "antd";
 import "antd/lib/button/style";
 import "antd/lib/dropdown/style";
 import moment, { Moment } from "moment-timezone";
+import classNames from "classnames/bind";
+
 import { DateRangeMenu } from "src/dateRangeMenu";
 import { CaretDown } from "src/icon/caretDown";
-import classNames from "classnames/bind";
+import { Timezone } from "src/timestamp";
 
 import styles from "./rangeSelector.module.scss";
 import { TimeWindow } from "./timeScaleTypes";
-import { Timezone } from "src/timestamp";
 
 const cx = classNames.bind(styles);
 

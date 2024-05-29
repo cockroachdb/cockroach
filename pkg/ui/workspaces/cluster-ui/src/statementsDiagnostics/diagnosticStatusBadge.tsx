@@ -10,9 +10,10 @@
 
 import React from "react";
 import classNames from "classnames/bind";
+import { Tooltip } from "@cockroachlabs/ui-components";
+
 import { Badge } from "src/badge";
 import { Anchor } from "src/anchor";
-import { Tooltip } from "@cockroachlabs/ui-components";
 import { statementDiagnostics } from "src/util";
 
 import { DiagnosticStatuses } from "./diagnosticStatuses";

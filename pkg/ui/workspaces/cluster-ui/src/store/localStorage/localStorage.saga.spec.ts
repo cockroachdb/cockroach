@@ -9,11 +9,12 @@
 // licenses/APL.txt.
 
 import { expectSaga, testSaga } from "redux-saga-test-plan";
+import { takeEvery, takeLatest } from "redux-saga/effects";
+
 import { actions as stmtInsightActions } from "src/store/insights/statementInsights/statementInsights.reducer";
 import { actions as txnInsightActions } from "src/store/insights/transactionInsights/transactionInsights.reducer";
 import { actions as sqlStatsActions } from "src/store/sqlStats/sqlStats.reducer";
 import { actions as txnStatsActions } from "src/store/transactionStats";
-import { takeEvery, takeLatest } from "redux-saga/effects";
 
 import { defaultTimeScaleSelected } from "../../timeScaleDropdown";
 

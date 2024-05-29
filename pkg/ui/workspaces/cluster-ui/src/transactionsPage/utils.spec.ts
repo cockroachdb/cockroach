@@ -30,15 +30,18 @@ type Transaction =
 describe("getStatementsByFingerprintId", () => {
   it("filters statements by fingerprint id", () => {
     const selectedStatements = getStatementsByFingerprintId(
-      [Long.fromInt(4104049045071304794), Long.fromInt(3334049045071304794)],
       [
-        { id: Long.fromInt(4104049045071304794) },
-        { id: Long.fromInt(5554049045071304794) },
+        Long.fromString("4104049045071304794"),
+        Long.fromString("3334049045071304794"),
+      ],
+      [
+        { id: Long.fromString("4104049045071304794") },
+        { id: Long.fromString("5554049045071304794") },
       ],
     );
     assert.lengthOf(selectedStatements, 1);
     assert.isTrue(
-      selectedStatements[0].id.eq(Long.fromInt(4104049045071304794)),
+      selectedStatements[0].id.eq(Long.fromString("4104049045071304794")),
     );
   });
 });
@@ -261,7 +264,7 @@ describe("statementFingerprintIdsToText", () => {
   it("translate statement fingerprint IDs into queries", () => {
     const statements = [
       {
-        id: Long.fromInt(4104049045071304794),
+        id: Long.fromString("4104049045071304794"),
         key: {
           key_data: {
             query: "SELECT _",
@@ -269,7 +272,7 @@ describe("statementFingerprintIdsToText", () => {
         },
       },
       {
-        id: Long.fromInt(5104049045071304794),
+        id: Long.fromString("5104049045071304794"),
         key: {
           key_data: {
             query: "SELECT _, _",
@@ -278,10 +281,10 @@ describe("statementFingerprintIdsToText", () => {
       },
     ];
     const statementFingerprintIds = [
-      Long.fromInt(4104049045071304794),
-      Long.fromInt(5104049045071304794),
-      Long.fromInt(4104049045071304794),
-      Long.fromInt(4104049045071304794),
+      Long.fromString("4104049045071304794"),
+      Long.fromString("5104049045071304794"),
+      Long.fromString("4104049045071304794"),
+      Long.fromString("4104049045071304794"),
     ];
 
     assert.equal(

@@ -7,11 +7,14 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import { Tooltip } from "@cockroachlabs/ui-components";
-import { isEqual, map } from "lodash";
 import React from "react";
-import { Link } from "react-router-dom";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import { Nodes, MagnifyingGlass } from "@cockroachlabs/icons";
+import classNames from "classnames/bind";
+import { Link } from "react-router-dom";
+import map from "lodash/map";
+import isEqual from "lodash/isEqual";
+
 import { Anchor } from "src/anchor";
 import { Schedule, Schedules } from "src/api/schedulesApi";
 import { EmptyTable } from "src/empty";
@@ -19,7 +22,6 @@ import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import { dropSchedules, pauseSchedules, resumeSchedules } from "src/util/docs";
 import { DATE_FORMAT } from "src/util/format";
-import classNames from "classnames/bind";
 
 import styles from "../schedules.module.scss";
 import { Timestamp, Timezone } from "../../timestamp";
@@ -294,7 +296,7 @@ export class ScheduleTable extends React.Component<
         }),
       )
     ) {
-      this.setState((prevState: Readonly<any>) => {
+      this.setState((prevState: Readonly<ScheduleTableState>) => {
         return {
           pagination: {
             ...prevState.pagination,

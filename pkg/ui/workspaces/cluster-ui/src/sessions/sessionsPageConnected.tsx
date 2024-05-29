@@ -10,16 +10,17 @@
 
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
+import { createSelector } from "reselect";
+import { Dispatch } from "redux";
+
 import { analyticsActions, AppState } from "src/store";
 import { SessionsState, actions as sessionsActions } from "src/store/sessions";
-import { createSelector } from "reselect";
 import { actions as localStorageActions } from "src/store/localStorage";
 import {
   actions as terminateQueryActions,
   ICancelQueryRequest,
   ICancelSessionRequest,
 } from "src/store/terminateQuery";
-import { Dispatch } from "redux";
 
 import { Filters } from "../queryFilter";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";

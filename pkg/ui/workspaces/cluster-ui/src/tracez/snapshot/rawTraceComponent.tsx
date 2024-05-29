@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { GetTraceResponse } from "src/api";
 import Long from "long";
-import { Loading } from "src/loading";
 import React, { useEffect } from "react";
 import classNames from "classnames/bind";
+
+import { Loading } from "src/loading";
+import { GetTraceResponse } from "src/api";
 
 import styles from "../snapshot.module.scss";
 const cx = classNames.bind(styles);

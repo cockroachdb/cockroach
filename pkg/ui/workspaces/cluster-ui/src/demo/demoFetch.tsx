@@ -10,6 +10,7 @@
 
 import React from "react";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { fetchData } from "src/api";
 
 type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
