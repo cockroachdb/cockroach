@@ -942,7 +942,7 @@ func (pb *ProcessorBaseNoHelper) ConsumerClosed() {
 func NewMonitor(
 	ctx context.Context, parent *mon.BytesMonitor, name redact.RedactableString,
 ) *mon.BytesMonitor {
-	monitor := mon.NewMonitorInheritWithLimit(name, 0 /* limit */, parent)
+	monitor := mon.NewMonitorInheritWithLimit(name, 0 /* limit */, parent, false /* longLiving */)
 	monitor.StartNoReserved(ctx, parent)
 	return monitor
 }
@@ -956,7 +956,7 @@ func NewMonitor(
 func NewLimitedMonitor(
 	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name redact.RedactableString,
 ) *mon.BytesMonitor {
-	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(flowCtx), parent)
+	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(flowCtx), parent, false /* longLiving */)
 	limitedMon.StartNoReserved(ctx, parent)
 	return limitedMon
 }
@@ -971,7 +971,7 @@ func NewLimitedMonitorWithLowerBound(
 	if memoryLimit < minMemoryLimit {
 		memoryLimit = minMemoryLimit
 	}
-	limitedMon := mon.NewMonitorInheritWithLimit(name, memoryLimit, flowCtx.Mon)
+	limitedMon := mon.NewMonitorInheritWithLimit(name, memoryLimit, flowCtx.Mon, false /* longLiving */)
 	limitedMon.StartNoReserved(ctx, flowCtx.Mon)
 	return limitedMon
 }

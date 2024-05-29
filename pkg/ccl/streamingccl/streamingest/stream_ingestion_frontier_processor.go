@@ -337,6 +337,9 @@ func (sf *streamIngestionFrontier) MoveToDrainingAndLogError(err error) {
 }
 
 func (sf *streamIngestionFrontier) close() {
+	if sf.Closed {
+		return
+	}
 	defer sf.frontier.Release()
 
 	if err := sf.heartbeatSender.stop(); err != nil {

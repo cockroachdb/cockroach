@@ -86,9 +86,10 @@ func NewServer(
 			// Note that we don't use 'sql.mem.distsql.*' metrics here since
 			// that would double count them with the 'flow' monitor in
 			// setupFlow.
-			CurCount: nil,
-			MaxHist:  nil,
-			Settings: cfg.Settings,
+			CurCount:   nil,
+			MaxHist:    nil,
+			Settings:   cfg.Settings,
+			LongLiving: true,
 		}),
 	}
 	ds.memMonitor.StartNoReserved(ctx, cfg.ParentMemoryMonitor)
@@ -262,10 +263,11 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	monitor = mon.NewMonitor(mon.Options{
-		Name:     "flow " + redact.RedactableString(req.Flow.FlowID.Short()),
-		CurCount: ds.Metrics.CurBytesCount,
-		MaxHist:  ds.Metrics.MaxBytesHist,
-		Settings: ds.Settings,
+		Name:       "flow " + redact.RedactableString(req.Flow.FlowID.Short()),
+		CurCount:   ds.Metrics.CurBytesCount,
+		MaxHist:    ds.Metrics.MaxBytesHist,
+		Settings:   ds.Settings,
+		LongLiving: localState.MarkFlowMonitorAsLongLiving,
 	})
 	monitor.Start(ctx, parentMonitor, reserved)
 	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, "flow-disk-monitor")
@@ -558,6 +560,11 @@ type LocalState struct {
 	// mapping to coldata.Batch, use any to avoid injecting new
 	// dependencies.
 	LocalVectorSources map[int32]any
+
+	// MarkFlowMonitorAsLongLiving, if set, instructs the DistSQL runner to mark
+	// the "flow" memory monitor as long-living one, thus exempting it from
+	// having to be stopped when the txn monitor is stopped.
+	MarkFlowMonitorAsLongLiving bool
 }
 
 // MustUseLeafTxn returns true if a LeafTxn must be used. It is valid to call

@@ -379,7 +379,7 @@ func TestMultiSharedGauge(t *testing.T) {
 	})
 	parent.Start(ctx, nil, NewStandaloneBudget(100000))
 
-	child := NewMonitorInheritWithLimit("child", 20000, parent)
+	child := NewMonitorInheritWithLimit("child", 20000, parent, false /* longLiving */)
 	child.StartNoReserved(ctx, parent)
 
 	acc := child.MakeBoundAccount()
@@ -491,6 +491,8 @@ func TestBytesMonitorTree(t *testing.T) {
 
 	grandchild1 := getMonitor(ctx, st, "grandchild1", child1)
 	grandchild2 := getMonitor(ctx, st, "grandchild2", child2)
+	// Mark grandchild2 as long-living since we simulate forgetting to stop it.
+	grandchild2.MarkLongLiving()
 	require.Equal(t, "parent\n-child2\n--grandchild2\n-child1\n--grandchild1\n", export(parent))
 	require.Equal(t, "child1\n-grandchild1\n", export(child1))
 	require.Equal(t, "child2\n-grandchild2\n", export(child2))

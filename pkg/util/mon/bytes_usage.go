@@ -12,8 +12,10 @@ package mon
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 // BoundAccount and BytesMonitor together form the mechanism by which
@@ -228,6 +231,13 @@ type BytesMonitor struct {
 		// NB: this field doesn't need mutex protection but is inside of mu
 		// struct in order to reduce the struct size.
 		rootSQLMonitor bool
+
+		// longLiving indicates whether lifetime of this monitor matches the
+		// server's life, and as such, this monitor is exempted from having to
+		// be stopped when its ancestor monitor is stopped.
+		// NB: this field doesn't need mutex protection but is inside of mu
+		// struct in order to reduce the struct size.
+		longLiving bool
 	}
 
 	// parentMu encompasses the fields that must be accessed while holding the
@@ -332,6 +342,8 @@ type MonitorState struct {
 	ReservedReserved int64
 	// Stopped indicates whether the monitor has been stopped.
 	Stopped bool
+	// LongLiving indicates whether the monitor is a long-living one.
+	LongLiving bool
 }
 
 // TraverseTree traverses the tree of monitors rooted in the BytesMonitor. The
@@ -369,6 +381,7 @@ func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState
 		ReservedUsed:     reservedUsed,
 		ReservedReserved: reservedReserved,
 		Stopped:          mm.mu.stopped,
+		LongLiving:       mm.mu.longLiving,
 	}
 	// Note that we cannot call traverseTree on the children while holding mm's
 	// lock since it could lead to deadlocks. Instead, we store all children as
@@ -421,8 +434,9 @@ type Options struct {
 	CurCount *metric.Gauge
 	MaxHist  metric.IHistogram
 	// Increment is the block size used for upstream allocations from the pool.
-	Increment int64
-	Settings  *cluster.Settings
+	Increment  int64
+	Settings   *cluster.Settings
+	LongLiving bool
 }
 
 // NewMonitor creates a new monitor.
@@ -443,6 +457,7 @@ func NewMonitor(args Options) *BytesMonitor {
 	m.mu.curBytesCount = args.CurCount
 	m.mu.maxBytesHist = args.MaxHist
 	m.mu.tracksDisk = args.Res == DiskResource
+	m.mu.longLiving = args.LongLiving
 	return m
 }
 
@@ -457,20 +472,21 @@ func NewMonitor(args Options) *BytesMonitor {
 // those chunks would be reported as used by pool while downstream monitors will
 // not.
 func NewMonitorInheritWithLimit(
-	name redact.RedactableString, limit int64, m *BytesMonitor,
+	name redact.RedactableString, limit int64, m *BytesMonitor, longLiving bool,
 ) *BytesMonitor {
 	res := MemoryResource
 	if m.mu.tracksDisk {
 		res = DiskResource
 	}
 	return NewMonitor(Options{
-		Name:      name,
-		Res:       res,
-		Limit:     limit,
-		CurCount:  nil, // CurCount is not inherited as we don't want to double count allocations
-		MaxHist:   nil, // MaxHist is not inherited as we don't want to double count allocations
-		Increment: m.poolAllocationSize,
-		Settings:  m.settings,
+		Name:       name,
+		Res:        res,
+		Limit:      limit,
+		CurCount:   nil, // CurCount is not inherited as we don't want to double count allocations
+		MaxHist:    nil, // MaxHist is not inherited as we don't want to double count allocations
+		Increment:  m.poolAllocationSize,
+		Settings:   m.settings,
+		LongLiving: longLiving,
 	})
 }
 
@@ -592,12 +608,59 @@ func (mm *BytesMonitor) Limit() int64 {
 	return mm.limit
 }
 
+// MarkLongLiving marks the monitor as a long-living. Such monitors are allowed
+// to not be stopped because their lifetime matches the server's lifetime.
+func (mm *BytesMonitor) MarkLongLiving() {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	mm.mu.longLiving = true
+}
+
+func findShortLivingCb(f io.Writer, numShortLiving *int) func(state MonitorState) error {
+	return func(s MonitorState) error {
+		if s.LongLiving {
+			return nil
+		}
+		*numShortLiving++
+		info := fmt.Sprintf("%s%s %s", strings.Repeat(" ", 4*s.Level), s.Name, humanize.IBytes(uint64(s.Used)))
+		if s.ReservedUsed != 0 || s.ReservedReserved != 0 {
+			info += fmt.Sprintf(" (%s / %s)", humanize.IBytes(uint64(s.ReservedUsed)), humanize.IBytes(uint64(s.ReservedReserved)))
+		}
+		if _, err := f.Write([]byte(info)); err != nil {
+			return err
+		}
+		_, err := f.Write([]byte{'\n'})
+		return err
+	}
+}
+
 const bytesMaxUsageLoggingThreshold = 100 * 1024
 
 func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	mm.mu.stopped = true
+	if buildutil.CrdbTestBuild {
+		// We expect that all short-living descendants of this monitor have been
+		// stopped.
+		if mm.mu.head != nil {
+			mm.mu.Unlock()
+			var sb strings.Builder
+			var numShortLiving int
+			_ = mm.TraverseTree(findShortLivingCb(&sb, &numShortLiving))
+			mm.mu.Lock()
+			if !mm.mu.longLiving {
+				// Ignore mm itself if it is short-living.
+				numShortLiving--
+			}
+			if numShortLiving > 0 {
+				panic(errors.AssertionFailedf(
+					"found %d short-living non-stopped monitors in %s\n%s",
+					numShortLiving, mm.name, sb.String(),
+				))
+			}
+		}
+	}
 
 	if log.V(1) && mm.mu.maxAllocated >= bytesMaxUsageLoggingThreshold {
 		log.InfofDepth(ctx, 1, "%s, bytes usage max %s",

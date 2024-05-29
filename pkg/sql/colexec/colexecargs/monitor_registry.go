@@ -90,7 +90,7 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategyWithLimit(
 		}
 	}
 	monitorName := r.getMemMonitorName(opName, processorID, "limited" /* suffix */)
-	bufferingOpMemMonitor := mon.NewMonitorInheritWithLimit(monitorName, limit, flowCtx.Mon)
+	bufferingOpMemMonitor := mon.NewMonitorInheritWithLimit(monitorName, limit, flowCtx.Mon, false /* longLiving */)
 	bufferingOpMemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 	r.monitors = append(r.monitors, bufferingOpMemMonitor)
 	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
