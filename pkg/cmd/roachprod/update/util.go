@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package upgrade
+package update
 
 import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -81,4 +82,17 @@ func SwapBinary(old, new string) error {
 
 	// Move the new binary into place.
 	return os.Rename(new, old)
+}
+
+// Computes the age of the current binary, relative to the given update time.
+func TimeSinceUpdate(updateTime time.Time) (time.Duration, error) {
+	currentBinary, err := os.Executable()
+	if err != nil {
+		return -1, err
+	}
+	statInfo, err := os.Stat(currentBinary)
+	if err != nil {
+		return -1, err
+	}
+	return updateTime.Sub(statInfo.ModTime()), nil
 }
