@@ -78,6 +78,7 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/quotapool",
         "//pkg/util/syncutil",
         "//pkg/util/sysutil",
         "//pkg/util/timeutil",
