@@ -20,13 +20,19 @@ func (b *SpatialObject) EWKBHex() string {
 	return fmt.Sprintf("%X", b.EWKB)
 }
 
-// MemSize returns the size of the spatial object in memory.
-func (b *SpatialObject) MemSize() uintptr {
+// MemSize returns the size of the spatial object in memory. If deterministic is
+// true, then only length of EWKB slice is included - this option should only be
+// used when determinism is favored over precision.
+func (b *SpatialObject) MemSize(deterministic bool) uintptr {
 	var bboxSize uintptr
 	if bbox := b.BoundingBox; bbox != nil {
 		bboxSize = unsafe.Sizeof(*bbox)
 	}
-	return unsafe.Sizeof(*b) + bboxSize + uintptr(len(b.EWKB))
+	ewkbSize := uintptr(cap(b.EWKB))
+	if deterministic {
+		ewkbSize = uintptr(len(b.EWKB))
+	}
+	return unsafe.Sizeof(*b) + bboxSize + ewkbSize
 }
 
 // MultiType returns the corresponding multi-type for a shape type, or unset
