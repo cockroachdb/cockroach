@@ -832,7 +832,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			uint64(kvserver.EagerLeaseAcquisitionConcurrency.Get(&cfg.Settings.SV)))
 	})
 
-	storeLivenessTransport := storeliveness.NewSLTransport(
+	storeLivenessTransport := storeliveness.NewTransport(
 		cfg.AmbientCtx,
 		st,
 		cfg.AmbientCtx.Tracer,

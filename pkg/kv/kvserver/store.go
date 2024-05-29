@@ -54,7 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
@@ -861,13 +861,14 @@ type Store struct {
 	replRankingsByTenant *ReplicaRankingMap
 	storeRebalancer      *StoreRebalancer
 	rangeIDAlloc         *idalloc.Allocator // Range ID allocator
-	leaseQueue           *leaseQueue        // Lease queue
-	mvccGCQueue          *mvccGCQueue       // MVCC GC queue
-	mergeQueue           *mergeQueue        // Range merging queue
-	splitQueue           *splitQueue        // Range splitting queue
-	replicateQueue       *replicateQueue    // Replication queue
-	replicaGCQueue       *replicaGCQueue    // Replica GC queue
-	raftLogQueue         *raftLogQueue      // Raft log truncation queue
+	storeLiveness        storeliveness.Fabric
+	leaseQueue           *leaseQueue     // Lease queue
+	mvccGCQueue          *mvccGCQueue    // MVCC GC queue
+	mergeQueue           *mergeQueue     // Range merging queue
+	splitQueue           *splitQueue     // Range splitting queue
+	replicateQueue       *replicateQueue // Replication queue
+	replicaGCQueue       *replicaGCQueue // Replica GC queue
+	raftLogQueue         *raftLogQueue   // Raft log truncation queue
 	// Carries out truncations proposed by the raft log queue, and "replicated"
 	// via raft, when they are safe. Created in Store.Start.
 	raftTruncator       *raftLogTruncator
@@ -1137,8 +1138,7 @@ type StoreConfig struct {
 	Gossip                 *gossip.Gossip
 	DB                     *kv.DB
 	NodeLiveness           *liveness.NodeLiveness
-	StoreLiveness          storeliveness.Fabric
-	StoreLivenessTransport *storeliveness.SLTransport
+	StoreLivenessTransport *storeliveness.Transport
 	StorePool              *storepool.StorePool
 	Transport              *RaftTransport
 	NodeDialer             *nodedialer.Dialer
@@ -2149,17 +2149,17 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
 
-	storeID := storelivenesspb.StoreIdent{NodeID: s.NodeID(), StoreID: s.StoreID()}
+	storeID := slpb.StoreIdent{NodeID: s.NodeID(), StoreID: s.StoreID()}
 	options := storeliveness.Options{
 		Clock:                    s.cfg.Clock,
-		HeartbeatInterval:        10 * time.Second,
-		LivenessInterval:         30 * time.Second,
-		SupportExpiryInterval:    10 * time.Second,
-		ResponseHandlingInterval: 10 * time.Second,
+		HeartbeatInterval:        3 * time.Second,
+		LivenessInterval:         9 * time.Second,
+		SupportExpiryInterval:    9 * time.Second,
+		ResponseHandlingInterval: 1 * time.Second,
 	}
 	sm := storeliveness.NewSupportManager(storeID, options, stopper, s.cfg.StoreLivenessTransport)
-	s.cfg.StoreLivenessTransport.ListenHeartbeatMessages(storeID.StoreID, sm)
-	s.cfg.StoreLiveness = sm
+	s.cfg.StoreLivenessTransport.ListenMessages(storeID.StoreID, sm)
+	s.storeLiveness = sm
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
@@ -2236,9 +2236,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}
 		// Set up store liveness heartbeating to all remote replicas.
 		for _, r := range repl.Desc.InternalReplicas {
-			remoteStoreID := storelivenesspb.StoreIdent{NodeID: r.NodeID, StoreID: r.StoreID}
+			remoteStoreID := slpb.StoreIdent{NodeID: r.NodeID, StoreID: r.StoreID}
 			if remoteStoreID != storeID {
-				s.cfg.StoreLiveness.SupportFrom(remoteStoreID)
+				s.storeLiveness.SupportFrom(remoteStoreID)
 			}
 		}
 	}

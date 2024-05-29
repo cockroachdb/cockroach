@@ -16,7 +16,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
-        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/hlc",
         "//pkg/util/log",

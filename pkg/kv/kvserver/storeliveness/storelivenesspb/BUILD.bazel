@@ -4,11 +4,10 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 
 proto_library(
     name = "storelivenesspb_proto",
-    srcs = ["messages.proto"],
+    srcs = ["service.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvpb:kvpb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -22,7 +21,6 @@ go_proto_library(
     proto = ":storelivenesspb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
@@ -31,7 +29,9 @@ go_proto_library(
 
 go_library(
     name = "storelivenesspb",
+    srcs = ["service.go"],
     embed = [":storelivenesspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/hlc"],
 )

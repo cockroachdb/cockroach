@@ -3,11 +3,11 @@ package storeliveness
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -36,7 +36,7 @@ func TestManager(t *testing.T) {
 	}
 	nodeID := roachpb.NodeID(1)
 	storeID := roachpb.StoreID(1)
-	id := storelivenesspb.StoreIdent{NodeID: nodeID, StoreID: storeID}
+	id := slpb.StoreIdent{NodeID: nodeID, StoreID: storeID}
 	transport := NewDummyTransport(cfg.Settings, cfg.AmbientCtx.Tracer, cfg.Clock)
 	m := NewSupportManager(id, opt, stopper, transport)
 
@@ -48,11 +48,11 @@ func TestManager(t *testing.T) {
 				d.ScanArgs(t, "node-id", &remoteNodeID)
 				var remoteStoreID int64
 				d.ScanArgs(t, "store-id", &remoteStoreID)
-				remoteID := storelivenesspb.StoreIdent{
+				remoteID := slpb.StoreIdent{
 					NodeID:  roachpb.NodeID(remoteNodeID),
 					StoreID: roachpb.StoreID(remoteStoreID),
 				}
-				m.addStore(remoteID)
+				m.addStore(context.Background(), remoteID)
 				return ""
 
 			case "remove-store":
@@ -60,11 +60,11 @@ func TestManager(t *testing.T) {
 				d.ScanArgs(t, "node-id", &remoteNodeID)
 				var remoteStoreID int64
 				d.ScanArgs(t, "store-id", &remoteStoreID)
-				remoteID := storelivenesspb.StoreIdent{
+				remoteID := slpb.StoreIdent{
 					NodeID:  roachpb.NodeID(remoteNodeID),
 					StoreID: roachpb.StoreID(remoteStoreID),
 				}
-				m.removeStore(remoteID)
+				m.removeStore(context.Background(), remoteID)
 				return ""
 			case "set-time":
 				var nowMilli int64

@@ -12,12 +12,17 @@ package storeliveness
 
 import (
 	"context"
+	"net"
+	"runtime/pprof"
+	"sync/atomic"
+	"time"
+	"unsafe"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,136 +32,67 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
-	"net"
-	"runtime/pprof"
-	"sync"
-	"sync/atomic"
-	"time"
-	"unsafe"
 )
 
 const (
 	// Outgoing messages are queued per-node on a channel of this size.
-	//
-	// This buffer was sized many moons ago and is very large. If the
-	// buffer fills up, we drop raft messages, so we'd be in trouble.
-	// But as is, the buffer can hold to a lot of memory, especially
-	// during RESTORE/IMPORT where we're routinely sending out SSTs,
-	// which weigh in at a few mbs each; an individual raft instance
-	// will limit how many it has in-flight per-follower, but groups
-	// don't compete among each other for budget.
-	sendBufferSize = 10000
+	sendBufferSize = 10
 
 	// When no message has been queued for this duration, the corresponding
 	// instance of processQueue will shut down.
-	//
-	// TODO(tamird): make culling of outbound streams more evented, so that we
-	// need not rely on this timeout to shut things down.
 	idleTimeout = time.Minute
+
+	// connClass is the rpc ConnectionClass used by store liveness traffic.
+	connClass = rpc.SystemClass
 )
 
-// targetOutgoingBatchSize wraps "kv.storeliveness.target_batch_size".
-var targetOutgoingBatchSize = settings.RegisterByteSizeSetting(
-	settings.SystemOnly,
-	"kv.storeliveness.target_batch_size",
-	"size of a batch of store liveness batch after which it will be sent without further batching",
-	64<<20, // 64 MB
-	settings.PositiveInt,
-)
-
-// HeartbeatResponseStream is the subset of the StoreLiveness_HeartbeatServer
-// interface that is needed for sending responses.
-type HeartbeatResponseStream interface {
-	Send(response *storelivenesspb.HeartbeatResponse) error
-}
-
-// lockedMessageResponseStream is an implementation of
-// HeartbeatResponseStream which provides support for concurrent calls to
-// Send. Note that the default implementation of grpc.Stream for server
-// responses (grpc.serverStream) is not safe for concurrent calls to Send.
-type lockedHeartbeatResponseStream struct {
-	wrapped storelivenesspb.StoreLiveness_HeartbeatServer
-	sendMu  syncutil.Mutex
-}
-
-func (s *lockedHeartbeatResponseStream) Send(resp *storelivenesspb.HeartbeatResponse) error {
-	s.sendMu.Lock()
-	defer s.sendMu.Unlock()
-	return s.wrapped.Send(resp)
-}
-
-func (s *lockedHeartbeatResponseStream) Recv() (*storelivenesspb.HeartbeatRequestBatch, error) {
-	// No need for lock. gRPC.Stream.RecvMsg is safe for concurrent use.
-	return s.wrapped.Recv()
-}
-
-// HeartbeatHandler is the interface that must be implemented by
+// MessageHandler is the interface that must be implemented by
 // arguments to Transport.ListenIncomingHeartbeats.
-type HeartbeatHandler interface {
-	// HandleHeartbeatRequest is called for each incoming Heartbeat. The request is
-	// always processed asynchronously and the response is sent over respStream.
-	// If an error is encountered during asynchronous processing, it will be
-	// streamed back to the sender of the message as a HeartbeatResponse.
-	HandleHeartbeatRequest(ctx context.Context, req *storelivenesspb.HeartbeatRequest,
-		respStream HeartbeatResponseStream) *kvpb.Error
-
-	// HandleHeartbeatResponse is called for each HeartbeatResponse. Note that
-	// not all messages receive a response. An error is returned if and only if
-	// the underlying store liveness connection should be closed.
-	HandleHeartbeatResponse(context.Context, *storelivenesspb.HeartbeatResponse) error
+type MessageHandler interface {
+	// HandleMessage is called for each incoming Message.
+	HandleMessage(ctx context.Context, msg slpb.Message)
 }
 
-// SLTransport handles the rpc messages for Store liveness.
+// Transport handles the rpc messages for Store liveness.
 //
-// The transport is asynchronous with respect to the caller, and
-// internally multiplexes outbound messages. Internally, each message is
-// queued on a per-destination queue before being asynchronously delivered.
-//
-// Callers are required to construct a HeartbeatSender before being able to
-// dispatch messages, and must provide an error handler which will be invoked
-// asynchronously in the event that the recipient of any message closes its
-// inbound RPC stream. This callback is asynchronous with respect to the
-// outbound message which caused the remote to hang up; all that is known is
-// which remote hung up.
-type SLTransport struct {
+// The transport is asynchronous with respect to the caller, and internally
+// multiplexes outbound messages. Internally, each message is queued on a
+// per-destination queue before being asynchronously delivered.
+type Transport struct {
 	log.AmbientContext
 	st      *cluster.Settings
 	tracer  *tracing.Tracer
 	clock   *hlc.Clock
 	stopper *stop.Stopper
-	//metrics *TransportMetrics
 
-	// Queues maintains a map[roachpb.NodeID]*sendQueue on a per rpc-class
-	// level.
-	queues [rpc.NumConnectionClasses]syncutil.IntMap
+	// Queues maintains a map[roachpb.NodeID]*sendQueue.
+	queues syncutil.IntMap
 
-	dialer            *nodedialer.Dialer
-	heartbeatHandlers syncutil.IntMap // map[roachpb.StoreID]*HeartbeatHandler
+	dialer   *nodedialer.Dialer
+	handlers syncutil.IntMap // map[roachpb.StoreID]*MessageHandler
 }
 
-// sendQueue is a queue of outgoing HeartbeatRequests.
+// sendQueue is a queue of outgoing Messages.
 type sendQueue struct {
-	reqs chan *storelivenesspb.HeartbeatRequest
+	msgs chan slpb.Message
 	// The number of bytes in flight. Must be updated *atomically* on sending and
 	// receiving from the reqs channel.
 	bytes atomic.Int64
 }
 
-// NewDummyTransport returns a dummy raft transport for use in tests which
-// need a non-nil raft transport that need not function.
-func NewDummyTransport(
-	st *cluster.Settings, tracer *tracing.Tracer, clock *hlc.Clock,
-) *SLTransport {
+// NewDummyTransport returns a dummy raft transport for use in tests which need
+// a non-nil raft transport that need not function.
+func NewDummyTransport(st *cluster.Settings, tracer *tracing.Tracer, clock *hlc.Clock) *Transport {
 	resolver := func(roachpb.NodeID) (net.Addr, error) {
 		return nil, errors.New("dummy resolver")
 	}
-	return NewSLTransport(log.MakeTestingAmbientContext(tracer), st, tracer, clock,
+	return NewTransport(log.MakeTestingAmbientContext(tracer), st, tracer, clock,
 		nodedialer.New(nil, resolver), nil, nil,
 	)
 }
 
-// NewSLTransport creates a new store liveness Transport.
-func NewSLTransport(
+// NewTransport creates a new store liveness Transport.
+func NewTransport(
 	ambient log.AmbientContext,
 	st *cluster.Settings,
 	tracer *tracing.Tracer,
@@ -164,8 +100,8 @@ func NewSLTransport(
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
 	stopper *stop.Stopper,
-) *SLTransport {
-	t := &SLTransport{
+) *Transport {
+	t := &Transport{
 		AmbientContext: ambient,
 		st:             st,
 		tracer:         tracer,
@@ -174,81 +110,58 @@ func NewSLTransport(
 		dialer:         dialer,
 	}
 	if grpcServer != nil {
-		storelivenesspb.RegisterStoreLivenessServer(grpcServer, t)
+		slpb.RegisterStoreLivenessServer(grpcServer, t)
 	}
 	return t
 }
 
 // visitQueues calls the visit callback on each outgoing messages sub-queue.
-func (t *SLTransport) visitQueues(visit func(*sendQueue)) {
-	for class := range t.queues {
-		t.queues[class].Range(func(k int64, v unsafe.Pointer) bool {
-			visit((*sendQueue)(v))
-			return true
-		})
-	}
+func (t *Transport) visitQueues(visit func(*sendQueue)) {
+	t.queues.Range(func(k int64, v unsafe.Pointer) bool {
+		visit((*sendQueue)(v))
+		return true
+	})
 }
 
-// queueMessageCount returns the total number of outgoing heeartbeats in the queue.
-func (t *SLTransport) queueHeartbeatCount() int64 {
+// queueMessageCount returns the total number of outgoing messages in the queue.
+func (t *Transport) queueMessageCount() int64 {
 	var count int64
-	t.visitQueues(func(q *sendQueue) { count += int64(len(q.reqs)) })
+	t.visitQueues(func(q *sendQueue) { count += int64(len(q.msgs)) })
 	return count
 }
 
 // queueByteSize returns the total bytes size of outgoing messages in the queue.
-func (t *SLTransport) queueByteSize() int64 {
+func (t *Transport) queueByteSize() int64 {
 	var size int64
 	t.visitQueues(func(q *sendQueue) { size += q.bytes.Load() })
 	return size
 }
 
-// getIncomingHeartbeatHandler returns the registered
-// IncomingHeartbeatHandler for the given StoreID. If no handlers are
-// registered for the StoreID, it returns (nil, false).
-func (t *SLTransport) getIncomingHeartbeatHandler(
-	storeID roachpb.StoreID,
-) (HeartbeatHandler, bool) {
-	if value, ok := t.heartbeatHandlers.Load(int64(storeID)); ok {
-		return *(*HeartbeatHandler)(value), true
+// getMessageHandler returns the registered MessageHandler for the given
+// StoreID. If no handlers are registered for the StoreID, it returns (nil,
+// false).
+func (t *Transport) getMessageHandler(storeID roachpb.StoreID) (MessageHandler, bool) {
+	if value, ok := t.handlers.Load(int64(storeID)); ok {
+		return *(*MessageHandler)(value), true
 	}
 	return nil, false
 }
 
-// handleHeartbeatRequest proxies a request to the listening server interface.
-func (t *SLTransport) handleHeartbeatRequest(
-	ctx context.Context, req *storelivenesspb.HeartbeatRequest, respStream HeartbeatResponseStream,
-) *kvpb.Error {
-	incomingHeartbeatHandler, ok := t.getIncomingHeartbeatHandler(req.Header.To.StoreID)
+// handleMessage proxies a request to the listening server interface.
+func (t *Transport) handleMessage(ctx context.Context, msg slpb.Message) error {
+	h, ok := t.getMessageHandler(msg.To.StoreID)
 	if !ok {
-		log.Warningf(ctx, "unable to accept Heartbeat message from %+v: no handler registered for %+v",
-			req.Header.From, req.Header.To)
-		return kvpb.NewError(kvpb.NewStoreNotFoundError(req.Header.To.StoreID))
+		log.Warningf(ctx, "unable to accept message %+v from %+v: no handler registered for %+v",
+			msg, msg.From, msg.To)
+		return kvpb.NewStoreNotFoundError(msg.To.StoreID)
 	}
 
-	return incomingHeartbeatHandler.HandleHeartbeatRequest(ctx, req, respStream)
+	h.HandleMessage(ctx, msg)
+	return nil
 }
 
-// newHeartbeatResponse constructs a HeartbeatResponse from the
-// given request and error.
-func newHeartbeatResponse(
-	req *storelivenesspb.HeartbeatRequest, pErr *kvpb.Error,
-) *storelivenesspb.HeartbeatResponse {
-	resp := &storelivenesspb.HeartbeatResponse{
-		Header: storelivenesspb.Header{
-			From: req.Header.To,
-			To:   req.Header.From,
-		},
-		Heartbeat: req.Heartbeat,
-	}
-	if pErr != nil {
-		resp.Union.SetValue(pErr)
-	}
-	return resp
-}
-
-// Heartbeat proxies the incoming requests to the listening server interface.
-func (t *SLTransport) Heartbeat(stream storelivenesspb.StoreLiveness_HeartbeatServer) (lastErr error) {
+// Stream proxies the incoming requests to the listening server interface.
+func (t *Transport) Stream(stream slpb.StoreLiveness_StreamServer) error {
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
@@ -263,7 +176,6 @@ func (t *SLTransport) Heartbeat(stream storelivenesspb.StoreLiveness_HeartbeatSe
 			SpanOpt:  stop.ChildSpan,
 		}, func(ctx context.Context) {
 			errCh <- func() error {
-				stream := &lockedHeartbeatResponseStream{wrapped: stream}
 				for {
 					batch, err := stream.Recv()
 					if err != nil {
@@ -272,17 +184,9 @@ func (t *SLTransport) Heartbeat(stream storelivenesspb.StoreLiveness_HeartbeatSe
 					if !batch.Now.IsEmpty() {
 						t.clock.Update(batch.Now)
 					}
-					if len(batch.Requests) == 0 {
-						continue
-					}
-					for i := range batch.Requests {
-						req := &batch.Requests[i]
-						//t.metrics.HeartbeatsRcvd.Inc(1)
-						if pErr := t.handleHeartbeatRequest(ctx, req, stream); pErr != nil {
-							if err := stream.Send(newHeartbeatResponse(req, pErr)); err != nil {
-								return err
-							}
-							//t.metrics.ReverseSent.Inc(1)
+					for _, msg := range batch.Messages {
+						if pErr := t.handleMessage(ctx, msg); pErr != nil {
+							return err
 						}
 					}
 				}
@@ -299,74 +203,25 @@ func (t *SLTransport) Heartbeat(stream storelivenesspb.StoreLiveness_HeartbeatSe
 	}
 }
 
-// ListenHeartbeatMessages registers a HeartbeatHandler to receive proxied messages.
-func (t *SLTransport) ListenHeartbeatMessages(
-	storeID roachpb.StoreID, handler HeartbeatHandler,
-) {
-	t.heartbeatHandlers.Store(int64(storeID), unsafe.Pointer(&handler))
+// ListenMessages registers a MessageHandler to receive proxied messages.
+func (t *Transport) ListenMessages(storeID roachpb.StoreID, handler MessageHandler) {
+	t.handlers.Store(int64(storeID), unsafe.Pointer(&handler))
 }
 
-// StopHeartbeats unregisters a IncomingHeartbeatHandler.
-func (t *SLTransport) StopHeartbeats(storeID roachpb.StoreID) {
-	t.heartbeatHandlers.Delete(int64(storeID))
-}
-
-// processQueue opens a Store liveness client stream and sends messages from the
+// processQueue opens a Store Liveness client stream and sends messages from the
 // designated queue (ch) via that stream, exiting when an error is received or
 // when it idles out. All messages remaining in the queue at that point are
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
-func (t *SLTransport) processQueue(
-	q *sendQueue, stream storelivenesspb.StoreLiveness_HeartbeatClient, class rpc.ConnectionClass,
-) error {
-	errCh := make(chan error, 1)
-
-	ctx := stream.Context()
-
-	if err := t.stopper.RunAsyncTask(
-		ctx, "storeliveness.Transport: processing queue",
-		func(ctx context.Context) {
-			errCh <- func() error {
-				for {
-					resp, err := stream.Recv()
-					if err != nil {
-						return err
-					}
-					//t.metrics.ReverseRcvd.Inc(1)
-					incomingMessageHandler, ok := t.getIncomingHeartbeatHandler(resp.Header.To.StoreID)
-					if !ok {
-						log.Warningf(ctx, "no handler found for store %s in response %s",
-							resp.Header.To.StoreID, resp)
-						continue
-					}
-					if err := incomingMessageHandler.HandleHeartbeatResponse(ctx, resp); err != nil {
-						return err
-					}
-				}
-			}()
-		}); err != nil {
-		return err
-	}
-
-	annotateWithClockTimestamp := func(batch *storelivenesspb.HeartbeatRequestBatch) {
-		batch.Now = t.clock.NowAsClockTimestamp()
-	}
-
-	clearRequestBatch := func(batch *storelivenesspb.HeartbeatRequestBatch) {
-		// Reuse the Requests slice, but zero out the contents to avoid delaying
-		// GC of memory referenced from within.
-		for i := range batch.Requests {
-			batch.Requests[i] = storelivenesspb.HeartbeatRequest{}
-		}
-		batch.Requests = batch.Requests[:0]
-		batch.StoreIDs = nil
-		batch.Now = hlc.ClockTimestamp{}
-	}
+func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamClient) (err error) {
+	defer func() {
+		_, closeErr := stream.CloseAndRecv()
+		err = errors.Join(err, closeErr)
+	}()
 
 	var it timeutil.Timer
 	defer it.Stop()
-
-	batch := &storelivenesspb.HeartbeatRequestBatch{}
+	batch := &slpb.MessageBatch{}
 	for {
 		it.Reset(idleTimeout)
 		select {
@@ -377,68 +232,45 @@ func (t *SLTransport) processQueue(
 			it.Read = true
 			return nil
 
-		case err := <-errCh:
-			return err
-
-		case req := <-q.reqs:
-			size := int64(req.Size())
+		case msg := <-q.msgs:
+			size := int64(msg.Size())
 			q.bytes.Add(-size)
-			budget := targetOutgoingBatchSize.Get(&t.st.SV) - size
-
-			batch.Requests = append(batch.Requests, *req)
-			releaseHeartbeatRequest(req)
+			batch.Messages = append(batch.Messages, msg)
 
 			// Pull off as many queued requests as possible, within reason.
-			for budget > 0 {
-				select {
-				case req = <-q.reqs:
-					size := int64(req.Size())
-					q.bytes.Add(-size)
-					budget -= size
-					batch.Requests = append(batch.Requests, *req)
-					releaseHeartbeatRequest(req)
-				default:
-					budget = -1
-				}
+			select {
+			case msg = <-q.msgs:
+				size := int64(msg.Size())
+				q.bytes.Add(-size)
+				batch.Messages = append(batch.Messages, msg)
+			default:
 			}
 
-			annotateWithClockTimestamp(batch)
+			batch.Now = t.clock.NowAsClockTimestamp()
 			if err := stream.Send(batch); err != nil {
 				return err
 			}
-			//t.metrics.MessagesSent.Inc(int64(len(batch.Requests)))
-			clearRequestBatch(batch)
+
+			// Reuse the Messages slice, but zero out the contents to avoid delaying
+			// GC of memory referenced from within.
+			for i := range batch.Messages {
+				batch.Messages[i] = slpb.Message{}
+			}
+			batch.Messages = batch.Messages[:0]
+			batch.Now = hlc.ClockTimestamp{}
 		}
 	}
 }
 
-var heartbeatRequestPool = sync.Pool{
-	New: func() interface{} {
-		return &storelivenesspb.HeartbeatRequest{}
-	},
-}
-
-func newHeartbeatRequest() *storelivenesspb.HeartbeatRequest {
-	return heartbeatRequestPool.Get().(*storelivenesspb.HeartbeatRequest)
-}
-
-func releaseHeartbeatRequest(m *storelivenesspb.HeartbeatRequest) {
-	*m = storelivenesspb.HeartbeatRequest{}
-	heartbeatRequestPool.Put(m)
-}
-
 // getQueue returns the queue for the specified node ID and a boolean
 // indicating whether the queue already exists (true) or was created (false).
-func (t *SLTransport) getQueue(
-	nodeID roachpb.NodeID, class rpc.ConnectionClass,
-) (*sendQueue, bool) {
-	queuesMap := &t.queues[class]
-	value, ok := queuesMap.Load(int64(nodeID))
+func (t *Transport) getQueue(nodeID roachpb.NodeID) (*sendQueue, bool) {
+	value, ok := t.queues.Load(int64(nodeID))
 	if !ok {
 		q := sendQueue{
-			reqs: make(chan *storelivenesspb.HeartbeatRequest, sendBufferSize),
+			msgs: make(chan slpb.Message, sendBufferSize),
 		}
-		value, ok = queuesMap.LoadOrStore(int64(nodeID), unsafe.Pointer(&q))
+		value, ok = t.queues.LoadOrStore(int64(nodeID), unsafe.Pointer(&q))
 	}
 	return (*sendQueue)(value), ok
 }
@@ -448,35 +280,32 @@ func (t *SLTransport) getQueue(
 // positive but will never be a false negative; if sent is true the message may
 // or may not actually be sent but if it's false the message definitely was not
 // sent. It is not safe to continue using the reference to the provided request.
-func (t *SLTransport) SendAsync(
-	req *storelivenesspb.HeartbeatRequest, class rpc.ConnectionClass,
-) (sent bool) {
-	toNodeID := req.Header.To.NodeID
-	defer func() {
-		if !sent {
-			//t.metrics.MessagesDropped.Inc(1)
-			releaseHeartbeatRequest(req)
-		}
-	}()
+func (t *Transport) SendAsync(msg slpb.Message) (sent bool) {
+	toNodeID := msg.To.NodeID
+	//defer func() {
+	//	if !sent {
+	//		t.metrics.MessagesDropped.Inc(1)
+	//	}
+	//}()
 
-	if b, ok := t.dialer.GetCircuitBreaker(toNodeID, class); ok && b.Signal().Err() != nil {
+	if b, ok := t.dialer.GetCircuitBreaker(toNodeID, connClass); ok && b.Signal().Err() != nil {
 		return false
 	}
 
-	q, existingQueue := t.getQueue(toNodeID, class)
+	q, existingQueue := t.getQueue(toNodeID)
 	if !existingQueue {
 		// Note that startProcessNewQueue is in charge of deleting the queue.
 		ctx := t.AnnotateCtx(context.Background())
-		if !t.startProcessNewQueue(ctx, toNodeID, class) {
+		if !t.startProcessNewQueue(ctx, toNodeID) {
 			return false
 		}
 	}
 
 	// Note: computing the size of the request *before* sending it to the queue,
 	// because the receiver takes ownership of, and can modify it.
-	size := int64(req.Size())
+	size := int64(msg.Size())
 	select {
-	case q.reqs <- req:
+	case q.msgs <- msg:
 		q.bytes.Add(size)
 		return true
 	default:
@@ -496,8 +325,8 @@ func (t *SLTransport) SendAsync(
 // different class than that of user data ranges.
 //
 // Returns whether the worker was started (the queue is deleted either way).
-func (t *SLTransport) startProcessNewQueue(
-	ctx context.Context, toNodeID roachpb.NodeID, class rpc.ConnectionClass,
+func (t *Transport) startProcessNewQueue(
+	ctx context.Context, toNodeID roachpb.NodeID,
 ) (started bool) {
 	cleanup := func(q *sendQueue) {
 		// Account for the remainder of `ch` which was never sent.
@@ -508,50 +337,49 @@ func (t *SLTransport) startProcessNewQueue(
 		// way the code is written).
 		for {
 			select {
-			case req := <-q.reqs:
-				q.bytes.Add(-int64(req.Size()))
+			case msg := <-q.msgs:
+				q.bytes.Add(-int64(msg.Size()))
 				//t.metrics.MessagesDropped.Inc(1)
-				releaseHeartbeatRequest(req)
 			default:
 				return
 			}
 		}
 	}
 	worker := func(ctx context.Context) {
-		q, existingQueue := t.getQueue(toNodeID, class)
+		q, existingQueue := t.getQueue(toNodeID)
 		if !existingQueue {
 			log.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
 		defer cleanup(q)
 		defer func() {
-			t.queues[class].Delete(int64(toNodeID))
+			t.queues.Delete(int64(toNodeID))
 		}()
-		conn, err := t.dialer.Dial(ctx, toNodeID, class)
+		conn, err := t.dialer.Dial(ctx, toNodeID, connClass)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
 			return
 		}
 
-		client := storelivenesspb.NewStoreLivenessClient(conn)
-		batchCtx, cancel := context.WithCancel(ctx)
+		client := slpb.NewStoreLivenessClient(conn)
+		streamCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		stream, err := client.Heartbeat(batchCtx) // closed via cancellation
+		stream, err := client.Stream(streamCtx) // closed via cancellation
 		if err != nil {
-			log.Warningf(ctx, "creating batch client for node %d failed: %+v", toNodeID, err)
+			log.Warningf(ctx, "creating stream client for node %d failed: %+v", toNodeID, err)
 			return
 		}
 
-		if err := t.processQueue(q, stream, class); err != nil {
+		if err := t.processQueue(q, stream); err != nil {
 			log.Warningf(ctx, "while processing outgoing queue to node %d: %s:", toNodeID, err)
 		}
 	}
-	err := t.stopper.RunAsyncTask(ctx, "storeliveness.Transport: sending/receiving messages",
+	err := t.stopper.RunAsyncTask(ctx, "storeliveness.Transport: sending messages",
 		func(ctx context.Context) {
 			pprof.Do(ctx, pprof.Labels("remote_node_id", toNodeID.String()), worker)
 		})
 	if err != nil {
-		t.queues[class].Delete(int64(toNodeID))
+		t.queues.Delete(int64(toNodeID))
 		return false
 	}
 	return true

@@ -10,19 +10,7 @@
 
 package storeliveness
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-)
-
-// Epoch is an epoch in the Store Liveness fabric, referencing an uninterrupted
-// period of support from one store to another.
-type Epoch int64
-
-// Expiration is a timestamp indicating the extent of support from one store to
-// another in the Store Liveness fabric within a given epoch. This expiration
-// may be extended through the provision of additional support.
-type Expiration hlc.Timestamp
+import slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 
 // Fabric is a representation of the Store Liveness fabric. It provides
 // information about uninterrupted periods of "support" between stores.
@@ -42,7 +30,7 @@ type Fabric interface {
 	// If S_local cannot map the replica ID to a store ID, false will be returned.
 	// It is therefore important to ensure that the replica ID to store ID mapping
 	// is not lost during periods of support.
-	SupportFor(id storelivenesspb.StoreIdent) (Epoch, bool)
+	SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool)
 
 	// SupportFrom returns the epoch of the current uninterrupted period of Store
 	// Liveness support from the specified replica's remote store (S_remote) for
@@ -58,5 +46,5 @@ type Fabric interface {
 	// However, S_remote will never be unaware of support it is providing.
 	//
 	// If S_local cannot map the replica ID to a store ID, false will be returned.
-	SupportFrom(id storelivenesspb.StoreIdent) (Epoch, Expiration, bool)
+	SupportFrom(id slpb.StoreIdent) (slpb.Epoch, slpb.Expiration, bool)
 }
