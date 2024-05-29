@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -45,7 +46,7 @@ func (s *systemStatusServer) DownloadSpan(
 	ctx = s.AnnotateCtx(ctx)
 
 	resp := &serverpb.DownloadSpanResponse{
-		ErrorsByNodeID: make(map[roachpb.NodeID]string),
+		Errors: make(map[roachpb.NodeID]errorspb.EncodedError),
 	}
 	if len(req.NodeID) > 0 {
 		_, local, err := s.parseNodeID(req.NodeID)
@@ -54,7 +55,10 @@ func (s *systemStatusServer) DownloadSpan(
 		}
 
 		if local {
-			return resp, s.localDownloadSpan(ctx, req)
+			if err := s.localDownloadSpan(ctx, req); err != nil {
+				resp.Errors[s.node.Descriptor.NodeID] = errors.EncodeError(ctx, err)
+			}
+			return resp, nil
 		}
 
 		return nil, errors.AssertionFailedf("requesting download on a specific node is not supported yet")
@@ -66,9 +70,15 @@ func (s *systemStatusServer) DownloadSpan(
 	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.DownloadSpanResponse, error) {
 		return status.DownloadSpan(ctx, &remoteRequest)
 	}
-	responseFn := func(nodeID roachpb.NodeID, downloadSpanResp *serverpb.DownloadSpanResponse) {}
+	responseFn := func(nodeID roachpb.NodeID, downloadSpanResp *serverpb.DownloadSpanResponse) {
+		for i, e := range downloadSpanResp.Errors {
+			resp.Errors[i] = e
+		}
+	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
-		resp.ErrorsByNodeID[nodeID] = err.Error()
+		if _, ok := resp.Errors[nodeID]; !ok {
+			resp.Errors[nodeID] = errors.EncodeError(ctx, err)
+		}
 	}
 
 	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "download spans",

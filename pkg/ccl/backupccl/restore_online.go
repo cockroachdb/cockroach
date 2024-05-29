@@ -570,9 +570,11 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 	if err != nil {
 		return err
 	}
-	log.VInfof(ctx, 1, "finished sending download requests for %d spans, %d errors", len(spans), len(resp.ErrorsByNodeID))
-	for n, err := range resp.ErrorsByNodeID {
-		return errors.Newf("failed to download spans on %d nodes; n%d returned %v", len(resp.ErrorsByNodeID), n, err)
+	log.VInfof(ctx, 1, "finished sending download requests for %d spans, %d errors", len(spans), len(resp.Errors))
+	for n, encoded := range resp.Errors {
+		err := errors.DecodeError(ctx, encoded)
+		return errors.Wrapf(err,
+			"failed to download spans on %d nodes; n%d err", len(resp.Errors), n)
 	}
 	return nil
 }
