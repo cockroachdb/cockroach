@@ -12,7 +12,6 @@ package kvflowconnectedstream
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
@@ -41,7 +40,8 @@ type Tracker struct {
 // raft log position (typically where the proposed command is expected to end
 // up).
 type tracked struct {
-	tokens kvflowcontrol.Tokens
+	tokens      kvflowcontrol.Tokens
+	sendTokenWC admissionpb.WorkClass
 	// TODO: why do we care about the term?
 	position kvflowcontrolpb.RaftLogPosition
 }
@@ -58,10 +58,13 @@ func (dt *Tracker) Init(stream kvflowcontrol.Stream) {
 // Track token deductions of the given priority with the given raft log
 // position.
 //
-// TODO: add overridden priority.
+// sendTokenWC is not necessarily derived from pri. It is the wc from which
+// send-tokens were deducted. Eval tokens are always deducted from the
+// WorkClass derived from pri.
 func (dt *Tracker) Track(
 	ctx context.Context,
 	pri admissionpb.WorkPriority,
+	sendTokenWC admissionpb.WorkClass,
 	tokens kvflowcontrol.Tokens,
 	pos kvflowcontrolpb.RaftLogPosition,
 ) bool {
@@ -77,8 +80,9 @@ func (dt *Tracker) Track(
 	// of allocations under kv0/enc=false/nodes=3/cpu=9. Maybe clean it up as
 	// part of #104154, by using a sync.Pool perhaps.
 	dt.trackedM[pri] = append(dt.trackedM[pri], tracked{
-		tokens:   tokens,
-		position: pos,
+		tokens:      tokens,
+		sendTokenWC: sendTokenWC,
+		position:    pos,
 	})
 	if log.V(1) {
 		log.Infof(ctx, "tracking %s flow control tokens for pri=%s stream=%s pos=%s",
@@ -90,57 +94,51 @@ func (dt *Tracker) Track(
 // Untrack all token deductions of the given priority that have log positions
 // less than or equal to the one provided.
 func (dt *Tracker) Untrack(
-	ctx context.Context, pri admissionpb.WorkPriority, upto kvflowcontrolpb.RaftLogPosition,
-) kvflowcontrol.Tokens {
+	ctx context.Context,
+	pri admissionpb.WorkPriority,
+	upto kvflowcontrolpb.RaftLogPosition,
+	f func(index uint64, sendTokenWC admissionpb.WorkClass, tokens kvflowcontrol.Tokens),
+) {
 	if dt == nil {
-		return 0
+		return
 	}
 	if _, ok := dt.trackedM[pri]; !ok {
-		return 0
+		return
 	}
 
 	var untracked int
-	var tokens kvflowcontrol.Tokens
 	for {
 		if untracked == len(dt.trackedM[pri]) {
 			break
 		}
-
 		deduction := dt.trackedM[pri][untracked]
 		if !deduction.position.LessEq(upto) {
 			break
 		}
+		f(deduction.position.Index, deduction.sendTokenWC, deduction.tokens)
 		untracked += 1
-		tokens += deduction.tokens
 	}
 
-	trackedBefore := len(dt.trackedM[pri])
 	dt.trackedM[pri] = dt.trackedM[pri][untracked:]
-	if log.V(1) {
-		remaining := ""
-		if len(dt.trackedM[pri]) > 0 {
-			remaining = fmt.Sprintf(" (%s, ...)", dt.trackedM[pri][0].tokens)
-		}
-		log.Infof(ctx, "released %s flow control tokens for %d out of %d tracked deductions for pri=%s stream=%s, up to %s; %d tracked deduction(s) remain%s",
-			tokens, untracked, trackedBefore, pri, dt.stream, upto, len(dt.trackedM[pri]), remaining)
-	}
 	if len(dt.trackedM[pri]) == 0 {
 		delete(dt.trackedM, pri)
 	}
-	return tokens
 }
 
 // UntrackAll iterates through all tracked token deductions, invoking the
 // provided callback with the sum of all tokens at a per-priority level, and
 // untracking.
 func (dt *Tracker) UntrackAll(
-	_ context.Context, f func(admissionpb.WorkPriority, kvflowcontrol.Tokens),
+	_ context.Context,
+	f func(
+		pri admissionpb.WorkPriority, sendTokenWC admissionpb.WorkClass, tokens kvflowcontrol.Tokens),
 ) {
 	for pri, deductions := range dt.trackedM {
-		var tokens kvflowcontrol.Tokens
+		var tokens [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
 		for _, deduction := range deductions {
-			tokens += deduction.tokens
+			tokens[deduction.sendTokenWC] += deduction.tokens
 		}
-		f(pri, tokens)
+		f(pri, admissionpb.RegularWorkClass, tokens[admissionpb.RegularWorkClass])
+		f(pri, admissionpb.ElasticWorkClass, tokens[admissionpb.ElasticWorkClass])
 	}
 }
