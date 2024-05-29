@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/fifo"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
@@ -127,6 +128,21 @@ var MinCapacityForBulkIngest = settings.RegisterFloatSetting(
 	"kv.bulk_io_write.min_capacity_remaining_fraction",
 	"remaining store capacity fraction below which bulk ingestion requests are rejected",
 	0.05,
+)
+
+// BlockLoadConcurrencyLimit controls the maximum number of outstanding
+// filesystem read operations for loading sstable blocks. This limit is a
+// last-resort queueing mechanism to avoid memory issues or running against the
+// Go OS system threads limit (see runtime.SetMaxThreads() with default value
+// 10,000).
+//
+// The limit is distributed evenly between all stores (rounding up).
+var BlockLoadConcurrencyLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.block_load.concurrency_limit",
+	"maximum number of outstanding sstable block reads per host",
+	7500,
+	settings.IntInRange(1, 9000),
 )
 
 // CompressionAlgorithm is an enumeration of available compression algorithms
@@ -956,6 +972,14 @@ type engineConfig struct {
 	// DiskWriteStatsCollector is used to categorically track disk write metrics
 	// across all Pebble stores on this node.
 	DiskWriteStatsCollector *vfs.DiskWriteStatsCollector
+
+	// blockConcurrencyLimitDivisor is used to calculate the block load
+	// concurrency limit: it is the current valuer of the
+	// BlockLoadConcurrencyLimit setting divided by this value. It should be set
+	// to the number of stores.
+	//
+	// A value of 0 disables the limit.
+	blockConcurrencyLimitDivisor int
 }
 
 // Pebble is a wrapper around a Pebble database instance.
@@ -1197,6 +1221,14 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		}
 	}
 	ballastPath := base.EmergencyBallastFile(cfg.env.PathJoin, cfg.env.Dir)
+
+	if d := int64(cfg.blockConcurrencyLimitDivisor); d != 0 {
+		val := (BlockLoadConcurrencyLimit.Get(&cfg.settings.SV) + d - 1) / d
+		cfg.opts.LoadBlockSema = fifo.NewSemaphore(val)
+		BlockLoadConcurrencyLimit.SetOnChange(&cfg.settings.SV, func(ctx context.Context) {
+			cfg.opts.LoadBlockSema.UpdateCapacity((BlockLoadConcurrencyLimit.Get(&cfg.settings.SV) + d - 1) / d)
+		})
+	}
 
 	cfg.opts.Logger = nil // Defensive, since LoggerAndTracer will be used.
 	if cfg.opts.LoggerAndTracer == nil {
@@ -2096,6 +2128,12 @@ func (p *Pebble) GetMetrics() Metrics {
 		SingleDelIneffectualCount:        atomic.LoadInt64(&p.singleDelIneffectualCount),
 		SharedStorageReadBytes:           atomic.LoadInt64(&p.sharedBytesRead),
 		SharedStorageWriteBytes:          atomic.LoadInt64(&p.sharedBytesWritten),
+	}
+	if sema := p.cfg.opts.LoadBlockSema; sema != nil {
+		semaStats := sema.Stats()
+		m.BlockLoadConcurrencyLimit = semaStats.Capacity
+		m.BlockLoadsInProgress = semaStats.Outstanding
+		m.BlockLoadsHadToWait = semaStats.NumHadToWait
 	}
 	p.iterStats.Lock()
 	m.Iterator = p.iterStats.AggregatedIteratorStats
