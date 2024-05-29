@@ -1346,11 +1346,12 @@ func TestNewDefaultDatum(t *testing.T) {
 func TestGeospatialSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {
-		wkt      string
-		expected uintptr
+		wkt               string
+		size              uintptr
+		deterministicSize uintptr
 	}{
-		{"SRID=4004;POINT EMPTY", 73},
-		{"SRID=4326;LINESTRING(0 0, 10 0)", 125},
+		{"SRID=4004;POINT EMPTY", 112, 73},
+		{"SRID=4326;LINESTRING(0 0, 10 0)", 144, 125},
 	}
 
 	for _, tc := range testCases {
@@ -1358,12 +1359,14 @@ func TestGeospatialSize(t *testing.T) {
 			t.Run("geometry", func(t *testing.T) {
 				g, err := tree.ParseDGeometry(tc.wkt)
 				require.NoError(t, err)
-				require.Equal(t, tc.expected, g.Size())
+				require.Equal(t, tc.size, g.Size())
+				require.Equal(t, tc.deterministicSize, g.DeterministicMemSize())
 			})
 			t.Run("geography", func(t *testing.T) {
 				g, err := tree.ParseDGeography(tc.wkt)
 				require.NoError(t, err)
-				require.Equal(t, tc.expected, g.Size())
+				require.Equal(t, tc.size, g.Size())
+				require.Equal(t, tc.deterministicSize, g.DeterministicMemSize())
 			})
 		})
 	}

@@ -3549,7 +3549,14 @@ func (d *DGeography) Format(ctx *FmtCtx) {
 
 // Size implements the Datum interface.
 func (d *DGeography) Size() uintptr {
-	return d.Geography.SpatialObjectRef().MemSize()
+	return d.Geography.SpatialObjectRef().MemSize(false /* deterministic */)
+}
+
+// DeterministicMemSize returns size of this DGeography object that will not
+// depend on runtime conditions like pre-allocated slice capacity. This comes at
+// the expense of having less precise information.
+func (d *DGeography) DeterministicMemSize() uintptr {
+	return d.Geography.SpatialObjectRef().MemSize(true /* deterministic */)
 }
 
 // ToJSON converts the DGeography to JSON.
@@ -3676,7 +3683,14 @@ func (d *DGeometry) Format(ctx *FmtCtx) {
 
 // Size implements the Datum interface.
 func (d *DGeometry) Size() uintptr {
-	return d.Geometry.SpatialObjectRef().MemSize()
+	return d.Geometry.SpatialObjectRef().MemSize(false /* deterministic */)
+}
+
+// DeterministicMemSize returns size of this DGeometry object that will not
+// depend on runtime conditions like pre-allocated slice capacity. This comes at
+// the expense of having less precise information.
+func (d *DGeometry) DeterministicMemSize() uintptr {
+	return d.Geometry.SpatialObjectRef().MemSize(true /* deterministic */)
 }
 
 // ToJSON converts the DGeometry to JSON.
@@ -5463,6 +5477,21 @@ func (d *DEnum) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
+
+	// Different enums count as different types.
+	if v.EnumTyp.Oid() != d.EnumTyp.Oid() {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+
+	// We should never be comparing two different versions of the same enum.
+	if v.EnumTyp.TypeMeta.Version != d.EnumTyp.TypeMeta.Version {
+		panic(errors.AssertionFailedf(
+			"comparison of two different versions of enum %s oid %d: versions %d and %d",
+			errors.Safe(d.EnumTyp.SQLString), d.EnumTyp.Oid(), d.EnumTyp.TypeMeta.Version,
+			v.EnumTyp.TypeMeta.Version,
+		))
+	}
+
 	res := bytes.Compare(d.PhysicalRep, v.PhysicalRep)
 	return res, nil
 }
