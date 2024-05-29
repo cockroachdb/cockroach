@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import classNames from "classnames/bind";
+
 import { stdDevLong, longToInt } from "src/util";
 import { Duration, Bytes, PercentageCustom } from "src/util/format";
-import classNames from "classnames/bind";
 import { AggregateStatistics } from "src/statementsTable/statementsTable";
 
 import styles from "./barCharts.module.scss";
@@ -144,7 +145,7 @@ export const retryBarChart = barChartFactory("red", retryBars, approximify);
 
 export function workloadPctBarChart(
   statements: AggregateStatistics[],
-  defaultBarChartOptions: BarChartOptions<any>,
+  defaultBarChartOptions: BarChartOptions<object>,
   totalWorkload: number,
 ) {
   return barChartFactory(

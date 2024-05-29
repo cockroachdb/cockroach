@@ -17,7 +17,7 @@ const cx = classNames.bind(styles);
 
 export interface OutsideEventHandlerProps {
   onOutsideClick: () => void;
-  children: any;
+  children: React.ReactNode;
   mountNodePosition?: "fixed" | "initial";
   ignoreClickOnRefs?: React.RefObject<HTMLDivElement>[];
 }
@@ -25,7 +25,7 @@ export interface OutsideEventHandlerProps {
 export class OutsideEventHandler extends React.Component<OutsideEventHandlerProps> {
   nodeRef: React.RefObject<HTMLDivElement>;
 
-  constructor(props: any) {
+  constructor(props: OutsideEventHandlerProps) {
     super(props);
     this.nodeRef = React.createRef();
   }
@@ -38,10 +38,11 @@ export class OutsideEventHandler extends React.Component<OutsideEventHandlerProp
     this.removeEventListener();
   }
 
-  onClick = (event: any) => {
+  onClick = (event: any): void => {
     const { onOutsideClick, ignoreClickOnRefs = [] } = this.props;
     const isChildEl =
-      this.nodeRef.current && this.nodeRef.current.contains(event.target);
+      this.nodeRef.current &&
+      this.nodeRef.current.contains(event.target.target);
 
     const isOutsideIgnoredEl = ignoreClickOnRefs.some(outsideIgnoredRef => {
       if (!outsideIgnoredRef || !outsideIgnoredRef.current) {

@@ -9,7 +9,11 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { PartialStoryFn, StoryContext } from "@storybook/addons";
 
-export const withBackground = (storyFn: any): React.ReactElement => (
-  <div style={{ backgroundColor: "#F5F7FA" }}>{storyFn()}</div>
+export const withBackground = (
+  storyFn: PartialStoryFn,
+  context: StoryContext,
+): React.ReactElement => (
+  <div style={{ backgroundColor: "#F5F7FA" }}>{storyFn(context)}</div>
 );

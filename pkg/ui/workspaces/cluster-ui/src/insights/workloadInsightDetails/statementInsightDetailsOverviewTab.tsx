@@ -9,6 +9,11 @@
 // licenses/APL.txt.
 import React, { useContext, useMemo, useState } from "react";
 import { Col, Row } from "antd";
+import "antd/lib/col/style";
+import "antd/lib/row/style";
+import classNames from "classnames/bind";
+import { Heading } from "@cockroachlabs/ui-components";
+
 import {
   InsightsSortedTable,
   makeInsightsColumns,
@@ -19,16 +24,10 @@ import {
   Count,
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
 } from "src/util/format";
-import classNames from "classnames/bind";
-
 // Styles
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
-
-import "antd/lib/col/style";
-import "antd/lib/row/style";
-import { Heading } from "@cockroachlabs/ui-components";
 
 import { WaitTimeInsightsLabels } from "../../detailsPanels/waitTimeInsightsPanel";
 import { getStmtInsightRecommendations } from "../utils";
@@ -78,7 +77,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
       <Row gutter={24} className={tableCx("margin-bottom")}>
         <Col className="gutter-row">
           <Heading type="h5">
-            {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
+            {WaitTimeInsightsLabels.blockedTxnsTableTitle(
               insightDetails?.statementExecutionID,
               "statement",
             )}

@@ -9,13 +9,6 @@
 // licenses/APL.txt.
 
 import { withRouter } from "react-router-dom";
-
-import {
-  DatabasesPage,
-  DatabasesPageActions,
-  DatabasesPageData,
-} from "./databasesPage";
-
 import { connect } from "react-redux";
 import { Dispatch } from "redux";
 
@@ -37,9 +30,6 @@ import {
   databaseDetailsReducer,
   databaseDetailsSpanStatsReducer,
 } from "../store/databaseDetails";
-const databaseDetailsActions = databaseDetailsReducer.actions;
-const databaseDetailsSpanStatsActions = databaseDetailsSpanStatsReducer.actions;
-
 import {
   actions as localStorageActions,
   LocalStorageKeys,
@@ -52,6 +42,15 @@ import {
   selectIndexRecommendationsEnabled,
 } from "../store/clusterSettings/clusterSettings.selectors";
 import { deriveDatabaseDetailsMemoized } from "../databases";
+
+import {
+  DatabasesPage,
+  DatabasesPageActions,
+  DatabasesPageData,
+} from "./databasesPage";
+
+const databaseDetailsActions = databaseDetailsReducer.actions;
+const databaseDetailsSpanStatsActions = databaseDetailsSpanStatsReducer.actions;
 
 const mapStateToProps = (state: AppState): DatabasesPageData => {
   const databasesListState = databasesListSelector(state);
@@ -154,6 +153,6 @@ const mapDispatchToProps = (dispatch: Dispatch): DatabasesPageActions => ({
   },
 });
 
-export const ConnectedDatabasesPage = withRouter<any, any>(
+export const ConnectedDatabasesPage = withRouter(
   connect(mapStateToProps, mapDispatchToProps)(DatabasesPage),
 );

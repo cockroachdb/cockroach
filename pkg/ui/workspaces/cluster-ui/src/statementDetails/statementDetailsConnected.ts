@@ -11,6 +11,7 @@
 import { withRouter, RouteComponentProps } from "react-router-dom";
 import { connect } from "react-redux";
 import { Dispatch } from "redux";
+
 import { actions as sqlDetailsStatsActions } from "src/store/statementDetails";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import {
@@ -190,6 +191,6 @@ const mapDispatchToProps = (
     ),
 });
 
-export const ConnectedStatementDetailsPage = withRouter<any, any>(
+export const ConnectedStatementDetailsPage = withRouter(
   connect(mapStateToProps, mapDispatchToProps)(StatementDetails),
 );

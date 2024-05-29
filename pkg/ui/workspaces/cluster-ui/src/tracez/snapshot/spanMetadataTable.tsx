@@ -10,12 +10,13 @@
 import moment from "moment-timezone";
 import React, { useState } from "react";
 import { Nodes } from "@cockroachlabs/icons";
+import classNames from "classnames/bind";
+import { Tooltip } from "antd";
+
 import { NamedOperationMetadata } from "src/api/tracezApi";
 import { EmptyTable } from "src/empty";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
-import classNames from "classnames/bind";
 import { CircleFilled } from "src/icon";
-import { Tooltip } from "antd";
 
 import styles from "../snapshot.module.scss";
 

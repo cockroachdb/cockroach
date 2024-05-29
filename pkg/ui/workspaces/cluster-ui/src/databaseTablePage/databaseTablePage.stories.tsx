@@ -10,15 +10,17 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-import _ from "lodash";
+import random from "lodash/random";
+import uniq from "lodash/uniq";
+import moment from "moment-timezone";
+import * as H from "history";
+
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import {
   randomName,
   randomRole,
   randomTablePrivilege,
 } from "src/storybook/fixtures";
-import moment from "moment-timezone";
-import * as H from "history";
 import { indexUnusedDuration } from "src/util/constants";
 
 import { DatabaseTablePage, DatabaseTablePageProps } from "./databaseTablePage";
@@ -115,8 +117,8 @@ const withData: DatabaseTablePageProps = {
       all: [
         {
           user: randomRole(),
-          privileges: _.uniq(
-            new Array(_.random(1, 5)).map(() => randomTablePrivilege()),
+          privileges: uniq(
+            new Array(random(1, 5)).map(() => randomTablePrivilege()),
           ),
         },
       ],

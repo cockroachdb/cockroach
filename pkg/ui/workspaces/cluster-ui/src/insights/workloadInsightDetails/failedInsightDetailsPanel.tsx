@@ -10,18 +10,16 @@
 
 import React from "react";
 import { Col, Row } from "antd";
+import "antd/lib/row/style";
+import "antd/lib/col/style";
 import { Heading } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 
-import { ContentionDetails } from "../types";
 import { SummaryCard, SummaryCardItem } from "../../summaryCard";
-
 // TODO (xinhaoz) we should organize these common page details styles into its own file.
 import styles from "../../statementDetails/statementDetails.module.scss";
-
-import "antd/lib/row/style";
-import "antd/lib/col/style";
 import { TransactionDetailsLink } from "../workloadInsights/util";
+import { ContentionDetails } from "../types";
 
 const cx = classNames.bind(styles);
 

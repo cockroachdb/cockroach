@@ -11,7 +11,7 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { MemoryRouter } from "react-router-dom";
-import { noop } from "lodash";
+import noop from "lodash/noop";
 import moment from "moment-timezone";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 

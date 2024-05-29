@@ -10,8 +10,9 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { StatementsRequest } from "src/api/statementsApi";
 import moment from "moment-timezone";
+
+import { StatementsRequest } from "src/api/statementsApi";
 import { createInitialState, RequestState } from "src/api/types";
 
 import { TimeScale } from "../../timeScaleDropdown";

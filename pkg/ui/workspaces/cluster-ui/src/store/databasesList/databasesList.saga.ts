@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
-import { getDatabasesList } from "src/api";
 import moment from "moment-timezone";
+
+import { getDatabasesList } from "src/api";
 
 import { actions } from "./databasesList.reducers";
 

@@ -10,8 +10,9 @@
 
 import React from "react";
 import classnames from "classnames/bind";
-import { Button, ButtonProps } from "src/button";
 import { CaretDown } from "@cockroachlabs/icons";
+
+import { Button, ButtonProps } from "src/button";
 
 import { OutsideEventHandler } from "../outsideEventHandler";
 

@@ -10,16 +10,17 @@
 import moment from "moment-timezone";
 import React, { useState } from "react";
 import { Nodes, Caution, Plus, Minus } from "@cockroachlabs/icons";
+import classNames from "classnames/bind";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { Link } from "react-router-dom";
+import Long from "long";
+
 import { Span, Snapshot } from "src/api/tracezApi";
 import { EmptyTable } from "src/empty";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
-import classNames from "classnames/bind";
 import { TimestampToMoment } from "src/util";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { CircleFilled } from "src/icon";
 import { Dropdown } from "src/dropdown";
-import { Link } from "react-router-dom";
-import Long from "long";
 
 import styles from "../snapshot.module.scss";
 

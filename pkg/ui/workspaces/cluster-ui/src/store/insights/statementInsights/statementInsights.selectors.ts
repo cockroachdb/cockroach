@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+
 import { localStorageSelector } from "src/store/utils/selectors";
 import { AppState } from "src/store/reducers";
 import {

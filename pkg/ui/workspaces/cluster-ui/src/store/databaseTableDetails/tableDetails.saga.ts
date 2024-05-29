@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeEvery } from "redux-saga/effects";
-import { ErrorWithKey, getTableDetails, TableDetailsReqParams } from "src/api";
 import moment from "moment";
 import { PayloadAction } from "@reduxjs/toolkit";
+
+import { ErrorWithKey, getTableDetails, TableDetailsReqParams } from "src/api";
 
 import { generateTableID } from "../../util";
 

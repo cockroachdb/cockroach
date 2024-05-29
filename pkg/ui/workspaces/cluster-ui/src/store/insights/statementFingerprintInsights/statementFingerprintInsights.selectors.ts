@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+
 import { AppState } from "src/store/reducers";
 import { selectStatementFingerprintID } from "src/selectors/common";
 

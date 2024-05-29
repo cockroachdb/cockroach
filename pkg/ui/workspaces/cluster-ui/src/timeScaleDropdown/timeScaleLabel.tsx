@@ -11,14 +11,14 @@
 import React, { useContext } from "react";
 import moment from "moment-timezone";
 import classNames from "classnames/bind";
-
-import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
-
 import { Icon } from "@cockroachlabs/ui-components";
 import { Tooltip } from "antd";
+
 import "antd/lib/tooltip/style";
 import { Timezone } from "src/timestamp";
 import { TimezoneContext } from "src/contexts/timezoneContext";
+
+import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
 import { dateFormat, timeFormat } from "./timeScaleDropdown";
 import { FormattedTimescale } from "./formattedTimeScale";

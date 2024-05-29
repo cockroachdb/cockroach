@@ -17,9 +17,10 @@ import {
   takeLatest,
   takeEvery,
 } from "redux-saga/effects";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { ErrorWithKey } from "src/api/statementsApi";
 import { CACHE_INVALIDATION_PERIOD } from "src/store/utils";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { generateTableID } from "../../util";
 import {

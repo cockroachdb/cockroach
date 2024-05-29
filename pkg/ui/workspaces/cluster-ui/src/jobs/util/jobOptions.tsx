@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { BadgeStatus } from "src/badge";
 
 const JobType = cockroach.sql.jobs.jobspb.Type;

@@ -27,7 +27,7 @@ import {
   TimeScaleDropdown,
 } from "./timeScaleDropdown";
 import * as timescale from "./timeScaleTypes";
-import TimeFrameControls from "./timeFrameControls";
+import { TimeFrameControls } from "./timeFrameControls";
 import RangeSelect from "./rangeSelect";
 import { TimeWindow, ArrowDirection, TimeScale } from "./timeScaleTypes";
 

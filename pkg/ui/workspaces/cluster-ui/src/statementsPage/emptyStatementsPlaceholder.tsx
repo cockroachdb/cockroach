@@ -9,10 +9,11 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { Link } from "react-router-dom";
+
 import { EmptyTable, EmptyTableProps } from "src/empty";
 import { Anchor } from "src/anchor";
 import { statementsTable, tabAttr, viewAttr } from "src/util";
-import { Link } from "react-router-dom";
 import { commonStyles } from "src/common";
 
 import magnifyingGlassImg from "../assets/emptyState/magnifying-glass.svg";

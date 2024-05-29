@@ -11,7 +11,6 @@
 import React, { useCallback, useState } from "react";
 import copy from "copy-to-clipboard";
 import { message, Icon } from "antd";
-
 import "antd/lib/message/style";
 import "antd/lib/icon/style";
 import { InlineAlert } from "@cockroachlabs/ui-components";
@@ -37,13 +36,13 @@ import { InsightType } from "./types";
 
 const cx = classNames.bind(styles);
 
-interface idxRecProps {
+interface IdxRecProps {
   actionQuery: string;
   actionType: InsightType;
   database: string;
 }
 
-const IdxRecAction = (props: idxRecProps): React.ReactElement => {
+const IdxRecAction = (props: IdxRecProps): React.ReactElement => {
   const [visible, setVisible] = useState(false);
   const [applying, setApplying] = useState(false);
   const [btnOkLabel, setBtnOkLabel] = useState("Apply");

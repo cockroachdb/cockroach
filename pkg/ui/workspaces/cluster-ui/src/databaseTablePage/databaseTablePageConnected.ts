@@ -9,6 +9,11 @@
 // licenses/APL.txt.
 
 import { RouteComponentProps } from "react-router";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { Dispatch } from "redux";
+import { withRouter } from "react-router-dom";
+import { connect } from "react-redux";
+
 import { AppState, uiConfigActions } from "src/store";
 import {
   databaseNameCCAttr,
@@ -30,14 +35,10 @@ import {
   selectIndexUsageStatsEnabled,
 } from "src/store/clusterSettings/clusterSettings.selectors";
 import { selectHasAdminRole, selectIsTenant } from "src/store/uiConfig";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { Dispatch } from "redux";
 import { actions as tableDetailsActions } from "src/store/databaseTableDetails";
 import { actions as indexStatsActions } from "src/store/indexStats";
 import { actions as analyticsActions } from "src/store/analytics";
 import { actions as clusterSettingsActions } from "src/store/clusterSettings";
-import { withRouter } from "react-router-dom";
-import { connect } from "react-redux";
 
 import {
   deriveIndexDetailsMemoized,

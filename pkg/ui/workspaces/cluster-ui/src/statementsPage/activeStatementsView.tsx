@@ -12,6 +12,8 @@ import React, { useEffect, useState } from "react";
 import classNames from "classnames/bind";
 import moment, { Moment } from "moment-timezone";
 import { useHistory } from "react-router-dom";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import {
   ISortedTablePagination,
   SortSetting,
@@ -29,7 +31,6 @@ import LoadingError from "src/sqlActivity/errorComponent";
 import { queryByName, syncHistory } from "src/util/query";
 import { getActiveStatementFiltersFromURL } from "src/queryFilter/utils";
 import { Pagination } from "src/pagination";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 import RefreshControl from "src/activeExecutions/refreshControl/refreshControl";
 
 import {

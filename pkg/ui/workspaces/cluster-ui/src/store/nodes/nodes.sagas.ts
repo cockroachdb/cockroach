@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 
 import { all, call, put, delay, takeLatest } from "redux-saga/effects";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { getNodes } from "src/api/nodesApi";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { rootActions } from "../rootActions";
 

@@ -10,7 +10,7 @@
 
 import React from "react";
 import Select, { Props, OptionsType } from "react-select";
-import { noop } from "lodash";
+import noop from "lodash/noop";
 import { StylesConfig } from "react-select/src/styles";
 
 import { CheckboxOption } from "../multiSelectCheckbox/multiSelectCheckbox";

@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { Link } from "react-router-dom";
+
 import {
   ColumnDescriptor,
   ISortedTablePagination,
@@ -24,7 +26,6 @@ import {
   TransactionStatus,
   TxnInsightEvent,
 } from "src/insights";
-import { Link } from "react-router-dom";
 import { Badge } from "src/badge";
 
 import {

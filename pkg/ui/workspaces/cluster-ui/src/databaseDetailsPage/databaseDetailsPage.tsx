@@ -13,6 +13,8 @@ import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import { Dropdown, DropdownOption } from "src/dropdown";
 import { DatabaseIcon } from "src/icon/databaseIcon";
 import { StackIcon } from "src/icon/stackIcon";
@@ -35,7 +37,6 @@ import {
 } from "src/queryFilter";
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "src/tableStatistics";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 
 import {
   isMaxSizeError,
@@ -177,7 +178,7 @@ export interface DatabaseDetailsPageActions {
 
 export type DatabaseDetailsPageProps = DatabaseDetailsPageData &
   DatabaseDetailsPageActions &
-  RouteComponentProps<unknown>;
+  RouteComponentProps;
 
 interface DatabaseDetailsPageState {
   pagination: ISortedTablePagination;

@@ -12,6 +12,9 @@ import { join } from "path";
 
 import React, { useCallback, useEffect } from "react";
 import { RouteComponentProps } from "react-router-dom";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
+
 import {
   ListTracingSnapshotsResponse,
   GetTracingSnapshotResponse,
@@ -20,10 +23,8 @@ import {
   RecordingMode,
   GetTraceResponse,
 } from "src/api/tracezApi";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { SortSetting } from "src/sortedtable";
 import { getMatchParamByName, syncHistory } from "src/util";
-import Long from "long";
 import { Breadcrumbs } from "src/breadcrumbs";
 
 import { SnapshotComponent } from "./snapshotComponent";

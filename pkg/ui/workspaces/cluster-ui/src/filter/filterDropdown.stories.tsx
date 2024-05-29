@@ -10,7 +10,7 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-import { noop } from "lodash";
+import noop from "lodash/noop";
 
 import { FilterDropdown } from "./filterDropdown";
 import { FilterCheckboxOption } from "./filterCheckboxOption";

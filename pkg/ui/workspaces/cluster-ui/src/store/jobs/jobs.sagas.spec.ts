@@ -16,8 +16,9 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { getJobs } from "src/api/jobsApi";
 import moment from "moment-timezone";
+
+import { getJobs } from "src/api/jobsApi";
 
 import {
   allJobsFixture,
