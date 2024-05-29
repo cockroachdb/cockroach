@@ -76,7 +76,7 @@ type Dependencies interface {
 	DescriptorCommentGetter() CommentGetter
 
 	// ZoneConfigGetter returns a zone config reader.
-	ZoneConfigGetter() ZoneConfigGetter
+	ZoneConfigGetter() scdecomp.ZoneConfigGetter
 
 	// ClientNoticeSender returns a eval.ClientNoticeSender.
 	ClientNoticeSender() eval.ClientNoticeSender
@@ -90,7 +90,14 @@ type Dependencies interface {
 	// ReferenceProviderFactory returns a ReferenceProviderFactory.
 	ReferenceProviderFactory() ReferenceProviderFactory
 
+	// TemporarySchemaProvider returns a TemporarySchemaProvider.
 	TemporarySchemaProvider() TemporarySchemaProvider
+
+	// NodesStatusInfo returns a NodesStatusInfo.
+	NodesStatusInfo() NodesStatusInfo
+
+	// RegionProvider returns a RegionProvider.
+	RegionProvider() RegionProvider
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating
@@ -217,9 +224,6 @@ type AstFormatter interface {
 	FormatAstAsRedactableString(statement tree.Statement, annotations *tree.Annotations) redact.RedactableString
 }
 
-// ZoneConfigGetter see scdecomp.ZoneConfigGetter.
-type ZoneConfigGetter scdecomp.ZoneConfigGetter
-
 // CommentGetter see scdecomp.CommentGetter.
 type CommentGetter scdecomp.CommentGetter
 
@@ -265,4 +269,6 @@ type (
 	FeatureChecker = scbuildstmt.SchemaFeatureChecker
 
 	TemporarySchemaProvider = scbuildstmt.TemporarySchemaProvider
+	NodesStatusInfo         = scbuildstmt.NodeStatusInfo
+	RegionProvider          = scbuildstmt.RegionProvider
 )

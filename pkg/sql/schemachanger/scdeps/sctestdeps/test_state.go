@@ -104,6 +104,8 @@ func NewTestDependencies(options ...Option) *TestState {
 	for _, o := range options {
 		o.apply(&s)
 	}
+	zc := zonepb.DefaultSystemZoneConfigRef()
+	s.committed.UpsertZoneConfig(0, zc, nil)
 	s.uncommittedInMemory = catalogDeepCopy(s.committed.Catalog)
 	s.uncommittedInStorage = catalogDeepCopy(s.committed.Catalog)
 	return &s
