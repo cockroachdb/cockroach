@@ -160,11 +160,17 @@ func (s *storeStreamSendTokensWatcher) NotifyWhenAvailable(
 	s.mu.idSeq++
 
 	s.mu.handles[handle.id] = &handle
-	watcher := s.getOrCreateTokenWatcherLocked(stc, wc)
+	watcher, ok := s.mu.watchers[stc]
+	if !ok {
+		watcher = &tokenWatcher{
+			tracked: make(map[admissionpb.WorkClass][]StoreStreamSendTokenHandleID),
+		}
+		s.mu.watchers[stc] = watcher
+	}
 	watcher.tracked[wc] = append(watcher.tracked[wc], handle.id)
 
-	// This is the first token for the work class, token counter pair, start
-	// watching tokens.
+	// This is the first token for the work class, token counter pair, launch a
+	// new watcher task.
 	if len(watcher.tracked[handle.wc]) == 1 {
 		s.watchTokens(context.Background(), handle.stc, wc, watcher)
 	}
@@ -194,7 +200,7 @@ func (s *storeStreamSendTokensWatcher) UpdateHandle(
 	watcher.tracked[handle.wc] = append(watcher.tracked[handle.wc], handleID)
 
 	// This is the first token for the work class, counter pair, launch a new
-	// watcher.
+	// watcher task.
 	if len(watcher.tracked[handle.wc]) == 1 {
 		s.watchTokens(context.Background(), handle.stc, wc, watcher)
 	}
@@ -212,23 +218,12 @@ func (s *storeStreamSendTokensWatcher) CancelHandle(handleID StoreStreamSendToke
 	delete(s.mu.handles, handle.id)
 }
 
-func (s *storeStreamSendTokensWatcher) getOrCreateTokenWatcherLocked(
-	stc TokenCounter, wc admissionpb.WorkClass,
-) *tokenWatcher {
-	watcher, ok := s.mu.watchers[stc]
-	if !ok {
-		watcher = &tokenWatcher{
-			tracked: make(map[admissionpb.WorkClass][]StoreStreamSendTokenHandleID),
-		}
-		s.mu.watchers[stc] = watcher
-	}
-
-	return watcher
-}
-
 func (s *storeStreamSendTokensWatcher) watchTokens(
 	ctx context.Context, stc TokenCounter, wc admissionpb.WorkClass, watcher *tokenWatcher,
 ) {
+	// TODO: This async task should be spawned by the caller. Consider
+	// maintaining all the state needed to run the task within a struct,
+	// including the notification corresponding to the handleID.
 	_ = s.stopper.RunAsyncTask(ctx, "store-stream-token-watcher", func(ctx context.Context) {
 		for {
 			// Check whether there are no more watchers for the given work class. If
@@ -273,8 +268,7 @@ func (s *storeStreamSendTokensWatcher) watchTokens(
 				// Move the next handle to the end of the queue, so that we can rotate
 				// through each of the watchers when tokens are available.
 				//
-				// TODO(kvoli): Should we be using a more general purpose queue here
-				// instead of a slice?
+				// TODO(kvoli): Should we be using a queue here instead of a slice?
 				next := watcher.tracked[wc][0]
 				watcher.tracked[wc] = watcher.tracked[wc][1:]
 				watcher.tracked[wc] = append(watcher.tracked[wc], next)

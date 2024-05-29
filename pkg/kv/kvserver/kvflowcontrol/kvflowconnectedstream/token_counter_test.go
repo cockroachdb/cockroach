@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -20,12 +21,18 @@ func TestTokenCounter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+
 	tokensPerWorkClass := tokensPerWorkClass{
 		regular: 100,
 		elastic: 100,
 	}
+	settings := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClockForTesting(hlc.NewHybridManualClock())
-	counter := newTokenCounter(tokensPerWorkClass, clock)
+
+	elasticTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.elastic))
+	regularTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.regular))
+
+	counter := newTokenCounter(settings, clock)
 
 	// Initially, expect there to be tokens available, so no handle is returned.
 	available, handle := counter.TokensAvailable(admissionpb.RegularWorkClass)
