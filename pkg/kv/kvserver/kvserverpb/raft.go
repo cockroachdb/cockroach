@@ -42,4 +42,5 @@ func (m *SnapshotResponse) Error() (deprecated bool, _ error) {
 	return true, errors.Newf("%s", m.DeprecatedMessage)
 }
 
-const AdmissionPriorityNotOverridden = admissionpb.UnusedPri
+const PriorityNotOverriddenForFlowControl = admissionpb.UnusedPri1
+const NotSubjectToACForFlowControl = admissionpb.UnusedPri2
