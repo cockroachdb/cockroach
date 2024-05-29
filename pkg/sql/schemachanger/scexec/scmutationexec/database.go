@@ -37,3 +37,14 @@ func (i *immediateVisitor) CreateDatabaseDescriptor(
 	i.CreateDescriptor(mut)
 	return nil
 }
+
+func (i *immediateVisitor) AddDatabaseZoneConfig(
+	ctx context.Context, op scop.AddDatabaseZoneConfig,
+) error {
+	dbDesc, err := i.checkOutDescriptor(ctx, op.DatabaseID)
+	if err != nil {
+		return err
+	}
+	i.ImmediateMutationStateUpdater.UpdateZoneConfig(dbDesc.GetID(), *op.ZoneConfig)
+	return nil
+}
