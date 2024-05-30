@@ -206,13 +206,6 @@ func newCluster(
 	return c, nil
 }
 
-// shouldUseLoadBalancer determines if the node selector section in the cluster
-// name is set to select a load balancer.
-func shouldUseLoadBalancer(name string) bool {
-	parts := strings.Split(name, ":")
-	return len(parts) == 2 && strings.ToLower(parts[1]) == "lb"
-}
-
 // userClusterNameRegexp returns a regexp that matches all clusters owned by the
 // current user.
 func userClusterNameRegexp(l *logger.Logger) (*regexp.Regexp, error) {
@@ -1053,31 +1046,8 @@ func PgURL(
 	if err != nil {
 		return nil, err
 	}
-
-	if shouldUseLoadBalancer(clusterName) {
-		services, err := c.DiscoverServices(ctx, opts.VirtualClusterName, install.ServiceTypeSQL,
-			install.ServiceInstancePredicate(opts.SQLInstance))
-		if err != nil {
-			return nil, err
-		}
-		port := config.DefaultSQLPort
-		serviceMode := install.ServiceModeExternal
-		if len(services) > 0 {
-			port = services[0].Port
-			serviceMode = services[0].ServiceMode
-		} else {
-			l.Printf("no services found, searching for load balancer on default port %d", port)
-		}
-		addr, err := c.FindLoadBalancer(l, port)
-		if err != nil {
-			return nil, err
-		}
-		return []string{c.NodeURL(addr.IP, port, opts.VirtualClusterName, serviceMode, opts.Auth)}, nil
-	}
-
 	nodes := c.TargetNodes()
 	ips := make([]string, len(nodes))
-
 	if opts.External {
 		for i := 0; i < len(nodes); i++ {
 			ips[i] = c.VMs[nodes[i]-1].PublicIP

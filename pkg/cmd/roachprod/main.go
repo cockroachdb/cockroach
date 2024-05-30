@@ -1133,13 +1133,6 @@ var pgurlCmd = &cobra.Command{
 	Short: "generate pgurls for the nodes in a cluster",
 	Long: fmt.Sprintf(`Generate pgurls for the nodes in a cluster.
 
-The command generates postgres urls for the specified nodes in a cluster.
-Both the nodes or a load balancer can be specified as the target of the pgurl.
-
-Examples of <cluster>:
-	cluster-name:1-3
-	cluster-name:lb
-
 %[1]s
 `, strings.TrimSpace(AuthModeHelp)),
 	Args: cobra.ExactArgs(1),
