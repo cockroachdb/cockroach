@@ -364,16 +364,18 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
   getDisplayIdentities = (identityByID: Map<number, Identity>): Identity[] => {
     const { match } = this.props;
     const nodeId = getMatchParamByName(match, "node_id");
-    const identityContent = _.chain(Array.from(identityByID.values())).sortBy(
+    const identityContent = sortBy(
+      Array.from(identityByID.values()),
       identity => identity.nodeID,
     );
-    const sort = this.getSortParams(identityContent.value());
+    const sort = this.getSortParams(identityContent);
     if (sort.some(x => x.id === nodeId)) {
-      return identityContent
-        .sortBy(identity => getValueFromString(nodeId, identity.locality, true))
-        .value();
+      return sortBy(
+        identityContent,
+        identity => getValueFromString(nodeId, identity.locality, true)
+      );
     }
-    return identityContent.value();
+    return identityContent;
   };
 
   renderContent(
@@ -429,13 +431,13 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     const displayIdentities: Identity[] =
       this.getDisplayIdentities(identityByID);
 
-    const latencies: number[] = _.chain(connections)
-      .values()
-      .flatMap(v => Object.values(v.peers))
-      .flatMap(v => v.latency)
-      .filter(v => v !== undefined && v.nanos !== undefined)
-      .map(v => util.NanoToMilli(v.nanos))
-      .value();
+    const latencies = flow([
+      values,
+      (vals: IConnectivity[]) => flatMap(vals, v => Object.values(v.peers)),
+      (vals: IPeer[]) => flatMap(vals, v => v.latency),
+      (vals: IDuration[]) => filter(vals,v => v !== undefined && v.nanos !== undefined),
+      (vals: IDuration[]) => map(vals,v => util.NanoToMilli(v.nanos)),
+    ])(connections)
 
     if (_.isEmpty(identityByID)) {
       return <h2 className="base-heading">No nodes match the filters</h2>;

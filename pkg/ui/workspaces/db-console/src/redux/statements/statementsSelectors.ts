@@ -8,7 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { chain, orderBy } from "lodash";
+import orderBy from "lodash/orderBy";
+import groupBy from "lodash/groupBy";
+import mapValues from "lodash/mapValues";
+import flow from "lodash/flow";
 import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
@@ -59,11 +62,12 @@ export const selectDiagnosticsReportsPerStatement = createSelector(
   selectStatementDiagnosticsReports,
   (
     diagnosticsReports: clusterUiApi.StatementDiagnosticsReport[],
-  ): StatementDiagnosticsDictionary =>
-    chain(diagnosticsReports)
-      .groupBy(diagnosticsReport => diagnosticsReport.statement_fingerprint)
-      .mapValues(diagnostics =>
+  ): StatementDiagnosticsDictionary => {
+    return flow(
+      (reports: clusterUiApi.StatementDiagnosticsReport[]) => groupBy(reports, report => report.statement_fingerprint),
+      diagnosticsByFingerprint => mapValues(diagnosticsByFingerprint, diagnostics =>
         orderBy(diagnostics, d => moment(d.requested_at).unix(), ["desc"]),
       )
-      .value(),
+    )(diagnosticsReports);
+  }
 );

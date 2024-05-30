@@ -24,11 +24,12 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
   const { range } = props;
   let ids: number[];
   let viaNodeID = "";
-  if (range && !range.inFlight && !_.isNil(range.data)) {
-    ids = _.chain(_.keys(range.data.responses_by_node_id))
-      .map(id => parseInt(id, 10))
-      .sortBy(id => id)
-      .value();
+  if (range && !range.inFlight && !isNil(range.data)) {
+    ids = flow(
+      keys,
+      nodeIds => map(nodeIds, id => parseInt(id, 10)),
+      nodeIds => sortBy(nodeIds, id => id)
+    )(range.data.responses_by_node_id)
     viaNodeID = ` (via n${range.data.node_id.toString()})`;
   }
 

@@ -655,13 +655,12 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     const { infos, replicas } = this.props;
     const leader = _.head(infos);
     const rangeID = leader.state.state.desc.range_id;
-    const data = _.chain(infos);
 
     // We want to display ordered by store ID.
-    const sortedStoreIDs = data
-      .map(info => info.source_store_id)
-      .sortBy(id => id)
-      .value();
+    const sortedStoreIDs = flow(
+      (infos: IRangeInfo[]) => map(infos, info => info.source_store_id),
+      (storeIds) => sortBy(storeIds, id => id)
+    )(infos);
 
     const dormantStoreIDs: Set<number> = new Set();
 

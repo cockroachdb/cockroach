@@ -184,11 +184,11 @@ export class Range extends React.Component<RangeProps, {}> {
     );
 
     // Gather all replica IDs.
-    const replicas = _.chain(infos)
-      .flatMap(info => info.state.state.desc.internal_replicas)
-      .sortBy(rep => rep.replica_id)
-      .sortedUniqBy(rep => rep.replica_id)
-      .value();
+    const replicas = flow(
+      (infos: IRangeInfo[]) => flatMap(infos, info => info.state.state.desc.internal_replicas),
+      descriptors => sortBy(descriptors, d => d.replica_id),
+      descriptors => sortedUniqBy(descriptors, d => d.replica_id)
+    )(infos);
 
     return (
       <div className="section">

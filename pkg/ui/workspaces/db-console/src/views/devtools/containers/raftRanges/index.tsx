@@ -8,7 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import filter from "lodash/filter";
+import flatMap from "lodash/flatMap";
+import map from "lodash/map";
+import uniq from "lodash/uniq";
+import values from "lodash/values";
+import sortBy from "lodash/sortBy";
+import flow from "lodash/flow";
 import React from "react";
 import ReactPaginate from "react-paginate";
 import { connect } from "react-redux";
@@ -18,6 +24,9 @@ import { refreshRaft } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import { cockroach } from "src/js";
+
+import RaftDebugResponse = cockroach.server.serverpb.RaftDebugResponse;
 
 /******************************
  *   RAFT RANGES MAIN COMPONENT
@@ -171,16 +180,12 @@ export class RangesMain extends React.Component<
       errors = errors.concat(statuses.errors.map(err => err.message));
 
       // Build list of all nodes for static ordering.
-      const nodeIDs = _(statuses.ranges)
-        .flatMap((range: protos.cockroach.server.serverpb.IRaftRangeStatus) => {
-          return range.nodes;
-        })
-        .map((node: protos.cockroach.server.serverpb.IRaftRangeNode) => {
-          return node.node_id;
-        })
-        .uniq()
-        .sort()
-        .value();
+      const nodeIDs = flow(
+        (ranges: RaftDebugResponse["ranges"]) => flatMap(ranges, r => r.nodes),
+        nodes => map(nodes, node => node.node_id),
+        nodeIds => uniq(nodeIds),
+        nodeIds => sortBy(nodeIds),
+      )(statuses.ranges);
 
       const nodeIDIndex: { [nodeID: number]: number } = {};
       const columns = [<th key={-1}>Range</th>];
