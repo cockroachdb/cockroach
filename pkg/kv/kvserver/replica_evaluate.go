@@ -238,7 +238,7 @@ func evaluateBatch(
 	// Only collect the scan stats if the tracing is enabled.
 	var ss *kvpb.ScanStats
 	if sp := tracing.SpanFromContext(ctx); sp.RecordingType() != tracingpb.RecordingOff {
-		ss = &kvpb.ScanStats{}
+		ss = &kvpb.ScanStats{NodeID: rec.NodeID()}
 		defer func() {
 			if ss.NumGets != 0 || ss.NumScans != 0 || ss.NumReverseScans != 0 {
 				// Only record non-empty ScanStats.

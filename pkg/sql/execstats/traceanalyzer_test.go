@@ -267,6 +267,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		MvccRangeKeyContainedPoints:        22,
 		MvccRangeKeySkippedPoints:          23,
 		SQLInstanceIDs:                     []int32{1},
+		KVNodeIDs:                          []int32{1, 2},
 		Regions:                            []string{"east-usA"},
 		ClientTime:                         time.Second,
 	}
@@ -299,6 +300,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		MvccRangeKeyContainedPoints:        29,
 		MvccRangeKeySkippedPoints:          30,
 		SQLInstanceIDs:                     []int32{2},
+		KVNodeIDs:                          []int32{1, 3},
 		Regions:                            []string{"east-usB"},
 		ClientTime:                         2 * time.Second,
 	}
@@ -330,6 +332,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		MvccRangeKeyContainedPoints:        51,
 		MvccRangeKeySkippedPoints:          53,
 		SQLInstanceIDs:                     []int32{1, 2},
+		KVNodeIDs:                          []int32{1, 2, 3},
 		Regions:                            []string{"east-usA", "east-usB"},
 		ClientTime:                         3 * time.Second,
 	}
@@ -337,6 +340,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 	aCopy := a
 	// Copy will point to the same array.
 	aCopy.SQLInstanceIDs = []int32{1}
+	aCopy.KVNodeIDs = []int32{1, 2}
 	a.Accumulate(b)
 	require.Equal(t, expected, a)
 

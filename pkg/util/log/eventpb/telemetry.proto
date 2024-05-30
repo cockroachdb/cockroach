@@ -300,9 +300,8 @@ message SampledQuery {
   // more details see: https://github.com/cockroachdb/cockroach/issues/123665
   reserved 13;
 
-  // PR #124681 used this field for KVNodeIDs, but isn't being backported to 23.2. Instead, it
-  // is reserved for visibility and to ensure compatability in the future.
-  reserved 78;
+  // KVNodeIDs is a list of all the KV nodes used in this statement's execution.
+  repeated int32 kv_node_ids = 78 [(gogoproto.jsontag) = ',omitempty', (gogoproto.customname) = "KVNodeIDs", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
   // Next available ID: 80.
 }

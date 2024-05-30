@@ -104,7 +104,7 @@ func TestDataDriven(t *testing.T) {
 	reStripFileLinePrefix := regexp.MustCompile(`^[^ ]+ `)
 	// Scan stats (shown after loading the range descriptors) can be different in
 	// race builds.
-	reStripScanStats := regexp.MustCompile(`scan stats: .*$`)
+	reStripScanStats := regexp.MustCompile(`n\d scan stats: .*$`)
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		e := newEnv(t)

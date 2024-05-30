@@ -283,6 +283,7 @@ function makeStats(): Required<StatementStatistics> {
       nanos: 111613000,
     },
     nodes: [Long.fromInt(1), Long.fromInt(2), Long.fromInt(3)],
+    kv_node_ids: [1, 2, 3],
     regions: ["gcp-us-east1"],
     plan_gists: ["Ais="],
     index_recommendations: [],
