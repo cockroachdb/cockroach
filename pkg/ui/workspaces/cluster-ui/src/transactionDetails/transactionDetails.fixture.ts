@@ -231,6 +231,7 @@ export const transactionDetailsData: StatementsResponse = {
           nanos: 677408609,
         },
         nodes: [new Long(2)],
+        kv_node_ids: [2],
         rows_written: {
           mean: 0,
           squared_diffs: 0,
@@ -335,6 +336,7 @@ export const transactionDetailsData: StatementsResponse = {
           nanos: 801046328,
         },
         nodes: [new Long(2)],
+        kv_node_ids: [2],
         rows_written: {
           mean: 0,
           squared_diffs: 0,
@@ -453,6 +455,7 @@ export const transactionDetailsData: StatementsResponse = {
           nanos: 178832951,
         },
         nodes: [new Long(2)],
+        kv_node_ids: [2],
         rows_written: {
           mean: 0,
           squared_diffs: 0,
