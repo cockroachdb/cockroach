@@ -135,6 +135,9 @@ message Statement {
   string error_code = 24;
   // The most recent error experienced by this statement.
   string error_msg = 25 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+  // KVNodeIDs is the ordered list of KV node ids which were used to evaluate KV
+  // read requests.
+  repeated int32 kv_node_ids = 26 [(gogoproto.customname) = "KVNodeIDs"];
 }
 
 

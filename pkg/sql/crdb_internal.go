@@ -1834,6 +1834,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   sample_plan         JSONB,
   database_name       STRING NOT NULL,
   exec_node_ids       INT[] NOT NULL,
+  kv_node_ids         INT[] NOT NULL,
   txn_fingerprint_id  STRING,
   index_recommendations STRING[] NOT NULL,
   latency_seconds_min FLOAT,
@@ -1884,6 +1885,13 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			execNodeIDs := tree.NewDArray(types.Int)
 			for _, nodeID := range stats.Stats.Nodes {
 				if err := execNodeIDs.Append(alloc.NewDInt(tree.DInt(nodeID))); err != nil {
+					return err
+				}
+			}
+
+			kvNodeIDs := tree.NewDArray(types.Int)
+			for _, kvNodeID := range stats.Stats.KVNodeIDs {
+				if err := kvNodeIDs.Append(alloc.NewDInt(tree.DInt(kvNodeID))); err != nil {
 					return err
 				}
 			}
@@ -1976,6 +1984,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				alloc.NewDJSON(tree.DJSON{JSON: samplePlan}),                                                                             // sample_plan
 				alloc.NewDString(tree.DString(stats.Key.Database)),                                                                       // database_name
 				execNodeIDs,          // exec_node_ids
+				kvNodeIDs,            // kv_node_ids
 				txnFingerprintID,     // txn_fingerprint_id
 				indexRecommendations, // index_recommendations
 				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.Min)), // latency_seconds_min
@@ -8392,6 +8401,7 @@ CREATE TABLE crdb_internal.%s (
 	retries                    INT8 NOT NULL,
 	last_retry_reason          STRING,
 	exec_node_ids              INT[] NOT NULL,
+	kv_node_ids                INT[] NOT NULL,
 	contention                 INTERVAL,
 	index_recommendations      STRING[] NOT NULL,
 	implicit_txn               BOOL NOT NULL,
@@ -8478,6 +8488,12 @@ func populateStmtInsights(
 					return err
 				}
 			}
+			kvNodeIDs := tree.NewDArray(types.Int)
+			for _, kvNodeID := range s.KVNodeIDs {
+				if err = kvNodeIDs.Append(tree.NewDInt(tree.DInt(kvNodeID))); err != nil {
+					return err
+				}
+			}
 
 			autoRetryReason := tree.DNull
 			if s.AutoRetryReason != "" {
@@ -8533,6 +8549,7 @@ func populateStmtInsights(
 				tree.NewDInt(tree.DInt(s.Retries)),
 				autoRetryReason,
 				execNodeIDs,
+				kvNodeIDs,
 				contentionTime,
 				indexRecommendations,
 				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
