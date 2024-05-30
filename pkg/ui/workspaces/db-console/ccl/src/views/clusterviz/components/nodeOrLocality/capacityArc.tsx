@@ -7,6 +7,8 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
+import { util } from "@cockroachlabs/cluster-ui";
+
 import * as PathMath from "src/views/clusterviz/util/pathmath";
 import {
   BACKGROUND_BLUE,
@@ -14,7 +16,6 @@ import {
   LIGHT_TEXT_BLUE,
   MAIN_BLUE,
 } from "src/views/shared/colors";
-import { util } from "@cockroachlabs/cluster-ui";
 import {
   NodeArcPercentageTooltip,
   NodeArcUsedCapacityTooltip,

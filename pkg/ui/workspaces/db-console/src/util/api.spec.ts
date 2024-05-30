@@ -8,23 +8,25 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import isError from "lodash/isError";
+import startsWith from "lodash/startsWith";
 import moment from "moment-timezone";
 import Long from "long";
-
-import fetchMock from "./fetch-mock";
-
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-const cockroach = protos.cockroach;
-import * as api from "./api";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+
 import {
   REMOTE_DEBUGGING_ERROR_TEXT,
   indexUnusedDuration,
 } from "src/util/constants";
-import Severity = protos.cockroach.util.log.Severity;
 import { stubSqlApiCall } from "src/util/fakeApi";
 
+import * as api from "./api";
+import fetchMock from "./fetch-mock";
+
+import Severity = protos.cockroach.util.log.Severity;
+
+const cockroach = protos.cockroach;
 const { ZoneConfig } = cockroach.config.zonepb;
 const { ZoneConfigurationLevel } = cockroach.server.serverpb;
 
@@ -75,7 +77,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.isError(e)).toBeTruthy();
+          expect(isError(e)).toBeTruthy();
           done();
         });
     });
@@ -99,7 +101,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.startsWith(e.message, "Promise timed out")).toBeTruthy();
+          expect(startsWith(e.message, "Promise timed out")).toBeTruthy();
           done();
         });
     });
@@ -264,7 +266,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.isError(e)).toBeTruthy();
+          expect(isError(e)).toBeTruthy();
           done();
         });
     });
@@ -298,7 +300,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.startsWith(e.message, "Promise timed out")).toBeTruthy();
+          expect(startsWith(e.message, "Promise timed out")).toBeTruthy();
           done();
         });
     });
@@ -456,7 +458,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.isError(e)).toBeTruthy();
+          expect(isError(e)).toBeTruthy();
           done();
         });
     });
@@ -492,7 +494,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.startsWith(e.message, "Promise timed out")).toBeTruthy();
+          expect(startsWith(e.message, "Promise timed out")).toBeTruthy();
           done();
         });
     });
@@ -574,7 +576,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.isError(e)).toBeTruthy();
+          expect(isError(e)).toBeTruthy();
           done();
         });
     });
@@ -600,7 +602,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.startsWith(e.message, "Promise timed out")).toBeTruthy();
+          expect(startsWith(e.message, "Promise timed out")).toBeTruthy();
           done();
         });
     });
@@ -653,7 +655,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.isError(e)).toBeTruthy();
+          expect(isError(e)).toBeTruthy();
           done();
         });
     });
@@ -678,7 +680,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.startsWith(e.message, "Promise timed out")).toBeTruthy();
+          expect(startsWith(e.message, "Promise timed out")).toBeTruthy();
           done();
         });
     });
@@ -731,7 +733,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.isError(e)).toBeTruthy();
+          expect(isError(e)).toBeTruthy();
           done();
         });
     });
@@ -756,7 +758,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.startsWith(e.message, "Promise timed out")).toBeTruthy();
+          expect(startsWith(e.message, "Promise timed out")).toBeTruthy();
           done();
         });
     });
@@ -812,7 +814,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.isError(e)).toBeTruthy();
+          expect(isError(e)).toBeTruthy();
           done();
         });
     });
@@ -837,7 +839,7 @@ describe("rest api", function () {
           done(new Error("Request unexpectedly succeeded."));
         })
         .catch(function (e) {
-          expect(_.startsWith(e.message, "Promise timed out")).toBeTruthy();
+          expect(startsWith(e.message, "Promise timed out")).toBeTruthy();
           done();
         });
     });
@@ -903,7 +905,7 @@ describe("rest api", function () {
           expect(false).toBe(true);
         })
         .catch(function (e: Error) {
-          expect(_.isError(e)).toBeTruthy();
+          expect(isError(e)).toBeTruthy();
           expect(e.message).toBe(REMOTE_DEBUGGING_ERROR_TEXT);
         })
         .finally(done);
@@ -929,7 +931,7 @@ describe("rest api", function () {
           expect(false).toBe(true);
         })
         .catch(function (e) {
-          expect(_.startsWith(e.message, "Promise timed out")).toBeTruthy();
+          expect(startsWith(e.message, "Promise timed out")).toBeTruthy();
         })
         .finally(done);
     });

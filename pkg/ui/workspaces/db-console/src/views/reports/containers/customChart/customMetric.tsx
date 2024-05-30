@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import assign from "lodash/assign";
+import isEmpty from "lodash/isEmpty";
 import * as React from "react";
 import Select from "react-select";
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import * as protos from "src/js/protos";
-import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { isSystemTenant } from "src/redux/tenants";
 
@@ -84,7 +85,7 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
   changeState(newState: Partial<CustomMetricState>) {
     this.props.onChange(
       this.props.index,
-      _.assign(this.props.rowState, newState),
+      assign(this.props.rowState, newState),
     );
   }
 
@@ -330,7 +331,7 @@ export class CustomChartTable extends React.Component<CustomChartTableProps> {
       <h3>Click "Add Metric" to add a metric to the custom chart.</h3>
     );
 
-    if (!_.isEmpty(metrics)) {
+    if (!isEmpty(metrics)) {
       table = (
         <table className="metric-table">
           <thead>

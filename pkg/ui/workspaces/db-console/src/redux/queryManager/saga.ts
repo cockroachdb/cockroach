@@ -130,7 +130,7 @@ export class ManagedQuerySagaState {
   // The number of components currently requesting that this query be
   // auto-refreshed. This is the result of incrementing on autoRefresh()
   // actions and decrementing on stopAutoRefresh() actions.
-  autoRefreshCount: number = 0;
+  autoRefreshCount = 0;
   // If true, the query saga needs to run the underlying query immediately. If
   // this is false, the saga will delay until it needs to be refreshed (or
   // will exit if autoRefreshCount is zero,)

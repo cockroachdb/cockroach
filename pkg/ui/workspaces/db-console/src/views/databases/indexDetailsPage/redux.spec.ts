@@ -18,6 +18,7 @@ import {
   util,
   TimeScale,
 } from "@cockroachlabs/cluster-ui";
+import moment from "moment-timezone";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import {
@@ -26,8 +27,8 @@ import {
   tableNameAttr,
 } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
+
 import { mapStateToProps, mapDispatchToProps } from "./redux";
-import moment from "moment-timezone";
 
 function fakeRouteComponentProps(
   k1: string,
@@ -94,10 +95,7 @@ class TestDriver {
       );
   }
 
-  assertProperties(
-    expected: IndexDetailsPageData,
-    compareTimestamps: boolean = true,
-  ) {
+  assertProperties(expected: IndexDetailsPageData, compareTimestamps = true) {
     // Assert moments are equal if not in pre-loading state.
     if (compareTimestamps) {
       expect(

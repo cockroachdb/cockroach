@@ -9,12 +9,17 @@
 // licenses/APL.txt.
 
 import classNames from "classnames";
-import _ from "lodash";
 import React from "react";
-
-import * as protos from "src/js/protos";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { Loading } from "@cockroachlabs/cluster-ui";
+import isNil from "lodash/isNil";
+import flow from "lodash/flow";
+import keys from "lodash/keys";
+import map from "lodash/map";
+import sortBy from "lodash/sortBy";
+import isEmpty from "lodash/isEmpty";
+
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import * as protos from "src/js/protos";
 
 interface ConnectionsTableProps {
   range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
@@ -57,11 +62,11 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
                   Error
                 </th>
               </tr>
-              {_.map(ids, id => {
+              {map(ids, id => {
                 const resp = range.data.responses_by_node_id[id];
                 const rowClassName = classNames("connections-table__row", {
                   "connections-table__row--warning":
-                    !resp.response || !_.isEmpty(resp.error_message),
+                    !resp.response || !isEmpty(resp.error_message),
                 });
                 return (
                   <tr key={id} className={rowClassName}>

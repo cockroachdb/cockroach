@@ -11,6 +11,13 @@
 import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 import {
+  TransactionDetailsStateProps,
+  TransactionDetailsDispatchProps,
+  TransactionDetailsProps,
+  TransactionDetails,
+} from "@cockroachlabs/cluster-ui";
+
+import {
   refreshNodes,
   refreshTxns,
   refreshTxnInsights,
@@ -24,12 +31,6 @@ import {
   selectTxns,
   requestTimeLocalSetting,
 } from "src/views/transactions/transactionsPage";
-import {
-  TransactionDetailsStateProps,
-  TransactionDetailsDispatchProps,
-  TransactionDetailsProps,
-  TransactionDetails,
-} from "@cockroachlabs/cluster-ui";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectTxnInsightsByFingerprint } from "src/views/insights/insightsSelectors";

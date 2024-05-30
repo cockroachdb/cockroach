@@ -13,9 +13,10 @@ import groupBy from "lodash/groupBy";
 import mapValues from "lodash/mapValues";
 import flow from "lodash/flow";
 import { createSelector } from "reselect";
-import { AdminUIState } from "src/redux/state";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import moment from "moment-timezone";
+
+import { AdminUIState } from "src/redux/state";
 
 export const selectStatementByFingerprint = createSelector(
   (state: AdminUIState) => state.cachedData.statements.data?.statements,

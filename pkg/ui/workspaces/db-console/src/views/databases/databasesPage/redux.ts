@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { LocalSetting } from "src/redux/localsettings";
 import {
   DatabasesPageData,
   defaultFilters,
@@ -17,6 +16,7 @@ import {
   deriveDatabaseDetailsMemoized,
 } from "@cockroachlabs/cluster-ui";
 
+import { LocalSetting } from "src/redux/localsettings";
 import {
   refreshDatabases,
   refreshDatabaseDetails,

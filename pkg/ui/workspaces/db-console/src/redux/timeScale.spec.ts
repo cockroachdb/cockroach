@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { defaultTimeScaleOptions, TimeScale } from "@cockroachlabs/cluster-ui";
-import * as timeScale from "./timeScale";
 import moment from "moment-timezone";
+
+import * as timeScale from "./timeScale";
 
 describe("time scale reducer", function () {
   describe("actions", function () {

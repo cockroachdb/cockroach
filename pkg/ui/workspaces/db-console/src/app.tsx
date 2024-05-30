@@ -16,6 +16,8 @@ import { Provider, ReactReduxContext } from "react-redux";
 import { Redirect, Route, Switch } from "react-router-dom";
 import "react-select/dist/react-select.css";
 import { Action, Store } from "redux";
+import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
+
 import { AdminUIState } from "src/redux/state";
 import { createLoginRoute, createLogoutRoute } from "src/routes/login";
 import visualizationRoutes from "src/routes/visualization";
@@ -78,17 +80,17 @@ import TransactionDetails from "src/views/transactions/transactionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
 import HotRangesPage from "src/views/hotRanges/index";
+import { SnapshotRouter } from "src/views/tracez_v2/snapshotRoutes";
+import KeyVisualizerPage from "src/views/keyVisualizer";
+import { TimezoneProvider } from "src/contexts/timezoneProvider";
+import "styl/app.styl";
+
 import ActiveStatementDetails from "./views/statements/activeStatementDetailsConnected";
 import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
-import "styl/app.styl";
 import InsightsOverviewPage from "./views/insights/insightsOverview";
 import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
 import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";
 import { JwtAuthTokenPage } from "./views/jwt/jwtAuthToken";
-import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
-import { SnapshotRouter } from "src/views/tracez_v2/snapshotRoutes";
-import KeyVisualizerPage from "src/views/keyVisualizer";
-import { TimezoneProvider } from "src/contexts/timezoneProvider";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the

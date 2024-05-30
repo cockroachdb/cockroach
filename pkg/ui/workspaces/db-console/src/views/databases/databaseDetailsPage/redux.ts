@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { RouteComponentProps } from "react-router";
-import { LocalSetting } from "src/redux/localsettings";
 import {
   DatabaseDetailsPageData,
   defaultFilters,
@@ -18,6 +17,7 @@ import {
   deriveTableDetailsMemoized,
 } from "@cockroachlabs/cluster-ui";
 
+import { LocalSetting } from "src/redux/localsettings";
 import {
   refreshDatabaseDetails,
   refreshNodes,

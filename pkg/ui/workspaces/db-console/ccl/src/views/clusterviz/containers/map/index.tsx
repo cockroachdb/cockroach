@@ -10,6 +10,7 @@ import React from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import cn from "classnames";
+import { Loading } from "@cockroachlabs/cluster-ui";
 
 import { Breadcrumbs } from "src/views/clusterviz/containers/map/breadcrumbs";
 import NeedEnterpriseLicense from "src/views/clusterviz/containers/map/needEnterpriseLicense";
@@ -17,7 +18,6 @@ import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasC
 import TimeScaleDropdown from "src/views/cluster/containers/timeScaleDropdownWithSearchParams";
 import swapByLicense from "src/views/shared/containers/licenseSwap";
 import { parseLocalityRoute } from "src/util/localities";
-import { Loading } from "@cockroachlabs/cluster-ui";
 import { AdminUIState } from "src/redux/state";
 import { selectEnterpriseEnabled } from "src/redux/license";
 import { Dropdown } from "src/components/dropdown";

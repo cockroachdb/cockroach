@@ -14,21 +14,24 @@
  * 'util/cockroachlabsAPI'
  */
 
-import _ from "lodash";
-import { Action } from "redux";
 import assert from "assert";
+
+import isNil from "lodash/isNil";
+import clone from "lodash/clone";
+import { Action } from "redux";
 import moment from "moment-timezone";
 import { push } from "connected-react-router";
 import { ThunkAction, ThunkDispatch } from "redux-thunk";
-
 import { createHashHistory } from "history";
+import { util as clusterUiUtil } from "@cockroachlabs/cluster-ui";
+
 import { getLoginPage } from "src/redux/login";
 import { APIRequestFn } from "src/util/api";
-import { util as clusterUiUtil } from "@cockroachlabs/cluster-ui";
-const { isForbiddenRequestError } = clusterUiUtil;
-
 import { PayloadAction, WithRequest } from "src/interfaces/action";
+
 import { clearTenantCookie } from "./cookies";
+
+const { isForbiddenRequestError } = clusterUiUtil;
 
 export interface WithPaginationRequest {
   page_size: number;
@@ -149,14 +152,14 @@ export class CachedDataReducer<
     state = new CachedDataReducerState<TResponseMessage>(),
     action: Action,
   ): CachedDataReducerState<TResponseMessage> => {
-    if (_.isNil(action)) {
+    if (isNil(action)) {
       return state;
     }
 
     switch (action.type) {
       case this.REQUEST:
         // A request is in progress.
-        state = _.clone(state);
+        state = clone(state);
         state.requestedAt = this.timeSource();
         state.inFlight = true;
         return state;
@@ -165,7 +168,7 @@ export class CachedDataReducer<
         const { payload } = action as PayloadAction<
           WithRequest<TResponseMessage, TRequest>
         >;
-        state = _.clone(state);
+        state = clone(state);
         state.inFlight = false;
         state.data = payload.data;
         state.setAt = this.timeSource();
@@ -178,7 +181,7 @@ export class CachedDataReducer<
         const { payload: error } = action as PayloadAction<
           WithRequest<Error, TRequest>
         >;
-        state = _.clone(state);
+        state = clone(state);
         state.inFlight = false;
         state.lastError = error.data;
         state.valid = false;
@@ -189,7 +192,7 @@ export class CachedDataReducer<
       }
       case this.INVALIDATE:
         // The data is invalidated.
-        state = _.clone(state);
+        state = clone(state);
         state.valid = false;
         return state;
       default:
@@ -441,7 +444,7 @@ export class KeyedCachedDataReducer<
     state = new KeyedCachedDataReducerState<TResponseMessage>(),
     action: Action,
   ): KeyedCachedDataReducerState<TResponseMessage> => {
-    if (_.isNil(action)) {
+    if (isNil(action)) {
       return state;
     }
 
@@ -456,12 +459,12 @@ export class KeyedCachedDataReducer<
           >
         ).payload;
         const id = this.requestToID(request);
-        state = _.clone(state);
+        state = clone(state);
         state[id] = this.cachedDataReducer.reducer(state[id], action);
         return state;
       }
       case this.cachedDataReducer.INVALIDATE_ALL: {
-        state = _.clone(state);
+        state = clone(state);
         const keys = Object.keys(state);
         for (const key in keys) {
           state[key] = this.cachedDataReducer.reducer(state[key], action);
@@ -530,14 +533,14 @@ export class PaginatedCachedDataReducer<
     state = new PaginatedCachedDataReducerState<TResponseMessage>(),
     action: Action,
   ): PaginatedCachedDataReducerState<TResponseMessage> => {
-    if (_.isNil(action)) {
+    if (isNil(action)) {
       return state;
     }
 
     switch (action.type) {
       case this.cachedDataReducer.REQUEST:
         // A request is in progress.
-        state = _.clone(state);
+        state = clone(state);
         state.requestedAt = this.timeSource();
         state.inFlight = true;
         return state;
@@ -547,7 +550,7 @@ export class PaginatedCachedDataReducer<
           action as PayloadAction<WithRequest<TResponseMessage, TRequest>>
         ).payload;
         const id = this.requestToID(request);
-        state = _.clone(state);
+        state = clone(state);
         state.inFlight = true;
         state.data[id] = data;
         state.valid = false;
@@ -556,7 +559,7 @@ export class PaginatedCachedDataReducer<
         return state;
       }
       case this.RECEIVE_COMPLETED: {
-        state = _.clone(state);
+        state = clone(state);
         state.inFlight = false;
         state.setAt = this.timeSource();
         state.valid = true;
@@ -564,7 +567,7 @@ export class PaginatedCachedDataReducer<
         return state;
       }
       case this.CLEAR_DATA: {
-        state = _.clone(state);
+        state = clone(state);
         state.data = {};
         state.inFlight = false;
         state.setAt = undefined;
@@ -577,7 +580,7 @@ export class PaginatedCachedDataReducer<
         const { payload: error } = action as PayloadAction<
           WithRequest<Error, TRequest>
         >;
-        state = _.clone(state);
+        state = clone(state);
         state.inFlight = false;
         state.lastError = error.data;
         state.valid = false;
@@ -588,7 +591,7 @@ export class PaginatedCachedDataReducer<
       }
       case this.cachedDataReducer.INVALIDATE:
         // The data is invalidated.
-        state = _.clone(state);
+        state = clone(state);
         state.valid = false;
         return state;
       default:

@@ -8,8 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { dismissReleaseNotesSignupForm } from "./uiDataSelectors";
 import { UIData, UIDataStatus } from "src/redux/uiData";
+
+import { dismissReleaseNotesSignupForm } from "./uiDataSelectors";
 
 describe("uiDataSelectors", () => {
   describe("dismissReleaseNotesSignupForm selector", () => {

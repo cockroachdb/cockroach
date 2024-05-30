@@ -9,11 +9,10 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
-import { AxisUnits } from "@cockroachlabs/cluster-ui";
-
 import { GraphDashboardProps } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
 
 export default function (props: GraphDashboardProps) {

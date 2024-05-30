@@ -9,8 +9,10 @@
 // licenses/APL.txt.
 
 import moment from "moment-timezone";
-import { ILatencyProps } from ".";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import { ILatencyProps } from ".";
+
 import NodeLivenessStatus = cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
 import IPeer = cockroach.server.serverpb.NetworkConnectivityResponse.IPeer;
 import ConnectionStatus = cockroach.server.serverpb.NetworkConnectivityResponse.ConnectionStatus;

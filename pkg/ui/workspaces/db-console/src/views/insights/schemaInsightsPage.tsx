@@ -11,17 +11,18 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
-  refreshSchemaInsights,
-  refreshUserSQLRoles,
-} from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
-import {
   SchemaInsightEventFilters,
   SchemaInsightsView,
   SchemaInsightsViewDispatchProps,
   SchemaInsightsViewStateProps,
   SortSetting,
 } from "@cockroachlabs/cluster-ui";
+
+import {
+  refreshSchemaInsights,
+  refreshUserSQLRoles,
+} from "src/redux/apiReducers";
+import { AdminUIState } from "src/redux/state";
 import {
   schemaInsightsFiltersLocalSetting,
   schemaInsightsSortLocalSetting,
