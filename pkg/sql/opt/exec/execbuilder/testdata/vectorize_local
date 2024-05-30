@@ -52,6 +52,7 @@ quality of service: regular
 ·
 • scan
   sql nodes: <hidden>
+  kv nodes: <hidden>
   regions: <hidden>
   actual row count: 2,001
   KV time: 0µs
@@ -65,7 +66,7 @@ quality of service: regular
   table: a@a_pkey
   spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUsFqGzEQvfcrxJxakIk2lB50Kt2kYFI3wTa5lCWMpYkjrJW20iy2MftZ_YF-WdlVDE3bQOew7Lz3NPNGoxPk7x40rK6_XNdrgeLz8nYhECSEaOkrtpRBf4MKGgldioZyjmmETpNgbg-glQQXup5HuJFgYiLQJ2DHnkDDGjeeloSW0oUCCZYYnZ_K4kd86HZ0BAl19H0bsp56rzocf2cg4eZesGtJC_XzRy65iYEpsIvhLyrFfRaWTLRktbiUSlWF2ByZskiEVovqg7hxnwq-Xd7VwqD3-YW8Q5fO8vdSqUuQsLiva5GZOmFiH1i8pQNfuMDvtFDTYEVAtHtN0OJBtNTGdBTofTTIo0slRi8bZPNEWcSeu561GPXTNGeguGsGCQV5vu3MuCXQ1W_rmV-BVoP8_w0tKXcxZHqxnNc6qT86zaqhkUB2S-VZ5NgnQ3cpmklb0tup0ARYylzYqiTzcKYyJ8K22G8kPPq4f3AWNKjnmP3jcw4YD-A2j4OtnuJ-Krs-dqOtR_SZJCxwR1fElFoXXGZnQHPqaRje_AoAAP__MxfzJg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUsFqGzEQvfcrxJxaUIg2lB50KnVSCGmaYJtcigljaeIIa6WtZhbbGH9Wf6BfVnZlQ9M2UB2WnTdv33uzoz3w9wgWZldfriZzherz9O5WIWhI2dNXbInBfoMGFhq6kh0x5zJA-5Fw7bdgjYaQul4GeKHB5UJg9yBBIoGFOS4jTQk9lXMDGjwJhjjK4kd87Na0Aw2THPs2sR29Zx0Or2eg4eZBDUZsVWpqKaElq8zPH1xrl5NQkpDTX62SN6w8uezJW3WhjTlqLHdCrAqht6r5oG7Cp4qvpvcT5TBGfkHvMJQT_b025gI03D5MJoqFOuVyn0S9pa2chyTvrDLjnJVAtH6N0OJWtdTmslMYY3YoQ0qjhixLFPdMrHIvXS9WDfxxmhNQ0y0OGipy_PksuCKwzW_bur4Eaw76_xc2Je5yYnqxq9eczB9OZ81hoYH8iuot4dwXR_clu5Fby7tRaAQ8sdRuU4vrdGqxFMK2xl9oeIp58xg8WDDHc_aPx-nA8AGueBhs9pw3o-x81w2xnjAyabjFNV2SUGlDCizBgZXS0-Hw5lcAAAD__4Ue92k=
 
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b
@@ -84,6 +85,7 @@ quality of service: regular
 ·
 • lookup join (streamer)
 │ sql nodes: <hidden>
+│ kv nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
 │ KV time: 0µs
@@ -98,6 +100,7 @@ quality of service: regular
 │
 └── • scan
       sql nodes: <hidden>
+      kv nodes: <hidden>
       regions: <hidden>
       actual row count: 2
       KV time: 0µs
@@ -111,7 +114,7 @@ quality of service: regular
       table: c@sec
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k9FqGzsQhu_PUwxzdQpKsruUUgQFUycFp0kcnJCbYoIsTRzVWmkrabGN8WP1BfpkRSs7OHES2tLqYmFm_v1nNN_uCsM3gxyvTs5O-tcgDwV8Gg3PQcLpcHABCoYXoA4n8AHk4QQZWqfoQtQUkH_BEscMG-8kheB8Sq06wUAtkBcMtW3amNJjhtJ5Qr7CqKMh5HgtJoZGJBT5owIZKopCm85W9gJJZNh3pq1t4CAYpN5XjUjRATL8fANR18Sh-PE95Fg6G8lG7exeybt5AEXSKVIcqpycLCMF8CQUh_IdfMzZ6eiyD1IYEx6EjdB-K3yLDM9v-n0IkRqQrrUR_qdFPNI2vuFQdFfJAqLZS4JaLKCm2vklCGOcFDHNVXQzTESU9xTAtbFpI4ek7-bfJiocrxnmaLPbEMWUkJc7MAbHyIs1-3Uep07bDY7yMQ7VU7fNjJbI8My5WdvAV6ctOMuhV-1iSoyGacRecuiadavPm8xxiMKYPUB_zLLcZ_n-OZTlPsrqr6BsAykI0ZOoySNDWpBs9wf_R8SrJ8TL3yE-otA4G-gR7Zc6FU86HZTrMUNSU8q_fXCtl3Tpney0ORx2Rl1CUYi5WuZgYLelvL2HD3bXqXzVqXrNaczwzrj5rVbIsdicg2ce24PpBTENaUVX927e2V4vm3TBO2ECMTwXMzqmSL7WVoeoJfLoW1qv__sZAAD__9uqrY8=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lNFqGzsQhu_PUwxzdQpKsruUUgQFUycFp0kcnJCbYoIsTRzVWmkrabGN8WP1BfpkRSs7OHESWkh1YZjR739G8w27wvDDIMerk7OT_jXIQwFfRsNzkHA6HFyAguEFqMMJfAJ5OEGG1im6EDUF5N-wxDHDxjtJITifUqtOMFAL5AVDbZs2pvSYoXSekK8w6mgIOV6LiaERCUX-qECGiqLQprOVvUASGfadaWsbOAgGqfZVI1J0gAy_3kAqFDjYModR18Sh-PUz5Fg6G8lG7ezelXfzAIqkU6Q4VDk5WUYK4EkoDuUH-Jyz09FlH6QwJjwIG6H9VvgeGZ7f9PsQIjUgXWsj_E-LeKRtfMeh6F6WBUSzlwS1WEBNtfNLEMY4KWLqq-h6mIgo7ymAa2PTRg5J3_W_TVQ4XjPM0WbUIYopIS932AyOkRdr9ud4Tp22GzrlYzqqp26bGS2R4Zlzs7aB705bcJZDr9qllpANU4u95NAV60afJ5njEIUxe4DeCm25j_bjc2TLfbLVm5BtAykI0ZOoySNDWpBs9xv_RwtQPVmA8m8WYEShcTbQI_gvVSqeVDoo12OGpKaUPwrBtV7SpXey0-Zw2Bl1CUUh5tsyBwO7vcrTe9jfXafyVafqNacxwzvj5rdaIcdicw6e-dkeTH8Q05BGdHXv5p3t9bJJD7wTJhDDczGjY4rka211iFoij76l9fq_3wEAAP__tha2FQ==
 
 # Regression test for using the Streamer API when we have a cast to an Oid type
 # for which DistSQL is prohibited (#122274). (Note that, unlike above, we don't
@@ -135,6 +138,7 @@ quality of service: regular
 │
 └── • lookup join
     │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
     │ KV time: 0µs
@@ -149,6 +153,7 @@ quality of service: regular
     │
     └── • scan
           sql nodes: <hidden>
+          kv nodes: <hidden>
           regions: <hidden>
           actual row count: 2
           KV time: 0µs
@@ -162,7 +167,7 @@ quality of service: regular
           table: c@sec
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k9Fq2zAUhu_3FIdztYHa2maMIRikc7ORrkmKU3ozQlGk01SLLHmSTBNKHmsvsCcbtpPSNG3ZxqaLwPn15z9H-uQ7DN8Ncpz0z_r5BchDwXnR_zw6HvYn58d5Hz4V4yFIOB0PRqBgPAJ1OIMPIA9nyNA6RSNRUkD-FVOcMqy8kxSC84101xoGaok8YahtVcdGnjKUzhPyO4w6GkKOF2JmqCChyB8lyFBRFNq0sbIXSCLD3Jm6tIGDYND0nlSiqQ6Q4ZdLiLokDsnPH6GrpbORbNTO7m15dxtAkXSKFIesE2erSAE8CcUhfQcfO3VenOcghTHh3lgJ7bfGt8hweJnnECJVIF1tI7ymZTzSNr7hkLRH6QxEi-cMpVhCSaXzKxDGOCliM1fSzjATUd5QAFfHqo4cGn87_1bIcLpm2FWbuw1RzAl5-gDG4AR5sma_z-PUabvBke7iUD11VS1ohQzPnFvUFXxz2oKzHHrZQ0wNo4KsIs-hl-6-Ktx0b1l0V9vVIQpj9oj9Ndx0H-77p9im-2yzf8KWliTr_UH_E_LsEfL0T5AXFCpnA-3gfq5T8qjTQbqeMiQ1p-67D672ks69k623K8dtUCsoCrHbTbtiYLdbIXoS5f2LfZiUvpiUvZQ0ZXht3O2VVsgx2ayDJ362C5s_iHlormhy427b2ItV1RzwWphADIdiQScUyZfa6hC1RB59Tev1q18BAAD___qmsNE=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lFFqGzEQht97imGeWlCSXVNKERScOm5xGtthHfJSTJCliaNaK20lLbEJPlYv0JOVXdkhjpPQQqoHwz_6PTOab9g7DD8Ncpz0z_q9C5CHgvOi_3V0POxPzo97ffhSjIcg4XQ8GIGC8QjU4Qw-gTycIUPrFI1ESQH5d8xxyrDyTlIIzjehu9YwUEvkGUNtqzo24SlD6Twhv8OooyHkeCFmhgoSivxRhgwVRaFNm1Z2A0lk2HOmLm3gIBg0tSeVaNQBMvx2CU2hwMHmSUZdEofs96-QtHQ2ko3a2b0r724DKJJOkeLQScHZKlIAT0JxyD_A5xSdF-c9kMKYcG-shPZb43tkOLzs9SBEqkC62kZ4S8t4pG18xyFrX5YMRIvnDKVYQkml8ysQxjgpYtNX1vYwE1HeUABXx6qOHBp_2_820MHpmmFSm1GHKOaEPH_AZnCCPFuzv8dz6rTd0Ml36aiuuqoWtEKGZ84t6gp-OG3BWQ7dzkNqDbKCrCLPoZvvLhluqrcs0miTDlEYs0fstVjn-6w_PoU630fdeRXUtCRZ7zf6nzag82gD8n_ZgIJC5WygHfrPVcoeVTrI11OGpOaUvgrB1V7SuXey9SY5bhO1AUUhpts8iYHdXoXoSZT3C_wwU_5ips5LmaYMr427vdIKOWabc_DEz_Zg8wcxD82IJjfutk17saqaB14LE4jhUCzohCL5UlsdopbIo69pvX7zJwAA__9Uv7lX
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
@@ -227,6 +232,7 @@ quality of service: regular
 │
 ├── • scan
 │     sql nodes: <hidden>
+│     kv nodes: <hidden>
 │     regions: <hidden>
 │     actual row count: 2
 │     KV time: 0µs
@@ -242,6 +248,7 @@ quality of service: regular
 │
 └── • scan
       sql nodes: <hidden>
+      kv nodes: <hidden>
       regions: <hidden>
       actual row count: 2
       KV time: 0µs
@@ -255,7 +262,7 @@ quality of service: regular
       table: d@d_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsU81OIzkQvu9TlOoEWgPdzWoPlpCiDdlRmEmCAuIyipBjF40Vt93YbpEI5bHmBebJRu4GhoQ_MZrj-NByVX3-qvx97jsMNwY5ng2-DPrnIPcF_D-djEDCcDweTGE0mH4awMlkOAYFk3ELOAK1P0eG1ikai4oC8q-Y44xh7Z2kEJxPqbsWMFRL5BlDbesmpvSMoXSekN9h1NEQcjwXc0NTEor8QYYMFUWhTUsre_KyXtAKGfadaSobOAhkeFaLtN1Dhp8vIOqKOGTfv4Uuls5GslE7-6zk3W0ARdIpUhyKLjlfRQrgSSgO-b_wX5ctp6d9kMKY8AishfYPwH-Q4eii34cQqQbpGhthh5bxQNu4yyFrr9IBiBavASqxhIoq51cgjHFSxDRX1s4wF1FeUwDXxLqJHBK-nf8hUeBszbCL7rUNUZSEPH9ixvAYebZmv-ZHvumH6qlnfsz_-PGuH8WWH_mrfvy0obHOK_KkNiyYpZPvQV4wdUS-pBOnLfmDYtNUQ1dxp5f_vXvkdXndbZHhJF2plx4ALUk2z-17S6tUCzcGIlU1KB0W0ARR0m-Q8nBLyuIjT3tKoXY20LakL3bKtjrt5UlYUiV1RgXXeEmn3skW24WTlqhNKAqxqxZdMLRtKU8dPInq8c98ypR_gKl4ypRvMxVvMh1uMGWbM80YXhl3e6kVcszu194Ln4eF6YAoQxL77NrdtrTnqzpJdSVMIIYjsaBjiuQrbXWIWiKPvqH1-q8fAQAA__9OjRUr
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsk99O20oQxu_PU4zmCnQWsM3RuVgJKWpIq9AmQQFxU0VoszuYVda7ZnctEqE8Vl-gT1atDZSEPxVVL-uLyDP7-Zvx94vvMNwY5Hg2-DLon4PcF_BxOhmBhOF4PJjCaDD9NICTyXAMCibjVnAEan-ODK1TNBYVBeRfMccZw9o7SSE4n1p3rWColsgzhtrWTUztGUPpPCG_w6ijIeR4LuaGpiQU-YMMGSqKQpvWVvbkZb2gFTLsO9NUNnAQyPCsFul2Dxl-voA0KHCweVdGXRGH7Pu30NXS2Ug2amefHXl3G0CRdIoUh6JrzleRAngSikP-P3zouuX0tA9SGBMehbXQ_kH4HzIcXfT7ECLVIF1jI-zQMh5oG3c5ZO2bdQKixWuCSiyhosr5FQhjnBQx7ZW1O8xFlNcUwDWxbiKHpG_3f2gUOFsz7Kr7qEMUJSHPn7AZHiPP1uz38OSbeFRPPcMz_4vnvXiKLTz5q3h-Umms84o8qQ0is_TkryQvMB6RL-nEaUv-oNhkbOgq7vTyf3ePvC6vu1tkOEmv1EtIaUmyeY7vrazSWbgxEKmqQemwgCaIkv5AlIdbURbv-adPKdTOBtqO9MVJ2dakvTwFS6qkDlRwjZd06p1stV05aY3ahqIQu9OiK4a2PcrTBE-ievxQnzrl73Aqnjrl207Fm06HG07Z5k4zhlfG3V5qhRyz-2vvhZ-HC9MDogwp7LNrd9vanq_qFNWVMIEYjsSCjimSr7TVIWqJPPqG1ut_fgQAAP__qDcdsQ==
 
 statement ok
 RESET vectorize; RESET distsql

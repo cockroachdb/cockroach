@@ -50,6 +50,7 @@ quality of service: regular
     │
     └── • index join (streamer)
         │ sql nodes: <hidden>
+        │ kv nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
         │ KV time: 0µs
@@ -73,6 +74,7 @@ quality of service: regular
             │
             └── • scan
                   sql nodes: <hidden>
+                  kv nodes: <hidden>
                   regions: <hidden>
                   actual row count: 4
                   KV time: 0µs
@@ -86,7 +88,7 @@ quality of service: regular
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVuFu4kYQ_t-nGM2fJKqj7NoO5baqREO4lrY5IkBXnWqENvaEWNi7vt11QxTxWH2BPlllO0QBAnf0KvX8Y2FmZz_PzDef1o9oP2YocNT7rdcdwxzeDgdXMCM9dfImI_j9596wB9ZNU-XIWIqdPT4aDfuXP_itN7z9_fWg_258HDLGWAD1DwtOjoT4qTe46o2HH7wKKz-BwfCyN4SLDzBHD5VO6J3MyaL4AzlOPCyMjslabSrXYx3QTxYomIepKkpXuScextoQikd0qcsIBY6rHIckEzJnDD1MyMk0q2GfS-hUCUxTldACPezqrMyVFTBvMkMPR4WsHGcRXkTR4jaJogVnUbRgn1rw9NAzPEKQKoGAgXZ3ZCx6-Ot7cGlOAtjffz3ZsVaOlEu12toy-t5CQrFOKBEQNs6bB0cWDMlEQODDReOdDa-7EMsss8-BhUzNKrCNHl6973bBOiog1qVycEwLd5YqdyKA1Q1tAojmuwJyuYCccm0eQGaZjqWr8mJ1DjfSxXdkQZeuKJ2AKr7Of-UIcbL0sLGeGLZOzggFfzES_UsUbOl9_lT01Z9kHCVv08yRIXPG10djtd9bFAa0gg4XYKshAOukcaImNfjuPIqYz6KIsU8tCKSSQ49Vs7A1DIOqLZ0q37rAmu6Gvca2TmbZ-lDQguJye1b2EVPt2Y8ZOMoLSFI7h9LKGX02b_5O3vwN3vghvP2iU_UkZn-PmJt_02JOD68L-ksU5W8rirdeU5S_rajwP1FUaSkB6wzJnMz_RmSwQaR_CJHPwgvWaWz8YvM6YZzx6uLwmd9qvWEvn27rR94OeWO0WZu3w7AX8iPx8obp-Cc7peP_C-l8QdvCjbYFh7RtpI0jcxauN63Dv_3aVH6-UWV4SJVDsoVWltaq3PUmtvGmU76ceEjJjJoPBatLE9O10XEd25iDGqh2JGRds8sbo69WW43Eni-Xl0h8L5K_G4lvIvl7kYLdSP4mUrAXKdyNFGwihXuRzvf1aeLhbabvp2mCAlcaPX1lWT1YHZAzWw3A6E7f17Djh6Ki71Zmljy8knO6JEcmT1VqXRqjcKak5fKbfwIAAP__hpdg6A==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVu9u4kYQ_96nGM2XJKqj7NoO5baqREO4lrY5IkBXnWqENvaEWNi7vt11QxTxWH2BPlllO0QBAne0J_X8wcn82Z9n5jc_LY9oP2YocNT7rdcdwxzeDgdXMCM9dfImI_j9596wB9ZNU-XIWIqdPT4aDfuXP_itN7z9_fWg_258HDLGWAD1HxacHAnxU29w1RsPP3gVVn4Cg-FlbwgXH2COHiqd0DuZk0XxB3KceFgYHZO12lSuxzqhnyxQMA9TVZSuck88jLUhFI_oUpcRChxXNQ5JJmTOGHqYkJNpVsM-t9CpCpimKqEFetjVWZkrK2DeVIYejgpZOc4ivIiixW0SRQvOomjBPvXC00PP8AhBqgQCBtrdkbHo4a_voWrXClC8MV2akwD2919P4VgrR8qlWm2FjL63kFCsE0oEhI3z5sGRBUMyERD4cNF4Z8PrLsQyy-xzYiFTs0pso4dX77tdsI4KiHWpHBzTwp2lyp0IYPV8mwSi-a6EXC4gp1ybB5BZpmPpqrpYXcONdPEdWdClK0onoMqv6185QpwsPWysJ8KtkzNCwV9sSP8SBVt6n78kffUnGUfJ2zRzZMic8fVNWcV7i8KAVtDhAmy1E2CdNE7UHAffnUcR81kUMfapFwKp5NBj1Wps7cagGkunqrdusKa7Ya-xrZNZtr4UtKC43N6VfcRUMfsxA0d5AUlq51BaOaPP5s3fyZu_wRs_hLdfdKqetO3v0Xbz37SY08Pr-v6CAvO3BcZbrwnM3xZY-EUEVlpKwDpDMifzv_EabPDqH8Lrsw6DdVYbv9i8bBhnvLpWfOa3Wm_Yy6fb-pG3Q94Ybdbm7TDshfxIvLx_Ov7JTiX5_0JJ_2Fs4cbYgkPGNtLGkTkL14fW4d9-baI_3-gyPKTLIdlCK0trXe76Etv40ilfTjykZEbNzwirSxPTtdFxnduYgxqodiRkXRPljdFXq1Ajsee75iUS34vk70bim0j-XqRgN5K_iRTsRQp3IwWbSOFepPN9c5p4eJvp-2maoMCVRk9fea0erA7Ima0WYHSn72vY8UNR0XcrM0seXsk5XZIjk6cqtS6NUThT0nL5zT8BAAD__2MSaW4=
 
 statement ok
 DROP TABLE geo_table
@@ -142,6 +144,7 @@ quality of service: regular
     │
     └── • index join (streamer)
         │ sql nodes: <hidden>
+        │ kv nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
         │ KV time: 0µs
@@ -165,6 +168,7 @@ quality of service: regular
             │
             └── • scan
                   sql nodes: <hidden>
+                  kv nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
                   KV time: 0µs
@@ -178,7 +182,7 @@ quality of service: regular
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVuFu4kYQ_t-nGM2fJKqj7NoO5baqREO4lrY5IkBXnQpCG3tCLOxd3-66IYp4rL5An6xaO0SBHLSoJ7XnHwszO_t5Zr75tH5E-zFHgaPeL73uGBbwdji4gjnpmZM3OcGvP_aGPbBulilHxlLi7PHRaNi__C5sveHtb68H_Xfj45gxxiKof1h0ciTED73BVW88_BB4rOIEBsPL3hAuPsACA1Q6pXeyIIviN-Q4DbA0OiFrtfGuxzqgny5RsAAzVVbOu6cBJtoQikd0mcsJBY59jkOSKZkzhgGm5GSW17DPJXR8ArNMpbTEALs6rwplBSyazDDAUSm942yCF5PJ8jadTJYs8gv7mwVPDz3DJwhSpRAx0O6OjMUAf34PLitIAPvzjyc70cqRcplWr7aMvreQUqJTSgWEjfPmwZEFQzIVwFtw0Xjnw-suJDLP7XNgKTOzDowxwKv33S5YRyUkulIOjmnpzjLlTgSwuqFNANFiV0Ahl1BQoc0DyDzXiXQ-L1bncCNdckcWdOXKygnw8XX-a0eI01WAjfXEsHVyTij4i5HoX6Jgq-CfT0Vf_U7GUfo2yx0ZMmd8czTW-71laUAr6HAB1g8BWCeNEzWp0TfnkwnzpDLP3d4FgVR66DE_C6-GYeDb0vH51gXWdDfsNbZ1Ms83h4KWlFSvZ2UfMX7PfszBUVFCmtkFVFbO6TPwFm7xxg_h7SedqScxh3vE3PyblQt6-LSgv2xFVZZSsM6QLMj8Z0RGW0SGhxD5LLxok8bGL7avE8YZ9xdHyMJW6w17-XRb3_N2zBujzdq8Hce9mB-JlzdMJzz5rNL5F22Lt9oWHdK2kTaOzFm82bQO__r_pvLzrSrjQ6ocki21srRR5a43sa03nfLVNEBK59R8KFhdmYSujU7q2MYc1EC1IyXrml3eGH213mok9ny5vETie5HC3Uh8GyncixTtRgq3kaK9SPFupGgbKd6LdL6vT9MAb3N9P8tSFLjW6OknlvWD_oCcWz8Aozt9X8OOH0pP363MLQV4JRd0SY5MkanMuixB4UxFq9VXfwUAAP__aLZg5A==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcVu9u4kYQ_96nGM2XJKqj7NoO5baqREO4lrY5IkBXnQpCG3tCLOxd3-66IYp4rL5An6xaO0SBHLSoJ7U6f1iYP_vzzPxmNH5E-zFHgaPeL73uGBbwdji4gjnpmZM3OcGvP_aGPbBulilHxlLi7PHRaNi__C5sveHtb68H_Xfj45gxxiKof1h0ciTED73BVW88_BB4rOIEBsPL3hAuPsACA1Q6pXeyIIviN-Q4DbA0OiFrtfGqx9qhny5RsAAzVVbOq6cBJtoQikd0mcsJBY59jEOSKZkzhgGm5GSW17DPKXR8ALNMpbTEALs6rwplBSyayDDAUSm94myCF5PJ8jadTJYs8gf7mwNPD73DJwhSpRAx0O6OjMUAf34PPl0rQPFGdFlBAtiffzyZE60cKZdp9cpk9L2FlBKdUiogbJQ3D44sGJKpAN6Ci0Y7H153IZF5bp8dS5mZtWOMAV6973bBOioh0ZVycExLd5YpdyKA1fVtHIgWuxwKuYSCCm0eQOa5TqTzcbE6hhvpkjuyoCtXVk6A96_jXytCnK4CbKQnwq2Tc0LBX3RI_xIFWwX_vEn66ncyjtK3We7IkDnjm52ytveWpQGtoMMFWN8TYJ00TtQcR9-cTybMc8w8lXsPBFLpodd8a7zqjYEvS8fHWydY092w18jWyTzfbApaUlK97pV9xHib_ZiDo6KENLMLqKyc02fgLdzijR_C2086U0-zHe6Z7ebfrFzQw6fn-4sasMpSCtYZkgWZ_4zXaIvX8BBen-cw2mS10YvtZcM4436thCxstd6wl0-39T1vx7wR2qzN23Hci_mReLl_OuHJZ52kf1G2eKts0SFlG2njyJzFm0Xr8K__b0N_vpVlfEiWQ7KlVpY2stz1Jrb1plO-mgZI6ZyazwirK5PQtdFJ7duIgxqoVqRkXWPljdBXa1MzYs-75iUS34sU7kbi20jhXqRoN1K4jRTtRYp3I0XbSPFepPN9dZoGeJvr-1mWosD1jJ5-4lg_6C_IufUNMLrT9zXs-KH09N3K3FKAV3JBl-TIFJnKrMsSFM5UtFp99VcAAAD__0UxaWo=
 
 # Also works when creating an index.
 statement ok
@@ -218,6 +222,7 @@ quality of service: regular
     │
     └── • index join (streamer)
         │ sql nodes: <hidden>
+        │ kv nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
         │ KV time: 0µs
@@ -241,6 +246,7 @@ quality of service: regular
             │
             └── • scan
                   sql nodes: <hidden>
+                  kv nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
                   KV time: 0µs
@@ -254,4 +260,4 @@ quality of service: regular
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVuFu4kYQ_t-nGM2fJKqj7NoO5baqREO4lrY5IkBXnQpCG3tCLOxd3-66IYp4rL5An6xaO0SBHLSoJ7XnHwszO_t5Zr75tH5E-zFHgaPeL73uGBbwdji4gjnpmZM3OcGvP_aGPbBulilHxlLi7PHRaNi__C5sveHtb68H_Xfj45gxxiKof1h0ciTED73BVW88_BB4rOIEBsPL3hAuPsACA1Q6pXeyIIviN-Q4DbA0OiFrtfGuxzqgny5RsAAzVVbOu6cBJtoQikd0mcsJBY59jkOSKZkzhgGm5GSW17DPJXR8ArNMpbTEALs6rwplBSyazDDAUSm942yCF5PJ8jadTJYs8gv7mwVPDz3DJwhSpRAx0O6OjMUAf34PLitIAPvzjyc70cqRcplWr7aMvreQUqJTSgWEjfPmwZEFQzIVwFtw0Xjnw-suJDLP7XNgKTOzDowxwKv33S5YRyUkulIOjmnpzjLlTgSwuqFNANFiV0Ahl1BQoc0DyDzXiXQ-L1bncCNdckcWdOXKygnw8XX-a0eI01WAjfXEsHVyTij4i5HoX6Jgq-CfT0Vf_U7GUfo2yx0ZMmd8czTW-71laUAr6HAB1g8BWCeNEzWp0TfnkwnzpDLP3d4FgVR66DE_C6-GYeDb0vH51gXWdDfsNbZ1Ms83h4KWlFSvZ2UfMX7PfszBUVFCmtkFVFbO6TPwFm7xxg_h7SedqScxh3vE3PyblQt6-LSgv2xFVZZSsM6QLMj8Z0RGW0SGhxD5LLxok8bGL7avE8YZ9xdHyMJW6w17-XRb3_N2zBujzdq8Hce9mB-JlzdMJzz5rNL5F22Lt9oWHdK2kTaOzFm82bQO__r_pvLzrSrjQ6ocki21srRR5a43sa03nfLVNEBK59R8KFhdmYSujU7q2MYc1EC1IyXrml3eGH213mok9ny5vETie5HC3Uh8GyncixTtRgq3kaK9SPFupGgbKd6LdL6vT9MAb3N9P8tSFLjW6OknlvWD_oCcWz8Aozt9X8OOH0pP363MLQV4JRd0SY5MkanMuixB4UxFq9VXfwUAAP__aLZg5A==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcVu9u4kYQ_96nGM2XJKqj7NoO5baqREO4lrY5IkBXnQpCG3tCLOxd3-66IYp4rL5An6xaO0SBHLSoJ7U6f1iYP_vzzPxmNH5E-zFHgaPeL73uGBbwdji4gjnpmZM3OcGvP_aGPbBulilHxlLi7PHRaNi__C5sveHtb68H_Xfj45gxxiKof1h0ciTED73BVW88_BB4rOIEBsPL3hAuPsACA1Q6pXeyIIviN-Q4DbA0OiFrtfGqx9qhny5RsAAzVVbOq6cBJtoQikd0mcsJBY59jEOSKZkzhgGm5GSW17DPKXR8ALNMpbTEALs6rwplBSyayDDAUSm94myCF5PJ8jadTJYs8gf7mwNPD73DJwhSpRAx0O6OjMUAf34PPl0rQPFGdFlBAtiffzyZE60cKZdp9cpk9L2FlBKdUiogbJQ3D44sGJKpAN6Ci0Y7H153IZF5bp8dS5mZtWOMAV6973bBOioh0ZVycExLd5YpdyKA1fVtHIgWuxwKuYSCCm0eQOa5TqTzcbE6hhvpkjuyoCtXVk6A96_jXytCnK4CbKQnwq2Tc0LBX3RI_xIFWwX_vEn66ncyjtK3We7IkDnjm52ytveWpQGtoMMFWN8TYJ00TtQcR9-cTybMc8w8lXsPBFLpodd8a7zqjYEvS8fHWydY092w18jWyTzfbApaUlK97pV9xHib_ZiDo6KENLMLqKyc02fgLdzijR_C2086U0-zHe6Z7ebfrFzQw6fn-4sasMpSCtYZkgWZ_4zXaIvX8BBen-cw2mS10YvtZcM4436thCxstd6wl0-39T1vx7wR2qzN23Hci_mReLl_OuHJZ52kf1G2eKts0SFlG2njyJzFm0Xr8K__b0N_vpVlfEiWQ7KlVpY2stz1Jrb1plO-mgZI6ZyazwirK5PQtdFJ7duIgxqoVqRkXWPljdBXa1MzYs-75iUS34sU7kbi20jhXqRoN1K4jRTtRYp3I0XbSPFepPN9dZoGeJvr-1mWosD1jJ5-4lg_6C_IufUNMLrT9zXs-KH09N3K3FKAV3JBl-TIFJnKrMsSFM5UtFp99VcAAAD__0UxaWo=

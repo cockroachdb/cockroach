@@ -34,6 +34,7 @@ quality of service: background
 ·
 • scan
   sql nodes: <hidden>
+  kv nodes: <hidden>
   regions: <hidden>
   actual row count: 3
   KV time: 0µs
@@ -87,6 +88,7 @@ quality of service: regular
 ├── • scan
 │     columns: (k, v)
 │     sql nodes: <hidden>
+│     kv nodes: <hidden>
 │     regions: <hidden>
 │     actual row count: 4
 │     vectorized batch count: 0
@@ -106,6 +108,7 @@ quality of service: regular
 └── • scan
       columns: (a, b)
       sql nodes: <hidden>
+      kv nodes: <hidden>
       regions: <hidden>
       actual row count: 3
       vectorized batch count: 0

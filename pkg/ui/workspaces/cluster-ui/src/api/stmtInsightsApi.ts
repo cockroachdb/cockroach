@@ -56,6 +56,7 @@ export type StmtInsightsResponseRow = {
   priority: string;
   retries: number;
   exec_node_ids: number[];
+  kv_node_ids: number[];
   contention: string; // interval
   contention_events: ContentionDetails[];
   last_retry_reason?: string;
@@ -88,6 +89,7 @@ rows_written,
 priority,
 retries,
 exec_node_ids,
+kv_node_ids,
 contention,
 last_retry_reason,
 causes,
