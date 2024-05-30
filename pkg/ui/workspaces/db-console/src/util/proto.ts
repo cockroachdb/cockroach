@@ -8,10 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import forEach from "lodash/forEach";
+import has from "lodash/has";
+import map from "lodash/map";
+import sumBy from "lodash/sumBy";
 
 import * as protos from "src/js/protos";
 import { cockroach } from "src/js/protos";
+
 import INodeResponse = cockroach.server.serverpb.INodeResponse;
 
 export type INodeStatus = protos.cockroach.server.status.statuspb.INodeStatus;
@@ -29,8 +33,8 @@ export function AccumulateMetrics(
   ...srcs: StatusMetrics[]
 ): void {
   srcs.forEach((s: StatusMetrics) => {
-    _.forEach(s, (val: number, key: string) => {
-      if (_.has(dest, key)) {
+    forEach(s, (val: number, key: string) => {
+      if (has(dest, key)) {
         dest[key] = dest[key] + val;
       } else {
         dest[key] = val;
@@ -45,7 +49,7 @@ export function AccumulateMetrics(
  * for all current usages of NodeStatus in the UI.
  */
 export function RollupStoreMetrics(ns: INodeResponse): void {
-  AccumulateMetrics(ns.metrics, ..._.map(ns.store_statuses, ss => ss.metrics));
+  AccumulateMetrics(ns.metrics, ...map(ns.store_statuses, ss => ss.metrics));
 }
 
 /**
@@ -55,37 +59,37 @@ export function RollupStoreMetrics(ns: INodeResponse): void {
 // eslint-disable-next-line @typescript-eslint/no-namespace
 export namespace MetricConstants {
   // Store level metrics.
-  export const replicas: string = "replicas";
-  export const raftLeaders: string = "replicas.leaders";
-  export const leaseHolders: string = "replicas.leaseholders";
-  export const ranges: string = "ranges";
-  export const unavailableRanges: string = "ranges.unavailable";
-  export const underReplicatedRanges: string = "ranges.underreplicated";
-  export const liveBytes: string = "livebytes";
-  export const keyBytes: string = "keybytes";
-  export const valBytes: string = "valbytes";
-  export const rangeKeyBytes: string = "rangekeybytes";
-  export const rangeValBytes: string = "rangevalbytes";
-  export const totalBytes: string = "totalbytes";
-  export const intentBytes: string = "intentbytes";
-  export const liveCount: string = "livecount";
-  export const keyCount: string = "keycount";
-  export const valCount: string = "valcount";
-  export const intentCount: string = "intentcount";
-  export const intentAge: string = "intentage";
-  export const gcBytesAge: string = "gcbytesage";
-  export const capacity: string = "capacity";
-  export const availableCapacity: string = "capacity.available";
-  export const usedCapacity: string = "capacity.used";
-  export const sysBytes: string = "sysbytes";
-  export const sysCount: string = "syscount";
+  export const replicas = "replicas";
+  export const raftLeaders = "replicas.leaders";
+  export const leaseHolders = "replicas.leaseholders";
+  export const ranges = "ranges";
+  export const unavailableRanges = "ranges.unavailable";
+  export const underReplicatedRanges = "ranges.underreplicated";
+  export const liveBytes = "livebytes";
+  export const keyBytes = "keybytes";
+  export const valBytes = "valbytes";
+  export const rangeKeyBytes = "rangekeybytes";
+  export const rangeValBytes = "rangevalbytes";
+  export const totalBytes = "totalbytes";
+  export const intentBytes = "intentbytes";
+  export const liveCount = "livecount";
+  export const keyCount = "keycount";
+  export const valCount = "valcount";
+  export const intentCount = "intentcount";
+  export const intentAge = "intentage";
+  export const gcBytesAge = "gcbytesage";
+  export const capacity = "capacity";
+  export const availableCapacity = "capacity.available";
+  export const usedCapacity = "capacity.used";
+  export const sysBytes = "sysbytes";
+  export const sysCount = "syscount";
 
   // Node level metrics.
-  export const userCPUPercent: string = "sys.cpu.user.percent";
-  export const sysCPUPercent: string = "sys.cpu.sys.percent";
-  export const allocBytes: string = "sys.go.allocbytes";
-  export const sqlConns: string = "sql.conns";
-  export const rss: string = "sys.rss";
+  export const userCPUPercent = "sys.cpu.user.percent";
+  export const sysCPUPercent = "sys.cpu.sys.percent";
+  export const allocBytes = "sys.go.allocbytes";
+  export const sqlConns = "sql.conns";
+  export const rss = "sys.rss";
 }
 
 /**
@@ -113,7 +117,7 @@ export function BytesUsed(s: INodeStatus): number {
   if (usedCapacity !== 0) {
     return usedCapacity;
   }
-  return _.sumBy(aggregateByteKeys, (key: string) => {
+  return sumBy(aggregateByteKeys, (key: string) => {
     return s.metrics[key];
   });
 }

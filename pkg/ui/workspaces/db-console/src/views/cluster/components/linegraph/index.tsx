@@ -11,6 +11,26 @@
 import React from "react";
 import moment from "moment-timezone";
 import { createSelector } from "reselect";
+import {
+  calculateXAxisDomain,
+  calculateYAxisDomain,
+  AxisDomain,
+  TimeScale,
+  Visualization,
+  util,
+  WithTimezoneProps,
+  findClosestTimeScale,
+  defaultTimeScaleOptions,
+  TimeWindow,
+  WithTimezone,
+} from "@cockroachlabs/cluster-ui";
+import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
+import Long from "long";
+import { Tooltip } from "antd";
+import "antd/lib/tooltip/style";
+import flatMap from "lodash/flatMap";
+import filter from "lodash/filter";
 
 import * as protos from "src/js/protos";
 import { hoverOff, hoverOn, HoverState } from "src/redux/hover";
@@ -29,31 +49,11 @@ import {
   MetricsDataComponentProps,
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
-import {
-  calculateXAxisDomain,
-  calculateYAxisDomain,
-  AxisDomain,
-  TimeScale,
-  Visualization,
-  util,
-  WithTimezoneProps,
-} from "@cockroachlabs/cluster-ui";
-import uPlot from "uplot";
-import "uplot/dist/uPlot.min.css";
-import "./linegraph.styl";
-import Long from "long";
-import {
-  findClosestTimeScale,
-  defaultTimeScaleOptions,
-  TimeWindow,
-  WithTimezone,
-} from "@cockroachlabs/cluster-ui";
-import _ from "lodash";
 import { isSecondaryTenant } from "src/redux/tenants";
-import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import { MonitoringIcon } from "src/views/shared/components/icons/monitoring";
 import { unique } from "src/util/arrays";
+
+import "./linegraph.styl";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -314,7 +314,7 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
     // and are called when recomputing certain axis and
     // series options. This lets us use updated domains
     // when redrawing the uPlot chart on data change.
-    const resultDatapoints = _.flatMap(fData, result =>
+    const resultDatapoints = flatMap(fData, result =>
       result.values.map(dp => dp.value),
     );
     this.yAxisDomain = calculateYAxisDomain(axis.props.units, resultDatapoints);
@@ -395,7 +395,7 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
     ) : null;
     // Extend tooltip to include metrics names
     if (showMetricsInTooltip) {
-      const metrics = _.filter(data?.results, canShowMetric);
+      const metrics = filter(data?.results, canShowMetric);
       if (metrics.length === 1) {
         tt = (
           <>

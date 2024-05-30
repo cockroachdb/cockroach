@@ -11,12 +11,15 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { RenderFunction } from "storybook__react";
-import { Latency } from "./index";
+
+import { withRouterDecorator } from "src/util/decorators";
+
 import {
   latencyFixture,
   latencyFixtureWithNodeStatuses,
 } from "./latency.fixtures";
-import { withRouterDecorator } from "src/util/decorators";
+
+import { Latency } from "./index";
 
 storiesOf("Latency Table", module)
   .addDecorator(withRouterDecorator)

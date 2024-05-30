@@ -13,11 +13,25 @@ import { bindActionCreators } from "redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
+  Filters,
+  defaultFilters,
+  util,
+  StatementsPageRoot,
+  ActiveStatementsViewStateProps,
+  StatementsPageStateProps,
+  ActiveStatementsViewDispatchProps,
+  StatementsPageDispatchProps,
+  StatementsPageRootProps,
+  api,
+} from "@cockroachlabs/cluster-ui";
+
+import {
   refreshNodes,
   refreshDatabases,
   refreshStatementDiagnosticsRequests,
   refreshStatements,
   refreshUserSQLRoles,
+  createSelectorForCachedDataField,
 } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState, AppDispatch } from "src/redux/state";
@@ -31,19 +45,6 @@ import {
   selectHasViewActivityRedactedRole,
   selectHasAdminRole,
 } from "src/redux/user";
-
-import {
-  Filters,
-  defaultFilters,
-  util,
-  StatementsPageRoot,
-  ActiveStatementsViewStateProps,
-  StatementsPageStateProps,
-  ActiveStatementsViewDispatchProps,
-  StatementsPageDispatchProps,
-  StatementsPageRootProps,
-  api,
-} from "@cockroachlabs/cluster-ui";
 import {
   cancelStatementDiagnosticsReportAction,
   createOpenDiagnosticsModalAction,
@@ -59,12 +60,12 @@ import {
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { LocalSetting } from "src/redux/localsettings";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
+import { selectTimeScale } from "src/redux/timeScale";
+
 import {
   activeStatementsViewActions,
   mapStateToActiveStatementViewProps,
 } from "./activeStatementsSelectors";
-import { selectTimeScale } from "src/redux/timeScale";
-import { createSelectorForCachedDataField } from "src/redux/apiReducers";
 
 // selectDatabases returns the array of all databases in the cluster.
 export const selectDatabases = createSelector(

@@ -10,6 +10,7 @@
 
 import React from "react";
 import Helmet from "react-helmet";
+
 import "./errorMessage.styl";
 import NotFoundImg from "assets/not-found.svg";
 

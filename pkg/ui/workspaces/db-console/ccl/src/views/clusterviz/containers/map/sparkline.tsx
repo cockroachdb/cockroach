@@ -8,8 +8,8 @@
 
 import d3 from "d3";
 import React from "react";
-
 import { util } from "@cockroachlabs/cluster-ui";
+
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import createChartComponent from "src/views/shared/util/d3-react";
 import { BACKGROUND_BLUE, MAIN_BLUE } from "src/views/shared/colors";

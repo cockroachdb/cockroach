@@ -10,6 +10,7 @@
 
 import classnames from "classnames/bind";
 import React from "react";
+
 import styles from "./pageConfig.module.styl";
 
 export interface PageConfigProps {

@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { Action } from "redux";
+
 import {
   LocalSettingData,
   LocalSetting,

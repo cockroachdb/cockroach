@@ -8,21 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { api as clusterUiApi, util } from "@cockroachlabs/cluster-ui";
+import { createMemoryHistory } from "history";
+import merge from "lodash/merge";
+import moment from "moment-timezone";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { RouteComponentProps } from "react-router";
+
+import { AdminUIState, createAdminUIStore } from "src/redux/state";
+import { queryByName } from "src/util/query";
+
+import { indexUnusedDuration } from "../util/constants";
+
 import {
   databaseRequestPayloadToID,
   tableRequestToID,
   createSelectorForCachedDataField,
   createSelectorForKeyedCachedDataField,
 } from "./apiReducers";
-import { api as clusterUiApi, util } from "@cockroachlabs/cluster-ui";
-import { AdminUIState, createAdminUIStore } from "src/redux/state";
-import { createMemoryHistory } from "history";
-import { merge } from "lodash";
-import moment from "moment-timezone";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { RouteComponentProps } from "react-router";
-import { queryByName } from "src/util/query";
-import { indexUnusedDuration } from "../util/constants";
 
 describe("table id generator", function () {
   it("generates encoded db/table id", function () {

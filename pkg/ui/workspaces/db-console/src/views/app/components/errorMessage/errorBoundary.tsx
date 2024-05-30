@@ -10,6 +10,7 @@
 
 import React, { ErrorInfo } from "react";
 import Helmet from "react-helmet";
+
 import "./errorMessage.styl";
 import SleepyMoonImg from "assets/sleepy-moon.svg";
 

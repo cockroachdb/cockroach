@@ -8,12 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import Long from "long";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import {cockroach} from "@cockroachlabs/crdb-protobuf-client";
+import { Button, commonStyles } from "@cockroachlabs/cluster-ui";
+import { ArrowLeft } from "@cockroachlabs/icons";
+import isEqual from "lodash/isEqual";
+import isNil from "lodash/isNil";
+import isEmpty from "lodash/isEmpty";
+import some from "lodash/some";
+import orderBy from "lodash/orderBy";
+import flatMap from "lodash/flatMap";
+import sortedUniqBy from "lodash/sortedUniqBy";
+import flow from "lodash/flow";
+import head from "lodash/head";
+import sortBy from "lodash/sortBy";
 
 import * as protos from "src/js/protos";
 import {
@@ -35,8 +47,8 @@ import AllocatorOutput from "src/views/reports/containers/range/allocator";
 import RangeInfo from "src/views/reports/containers/range/rangeInfo";
 import LeaseTable from "src/views/reports/containers/range/leaseTable";
 import { getMatchParamByName } from "src/util/query";
-import { Button, commonStyles } from "@cockroachlabs/cluster-ui";
-import { ArrowLeft } from "@cockroachlabs/icons";
+
+import IRangeInfo = cockroach.server.serverpb.IRangeInfo;
 
 interface RangeDispatchProps {
   refreshRange: typeof refreshRange;
@@ -107,7 +119,7 @@ export class Range extends React.Component<RangeProps, {}> {
   }
 
   componentDidUpdate(prevProps: RangeProps) {
-    if (!_.isEqual(this.props.location, prevProps.location)) {
+    if (!isEqual(this.props.location, prevProps.location)) {
       this.refresh(this.props);
     }
   }
@@ -121,7 +133,7 @@ export class Range extends React.Component<RangeProps, {}> {
     const rangeID = getMatchParamByName(match, rangeIDAttr);
 
     // A bunch of quick error cases.
-    if (!_.isNil(range) && !_.isNil(range.lastError)) {
+    if (!isNil(range) && !isNil(range.lastError)) {
       return (
         <ErrorPage
           rangeID={rangeID}
@@ -129,7 +141,7 @@ export class Range extends React.Component<RangeProps, {}> {
         />
       );
     }
-    if (_.isNil(range) || _.isEmpty(range.data)) {
+    if (isNil(range) || isEmpty(range.data)) {
       return (
         <ErrorPage rangeID={rangeID} errorText={`Loading cluster status...`} />
       );
@@ -151,7 +163,7 @@ export class Range extends React.Component<RangeProps, {}> {
 
     // Did we get any responses?
     if (
-      !_.some(range.data.responses_by_node_id, resp => resp.infos.length > 0)
+      !some(range.data.responses_by_node_id, resp => resp.infos.length > 0)
     ) {
       return (
         <ErrorPage
@@ -164,9 +176,9 @@ export class Range extends React.Component<RangeProps, {}> {
 
     // Collect all the infos and sort them, putting the leader (or the replica
     // with the highest term, first.
-    const infos = _.orderBy(
-      _.flatMap(range.data.responses_by_node_id, resp => {
-        if (resp.response && _.isEmpty(resp.error_message)) {
+    const infos = orderBy(
+      flatMap(range.data.responses_by_node_id, resp => {
+        if (resp.response && isEmpty(resp.error_message)) {
           return resp.infos;
         }
         return [];
@@ -177,7 +189,7 @@ export class Range extends React.Component<RangeProps, {}> {
         info => FixLong(info.raft_state.hard_state.term).toNumber(),
         info => {
           const localReplica = RangeInfo.GetLocalReplica(info);
-          return _.isNil(localReplica) ? 0 : localReplica.replica_id;
+          return isNil(localReplica) ? 0 : localReplica.replica_id;
         },
       ],
       ["desc", "desc", "desc", "asc"],
@@ -212,7 +224,7 @@ export class Range extends React.Component<RangeProps, {}> {
           Enqueue Range
         </a>
         <RangeTable infos={infos} replicas={replicas} />
-        <LeaseTable info={_.head(infos)} />
+        <LeaseTable info={head(infos)} />
         <ConnectionsTable range={range} />
         <AllocatorOutput allocator={this.props.allocator} />
         <LogTable rangeID={responseRangeID} log={this.props.rangeLog} />

@@ -8,13 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import { Action, Dispatch } from "redux";
 import * as protobuf from "protobufjs/minimal";
+import isNil from "lodash/isNil";
+import clone from "lodash/clone";
+import each from "lodash/each";
+import filter from "lodash/filter";
+import map from "lodash/map";
+import has from "lodash/has";
 
-import * as protos from "src/js/protos";
-import { PayloadAction } from "src/interfaces/action";
 import { getUIData, setUIData } from "src/util/api";
+import { PayloadAction } from "src/interfaces/action";
+import * as protos from "src/js/protos";
+
 import { AdminUIState } from "./state";
 
 export const SET = "cockroachui/uidata/SET_OPTIN";
@@ -26,10 +32,10 @@ export const SAVE = "cockroachui/uidata/SAVE";
 export const SAVE_COMPLETE = "cockroachui/uidata/SAVE_COMPLETE";
 
 // Opt In Attribute Keys
-export const KEY_HELPUS: string = "helpus";
+export const KEY_HELPUS = "helpus";
 // The "server." prefix denotes that this key is shared with the server, so
 // changes to this key must be synchronized with the server code.
-export const KEY_OPTIN: string = "server.optin-reporting";
+export const KEY_OPTIN = "server.optin-reporting";
 // Tracks whether the latest registration data has been synchronized with the
 // Cockroach Labs servers.
 export const KEY_REGISTRATION_SYNCHRONIZED = "registration_synchronized";
@@ -38,7 +44,7 @@ export const KEY_REGISTRATION_SYNCHRONIZED = "registration_synchronized";
  * OptInAttributes tracks the values the user has provided when opting in to usage reporting
  */
 export class OptInAttributes {
-  email: string = "";
+  email = "";
   optin: boolean = null; // Did the user opt in/out of reporting usage
   /**
    * Number of times the user has dismissed the opt-in banner. This was made a
@@ -46,9 +52,9 @@ export class OptInAttributes {
    * currently only ever set to null or 1.
    */
   dismissed: number = null;
-  firstname: string = "";
-  lastname: string = "";
-  company: string = "";
+  firstname = "";
+  lastname = "";
+  company = "";
   updates: boolean = null; // Did the user sign up for product/feature updates
 }
 
@@ -98,15 +104,15 @@ export function uiDataReducer(
   state = new UIDataState(),
   action: Action,
 ): UIDataState {
-  if (_.isNil(action)) {
+  if (isNil(action)) {
     return state;
   }
 
   switch (action.type) {
     case SET: {
       const { key, value } = (action as PayloadAction<KeyValue>).payload;
-      state = _.clone(state);
-      state[key] = _.clone(state[key]) || new UIData();
+      state = clone(state);
+      state[key] = clone(state[key]) || new UIData();
       state[key].status = UIDataStatus.VALID;
       state[key].data = value;
       state[key].error = null;
@@ -114,9 +120,9 @@ export function uiDataReducer(
     }
     case SAVE: {
       const keys = (action as PayloadAction<string[]>).payload;
-      state = _.clone(state);
-      _.each(keys, k => {
-        state[k] = _.clone(state[k]) || new UIData();
+      state = clone(state);
+      each(keys, k => {
+        state[k] = clone(state[k]) || new UIData();
         state[k].status = UIDataStatus.SAVING;
       });
       return state;
@@ -125,17 +131,17 @@ export function uiDataReducer(
       const { key: saveErrorKey, error: saveError } = (
         action as PayloadAction<KeyedError>
       ).payload;
-      state = _.clone(state);
-      state[saveErrorKey] = _.clone(state[saveErrorKey]) || new UIData();
+      state = clone(state);
+      state[saveErrorKey] = clone(state[saveErrorKey]) || new UIData();
       state[saveErrorKey].status = UIDataStatus.SAVE_ERROR;
       state[saveErrorKey].error = saveError;
       return state;
     }
     case LOAD: {
       const keys = (action as PayloadAction<string[]>).payload;
-      state = _.clone(state);
-      _.each(keys, k => {
-        state[k] = _.clone(state[k]) || new UIData();
+      state = clone(state);
+      each(keys, k => {
+        state[k] = clone(state[k]) || new UIData();
         state[k].status = UIDataStatus.LOADING;
       });
       return state;
@@ -144,8 +150,8 @@ export function uiDataReducer(
       const { key: loadErrorKey, error: loadError } = (
         action as PayloadAction<KeyedError>
       ).payload;
-      state = _.clone(state);
-      state[loadErrorKey] = _.clone(state[loadErrorKey]) || new UIData();
+      state = clone(state);
+      state[loadErrorKey] = clone(state[loadErrorKey]) || new UIData();
       state[loadErrorKey].status = UIDataStatus.LOAD_ERROR;
       state[loadErrorKey].error = loadError;
       return state;
@@ -304,15 +310,15 @@ export function saveUIData(...values: KeyValue[]) {
     getState: () => AdminUIState,
   ): Promise<void> => {
     const state = getState();
-    values = _.filter(values, kv => !isInFlight(state, kv.key));
+    values = filter(values, kv => !isInFlight(state, kv.key));
     if (values.length === 0) {
       return;
     }
-    dispatch(beginSaveUIData(_.map(values, kv => kv.key)));
+    dispatch(beginSaveUIData(map(values, kv => kv.key)));
 
     // Encode data for each UIData key.
     const request = new protos.cockroach.server.serverpb.SetUIDataRequest();
-    _.each(values, kv => {
+    each(values, kv => {
       const stringifiedValue = JSON.stringify(kv.value);
       const buffer = new Uint8Array(
         protobuf.util.utf8.length(stringifiedValue),
@@ -324,13 +330,13 @@ export function saveUIData(...values: KeyValue[]) {
     return setUIData(request)
       .then(_response => {
         // SetUIDataResponse is empty. A positive return indicates success.
-        _.each(values, kv => dispatch(setUIDataKey(kv.key, kv.value)));
+        each(values, kv => dispatch(setUIDataKey(kv.key, kv.value)));
       })
       .catch(error => {
         // TODO(maxlang): Fix error handling more comprehensively.
         // Tracked in #8699
         setTimeout(
-          () => _.each(values, kv => dispatch(saveErrorUIData(kv.key, error))),
+          () => each(values, kv => dispatch(saveErrorUIData(kv.key, error))),
           1000,
         );
       });
@@ -346,7 +352,7 @@ export function loadUIData(...keys: string[]) {
     getState: () => AdminUIState,
   ): Promise<void> => {
     const state = getState();
-    keys = _.filter(keys, k => !isInFlight(state, k));
+    keys = filter(keys, k => !isInFlight(state, k));
     if (keys.length === 0) {
       return;
     }
@@ -357,8 +363,8 @@ export function loadUIData(...keys: string[]) {
     )
       .then(response => {
         // Decode data for each UIData key.
-        _.each(keys, key => {
-          if (_.has(response.key_values, key)) {
+        each(keys, key => {
+          if (has(response.key_values, key)) {
             const buffer = response.key_values[key].value;
             dispatch(
               setUIDataKey(
@@ -377,7 +383,7 @@ export function loadUIData(...keys: string[]) {
         // TODO(maxlang): Fix error handling more comprehensively.
         // Tracked in #8699
         setTimeout(
-          () => _.each(keys, key => dispatch(loadErrorUIData(key, error))),
+          () => each(keys, key => dispatch(loadErrorUIData(key, error))),
           1000,
         );
       });

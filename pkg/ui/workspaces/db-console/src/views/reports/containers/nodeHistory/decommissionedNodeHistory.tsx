@@ -13,17 +13,9 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Moment } from "moment-timezone";
-import _ from "lodash";
-
-import { AdminUIState } from "src/redux/state";
-import { nodesSummarySelector } from "src/redux/nodes";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { cockroach } from "src/js/protos";
-import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
-import { LocalSetting } from "src/redux/localsettings";
-
-import "./decommissionedNodeHistory.styl";
-import { Text } from "src/components";
+import flow from "lodash/flow";
+import orderBy from "lodash/orderBy";
+import map from "lodash/map";
 import {
   ColumnsConfig,
   Table,
@@ -32,6 +24,13 @@ import {
   Timestamp,
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
+
+import { AdminUIState } from "src/redux/state";
+import { nodesSummarySelector } from "src/redux/nodes";
+import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
+import { cockroach } from "src/js/protos";
+import { LocalSetting } from "src/redux/localsettings";
+import { Text } from "src/components";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
 import "./decommissionedNodeHistory.styl";

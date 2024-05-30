@@ -8,10 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import EyeOff from "assets/eye-off.svg";
-import Eye from "assets/eye.svg";
 import cn from "classnames";
 import React from "react";
+
+import EyeOff from "assets/eye-off.svg";
+import Eye from "assets/eye.svg";
+
 import { Button } from "../button";
 import "./input.styl";
 

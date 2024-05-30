@@ -6,15 +6,18 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import _ from "lodash";
-import * as vector from "src/util/vector";
 import * as d3 from "d3";
+import isEmpty from "lodash/isEmpty";
+import clone from "lodash/clone";
+import isNil from "lodash/isNil";
+
+import * as vector from "src/util/vector";
 
 // Box is an immutable construct for a box.
 export class Box {
   // Compute a minimum bounding box for a supplied collection of boxes.
   static boundingBox(...boxes: Box[]): Box {
-    if (_.isEmpty(boxes)) {
+    if (isEmpty(boxes)) {
       return null;
     }
 
@@ -125,14 +128,14 @@ export class ZoomTransformer {
   }
 
   withViewportSize(viewportSize: Size): ZoomTransformer {
-    const newZoom = _.clone(this);
+    const newZoom = clone(this);
     newZoom._viewportSize = viewportSize;
     newZoom.adjustZoom();
     return newZoom;
   }
 
   withScaleAndTranslate(scale: number, translate: Point) {
-    const newZoom = _.clone(this);
+    const newZoom = clone(this);
     newZoom._scale = scale;
     newZoom._translate = translate;
     newZoom.adjustZoom();
@@ -144,11 +147,11 @@ export class ZoomTransformer {
   // in frame. Note that the resulting zoom will be adjusted if it does not fit
   // inside the top-level bounds of the ZoomTransformer.
   zoomedToBox(bounding: Box): ZoomTransformer {
-    if (_.isNil(bounding)) {
+    if (isNil(bounding)) {
       return this;
     }
 
-    const newZoom = _.clone(this);
+    const newZoom = clone(this);
     const boundingSize = bounding.size();
     newZoom._scale = Math.min(
       this._viewportSize[0] / boundingSize[0],
@@ -177,7 +180,7 @@ export class ZoomTransformer {
     // Increase scaling if we are below the minimum.
     const newScale = Math.max(this._scale, this.minScale());
     const scaledBounds = this._bounds.scale(newScale);
-    const newTranslate = _.clone(this._translate);
+    const newTranslate = clone(this._translate);
 
     // Adjust translation so that viewport is within the bounds.
     const translatedBounds = scaledBounds.translate(this._translate);

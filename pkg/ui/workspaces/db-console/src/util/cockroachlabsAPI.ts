@@ -15,6 +15,7 @@
 import moment from "moment-timezone";
 
 import { VersionList, VersionCheckRequest } from "src/interfaces/cockroachlabs";
+
 import { withTimeout } from "./api";
 
 export const COCKROACHLABS_ADDR = "https://register.cockroachdb.com";

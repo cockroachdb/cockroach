@@ -11,10 +11,11 @@
 import React from "react";
 import { shallow } from "enzyme";
 import moment from "moment-timezone";
-import _ from "lodash";
+import clone from "lodash/clone";
+
+import * as timewindow from "src/redux/timeScale";
 
 import { MetricsTimeManagerUnconnected as MetricsTimeManager } from "./";
-import * as timewindow from "src/redux/timeScale";
 
 describe("<MetricsTimeManager>", function () {
   const spy = jest.fn();
@@ -32,7 +33,7 @@ describe("<MetricsTimeManager>", function () {
   const getManager = () =>
     shallow(
       <MetricsTimeManager
-        timeScale={_.clone(state)}
+        timeScale={clone(state)}
         setMetricsMovingWindow={spy}
         now={now}
       />,

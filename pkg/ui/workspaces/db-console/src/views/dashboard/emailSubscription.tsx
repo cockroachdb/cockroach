@@ -15,8 +15,6 @@ import { EmailSubscriptionForm } from "src/views/shared/components/emailSubscrip
 import { signUpForEmailSubscription } from "src/redux/customAnalytics";
 import { AdminUIState } from "src/redux/state";
 import { clusterIdSelector } from "src/redux/nodes";
-
-import "./emailSubscription.styl";
 import {
   loadUIData,
   RELEASE_NOTES_SIGNUP_DISMISSED_KEY,
@@ -24,6 +22,8 @@ import {
 } from "src/redux/uiData";
 import { dismissReleaseNotesSignupForm } from "src/redux/uiDataSelectors";
 import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";
+
+import "./emailSubscription.styl";
 
 type EmailSubscriptionProps = MapDispatchToProps & MapStateToProps;
 

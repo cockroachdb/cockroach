@@ -18,10 +18,14 @@ import {
   FilterDropdown,
   FilterSearchOption,
 } from "@cockroachlabs/cluster-ui";
-import { isEmpty, isArray, isString } from "lodash";
+import isEmpty from "lodash/isEmpty";
+import isArray from "lodash/isArray";
+import isString from "lodash/isString";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
+
 import { cockroach } from "src/js/protos";
+
 import styles from "./hotRanges.module.styl";
 
 type HotRange = cockroach.server.serverpb.HotRangesResponseV2.IHotRange;

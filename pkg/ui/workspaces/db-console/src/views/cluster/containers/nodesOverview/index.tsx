@@ -13,9 +13,19 @@ import { Link } from "react-router-dom";
 import { connect } from "react-redux";
 import moment, { Moment } from "moment-timezone";
 import { createSelector } from "reselect";
-import _ from "lodash";
-
+import isUndefined from "lodash/isUndefined";
+import head from "lodash/head";
+import isEmpty from "lodash/isEmpty";
+import groupBy from "lodash/groupBy";
+import capitalize from "lodash/capitalize";
+import last from "lodash/last";
+import map from "lodash/map";
+import orderBy from "lodash/orderBy";
+import take from "lodash/take";
+import sum from "lodash/sum";
 import flow from "lodash/flow";
+import { Badge, BadgeProps, ColumnsConfig, SortSetting, Table, Timestamp, util, } from "@cockroachlabs/cluster-ui";
+
 import {
   LivenessStatus,
   nodeCapacityStats,
@@ -24,39 +34,30 @@ import {
   selectNodesSummaryValid,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { INodeStatus, MetricConstants } from "src/util/proto";
 import { Text, TextTypes, Tooltip } from "src/components";
-import {
-  Badge,
-  BadgeProps,
-  ColumnsConfig,
-  Table,
-  SortSetting,
-  util,
-  Timestamp,
-} from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
+import { cockroach } from "src/js/protos";
 
 import TableSection from "./tableSection";
 import "./nodes.styl";
-
 import {
-  getStatusDescription,
-  getNodeStatusDescription,
-  NodeCountTooltip,
-  UptimeTooltip,
-  ReplicasTooltip,
-  NodelistCapacityUsageTooltip,
-  MemoryUseTooltip,
   CPUsTooltip,
-  VersionTooltip,
+  getNodeStatusDescription,
+  getStatusDescription,
+  MemoryUseTooltip,
+  NodeCountTooltip,
+  NodelistCapacityUsageTooltip,
+  ReplicasTooltip,
   StatusTooltip,
+  UptimeTooltip,
+  VersionTooltip,
 } from "./tooltips";
-import { cockroach } from "src/js/protos";
+
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 import ILiveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
 
@@ -176,18 +177,18 @@ export const getLivenessStatusName = (status: LivenessStatus): string => {
 const NodeNameColumn: React.FC<{
   record: NodeStatusRow | DecommissionedNodeStatusRow;
   shouldLink?: boolean;
-}> = ({ record, shouldLink = true }) => {
+}> = ({record, shouldLink = true}) => {
   const columnValue = (
     <>
-      <Text>{record.nodeName}</Text>
-      <Text textType={TextTypes.BodyStrong}>{` (n${record.nodeId})`}</Text>
+      <Text>{ record.nodeName }</Text>
+      <Text textType={ TextTypes.BodyStrong }>{ ` (n${ record.nodeId })` }</Text>
     </>
   );
 
   if (shouldLink) {
     return (
-      <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
-        {columnValue}
+      <Link className="nodes-table__link" to={ `/node/${ record.nodeId }` }>
+        { columnValue }
       </Link>
     );
   }
@@ -196,21 +197,21 @@ const NodeNameColumn: React.FC<{
 };
 
 const NodeLocalityColumn: React.FC<{ record: NodeStatusRow }> = ({
-  record,
-}) => {
+                                                                   record,
+                                                                 }) => {
   return (
     <Text>
       <Tooltip
-        placement={"bottom"}
+        placement={ "bottom" }
         title={
           <div>
-            {record.tiers.map((tier, idx) => (
-              <div key={idx}>{`${tier.key} = ${tier.value}`}</div>
-            ))}
+            { record.tiers.map((tier, idx) => (
+              <div key={ idx }>{ `${ tier.key } = ${ tier.value }` }</div>
+            )) }
           </div>
         }
       >
-        {record.region}
+        { record.region }
       </Tooltip>
     </Text>
   );
@@ -224,7 +225,7 @@ const formatWithPossibleStaleIndicator = (
     record.status === LivenessStatus.NODE_STATUS_DEAD ||
     record.status === AggregatedNodeStatus.DEAD
   ) {
-    return `${text} (stale)`;
+    return `${ text } (stale)`;
   }
 
   return text;
@@ -242,13 +243,13 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       title: "nodes",
       render: (_text: string, record: NodeStatusRow) => {
         if (record.nodeId) {
-          return <NodeNameColumn record={record} />;
+          return <NodeNameColumn record={ record }/>;
         } else {
-          return <NodeLocalityColumn record={record} />;
+          return <NodeLocalityColumn record={ record }/>;
         }
       },
       sorter: (a: NodeStatusRow, b: NodeStatusRow) => {
-        if (!_.isUndefined(a.nodeId) && !_.isUndefined(b.nodeId)) {
+        if (!isUndefined(a.nodeId) && !isUndefined(b.nodeId)) {
           return 0;
         }
         if (a.region < b.region) {
@@ -266,7 +267,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "nodesCount",
       title: <NodeCountTooltip>Node Count</NodeCountTooltip>,
       sorter: (a: NodeStatusRow, b: NodeStatusRow) => {
-        if (_.isUndefined(a.nodesCount) || _.isUndefined(b.nodesCount)) {
+        if (isUndefined(a.nodesCount) || isUndefined(b.nodesCount)) {
           return 0;
         }
         if (a.nodesCount < b.nodesCount) {
@@ -278,7 +279,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
         return 0;
       },
       render: (_text: string, record: NodeStatusRow) => record.nodesCount,
-      sortDirections: ["ascend", "descend"],
+      sortDirections: [ "ascend", "descend" ],
       className: "column--align-right",
       width: "10%",
     },
@@ -383,17 +384,17 @@ export class NodeList extends React.Component<LiveNodeListProps> {
         // if aggregated row
         if (!record.nodeId) {
           return (
-            <Tooltip title={nodeTooltip}>
-              {""}
-              <Badge status={badgeType} text={badgeText} />
+            <Tooltip title={ nodeTooltip }>
+              { "" }
+              <Badge status={ badgeType } text={ badgeText }/>
             </Tooltip>
           );
         }
 
         return (
           <Badge
-            status={badgeType}
-            text={<Tooltip title={tooltipText}>{badgeText}</Tooltip>}
+            status={ badgeType }
+            text={ <Tooltip title={ tooltipText }>{ badgeText }</Tooltip> }
           />
         );
       },
@@ -408,7 +409,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
           <div className="cell--show-on-hover ">
             <Link
               className="nodes-table__link"
-              to={`/node/${record.nodeId}/logs`}
+              to={ `/node/${ record.nodeId }/logs` }
             >
               Logs
             </Link>
@@ -419,7 +420,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
   ];
 
   render() {
-    const { nodesCount, regionsCount } = this.props;
+    const {nodesCount, regionsCount} = this.props;
     let columns = this.columns;
     let dataSource = this.props.dataSource;
 
@@ -428,18 +429,18 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       columns = columns.filter(
         (column: NodeStatusRow) => column.key !== "nodesCount",
       );
-      dataSource = _.head(dataSource).children;
+      dataSource = head(dataSource).children;
     }
     return (
       <div className="nodes-overview__panel">
         <TableSection
-          id={`nodes-overview__live-nodes`}
-          title={`Nodes (${nodesCount})`}
+          id={ `nodes-overview__live-nodes` }
+          title={ `Nodes (${ nodesCount })` }
           className="embedded-table"
         >
           <Table
-            dataSource={dataSource}
-            columns={columns}
+            dataSource={ dataSource }
+            columns={ columns }
             tableLayout="fixed"
             className="nodes-overview__live-nodes-table"
           />
@@ -459,7 +460,7 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       key: "nodes",
       title: "decommissioned nodes",
       render: (_text: string, record: DecommissionedNodeStatusRow) => (
-        <NodeNameColumn record={record} shouldLink={false} />
+        <NodeNameColumn record={ record } shouldLink={ false }/>
       ),
     },
     {
@@ -467,8 +468,8 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       title: "decommissioned on",
       render: (_text: string, record: DecommissionedNodeStatusRow) => (
         <Timestamp
-          time={record.decommissionedDate}
-          format={util.DATE_FORMAT_24_TZ}
+          time={ record.decommissionedDate }
+          format={ util.DATE_FORMAT_24_TZ }
         />
       ),
     },
@@ -476,12 +477,12 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       key: "status",
       title: "status",
       render: (_text: string, record: DecommissionedNodeStatusRow) => {
-        const badgeText = _.capitalize(LivenessStatus[record.status]);
+        const badgeText = capitalize(LivenessStatus[record.status]);
         const tooltipText = getStatusDescription(record.status);
         return (
           <Badge
             status="default"
-            text={<Tooltip title={tooltipText}>{badgeText}</Tooltip>}
+            text={ <Tooltip title={ tooltipText }>{ badgeText }</Tooltip> }
           />
         );
       },
@@ -489,27 +490,27 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
   ];
 
   render() {
-    const { dataSource, isCollapsible } = this.props;
-    if (_.isEmpty(dataSource)) {
+    const {dataSource, isCollapsible} = this.props;
+    if (isEmpty(dataSource)) {
       return null;
     }
 
     return (
       <div className="nodes-overview__panel">
         <TableSection
-          id={`nodes-overview__decommissioned-nodes`}
+          id={ `nodes-overview__decommissioned-nodes` }
           title="Recently Decommissioned Nodes"
           footer={
-            <Link to={`/reports/nodes/history`}>
-              View all decommissioned nodes{" "}
+            <Link to={ `/reports/nodes/history` }>
+              View all decommissioned nodes{ " " }
             </Link>
           }
-          isCollapsible={isCollapsible}
+          isCollapsible={ isCollapsible }
           className="embedded-table embedded-table--dense"
         >
           <Table
-            dataSource={dataSource}
-            columns={this.columns}
+            dataSource={ dataSource }
+            columns={ this.columns }
             className="nodes-overview__decommissioned-nodes-table"
           />
         </TableSection>
@@ -538,10 +539,10 @@ export const liveNodesTableDataSelector = createSelector(
       (statuses: INodeStatus[]) => groupBy(statuses, s => s.desc.locality.tiers.map(tier => tier.value).join(".")),
       statusesByTiers => map(statusesByTiers, (nodesPerRegion: INodeStatus[], regionKey: string): NodeStatusRow => {
           const nestedRows = nodesPerRegion.map((ns, idx): NodeStatusRow => {
-            const { used: usedCapacity, usable: availableCapacity } =
+            const {used: usedCapacity, usable: availableCapacity} =
               nodeCapacityStats(ns);
             return {
-              key: `${regionKey}-${idx}`,
+              key: `${ regionKey }-${ idx }`,
               nodeId: ns.desc.node_id,
               nodeName: ns.desc.address.address_field,
               uptime: moment
@@ -566,26 +567,26 @@ export const liveNodesTableDataSelector = createSelector(
           // from location values.
           const firstNodeInGroup = nodesPerRegion[0];
           const tiers = getNodeLocalityTiers(firstNodeInGroup);
-          const lastTier = _.last(tiers);
+          const lastTier = last(tiers);
 
           const getLocalityStatus = () => {
-            const nodesByStatus = _.groupBy(
+            const nodesByStatus = groupBy(
               nestedRows,
               (row: NodeStatusRow) => row.status,
             );
 
             // Return DEAD status if at least one node is dead;
-            if (!_.isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_DEAD])) {
+            if (!isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_DEAD])) {
               return AggregatedNodeStatus.DEAD;
             }
 
             // Return WARNING status if at least one node is decommissioning or suspected;
             if (
-              !_.isEmpty(
+              !isEmpty(
                 nodesByStatus[LivenessStatus.NODE_STATUS_DECOMMISSIONING],
               ) ||
-              !_.isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_UNKNOWN]) ||
-              !_.isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_UNAVAILABLE])
+              !isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_UNKNOWN]) ||
+              !isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_UNAVAILABLE])
             ) {
               return AggregatedNodeStatus.WARNING;
             }
@@ -594,18 +595,18 @@ export const liveNodesTableDataSelector = createSelector(
           };
 
           return {
-            key: `${regionKey}`,
+            key: `${ regionKey }`,
             region: lastTier?.value,
             tiers,
             nodesCount: nodesPerRegion.length,
-            replicas: _.sum(nestedRows.map(nr => nr.replicas)),
-            usedCapacity: _.sum(nestedRows.map(nr => nr.usedCapacity)),
-            availableCapacity: _.sum(
+            replicas: sum(nestedRows.map(nr => nr.replicas)),
+            usedCapacity: sum(nestedRows.map(nr => nr.usedCapacity)),
+            availableCapacity: sum(
               nestedRows.map(nr => nr.availableCapacity),
             ),
-            usedMemory: _.sum(nestedRows.map(nr => nr.usedMemory)),
-            availableMemory: _.sum(nestedRows.map(nr => nr.availableMemory)),
-            numCpus: _.sum(nestedRows.map(nr => nr.numCpus)),
+            usedMemory: sum(nestedRows.map(nr => nr.usedMemory)),
+            availableMemory: sum(nestedRows.map(nr => nr.availableMemory)),
+            numCpus: sum(nestedRows.map(nr => nr.numCpus)),
             status: getLocalityStatus(),
             children: nestedRows,
           };
@@ -724,8 +725,8 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
   render() {
     return (
       <div className="nodes-overview">
-        <NodesConnected />
-        <DecommissionedNodesConnected />
+        <NodesConnected/>
+        <DecommissionedNodesConnected/>
       </div>
     );
   }

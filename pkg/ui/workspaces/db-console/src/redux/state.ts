@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import identity from "lodash/identity";
 import {
   createStore,
   combineReducers,
@@ -25,6 +25,10 @@ import {
   RouterState,
 } from "connected-react-router";
 import { History } from "history";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { createSelector } from "reselect";
+
+import { DataFromServer } from "src/util/dataFromServer";
 
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { hoverReducer, HoverState } from "./hover";
@@ -36,10 +40,8 @@ import { uiDataReducer, UIDataState } from "./uiData";
 import { loginReducer, LoginAPIState } from "./login";
 import rootSaga from "./sagas";
 import { initializeAnalytics } from "./analytics";
-import { DataFromServer } from "src/util/dataFromServer";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import FeatureFlags = cockroach.server.serverpb.FeatureFlags;
-import { createSelector } from "reselect";
 
 export interface AdminUIState {
   cachedData: APIReducersState;
@@ -133,7 +135,7 @@ export function createAdminUIStore(
               },
             },
           })
-        : _.identity,
+        : identity,
     ),
   );
 

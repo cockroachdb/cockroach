@@ -9,12 +9,14 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { AxisUnits, util } from "@cockroachlabs/cluster-ui";
 
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
-import { AxisUnits, util } from "@cockroachlabs/cluster-ui";
-import { GraphDashboardProps } from "./dashboardUtils";
 import { cockroach } from "src/js/protos";
+
+import { GraphDashboardProps } from "./dashboardUtils";
+
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function (props: GraphDashboardProps) {

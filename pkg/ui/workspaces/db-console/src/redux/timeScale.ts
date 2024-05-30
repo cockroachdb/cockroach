@@ -15,16 +15,18 @@
 
 import { Action } from "redux";
 import { put, takeEvery, all } from "redux-saga/effects";
-import { PayloadAction } from "src/interfaces/action";
-import _ from "lodash";
+import cloneDeep from "lodash/cloneDeep";
 import { defaultTimeScaleOptions, TimeScale } from "@cockroachlabs/cluster-ui";
 import moment from "moment-timezone";
 import { createSelector } from "reselect";
+
+import { PayloadAction } from "src/interfaces/action";
 import { AdminUIState } from "src/redux/state";
 import {
   getValueFromSessionStorage,
   setLocalSetting,
 } from "src/redux/localsettings";
+
 import {
   invalidateExecutionInsights,
   invalidateTxnInsights,
@@ -112,7 +114,7 @@ export function timeScaleReducer(
   switch (action.type) {
     case SET_SCALE: {
       const { payload: scale } = action as PayloadAction<TimeScale>;
-      state = _.cloneDeep(state);
+      state = cloneDeep(state);
       state.metricsTime.isFixedWindow = scale.key === "Custom";
       state.scale = scale;
       state.metricsTime.shouldUpdateMetricsWindowFromScale = true;
@@ -123,14 +125,14 @@ export function timeScaleReducer(
       // We don't want to deep clone the state here, because we're
       // not changing the scale object here. For components observing
       // timescale changes, we don't want to update them unnecessarily.
-      state = { ...state, metricsTime: _.cloneDeep(state.metricsTime) };
+      state = { ...state, metricsTime: cloneDeep(state.metricsTime) };
       state.metricsTime.currentWindow = tw;
       state.metricsTime.shouldUpdateMetricsWindowFromScale = false;
       return state;
     }
     case SET_METRICS_FIXED_WINDOW: {
       const { payload: data } = action as PayloadAction<TimeWindow>;
-      state = { ...state, metricsTime: _.cloneDeep(state.metricsTime) };
+      state = { ...state, metricsTime: cloneDeep(state.metricsTime) };
       state.metricsTime.currentWindow = data;
       state.metricsTime.isFixedWindow = true;
       state.metricsTime.shouldUpdateMetricsWindowFromScale = false;

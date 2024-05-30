@@ -10,8 +10,6 @@
 
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshStmtInsights, refreshTxnInsights } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
 import {
   WorkloadInsightEventFilters,
   SortSetting,
@@ -22,6 +20,10 @@ import {
   WorkloadInsightsRootControl,
   WorkloadInsightsViewProps,
 } from "@cockroachlabs/cluster-ui";
+import { bindActionCreators } from "redux";
+
+import { refreshStmtInsights, refreshTxnInsights } from "src/redux/apiReducers";
+import { AdminUIState } from "src/redux/state";
 import {
   filtersLocalSetting,
   selectStmtInsights,
@@ -33,7 +35,6 @@ import {
   selectStmtInsightsMaxApiReached,
   selectTxnInsightsMaxApiReached,
 } from "src/views/insights/insightsSelectors";
-import { bindActionCreators } from "redux";
 import { LocalSetting } from "src/redux/localsettings";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
