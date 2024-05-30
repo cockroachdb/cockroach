@@ -166,6 +166,7 @@ type Statistics = {
   latencyInfo: LatencyInfo;
   maxRetries: Long;
   nodes: Long[];
+  kvNodeIds: number[];
   numRows: NumericStat;
   ovhLat: NumericStat;
   parseLat: NumericStat;
@@ -249,6 +250,7 @@ export function convertStatementRawFormatToAggregatedStatistics(
       },
       max_retries: s.statistics.statistics.maxRetries,
       nodes: s.statistics.statistics.nodes,
+      kv_node_ids: s.statistics.statistics.kvNodeIds,
       num_rows: s.statistics.statistics.numRows,
       overhead_lat: s.statistics.statistics.ovhLat,
       parse_lat: s.statistics.statistics.parseLat,

@@ -964,7 +964,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 			var nodeStats exec.ExecutionStats
 
 			incomplete := false
-			var sqlInstanceIDs intsets.Fast
+			var sqlInstanceIDs, kvNodeIDs intsets.Fast
 			regionsMap := make(map[string]struct{})
 			for _, c := range components {
 				if c.Type == execinfrapb.ComponentID_PROCESSOR {
@@ -975,6 +975,9 @@ func (m execNodeTraceMetadata) annotateExplain(
 				if stats == nil {
 					incomplete = true
 					break
+				}
+				for _, kvNodeID := range stats.KV.NodeIDs {
+					kvNodeIDs.Add(int(kvNodeID))
 				}
 				nodeStats.RowCount.MaybeAdd(stats.Output.NumTuples)
 				nodeStats.KVTime.MaybeAdd(stats.KV.KVTime)
@@ -1008,6 +1011,9 @@ func (m execNodeTraceMetadata) annotateExplain(
 			if !incomplete {
 				for i, ok := sqlInstanceIDs.Next(0); ok; i, ok = sqlInstanceIDs.Next(i + 1) {
 					nodeStats.SQLNodes = append(nodeStats.SQLNodes, fmt.Sprintf("n%d", i))
+				}
+				for i, ok := kvNodeIDs.Next(0); ok; i, ok = kvNodeIDs.Next(i + 1) {
+					nodeStats.KVNodes = append(nodeStats.KVNodes, fmt.Sprintf("n%d", i))
 				}
 				regions := make([]string, 0, len(regionsMap))
 				for r := range regionsMap {

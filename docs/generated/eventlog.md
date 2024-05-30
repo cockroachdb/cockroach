@@ -3024,6 +3024,7 @@ contains common SQL event/execution details.
 | `SchemaChangerMode` | SchemaChangerMode is the mode that was used to execute the schema change, if any. | no |
 | `SQLInstanceIDs` | SQLInstanceIDs is a list of all the SQL instances used in this statement's execution. | no |
 | `StatementFingerprintID` | Statement fingerprint ID of the query. | no |
+| `KVNodeIDs` | KVNodeIDs is a list of all the KV nodes used in this statement's execution. | no |
 
 
 #### Common fields
