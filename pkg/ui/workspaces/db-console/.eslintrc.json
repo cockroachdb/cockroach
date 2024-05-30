@@ -1,20 +1,102 @@
 {
   "root": true,
-  "extends": "@cockroachlabs/eslint-config",
-  "plugins": ["@cockroachlabs/eslint-plugin-crdb"],
+  "extends": [
+    "plugin:import/recommended",
+    "plugin:import/typescript"
+  ],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "project": "./tsconfig.json"
+  },
+  "plugins": [
+    "@typescript-eslint",
+    "local-rules"
+  ],
   "ignorePatterns": ["protos.d.ts", "protos.js"],
   "rules": {
-    "@typescript-eslint/no-inferrable-types": "off",
-    "react/jsx-key": "off",
-    "@typescript-eslint/ban-types": "off",
-    "react/no-unescaped-entities": "off",
-    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
-    "@typescript-eslint/explicit-module-boundary-types": "off",
-    "@typescript-eslint/no-explicit-any": "off",
     "no-restricted-imports": ["error", {
       "patterns": ["@cockroachlabs/cluster-ui/src/*"]
     }],
-    "@cockroachlabs/crdb/require-antd-style-import": "error",
-    "eqeqeq": ["error", "smart"]
+    "eqeqeq": ["error", "smart"],
+    // Don't allow stray items within compound components.
+    "local-rules/restricted-compound-components": "error",
+    // Don't allow stray `debugger` statements in frontend code.
+    "no-debugger": "error",
+    // All new logging statements should use the ConsoleLogger class.  Search
+    // for useLogger or withContextualLogger for examples.
+    "no-console": "error",
+    // Disabled for tracking because we only link to internal sites/docs.
+    "react/jsx-no-target-blank": "off",
+    // This rule errors for imports using a webpack alias.
+    "import/no-unresolved": "off",
+    "import/no-extraneous-dependencies": [
+      "error",
+      {
+        "devDependencies": [
+          "**/*.test.tsx",
+          "**/*.test.ts",
+          "**/*.spec.tsx",
+          "**/*.spec.ts",
+          "**/*.stories.tsx",
+          "src/storybook/**",
+          "src/setupTests.js",
+          "src/test-utils/**",
+          "src/util/fetch-mock.ts"
+        ],
+        "optionalDependencies": false,
+        "peerDependencies": false
+      }
+    ],
+    "import/order": [
+      "error",
+      {
+        "newlines-between": "always",
+        "groups": [
+          "builtin",
+          "external",
+          "internal",
+          "parent",
+          "sibling",
+          "index",
+          "type"
+        ],
+        "pathGroups": [
+          {
+            // Webpack aliases look like external imports, so we need to explicitly mark them as internal.
+            "pattern": "{oss,ccl,src,assets}/**",
+            "group": "internal"
+          }
+        ],
+        "pathGroupsExcludedImportTypes": [
+          "oss",
+          "ccl",
+          "src",
+          "assets"
+        ]
+      }
+    ],
+    // Allow for variables prefixed with _ to be unused.
+    // Note: https://stackoverflow.com/questions/64052318/how-to-disable-warn-about-some-unused-params-but-keep-typescript-eslint-no-un
+    "no-unused-vars": "off",
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+    "@typescript-eslint/no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "lodash",
+            "message": "Use 'import foo from \"lodash/foo\";' instead of 'import _ from \"lodash\"' or 'import { foo } from \"lodash\"'.",
+            "allowTypeImports": true
+          }
+        ]
+      }
+    ]
   }
 }
