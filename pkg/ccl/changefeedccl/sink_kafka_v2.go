@@ -109,7 +109,6 @@ func (k *kafkaSinkClient) isSortedRight(ctx context.Context, msgs []*sarama.Prod
 	for _, m := range msgs {
 		if k.didFirstFlush && m.Offset == 0 { // first offset can actually be zero
 			log.Infof(ctx, `kafka message has offset 0: %v (id=%d)`, m, k.debuggingId)
-			return false
 		}
 		topicParts[m.Topic+strconv.Itoa(int(m.Partition))] = append(topicParts[m.Topic+strconv.Itoa(int(m.Partition))], m)
 	}
@@ -374,6 +373,7 @@ func makeKafkaSinkV2(ctx context.Context,
 		return nil, err
 	}
 	kafkaCfg.Producer.Retry.Max = 0 // retry is handled by the batching sink / parallelIO
+	kafkaCfg.Net.MaxOpenRequests = 1
 
 	topicNamer, err := MakeTopicNamer(
 		targets,
