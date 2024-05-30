@@ -375,7 +375,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "alter_backup_schedule",
-		replace: map[string]string{"iconst64": "schedule_id", "alter_backup_schedule_cmds": "options ( ',' options )*", "options": "'SET' ( 'LABEL' schedule_label | 'INTO' collectionURI | 'WITH' option | 'RECURRING' crontab | 'FULL BACKUP' ( crontab | 'ALWAYS' ) | 'SCHEDULE OPTION' schedule_option )"},
+		replace: map[string]string{"iconst64": "schedule_id", "alter_backup_schedule_cmds": "options ( ',' options )*", "options": "( 'SET' ( 'LABEL' schedule_label | 'INTO' collectionURI | 'WITH' option | 'RECURRING' crontab | 'FULL BACKUP' ( crontab | 'ALWAYS' ) | 'SCHEDULE OPTION' schedule_option ) | 'EXECUTE' 'FULL'? 'IMMEDIATELY' )"},
 		unlink:  []string{"schedule_id", "options", "option", "schedule_label", "collectionURI", "crontab", "schedule_option"},
 	},
 	{
