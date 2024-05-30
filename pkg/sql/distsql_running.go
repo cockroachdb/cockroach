@@ -769,6 +769,15 @@ func (dsp *DistSQLPlanner) Run(
 					if p.Spec.Core.LocalPlanNode != nil {
 						return true
 					}
+					if p.Spec.Core.TableReader != nil {
+						if planCtx.planner != nil {
+							if aost := planCtx.planner.EvalContext().AsOfSystemTime; aost != nil &&
+								aost.BoundedStaleness {
+								// BoundedStaleness requires the RootTxn.
+								return true
+							}
+						}
+					}
 				}
 				return false
 			}()
@@ -789,10 +798,9 @@ func (dsp *DistSQLPlanner) Run(
 			if !containsLocking && !mustUseRootTxn && planCtx.distSQLProhibitedErr == nil {
 				if evalCtx.SessionData().StreamerEnabled {
 					for _, proc := range plan.Processors {
-						if jr := proc.Spec.Core.JoinReader; jr != nil {
-							// Both index and lookup joins, with and without
-							// ordering, are executed via the Streamer API that has
-							// concurrency.
+						if core := proc.Spec.Core; core.TableReader != nil || core.JoinReader != nil {
+							// TableReader and JoinReader cores might be powered
+							// by the Streamer API which has concurrency.
 							localState.HasConcurrency = true
 							break
 						}

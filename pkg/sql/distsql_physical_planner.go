@@ -1924,6 +1924,7 @@ func initTableReaderSpecTemplate(
 		LockingStrength:                 n.lockingStrength,
 		LockingWaitPolicy:               n.lockingWaitPolicy,
 		LockingDurability:               n.lockingDurability,
+		MaintainOrdering:                len(n.reqOrdering) > 0,
 	}
 	if err := rowenc.InitIndexFetchSpec(&s.FetchSpec, codec, n.desc, n.index, colIDs); err != nil {
 		return nil, execinfrapb.PostProcessSpec{}, err

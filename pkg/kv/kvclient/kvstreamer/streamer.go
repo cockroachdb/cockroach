@@ -422,6 +422,8 @@ func NewStreamer(
 		s:                      s,
 		txn:                    txn,
 		lockWaitPolicy:         lockWaitPolicy,
+		singleReqDebtAllowance: streamerSingleReqDebtThreshold.Get(&st.SV),
+		singleReqDebtRatio:     streamerSingleReqDebtRatio.Get(&st.SV),
 		requestAdmissionHeader: txn.AdmissionHeader(),
 		responseAdmissionQ:     txn.DB().SQLKVResponseAdmissionQ,
 	}
@@ -867,6 +869,9 @@ type workerCoordinator struct {
 
 	asyncSem *quotapool.IntPool
 
+	singleReqDebtAllowance int64
+	singleReqDebtRatio     float64
+
 	// For request and response admission control.
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
@@ -901,10 +906,12 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 		// If we already have minTargetBytes set on the first request to be
 		// issued, then use that.
 		atLeastBytes := nextReq.minTargetBytes
+		var sp spillingPriority
 		// The first request has the highest urgency among all current requests
 		// to serve, so we use its priority to spill everything with less
 		// urgency when necessary to free up the budget.
-		spillingPriority := nextReq.priority()
+		sp.position = nextReq.priority()
+		sp.subRequestIdx = math.MaxInt32
 
 		avgResponseSize, shouldExit := w.getAvgResponseSize()
 		if shouldExit {
@@ -915,7 +922,7 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			atLeastBytes = avgResponseSize
 		}
 
-		shouldExit = w.waitUntilEnoughBudget(ctx, atLeastBytes, spillingPriority)
+		shouldExit = w.waitUntilEnoughBudget(ctx, atLeastBytes, sp)
 		if shouldExit {
 			return
 		}
@@ -1002,7 +1009,7 @@ func (w *workerCoordinator) getAvgResponseSize() (avgResponseSize int64, shouldE
 //
 // A boolean that indicates whether the coordinator should exit is returned.
 func (w *workerCoordinator) waitUntilEnoughBudget(
-	ctx context.Context, atLeastBytes int64, spillingPriority int,
+	ctx context.Context, atLeastBytes int64, sp spillingPriority,
 ) (shouldExit bool) {
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
@@ -1012,7 +1019,7 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 		// First, ask the results buffer to spill some results to disk in order
 		// to free up budget.
 		if ok, err := w.s.results.spill(
-			ctx, atLeastBytes-(w.s.budget.limitBytes-w.s.budget.mu.acc.Used()), spillingPriority,
+			ctx, atLeastBytes-(w.s.budget.limitBytes-w.s.budget.mu.acc.Used()), sp,
 		); err != nil {
 			w.s.results.setError(err)
 			return true
@@ -1164,6 +1171,15 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 				return nil
 			}
 			budgetIsExhausted = true
+			sp := spillingPriority{
+				position:      singleRangeReqs.priority(),
+				subRequestIdx: singleRangeReqs.subPriority(),
+			}
+			if ok, err := w.s.results.spill(ctx, minAcceptableBudget-availableBudget, sp); err != nil {
+				return err
+			} else if ok {
+				availableBudget = w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
+			}
 			if availableBudget < 1 {
 				// The budget is already in debt, and we have no requests in
 				// flight. This occurs when we have very large roachpb.Span in
@@ -1182,6 +1198,11 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 		// responses (except in a degenerate case for head-of-the-line request
 		// that will get a very large single row in response which will exceed
 		// this limit).
+		// TODO(yuzefovich): in some cases the Streamer might be issuing
+		// requests too eagerly with small TargetBytes limits which results in
+		// many small BatchResponses. Instead, it should dynamically adjust its
+		// concurrency once it has better estimate of the average response size.
+		// TODO: TODO above might be stale (fixed by 113809).
 		targetBytes := int64(len(singleRangeReqs.reqs)) * avgResponseSize
 		// Make sure that targetBytes is sufficient to receive non-empty
 		// response. Our estimate might be an under-estimate when responses vary
@@ -1209,9 +1230,6 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			// might reduce the TargetBytes limit. This is ok since our
 			// estimates are on the best effort basis, and we'll do precise
 			// accounting when we receive the BatchResponse.
-			// TODO(yuzefovich): consider not including all of the requests from
-			// singleRangeReqs.reqs into the BatchRequest in cases when we're
-			// low on the available budget.
 			if targetBytes > availableBudget {
 				// The estimate tells us that we don't have enough budget to
 				// receive non-empty responses for all requests in the
@@ -1219,6 +1237,9 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 				// budget fully, we can still issue this BatchRequest with the
 				// truncated TargetBytes value hoping to receive non-empty
 				// results at least for some requests.
+				//
+				// Note that we have checked above that we have enough budget to
+				// receive a non-empty response (or we're the head of the line).
 				targetBytes = availableBudget
 				responsesOverhead = 0
 			} else {
@@ -1306,6 +1327,29 @@ func (w *workerCoordinator) asyncRequestCleanup(budgetMuAlreadyLocked bool) {
 	w.s.adjustNumRequestsInFlight(-1 /* delta */)
 	w.s.waitGroup.Done()
 }
+
+// streamerSingleReqDebtThreshold controls the "allowance" for a single-range
+// non-head-of-the-line request that it could go in debt for, above its
+// reservation, when in absolute terms the debt is small enough.
+var streamerSingleReqDebtThreshold = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"kv.streamer.single_request_debt.threshold",
+	"absolute number (in bytes) that a single-range request could receive in debt",
+	256,
+	settings.NonNegativeInt,
+)
+
+// streamerSingleReqDebtRatio controls the "allowance" for a single-range
+// non-head-of-the-line request that it could go in debt for, above its
+// reservation, when in relative (to the response footprint) terms the debt is
+// small enough.
+var streamerSingleReqDebtRatio = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"kv.streamer.single_request_debt.ratio",
+	"ratio of debt to response footprint that a single-range request could ask for",
+	0.03,
+	settings.NonNegativeFloat,
+)
 
 // AsyncRequestOp is the operation name (in tracing) of all requests issued by
 // the Streamer asynchronously.
@@ -1430,7 +1474,12 @@ func (w *workerCoordinator) performRequestAsync(
 				// There is an under-accounting at the moment, so we have to
 				// increase the memory reservation.
 				//
-				// This under-accounting can occur in a couple of edge cases:
+				// Most likely this is due to not having enough budget to
+				// account for TargetBytes as well as responsesOverhead and us
+				// prioritizing the former in issueRequestsForAsyncProcessing.
+				//
+				// Additionally, this under-accounting can occur in a couple of
+				// edge cases:
 				// 1) the estimate of the response sizes is pretty good (i.e.
 				// respOverestimate is around 0), but we received many partial
 				// responses with ResumeSpans that take up much more space than
@@ -1439,7 +1488,25 @@ func (w *workerCoordinator) performRequestAsync(
 				// headOfLine must be true (targetBytes might be 1 or higher,
 				// but not enough for that large row).
 				toConsume := -overaccountedTotal
-				if err = w.s.budget.consume(ctx, toConsume, headOfLine /* allowDebt */); err != nil {
+				allowDebt := headOfLine
+				if !headOfLine {
+					// We're allowing non-head-of-the-line request to go in debt
+					// in some cases in order to not waste the work we already
+					// did to process the current batch. In particular, if the
+					// under-accounting is small in absolute terms or relative
+					// to the memory footprint of the response, we're allowing
+					// debt here.
+					//
+					// Note that this "debt allowance" is only for the
+					// streamer's budget, and, thus, if the root SQL monitor is
+					// running close to the limit, this memory request will
+					// still be denied. In other words, the Streamer might
+					// exceed its workmem budget but will never put the root
+					// monitor in debt.
+					allowDebt = toConsume <= w.singleReqDebtAllowance ||
+						float64(toConsume)/float64(targetBytes) <= w.singleReqDebtRatio
+				}
+				if err = w.s.budget.consume(ctx, toConsume, allowDebt); err != nil {
 					log.VEventf(ctx, 2,
 						"dropping response: root memory pool exhausted (head:%v): %v", headOfLine, err,
 					)
@@ -1448,7 +1515,7 @@ func (w *workerCoordinator) performRequestAsync(
 					// open up, up to some limit.
 					atomic.AddInt64(&w.s.atomics.droppedBatchResponses, 1)
 					w.s.budget.release(ctx, targetBytes)
-					if !headOfLine {
+					if !allowDebt {
 						// Since this is not the head of the line, we'll just
 						// discard the result and add the request back to be
 						// served.
