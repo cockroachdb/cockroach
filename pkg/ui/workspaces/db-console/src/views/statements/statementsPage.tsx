@@ -18,6 +18,7 @@ import {
   refreshStatementDiagnosticsRequests,
   refreshStatements,
   refreshUserSQLRoles,
+  createSelectorForCachedDataField,
 } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState, AppDispatch } from "src/redux/state";
@@ -31,7 +32,6 @@ import {
   selectHasViewActivityRedactedRole,
   selectHasAdminRole,
 } from "src/redux/user";
-
 import {
   Filters,
   defaultFilters,
@@ -59,12 +59,12 @@ import {
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { LocalSetting } from "src/redux/localsettings";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
+import { selectTimeScale } from "src/redux/timeScale";
+
 import {
   activeStatementsViewActions,
   mapStateToActiveStatementViewProps,
 } from "./activeStatementsSelectors";
-import { selectTimeScale } from "src/redux/timeScale";
-import { createSelectorForCachedDataField } from "src/redux/apiReducers";
 
 // selectDatabases returns the array of all databases in the cluster.
 export const selectDatabases = createSelector(

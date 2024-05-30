@@ -8,10 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import isNil from "lodash/isNil";
 import React, { useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
-
 import { getDataFromServer } from "src/util/dataFromServer";
 import DebugAnnotation from "src/views/shared/components/debugAnnotation";
 import InfoBox from "src/views/shared/components/infoBox";
@@ -61,7 +60,7 @@ export function DebugTableLink(props: {
         </a>
       </td>
       <td className="debug-inner-table__cell--notes">
-        {_.isNil(props.note) ? urlWithParams : props.note}
+        {isNil(props.note) ? urlWithParams : props.note}
       </td>
     </tr>
   );

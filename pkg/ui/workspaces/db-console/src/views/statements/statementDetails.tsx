@@ -11,7 +11,6 @@ import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 import Long from "long";
-
 import {
   refreshLiveness,
   refreshNodes,
@@ -30,6 +29,7 @@ import {
   StatementDetailsStateProps,
   toRoundedDateRange,
   util,
+  api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
 import {
   cancelStatementDiagnosticsReportAction,
@@ -48,11 +48,10 @@ import {
 } from "src/redux/analyticsActions";
 import { StatementDetailsResponseMessage } from "src/util/api";
 import { getMatchParamByName, queryByName } from "src/util/query";
-
 import { appNamesAttr, statementAttr } from "src/util/constants";
 import { selectTimeScale } from "src/redux/timeScale";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import moment from "moment-timezone";
+
 import { requestTimeLocalSetting } from "./statementsPage";
 
 const { generateStmtDetailsToID } = util;

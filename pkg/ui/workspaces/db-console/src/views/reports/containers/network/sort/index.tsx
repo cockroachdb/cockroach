@@ -14,9 +14,9 @@ import "antd/lib/divider/style";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import React from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-
 import { trackNetworkSort } from "src/util/analytics";
 import { getMatchParamByName } from "src/util/query";
+
 import { NetworkFilter, NetworkSort } from "..";
 import { Filter } from "../filter";
 import "./sort.styl";

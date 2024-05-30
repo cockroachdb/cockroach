@@ -10,7 +10,6 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-
 import * as ClusterTooltips from "src/views/cluster/containers/clusterOverview/tooltips";
 import * as NodeOverviewTooltips from "src/views/cluster/containers/nodeOverview/tooltips";
 import * as CapacityArkTooltips from "src/views/clusterviz/components/nodeOrLocality/tooltips";

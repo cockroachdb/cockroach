@@ -8,7 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { get } from "lodash";
+import get from "lodash/get";
+
 import { track } from "./trackTimeScaleSelected";
 
 describe("trackTimeScaleSelected", () => {

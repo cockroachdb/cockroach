@@ -12,7 +12,6 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
-
 import NavigationBar from "src/views/app/components/layoutSidebar";
 import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
 import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
@@ -35,10 +34,11 @@ import {
   TextTypes,
 } from "src/components";
 import { Badge } from "@cockroachlabs/cluster-ui";
+import { getDataFromServer } from "src/util/dataFromServer";
 
 import "./layout.styl";
 import "./layoutPanel.styl";
-import { getDataFromServer } from "src/util/dataFromServer";
+
 import TenantDropdown from "../../components/tenantDropdown/tenantDropdown";
 import { LicenseNotification } from "../licenseNotification/licenseNotification";
 

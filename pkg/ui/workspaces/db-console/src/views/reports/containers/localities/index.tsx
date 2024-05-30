@@ -8,12 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import isNil from "lodash/isNil";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-
 import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
 import {
   LocalityTier,
@@ -32,6 +31,7 @@ import { findMostSpecificLocation, hasLocation } from "src/util/locations";
 import { Loading } from "@cockroachlabs/cluster-ui";
 import "./localities.styl";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+
 import { BackToAdvanceDebug } from "../util";
 
 function formatCoord(coordinate: number) {
@@ -41,7 +41,7 @@ function formatCoord(coordinate: number) {
 function renderLocation(locations: LocationTree, tiers: LocalityTier[]) {
   const location = findMostSpecificLocation(locations, tiers);
 
-  if (_.isNil(location)) {
+  if (isNil(location)) {
     return "";
   }
 

@@ -8,7 +8,6 @@
 
 import d3 from "d3";
 import React from "react";
-
 import { SparklineMetricsDataComponent } from "src/views/clusterviz/containers/map/sparkline";
 import { Metric } from "src/views/shared/components/metricQuery";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";

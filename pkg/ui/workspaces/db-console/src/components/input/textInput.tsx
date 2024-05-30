@@ -10,7 +10,6 @@
 
 import React from "react";
 import cn from "classnames";
-
 import { Text, TextTypes } from "src/components";
 import "./input.styl";
 

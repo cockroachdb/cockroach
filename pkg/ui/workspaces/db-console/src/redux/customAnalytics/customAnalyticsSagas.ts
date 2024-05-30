@@ -10,7 +10,6 @@
 
 import { call, put, takeEvery } from "redux-saga/effects";
 import Analytics from "analytics-node";
-
 import { PayloadAction } from "src/interfaces/action";
 import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";

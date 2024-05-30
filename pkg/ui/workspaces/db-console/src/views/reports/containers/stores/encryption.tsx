@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-
 import * as protos from "src/js/protos";
 
 export interface EncryptionStatusProps {

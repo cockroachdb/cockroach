@@ -7,7 +7,6 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import * as d3 from "d3";
-
 import * as vector from "src/util/vector";
 
 // createArcPath returns an svg arc object. startAngle and endAngle are

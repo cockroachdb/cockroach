@@ -10,7 +10,6 @@
 
 import d3 from "d3";
 import { createSelector } from "reselect";
-
 import * as protos from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
 import { Pick } from "src/util/pick";

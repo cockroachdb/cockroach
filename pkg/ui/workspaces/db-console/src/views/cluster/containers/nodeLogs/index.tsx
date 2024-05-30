@@ -8,12 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import sortBy from "lodash/sortBy";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-
 import * as protos from "src/js/protos";
 import { INodeStatus } from "src/util/proto";
 import { nodeIDAttr } from "src/util/constants";
@@ -54,7 +53,7 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
   }
 
   renderContent = () => {
-    const logEntries = _.sortBy(this.props.logs.data.entries, e => e.time);
+    const logEntries = sortBy(this.props.logs.data.entries, e => e.time);
     const columns = [
       {
         title: "Time",

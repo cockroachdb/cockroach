@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 import React from "react";
 import * as ReactDOM from "react-dom";
-
 import "src/polyfills";
 import "src/protobufInit";
 import { alertDataSync } from "src/redux/alerts";

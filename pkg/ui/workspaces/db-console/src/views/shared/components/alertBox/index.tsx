@@ -10,9 +10,6 @@
 
 import React from "react";
 import classNames from "classnames";
-
-import "./alertbox.styl";
-
 import { AlertInfo, AlertLevel } from "src/redux/alerts";
 import {
   warningIcon,
@@ -20,6 +17,8 @@ import {
   criticalIcon,
 } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
+
+import "./alertbox.styl";
 
 function alertIcon(level: AlertLevel) {
   switch (level) {

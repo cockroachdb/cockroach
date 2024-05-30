@@ -17,7 +17,6 @@ import {
   ViewMode,
   deriveTableDetailsMemoized,
 } from "@cockroachlabs/cluster-ui";
-
 import {
   refreshDatabaseDetails,
   refreshNodes,

@@ -90,7 +90,6 @@ const TimeScaleDropdownWithSearchParams = (
 
     // Passing an empty array of dependencies will cause this effect
     // to only run on the initial render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onTimeScaleChange = (timeScale: TimeScale) => {

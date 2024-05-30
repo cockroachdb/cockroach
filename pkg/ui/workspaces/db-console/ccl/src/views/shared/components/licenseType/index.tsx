@@ -7,7 +7,6 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
-
 import DebugAnnotation from "src/views/shared/components/debugAnnotation";
 import swapByLicense from "src/views/shared/containers/licenseSwap";
 import OSSLicenseType from "oss/src/views/shared/components/licenseType";

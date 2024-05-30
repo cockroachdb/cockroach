@@ -10,9 +10,7 @@
 
 import React from "react";
 import { configureStore } from "@reduxjs/toolkit";
-import type { PreloadedState } from "@reduxjs/toolkit";
 import { Provider } from "react-redux";
-
 import { AdminUIState, flagsReducer } from "src/redux/state";
 import { createMemoryHistory } from "history";
 import { apiReducersReducer } from "src/redux/apiReducers";
@@ -24,6 +22,8 @@ import { timeScaleReducer } from "src/redux/timeScale";
 import { uiDataReducer } from "src/redux/uiData";
 import { loginReducer } from "src/redux/login";
 import { connectRouter } from "connected-react-router";
+
+import type { PreloadedState } from "@reduxjs/toolkit";
 
 export function renderWithProviders(
   element: React.ReactElement,

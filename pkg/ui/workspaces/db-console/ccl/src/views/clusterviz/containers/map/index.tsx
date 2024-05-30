@@ -10,7 +10,6 @@ import React from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import cn from "classnames";
-
 import { Breadcrumbs } from "src/views/clusterviz/containers/map/breadcrumbs";
 import NeedEnterpriseLicense from "src/views/clusterviz/containers/map/needEnterpriseLicense";
 import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasContainer";

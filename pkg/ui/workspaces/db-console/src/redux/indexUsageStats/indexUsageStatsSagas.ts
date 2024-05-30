@@ -11,14 +11,6 @@
 import { cockroach } from "src/js/protos";
 import { all, call, put, takeEvery, select } from "redux-saga/effects";
 import {
-  RESET_INDEX_USAGE_STATS,
-  resetIndexUsageStatsCompleteAction,
-  resetIndexUsageStatsFailedAction,
-  resetIndexUsageStatsPayload,
-} from "./indexUsageStatsActions";
-
-import ResetIndexUsageStatsRequest = cockroach.server.serverpb.ResetIndexUsageStatsRequest;
-import {
   invalidateIndexStats,
   KeyedCachedDataReducerState,
   refreshIndexStats,
@@ -26,8 +18,17 @@ import {
 import { IndexStatsResponseMessage, resetIndexUsageStats } from "src/util/api";
 import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
-import TableIndexStatsRequest = cockroach.server.serverpb.TableIndexStatsRequest;
 import { PayloadAction } from "src/interfaces/action";
+
+import {
+  RESET_INDEX_USAGE_STATS,
+  resetIndexUsageStatsCompleteAction,
+  resetIndexUsageStatsFailedAction,
+  resetIndexUsageStatsPayload,
+} from "./indexUsageStatsActions";
+
+import TableIndexStatsRequest = cockroach.server.serverpb.TableIndexStatsRequest;
+import ResetIndexUsageStatsRequest = cockroach.server.serverpb.ResetIndexUsageStatsRequest;
 
 export const selectIndexStatsKeys = createSelector(
   (state: AdminUIState) => state.cachedData.indexStats,

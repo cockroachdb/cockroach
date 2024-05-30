@@ -10,8 +10,14 @@
 
 import React from "react";
 import { ReactWrapper } from "enzyme";
-import { times } from "lodash";
+import times from "lodash/times";
 import Long from "long";
+import { AdminUIState } from "src/redux/state";
+import { LocalSetting } from "src/redux/localsettings";
+import { connectedMount } from "src/test-utils";
+import { cockroach } from "src/js/protos";
+import { livenessByNodeIDSelector, LivenessStatus } from "src/redux/nodes";
+import { SortSetting } from "@cockroachlabs/cluster-ui";
 
 import {
   decommissionedNodesTableDataSelector,
@@ -20,12 +26,6 @@ import {
   NodeList,
   NodeStatusRow,
 } from "./index";
-import { AdminUIState } from "src/redux/state";
-import { LocalSetting } from "src/redux/localsettings";
-import { connectedMount } from "src/test-utils";
-import { cockroach } from "src/js/protos";
-import { livenessByNodeIDSelector, LivenessStatus } from "src/redux/nodes";
-import { SortSetting } from "@cockroachlabs/cluster-ui";
 
 import NodeLivenessStatus = cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;

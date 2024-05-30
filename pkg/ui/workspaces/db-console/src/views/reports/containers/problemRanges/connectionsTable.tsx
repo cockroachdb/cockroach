@@ -8,11 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import classNames from "classnames";
+import flow from "lodash/flow";
+import isEmpty from "lodash/isEmpty";
+import isNil from "lodash/isNil";
+import keys from "lodash/keys";
+import map from "lodash/map";
+import sortBy from "lodash/sortBy";
 import React from "react";
 import { Link } from "react-router-dom";
-
 import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
@@ -101,9 +105,9 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
   const { problemRanges } = props;
   // lastError is already handled by ProblemRanges component.
   if (
-    _.isNil(problemRanges) ||
-    _.isNil(problemRanges.data) ||
-    !_.isNil(problemRanges.lastError)
+    isNil(problemRanges) ||
+    isNil(problemRanges.data) ||
+    !isNil(problemRanges.lastError)
   ) {
     return null;
   }
@@ -120,7 +124,7 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
       <table className="connections-table">
         <tbody>
           <tr className="connections-table__row connections-table__row--header">
-            {_.map(connectionTableColumns, (col, key) => (
+            {map(connectionTableColumns, (col, key) => (
               <th
                 key={key}
                 className="connections-table__cell connections-table__cell--header"
@@ -129,17 +133,17 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
               </th>
             ))}
           </tr>
-          {_.map(ids, id => {
+          {map(ids, id => {
             const rowProblems = data.problems_by_node_id[id];
             const rowClassName = classNames({
               "connections-table__row": true,
-              "connections-table__row--warning": !_.isEmpty(
+              "connections-table__row--warning": !isEmpty(
                 rowProblems.error_message,
               ),
             });
             return (
               <tr key={id} className={rowClassName}>
-                {_.map(connectionTableColumns, (col, key) => (
+                {map(connectionTableColumns, (col, key) => (
                   <td key={key} className="connections-table__cell">
                     {col.extract(rowProblems, id)}
                   </td>

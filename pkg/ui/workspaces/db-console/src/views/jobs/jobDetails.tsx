@@ -11,6 +11,7 @@ import {
   JobDetails,
   JobDetailsStateProps,
   selectID,
+  api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -22,7 +23,6 @@ import {
 } from "src/redux/apiReducers";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import { ListJobProfilerExecutionDetailsResponseMessage } from "src/util/api";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { collectExecutionDetailsAction } from "oss/src/redux/jobs/jobsActions";
 import long from "long";
 import { selectHasAdminRole } from "src/redux/user";

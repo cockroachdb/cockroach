@@ -12,8 +12,8 @@ import {
   SnapshotPage,
   SnapshotPageStateProps,
   SortSetting,
+  api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {

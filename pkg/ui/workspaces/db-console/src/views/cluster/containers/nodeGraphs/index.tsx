@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import map from "lodash/map";
+import has from "lodash/has";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { compose } from "redux";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
-
 import {
   nodeIDAttr,
   dashboardNameAttr,
@@ -26,8 +26,6 @@ import {
   PageConfig,
   PageConfigItem,
 } from "src/views/shared/components/pageconfig";
-import ClusterSummaryBar from "./summaryBar";
-
 import { AdminUIState } from "src/redux/state";
 import {
   refreshNodes,
@@ -51,26 +49,6 @@ import {
 } from "src/redux/nodes";
 import Alerts from "src/views/shared/containers/alerts";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
-
-import {
-  GraphDashboardProps,
-  storeIDsForNode,
-} from "./dashboards/dashboardUtils";
-
-import overviewDashboard from "./dashboards/overview";
-import runtimeDashboard from "./dashboards/runtime";
-import sqlDashboard from "./dashboards/sql";
-import storageDashboard from "./dashboards/storage";
-import replicationDashboard from "./dashboards/replication";
-import distributedDashboard from "./dashboards/distributed";
-import queuesDashboard from "./dashboards/queues";
-import requestsDashboard from "./dashboards/requests";
-import hardwareDashboard from "./dashboards/hardware";
-import changefeedsDashboard from "./dashboards/changefeeds";
-import overloadDashboard from "./dashboards/overload";
-import ttlDashboard from "./dashboards/ttl";
-import crossClusterReplicationDashboard from "./dashboards/crossClusterReplication";
-import networkingDashboard from "./dashboards/networking";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
@@ -81,7 +59,6 @@ import {
   selectTimeScale,
 } from "src/redux/timeScale";
 import { InlineAlert } from "src/components";
-import TimeScaleDropdown from "../timeScaleDropdownWithSearchParams";
 import { Anchor, TimeScale } from "@cockroachlabs/cluster-ui";
 import { reduceStorageOfTimeSeriesDataOperationalFlags } from "src/util/docs";
 import moment from "moment-timezone";
@@ -96,6 +73,28 @@ import {
   isSystemTenant,
   tenantDropdownOptions,
 } from "src/redux/tenants";
+
+import TimeScaleDropdown from "../timeScaleDropdownWithSearchParams";
+
+import {
+  GraphDashboardProps,
+  storeIDsForNode,
+} from "./dashboards/dashboardUtils";
+import overviewDashboard from "./dashboards/overview";
+import runtimeDashboard from "./dashboards/runtime";
+import sqlDashboard from "./dashboards/sql";
+import storageDashboard from "./dashboards/storage";
+import replicationDashboard from "./dashboards/replication";
+import distributedDashboard from "./dashboards/distributed";
+import queuesDashboard from "./dashboards/queues";
+import requestsDashboard from "./dashboards/requests";
+import hardwareDashboard from "./dashboards/hardware";
+import changefeedsDashboard from "./dashboards/changefeeds";
+import overloadDashboard from "./dashboards/overload";
+import ttlDashboard from "./dashboards/ttl";
+import crossClusterReplicationDashboard from "./dashboards/crossClusterReplication";
+import networkingDashboard from "./dashboards/networking";
+import ClusterSummaryBar from "./summaryBar";
 
 interface GraphDashboard {
   label: string;
@@ -166,7 +165,7 @@ const dashboards: { [key: string]: GraphDashboard } = {
 
 const defaultDashboard = "overview";
 
-const dashboardDropdownOptions = _.map(dashboards, (dashboard, key) => {
+const dashboardDropdownOptions = map(dashboards, (dashboard, key) => {
   return {
     value: key,
     label: dashboard.label,
@@ -322,7 +321,7 @@ export class NodeGraphs extends React.Component<
     if (dashboards[selectedDashboard].isKvDashboard && !canViewKvGraphs) {
       selectedDashboard = defaultDashboard;
     }
-    const dashboard = _.has(dashboards, selectedDashboard)
+    const dashboard = has(dashboards, selectedDashboard)
       ? selectedDashboard
       : defaultDashboard;
 
@@ -373,7 +372,7 @@ export class NodeGraphs extends React.Component<
     const graphs = dashboards[dashboard]
       .component(dashboardProps)
       .filter(d => canViewKvGraphs || !d.props.isKvGraph);
-    const graphComponents = _.map(graphs, (graph, idx) => {
+    const graphComponents = map(graphs, (graph, idx) => {
       const key = `nodes.${dashboard}.${idx}`;
       return (
         <MetricsDataProvider

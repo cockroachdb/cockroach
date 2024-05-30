@@ -78,17 +78,18 @@ import TransactionDetails from "src/views/transactions/transactionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
 import HotRangesPage from "src/views/hotRanges/index";
-import ActiveStatementDetails from "./views/statements/activeStatementDetailsConnected";
-import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
-import "styl/app.styl";
-import InsightsOverviewPage from "./views/insights/insightsOverview";
-import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
-import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";
-import { JwtAuthTokenPage } from "./views/jwt/jwtAuthToken";
 import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
 import { SnapshotRouter } from "src/views/tracez_v2/snapshotRoutes";
 import KeyVisualizerPage from "src/views/keyVisualizer";
 import { TimezoneProvider } from "src/contexts/timezoneProvider";
+import "styl/app.styl";
+
+import ActiveStatementDetails from "./views/statements/activeStatementDetailsConnected";
+import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
+import InsightsOverviewPage from "./views/insights/insightsOverview";
+import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
+import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";
+import { JwtAuthTokenPage } from "./views/jwt/jwtAuthToken";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the

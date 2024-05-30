@@ -11,11 +11,12 @@
 import { cockroach } from "src/js/protos";
 import { resetSQLStats } from "src/util/api";
 import { all, call, put, takeEvery } from "redux-saga/effects";
-import { RESET_SQL_STATS, resetSQLStatsFailedAction } from "./sqlStatsActions";
 import {
   invalidateAllStatementDetails,
   invalidateStatements,
 } from "src/redux/apiReducers";
+
+import { RESET_SQL_STATS, resetSQLStatsFailedAction } from "./sqlStatsActions";
 
 import ResetSQLStatsRequest = cockroach.server.serverpb.ResetSQLStatsRequest;
 

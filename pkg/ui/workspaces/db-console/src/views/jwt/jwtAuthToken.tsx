@@ -13,7 +13,6 @@ import Helmet from "react-helmet";
 import { useParams } from "react-router-dom";
 import Select from "react-select";
 import { Spinner } from "@cockroachlabs/ui-components";
-
 import {
   Button,
   CockroachLabsLockupIcon,
@@ -21,7 +20,6 @@ import {
   TextInput,
   TextTypes,
 } from "src/components";
-
 import ErrorCircle from "assets/error-circle.svg";
 import "./jwtAuthToken.styl";
 

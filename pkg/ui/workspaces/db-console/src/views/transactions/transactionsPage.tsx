@@ -22,9 +22,7 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { selectHasAdminRole } from "src/redux/user";
 import { StatementsResponseMessage } from "src/util/api";
-
 import { PrintTime } from "src/views/reports/containers/range/print";
-
 import {
   Filters,
   defaultFilters,
@@ -41,12 +39,13 @@ import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { LocalSetting } from "src/redux/localsettings";
 import { bindActionCreators } from "redux";
+import { selectTimeScale } from "src/redux/timeScale";
+import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
+
 import {
   activeTransactionsPageActionCreators,
   mapStateToActiveTransactionsPageProps,
 } from "./activeTransactionsSelectors";
-import { selectTimeScale } from "src/redux/timeScale";
-import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
 
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.

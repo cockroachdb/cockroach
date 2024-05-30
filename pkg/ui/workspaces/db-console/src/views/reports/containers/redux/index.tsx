@@ -14,7 +14,6 @@ import { connect } from "react-redux";
 import classNames from "classnames";
 import CopyToClipboard from "react-copy-to-clipboard";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-
 import { AdminUIState } from "src/redux/state";
 
 import "./redux.styl";

@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 
 import { emptyLoginState } from "src/redux/login";
-import type { LoginPageProps } from "./loginPage";
 import { createMemoryHistory } from "history";
 import { RouteComponentProps } from "react-router-dom";
+
+import type { LoginPageProps } from "./loginPage";
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
 

@@ -11,16 +11,16 @@
 import React from "react";
 import { shallow, mount } from "enzyme";
 import { MemoryRouter as Router } from "react-router-dom";
-import sinon from "sinon";
-
-import { ClusterNodeTotals } from "./summaryBar";
-import * as summaryBar from "./summaryBar";
+import { createSandbox } from "sinon";
 import { SummaryStatBreakdown } from "src/views/shared/components/summaryBar";
 import { renderWithProviders } from "src/test-utils/renderWithProviders";
 import { NodeSummaryStats } from "src/redux/nodes";
 import * as nodes from "src/redux/nodes";
 
-const sandbox = sinon.createSandbox();
+import * as summaryBar from "./summaryBar";
+import { ClusterNodeTotals } from "./summaryBar";
+
+const sandbox = createSandbox();
 
 describe("<ClusterNodeTotals>", () => {
   let nodeSumsSelectorStubReturn: NodeSummaryStats;

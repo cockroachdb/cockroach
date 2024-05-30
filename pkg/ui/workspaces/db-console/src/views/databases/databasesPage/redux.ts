@@ -16,7 +16,6 @@ import {
   Filters,
   deriveDatabaseDetailsMemoized,
 } from "@cockroachlabs/cluster-ui";
-
 import {
   refreshDatabases,
   refreshDatabaseDetails,

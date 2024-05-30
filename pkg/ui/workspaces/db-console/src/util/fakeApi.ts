@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import * as $protobuf from "protobufjs";
-
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "src/js/protos";
 import { API_PREFIX, STATUS_PREFIX } from "src/util/api";
@@ -104,7 +103,7 @@ function stubGet(path: string, writer: $protobuf.Writer, prefix: string) {
 export function stubSqlApiCall<T>(
   req: clusterUiApi.SqlExecutionRequest,
   mockTxnResults: mockSqlTxnResult<T>[],
-  times: number = 1,
+  times = 1,
 ) {
   const response = buildSqlExecutionResponse(mockTxnResults);
   fetchMock.mock({

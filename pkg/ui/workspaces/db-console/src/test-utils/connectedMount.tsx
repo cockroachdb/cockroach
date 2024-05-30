@@ -14,7 +14,6 @@ import { Action, Store } from "redux";
 import { Provider } from "react-redux";
 import { ConnectedRouter } from "connected-react-router";
 import { createMemoryHistory } from "history";
-
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 
 export function connectedMount(

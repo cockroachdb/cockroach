@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import * as React from "react";
-
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 import "./infoTooltip.styl";

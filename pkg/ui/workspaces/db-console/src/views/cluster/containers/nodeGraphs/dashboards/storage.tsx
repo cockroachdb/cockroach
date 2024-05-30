@@ -9,21 +9,20 @@
 // licenses/APL.txt.
 
 import React from "react";
-import _ from "lodash";
-
+import map from "lodash/map";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
+import {
+  CapacityGraphTooltip,
+  LiveBytesGraphTooltip,
+} from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import {
   GraphDashboardProps,
   nodeDisplayName,
   storeIDsForNode,
 } from "./dashboardUtils";
-import {
-  CapacityGraphTooltip,
-  LiveBytesGraphTooltip,
-} from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
-import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 export default function (props: GraphDashboardProps) {
   const {
@@ -78,7 +77,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <>
             <Metric
               key={nid}
@@ -113,7 +112,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.raft.process.logcommit.latency-p99"
@@ -134,7 +133,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.raft.process.logcommit.latency-p50"
@@ -156,7 +155,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.raft.process.commandcommit.latency-p99"
@@ -178,7 +177,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.raft.process.commandcommit.latency-p50"
@@ -199,7 +198,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="factor">
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.rocksdb.read-amplification"
@@ -219,7 +218,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="sstables">
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.rocksdb.num-sstables"
@@ -254,7 +253,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.rocksdb.flushed-bytes"
@@ -275,7 +274,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.storage.wal.bytes_written"
@@ -296,7 +295,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.rocksdb.compacted-bytes-written"
@@ -317,7 +316,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.rocksdb.ingested-bytes"
@@ -428,7 +427,7 @@ export default function (props: GraphDashboardProps) {
           "sql-row-spill",
           "sql-col-spill",
         ].map(category =>
-          _.map(nodeIDs, nid => (
+          map(nodeIDs, nid => (
             <Metric
               key={category + "-" + nid}
               name={`cr.store.storage.category-${category}.bytes-written`}

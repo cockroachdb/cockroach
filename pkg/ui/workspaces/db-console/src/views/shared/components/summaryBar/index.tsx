@@ -8,16 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import React from "react";
 import classNames from "classnames";
 import * as protos from "src/js/protos";
-
-import "./summarybar.styl";
-
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import { InfoTooltip } from "src/components/infoTooltip";
+import isNumber from "lodash/isNumber";
+import last from "lodash/last";
+import sum from "lodash/sum";
+
+import "./summarybar.styl";
+
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 export enum SummaryMetricsAggregator {
@@ -62,7 +64,7 @@ export function formatNumberForDisplay(
   value: number,
   format: (n: number) => string = numberToString,
 ) {
-  if (!_.isNumber(value)) {
+  if (!isNumber(value)) {
     return "-";
   }
   return format(value);
@@ -191,7 +193,7 @@ function SummaryMetricStatHelper(
     <SummaryStat
       title={title}
       format={format}
-      value={_.isNumber(value) ? value : props.value}
+      value={isNumber(value) ? value : props.value}
     >
       {summaryStatMessage && (
         <SummaryStatMessage message={summaryStatMessage} />
@@ -209,13 +211,13 @@ function aggregateLatestValuesFromMetrics(
   }
 
   const latestValues = data.results.map(({ datapoints }) => {
-    return datapoints && datapoints.length && _.last(datapoints).value;
+    return datapoints && datapoints.length && last(datapoints).value;
   });
 
   if (aggregator) {
     switch (aggregator) {
       case SummaryMetricsAggregator.SUM:
-        return _.sum(latestValues);
+        return sum(latestValues);
       case SummaryMetricsAggregator.FIRST:
       default:
         // Do nothing, which does default action (below) of

@@ -10,8 +10,6 @@
 
 import React from "react";
 import { mount, shallow } from "enzyme";
-import _ from "lodash";
-
 import {
   EventBoxUnconnected as EventBox,
   EventRow,
@@ -21,6 +19,7 @@ import { refreshEvents } from "src/redux/apiReducers";
 import { allEvents } from "src/util/eventTypes";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import each from "lodash/each";
 
 function makeEventBox(
   events: clusterUiApi.EventsResponse,
@@ -92,7 +91,7 @@ describe("<EventRow>", function () {
 
 describe("getEventInfo", function () {
   it("covers every currently known event", function () {
-    _.each(allEvents, eventType => {
+    each(allEvents, eventType => {
       const event: clusterUiApi.EventColumns =
         createEventWithEventType(eventType);
       const eventContent = shallow(

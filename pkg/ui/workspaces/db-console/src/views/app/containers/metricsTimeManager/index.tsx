@@ -11,10 +11,9 @@
 import React from "react";
 import { connect } from "react-redux";
 import moment from "moment-timezone";
-
 import { AdminUIState } from "src/redux/state";
 import * as timewindow from "src/redux/timeScale";
-import _ from "lodash";
+import isEqual from "lodash/isEqual";
 
 interface MetricsTimeManagerProps {
   // The current timescale redux state.
@@ -124,7 +123,7 @@ class MetricsTimeManager extends React.Component<
   }
 
   componentDidUpdate(prevProps: MetricsTimeManagerProps) {
-    if (!_.isEqual(prevProps.timeScale, this.props.timeScale)) {
+    if (!isEqual(prevProps.timeScale, this.props.timeScale)) {
       this.checkWindow(this.props);
     }
   }

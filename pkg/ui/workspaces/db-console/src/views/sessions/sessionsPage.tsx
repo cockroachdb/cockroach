@@ -14,13 +14,11 @@ import { connect } from "react-redux";
 import { AdminUIState } from "src/redux/state";
 import { LocalSetting } from "src/redux/localsettings";
 import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
-
 import { createSelector } from "reselect";
 import {
   SessionsResponseMessage,
   StatementsResponseMessage,
 } from "src/util/api";
-
 import {
   defaultFilters,
   Filters,

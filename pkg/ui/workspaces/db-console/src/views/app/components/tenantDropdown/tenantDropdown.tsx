@@ -10,9 +10,11 @@
 import { getCookieValue, setCookie } from "src/redux/cookies";
 import React from "react";
 import { Dropdown } from "@cockroachlabs/cluster-ui";
-import ErrorBoundary from "../errorMessage/errorBoundary";
-import "./tenantDropdown.styl";
 import { isSystemTenant } from "src/redux/tenants";
+
+import ErrorBoundary from "../errorMessage/errorBoundary";
+
+import "./tenantDropdown.styl";
 
 const tenantIDKey = "tenant";
 

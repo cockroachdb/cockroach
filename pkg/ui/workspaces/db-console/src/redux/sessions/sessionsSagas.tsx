@@ -18,6 +18,7 @@ import {
 } from "src/redux/alerts";
 import { cockroach } from "src/js/protos";
 import { Action } from "redux";
+
 import ICancelSessionRequest = cockroach.server.serverpb.ICancelSessionRequest;
 import CancelSessionRequest = cockroach.server.serverpb.CancelSessionRequest;
 import ICancelQueryRequest = cockroach.server.serverpb.ICancelQueryRequest;

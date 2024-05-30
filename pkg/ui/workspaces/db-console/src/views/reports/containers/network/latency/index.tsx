@@ -14,17 +14,20 @@ import "antd/lib/badge/style";
 import "antd/lib/divider/style";
 import "antd/lib/tooltip/style";
 import classNames from "classnames";
-import _ from "lodash";
+import map from "lodash/map";
 import { util } from "@cockroachlabs/cluster-ui";
 import { Chip } from "src/views/app/components/chip";
 import React from "react";
 import { Link } from "react-router-dom";
-import { getValueFromString, Identity, isHealthyLivenessStatus } from "..";
-import "./latency.styl";
 import { Empty } from "src/components/empty";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { livenessNomenclature } from "src/redux/nodes";
 import { BadgeProps } from "antd/lib/badge";
+
+import { getValueFromString, Identity, isHealthyLivenessStatus } from "..";
+
+import "./latency.styl";
+
 import NodeLivenessStatus = cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
 import ConnectionStatus = cockroach.server.serverpb.NetworkConnectivityResponse.ConnectionStatus;
 
@@ -353,7 +356,7 @@ const getLatencyCell = (
     if (!data) {
       return;
     }
-    return _.map(data.split(","), (identity, index) => (
+    return map(data.split(","), (identity, index) => (
       <p key={index} className="Chip--tooltip__nodes--item-description">
         {`${identity},`}
       </p>
@@ -474,7 +477,7 @@ export const Latency: React.SFC<ILatencyProps> = ({
           <tr>
             <th style={{ width: 115 }} />
             <th style={{ width: 45 }} />
-            {_.map(data, (value, index) => (
+            {map(data, (value, index) => (
               <th
                 className="region-name"
                 colSpan={data[index].length}
@@ -490,8 +493,8 @@ export const Latency: React.SFC<ILatencyProps> = ({
             {multipleHeader && <td />}
             <td className="latency-table__cell latency-table__cell--spacer" />
             {React.Children.toArray(
-              _.map(data, value =>
-                _.map(value, (identity, index: number) =>
+              map(data, value =>
+                map(value, (identity, index: number) =>
                   createHeaderCell(identity, index === 0, collapsed),
                 ),
               ),
@@ -501,8 +504,8 @@ export const Latency: React.SFC<ILatencyProps> = ({
       </thead>
       <tbody>
         {React.Children.toArray(
-          _.map(data, (value, index) =>
-            _.map(data[index], (identityA, indA: number) => {
+          map(data, (value, index) =>
+            map(data[index], (identityA, indA: number) => {
               return (
                 <tr
                   className={`latency-table__row ${
@@ -518,7 +521,7 @@ export const Latency: React.SFC<ILatencyProps> = ({
                     </th>
                   )}
                   {createHeaderCell(identityA, false, collapsed)}
-                  {_.map(identityA.row, (identity: any, indexB: number) =>
+                  {map(identityA.row, (identity: any, indexB: number) =>
                     getLatencyCell(
                       { ...identity, identityA },
                       getVerticalLines(data, indexB),

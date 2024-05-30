@@ -11,7 +11,6 @@
 import React from "react";
 import { Route, Redirect } from "react-router-dom";
 import { Store } from "redux";
-
 import { doLogout, selectLoginState } from "src/redux/login";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import LoginPage from "src/views/login/loginPage";

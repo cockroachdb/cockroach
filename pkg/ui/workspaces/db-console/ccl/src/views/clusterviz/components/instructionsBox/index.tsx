@@ -10,7 +10,6 @@ import React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router-dom";
 import classNames from "classnames";
-
 import { allNodesHaveLocality } from "src/util/localities";
 import {
   instructionsBoxCollapsedSelector,

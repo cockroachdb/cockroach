@@ -22,8 +22,9 @@ import moment from "moment";
 import ErrorIcon from "assets/error-circle.svg";
 import InfoIcon from "assets/info-filled-circle.svg";
 import WarningIcon from "assets/warning.svg";
-import styles from "./licenseNotification.module.styl";
 import { licensingFaqs } from "src/util/docs";
+
+import styles from "./licenseNotification.module.styl";
 
 const cn = classNames.bind(styles);
 

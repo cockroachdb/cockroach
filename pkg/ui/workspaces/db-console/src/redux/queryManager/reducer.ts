@@ -10,7 +10,6 @@
 
 import moment from "moment-timezone";
 import { Action } from "redux";
-
 import nextState from "src/util/nextState";
 
 const QUERY_BEGIN = "cockroachui/queries/QUERY_BEGIN";

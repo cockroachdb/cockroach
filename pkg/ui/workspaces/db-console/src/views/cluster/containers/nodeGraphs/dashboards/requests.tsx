@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 

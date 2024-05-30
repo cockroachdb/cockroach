@@ -9,8 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import _ from "lodash";
-
+import map from "lodash/map";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
@@ -111,7 +110,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="transaction duration">
-        {_.map(nodeIDs, node => (
+        {map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.txn.durations-p99"
@@ -131,7 +130,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="transaction duration">
-        {_.map(nodeIDs, node => (
+        {map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.txn.durations-p90"
@@ -152,7 +151,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="heartbeat latency">
-        {_.map(nodeIDs, node => (
+        {map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.liveness.heartbeatlatency-p99"
@@ -173,7 +172,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="heartbeat latency">
-        {_.map(nodeIDs, node => (
+        {map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.liveness.heartbeatlatency-p90"

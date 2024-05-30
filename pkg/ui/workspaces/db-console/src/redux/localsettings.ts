@@ -19,12 +19,12 @@
  * it should be given the full redux treatment with unique modification actions.
  */
 
-import _ from "lodash";
 import { createSelector, Selector } from "reselect";
 import { Action } from "redux";
 import { call, takeEvery } from "redux-saga/effects";
-
 import { PayloadAction } from "src/interfaces/action";
+import clone from "lodash/clone";
+import isNil from "lodash/isNil";
 
 const STORAGE_PREFIX = "cockroachui";
 export const SET_UI_VALUE = `${STORAGE_PREFIX}/ui/SET_UI_VALUE`;
@@ -73,14 +73,14 @@ export function localSettingsReducer(
   state: LocalSettingsState = {},
   action: Action,
 ): LocalSettingsState {
-  if (_.isNil(action)) {
+  if (isNil(action)) {
     return state;
   }
 
   switch (action.type) {
     case SET_UI_VALUE: {
       const { payload } = action as PayloadAction<LocalSettingData>;
-      state = _.clone(state);
+      state = clone(state);
       state[payload.key] = payload.value;
       return state;
     }

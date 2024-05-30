@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-
 import DebugAnnotation from "src/views/shared/components/debugAnnotation";
 
 /**

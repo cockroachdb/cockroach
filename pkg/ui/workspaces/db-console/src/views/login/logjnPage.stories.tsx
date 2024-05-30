@@ -10,6 +10,7 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { withRouterDecorator } from "src/util/decorators";
+
 import { LoginPage } from "./loginPage";
 import {
   loginPagePropsFixture,

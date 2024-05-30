@@ -9,7 +9,6 @@
 import React from "react";
 import { RouteComponentProps } from "react-router";
 import { withRouter } from "react-router-dom";
-
 import { LocalityTree } from "src/redux/localities";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import {
@@ -17,15 +16,15 @@ import {
   getLocalityLabel,
   getLeaves,
 } from "src/util/localities";
-
 import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
 import { pluralize } from "src/util/pluralize";
 import { trustIcon } from "src/util/trust";
-import localityIcon from "!!raw-loader!assets/localityIcon.svg";
-import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
 import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capacityArc";
 import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
+
+import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
+import localityIcon from "!!raw-loader!assets/localityIcon.svg";
 
 interface LocalityViewProps {
   localityTree: LocalityTree;

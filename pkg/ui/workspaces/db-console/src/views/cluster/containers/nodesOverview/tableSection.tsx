@@ -14,7 +14,6 @@ import cn from "classnames";
 import { Icon } from "antd";
 import "antd/lib/icon/style";
 import { Action, Dispatch } from "redux";
-
 import { LocalSetting, setLocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { Text, TextTypes } from "src/components";

@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import classNames from "classnames";
-import _ from "lodash";
 import Long from "long";
 import moment from "moment-timezone";
 import React from "react";
@@ -17,7 +16,6 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 import { InlineAlert } from "src/components";
-
 import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import {
@@ -40,6 +38,7 @@ import {
   PageConfigItem,
 } from "src/views/shared/components/pageconfig";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
+
 import { BackToAdvanceDebug } from "../util";
 
 interface NodesOwnProps {

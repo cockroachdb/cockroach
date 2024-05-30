@@ -10,7 +10,6 @@
 
 import React from "react";
 import classNames from "classnames";
-
 import { OutsideEventHandler } from "src/components/outsideEventHandler";
 
 import "./popover.styl";

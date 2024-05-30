@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-
 import { AdminUIState } from "src/redux/state";
 import {
   RELEASE_NOTES_SIGNUP_DISMISSED_KEY,

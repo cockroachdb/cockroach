@@ -20,12 +20,11 @@ import {
   SortSetting,
   Anchor,
   EmptyTable,
+  util,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
-import { round } from "lodash";
-import styles from "./hotRanges.module.styl";
+import round from "lodash/round";
 import { cockroach } from "src/js/protos";
-import { util } from "@cockroachlabs/cluster-ui";
 import {
   performanceBestPracticesHotSpots,
   readsAndWritesOverviewPage,
@@ -35,6 +34,8 @@ import emptyTableResultsImg from "assets/emptyState/empty-table-results.svg";
 import { sortSettingLocalSetting } from "oss/src/redux/hotRanges";
 import { AdminUIState } from "oss/src/redux/state";
 import { connect } from "react-redux";
+
+import styles from "./hotRanges.module.styl";
 
 const PAGE_SIZE = 50;
 const cx = classNames.bind(styles);

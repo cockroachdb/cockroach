@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 import { getCookieValue } from "src/redux/cookies";
 import React from "react";
-import TenantDropdown from "./tenantDropdown";
 import { shallow } from "enzyme";
 import fetchMock from "fetch-mock";
+
+import TenantDropdown from "./tenantDropdown";
 
 jest.mock("src/redux/cookies", () => ({
   getCookieValue: jest.fn(),

@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-
 import { LoginAPIState } from "oss/src/redux/login";
 import { Button } from "src/components";
 import { RouteComponentProps, withRouter } from "react-router-dom";

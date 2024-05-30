@@ -11,7 +11,6 @@
 import React from "react";
 import { connect } from "react-redux";
 import { Link, withRouter, RouteComponentProps } from "react-router-dom";
-
 import { SideNavigation } from "src/components";
 import "./navigation-bar.styl";
 import { AdminUIState } from "src/redux/state";

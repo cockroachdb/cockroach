@@ -29,7 +29,6 @@ import {
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 import { longToInt } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
-import TableIndexStatsRequest = cockroach.server.serverpb.TableIndexStatsRequest;
 import {
   selectHasViewActivityRedactedRole,
   selectHasAdminRole,
@@ -37,6 +36,8 @@ import {
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
+
+import TableIndexStatsRequest = cockroach.server.serverpb.TableIndexStatsRequest;
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
 export const mapStateToProps = (

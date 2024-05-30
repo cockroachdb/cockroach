@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import { Action, combineReducers } from "redux";
 import { ThunkAction, ThunkDispatch } from "redux-thunk";
 import moment from "moment-timezone";
@@ -18,6 +17,19 @@ import {
   StmtInsightEvent,
   TxnInsightEvent,
 } from "@cockroachlabs/cluster-ui";
+import * as api from "src/util/api";
+import { VersionList } from "src/interfaces/cockroachlabs";
+import { versionCheck } from "src/util/cockroachlabsAPI";
+import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
+import * as protos from "src/js/protos";
+import Long from "long";
+import { createSelector, ParametricSelector } from "reselect";
+import { RouteComponentProps } from "react-router";
+import map from "lodash/map";
+import isEmpty from "lodash/isEmpty";
+import isNil from "lodash/isNil";
+
+import { AdminUIState } from "./state";
 import {
   CachedDataReducer,
   CachedDataReducerState,
@@ -26,15 +38,6 @@ import {
   PaginatedCachedDataReducer,
   PaginatedCachedDataReducerState,
 } from "./cachedDataReducer";
-import * as api from "src/util/api";
-import { VersionList } from "src/interfaces/cockroachlabs";
-import { versionCheck } from "src/util/cockroachlabsAPI";
-import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
-import * as protos from "src/js/protos";
-import Long from "long";
-import { createSelector, ParametricSelector } from "reselect";
-import { AdminUIState } from "./state";
-import { RouteComponentProps } from "react-router";
 
 const { generateStmtDetailsToID, HexStringToInt64String, generateTableID } =
   util;
@@ -70,7 +73,7 @@ export const refreshHealth = healthReducerObj.refresh;
 function rollupStoreMetrics(
   res: api.NodesResponseExternalMessage,
 ): INodeStatus[] {
-  return _.map(res.nodes, node => {
+  return map(res.nodes, node => {
     RollupStoreMetrics(node);
     return node;
   });
@@ -252,7 +255,7 @@ export const refreshQueryPlan = queryPlanReducerObj.refresh;
 
 export const problemRangesRequestKey = (
   req: api.ProblemRangesRequestMessage,
-): string => (_.isEmpty(req.node_id) ? "all" : req.node_id);
+): string => (isEmpty(req.node_id) ? "all" : req.node_id);
 
 const problemRangesReducerObj = new KeyedCachedDataReducer(
   api.getProblemRanges,
@@ -265,7 +268,7 @@ export const refreshProblemRanges = problemRangesReducerObj.refresh;
 
 export const certificatesRequestKey = (
   req: api.CertificatesRequestMessage,
-): string => (_.isEmpty(req.node_id) ? "none" : req.node_id);
+): string => (isEmpty(req.node_id) ? "none" : req.node_id);
 
 const certificatesReducerObj = new KeyedCachedDataReducer(
   api.getCertificates,
@@ -276,7 +279,7 @@ const certificatesReducerObj = new KeyedCachedDataReducer(
 export const refreshCertificates = certificatesReducerObj.refresh;
 
 export const rangeRequestKey = (req: api.RangeRequestMessage): string =>
-  _.isNil(req.range_id) ? "none" : req.range_id.toString();
+  isNil(req.range_id) ? "none" : req.range_id.toString();
 
 const rangeReducerObj = new KeyedCachedDataReducer(
   api.getRange,
@@ -289,7 +292,7 @@ export const refreshRange = rangeReducerObj.refresh;
 
 export const allocatorRangeRequestKey = (
   req: api.AllocatorRangeRequestMessage,
-): string => (_.isNil(req.range_id) ? "none" : req.range_id.toString());
+): string => (isNil(req.range_id) ? "none" : req.range_id.toString());
 
 const allocatorRangeReducerObj = new KeyedCachedDataReducer(
   api.getAllocatorRange,
@@ -301,7 +304,7 @@ const allocatorRangeReducerObj = new KeyedCachedDataReducer(
 export const refreshAllocatorRange = allocatorRangeReducerObj.refresh;
 
 export const rangeLogRequestKey = (req: api.RangeLogRequestMessage): string =>
-  _.isNil(req.range_id) ? "none" : req.range_id.toString();
+  isNil(req.range_id) ? "none" : req.range_id.toString();
 
 const rangeLogReducerObj = new KeyedCachedDataReducer(
   api.getRangeLog,
@@ -331,7 +334,7 @@ export const invalidateSessions = sessionsReducerObj.invalidateData;
 export const refreshSessions = sessionsReducerObj.refresh;
 
 export const storesRequestKey = (req: api.StoresRequestMessage): string =>
-  _.isEmpty(req.node_id) ? "none" : req.node_id;
+  isEmpty(req.node_id) ? "none" : req.node_id;
 
 const storesReducerObj = new KeyedCachedDataReducer(
   api.getStores,

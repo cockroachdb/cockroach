@@ -10,7 +10,6 @@
 
 import React from "react";
 import { connect } from "react-redux";
-
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import { trustIcon } from "src/util/trust";
 import Popover from "src/views/shared/components/popover";

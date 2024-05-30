@@ -10,9 +10,6 @@
 
 import { expectSaga } from "redux-saga-test-plan";
 import { call } from "redux-saga-test-plan/matchers";
-
-import { resetSQLStatsFailedAction } from "./sqlStatsActions";
-import { resetSQLStatsSaga } from "./sqlStatsSagas";
 import { resetSQLStats } from "src/util/api";
 import {
   apiReducersReducer,
@@ -20,8 +17,10 @@ import {
   invalidateAllStatementDetails,
 } from "src/redux/apiReducers";
 import { throwError } from "redux-saga-test-plan/providers";
-
 import { cockroach } from "src/js/protos";
+
+import { resetSQLStatsSaga } from "./sqlStatsSagas";
+import { resetSQLStatsFailedAction } from "./sqlStatsActions";
 
 describe("SQL Stats sagas", () => {
   describe("resetSQLStatsSaga", () => {

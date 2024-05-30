@@ -7,7 +7,6 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
-
 import { CpuSparkline } from "src/views/clusterviz/containers/map/cpuSparkline";
 import { QpsSparkline } from "src/views/clusterviz/containers/map/qpsSparkline";
 import { DARK_BLUE } from "src/views/shared/colors";

@@ -24,6 +24,8 @@ import {
   trackDownloadDiagnosticsBundle,
   trackSubnavSelection,
 } from "src/util/analytics";
+import trackCancelDiagnosticsBundle from "src/util/analytics/trackCancelDiagnosticsBundle";
+
 import {
   TRACK_STATEMENTS_SEARCH,
   TRACK_STATEMENTS_PAGINATION,
@@ -33,7 +35,6 @@ import {
   TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION,
   TRACK_CANCEL_DIAGNOSTIC_BUNDLE,
 } from "./analyticsActions";
-import trackCancelDiagnosticsBundle from "src/util/analytics/trackCancelDiagnosticsBundle";
 
 export function* trackActivateStatementsDiagnostics(
   action: PayloadAction<DiagnosticsReportPayload>,

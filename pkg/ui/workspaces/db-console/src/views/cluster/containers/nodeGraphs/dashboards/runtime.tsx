@@ -9,8 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import _ from "lodash";
-
+import map from "lodash/map";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
@@ -260,7 +259,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="offset" units={AxisUnits.Duration}>
-        {_.map(nodeIDs, nid => (
+        {map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.node.clock-offset.meannanos"
