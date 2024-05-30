@@ -1,4 +1,3 @@
-version: '3'
 services:
   cockroach1:
     image: ubuntu:xenial-20170214
