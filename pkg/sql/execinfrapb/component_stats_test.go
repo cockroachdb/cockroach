@@ -252,6 +252,7 @@ rows output: 100`,
 				},
 				KV: KVStats{
 					NodeIDs:   []int32{1, 2},
+					Regions:   []string{"region1", "region2"},
 					BytesRead: optional.MakeUint(12345),
 				},
 				Exec: ExecStats{
@@ -276,6 +277,7 @@ rows output: 100`,
 				},
 				KV: KVStats{
 					NodeIDs:    []int32{2, 3},
+					Regions:    []string{"region2", "region3"},
 					KVTime:     optional.MakeTimeValue(time.Second),
 					TuplesRead: optional.MakeUint(10),
 					BytesRead:  optional.MakeUint(12345 * 1000),
@@ -303,6 +305,7 @@ network bytes sent: 12 KiB
 input rows: 100
 input stall time: 1s
 KV nodes: n1, n2, n3
+KV regions: region1, region2, region3
 KV time: 1s
 KV rows decoded: 10
 KV bytes read: 12 KiB
