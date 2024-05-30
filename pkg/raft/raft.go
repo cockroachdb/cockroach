@@ -596,7 +596,8 @@ func (r *raft) maybeSendAppend(to uint64) bool {
 	pr := r.trk.Progress[to]
 
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
-	if !pr.ShouldSendMsgApp(last, commit) {
+	msgAppType := pr.ShouldSendMsgApp(last, commit)
+	if msgAppType == tracker.MsgAppNone {
 		return false
 	}
 
@@ -609,7 +610,7 @@ func (r *raft) maybeSendAppend(to uint64) bool {
 	}
 
 	var entries []pb.Entry
-	if pr.CanSendEntries(last) {
+	if msgAppType == tracker.MsgAppWithEntries {
 		if entries, err = r.raftLog.entries(pr.Next, r.maxMsgSize); err != nil {
 			// Send a snapshot if we failed to get the entries.
 			return r.maybeSendSnapshot(to, pr)
