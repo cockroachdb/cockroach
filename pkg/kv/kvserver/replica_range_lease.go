@@ -538,20 +538,31 @@ func (p *pendingLeaseRequest) requestLease(
 	// interval are the same.
 	expToEpochPromo := extension && status.Lease.Type() == roachpb.LeaseExpiration && reqLease.Type() == roachpb.LeaseEpoch
 	if expToEpochPromo && reqLeaseLiveness.Expiration.ToTimestamp().Less(status.Lease.GetExpiration()) {
-		err := p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, reqLeaseLiveness)
-		if err != nil {
-			if logFailedHeartbeatOwnLiveness.ShouldLog() {
-				log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
+		curLiveness := reqLeaseLiveness
+		for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+			err := p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, curLiveness)
+			if err != nil {
+				if logFailedHeartbeatOwnLiveness.ShouldLog() {
+					log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
+				}
+				return kvpb.NewNotLeaseHolderError(roachpb.Lease{}, p.repl.store.StoreID(), p.repl.Desc(),
+					fmt.Sprintf("failed to manipulate liveness record: %s", err))
 			}
-			return kvpb.NewNotLeaseHolderError(roachpb.Lease{}, p.repl.store.StoreID(), p.repl.Desc(),
-				fmt.Sprintf("failed to manipulate liveness record: %s", err))
-		}
-		// Assert that the liveness record expiration is now greater than the
-		// expiration of the lease we're promoting.
-		l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(reqLeaseLiveness.NodeID)
-		if !ok || l.Expiration.ToTimestamp().Less(status.Lease.GetExpiration()) {
-			return errors.AssertionFailedf("expiration of liveness record %s is not greater than "+
-				"expiration of the previous lease %s after liveness heartbeat", l, status.Lease)
+			// Check whether the liveness record expiration is now greater than the
+			// expiration of the lease we're promoting. If not, we may have raced with
+			// another liveness heartbeat which did not extend the liveness expiration
+			// far enough and we should try again.
+			l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(reqLeaseLiveness.NodeID)
+			if !ok {
+				return errors.NewAssertionErrorWithWrappedErrf(liveness.ErrRecordCacheMiss, "after heartbeat")
+			}
+			if l.Expiration.ToTimestamp().Less(status.Lease.GetExpiration()) {
+				log.Infof(ctx, "expiration of liveness record %s is not greater than "+
+					"expiration of the previous lease %s after liveness heartbeat, retrying...", l, status.Lease)
+				curLiveness = l.Liveness
+				continue
+			}
+			break
 		}
 	}
 
