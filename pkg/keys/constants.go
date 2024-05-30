@@ -219,6 +219,10 @@ var (
 	// is to allow a restarting node to discover approximately how long it has
 	// been down without needing to retrieve liveness records from the cluster.
 	localStoreLastUpSuffix = []byte("uptm")
+	// TODO store liveness keys.
+	localStoreLivenessRequesterMeta = []byte("slrm")
+	localStoreLivenessSupporterMeta = []byte("slsm")
+	localStoreLivenessSupportFor    = []byte("slsf")
 	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent
 	// reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")

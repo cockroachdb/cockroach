@@ -15,6 +15,7 @@ import (
 	"time"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -22,35 +23,33 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-type lockedEpoch struct {
-	mu    syncutil.Mutex
-	epoch slpb.Epoch
-}
-
-func (le *lockedEpoch) getEpoch() slpb.Epoch {
-	le.mu.Lock()
-	defer le.mu.Unlock()
-	return le.epoch
-}
-
-func (le *lockedEpoch) incrementEpoch() {
-	le.mu.Lock()
-	defer le.mu.Unlock()
-	le.epoch++
-}
-
 type receiveQueue struct {
 	mu struct { // not to be locked directly
 		syncutil.Mutex
 		msgs []slpb.Message
 	}
+	sig chan struct{}
 	// maxLen
+}
+
+func makeReceiveQueue() receiveQueue {
+	return receiveQueue{
+		sig: make(chan struct{}, 1),
+	}
 }
 
 func (q *receiveQueue) Append(msg slpb.Message) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.mu.msgs = append(q.mu.msgs, msg)
+	select {
+	case q.sig <- struct{}{}:
+	default:
+	}
+}
+
+func (q *receiveQueue) Sig() <-chan struct{} {
+	return q.sig
 }
 
 func (q *receiveQueue) Drain() []slpb.Message {
@@ -62,59 +61,87 @@ func (q *receiveQueue) Drain() []slpb.Message {
 }
 
 type Options struct {
-	*hlc.Clock
 	// How often heartbeats are sent out to all remote stores.
 	HeartbeatInterval time.Duration
 	// How much ahead of the current time we ask for support.
 	LivenessInterval time.Duration
 	// How often we check for support expiry.
 	SupportExpiryInterval time.Duration
-	// How often we drain the receive queue and handle the responses in it.
-	ResponseHandlingInterval time.Duration
 }
 
 type SupportManager struct {
 	storeID      slpb.StoreIdent
+	engine       storage.Engine
 	options      Options
 	stopper      *stop.Stopper
+	clock        *hlc.Clock
 	transport    *Transport
 	receiveQueue receiveQueue
 	// TODO(mira): For production, or even before, when persistence is added to
 	// the algorithm, double-check all locking and ensure mutexes are not held
 	// during local disk IO.
 	// Protects supportMap.
-	mu           syncutil.RWMutex
-	supportMap   map[slpb.StoreIdent]*supportState
-	currentEpoch lockedEpoch
+	ss supporterState
+	rs requesterState
 	// Metrics
 }
 
-func (sm *SupportManager) getSupportState(remoteStore slpb.StoreIdent) (*supportState, bool) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	ss, ok := sm.supportMap[remoteStore]
-	return ss, ok
-}
-
 func NewSupportManager(
-	storeID slpb.StoreIdent, options Options, stopper *stop.Stopper, transport *Transport,
-) *SupportManager {
+	ctx context.Context,
+	storeID slpb.StoreIdent,
+	engine storage.Engine,
+	options Options,
+	stopper *stop.Stopper,
+	clock *hlc.Clock,
+	transport *Transport,
+) (*SupportManager, error) {
 	sm := &SupportManager{
-		storeID:    storeID,
-		options:    options,
-		stopper:    stopper,
-		transport:  transport,
-		supportMap: map[slpb.StoreIdent]*supportState{},
+		storeID:      storeID,
+		engine:       engine,
+		options:      options,
+		stopper:      stopper,
+		clock:        clock,
+		transport:    transport,
+		receiveQueue: makeReceiveQueue(),
 	}
-	sm.currentEpoch.incrementEpoch()
-	sm.supportMap[storeID] = newSupportState(storeID, sm.currentEpoch.getEpoch())
+
+	if err := sm.onRestart(ctx); err != nil {
+		return nil, err
+	}
+
 	// TODO(mira): load and populate persisted state (bySelfFor).
 	// For each remote store in supportMap, set:
 	// 1. forSelfBy.epoch = currentEpoch,
 	// 2. forSelfBy.expiration = empty.
 	// TODO(mira): use a stopper here.
 	go sm.startLoop(context.Background())
-	return sm
+	return sm, nil
+}
+
+func (sm *SupportManager) onRestart(ctx context.Context) error {
+	// Load the supporter and requester state from disk.
+	if err := sm.ss.load(ctx, sm.engine); err != nil {
+		return err
+	}
+	if err := sm.rs.load(ctx, sm.engine); err != nil {
+		return err
+	}
+	// Advance our clock to the maximum withdrawal time.
+	if err := sm.clock.UpdateAndCheckMaxOffset(ctx, sm.ss.meta.MaxWithdrawal); err != nil {
+		return err
+	}
+	// Wait out the previous max requested time.
+	if err := sm.clock.SleepUntil(ctx, sm.rs.meta.MaxRequested); err != nil {
+		return err
+	}
+	// Increment the current epoch.
+	rsv := makeRequesterStateVolatile(&sm.rs)
+	rsv.incrementEpoch()
+	if err := rsv.write(ctx, sm.engine); err != nil {
+		return err
+	}
+	rsv.updateDurable()
+	return nil
 }
 
 func (sm *SupportManager) HandleMessage(ctx context.Context, msg slpb.Message) {
@@ -124,62 +151,58 @@ func (sm *SupportManager) HandleMessage(ctx context.Context, msg slpb.Message) {
 func (sm *SupportManager) startLoop(ctx context.Context) {
 	var heartbeatTimer timeutil.Timer
 	var supportExpiryInterval timeutil.Timer
-	var responseInterval timeutil.Timer
 	defer heartbeatTimer.Stop()
 	defer supportExpiryInterval.Stop()
-	defer responseInterval.Stop()
-
+	// TODO(mira): make these intervals cluster settings.
 	heartbeatTimer.Reset(sm.options.HeartbeatInterval)
 	supportExpiryInterval.Reset(sm.options.SupportExpiryInterval)
-	responseInterval.Reset(sm.options.ResponseHandlingInterval)
 
 	for {
+		// NOTE: only listen to the receive queue's signal if we don't already have
+		// heartbeats to send or support to check. This prevents a constant flow of
+		// inbound messages from starving out the other work.
+		var receiveQueueSig <-chan struct{}
+		if len(heartbeatTimer.C) == 0 && len(supportExpiryInterval.C) == 0 {
+			receiveQueueSig = sm.receiveQueue.Sig()
+		}
+
 		select {
 		case <-heartbeatTimer.C:
 			heartbeatTimer.Read = true
-			// TODO(mira): persist max expiration of the heartbeats about to send.
-			for remoteStore, ss := range sm.supportMap {
-				epoch, _ := ss.forSelfBy.getEpochAndExpiration()
-				endTime := sm.options.Clock.Now().Add(sm.options.LivenessInterval.Nanoseconds(), 0)
-				sm.sendHeartbeat(ctx, remoteStore, epoch, slpb.Expiration(endTime))
-			}
-			log.Infof(ctx, "sent heartbeats to all remote stores")
 			heartbeatTimer.Reset(sm.options.HeartbeatInterval)
+			sm.sendHeartbeats(ctx)
+
 		case <-supportExpiryInterval.C:
 			supportExpiryInterval.Read = true
-			for _, ss := range sm.supportMap {
-				ss.maybeWithdrawSupport(sm.options.Clock.Now())
-			}
-			log.Infof(ctx, "checked for support withdrawal")
 			supportExpiryInterval.Reset(sm.options.SupportExpiryInterval)
-		case <-responseInterval.C:
-			responseInterval.Read = true
+			sm.withdrawSupport(ctx)
+
+		case <-receiveQueueSig:
 			msgs := sm.receiveQueue.Drain()
-			var resps []slpb.Message
-			for _, msg := range msgs {
-				switch msg.Type {
-				case slpb.MsgHeartbeat:
-					resp := sm.handleHeartbeat(ctx, msg)
-					resps = append(resps, resp)
-				case slpb.MsgHeartbeatResp:
-					sm.handleHeartbeatResp(ctx, msg)
-				default:
-					log.Errorf(ctx, "unexpected message type: %v", msg.Type)
-				}
-			}
-			log.Infof(ctx, "drained receive queue of size %d", len(msgs))
-			// TODO(nvanbenschoten): sync to disk.
-			for _, resp := range resps {
-				_ = sm.transport.SendAsync(resp)
-			}
-			log.Infof(ctx, "sent %d responses", len(resps))
-			responseInterval.Reset(sm.options.ResponseHandlingInterval)
+			sm.handleMessages(ctx, msgs)
 		}
 	}
 }
 
+func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
+	// Persist a new requester state with an updated MaxRequested timestamp.
+	rsv := makeRequesterStateVolatile(&sm.rs)
+	rsv.updateMaxRequested(sm.clock.Now(), sm.options.LivenessInterval)
+	if err := rsv.write(ctx, sm.engine); err != nil {
+		log.Warningf(ctx, "failed to write requester state: %v", err)
+		return
+	}
+	rsv.updateDurable()
+
+	// Send heartbeats to each remote store.
+	for _, ss := range sm.rs.supportFrom {
+		sm.sendHeartbeat(ctx, ss.Target, ss.Epoch, sm.rs.meta.MaxRequested)
+	}
+	log.Infof(ctx, "sent heartbeats to all remote stores")
+}
+
 func (sm *SupportManager) sendHeartbeat(
-	ctx context.Context, to slpb.StoreIdent, epoch slpb.Epoch, endTime slpb.Expiration,
+	ctx context.Context, to slpb.StoreIdent, epoch slpb.Epoch, endTime hlc.Timestamp,
 ) {
 	msg := slpb.Message{
 		Type:    slpb.MsgHeartbeat,
@@ -197,85 +220,118 @@ func (sm *SupportManager) sendHeartbeat(
 	}
 }
 
-func (sm *SupportManager) handleHeartbeat(
-	ctx context.Context, msg slpb.Message,
-) (resp slpb.Message) {
-	fromStore := msg.From
-	ss, ok := sm.getSupportState(fromStore)
-	if !ok {
-		log.Infof(ctx, "received a heartbeat from an unknown remote store %+v", fromStore)
+func (sm *SupportManager) withdrawSupport(ctx context.Context) {
+	now := sm.clock.NowAsClockTimestamp()
+	ssv := makeSupporterStateVolatile(&sm.ss)
+	for _, ss := range sm.ss.supportFor {
+		ssv.maybeWithdrawSupport(ss.Target, now)
+	}
+
+	if !ssv.needsWrite() {
+		log.Infof(ctx, "checked for support withdrawal and found none")
 		return
 	}
-	ack := ss.handleHeartbeat(msg.Epoch, msg.EndTime)
+
+	batch := sm.engine.NewBatch()
+	defer batch.Close()
+	if err := ssv.write(ctx, batch); err != nil {
+		log.Warningf(ctx, "failed to write supporter state: %v", err)
+		return
+	}
+	if err := batch.Commit(true /* sync */); err != nil {
+		log.Warningf(ctx, "failed to sync supporter state: %v", err)
+		return
+	}
+	ssv.updateDurable()
+	log.Infof(ctx, "withdrew some store liveness support")
+}
+
+func (sm *SupportManager) handleMessages(ctx context.Context, msgs []slpb.Message) {
+	log.Infof(ctx, "drained receive queue of size %d", len(msgs))
+	ssv := makeSupporterStateVolatile(&sm.ss)
+	rsv := makeRequesterStateVolatile(&sm.rs)
+	var resps []slpb.Message
+	for _, msg := range msgs {
+		switch msg.Type {
+		case slpb.MsgHeartbeat:
+			resp := sm.handleHeartbeat(ctx, ssv, msg)
+			resps = append(resps, resp)
+		case slpb.MsgHeartbeatResp:
+			sm.handleHeartbeatResp(ctx, rsv, msg)
+		default:
+			log.Errorf(ctx, "unexpected message type: %v", msg.Type)
+		}
+	}
+
+	if rsv.needsWrite() || ssv.needsWrite() {
+		batch := sm.engine.NewBatch()
+		defer batch.Close()
+		if err := ssv.write(ctx, batch); err != nil {
+			log.Warningf(ctx, "failed to write supporter state: %v", err)
+			return
+		}
+		if err := rsv.write(ctx, batch); err != nil {
+			log.Warningf(ctx, "failed to write requester state: %v", err)
+			return
+		}
+		if err := batch.Commit(true /* sync */); err != nil {
+			log.Warningf(ctx, "failed to sync supporter and requester state: %v", err)
+			return
+		}
+		ssv.updateDurable()
+		rsv.updateDurable()
+	}
+
+	for _, resp := range resps {
+		_ = sm.transport.SendAsync(resp)
+	}
+	log.Infof(ctx, "sent %d responses", len(resps))
+}
+
+func (sm *SupportManager) handleHeartbeat(
+	ctx context.Context, ssv *supporterStateVolatile, msg slpb.Message,
+) (resp slpb.Message) {
+	ss, ack := ssv.handleHeartbeat(msg)
 	log.Infof(ctx, "handled heartbeat from %+v with epoch %+v and expiration %+v, ack: %t",
-		fromStore, msg.Epoch, msg.EndTime, ack)
+		msg.From, msg.Epoch, msg.EndTime, ack)
 	resp = slpb.Message{
 		Type: slpb.MsgHeartbeatResp,
 		From: sm.storeID,
-		To:   fromStore,
+		To:   ss.Target,
 		// TODO(mira): are these values correct?
-		Epoch:   msg.Epoch,
-		EndTime: msg.EndTime,
+		Epoch:   ss.Epoch,
+		EndTime: ss.EndTime,
 		Ack:     ack,
 	}
 	return resp
 }
 
-func (sm *SupportManager) handleHeartbeatResp(ctx context.Context, msg slpb.Message) {
-	fromStore := msg.From
-	ss, ok := sm.getSupportState(fromStore)
-	if !ok {
-		log.Infof(ctx, "received a heartbeat response from an unknown remote store %+v", fromStore)
-		return
-	}
-	ss.handleHeartbeatResp(&sm.currentEpoch, msg.Epoch, msg.EndTime, msg.Ack)
+func (sm *SupportManager) handleHeartbeatResp(
+	ctx context.Context, rsv *requesterStateVolatile, msg slpb.Message,
+) {
+	rsv.handleHeartbeatResp(msg)
 	log.Infof(ctx, "handled heartbeat response from %s with expiration %s and ack %t",
-		fromStore, msg.EndTime, msg.Ack)
-}
-
-func (sm *SupportManager) addStore(ctx context.Context, storeID slpb.StoreIdent) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	_, ok := sm.supportMap[storeID]
-	if ok {
-		log.Infof(ctx, "remote store already exists %+v", storeID)
-		return
-	}
-	sm.supportMap[storeID] = newSupportState(storeID, sm.currentEpoch.getEpoch())
-}
-
-func (sm *SupportManager) removeStore(ctx context.Context, storeID slpb.StoreIdent) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	_, ok := sm.supportMap[storeID]
-	if !ok {
-		log.Infof(ctx, "attempting to remove a missing local store %+v", storeID)
-		return
-	}
-	delete(sm.supportMap, storeID)
+		msg.From, msg.EndTime, msg.Ack)
 }
 
 func (sm *SupportManager) SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool) {
-	ss, ok := sm.getSupportState(id)
+	ss, ok := sm.ss.getSupportFor(id)
 	if !ok {
 		log.Infof(context.Background(), "attempting to evaluate support for an unknown remote store %+v", id)
 		return 0, false
 	}
-	epoch, exp := ss.supportFor()
-	if exp.IsEmpty() {
-		return 0, false
-	}
-	return epoch, true
+	return ss.Epoch, true
 }
 
 func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, slpb.Expiration, bool) {
-	ss, ok := sm.getSupportState(id)
+	ss, ok := sm.rs.getSupportFrom(id)
 	if !ok {
-		log.Infof(context.Background(), "attempting to evaluate support from an unknown remote store %+v; adding remote store", id)
 		// TODO(mira): remove a remote store if SupportFrom hasn't been called in a while.
-		sm.addStore(context.Background(), id)
+		sm.rs.addStoreIfNotExists(id)
 		return 0, slpb.Expiration{}, false
 	}
-	epoch, exp := ss.supportFrom()
-	return epoch, exp, !exp.IsEmpty()
+	if ss.EndTime.IsEmpty() {
+		return 0, slpb.Expiration{}, false
+	}
+	return ss.Epoch, slpb.Expiration(ss.EndTime), true
 }

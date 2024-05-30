@@ -2151,13 +2151,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	storeID := slpb.StoreIdent{NodeID: s.NodeID(), StoreID: s.StoreID()}
 	options := storeliveness.Options{
-		Clock:                    s.cfg.Clock,
-		HeartbeatInterval:        3 * time.Second,
-		LivenessInterval:         9 * time.Second,
-		SupportExpiryInterval:    9 * time.Second,
-		ResponseHandlingInterval: 1 * time.Second,
+		HeartbeatInterval:     1 * time.Second,
+		LivenessInterval:      s.cfg.RangeLeaseDuration,
+		SupportExpiryInterval: 1 * time.Second,
 	}
-	sm := storeliveness.NewSupportManager(storeID, options, stopper, s.cfg.StoreLivenessTransport)
+	sm, err := storeliveness.NewSupportManager(ctx, storeID, s.TODOEngine(), options, stopper, s.cfg.Clock, s.cfg.StoreLivenessTransport)
+	if err != nil {
+		return errors.Wrap(err, "loading store liveness state")
+	}
 	s.cfg.StoreLivenessTransport.ListenMessages(storeID.StoreID, sm)
 	s.storeLiveness = sm
 

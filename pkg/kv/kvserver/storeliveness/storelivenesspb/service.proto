@@ -36,7 +36,7 @@ message Message {
   // epoch is included in MsgHeartbeat and MsgHeartbeatResp messages.
   int64 epoch = 4 [(gogoproto.casttype) = "Epoch"];
   // end_time is included in MsgHeartbeat and MsgHeartbeatResp messages.
-  util.hlc.Timestamp end_time = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "Expiration"];
+  util.hlc.Timestamp end_time = 5 [(gogoproto.nullable) = false];
   // ack is included in MsgHeartbeatResp messages.
   bool ack = 6;
 }
@@ -51,4 +51,23 @@ message Empty {}
 
 service StoreLiveness {
   rpc Stream (stream MessageBatch) returns (Empty) {}
+}
+
+message RequesterMeta {
+  int64 current_epoch              = 1 [(gogoproto.casttype) = "Epoch"];
+  util.hlc.Timestamp max_requested = 2 [(gogoproto.nullable) = false];
+}
+
+message SupporterMeta {
+  util.hlc.Timestamp max_withdrawal = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+}
+
+message SupportState {
+  // Target is the identify of the store that is being supported by the local
+  // store ("support for") or the store that is providing support to the local
+  // store ("support from"), depending on the context.
+  StoreIdent         target   = 1 [(gogoproto.nullable) = false];
+  int64              epoch    = 2 [(gogoproto.casttype) = "Epoch"];
+  util.hlc.Timestamp end_time = 3 [(gogoproto.nullable) = false];
 }

@@ -86,6 +86,39 @@ func StoreNodeTombstoneKey(nodeID roachpb.NodeID) roachpb.Key {
 	return MakeStoreKey(localStoreNodeTombstoneSuffix, encoding.EncodeUint32Ascending(nil, uint32(nodeID)))
 }
 
+func StoreLivenessRequesterMetaKey() roachpb.Key {
+	return MakeStoreKey(localStoreLivenessRequesterMeta, nil)
+}
+
+func StoreLivenessSupporterMetaKey() roachpb.Key {
+	return MakeStoreKey(localStoreLivenessSupporterMeta, nil)
+}
+
+func StoreLivenessSupportForKey(nodeID roachpb.NodeID, storeID roachpb.StoreID) roachpb.Key {
+	nodeIDAndStoreID := uint64(nodeID)<<32 | uint64(storeID)
+	return MakeStoreKey(localStoreLivenessSupportFor, encoding.EncodeUint64Ascending(nil, nodeIDAndStoreID))
+}
+
+func DecodeStoreLivenessSupportForKey(key roachpb.Key) (roachpb.NodeID, roachpb.StoreID, error) {
+	suffix, detail, err := DecodeStoreKey(key)
+	if err != nil {
+		return 0, 0, err
+	}
+	if !suffix.Equal(localStoreLivenessSupportFor) {
+		return 0, 0, errors.Errorf("key with suffix %q != %q", suffix, localStoreLivenessSupportFor)
+	}
+	detail, nodeIDAndStoreID, err := encoding.DecodeUint64Ascending(detail)
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(detail) != 0 {
+		return 0, 0, errors.Errorf("invalid key has trailing garbage: %q", detail)
+	}
+	nodeID := roachpb.NodeID(nodeIDAndStoreID >> 32)
+	storeID := roachpb.StoreID(nodeIDAndStoreID & math.MaxUint32)
+	return nodeID, storeID, nil
+}
+
 // DecodeNodeTombstoneKey returns the NodeID for the node tombstone.
 func DecodeNodeTombstoneKey(key roachpb.Key) (roachpb.NodeID, error) {
 	suffix, detail, err := DecodeStoreKey(key)
