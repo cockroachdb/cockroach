@@ -2695,6 +2695,9 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 	return 0, err
 }
 
+// EnumValueNotYetPublicError enum value is not public yet.
+var EnumValueNotYetPublicError = pgerror.New(pgcode.InvalidParameterValue, "enum value is not yet public")
+
 // EnumGetIdxOfLogical returns the index within the TypeMeta's slice of
 // enum logical representations that matches the input string.
 func (t *T) EnumGetIdxOfLogical(logical string) (int, error) {
@@ -2707,7 +2710,7 @@ func (t *T) EnumGetIdxOfLogical(logical string) (int, error) {
 			// written until all nodes in the cluster are able to decode the
 			// physical representation.
 			if t.TypeMeta.EnumData.IsMemberReadOnly[i] {
-				return 0, errors.Newf("enum value %q is not yet public", logical)
+				return 0, errors.WithMessagef(EnumValueNotYetPublicError, "cannot use enum value %q", logical)
 			}
 			return i, nil
 		}
