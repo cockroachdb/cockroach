@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // regularTokensPerStream determines the flow tokens available for regular work
@@ -302,7 +303,6 @@ type waitHandle struct {
 	b  *tokenCounter
 }
 
-// TODO(kvoli): implement TokenWaitingHandle methods.
 var _ TokenWaitingHandle = waitHandle{}
 
 // WaitChannel is the channel that will be signaled if tokens are possibly
@@ -335,42 +335,95 @@ func (wh waitHandle) TryDeductAndUnblockNextWaiter(
 	return granted, wh.b.tokens(wh.wc) > 0
 }
 
-// WaitForEval ...
-// We always need minNumHandlesToWaitFor, even if the stopWaitCh channels have
-// been closed/signaled. If the replica stream is no longer connected, and
-// then later reconnects, the stopWaitCh will change, but that is ok, since we
-// are simply waiting on the handle.
+// WaitForEval waits for a quorum of handles to be signaled and have tokens
+// available, including all the required wait handles. The caller can provide a
+// refresh channel, which when signaled will cause the function to return
+// RefreshWaitSignaled, allowing the caller to retry waiting with updated
+// handles.
 //
-// TODO: add identity of leader. We also want a special stopWaitCh across all
-// that is closed if the RangeController is closed, or the leaseholder
-// changes. Also add the identity of the leader or leaseholder since
-// specifically waiting for those eval tokens to be > 0. We will let in a
-// burst if the leaseholder changes, while the local replica is still the
-// leader -- so be it.
-//
-// NO! The above is all wrong. We want to internalize this implementation in
-// RangeController. RangeController will get a list of all the voters, and
-// which ones are required (leader, leaseholder, and for elastic traffic, all
-// the ones in StateReplicate). There will also be a refresh channel for the waiter
-// which it will notify if it needs to refresh. Then the waiter will wait.
-// If leaseholder, leader change, or for elastic the ones in StateReplica are
-// no longer in StateReplicate, or the sets of voter change, refresh will be
-// signalled. All this state will either need to be copy-on-write or read locked
-// since there are many waiting requests for eval.
-//
-// TODO: revise the above comment and implement, and then delete
-// WaitForHandlesAndChannelsOld.
-//
-// Will wait for a quorum at least, which must include the requiredWait handles.
+// If the required quorum and required wait handles are signaled and have
+// tokens available, the function checks the availability of tokens for all
+// handles. If not all required handles have available tokens or the available
+// count is less than the required quorum, RefreshWaitSignaled is also
+// returned.
 func WaitForEval(
 	ctx context.Context,
 	refreshWaitCh <-chan struct{},
 	handles []tokenWaitingHandleInfo,
-	quorumCount int,
+	requiredQuorum int,
 	scratch []reflect.SelectCase,
 ) (state WaitEndState, scratch2 []reflect.SelectCase) {
-	// TODO: implement.
-	return 0, nil
+	scratch = scratch[:0]
+	if len(handles) < requiredQuorum || requiredQuorum == 0 {
+		panic(errors.AssertionFailedf("invalid arguments to WaitForEval"))
+	}
+
+	scratch = append(scratch,
+		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())})
+	scratch = append(scratch,
+		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(refreshWaitCh)})
+
+	requiredWaitCount := 0
+	for _, h := range handles {
+		if h.requiredWait {
+			requiredWaitCount++
+		}
+		scratch = append(scratch,
+			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(h.handle.WaitChannel())})
+	}
+	// We track the original length of the scratch slice and also the current
+	// length, where after each successful iteration we decrement the current
+	// length.
+	m := len(scratch)
+	signaledCount := 0
+
+	// Wait for at least a quorumCount of handles to be signaled which also have
+	// tokens and additionally, all of the required wait handles to have signaled
+	// and have tokens available.
+	for signaledCount < requiredQuorum || requiredWaitCount > 0 {
+		chosen, _, _ := reflect.Select(scratch)
+		switch chosen {
+		case 0:
+			return ContextCanceled, scratch
+		case 1:
+			return RefreshWaitSignaled, scratch
+		default:
+			handleInfo := handles[chosen-2]
+			signaledCount++
+			if handleInfo.requiredWait {
+				requiredWaitCount--
+			}
+			m--
+			scratch[chosen], scratch[m] = scratch[m], scratch[chosen]
+			scratch = scratch[:m]
+			handles[chosen-2], handles[m-2] = handles[m-2], handles[chosen-2]
+		}
+	}
+
+	availableCount := 0
+	allRequiredAvailable := true
+	// Check whether the handle has available tokens, if not we keep the
+	// select case and keep on waiting.
+	// TODO(kvoli): Currently we are only trying to deduct and signal the next
+	// waiter after signaling a quorum and all required waiters. If we instead
+	// signaled the next waiter immediately following a signal, would that work?
+	// At the moment we will hold up the next waiter for all required waiters
+	// here. If we instead signaled the next waiter immediately, would it be
+	// possible that we over-admit, as no tokens are actually deducted until after
+	// this function returns WaitSuccess.
+	for _, handleInfo := range handles {
+		if _, available := handleInfo.handle.TryDeductAndUnblockNextWaiter(0 /* tokens */); available {
+			availableCount++
+		} else if !available && handleInfo.requiredWait {
+			allRequiredAvailable = false
+		}
+	}
+
+	if !allRequiredAvailable || availableCount < requiredQuorum {
+		return RefreshWaitSignaled, scratch
+	}
+
+	return WaitSuccess, scratch
 }
 
 type tokenWaitingHandleInfo struct {
@@ -379,56 +432,6 @@ type tokenWaitingHandleInfo struct {
 	// elastic work this will be set for the aforementioned, and all replicas
 	// which are in StateReplicate.
 	requiredWait bool
-}
-
-func WaitForHandlesAndChannelsOld(
-	ctx context.Context,
-	stopWaitCh <-chan struct{},
-	numHandlesToWaitFor int,
-	handles []interface{},
-	scratch []reflect.SelectCase,
-) (state WaitEndState, scratch2 []reflect.SelectCase) {
-	scratch = scratch[:0]
-	if len(handles) < numHandlesToWaitFor || numHandlesToWaitFor == 0 {
-		panic("")
-	}
-	scratch = append(scratch,
-		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())})
-	scratch = append(scratch,
-		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(stopWaitCh)})
-	for _, h := range handles {
-		handle := h.(waitHandle)
-		scratch = append(scratch,
-			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(handle.b.mu.counters[handle.wc].signalCh)})
-	}
-	m := len(scratch)
-	for numHandlesToWaitFor > 0 {
-		chosen, _, _ := reflect.Select(scratch)
-		switch chosen {
-		case 0:
-			return ContextCanceled, scratch
-		case 1:
-			return RefreshWaitSignaled, scratch
-		default:
-			h := handles[chosen-2].(waitHandle)
-			h.b.mu.RLock()
-			tokens := h.b.tokensLocked(h.wc)
-			h.b.mu.RUnlock()
-			if tokens > 0 {
-				// Consumed the entry in the channel. Unblock another waiter.
-				h.b.mu.counters[h.wc].signal()
-				numHandlesToWaitFor--
-				if numHandlesToWaitFor == 0 {
-					return WaitSuccess, scratch
-				}
-				m--
-				scratch[chosen], scratch[m] = scratch[m], scratch[chosen]
-				scratch = scratch[:m]
-			}
-			// Else tokens < 0, so keep this SelectCase.
-		}
-	}
-	panic("unreachable")
 }
 
 // admin is set to true when this method is called because of a settings

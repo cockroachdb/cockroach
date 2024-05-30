@@ -80,3 +80,92 @@ func TestTokenCounter(t *testing.T) {
 	counter.Return(ctx, admissionpb.RegularWorkClass, tokensPerWorkClass.regular)
 	wg.Wait()
 }
+
+type mockTokenWaitingHandle struct {
+	available        bool
+	unavailableLater bool
+}
+
+func (m *mockTokenWaitingHandle) TryDeductAndUnblockNextWaiter(
+	tokens kvflowcontrol.Tokens,
+) (granted kvflowcontrol.Tokens, available bool) {
+	if m.unavailableLater {
+		m.available = false
+	}
+	return 0, m.available
+}
+
+func (m *mockTokenWaitingHandle) WaitChannel() <-chan struct{} {
+	ch := make(chan struct{})
+	if m.available {
+		close(ch)
+	}
+	return ch
+}
+
+// TestWaitForEval provides basic testing for the WaitForEval function. The
+// tests use a mocked token counter handle, which is either always available,
+// or available exactly once and later unavailable.
+func TestWaitForEval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// All tokens are available and the request is granted immediately.
+	t.Run("all available", func(t *testing.T) {
+		handles := []tokenWaitingHandleInfo{
+			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: true},
+			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: false},
+			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: false},
+		}
+		refreshWaitCh := make(chan struct{})
+		state, _ := WaitForEval(ctx, refreshWaitCh, handles, 2, nil)
+		require.Equal(t, WaitSuccess, state)
+	})
+	t.Run("all available and required", func(t *testing.T) {
+		handles := []tokenWaitingHandleInfo{
+			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: true},
+			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: true},
+			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: true},
+		}
+		refreshWaitCh := make(chan struct{})
+		state, _ := WaitForEval(ctx, refreshWaitCh, handles, 2, nil)
+		require.Equal(t, WaitSuccess, state)
+	})
+	// Partial tokens are available and the refreshWaitCh is signaled.
+	t.Run("refresh signaled", func(t *testing.T) {
+		handles := []tokenWaitingHandleInfo{
+			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: true},
+			{handle: &mockTokenWaitingHandle{available: false}, requiredWait: false},
+			{handle: &mockTokenWaitingHandle{available: false}, requiredWait: false},
+		}
+		refreshWaitCh := make(chan struct{}, 1)
+		refreshWaitCh <- struct{}{}
+		state, _ := WaitForEval(ctx, refreshWaitCh, handles, 2, nil)
+		require.Equal(t, RefreshWaitSignaled, state)
+	})
+	// Both a required quorum are signaled and the required waiters are signaled
+	// but later a quorum is unavailable.
+	t.Run("quorum available but later unavailable", func(t *testing.T) {
+		handles := []tokenWaitingHandleInfo{
+			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: false},
+			{handle: &mockTokenWaitingHandle{available: false}, requiredWait: false},
+			{handle: &mockTokenWaitingHandle{available: true, unavailableLater: true}, requiredWait: false},
+		}
+		refreshWaitCh := make(chan struct{})
+		state, _ := WaitForEval(ctx, refreshWaitCh, handles, 2, nil)
+		require.Equal(t, RefreshWaitSignaled, state)
+	})
+	// A required quorum of tokens are available but the required waiter is later
+	// unavailable.
+	t.Run("quorum available but later missing required", func(t *testing.T) {
+		handles := []tokenWaitingHandleInfo{
+			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: false},
+			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: false},
+			{handle: &mockTokenWaitingHandle{available: true, unavailableLater: true}, requiredWait: true},
+		}
+		refreshWaitCh := make(chan struct{})
+		state, _ := WaitForEval(ctx, refreshWaitCh, handles, 2, nil)
+		require.Equal(t, RefreshWaitSignaled, state)
+	})
+}
