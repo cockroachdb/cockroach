@@ -237,7 +237,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				}(ctx, workInfo, id)
 				// Need deterministic output, and this is racing with the goroutine
 				// which is trying to get admitted. Retry to let it get scheduled.
-				maybeRetryWithWait(d, &buf)
+				maybeRetryWithWait(d, t, &buf)
 				return buf.stringAndReset()
 
 			case "set-try-get-return-value":
@@ -253,7 +253,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				if rv > 0 {
 					// Need deterministic output, and this is racing with the goroutine that was
 					// admitted. Retry a few times.
-					maybeRetryWithWait(d, &buf)
+					maybeRetryWithWait(d, t, &buf)
 				}
 				tg.buf.printf("granted%s: returned %d", tg.name, rv)
 				return buf.stringAndReset()
@@ -271,7 +271,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				work.cancel()
 				// Need deterministic output, and this is racing with the goroutine
 				// whose work is canceled. Retry to let it get scheduled.
-				maybeRetryWithWait(d, &buf)
+				maybeRetryWithWait(d, t, &buf)
 				return buf.stringAndReset()
 
 			case "work-done":
@@ -313,7 +313,11 @@ func TestWorkQueueBasic(t *testing.T) {
 				return q.String()
 
 			case "print":
-				return q.String()
+				buf.printf(q.String())
+				// Need deterministic output, and this is racing with the goroutine
+				// whose work is canceled. Retry to let it get scheduled.
+				maybeRetryWithWait(d, t, &buf)
+				return buf.stringAndReset()
 
 			case "advance-time":
 				var millis int
@@ -339,26 +343,22 @@ func scanTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 	return roachpb.MustMakeTenantID(uint64(id))
 }
 
-func maybeRetryWithWait(d *datadriven.TestData, buf *builderWithMu) {
-	if d == nil {
-		// If it is not a datadriven test, simply add a delay to let the admit
-		// goroutine finish.
-		time.Sleep(150 * time.Millisecond)
-	}
+func maybeRetryWithWait(d *datadriven.TestData, t *testing.T, buf *builderWithMu) {
 	if d.Rewrite {
-		time.Sleep(time.Second)
+		time.Sleep(100 * time.Millisecond)
 		return
 	}
 	var str string
-	// Retry for at most 500ms.
-	for i := 0; i < 10; i++ {
-		time.Sleep(50 * time.Millisecond)
+	// Retry for at most 2s (20 iterations with 100ms delay).
+	for i := 0; i < 20; i++ {
 		buf.mu.Lock()
 		str = buf.buf.String()
 		buf.mu.Unlock()
-		if str == d.Expected {
+		if strings.TrimSpace(str) == strings.TrimSpace(d.Expected) {
 			return
 		}
+		t.Logf("retry loop: expected: %s, got: %s", d.Expected, str)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -413,7 +413,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 					if rv > 0 {
 						// Need deterministic output, and this is racing with the goroutine that was
 						// admitted. Add a wait to let it get scheduled.
-						maybeRetryWithWait(nil /* datadriven */, &buf)
+						time.Sleep(150 * time.Millisecond)
 					}
 					buf.printf("granted%s: returned %d", tg.name, rv)
 					work.cancel()
@@ -429,7 +429,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 				if rv > 0 {
 					// Need deterministic output, and this is racing with the goroutine that was
 					// admitted. Add a wait to let it get scheduled.
-					maybeRetryWithWait(nil /* datadriven */, &buf)
+					time.Sleep(150 * time.Millisecond)
 				}
 				buf.printf("granted%s: returned %d", tg.name, rv)
 			}
@@ -616,7 +616,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				}(ctx, workInfo, id)
 				// Need deterministic output, and this is racing with the goroutine
 				// which is trying to get admitted. Retry to let it get scheduled.
-				maybeRetryWithWait(d, &buf)
+				maybeRetryWithWait(d, t, &buf)
 				return buf.stringAndReset()
 
 			case "set-try-get-return-value":
@@ -640,7 +640,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				if rv > 0 {
 					// Need deterministic output, and this is racing with the goroutine that was
 					// admitted. Retry a few times.
-					maybeRetryWithWait(d, &buf)
+					maybeRetryWithWait(d, t, &buf)
 				}
 				buf.printf("granted%s: returned %d", tg[wc].name, rv)
 				return buf.stringAndReset()
@@ -658,7 +658,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				work.cancel()
 				// Need deterministic output, and this is racing with the goroutine
 				// whose work is canceled. Retry to let it get scheduled.
-				maybeRetryWithWait(d, &buf)
+				maybeRetryWithWait(d, t, &buf)
 				return buf.stringAndReset()
 
 			case "work-done":
@@ -714,7 +714,11 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				return printQueue()
 
 			case "print":
-				return printQueue()
+				buf.printf(printQueue())
+				// Need deterministic output, and this is racing with the goroutine
+				// whose work is canceled. Retry to let it get scheduled.
+				maybeRetryWithWait(d, t, &buf)
+				return buf.stringAndReset()
 
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
