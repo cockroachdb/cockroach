@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/promhelperclient",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/gce",
         "//pkg/util/timeutil",
