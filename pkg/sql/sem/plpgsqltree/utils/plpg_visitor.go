@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/errors"
 )
 
 // PLpgSQLStmtCounter is used to accurately report telemetry for plpgsql
@@ -61,15 +60,11 @@ var _ plpgsqltree.StatementVisitor = &telemetryVisitor{}
 func (v *telemetryVisitor) Visit(
 	stmt plpgsqltree.Statement,
 ) (newStmt plpgsqltree.Statement, recurse bool) {
-	taggedStmt, ok := stmt.(plpgsqltree.TaggedStatement)
-	if !ok {
-		v.Err = errors.AssertionFailedf("no tag found for stmt %q", stmt)
-	}
-	tag := taggedStmt.PlpgSQLStatementTag()
+	tag := stmt.PlpgSQLStatementTag()
 	sqltelemetry.IncrementPlpgsqlStmtCounter(tag)
 
 	//Capturing telemetry for tests
-	_, ok = v.StmtCnt[tag]
+	_, ok := v.StmtCnt[tag]
 	if !ok {
 		v.StmtCnt[tag] = 1
 	} else {

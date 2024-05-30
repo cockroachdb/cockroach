@@ -27,9 +27,6 @@ type Statement interface {
 	GetStmtID() uint
 	plpgsqlStmt()
 	WalkStmt(StatementVisitor) Statement
-}
-
-type TaggedStatement interface {
 	PlpgSQLStatementTag() string
 }
 
