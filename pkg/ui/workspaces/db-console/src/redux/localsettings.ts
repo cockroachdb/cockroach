@@ -54,6 +54,7 @@ function saveToSessionStorage(data: LocalSettingData) {
   try {
     sessionStorage.setItem(`${STORAGE_PREFIX}/${data.key}`, value);
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.warn(e.message);
   }
 }
