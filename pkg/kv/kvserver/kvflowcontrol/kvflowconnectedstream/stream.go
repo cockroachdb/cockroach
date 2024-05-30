@@ -29,6 +29,55 @@ import (
 
 // NB: bare TODO: are more urgent. TODO(sumeer) are for later.
 
+/*
+
+TODO: Robust token return guarantee
+
+We want a model like the following, given we there is buffering in raftTransport.raftSendQueue
+that we want to utilize when processing Ready. That is, if the grpc-stream is transiently
+down (say for 50ms), and there are send tokens available, we want to subtract tokens
+and add to the raftSendQueue. If the grpc-stream reconnects those buffers will
+get drained.
+If that stream breaks, we will get TransportDisconnected to early return tokens.
+
+
+                            (c) deducted here
+                                 |
+                                 v
+<grpc-stream does not exist> <grpc-stream exists> <stream breaks>
+
+  ^                                               ^
+  |                                               |
+                                                (b) and (c) tokens returned
+tokens deducted here
+added to raftTransport.raftSendQueue
+(a) queue overflows (will transition to StateProbe and return tokens)
+(b) did not overflow
+
+We probably need to change the wire protocol to make this possible.
+
+One other issue is that we can deduct tokens for the same index multiple
+times, due to transitions out and into StateReplicate, each of which will
+first cause early-return.
+e.g.
+  deduct send-tokens for index 10
+  early-return index 10 tokens due to transition to StateSnapshot/StateProbe
+  transition to StateReplicate and indexToSend < 10
+  deduct send-tokens for index 10
+
+After the second deduction, say there is no stream breakage or transition to
+StateProbe. Which means the remote store will receive index 10. We need to ensure
+it will call AdmitRaftEntry. Currently, that call happens in handRaftReadyRaftMuLocked,
+using raftpb.MsgStorageAppend. This seems risky. If for some reason the remote store
+has already appended an index >= 10, when it receives this MsgApp with index
+10, this MsgApp will not pop out in handleRaftReadyRaftMuLocked.
+
+If we instead called AdmitRaftEntry in Replica.stepRaftGroup, it may be
+sufficient
+to fix this problem.
+
+*/
+
 // TODO:
 // - force-flush when there isn't quorum.
 //
@@ -812,6 +861,7 @@ func (rc *RangeControllerImpl) TransportDisconnected(replica roachpb.ReplicaID) 
 	rs, ok := rc.replicaMap[replica]
 	if ok && rs.replicaSendStream != nil && rs.replicaSendStream.connectedState == replicateConnected {
 		rs.replicaSendStream.changeConnectedStateInStateReplicate(false)
+		// TODO: the callee isn't returning tokens in tracker. Fix it.
 	}
 }
 
