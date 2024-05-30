@@ -85,6 +85,7 @@ export class TimeScaleState {
     } catch (e) {
       // Don't log this in tests because it pollutes the output.
       if (process.env.NODE_ENV !== "test") {
+        // eslint-disable-next-line no-console
         console.warn(
           `Couldn't retrieve or parse TimeScale options from SessionStorage`,
           e,

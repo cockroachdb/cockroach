@@ -190,12 +190,14 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
         Axis,
       );
       if (axes.length === 0) {
+        // eslint-disable-next-line no-console
         console.warn(
           "LineGraph requires the specification of at least one axis.",
         );
         return null;
       }
       if (axes.length > 1) {
+        // eslint-disable-next-line no-console
         console.warn(
           "LineGraph currently only supports a single axis; ignoring additional axes.",
         );
