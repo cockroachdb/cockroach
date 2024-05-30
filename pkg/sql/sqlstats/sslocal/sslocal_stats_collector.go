@@ -246,6 +246,7 @@ func (s *StatsCollector) ObserveStatement(
 		RowsRead:             value.RowsRead,
 		RowsWritten:          value.RowsWritten,
 		Nodes:                value.Nodes,
+		KVNodeIDs:            value.KVNodeIDs,
 		Contention:           contention,
 		IndexRecommendations: value.IndexRecommendations,
 		Database:             value.Database,

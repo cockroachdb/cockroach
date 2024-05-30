@@ -253,6 +253,7 @@ export function addStatementStats(
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
     nodes: uniqueLong([...a.nodes, ...b.nodes]),
+    kv_node_ids: unique([...a.kv_node_ids, ...b.kv_node_ids]),
     regions: regions,
     plan_gists: planGists,
     index_recommendations: indexRec,
