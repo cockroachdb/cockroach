@@ -565,14 +565,15 @@
 /pkg/ts/                     @cockroachdb/kv-prs
 /pkg/ts/catalog/             @cockroachdb/obs-prs
 #!/pkg/util/                 @cockroachdb/unowned
-/pkg/util/log/               @cockroachdb/obs-prs
 /pkg/util/addr/              @cockroachdb/obs-prs
+/pkg/util/log/               @cockroachdb/obs-prs
 /pkg/util/metric/            @cockroachdb/obs-prs
+/pkg/util/tracing            @cockroachdb/obs-prs
 /pkg/util/stop/              @cockroachdb/kv-prs
 /pkg/util/grunning/          @cockroachdb/admission-control
 /pkg/util/admission/         @cockroachdb/admission-control
 /pkg/util/schedulerlatency/  @cockroachdb/admission-control
-/pkg/util/tracing            @cockroachdb/obs-prs
+/pkg/util/mon                @cockroachdb/sql-queries-prs
 /pkg/workload/               @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
 /pkg/obs/                    @cockroachdb/obs-prs
 /pkg/obsservice/             @cockroachdb/obs-prs
